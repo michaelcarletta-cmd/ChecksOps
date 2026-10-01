@@ -1,0 +1,259 @@
+{
+  "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+  "branch": "cursor/freedom-stakeholder-moov-sync-2d41",
+  "commit": "57a04ea534b3247add8ac0f4a161d8c49feaafbb",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "production-spa",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/lib/payments/stakeholderBankDisplay.ts",
+    "src/components/disbursement/StakeholderAccountSettings.tsx",
+    "index.html"
+  ],
+  "frontend_workstreams": [
+    "freedom-stakeholder-moov-sync-2d41"
+  ],
+  "accepted_composition": true,
+  "accepted_source_composition": true,
+  "source_composition_manifest": "ops/deployment-guard/freedom-stakeholder-moov-sync-source-composition.json",
+  "clean_build": true,
+  "dist": {
+    "clean_build": true,
+    "origin": "fresh-clean-build",
+    "path": "/tmp/freedom-stakeholder-moov-sync-src/dist"
+  },
+  "production_fingerprint": {
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
+  },
+  "preflight": {
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
+  },
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
+  },
+  "immediately_before": {
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
+  },
+  "immediately_before_fingerprint": {
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
+  },
+  "composed_onto": {
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
+  },
+  "production_baseline_fingerprint": {
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "ops/deployment-guard/freedom-stakeholder-moov-sync-staging-accepted.json"
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+    "inherited": false,
+    "from_previous_workstream": false
+  },
+  "contract_results": {
+    "review-claim-save": {
+      "ok": true,
+      "detail": "unchanged"
+    },
+    "claim-ledger": {
+      "ok": true,
+      "detail": "unchanged"
+    },
+    "signature-requests": {
+      "ok": true,
+      "detail": "unchanged"
+    },
+    "check-files": {
+      "ok": true,
+      "detail": "unchanged"
+    },
+    "check-command-center-responsive": {
+      "ok": true,
+      "detail": "layout 13/13"
+    },
+    "moov": {
+      "ok": true,
+      "detail": "unique email match"
+    },
+    "checkalt": {
+      "ok": true,
+      "detail": "no CheckAlt files changed"
+    },
+    "tenant-isolation": {
+      "ok": true
+    },
+    "walletops-activity-recovery": {
+      "ok": true
+    }
+  },
+  "protected_composition_results": {
+    "wallet-select": {
+      "ok": true
+    },
+    "wallet-funding-reconcile": {
+      "ok": true
+    },
+    "wallet-relative": {
+      "ok": true
+    },
+    "existing-wallet-not-pending-setup": {
+      "ok": true
+    },
+    "walletops-layout": {
+      "ok": true
+    },
+    "tenant-collection-v2": {
+      "ok": true
+    },
+    "funding-contract": {
+      "ok": true
+    },
+    "tenant-receivables": {
+      "ok": true
+    },
+    "tenant-isolation": {
+      "ok": true
+    },
+    "moov-spa-composition": {
+      "ok": true
+    },
+    "moov-file-rules": {
+      "ok": true,
+      "detail": "20/21 pre-existing"
+    }
+  },
+  "source_contracts": {
+    "environment_aware_wallet_selection": {
+      "ok": true
+    },
+    "production_host_selects_production_wallet": {
+      "ok": true
+    },
+    "staging_host_selects_sandbox_wallet": {
+      "ok": true
+    },
+    "ambiguous_wallet_fails_safe": {
+      "ok": true
+    },
+    "no_maybeSingle_unscoped_operating_wallets": {
+      "ok": true
+    },
+    "no_rows_0_wallet_pick": {
+      "ok": true
+    },
+    "funding_and_billing_present": {
+      "ok": true
+    },
+    "recent_activity_present": {
+      "ok": true
+    },
+    "payout_preferences_absent_from_walletops": {
+      "ok": true
+    },
+    "payment_account_management_absent_from_walletops": {
+      "ok": true
+    },
+    "payment_account_present_in_compliance": {
+      "ok": true
+    },
+    "pending_wallet_funding_is_pending_in": {
+      "ok": true
+    },
+    "completed_funding_remains_activity": {
+      "ok": true
+    },
+    "bank_billing_is_not_wallet_pending_out": {
+      "ok": true
+    },
+    "existing_wallet_not_pending_setup": {
+      "ok": true
+    },
+    "moov_generally_available": {
+      "ok": true
+    },
+    "moov_tenant_defaults": {
+      "ok": true
+    },
+    "moov_bank_verified_status": {
+      "ok": true
+    },
+    "moov_provider_linked_status": {
+      "ok": true
+    },
+    "moov_status_refresh": {
+      "ok": true
+    },
+    "moov_stakeholder_status_from_linked_tables": {
+      "ok": true
+    },
+    "moov_settings_no_admin_override_button": {
+      "ok": true
+    },
+    "moov_settings_last_four_from_provider": {
+      "ok": true
+    },
+    "moov_operating_no_admin_override_button": {
+      "ok": true
+    },
+    "moov_merchant_capability_codes": {
+      "ok": true
+    },
+    "moov_sync_writes_stakeholder_banks": {
+      "ok": true
+    },
+    "moov_onboarding_link_collect_funds": {
+      "ok": true
+    },
+    "moov_webhook_writes_stakeholder_verification": {
+      "ok": true
+    }
+  },
+  "protected_file_hashes": {
+    "aws/functions/api/tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "aws/functions/api/tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "aws/functions/api/tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  },
+  "recreate_provider_transfer_ids": [],
+  "retry_unseen_provider_transfers": false,
+  "branch_head_is_whole_production": false,
+  "changed_paths": [
+    "src/lib/payments/stakeholderBankDisplay.ts",
+    "src/components/disbursement/StakeholderAccountSettings.tsx"
+  ],
+  "restore_previous_index": false,
+  "reclaim_staging": false,
+  "build_timestamp": "2026-10-01T15:14:22.557Z"
+}

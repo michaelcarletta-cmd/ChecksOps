@@ -14,6 +14,7 @@ import {
   facilitatorAccountId,
   normalizeTransferStatus,
 } from "../_shared/moovClient.ts";
+import { COLLECT_ACH_CAPABILITIES, MOOV_CAPABILITIES_API_VERSION } from "../_shared/moovCapabilities.ts";
 import { corsHeaders, json, sanitize, logPaymentEvent } from "../_shared/moovGuard.ts";
 import { syncWallet } from "../_shared/moovWallet.ts";
 
@@ -160,6 +161,7 @@ serve(async (req) => {
         method: "POST",
         scopes: scopes.accountsWrite(),
         idempotencyKey: `checksops-ho-payer-${environment}-${recipient!.id}`,
+        apiVersion: MOOV_CAPABILITIES_API_VERSION,
         body: {
           accountType: "individual",
           profile: {
@@ -168,7 +170,7 @@ serve(async (req) => {
               email: tok.homeowner_email ?? undefined,
             },
           },
-          capabilities: ["collect-funds"],
+          capabilities: [...COLLECT_ACH_CAPABILITIES],
           foreignID: recipient!.id,
           metadata: {
             checksops_recipient_id: recipient!.id,

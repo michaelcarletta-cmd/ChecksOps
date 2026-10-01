@@ -1,0 +1,20 @@
+{
+  "id": "freedom-stakeholder-moov-sync-prod-candidate",
+  "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+  "composed_onto": {
+    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
+    "entry_bundle": "/assets/index-DyoF7zdg.js",
+    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
+    "last_modified": "2026-10-01T14:07:21+00:00",
+    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+  },
+  "dist": {
+    "entry": "/assets/index-5lb4YHS5.js",
+    "css": "/assets/index-Bdei11g4.css",
+    "walletops": "/assets/WalletOps-BaElnG-Z.js",
+    "use_wallet": "/assets/useWallet-deOg85_Z.js",
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_sha256": "9b774d74ebe24b1b44173cb87e64314be8269c714fe9e4f0a912f88a86a90943"
+  },
+  "path": "/tmp/freedom-stakeholder-moov-sync-src/dist"
+}

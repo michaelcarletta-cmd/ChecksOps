@@ -148,7 +148,17 @@ function hasFile(files, rel) {
   return Object.prototype.hasOwnProperty.call(files, rel);
 }
 
-const MERCHANT_CAPABILITY_CODES = ['transfers', 'send-funds', 'wallet', 'send-funds.ach'];
+const MERCHANT_CAPABILITY_CODES = ['transfers', 'collect-funds.ach', 'send-funds.ach', 'wallet.balance'];
+const LEGACY_CAPABILITY_REQUEST_IDS = ['send-funds', 'collect-funds', 'wallet'];
+
+function quotedCapability(src, code) {
+  return String(src || '').includes(`'${code}'`) || String(src || '').includes(`"${code}"`);
+}
+
+function requestsLegacyCapability(src, code) {
+  const escaped = String(code).replace(/\./g, '\\.');
+  return new RegExp(`capabilities\\s*:\\s*\\[[^\\]]*[\\'"\`]${escaped}[\\'"\`]`).test(String(src || ''));
+}
 
 export function evaluateMoovSourceContracts(files = {}) {
   const out = {};
@@ -172,18 +182,50 @@ export function evaluateMoovSourceContracts(files = {}) {
       && /A Moov account exists\. This is not bank verification/.test(stakeholders);
     out.moov_status_refresh = /moov-sync/.test(stakeholders)
       && /Refresh status/.test(stakeholders);
+    out.moov_stakeholder_status_from_linked_tables = /decorateStakeholderBank/.test(stakeholders)
+      && /external_payment_recipients/.test(stakeholders)
+      && /findLinkedRecipient|verification_recipient_email/.test(stakeholders)
+      && /email/.test(stakeholders);
+    out.moov_settings_no_admin_override_button = !/adminOverride/.test(stakeholders)
+      && !/Admin override: mark as verified/.test(stakeholders)
+      && !/> Override</.test(stakeholders);
+  }
+  if (hasFile(files, 'src/components/settings/TenantBankAccountSettings.tsx')) {
+    const operating = String(files['src/components/settings/TenantBankAccountSettings.tsx'] || '');
+    out.moov_settings_last_four_from_provider = /provider_last_four/.test(operating)
+      && /decorateStakeholderBank/.test(operating)
+      && /display_last_four_label/.test(operating);
+    out.moov_operating_no_admin_override_button = !/adminOverride/.test(operating)
+      && !/Admin override: mark as verified/.test(operating)
+      && !/> Override</.test(operating);
   }
   if (hasFile(files, 'aws/functions/api/providers/parity/moov-functions.mjs')
-    || hasFile(files, 'aws/functions/api/providers/parity/moov-onboard.mjs')) {
+    || hasFile(files, 'aws/functions/api/providers/parity/moov-onboard.mjs')
+    || hasFile(files, 'aws/functions/api/providers/parity/moov-capabilities.mjs')
+    || hasFile(files, 'supabase/functions/_shared/moovCapabilities.ts')) {
     const onboard = `${files['aws/functions/api/providers/parity/moov-functions.mjs'] || ''}\n${files['aws/functions/api/providers/parity/moov-onboard.mjs'] || ''}`;
-    out.moov_merchant_capability_codes = MERCHANT_CAPABILITY_CODES.every((code) => onboard.includes(`'${code}'`) || onboard.includes(`"${code}"`));
+    const capMod = `${files['aws/functions/api/providers/parity/moov-capabilities.mjs'] || ''}\n${files['supabase/functions/_shared/moovCapabilities.ts'] || ''}`;
+    const sources = `${capMod}\n${onboard}`;
+    out.moov_merchant_capability_codes = MERCHANT_CAPABILITY_CODES.every((code) => quotedCapability(sources, code))
+      && /MERCHANT_CAPABILITIES/.test(onboard || capMod)
+      && !LEGACY_CAPABILITY_REQUEST_IDS.some((code) => requestsLegacyCapability(onboard, code));
+    out.moov_sync_writes_stakeholder_banks = /applyMoovBanksToStakeholders/.test(onboard)
+      && /syncLinkedStakeholderBanks/.test(onboard);
   }
   if (hasFile(files, 'supabase/functions/moov-onboarding-link/index.ts')) {
     const link = String(files['supabase/functions/moov-onboarding-link/index.ts'] || '');
-    out.moov_onboarding_link_collect_funds = /collect-funds/.test(link)
-      && /transfers/.test(link)
-      && /send-funds/.test(link)
-      && /wallet/.test(link);
+    const capMod = `${files['aws/functions/api/providers/parity/moov-capabilities.mjs'] || ''}\n${files['supabase/functions/_shared/moovCapabilities.ts'] || ''}`;
+    out.moov_onboarding_link_collect_funds = /MERCHANT_CAPABILITIES/.test(link)
+      && /collect-funds\.ach/.test(`${capMod}\n${link}`)
+      && !requestsLegacyCapability(link, 'collect-funds')
+      && !requestsLegacyCapability(link, 'send-funds')
+      && !requestsLegacyCapability(link, 'wallet');
+  }
+  if (hasFile(files, 'supabase/functions/moov-webhook/index.ts')
+    || hasFile(files, 'aws/functions/api/providers/webhook-apply.mjs')) {
+    const webhook = `${files['supabase/functions/moov-webhook/index.ts'] || ''}\n${files['aws/functions/api/providers/webhook-apply.mjs'] || ''}`;
+    out.moov_webhook_writes_stakeholder_verification = /applyMoovBankVerificationEvent/.test(webhook)
+      && /shouldApplyBankVerificationEvent/.test(webhook);
   }
   for (const [id, okFlag] of Object.entries(out)) {
     out[id] = { ok: Boolean(okFlag) };

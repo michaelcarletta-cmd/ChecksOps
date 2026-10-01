@@ -390,21 +390,7 @@ export function normalizeOnboardingStatus(input: {
   return "onboarding_incomplete";
 }
 
-/** Reduces the capability list to the booleans ChecksOps stores. */
-export function capabilityFlags(
-  caps: Array<{ capability: string; status: string }> | null | undefined,
-) {
-  const byName = new Map((caps ?? []).map((c) => [c.capability, c.status]));
-  const on = (name: string) => byName.get(name) === "enabled";
-  return {
-    can_receive_payments: on("transfers") || on("collect-funds"),
-    can_send_payments: on("transfers") || on("send-funds"),
-    can_ach_debit: on("collect-funds"),
-    can_ach_credit: on("send-funds"),
-    restricted: (caps ?? []).some((c) => c.status === "disconnected"),
-    disabled: (caps ?? []).length > 0 && (caps ?? []).every((c) => c.status !== "enabled"),
-  };
-}
+export { capabilityFlags } from "./moovCapabilities.ts";
 
 /** Last four of a Moov bank account without ever handling the full number. */
 export function safeLastFour(value: string | null | undefined): string | null {

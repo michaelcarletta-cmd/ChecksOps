@@ -10,21 +10,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2 } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
 import { BankVerification } from "@/components/disbursement/BankVerification";
-import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
+import { decorateStakeholderBank } from "@/lib/payments/stakeholderBankDisplay";
 
 
 export function TenantBankAccountSettings() {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isAdmin } = usePermissions();
   const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [isStarting, setIsStarting] = useState(false);
@@ -38,17 +37,33 @@ export function TenantBankAccountSettings() {
       // (subcontractors, vendors, sales reps) belong in the Stakeholder
       // Accounts section below, and homeowner-linked accounts belong to the
       // homeowner on a specific check/claim — never show either here.
-      const { data, error } = await supabase
-        .from("stakeholder_accounts")
-        .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary, origin, account_type")
-        .eq("tenant_id", tenant!.id)
-        .eq("is_active", true)
-        .or("account_type.eq.operating,origin.eq.provider_connected")
-        .neq("origin", "homeowner_link")
-        .order("verified_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      const [accountsRes, tenantRes, methodsRes] = await Promise.all([
+        supabase
+          .from("stakeholder_accounts")
+          .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary, origin, account_type, provider_last_four, provider_bank_name, provider_account_id")
+          .eq("tenant_id", tenant!.id)
+          .eq("is_active", true)
+          .or("account_type.eq.operating,origin.eq.provider_connected")
+          .neq("origin", "homeowner_link")
+          .order("verified_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("tenants")
+          .select("bank_last_four, bank_name, bank_connection_status")
+          .eq("id", tenant!.id)
+          .maybeSingle(),
+        supabase
+          .from("payment_provider_methods")
+          .select("last_four, bank_name, verification_status, connection_status, provider_account_id, external_recipient_id")
+          .eq("tenant_id", tenant!.id)
+          .eq("provider", "moov"),
+      ]);
+      if (accountsRes.error) throw accountsRes.error;
+      return (accountsRes.data ?? []).map((acct: any) => decorateStakeholderBank(acct, {
+        tenantBank: tenantRes.data ?? null,
+        methods: methodsRes.error ? [] : methodsRes.data ?? [],
+        recipients: [],
+      }));
     },
   });
 
@@ -163,21 +178,6 @@ export function TenantBankAccountSettings() {
     onError: (e: any) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
   });
 
-  const adminOverride = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("stakeholder_accounts")
-        .update({ verification_status: "admin_override", verified_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Account marked as verified (admin override)" });
-      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
-    },
-    onError: (e: any) => toast({ title: "Override failed", description: e.message, variant: "destructive" }),
-  });
-
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading...</div>;
 
   return (
@@ -244,7 +244,7 @@ export function TenantBankAccountSettings() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
-                      {acct.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"} · {acct.custname}
+                      {acct.display_last_four_label} · {acct.acct_type === "C" ? "Checking" : "Savings"} · {acct.custname}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -257,18 +257,6 @@ export function TenantBankAccountSettings() {
                         disabled={resendVerification.isPending}
                       >
                         <MailCheck className="h-3 w-3 mr-1" /> Resend
-                      </Button>
-                    )}
-                    {isAdmin && vStatus !== "verified" && vStatus !== "admin_override" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                        onClick={() => adminOverride.mutate(acct.id)}
-                        disabled={adminOverride.isPending}
-                        title="Admin override: mark as verified without micro-deposits"
-                      >
-                        <ShieldAlert className="h-3 w-3 mr-1" /> Override
                       </Button>
                     )}
                     <Button
@@ -284,14 +272,14 @@ export function TenantBankAccountSettings() {
                 <BankVerification
                   accountId={acct.id}
                   accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct?.slice(-4) ?? ""}
+                  accountLast4={acct.display_last_four ?? acct.chk_acct?.slice(-4) ?? ""}
                   verificationStatus={acct.verification_status ?? "unverified"}
                   verificationSource={(acct as any).verification_source ?? "moov"}
                 />
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
                   accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct?.slice(-4) ?? ""}
+                  accountLast4={acct.display_last_four ?? acct.chk_acct?.slice(-4) ?? ""}
                   custname={acct.custname}
                 />
               </React.Fragment>

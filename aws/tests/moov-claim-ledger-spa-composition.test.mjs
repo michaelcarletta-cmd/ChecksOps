@@ -41,6 +41,24 @@ test('combined SPA source keeps Moov GA frontend behavior', () => {
   assert.match(accounts, /moov-sync/);
   assert.match(accounts, /provider_account_id/);
   assert.match(accounts, /A Moov account exists\. This is not bank verification/);
+  assert.match(accounts, /decorateStakeholderBank/);
+  assert.match(accounts, /external_payment_recipients/);
+
+  const operating = read('src/components/settings/TenantBankAccountSettings.tsx');
+  assert.match(operating, /provider_last_four/);
+  assert.match(operating, /decorateStakeholderBank/);
+  assert.match(operating, /display_last_four_label/);
+
+  const webhook = read('supabase/functions/moov-webhook/index.ts');
+  const webhookApply = read('aws/functions/api/providers/webhook-apply.mjs');
+  const bankVerify = read('supabase/functions/moov-recipient-bank-verify/index.ts');
+  assert.match(webhook, /applyMoovBankVerificationEvent/);
+  assert.match(webhookApply, /applyMoovBankVerificationEvent/);
+  assert.match(bankVerify, /applyMoovBankVerificationEvent/);
+  assert.doesNotMatch(accounts, /adminOverride/);
+  assert.doesNotMatch(accounts, /> Override</);
+  assert.doesNotMatch(operating, /adminOverride/);
+  assert.doesNotMatch(operating, /> Override</);
 });
 
 test('combined SPA source keeps Claim Ledger find/link/create and update-only save', () => {

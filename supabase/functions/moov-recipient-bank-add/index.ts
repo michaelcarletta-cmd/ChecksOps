@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovFetch, bindMoovEnvironment, moovConfigured, moovEnvironment, safeLastFour, scopes } from "../_shared/moovClient.ts";
+import { MOOV_CAPABILITIES_API_VERSION, RECIPIENT_CAPABILITIES } from "../_shared/moovCapabilities.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 import {
   identityRequirementsOutstanding,
@@ -9,6 +10,7 @@ import {
   shouldResumeExistingBank,
   tosRequirementOutstanding,
 } from "../_shared/recipientTosPolicy.ts";
+import { applyMoovBankVerificationEvent } from "../_shared/moovStakeholderSync.ts";
 
 /**
  * PUBLIC, token-authenticated bank collection for the branded recipient page
@@ -127,7 +129,8 @@ serve(async (req) => {
       await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
         method: "POST",
         scopes: scopes.capabilitiesWrite(accountId),
-        body: { capabilities: ["transfers"] },
+        apiVersion: MOOV_CAPABILITIES_API_VERSION,
+        body: { capabilities: [...RECIPIENT_CAPABILITIES] },
       });
     } catch (e) {
       console.error("[moov-recipient-bank-add] capabilities", (e as Error).message);
@@ -165,12 +168,17 @@ serve(async (req) => {
       })
       .eq("id", recipient.id);
 
-    if ((recipient as any).stakeholder_account_id) {
-      await supabase
-        .from("stakeholder_accounts")
-        .update({ verification_status: status === "verified" ? "verified" : "pending" })
-        .eq("id", (recipient as any).stakeholder_account_id);
-    }
+    await applyMoovBankVerificationEvent(supabase, {
+      environment,
+      providerAccountId: accountId,
+      tenantId: recipient.tenant_id,
+      bank: {
+        bankAccountID: bankAccountId,
+        bankName,
+        lastFourAccountNumber: lastFour,
+        status,
+      },
+    });
 
     await supabase.from("payment_event_log").insert(sanitize({
       tenant_id: recipient.tenant_id,

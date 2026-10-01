@@ -9,6 +9,11 @@ import { sanitize } from './parity/db.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
 import { providerExecutionEnabled } from '../provider-flags.mjs';
+import {
+  applyMoovBankVerificationEvent,
+  bankEventFromPayload,
+  shouldApplyBankVerificationEvent,
+} from './parity/moov-stakeholder-sync.mjs';
 
 const FUNDING_TERMINAL = ['completed', 'failed', 'returned', 'canceled'];
 
@@ -89,52 +94,39 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     || eventType.includes('verification')
     || eventType.includes('representative')
   ) {
-    if (eventType.startsWith('bankAccount') && data?.bankAccountID) {
-      const status = String(data.status ?? 'pending').toLowerCase();
-      const method = (await client.query(
-        `UPDATE public.payment_provider_methods
-         SET verification_status = $2,
-             connection_status = $3
-         WHERE provider_bank_account_id = $1 AND environment = 'sandbox'
-         RETURNING id`,
-        [
-          data.bankAccountID,
-          status,
-          status === 'verified' ? 'connected' : (status === 'errored' ? 'failed' : 'pending'),
-        ],
-      )).rows[0];
-      if (method) mutations.push('payment_provider_methods');
-      if (providerAccountId) {
-        await client.query(
-          `UPDATE public.external_payment_recipients
-           SET onboarding_status = $2
-           WHERE provider_account_id = $1 AND environment = 'sandbox'`,
-          [providerAccountId, status === 'verified' ? 'ready' : 'awaiting_bank'],
-        );
-        mutations.push('external_payment_recipients');
-        await client.query(
-          `UPDATE public.stakeholder_accounts sa
-           SET provider_bank_account_id = $2,
-               provider_bank_name = $3,
-               provider_last_four = $4,
-               verification_status = $5,
-               verified_at = CASE WHEN $5 = 'verified' THEN now() ELSE sa.verified_at END
-           FROM public.payment_provider_accounts ppa
-           WHERE sa.provider_account_id = $1
-             AND sa.provider = 'moov'
-             AND ppa.provider_account_id = sa.provider_account_id
-             AND ppa.provider = 'moov'
-             AND ppa.environment = 'sandbox'`,
+    if (shouldApplyBankVerificationEvent(eventType, data) && providerAccountId) {
+      const event = bankEventFromPayload(data);
+      const status = String(event.status ?? data.status ?? 'pending').toLowerCase();
+      if (event.bankAccountID) {
+        const method = (await client.query(
+          `UPDATE public.payment_provider_methods
+           SET verification_status = $2,
+               connection_status = $3
+           WHERE provider_bank_account_id = $1 AND environment = 'sandbox'
+           RETURNING id`,
           [
-            providerAccountId,
-            data.bankAccountID,
-            data.bankName ?? data.bankAccount?.bankName ?? null,
-            data.lastFourAccountNumber ?? data.bankAccount?.lastFourAccountNumber ?? null,
-            status === 'verified' ? 'verified' : 'pending',
+            event.bankAccountID,
+            status,
+            status === 'verified' ? 'connected' : (status === 'errored' ? 'failed' : 'pending'),
           ],
-        );
-        mutations.push('stakeholder_accounts');
+        )).rows[0];
+        if (method) mutations.push('payment_provider_methods');
       }
+      const applied = await applyMoovBankVerificationEvent(client, {
+        environment: 'sandbox',
+        providerAccountId,
+        tenantId,
+        bank: {
+          bankAccountID: event.bankAccountID,
+          bankName: event.bankName,
+          lastFourAccountNumber: event.lastFour,
+          status: event.status,
+        },
+        verification: event.verification,
+        sandboxOnly: true,
+      });
+      if (applied.recipients > 0) mutations.push('external_payment_recipients');
+      if (applied.updated > 0) mutations.push('stakeholder_accounts');
     }
     await client.query(
       `INSERT INTO public.payment_event_log
