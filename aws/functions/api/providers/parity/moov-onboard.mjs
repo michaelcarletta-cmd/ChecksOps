@@ -17,18 +17,11 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
-<<<<<<< HEAD
-=======
 import {
   MERCHANT_CAPABILITIES,
   MOOV_CAPABILITIES_API_VERSION,
   RECIPIENT_CAPABILITIES,
 } from './moov-capabilities.mjs';
-import {
-  enrichWalletTransactions,
-  loadTenantReceivables,
-} from './tenant-receivables.mjs';
->>>>>>> f0748ac84 (Switch Moov merchant requests to granular ACH capabilities.)
 import { sendViaSesOrSink } from '../../email.mjs';
 import { renderTransactionalTemplate } from '../../email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from '../../email-branding.mjs';

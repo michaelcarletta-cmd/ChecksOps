@@ -16,16 +16,12 @@ import {
   scopes,
   withMoovContext,
 } from './moov-client.mjs';
-<<<<<<< HEAD
 import { fail, jsonResult, moovParityContext } from './caller.mjs';
-=======
-import { fail, jsonResult, moovParityContext, isChecksOpsPlatformOwner } from './caller.mjs';
 import {
   MERCHANT_CAPABILITIES,
   MOOV_CAPABILITIES_API_VERSION,
   missingRequestedCapabilities,
 } from './moov-capabilities.mjs';
->>>>>>> f0748ac84 (Switch Moov merchant requests to granular ACH capabilities.)
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
 import {
