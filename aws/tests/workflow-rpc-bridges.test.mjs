@@ -69,6 +69,8 @@ test('classifies all audit rpc_disabled names', () => {
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_settings'), true);
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_tenant_auto_deposit'), true);
   assert.equal(SAFE_WRITE_RPCS.has('accept_mortgage_handling_request'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('admin_override_check_status'), true);
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.admin_override_check_status, 'safe_now');
   assert.ok(SAFE_LOSS_DRAFT_ACTIONS.has('mark_sent'));
   assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has('mark_escrowed'), false);
 });

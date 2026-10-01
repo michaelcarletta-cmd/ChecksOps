@@ -147,8 +147,21 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (effectiveStatus !== data.intake.status) {
-        intakeUpdates.status = effectiveStatus;
-        changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        if (isAwsStaging()) {
+          const { data: override, error: overrideError } = await supabase.rpc("admin_override_check_status", {
+            p_check_id: checkId,
+            p_new_status: effectiveStatus,
+            p_actor_id: user?.id ?? null,
+          });
+          if (overrideError) throw overrideError;
+          if (override && (override as { ok?: boolean }).ok === false) {
+            throw new Error((override as { error?: string }).error ?? "Override rejected");
+          }
+          changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        } else {
+          intakeUpdates.status = effectiveStatus;
+          changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        }
       }
 
       // 2. Intake-level mortgage_monitoring_type — always persisted here so it
