@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const page = readFileSync(join(root, "src/pages/WalletOps.tsx"), "utf8");
 const hooks = readFileSync(join(root, "src/hooks/useWalletOps.ts"), "utf8");
+const useWallet = readFileSync(join(root, "src/hooks/useWallet.ts"), "utf8");
+const loadSnapshot = readFileSync(join(root, "src/lib/payments/loadWalletSnapshot.ts"), "utf8");
 const sweep = readFileSync(join(root, "supabase/functions/moov-sweep-config/index.ts"), "utf8");
 const walletSync = readFileSync(join(root, "supabase/functions/moov-wallet-sync/index.ts"), "utf8");
 const transferStatus = readFileSync(join(root, "supabase/functions/moov-transfer-status/index.ts"), "utf8");
@@ -100,6 +102,14 @@ test("WalletOps wallet reads are environment-aware and never maybeSingle all ope
   assert.match(hooks, /resolveWalletOpsEnvironment/);
   assert.match(hooks, /\.eq\("environment", walletEnvironment\)/);
   assert.doesNotMatch(hooks, /\.eq\("wallet_type", "operating"\)[\s\S]{0,80}\.maybeSingle\(\)/);
+});
+
+test("Existing production wallet is not Pending setup when sync 409/502s", () => {
+  assert.match(useWallet, /loadWalletSnapshot/);
+  assert.match(useWallet, /readWallet/);
+  assert.match(useWallet, /tenantMoovEnvironment/);
+  assert.match(loadSnapshot, /setup_required:\s*false/);
+  assert.match(loadSnapshot, /isSetupError/);
 });
 
 let failed = 0;

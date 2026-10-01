@@ -165,6 +165,7 @@
         "aws/tests/walletops-wallet-select.test.mjs",
         "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
         "aws/tests/walletops-wallet-relative.test.mjs",
+        "aws/tests/walletops-existing-wallet-not-pending-setup.test.mjs",
         "scripts/test-walletops-layout.mjs",
         "aws/tests/tenant-collection-v2.test.mjs",
         "ops/release-locks/tests/freedom-platform-funding-contract.test.mjs",
@@ -175,6 +176,7 @@
       "protected_composition": "ops/deployment-guard/protected-composition/walletops-activity-recovery.json",
       "invariants": [
         "environment-aware operating-wallet selection",
+        "already-provisioned production wallets are not labeled Pending setup on moov-wallet-sync 409/502",
         "Pending In / Pending Out remain wallet-relative",
         "bank-funded ChecksOps billing is not tenant-wallet Pending Out",
         "Funding & Billing remains present",

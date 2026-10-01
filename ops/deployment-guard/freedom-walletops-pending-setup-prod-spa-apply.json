@@ -1,0 +1,57 @@
+{
+  "ok": true,
+  "id": "freedom-walletops-pending-setup-prod-spa-apply",
+  "verdict": "FREEDOM WALLETOPS PENDING-SETUP RESTORE — PRODUCTION SPA APPLIED",
+  "applied_at_utc": "2026-10-01T00:41:27Z",
+  "workstream_id": "freedom-walletops-pending-setup-2d41",
+  "branch": "cursor/freedom-walletops-pending-setup-2d41",
+  "commit": "1efc2545f41f6df9e260b4f1fcbcf69d384e6649",
+  "writer": "scripts/deployment-guard/production-spa-apply.mjs",
+  "role": "ChecksOpsProductionSpaDeploy",
+  "deploy_mode": "per_object_put",
+  "s3_sync_delete": false,
+  "lambda_updated": false,
+  "db_writes": 0,
+  "provider_financial_writes": 0,
+  "do_not_recreate_provider_transfer_ids": [
+    "9f9df312-32a9-4999-ace9-fc2b00669c75"
+  ],
+  "before": {
+    "entry": "/assets/index-CvCKsSsX.js",
+    "index_html_sha256": "0dac8cbceba15a086567511c447279c6a439c9c120079ebebb19309a8bf24e89",
+    "etag": "b2d4400446f1ef8b6a84896b5c11bcd2",
+    "last_modified": "2026-09-30T23:36:22+00:00",
+    "version_id": "rLJElCrQEl1AqJJuW4YuKC.xuo06gfiV"
+  },
+  "after": {
+    "entry": "/assets/index-DyoF7zdg.js",
+    "entry_sha256": "82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080",
+    "index_html_sha256": "d1a24f1089416b6a9630195ce87c310a0798cbcce3f207ae9cd5438a7e0954ac",
+    "walletops": "/assets/WalletOps-B7dXmlXU.js",
+    "use_wallet": "/assets/useWallet-BS8nWJZS.js",
+    "uploaded_count": 108,
+    "invalidation_id": "I1KEMHK2YRXIRDQJSX7AGZH12Y",
+    "https_cloudfront_cache": "Miss",
+    "s3_version": "tP.25Jv8BZwJP5Ghepsx.h7XiTCgZNTj",
+    "etag": "ebe3725545a38e18cce5a62e3302ac41",
+    "last_modified": "2026-10-01T00:41:27Z"
+  },
+  "https_verify": {
+    "entry": "/assets/index-DyoF7zdg.js",
+    "index_html_sha256": "d1a24f1089416b6a9630195ce87c310a0798cbcce3f207ae9cd5438a7e0954ac",
+    "authProvider_cognito": 2,
+    "empty_AUTH_PROVIDER": false,
+    "api_base_prep": true,
+    "hostname_guard": true,
+    "useWallet_readWallet": 2,
+    "useWallet_setup_required_false_on_existing": 2,
+    "funding_and_billing": 1,
+    "checksops_billing": 4
+  },
+  "not_restored": [
+    "/assets/index-CvCKsSsX.js",
+    "/assets/index-DSbVZXu8.js",
+    "/assets/index-QDJiUFF1.js",
+    "/assets/index-DbYbvb6d.js"
+  ]
+}
