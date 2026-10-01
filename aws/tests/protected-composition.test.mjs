@@ -40,8 +40,10 @@ const DRIFT = Object.freeze({
 
 const SOURCE_PATHS = [
   'src/hooks/useWalletOps.ts',
+  'src/hooks/useWallet.ts',
   'src/hooks/usePaymentProviderEligibility.ts',
   'src/lib/payments/wallets.ts',
+  'src/lib/payments/loadWalletSnapshot.ts',
   'src/pages/WalletOps.tsx',
   'src/lib/payments/walletRelativeTransfers.ts',
   'src/lib/payments/selectPaymentWallet.ts',
@@ -135,7 +137,7 @@ test('registry is multi-manifest and only registers known accepted work', () => 
   assert.equal(manifest.pin_hashed_spa_filenames, false);
   assert.equal(manifest.absence_based_deletion, 'forbidden_unless_superseded');
   assert.ok(manifest.do_not_recreate_provider_transfer_ids.includes('9f9df312-32a9-4999-ace9-fc2b00669c75'));
-  assert.equal(Object.keys(manifest.required_regression_tests).length, 8);
+  assert.equal(Object.keys(manifest.required_regression_tests).length, 9);
   assert.ok(fs.existsSync(path.join(ROOT, manifest.evidence)));
 });
 
@@ -305,6 +307,25 @@ test('7. making $139 bank billing Pending Out is rejected', () => {
   assert.equal(result.code, CODES.REGRESSION_DETECTED);
   const blob = JSON.stringify(result.errors);
   assert.match(blob, /wallet-relative|bank_billing_is_not_wallet_pending_out/);
+});
+
+test('7b. treating an existing production wallet as Pending setup is rejected', () => {
+  const files = loadWalletOpsFiles({
+    'src/hooks/useWallet.ts': readRepo('src/hooks/useWallet.ts')
+      .replaceAll('loadWalletSnapshot', 'syncWalletOnly'),
+    'src/lib/payments/loadWalletSnapshot.ts': readRepo('src/lib/payments/loadWalletSnapshot.ts')
+      .replaceAll('setup_required: false', 'setup_required: true'),
+  });
+  const result = evaluateProtectedComposition(validInput({
+    candidate_source: { files },
+    regression_results: {
+      ...passingProtectedCompositionResults(loadProtectedManifests(ROOT)),
+      'existing-wallet-not-pending-setup': { ok: false, reason: 'existing wallet labeled pending setup' },
+    },
+  }), { root: ROOT });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.REGRESSION_DETECTED);
+  assert.match(JSON.stringify(result.errors), /existing_wallet_not_pending_setup|existing-wallet-not-pending-setup/);
 });
 
 test('8. omitting required protected-composition evidence is rejected', () => {

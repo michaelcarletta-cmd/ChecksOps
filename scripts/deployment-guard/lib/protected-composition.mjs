@@ -78,6 +78,8 @@ export function passingProtectedCompositionResults(manifests) {
 
 export function evaluateWalletOpsSourceContracts(files = {}) {
   const useWalletOps = String(files['src/hooks/useWalletOps.ts'] || '');
+  const useWallet = String(files['src/hooks/useWallet.ts'] || '');
+  const loadSnapshot = String(files['src/lib/payments/loadWalletSnapshot.ts'] || '');
   const wallets = String(files['src/lib/payments/wallets.ts'] || '');
   const page = String(files['src/pages/WalletOps.tsx'] || '');
   const select = String(files['src/lib/payments/selectPaymentWallet.ts'] || '');
@@ -86,6 +88,7 @@ export function evaluateWalletOpsSourceContracts(files = {}) {
   const compliance = String(files['src/components/settings/ComplianceSettings.tsx'] || '');
   const whiteLabel = String(files['src/components/white-label/WhiteLabelSettings.tsx'] || '');
   const walletAndSelect = `${useWalletOps}\n${wallets}\n${select}`;
+  const walletStatus = `${useWallet}\n${loadSnapshot}`;
 
   const checks = {
     environment_aware_wallet_selection: /selectPaymentWallet/.test(useWalletOps)
@@ -114,6 +117,10 @@ export function evaluateWalletOpsSourceContracts(files = {}) {
       || /completed \$5 funding leaves Pending In/.test(relative),
     bank_billing_is_not_wallet_pending_out: /isChecksOpsBillingTransfer/.test(relative)
       && !/if \(isChecksOpsBillingTransfer\(transfer\)\) kind = ["']pending_out["']/.test(relative),
+    existing_wallet_not_pending_setup: /loadWalletSnapshot/.test(useWallet)
+      && /readWallet/.test(walletStatus)
+      && /tenantMoovEnvironment/.test(useWallet)
+      && /setup_required:\s*false/.test(loadSnapshot),
   };
 
   if (Object.keys(files).length && select && /rows\s*\[\s*0\s*\]/.test(select) && /selectPaymentWallet/.test(select)) {

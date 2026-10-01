@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { loadWalletSnapshot } from "@/lib/payments/loadWalletSnapshot";
 import {
   fundWallet,
+  readWallet,
   syncWallet,
   type WalletSnapshot,
   type WalletType,
@@ -12,7 +14,7 @@ import {
  * its per-matter sub-ledgers.
  */
 export function useWallet(walletType: WalletType = "operating") {
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, tenantMoovEnvironment } = usePaymentProviderEligibility();
   const qc = useQueryClient();
   const key = ["payment-wallet", tenantId, walletType];
 
@@ -21,23 +23,14 @@ export function useWallet(walletType: WalletType = "operating") {
     enabled: !!tenantId && enabled,
     staleTime: 30_000,
     retry: false,
-    queryFn: async () => {
-      try {
-        return await syncWallet(tenantId!, walletType);
-      } catch (e) {
-        // A balance that simply isn't provisioned yet is an empty state, not
-        // an error — the organization just hasn't finished payment setup.
-        if (isSetupError(e as Error)) {
-          return {
-            wallet: null as any,
-            ledger: [],
-            sub_ledgers: [],
-            setup_required: true,
-          } as WalletSnapshot & { setup_required: boolean };
-        }
-        throw e;
-      }
-    },
+    queryFn: () =>
+      loadWalletSnapshot({
+        tenantId: tenantId!,
+        walletType,
+        tenantMoovEnvironment,
+        syncWallet,
+        readWallet,
+      }) as Promise<WalletSnapshot & { setup_required?: boolean }>,
   });
 
   const fund = useMutation({
@@ -62,8 +55,8 @@ export function useWallet(walletType: WalletType = "operating") {
     onSuccess: (data) => {
       qc.setQueryData(key, data);
       qc.invalidateQueries({ queryKey: ["wallet-running-balance"] });
-      qc.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
       qc.invalidateQueries({ queryKey: ["wallet-ops-readiness"] });
+      qc.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
     },
   });
 
@@ -82,23 +75,3 @@ export function useWallet(walletType: WalletType = "operating") {
     fund,
   };
 }
-
-const SETUP_HINTS = [
-  "set up your payment account",
-  "not active yet",
-  "not ready to receive funds",
-  "not enabled for this payment provider",
-  "payment provider is not enabled",
-  "credentials are not configured",
-  "balance account",
-  "status 409",
-  "status 502",
-  "returned a non-2xx",
-  "edge function returned",
-];
-
-function isSetupError(e: Error): boolean {
-  const msg = (e?.message ?? "").toLowerCase();
-  return SETUP_HINTS.some((hint) => msg.includes(hint));
-}
-

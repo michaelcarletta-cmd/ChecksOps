@@ -23,6 +23,7 @@
     "Pending In / Pending Out remain wallet-relative",
     "pending bank → Freedom wallet funding contributes Pending In",
     "completed wallet funding leaves Pending In but remains in Recent Activity",
+    "an already-provisioned production wallet is not labeled Pending setup when moov-wallet-sync 409/502s",
     "bank-funded ChecksOps billing does NOT become tenant-wallet Pending Out",
     "ChecksOps Billing remains visible in WalletOps activity",
     "Funding & Billing remains present",
@@ -37,6 +38,7 @@
     "wallet-select": "aws/tests/walletops-wallet-select.test.mjs",
     "wallet-funding-reconcile": "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
     "wallet-relative": "aws/tests/walletops-wallet-relative.test.mjs",
+    "existing-wallet-not-pending-setup": "aws/tests/walletops-existing-wallet-not-pending-setup.test.mjs",
     "walletops-layout": "scripts/test-walletops-layout.mjs",
     "tenant-collection-v2": "aws/tests/tenant-collection-v2.test.mjs",
     "funding-contract": "ops/release-locks/tests/freedom-platform-funding-contract.test.mjs",
@@ -45,8 +47,10 @@
   },
   "shared_files": [
     "src/hooks/useWalletOps.ts",
+    "src/hooks/useWallet.ts",
     "src/hooks/usePaymentProviderEligibility.ts",
     "src/lib/payments/wallets.ts",
+    "src/lib/payments/loadWalletSnapshot.ts",
     "src/pages/WalletOps.tsx",
     "src/lib/payments/walletRelativeTransfers.ts",
     "src/lib/payments/selectPaymentWallet.ts",
@@ -66,7 +70,8 @@
     "payment_account_present_in_compliance",
     "pending_wallet_funding_is_pending_in",
     "completed_funding_remains_activity",
-    "bank_billing_is_not_wallet_pending_out"
+    "bank_billing_is_not_wallet_pending_out",
+    "existing_wallet_not_pending_setup"
   ],
   "do_not_recreate_provider_transfer_ids": [
     "9f9df312-32a9-4999-ace9-fc2b00669c75"
