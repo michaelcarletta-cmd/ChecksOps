@@ -43,6 +43,20 @@
       "capabilities": ["lambda-overlay-evaluate"]
     },
     {
+      "path": "scripts/deployment-guard/lambda-overlay-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": true,
+      "function_name_default": "checksops-staging-api",
+      "note": "Official shared-API Lambda overlay apply. Requires a matching lambda-overlay receipt. Re-reads CodeSha256 + RevisionId immediately before write. Staging targets checksops-staging-api. Production requires a production receipt plus --confirm-production. Never changes env, SPA, or SQL."
+    },
+    {
+      "path": "scripts/deployment-guard/build-new-stage-overlay.mjs",
+      "classification": "SAFE",
+      "capabilities": ["lambda-overlay-build"],
+      "note": "Downloads current live Lambda code and patches only workflow.mjs new_stage. Never writes AWS."
+    },
+    {
       "path": "scripts/deployment-guard/spa-promote.mjs",
       "classification": "GUARDED",
       "capabilities": ["spa-evaluate"]
