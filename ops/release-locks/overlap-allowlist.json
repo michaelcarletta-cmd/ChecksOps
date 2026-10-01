@@ -1269,6 +1269,13 @@
       "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #428 remains open. Other PR must rebase before merge.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 600,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #597 only refreshes the partner-sharing source.tree_hash after CheckCommandCenter changed. PR #600 also edits locked-components.json to refresh the production SPA baseline. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #600.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
