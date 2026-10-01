@@ -208,7 +208,7 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
       if (!intakeId) throw new Error("This check has no linked intake record and cannot be deleted through the AWS workflow.");
       const { data: ud } = await supabase.auth.getUser();
       if (!ud.user?.id) throw new Error("Your session has expired. Please sign in again.");
-      const { error } = await supabase.rpc("admin_delete_check" as any, {
+      const { error } = await supabase.rpc("admin_delete_check", {
         p_check_id: intakeId,
         p_actor_id: ud.user.id,
         p_reason: deleteReason.trim(),

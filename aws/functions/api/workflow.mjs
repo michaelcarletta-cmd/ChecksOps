@@ -423,7 +423,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     }
     const reason = String(body.reason || body.p_reason || '').trim();
     if (reason.length < 3 || reason.length > 2000) {
-      return denied(spoof, { error: 'deletion_reason_required', message: 'A deletion reason (min 3 characters) is required' });
+      return denied(spoof, { error: 'deletion_reason_required', message: 'A deletion reason between 3 and 2000 characters is required' });
     }
     if (looked.check.claim_id) {
       return denied(spoof, {

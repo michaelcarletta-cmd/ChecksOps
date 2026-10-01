@@ -63,7 +63,7 @@ export function AdminDeleteCheckButton({
     }
     setDeleting(true);
     try {
-      const { error } = await supabase.rpc("admin_delete_check" as any, {
+      const { error } = await supabase.rpc("admin_delete_check", {
         p_check_id: checkId,
         p_actor_id: user.id,
         p_reason: trimmed,
