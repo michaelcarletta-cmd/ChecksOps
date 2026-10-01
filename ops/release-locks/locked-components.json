@@ -159,7 +159,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/cutover/WEBHOOK_TRANSITION.md"],
+        "evidence_refs": [
+          "aws/cutover/WEBHOOK_TRANSITION.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -173,7 +175,11 @@
         "signed webhook receipt hash",
         "independent proof the Supabase Moov webhook is disabled"
       ],
-      "open_pr_overlap": ["#314", "#315", "#308"],
+      "open_pr_overlap": [
+        "#314",
+        "#315",
+        "#308"
+      ],
       "notes": "WEBHOOK_TRANSITION.md on main still says production URLs remain on Supabase. Background claims AWS accepted events. UNVERIFIED."
     },
     "checkalt-submission": {
@@ -210,7 +216,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/sql/65_checkalt_production_writer.sql"],
+        "evidence_refs": [
+          "aws/financial/sql/65_checkalt_production_writer.sql"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -224,7 +232,13 @@
         "writer SQL apply hash",
         "deployed Lambda version"
       ],
-      "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"],
+      "open_pr_overlap": [
+        "#327",
+        "#332",
+        "#339",
+        "#322",
+        "#323"
+      ],
       "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. PR #359 retargets tree_hash for persistPollOutcome FinCapture depositDate mapping only. Writer SQL remains NOT_APPLIED. UNVERIFIED."
     },
     "financial-ledger": {
@@ -269,7 +283,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"],
+        "evidence_refs": [
+          "aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -282,7 +298,11 @@
         "production financial permission flag",
         "reconciliation apply proof"
       ],
-      "open_pr_overlap": ["#315", "#310", "#309"],
+      "open_pr_overlap": [
+        "#315",
+        "#310",
+        "#309"
+      ],
       "notes": "Freedom Adjustment reconciliation is claimed in background/open PRs, not proven on origin/main."
     },
     "tenant-email": {
@@ -319,7 +339,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/docs/tenant-ses-email-domain.md"],
+        "evidence_refs": [
+          "aws/docs/tenant-ses-email-domain.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -332,7 +354,11 @@
         "production SES enablement proof",
         "SQL apply hash"
       ],
-      "open_pr_overlap": ["#233", "#231", "#255"],
+      "open_pr_overlap": [
+        "#233",
+        "#231",
+        "#255"
+      ],
       "notes": "Source preserved; template flag false; SQL NOT_APPLIED."
     },
     "partner-sharing": {
@@ -458,7 +484,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/rls/sql/29_mortgage_ops_library_parity.sql"],
+        "evidence_refs": [
+          "aws/rls/sql/29_mortgage_ops_library_parity.sql"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -470,7 +498,11 @@
       "missing_evidence": [
         "production or staging apply proof for SQL 29/30"
       ],
-      "open_pr_overlap": ["#249", "#248", "#282"],
+      "open_pr_overlap": [
+        "#249",
+        "#248",
+        "#282"
+      ],
       "notes": "Matches background: merged code-only; SQL previously reported unapplied."
     },
     "auto-deposit": {
@@ -511,7 +543,12 @@
         "merged tenant auto-deposit source",
         "production activation proof"
       ],
-      "open_pr_overlap": ["#342", "#339", "#327", "#332"],
+      "open_pr_overlap": [
+        "#342",
+        "#339",
+        "#327",
+        "#332"
+      ],
       "notes": "Validated-as-ready in background is not production-locked. PR #339 is draft and not on main."
     },
     "database-rls": {
@@ -595,7 +632,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"],
+        "evidence_refs": [
+          "aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -607,7 +646,10 @@
       "missing_evidence": [
         "Secrets Manager version IDs (not secret values)"
       ],
-      "open_pr_overlap": ["#316", "#314"],
+      "open_pr_overlap": [
+        "#316",
+        "#314"
+      ],
       "notes": "Name/config references only."
     },
     "ocr-azure": {
@@ -663,16 +705,16 @@
       "environment": "production",
       "source": {
         "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
-        "tree_hash": "3de6dae57821a391a1192acf4ecc6d596805af15a8cc58067cf5e6b322ecc706",
+        "tree_hash": "1e75908f910c1372cb67de6968008b1dd0f686f5c3900304a5d956a5565ef225",
         "merged": true,
         "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-DyoF7zdg.js",
-        "version": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt",
-        "hash": "82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080",
+        "name": "/assets/index-CTqMys28.js",
+        "version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+        "hash": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
@@ -683,32 +725,32 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-10-01T14:07:21Z",
+        "recorded_at": "2026-10-01T15:15:51Z",
         "environment": "production",
         "component": "production-spa",
         "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
-        "artifact_identity": "/assets/index-DyoF7zdg.js",
+        "artifact_identity": "/assets/index-CTqMys28.js",
         "evidence_producer": "read-only live HTTPS verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-DyoF7zdg.js",
-        "spa_sha256": "82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080",
+        "spa_bundle": "/assets/index-CTqMys28.js",
+        "spa_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt",
+        "cloudfront_deployment_fingerprint": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-        "notes": "Accepted live production SPA 2026-10-01T14:07:21Z. Host checksops.com. Entry /assets/index-DyoF7zdg.js. index.html sha256 f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726. S3 version SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt. CloudFront E1B0ZWWO5559U5. Source lineage 6c679a120d5d4b0dd23d7035ecaf309558df29d0. Banner overlay e3e4649478a0c3978065b71b0528dd93baa8dac1. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved."
+        "config_hash": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+        "notes": "Accepted live production SPA 2026-10-01T15:15:51Z. Host checksops.com. Entry /assets/index-CTqMys28.js. index.html sha256 ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b. S3 version 0AuwkrSXSQDHFGUBHFw93_symfzRvIkv. CloudFront E1B0ZWWO5559U5. Source lineage 6c679a120d5d4b0dd23d7035ecaf309558df29d0. Banner overlay e3e4649478a0c3978065b71b0528dd93baa8dac1. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved."
       },
       "rollback": {
         "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "artifact": "/assets/index-DSbVZXu8.js",
+        "artifact": "/assets/index-DyoF7zdg.js",
         "notes": "Previous accepted live baseline. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
       },
       "missing_evidence": [],
@@ -723,7 +765,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "185db945d21b5d14f55f0fe58c1efedee3e07cba790eab6c488aefd5fc20e7ad",
+        "tree_hash": "c7ef8b69db695ab617737f4ed76e1efa63bfc27f0cb2ac7242a7f443d7bef44f",
         "merged": true,
         "merged_pr": null
       },
@@ -769,6 +811,5 @@
       ],
       "notes": "Fail-closed control-plane metadata reconciliation only. The protected release-control tree advanced on merged main, including PR #508 production SPA baseline safeguards and subsequent guard/lock maintenance. Classification remains UNVERIFIED. This source hash update does not change production, does not authorize deployment, and does not replace the authoritative live-SPA or current-live-Lambda requirements."
     }
-
   }
 }

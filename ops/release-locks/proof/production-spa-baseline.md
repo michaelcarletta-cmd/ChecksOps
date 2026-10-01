@@ -14,11 +14,11 @@ protects it.
 | Host | `https://checksops.com` |
 | CloudFront | `E1B0ZWWO5559U5` |
 | S3 bucket | `checksops-production-frontend-806168576068` |
-| Entry | `/assets/index-DyoF7zdg.js` |
-| Entry JS SHA256 | `82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080` |
-| index.html SHA256 | `f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726` |
-| index.html S3 version | `SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt` |
-| Last-Modified | `Thu, 01 Oct 2026 14:07:21 GMT` |
+| Entry | `/assets/index-CTqMys28.js` |
+| Entry JS SHA256 | `ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd` |
+| index.html SHA256 | `ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b` |
+| index.html S3 version | `0AuwkrSXSQDHFGUBHFw93_symfzRvIkv` |
+| Last-Modified | `Thu, 01 Oct 2026 15:15:51 GMT` |
 | Banner overlay commit | `e3e4649478a0c3978065b71b0528dd93baa8dac1` |
 | Live source lineage before overlay | `6c679a120d5d4b0dd23d7035ecaf309558df29d0` |
 
@@ -35,7 +35,8 @@ branch, or another worktree must demonstrate that it contains or reconciles
 this accepted production SPA. If it cannot, deployment must be refused.
 
 Do not restore a superseded entry (`index-DSbVZXu8.js`, `index-BPbQUNFr.js`,
-`index-BAD1KYoF.js`, or earlier conflicting bundle names) over this baseline.
+`index-BAD1KYoF.js`, `index-DyoF7zdg.js`, or earlier conflicting bundle names)
+over this baseline.
 
 ## Fail-closed promotion rules
 
@@ -53,11 +54,11 @@ write.
 
 HTTPS `GET https://checksops.com/` returned:
 
-- `last-modified: Thu, 01 Oct 2026 14:07:21 GMT`
-- `x-amz-version-id: SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt`
-- index.html SHA256 `f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726`
-- entry `/assets/index-DyoF7zdg.js`
-- entry SHA256 `82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080`
+- `last-modified: Thu, 01 Oct 2026 15:15:51 GMT`
+- `x-amz-version-id: 0AuwkrSXSQDHFGUBHFw93_symfzRvIkv`
+- index.html SHA256 `ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b`
+- entry `/assets/index-CTqMys28.js`
+- entry SHA256 `ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd`
 
 Exact match to the accepted baseline. Freeze proceeded.
 
