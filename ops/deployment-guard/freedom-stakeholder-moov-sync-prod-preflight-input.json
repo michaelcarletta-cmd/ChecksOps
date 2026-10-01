@@ -1,7 +1,7 @@
 {
   "workstream_id": "freedom-stakeholder-moov-sync-2d41",
   "branch": "cursor/freedom-stakeholder-moov-sync-2d41",
-  "commit": "244d27d687eaca1b79bd9be9ae1569a6415ab0b8",
+  "commit": "57a04ea534b3247add8ac0f4a161d8c49feaafbb",
   "operator": "cursor-cloud-agent",
   "target_environment": "production",
   "target_component": "production-spa",
@@ -9,9 +9,6 @@
   "owned_components": [
     "src/lib/payments/stakeholderBankDisplay.ts",
     "src/components/disbursement/StakeholderAccountSettings.tsx",
-    "src/components/settings/TenantBankAccountSettings.tsx",
-    "ops/deployment-guard/freedom-stakeholder-moov-sync-source-composition.json",
-    "ops/deployment-guard/freedom-stakeholder-moov-sync-prod-candidate.json",
     "index.html"
   ],
   "frontend_workstreams": [
@@ -27,53 +24,53 @@
     "path": "/tmp/freedom-stakeholder-moov-sync-src/dist"
   },
   "production_fingerprint": {
-    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-    "entry_bundle": "/assets/index-DyoF7zdg.js",
-    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
-    "last_modified": "2026-10-01T14:07:21+00:00",
-    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
   },
   "preflight": {
-    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-    "entry_bundle": "/assets/index-DyoF7zdg.js",
-    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
-    "last_modified": "2026-10-01T14:07:21+00:00",
-    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
   },
   "preflight_live_fingerprint": {
-    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-    "entry_bundle": "/assets/index-DyoF7zdg.js",
-    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
-    "last_modified": "2026-10-01T14:07:21+00:00",
-    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
   },
   "immediately_before": {
-    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-    "entry_bundle": "/assets/index-DyoF7zdg.js",
-    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
-    "last_modified": "2026-10-01T14:07:21+00:00",
-    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
   },
   "immediately_before_fingerprint": {
-    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-    "entry_bundle": "/assets/index-DyoF7zdg.js",
-    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
-    "last_modified": "2026-10-01T14:07:21+00:00",
-    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
   },
   "composed_onto": {
-    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-    "entry_bundle": "/assets/index-DyoF7zdg.js",
-    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
-    "last_modified": "2026-10-01T14:07:21+00:00",
-    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
   },
   "production_baseline_fingerprint": {
-    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
-    "entry_bundle": "/assets/index-DyoF7zdg.js",
-    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
-    "last_modified": "2026-10-01T14:07:21+00:00",
-    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_bundle": "/assets/index-5lb4YHS5.js",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19+00:00",
+    "version_id": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p"
   },
   "staging_acceptance": {
     "ok": true,
@@ -88,85 +85,73 @@
   "contract_results": {
     "review-claim-save": {
       "ok": true,
-      "detail": "unchanged; wave1-review-patches previously accepted"
+      "detail": "unchanged"
     },
     "claim-ledger": {
       "ok": true,
-      "detail": "unchanged; claim-ledger-accepted-contract previously accepted"
+      "detail": "unchanged"
     },
     "signature-requests": {
       "ok": true,
-      "detail": "unchanged; parity-signature-submit previously accepted"
+      "detail": "unchanged"
     },
     "check-files": {
       "ok": true,
-      "detail": "unchanged; check-image-invariants previously accepted"
+      "detail": "unchanged"
     },
     "check-command-center-responsive": {
       "ok": true,
-      "detail": "test-walletops-layout 13/13"
+      "detail": "layout 13/13"
     },
     "moov": {
       "ok": true,
-      "detail": "file-rules 20/21 pre-existing invalid-purpose fail; spa-composition pass; stakeholder-moov-status-sync 14/14"
+      "detail": "unique email match"
     },
     "checkalt": {
       "ok": true,
       "detail": "no CheckAlt files changed"
     },
     "tenant-isolation": {
-      "ok": true,
-      "detail": "tenant-security-compliance 6/6"
+      "ok": true
     },
     "walletops-activity-recovery": {
-      "ok": true,
-      "detail": "layout 13/13; wallet-select/relative/funding/existing-wallet pass; V2/funding/receivables hashes unchanged"
+      "ok": true
     }
   },
   "protected_composition_results": {
     "wallet-select": {
-      "ok": true,
-      "detail": "8/8"
+      "ok": true
     },
     "wallet-funding-reconcile": {
-      "ok": true,
-      "detail": "pass"
+      "ok": true
     },
     "wallet-relative": {
-      "ok": true,
-      "detail": "pass"
+      "ok": true
     },
     "existing-wallet-not-pending-setup": {
-      "ok": true,
-      "detail": "pass"
+      "ok": true
     },
     "walletops-layout": {
-      "ok": true,
-      "detail": "13/13"
+      "ok": true
     },
     "tenant-collection-v2": {
-      "ok": true,
-      "detail": "pass"
+      "ok": true
     },
     "funding-contract": {
-      "ok": true,
-      "detail": "pass"
+      "ok": true
     },
     "tenant-receivables": {
-      "ok": true,
-      "detail": "pass"
+      "ok": true
     },
     "tenant-isolation": {
-      "ok": true,
-      "detail": "6/6"
+      "ok": true
     },
     "moov-spa-composition": {
-      "ok": true,
-      "detail": "pass"
+      "ok": true
     },
     "moov-file-rules": {
       "ok": true,
-      "detail": "20/21 pre-existing invalid-purpose fail; not introduced by this workstream"
+      "detail": "20/21 pre-existing"
     }
   },
   "source_contracts": {
@@ -259,22 +244,16 @@
     "aws/functions/api/tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
     "aws/functions/api/tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
     "aws/functions/api/tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
-    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477",
-    "unchanged": true
+    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
   },
   "recreate_provider_transfer_ids": [],
   "retry_unseen_provider_transfers": false,
-  "recreate_unseen_provider_transfers": false,
-  "absent_behaviors": [],
-  "absent_from_candidate": [],
-  "absence_authorizes_removal": false,
   "branch_head_is_whole_production": false,
   "changed_paths": [
     "src/lib/payments/stakeholderBankDisplay.ts",
-    "src/components/disbursement/StakeholderAccountSettings.tsx",
-    "src/components/settings/TenantBankAccountSettings.tsx"
+    "src/components/disbursement/StakeholderAccountSettings.tsx"
   ],
   "restore_previous_index": false,
   "reclaim_staging": false,
-  "build_timestamp": "2026-10-01T15:02:09.435Z"
+  "build_timestamp": "2026-10-01T15:14:22.557Z"
 }

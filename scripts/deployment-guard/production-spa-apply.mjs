@@ -46,7 +46,7 @@ function sha256Text(text) {
 }
 
 function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+  const match = String(html || '').match(/\/assets\/index-[A-Za-z0-9_-]+\.js/);
   return match ? match[0] : null;
 }
 
