@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
+import { summarizeAdminEditSave } from "@/components/check-review/adminEditSavedChanges";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -146,9 +147,24 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         effectiveStatus = "needs_review";
       }
 
+      let statusOverriddenOnAws = false;
       if (effectiveStatus !== data.intake.status) {
-        intakeUpdates.status = effectiveStatus;
-        changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        if (isAwsStaging()) {
+          const { data: override, error: overrideError } = await supabase.rpc("admin_override_check_status", {
+            p_check_id: checkId,
+            p_new_status: effectiveStatus,
+            p_actor_id: user?.id ?? null,
+          });
+          if (overrideError) throw overrideError;
+          if (override && (override as { ok?: boolean }).ok === false) {
+            throw new Error((override as { error?: string }).error ?? "Override rejected");
+          }
+          statusOverriddenOnAws = true;
+          changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        } else {
+          intakeUpdates.status = effectiveStatus;
+          changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        }
       }
 
       // 2. Intake-level mortgage_monitoring_type — always persisted here so it
@@ -228,29 +244,36 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         changes.push(`account # → ${newAccount ? `***${newAccount.slice(-4)}` : "—"}`);
       }
 
+      let skippedIntakeFields: string[] = [];
       if (Object.keys(intakeUpdates).length > 0) {
         const persist = isAwsStaging()
           ? pickAwsSafeIntakeUpdates(intakeUpdates)
           : { safe: intakeUpdates, skipped: [] };
+        skippedIntakeFields = persist.skipped;
         if (Object.keys(persist.safe).length === 0) {
-          throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
-        }
-        persist.safe.updated_at = new Date().toISOString();
-        const { error } = await supabase
-          .from("check_intake_items")
-          .update(persist.safe)
-          .eq("id", checkId);
-        if (error) throw error;
+          if (!statusOverriddenOnAws) {
+            throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
+          }
+          // Status already committed via RPC. Do not fail the save for leftover
+          // AWS-prohibited columns (amount, routing, account, mortgage).
+        } else {
+          persist.safe.updated_at = new Date().toISOString();
+          const { error } = await supabase
+            .from("check_intake_items")
+            .update(persist.safe)
+            .eq("id", checkId);
+          if (error) throw error;
 
-        await supabase.from("check_audit_log").insert([{
-          check_id: checkId,
-          event_type: "admin_correction",
-          actor_id: user?.id ?? null,
-          event_description: `Admin edit: ${Object.entries(persist.safe)
-            .filter(([k]) => k !== "updated_at")
-            .map(([k, v]) => `${k}=${v}`).join(", ")}`,
-          event_data: persist.safe as Record<string, any>,
-        }]);
+          await supabase.from("check_audit_log").insert([{
+            check_id: checkId,
+            event_type: "admin_correction",
+            actor_id: user?.id ?? null,
+            event_description: `Admin edit: ${Object.entries(persist.safe)
+              .filter(([k]) => k !== "updated_at")
+              .map(([k, v]) => `${k}=${v}`).join(", ")}`,
+            event_data: persist.safe as Record<string, any>,
+          }]);
+        }
       }
 
       // 3. Mirror descriptive fields to claim_checks if the row exists.
@@ -286,10 +309,14 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         }
       }
 
-      if (changes.length === 0) {
-        toast.info("No changes to save");
+      const saveSummary = summarizeAdminEditSave(changes, skippedIntakeFields);
+      if (saveSummary.warning) {
+        toast.warning(saveSummary.warning);
+      }
+      if (saveSummary.toast.kind === "info") {
+        toast.info(saveSummary.toast.message);
       } else {
-        toast.success(`Saved: ${changes.join(", ")}`);
+        toast.success(saveSummary.toast.message);
       }
 
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
@@ -310,7 +337,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-amber-400" />
-            Edit Check (Admin)
+            Edit Check
           </DialogTitle>
           <DialogDescription>
             Manually enter or correct check details, override workflow status, and adjust mortgage routing. All changes are logged.
@@ -465,7 +492,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs">Override Status (admin)</Label>
+              <Label className="text-xs">Override Status</Label>
               <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
