@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callPlaid } from "./plaidClient.ts";
 import { moovFetch, scopes, safeLastFour, moovConfigured } from "./moovClient.ts";
+import { MOOV_CAPABILITIES_API_VERSION, RECIPIENT_CAPABILITIES } from "./moovCapabilities.ts";
 import { logPaymentEvent, sanitize, moovGloballyEnabled } from "./moovGuard.ts";
 
 /**
@@ -180,6 +181,7 @@ export async function bridgePlaidBankToMoov(input: BridgeInput): Promise<BridgeR
         method: "POST",
         scopes: scopes.accountsWrite(),
         idempotencyKey: `checksops-recipient-${environment}-${recipient.id}`,
+        apiVersion: MOOV_CAPABILITIES_API_VERSION,
         body: {
           accountType: "individual",
           profile: {
@@ -188,7 +190,7 @@ export async function bridgePlaidBankToMoov(input: BridgeInput): Promise<BridgeR
               email: payeeEmail ?? undefined,
             },
           },
-          capabilities: ["send-funds"],
+          capabilities: [...RECIPIENT_CAPABILITIES],
           foreignID: recipient.id,
           metadata: { checksops_recipient_id: recipient.id, checksops_tenant_id: tenantId },
         },

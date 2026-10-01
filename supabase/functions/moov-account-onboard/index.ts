@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, scopes } from "../_shared/moovClient.ts";
+import { MERCHANT_CAPABILITIES, MOOV_CAPABILITIES_API_VERSION } from "../_shared/moovCapabilities.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller } from "../_shared/moovGuard.ts";
 
 // In-app onboarding for a tenant's own connected payment account.
@@ -223,7 +224,8 @@ serve(async (req) => {
     await moovFetch(`/accounts/${accountId}/capabilities`, {
       method: "POST",
       scopes: scopes.capabilitiesWrite(accountId),
-      body: { capabilities: ["transfers", "send-funds", "wallet", "send-funds.ach"] },
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
+      body: { capabilities: [...MERCHANT_CAPABILITIES] },
     }).catch((e) => console.error("[moov-account-onboard] capabilities", (e as Error).message));
 
     await supabase

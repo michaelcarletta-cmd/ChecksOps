@@ -271,18 +271,7 @@ export function normalizeOnboardingStatus(input) {
   return 'onboarding_incomplete';
 }
 
-export function capabilityFlags(caps) {
-  const byName = new Map((caps ?? []).map((c) => [c.capability, c.status]));
-  const on = (name) => byName.get(name) === 'enabled';
-  return {
-    can_receive_payments: on('transfers') || on('collect-funds'),
-    can_send_payments: on('transfers') || on('send-funds'),
-    can_ach_debit: on('collect-funds'),
-    can_ach_credit: on('send-funds'),
-    restricted: (caps ?? []).some((c) => c.status === 'disconnected'),
-    disabled: (caps ?? []).length > 0 && (caps ?? []).every((c) => c.status !== 'enabled'),
-  };
-}
+export { capabilityFlags } from './moov-capabilities.mjs';
 
 export function safeLastFour(value) {
   if (!value) return null;
