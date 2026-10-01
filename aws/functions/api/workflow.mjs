@@ -728,15 +728,30 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     }
 
     // Loss drafts optionally point at a check with no ON DELETE action.
+    // Claim-owned escrow must survive: admin_delete_check only unlinks
+    // check_intake_item_id, and child tables cascade on parent DELETE.
     // The application role cannot SET check_intake_item_id NULL: that column
     // is omitted from the T5 UPDATE grant, and aws_write_loss_draft_tracking
     // WITH CHECK uses aws_can_write_check(check_intake_item_id), which is
     // false after the value becomes NULL. DELETE is granted and USING still
-    // sees the old check id, so remove the check-scoped row instead.
+    // sees the old check id, so remove only check-scoped (claim_id IS NULL)
+    // drafts. Refuse when a claim-owned draft is still linked.
     await client.query('SAVEPOINT delete_unlink_loss_draft');
     try {
+      const claimed = (await client.query(
+        'SELECT 1 FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid AND claim_id IS NOT NULL LIMIT 1',
+        [looked.check.id],
+      )).rows;
+      if (claimed.length) {
+        await client.query('RELEASE SAVEPOINT delete_unlink_loss_draft');
+        return denied(spoof, {
+          error: 'cleanup_denied',
+          message: 'Refusing to delete a check with claim-owned loss draft tracking',
+          blocker: 'loss_draft_tracking',
+        });
+      }
       await client.query(
-        'DELETE FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid',
+        'DELETE FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid AND claim_id IS NULL',
         [looked.check.id],
       );
       await client.query('RELEASE SAVEPOINT delete_unlink_loss_draft');
@@ -757,7 +772,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     }
 
     // Rely on FK ON DELETE CASCADE for dependent records (payees/files/messages/etc).
-    // Loss drafts are cleared above; financial/provider tables are the remaining non-cascading holders.
+    // Check-scoped loss drafts are cleared above; claim-owned drafts block deletion.
     const rows = (await client.query(
       'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',
       [looked.check.id],

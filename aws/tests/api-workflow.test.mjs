@@ -103,6 +103,7 @@ const mockClient = ({
   rows = [createdRow],
   payees,
   endorsements,
+  claimOwnedLossDrafts = [],
 } = {}) => {
   const queries = [];
   const defaultPayees = payees || [{
@@ -165,6 +166,9 @@ const mockClient = ({
       }
       if (/SELECT id FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
         return { rows: [{ id: 'ld-1' }] };
+      }
+      if (/SELECT 1 FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
+        return { rows: claimOwnedLossDrafts };
       }
       if (/SELECT file_path FROM public\.loss_draft_documents/.test(sql)) {
         return { rows: [{ file_path: 'escrow/claim-not-this-check.pdf' }] };
@@ -452,7 +456,8 @@ test('admin can delete a safe check via workflow delete route', async () => {
   }), depsFor(client));
   assert.equal(result.ok, true);
   assert.equal(result.data.deleted, true);
-  assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(String(q.sql))));
+  assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id = \$1::uuid AND claim_id IS NULL/.test(String(q.sql))));
+  assert.ok(!client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id = \$1::uuid\s*$/.test(String(q.sql))));
   assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
 });
 
@@ -479,6 +484,22 @@ test('workflow delete denies claim-linked, partner-linked, and deposited checks'
   })));
   assert.equal(claimLinked.statusCode, 403);
   assert.equal(claimLinked.error, 'cleanup_denied');
+
+  const claimOwnedClient = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+    claimOwnedLossDrafts: [{ '?column?': 1 }],
+  });
+  const claimOwnedDraft = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(claimOwnedClient));
+  assert.equal(claimOwnedDraft.statusCode, 403);
+  assert.equal(claimOwnedDraft.error, 'cleanup_denied');
+  assert.equal(claimOwnedDraft.blocker, 'loss_draft_tracking');
+  assert.ok(!claimOwnedDraft.ok);
+  assert.ok(!claimOwnedClient.queries.some((q) => /DELETE FROM public\.loss_draft_tracking/.test(String(q.sql))));
+  assert.ok(!claimOwnedClient.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
 
   const partnerLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
     check_id: CHECK_ID,
@@ -554,7 +575,7 @@ test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async
     assert.equal(result.ok, true);
     assert.equal(result.data.deleted, true);
     assert.equal(result.storageCleanup.ok, true);
-    assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(String(q.sql))));
+    assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id = \$1::uuid AND claim_id IS NULL/.test(String(q.sql))));
     assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
     assert.ok(!client.queries.some((q) => /FROM public\.loss_draft_documents/.test(String(q.sql))));
 
