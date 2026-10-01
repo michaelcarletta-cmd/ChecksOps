@@ -23,7 +23,7 @@
       ".github/workflows/tax-profile-migration-guard.yml"
     ],
     "lambda_aliases_in_repo": "none",
-    "spa_lock_files_on_main": "production-spa component records live checksops.com index-DSbVZXu8.js; origin/main source is not guaranteed to be that baseline"
+      "spa_lock_files_on_main": "production-spa component records live checksops.com index-DyoF7zdg.js; origin/main source is not guaranteed to be that baseline"
   },
   "github_enforcement": {
     "status": "REVISION_REQUIRED_UNTIL_ENFORCED",
@@ -194,14 +194,14 @@
     },
     "production-spa": {
       "classification": "PRODUCTION_LOCKED",
-      "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-      "merged_pr": 506,
+      "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+      "merged_pr": null,
       "merge_commit": null,
-      "deployed_artifact": "/assets/index-DSbVZXu8.js sha256 8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5; index.html sha256 e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f; s3 Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw; CloudFront E1B0ZWWO5559U5",
+      "deployed_artifact": "/assets/index-DyoF7zdg.js sha256 82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080; index.html sha256 f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726; s3 SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt; CloudFront E1B0ZWWO5559U5",
       "applied_migrations": "none; SPA-only component",
       "environment": "production",
       "missing_evidence": [],
-      "open_pr_overlap": ["#506"]
+      "open_pr_overlap": []
     },
     "production-release": {
       "classification": "UNVERIFIED",
