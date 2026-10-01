@@ -34,6 +34,13 @@ test('combined SPA source keeps Moov GA frontend behavior', () => {
   const stakeholders = read('src/components/disbursement/CheckStakeholdersManager.tsx');
   assert.match(stakeholders, /PAYMENT_FLAGS\.USE_MOOV/);
   assert.doesNotMatch(stakeholders, /isMoovAllowedForTenant\(\(tenant as any\)\?\.moov_allowlisted\)/);
+
+  const accounts = read('src/components/disbursement/StakeholderAccountSettings.tsx');
+  assert.match(accounts, /Bank verified/);
+  assert.match(accounts, /Provider linked/);
+  assert.match(accounts, /moov-sync/);
+  assert.match(accounts, /provider_account_id/);
+  assert.match(accounts, /A Moov account exists\. This is not bank verification/);
 });
 
 test('combined SPA source keeps Claim Ledger find/link/create and update-only save', () => {

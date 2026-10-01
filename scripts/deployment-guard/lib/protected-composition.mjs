@@ -137,6 +137,53 @@ export function evaluateWalletOpsSourceContracts(files = {}) {
   return out;
 }
 
+function hasFile(files, rel) {
+  return Object.prototype.hasOwnProperty.call(files, rel);
+}
+
+const MERCHANT_CAPABILITY_CODES = ['transfers', 'send-funds', 'wallet', 'send-funds.ach'];
+
+export function evaluateMoovSourceContracts(files = {}) {
+  const out = {};
+  if (hasFile(files, 'src/lib/payments/featureFlags.ts')) {
+    const flags = String(files['src/lib/payments/featureFlags.ts'] || '');
+    out.moov_generally_available = /generally available/.test(flags)
+      && /export function isMoovAllowedForTenant/.test(flags)
+      && /return PAYMENT_FLAGS\.USE_MOOV;/.test(flags)
+      && !/USE_MOOV && !!tenantAllowlisted/.test(flags);
+  }
+  if (hasFile(files, 'src/lib/payments/tenantMoovDefaults.ts')) {
+    const defaults = String(files['src/lib/payments/tenantMoovDefaults.ts'] || '');
+    out.moov_tenant_defaults = /export function tenantMoovDefaults/.test(defaults)
+      && /moov_environment: opts\?\.isTestAccount \? "sandbox" : "production"/.test(defaults);
+  }
+  if (hasFile(files, 'src/components/disbursement/StakeholderAccountSettings.tsx')) {
+    const stakeholders = String(files['src/components/disbursement/StakeholderAccountSettings.tsx'] || '');
+    out.moov_bank_verified_status = /Bank verified/.test(stakeholders)
+      && /provider_account_id/.test(stakeholders);
+    out.moov_provider_linked_status = /Provider linked/.test(stakeholders)
+      && /A Moov account exists\. This is not bank verification/.test(stakeholders);
+    out.moov_status_refresh = /moov-sync/.test(stakeholders)
+      && /Refresh status/.test(stakeholders);
+  }
+  if (hasFile(files, 'aws/functions/api/providers/parity/moov-functions.mjs')
+    || hasFile(files, 'aws/functions/api/providers/parity/moov-onboard.mjs')) {
+    const onboard = `${files['aws/functions/api/providers/parity/moov-functions.mjs'] || ''}\n${files['aws/functions/api/providers/parity/moov-onboard.mjs'] || ''}`;
+    out.moov_merchant_capability_codes = MERCHANT_CAPABILITY_CODES.every((code) => onboard.includes(`'${code}'`) || onboard.includes(`"${code}"`));
+  }
+  if (hasFile(files, 'supabase/functions/moov-onboarding-link/index.ts')) {
+    const link = String(files['supabase/functions/moov-onboarding-link/index.ts'] || '');
+    out.moov_onboarding_link_collect_funds = /collect-funds/.test(link)
+      && /transfers/.test(link)
+      && /send-funds/.test(link)
+      && /wallet/.test(link);
+  }
+  for (const [id, okFlag] of Object.entries(out)) {
+    out[id] = { ok: Boolean(okFlag) };
+  }
+  return out;
+}
+
 function supersessionFor(input, compositionId) {
   const rows = asList(input.supersede || input.supersessions);
   return rows.find((row) => row && row.composition_id === compositionId) || null;
@@ -237,6 +284,7 @@ export function evaluateProtectedComposition(input = {}, ctx = {}) {
   const candidateFiles = input.candidate_source?.files || input.source_files || null;
   if (candidateFiles && Object.keys(candidateFiles).length) {
     Object.assign(sourceResults, evaluateWalletOpsSourceContracts(candidateFiles));
+    Object.assign(sourceResults, evaluateMoovSourceContracts(candidateFiles));
   }
 
   const changedPaths = asList(input.changed_paths || input.owned_components);
