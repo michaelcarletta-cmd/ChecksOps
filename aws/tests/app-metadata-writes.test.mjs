@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
 import { executeAppMetadataWrite } from '../functions/api/write-app-metadata.mjs';
-import { SAFE_WRITE_RPC_CLASSIFICATION } from '../functions/api/workflow-rpc.mjs';
+import { SAFE_WRITE_RPC_CLASSIFICATION, SAFE_WRITE_RPCS } from '../functions/api/workflow-rpc.mjs';
 
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
@@ -27,6 +27,8 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
 
 test('admin_delete_check is client-bridged; financial RPCs stay classified disabled', () => {
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.admin_delete_check, 'already_bridged');
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.admin_override_check_status, 'already_bridged');
+  assert.equal(SAFE_WRITE_RPCS.has('admin_override_check_status'), false);
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.deposit_action, 'safe_now_subset');
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.mark_deposit_closeout, 'financial_sensitive');
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.add_partner_stakeholder_to_check, 'provider_dependent');

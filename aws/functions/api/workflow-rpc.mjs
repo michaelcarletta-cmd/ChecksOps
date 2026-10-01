@@ -59,8 +59,9 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   record_check_return: 'safe_now',
   resolve_check_return: 'safe_now',
   get_payment_direction_by_token: 'financial_sensitive',
-  admin_override_check_status: 'financial_sensitive',
+  admin_override_check_status: 'already_bridged', // client → POST /workflow/admin-status-correction; not SAFE_WRITE_RPCS
   admin_delete_check: 'already_bridged', // client → DELETE /workflow/checks
+  apply_check_review_correction: 'already_bridged', // client → POST /workflow/checks/:id/review-correction; not SAFE_WRITE_RPCS
   deposit_action: 'safe_now_subset', // money / provider-sensitive actions remain disabled
   assign_deposit_owner: 'financial_sensitive',
   bulk_deposit_closeout: 'financial_sensitive',

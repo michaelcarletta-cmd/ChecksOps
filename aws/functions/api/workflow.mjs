@@ -17,6 +17,8 @@ import {
   loadCheckEndorsements,
   loadCheckPayees,
 } from './providers/production/checkalt-eligibility.mjs';
+import { handleAdminStatusCorrection } from './workflow-admin-status.mjs';
+import { handleReviewCorrection } from './workflow-review-correction.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -555,6 +557,16 @@ export const matchWorkflowRoute = (method, path) => {
   if (method === 'POST' && path === '/workflow/checks') return 'create';
   if (method === 'POST' && (path === '/workflow/transition' || path === '/workflow/checks/transition')) return 'transition';
   if (method === 'POST' && path === '/workflow/endorsement-render-reset') return 'endorsement-render-reset';
+  if (method === 'POST' && path === '/workflow/admin-status-correction') return 'admin-status-correction';
+  if (method === 'POST' && path === '/workflow/review-correction') return 'review-correction';
+  const adminCorrection = path.match(/^\/workflow\/checks\/([^/]+)\/admin-status-correction$/);
+  if (method === 'POST' && adminCorrection) {
+    return { kind: 'admin-status-correction', checkId: decodeURIComponent(adminCorrection[1]) };
+  }
+  const reviewCorrection = path.match(/^\/workflow\/checks\/([^/]+)\/review-correction$/);
+  if (method === 'POST' && reviewCorrection) {
+    return { kind: 'review-correction', checkId: decodeURIComponent(reviewCorrection[1]) };
+  }
   const transition = path.match(/^\/workflow\/checks\/([^/]+)\/transition$/);
   if (method === 'POST' && transition) return { kind: 'transition', checkId: decodeURIComponent(transition[1]) };
   const remove = path.match(/^\/workflow\/checks\/([^/]+)$/);
@@ -569,6 +581,18 @@ export const handleWorkflowRequest = async (event, path, method, deps = {}) => {
   if (match === 'create') return handleCreateCheck(event, deps);
   if (match === 'transition') return handleCheckTransition(event, deps);
   if (match === 'endorsement-render-reset') return handleEndorsementRenderReset(event, deps);
+  if (match === 'admin-status-correction') return handleAdminStatusCorrection(event, deps);
+  if (match === 'review-correction') return handleReviewCorrection(event, deps);
+  if (match.kind === 'admin-status-correction') {
+    const body = parseBody(event);
+    event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };
+    return handleAdminStatusCorrection(event, deps);
+  }
+  if (match.kind === 'review-correction') {
+    const body = parseBody(event);
+    event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };
+    return handleReviewCorrection(event, deps);
+  }
   if (match.kind === 'transition') {
     const body = parseBody(event);
     event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };

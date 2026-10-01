@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { adminDeleteCheck } from "@/lib/adminCheckWorkflow";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -64,12 +64,11 @@ export function AdminDeleteCheckButton({
     }
     setDeleting(true);
     try {
-      const { error } = await supabase.rpc("admin_delete_check" as any, {
-        p_check_id: checkId,
-        p_actor_id: user.id,
-        p_reason: trimmed,
+      await adminDeleteCheck({
+        checkId,
+        actorId: user.id,
+        reason: trimmed,
       });
-      if (error) throw error;
       toast({
         title: "Check deleted",
         description: `Check${checkNumber ? ` #${checkNumber}` : ""} and all related records were removed.`,
