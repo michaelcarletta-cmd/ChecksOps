@@ -163,6 +163,7 @@ test('Gate 3A blocked record does not deploy and keeps execute-api', () => {
 
 test('banner and financial SQL remain untouched', () => {
   assert.match(banner, /AWS staging — Cognito \+ RDS/);
+  assert.match(banner, /hostname === "checksops\.com" \|\| hostname === "www\.checksops\.com"/);
   assert.match(banner, /window\.location\.hostname/);
   assert.match(banner, /hostname === "checksops\.com" \|\| hostname === "www\.checksops\.com"/);
   assert.match(read('aws/financial/sql/64_financial_activation_grants.sql'), /DO NOT APPLY THIS FILE/);

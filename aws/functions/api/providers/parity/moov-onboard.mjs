@@ -17,6 +17,11 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
+import {
+  MERCHANT_CAPABILITIES,
+  MOOV_CAPABILITIES_API_VERSION,
+  RECIPIENT_CAPABILITIES,
+} from './moov-capabilities.mjs';
 import { sendViaSesOrSink } from '../../email.mjs';
 import { renderTransactionalTemplate } from '../../email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from '../../email-branding.mjs';
@@ -178,7 +183,8 @@ export const accountOnboard = {
     }
     await moovFetch(`/accounts/${accountId}/capabilities`, {
       method: 'POST', scopes: scopes.capabilitiesWrite(accountId),
-      body: { capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach'] }, fetchImpl,
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
+      body: { capabilities: [...MERCHANT_CAPABILITIES] }, fetchImpl,
     }).catch(() => {});
     await client.query(
       `UPDATE public.payment_provider_accounts SET onboarding_status = 'verification_pending', last_synced_at = now() WHERE id = $1::uuid`,
@@ -474,19 +480,20 @@ export const recipientCreate = {
     const created = await moovFetch('/accounts', {
       method: 'POST', scopes: scopes.accountsWrite(),
       idempotencyKey: `checksops-recipient-sandbox-${recipient.id}`,
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
       fetchImpl,
       body: recipientType === 'business'
         ? {
           accountType: 'business',
           profile: { business: { legalBusinessName: name, email: email ?? undefined } },
-          capabilities: ['transfers'],
+          capabilities: [...RECIPIENT_CAPABILITIES],
           foreignID: recipient.id,
           metadata: { checksops_recipient_id: recipient.id, checksops_tenant_id: ctx.tenantId },
         }
         : {
           accountType: 'individual',
           profile: { individual: { name: { firstName: first, lastName: rest.join(' ') || first }, email: email ?? undefined } },
-          capabilities: ['transfers'],
+          capabilities: [...RECIPIENT_CAPABILITIES],
           foreignID: recipient.id,
           metadata: { checksops_recipient_id: recipient.id, checksops_tenant_id: ctx.tenantId },
         },
@@ -894,14 +901,22 @@ export const onboardingLink = {
       : 'https://checksops.com/payments?tab=settings';
     const invite = await moovFetch(`/accounts/${accountId}/onboarding-invites`, {
       method: 'POST', scopes: scopes.accountWrite(accountId), fetchImpl,
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
       body: {
         returnURL: redirect,
+        capabilities: [...MERCHANT_CAPABILITIES],
         ...(feePlanCodes.length ? { feePlanCodes } : {}),
       },
     }).catch(async (e) => {
       const alt = await moovFetch(`/accounts/${platformId}/onboarding-invites`, {
         method: 'POST', scopes: scopes.accountWrite(platformId), fetchImpl,
-        body: { accountID: accountId, returnURL: redirect, ...(feePlanCodes.length ? { feePlanCodes } : {}) },
+        apiVersion: MOOV_CAPABILITIES_API_VERSION,
+        body: {
+          accountID: accountId,
+          returnURL: redirect,
+          capabilities: [...MERCHANT_CAPABILITIES],
+          ...(feePlanCodes.length ? { feePlanCodes } : {}),
+        },
       }).catch(() => { throw e; });
       return alt;
     });
