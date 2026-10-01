@@ -111,6 +111,7 @@ export type StakeholderBankRow = {
   provider_bank_name?: string | null;
   provider_account_id?: string | null;
   verification_status?: string | null;
+  verification_recipient_email?: string | null;
   [key: string]: unknown;
 };
 
@@ -130,7 +131,29 @@ export type LinkedRecipient = {
   provider_last_four?: string | null;
   provider_bank_name?: string | null;
   provider_account_id?: string | null;
+  email?: string | null;
 };
+
+export function normalizeStakeholderEmail(value: unknown): string | null {
+  const email = String(value ?? "").trim().toLowerCase();
+  return email || null;
+}
+
+export function findLinkedRecipient(
+  acct: StakeholderBankRow,
+  recipients: LinkedRecipient[] = [],
+): LinkedRecipient | null {
+  const byId = (recipients || []).find((row) => row.stakeholder_account_id === acct.id);
+  if (byId) return byId;
+  if (acct.provider_account_id) {
+    const byProvider = (recipients || []).filter((row) => row.provider_account_id === acct.provider_account_id);
+    if (byProvider.length === 1) return byProvider[0];
+  }
+  const email = normalizeStakeholderEmail(acct.verification_recipient_email);
+  if (!email) return null;
+  const byEmail = (recipients || []).filter((row) => normalizeStakeholderEmail(row.email) === email);
+  return byEmail.length === 1 ? byEmail[0] : null;
+}
 
 export type TenantBankMirror = {
   bank_last_four?: string | null;
@@ -169,7 +192,7 @@ export function decorateStakeholderBank(
   } = {},
 ) {
   const operating = isOperatingStakeholder(acct);
-  const recipient = (extras.recipients ?? []).find((row) => row.stakeholder_account_id === acct.id) ?? null;
+  const recipient = findLinkedRecipient(acct, extras.recipients);
   const method = pickLinkedMethod(acct, extras.methods, recipient);
   const lastFourInput = {
     chk_acct: acct.chk_acct,

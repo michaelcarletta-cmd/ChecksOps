@@ -173,7 +173,9 @@ export function evaluateMoovSourceContracts(files = {}) {
     out.moov_status_refresh = /moov-sync/.test(stakeholders)
       && /Refresh status/.test(stakeholders);
     out.moov_stakeholder_status_from_linked_tables = /decorateStakeholderBank/.test(stakeholders)
-      && /external_payment_recipients/.test(stakeholders);
+      && /external_payment_recipients/.test(stakeholders)
+      && /findLinkedRecipient|verification_recipient_email/.test(stakeholders)
+      && /email/.test(stakeholders);
     out.moov_settings_no_admin_override_button = !/adminOverride/.test(stakeholders)
       && !/Admin override: mark as verified/.test(stakeholders)
       && !/> Override</.test(stakeholders);

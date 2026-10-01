@@ -17,6 +17,7 @@
     "moov-sync can refresh stakeholder verification status",
     "Settings Bank Account last four comes from Moov-linked provider fields, not placeholder chk_acct",
     "Settings stakeholder verification reads linked recipient and payment_provider_methods status",
+    "Settings matches an unlinked stakeholder to a unique Moov recipient email",
     "moov-sync writes verified last four and status onto stakeholder_accounts",
     "Moov bank verification webhooks write stakeholder verification through the linked recipient, even when provider_account_id is missing",
     "Settings does not offer an admin Override button for Moov bank verification",

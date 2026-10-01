@@ -81,6 +81,52 @@ test('Michael shows Bank verified when the linked Moov recipient is ready', () =
   assert.equal(row.display_last_four_label, '••••8891');
 });
 
+test('Michael shows Bank verified when the unique recipient email is Moov-ready', () => {
+  const row = decorateStakeholderBank({
+    id: 'michael-homeowner',
+    nickname: 'michael1',
+    custname: 'Michael Carletta',
+    account_type: 'homeowner',
+    chk_acct: '0000000000',
+    provider_account_id: null,
+    verification_status: 'unverified',
+    verification_recipient_email: 'michael@example.com',
+  }, {
+    recipients: [{
+      id: 'recipient-michael',
+      stakeholder_account_id: null,
+      email: 'michael@example.com',
+      onboarding_status: 'ready',
+      provider_last_four: '8891',
+      provider_account_id: 'moov-michael',
+    }],
+    methods: [{
+      external_recipient_id: 'recipient-michael',
+      last_four: '8891',
+      verification_status: 'verified',
+      connection_status: 'connected',
+    }],
+  });
+  assert.equal(row.verification_status, 'verified');
+  assert.equal(row.display_last_four_label, '••••8891');
+});
+
+test('ambiguous recipient emails do not verify a third-party stakeholder', () => {
+  const row = decorateStakeholderBank({
+    id: 'michael-homeowner',
+    account_type: 'homeowner',
+    verification_status: 'unverified',
+    verification_recipient_email: 'shared@example.com',
+  }, {
+    recipients: [
+      { id: 'r1', email: 'shared@example.com', onboarding_status: 'ready', provider_last_four: '1111' },
+      { id: 'r2', email: 'shared@example.com', onboarding_status: 'ready', provider_last_four: '2222' },
+    ],
+  });
+  assert.equal(row.verification_status, 'unverified');
+  assert.equal(row.display_last_four, null);
+});
+
 test('tenant bank connected does not verify a third-party stakeholder', () => {
   const row = decorateStakeholderBank({
     id: 'michael-homeowner',

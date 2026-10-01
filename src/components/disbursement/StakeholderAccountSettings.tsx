@@ -87,7 +87,7 @@ export function StakeholderAccountSettings() {
           .order("created_at", { ascending: true }),
         supabase
           .from("external_payment_recipients")
-          .select("id, stakeholder_account_id, onboarding_status, provider_last_four, provider_bank_name, provider_account_id")
+          .select("id, stakeholder_account_id, onboarding_status, provider_last_four, provider_bank_name, provider_account_id, email")
           .eq("tenant_id", tenant!.id),
         supabase
           .from("payment_provider_methods")
