@@ -187,26 +187,6 @@ const collectCheckOwnedStorageKeys = async (client, checkId) => {
   )).rows;
   for (const e of endorsementRows) addClaimFilesPath(e.signature_image_url, 'check_endorsements.signature_image_url');
 
-  // Loss-draft documents linked via loss_draft_tracking → loss_draft_documents (check-owned).
-  const lossDraftIds = (await client.query(
-    'SELECT id FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid',
-    [checkId],
-  )).rows.map((r) => r.id).filter(Boolean);
-  if (lossDraftIds.length) {
-    const docs = (await client.query(
-      'SELECT file_path FROM public.loss_draft_documents WHERE loss_draft_id = ANY($1::uuid[])',
-      [lossDraftIds],
-    )).rows;
-    for (const d of docs) {
-      const rel = normalizePath(d.file_path, 'loss-draft-documents');
-      if (!rel) continue;
-      const key = s3KeyFor('loss-draft-documents', rel);
-      if (!key) continue;
-      keys.add(key);
-      meta.push({ bucket: 'loss-draft-documents', rel, source: 'loss_draft_documents.file_path' });
-    }
-  }
-
   // Endorsement packets referenced by the check. Stored under an endorsement-packets prefix.
   const packetRaw = row.endorsement_packet_path;
   if (packetRaw && tenantId) {
@@ -747,8 +727,33 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
     }
 
+    // Loss drafts are claim-owned and only optionally point at a check.
+    // check_intake_item_id has no ON DELETE action; unlink like admin_delete_check.
+    await client.query('SAVEPOINT delete_unlink_loss_draft');
+    try {
+      await client.query(
+        'UPDATE public.loss_draft_tracking SET check_intake_item_id = NULL WHERE check_intake_item_id = $1::uuid',
+        [looked.check.id],
+      );
+      await client.query('RELEASE SAVEPOINT delete_unlink_loss_draft');
+    } catch (error) {
+      try { await client.query('ROLLBACK TO SAVEPOINT delete_unlink_loss_draft'); } catch { /* ignore */ }
+      try { await client.query('RELEASE SAVEPOINT delete_unlink_loss_draft'); } catch { /* ignore */ }
+      if (error?.code === '42P01') {
+        // Table absent on this schema snapshot.
+      } else if (error?.code === '42501') {
+        return denied(spoof, {
+          error: 'cleanup_denied',
+          message: 'Refusing to delete: unable to unlink loss draft tracking',
+          blocker: 'loss_draft_tracking',
+        });
+      } else {
+        throw error;
+      }
+    }
+
     // Rely on FK ON DELETE CASCADE for dependent records (payees/files/messages/etc).
-    // We explicitly block financial/provider tables above; those are the non-cascading integrity holders.
+    // Loss drafts are unlinked above; financial/provider tables are the remaining non-cascading holders.
     const rows = (await client.query(
       'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',
       [looked.check.id],

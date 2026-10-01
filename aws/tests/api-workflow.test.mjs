@@ -164,6 +164,12 @@ const mockClient = ({
         return { rows: [{ file_path: `check-intake/${CHECK_ID}/files/unit-test-delete-check.txt` }] };
       }
       if (/SELECT id FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
+        return { rows: [{ id: 'ld-1' }] };
+      }
+      if (/SELECT file_path FROM public\.loss_draft_documents/.test(sql)) {
+        return { rows: [{ file_path: 'escrow/claim-not-this-check.pdf' }] };
+      }
+      if (/UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(sql)) {
         return { rows: [] };
       }
       if (/INSERT INTO public.check_intake_items/.test(sql)) return { rows };
@@ -446,6 +452,7 @@ test('admin can delete a safe check via workflow delete route', async () => {
   }), depsFor(client));
   assert.equal(result.ok, true);
   assert.equal(result.data.deleted, true);
+  assert.ok(client.queries.some((q) => /UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(String(q.sql))));
   assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
 });
 
@@ -547,7 +554,9 @@ test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async
     assert.equal(result.ok, true);
     assert.equal(result.data.deleted, true);
     assert.equal(result.storageCleanup.ok, true);
+    assert.ok(client.queries.some((q) => /UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(String(q.sql))));
     assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+    assert.ok(!client.queries.some((q) => /FROM public\.loss_draft_documents/.test(String(q.sql))));
 
     const listed = sent.filter((c) => (c?.constructor?.name || '') === 'ListObjectsV2Command');
     const deleted = sent.find((c) => (c?.constructor?.name || '') === 'DeleteObjectsCommand');
@@ -556,6 +565,8 @@ test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async
     const deleteKeys = (deleted?.input?.Delete?.Objects || []).map((o) => o.Key).filter(Boolean);
     assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/checks/${CHECK_ID}/`)));
     assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/check-intake/${CHECK_ID}/files/`)));
+    assert.ok(!deleteKeys.some((k) => String(k).includes('loss-draft-documents')));
+    assert.ok(!deleteKeys.some((k) => String(k).includes('escrow/claim-not-this-check.pdf')));
   } finally {
     if (prevBucket === undefined) delete process.env.FILES_BUCKET;
     else process.env.FILES_BUCKET = prevBucket;
