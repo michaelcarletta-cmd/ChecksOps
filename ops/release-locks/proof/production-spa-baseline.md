@@ -3,8 +3,9 @@
 This file is repository evidence for the already-live production frontend.
 It does **not** deploy, upload, invalidate, or modify AWS.
 
-Read-only live verification on 2026-09-27 confirmed that production still
-serves this baseline. Metadata in this PR only records and protects it.
+Read-only live verification on 2026-10-01 confirmed that production now
+serves the baseline recorded here. Metadata in this PR only records and
+protects it.
 
 ## Accepted live production SPA
 
@@ -13,13 +14,13 @@ serves this baseline. Metadata in this PR only records and protects it.
 | Host | `https://checksops.com` |
 | CloudFront | `E1B0ZWWO5559U5` |
 | S3 bucket | `checksops-production-frontend-806168576068` |
-| Entry | `/assets/index-BPbQUNFr.js` |
-| Entry JS SHA256 | `78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5` |
-| index.html SHA256 | `244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394` |
-| index.html S3 version | `L.ND9yiehnJfDCocKdyFC_mRQZjchON3` |
-| Last-Modified | `Sun, 27 Sep 2026 01:34:04 GMT` |
-| Banner overlay commit | `6c679a120d5d4b0dd23d7035ecaf309558df29d0` |
-| Live source lineage before overlay | `1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720` |
+| Entry | `/assets/index-DyoF7zdg.js` |
+| Entry JS SHA256 | `82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080` |
+| index.html SHA256 | `f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726` |
+| index.html S3 version | `SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt` |
+| Last-Modified | `Thu, 01 Oct 2026 14:07:21 GMT` |
+| Banner overlay commit | `e3e4649478a0c3978065b71b0528dd93baa8dac1` |
+| Live source lineage before overlay | `6c679a120d5d4b0dd23d7035ecaf309558df29d0` |
 
 ## Accepted behavior
 
@@ -33,8 +34,8 @@ serves this baseline. Metadata in this PR only records and protects it.
 branch, or another worktree must demonstrate that it contains or reconciles
 this accepted production SPA. If it cannot, deployment must be refused.
 
-Do not restore a superseded entry (`index-BAD1KYoF.js` or earlier conflicting
-bundle names) over this baseline.
+Do not restore a superseded entry (`index-DSbVZXu8.js`, `index-BPbQUNFr.js`,
+`index-BAD1KYoF.js`, or earlier conflicting bundle names) over this baseline.
 
 ## Fail-closed promotion rules
 
@@ -52,11 +53,11 @@ write.
 
 HTTPS `GET https://checksops.com/` returned:
 
-- `last-modified: Sun, 27 Sep 2026 01:34:04 GMT`
-- `x-amz-version-id: L.ND9yiehnJfDCocKdyFC_mRQZjchON3`
-- index.html SHA256 `244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394`
-- entry `/assets/index-BPbQUNFr.js`
-- entry SHA256 `78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5`
+- `last-modified: Thu, 01 Oct 2026 14:07:21 GMT`
+- `x-amz-version-id: SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt`
+- index.html SHA256 `f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726`
+- entry `/assets/index-DyoF7zdg.js`
+- entry SHA256 `82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080`
 
 Exact match to the accepted baseline. Freeze proceeded.
 

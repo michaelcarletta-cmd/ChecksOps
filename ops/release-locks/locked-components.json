@@ -13,8 +13,50 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-27 (index-BPbQUNFr.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-30 (index-DSbVZXu8.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
+    "delete-check-contract": {
+      "id": "delete-check-contract",
+      "ownership_group": "delete-check-contract",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "production",
+      "source": {
+        "git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
+        "tree_hash": "bbf53305b50eeae6a8b0e8c60c5744a7b6cb3ee7a8011e3ef04938309a6b5af6",
+        "merged": false,
+        "merged_pr": 501
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "ops/release-locks/proof/delete-check-production-acceptance-2026-09-26.md"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
+        "artifact": null,
+        "notes": "Rollback is to the pre-overlay live production-prep package; see acceptance proof for provenance. Lambda version/alias rollback remains an operator-recorded artifact."
+      },
+      "missing_evidence": [
+        "candidate fingerprint schema does not yet record production-prep Lambda version and immutable artifact identity for Delete Check contract; contract is enforced via invariant tests + tree hash lock"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Accepted production contract: checksops-production-prep-api CodeSha256 Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM=. workflow.mjs content matches staging-accepted workflow.mjs overlaid onto the then-live production package. This lock prevents silent regression by requiring intentional tree_hash updates and invariant tests to pass."
+    },
     "identity-cognito": {
       "id": "identity-cognito",
       "ownership_group": "identity-cognito",
@@ -23,7 +65,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "cd6feb820a4accec582313f5f462f97656232be817a04b54c1a7b3a54d92abf0",
+        "tree_hash": "8929f6661d28e70ab5be17e124ee251fc398a6e4cd3517e6de4757f36d48014a",
         "merged": true,
         "merged_pr": null
       },
@@ -620,17 +662,17 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "tree_hash": "8a794da51c14a4520e987fcce8fc738e1dc196eca1b3f994fc17b57a2c2b2c7f",
-        "merged": false,
-        "merged_pr": 506
+        "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+        "tree_hash": "3de6dae57821a391a1192acf4ecc6d596805af15a8cc58067cf5e6b322ecc706",
+        "merged": true,
+        "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-BPbQUNFr.js",
-        "version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
-        "hash": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "name": "/assets/index-DyoF7zdg.js",
+        "version": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt",
+        "hash": "82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
@@ -641,36 +683,36 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-09-27T01:34:04Z",
+        "recorded_at": "2026-10-01T14:07:21Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "artifact_identity": "/assets/index-BPbQUNFr.js",
+        "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+        "artifact_identity": "/assets/index-DyoF7zdg.js",
         "evidence_producer": "read-only live HTTPS verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-BPbQUNFr.js",
-        "spa_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "spa_bundle": "/assets/index-DyoF7zdg.js",
+        "spa_sha256": "82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+        "cloudfront_deployment_fingerprint": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
-        "notes": "Accepted live production SPA 2026-09-27T01:34:04Z. Host checksops.com. Entry /assets/index-BPbQUNFr.js. index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394. S3 version L.ND9yiehnJfDCocKdyFC_mRQZjchON3. CloudFront E1B0ZWWO5559U5. Source lineage 1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720. Banner overlay 6c679a120d5d4b0dd23d7035ecaf309558df29d0. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. origin/main is not this baseline."
+        "config_hash": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
+        "notes": "Accepted live production SPA 2026-10-01T14:07:21Z. Host checksops.com. Entry /assets/index-DyoF7zdg.js. index.html sha256 f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726. S3 version SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt. CloudFront E1B0ZWWO5559U5. Source lineage 6c679a120d5d4b0dd23d7035ecaf309558df29d0. Banner overlay e3e4649478a0c3978065b71b0528dd93baa8dac1. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved."
       },
       "rollback": {
-        "git_sha": "1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720",
-        "artifact": "/assets/index-BAD1KYoF.js",
-        "notes": "Pre-overlay live lineage before the accepted banner fix. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
+        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+        "artifact": "/assets/index-DSbVZXu8.js",
+        "notes": "Previous accepted live baseline. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
       },
       "missing_evidence": [],
-      "open_pr_overlap": ["#506"],
+      "open_pr_overlap": [],
       "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This PR records evidence only and does not deploy."
     },
     "production-release": {
@@ -681,7 +723,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "aeff94e68383a05e088b9c1a66ce2afcfb0d26ffd5e6e137e94c77df34ad85ee",
+        "tree_hash": "7049d425ab118ed0de03c1a66f28b3718b7402c895083ba13067b0af840b3ecc",
         "merged": true,
         "merged_pr": null
       },
