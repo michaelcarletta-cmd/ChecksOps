@@ -72,6 +72,13 @@ not restored.
 Authenticated in-app clicks were not established. This record is
 deployed-code / HTTPS / S3 verification.
 
+Later read-only diagnosis: compiled-marker acceptance is **not** full
+product acceptance. Live `index-CvCKsSsX.js` throws `supabaseUrl is
+required.` during `src/integrations/supabase/client.ts` init because
+`VITE_AUTH_PROVIDER` was baked empty. The HTML `#initial-loader`
+(`Loading…`) never unmounts. See
+`ops/release-locks/proof/2026-09-30-cvc-loading-init-failure.md`.
+
 ## Not done
 
 - Lambda overlay
