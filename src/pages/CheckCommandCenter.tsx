@@ -487,7 +487,62 @@ export default function CheckCommandCenter() {
   const canAccessManager = isAdmin || (isWhiteLabel && ["admin", "owner"].includes(tenantMembershipRole ?? ""));
 
   // Admin: allow delete at any stage
-  const canDeleteAnyCheck = isAdmin;
+  const canDeleteAnyCheck = true;
+
+  const deleteCheckMutation = useMutation({
+    mutationFn: async (checkId: string) => {
+      // Delete all related records first (order matters for FK constraints)
+      const tables = [
+        "check_endorsement_events",
+        "check_endorsements",
+        "check_review_decisions",
+        "check_reissue_requests",
+        "check_eligibility_results",
+        "check_audit_log",
+        "check_payees",
+      ] as const;
+
+      for (const table of tables) {
+        const { error } = await supabase.from(table).delete().eq("check_id", checkId);
+        if (error) {
+          console.error(`[DELETE] Failed to delete from ${table}:`, error);
+          throw new Error(`Failed to clear ${table}: ${error.message}`);
+        }
+      }
+
+      // Remove any accounting rows and unlink any active loss draft before deleting the check
+      const { error: ccErr } = await supabase.from("claim_checks").delete().eq("check_intake_item_id", checkId);
+      if (ccErr) console.warn("[DELETE] claim_checks cleanup:", ccErr.message);
+
+      const { error: lossDraftErr } = await supabase
+        .from("loss_draft_tracking")
+        .update({ check_intake_item_id: null })
+        .eq("check_intake_item_id", checkId);
+      if (lossDraftErr) {
+        console.error("[DELETE] loss_draft_tracking unlink:", lossDraftErr);
+        throw new Error(`Failed to unlink loss draft: ${lossDraftErr.message}`);
+      }
+
+      const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
+      if (error) throw new Error(`Failed to delete check: ${error.message}`);
+    },
+    // Phase 4: drop the row from the queue immediately, restore it if the
+    // delete fails server-side.
+    onMutate: (checkId: string) => {
+      const rollback = optimisticRemove(qc, [checkId]);
+      return { rollback };
+    },
+    onSuccess: () => {
+      toast({ title: "Check deleted" });
+      setSelectedCheck(null);
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+    },
+    onError: (e, _vars, ctx) => {
+      ctx?.rollback?.();
+      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    },
+  });
 
 
   const { data: checks = [], isLoading } = useQuery({
@@ -2161,21 +2216,20 @@ export default function CheckCommandCenter() {
                                   </Button>
                                 )}
                                 {canDelete && !isShared && (
-                                  <div onClick={(e) => e.stopPropagation()}>
-                                    <AdminDeleteCheckButton
-                                      checkId={check.id}
-                                      checkNumber={check.check_number}
-                                      onDeleted={() => {
-                                        setSelectedCheck(null);
-                                        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-                                        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-                                      }}
-                                      size="icon"
-                                      variant="ghost"
-                                      label=""
-                                      className="h-7 w-7"
-                                    />
-                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm("Delete this check? This cannot be undone.")) {
+                                        deleteCheckMutation.mutate(check.id);
+                                      }
+                                    }}
+                                    disabled={deleteCheckMutation.isPending}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
                                 )}
                               </div>
                             </TableCell>
