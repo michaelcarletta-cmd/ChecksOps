@@ -23,7 +23,14 @@ export type SweepActivitySource = {
   createdOn?: string | null;
   completedOn?: string | null;
   accrualEndedOn?: string | null;
+  accrualStartedOn?: string | null;
 };
+
+export function sweepTimestamp(sweep: SweepActivitySource): string | null {
+  const raw = sweep.completedOn || sweep.accrualEndedOn || sweep.createdOn || sweep.accrualStartedOn;
+  const value = String(raw || "").trim();
+  return value || null;
+}
 
 function moneyObjectCents(value: unknown): number | null {
   if (!value || typeof value !== "object") return null;
@@ -84,7 +91,7 @@ export function summarizeSweepActivity({
 
     rows.push({
       key: `sweep-${sweep.sweepID || transferId || amountCents}`,
-      at: sweep.completedOn || sweep.accrualEndedOn || sweep.createdOn || new Date().toISOString(),
+      at: sweepTimestamp(sweep) || new Date().toISOString(),
       title: "Automatic payout",
       subtitle: pending
         ? "Moov sent leftover wallet funds to the bank"

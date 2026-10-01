@@ -49,7 +49,11 @@ export function useSweepConfig(walletType: string = "operating") {
   });
 
   const disable = useMutation({
-    mutationFn: () => disableSweep(tenantId!, walletType),
+    mutationFn: () => disableSweep(
+      tenantId!,
+      walletType,
+      query.data?.sweep_config?.provider_sweep_config_id,
+    ),
     onSuccess: invalidate,
   });
 

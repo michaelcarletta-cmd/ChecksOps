@@ -103,6 +103,11 @@ test("Automatic payouts are explained and listed in activity", () => {
   assert.match(page, /Automatic payout/);
 });
 
+test("WalletOps has a Turn off automatic payouts button", () => {
+  assert.match(page, /Turn off automatic payouts/);
+  assert.match(page, /disableSweeps\.mutateAsync/);
+});
+
 test("WalletOps wallet reads are environment-aware and never maybeSingle all operating rows", () => {
   assert.match(hooks, /selectPaymentWallet/);
   assert.match(hooks, /resolveWalletOpsEnvironment/);

@@ -142,8 +142,17 @@ export const createSweep = (input: SweepWriteInput) =>
 export const updateSweep = (input: SweepWriteInput) =>
   invoke<SweepSnapshot>(writeBody(input, "update"));
 
-export const disableSweep = (tenantId: string, walletType = "operating") =>
-  invoke<SweepSnapshot>({ action: "disable", tenant_id: tenantId, wallet_type: walletType });
+export const disableSweep = (
+  tenantId: string,
+  walletType = "operating",
+  sweepConfigId?: string | null,
+) =>
+  invoke<SweepSnapshot>({
+    action: "disable",
+    tenant_id: tenantId,
+    wallet_type: walletType,
+    sweep_config_id: sweepConfigId || undefined,
+  });
 
 /** Cents from a dollar string typed by a person. Throws on bad input. */
 export function dollarsToCents(input: string): number {

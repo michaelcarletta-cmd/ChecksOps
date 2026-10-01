@@ -11,6 +11,7 @@ import {
   Gauge,
   Landmark,
   Loader2,
+  PowerOff,
   RefreshCw,
   Sparkles,
   TrendingUp,
@@ -38,7 +39,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
-import { summarizeSweepActivity, sweepAmountCents } from "@/lib/payments/walletSweepActivity";
+import { summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
@@ -122,8 +123,10 @@ export default function WalletOps() {
     config,
     settlementMethod,
     history,
+    historyUnavailable,
     stale,
     refresh: refreshSweeps,
+    disable: disableSweeps,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   const refreshStatuses = useRefreshTransferStatuses();
@@ -460,8 +463,10 @@ export default function WalletOps() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last automatic payout</p>
               <p className="mt-0.5 font-medium">
                 {lastSweep
-                  ? new Date(lastSweep.completedOn ?? lastSweep.createdOn ?? Date.now()).toLocaleDateString()
-                  : "None yet"}
+                  ? `${money(sweepAmountCents(lastSweep))}${sweepTimestamp(lastSweep) ? ` · ${new Date(sweepTimestamp(lastSweep)!).toLocaleDateString()}` : ""}`
+                  : historyUnavailable
+                    ? "Couldn't load"
+                    : "None yet"}
               </p>
             </div>
           </div>
@@ -473,9 +478,38 @@ export default function WalletOps() {
           )}
 
           <div className="flex flex-wrap gap-2">
+            {sweepsOn && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={disableSweeps.isPending}
+                onClick={async () => {
+                  try {
+                    await disableSweeps.mutateAsync();
+                    toast({
+                      title: "Automatic payouts turned off",
+                      description: "Leftover wallet money will stay in the wallet until you move it.",
+                    });
+                  } catch (e) {
+                    toast({
+                      title: "Could not turn off automatic payouts",
+                      description: (e as Error).message,
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                {disableSweeps.isPending ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PowerOff className="h-4 w-4" />
+                )}
+                Turn off automatic payouts
+              </Button>
+            )}
             <Dialog>
               <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2" variant={sweepsOn ? "secondary" : "default"}>
                   <Gauge className="h-4 w-4" />
                   Manage sweeps
                 </Button>

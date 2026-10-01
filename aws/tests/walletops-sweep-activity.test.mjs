@@ -9,6 +9,7 @@ import {
   isSweepInFlight,
   summarizeSweepActivity,
   sweepAmountCents,
+  sweepTimestamp,
 } from '../../src/lib/payments/walletSweepActivity.ts';
 import { purposeOfTransfer } from '../../src/lib/payments/walletRelativeTransfers.ts';
 
@@ -83,9 +84,24 @@ test('6 sweepID description is labeled Automatic payout', () => {
 
 test('7 sweep history uses the wallet-scoped Moov path', () => {
   const shared = readFileSync(new URL('../../supabase/functions/_shared/moovSweeps.ts', import.meta.url), 'utf8');
-  const aws = readFileSync(new URL('../../aws/functions/api/providers/parity/moov-onboard.mjs', import.meta.url), 'utf8');
+  const reader = readFileSync(new URL('../../aws/functions/api/providers/parity/sweep-read.mjs', import.meta.url), 'utf8');
   assert.match(shared, /\/accounts\/\$\{accountId\}\/wallets\/\$\{encodeURIComponent\(walletId\)\}\/sweeps/);
-  assert.match(aws, /\/accounts\/\$\{accountId\}\/wallets\/\$\{encodeURIComponent\(wallet.provider_wallet_id\)\}\/sweeps/);
+  assert.match(reader, /\/accounts\/\$\{accountId\}\/wallets\/\$\{encodeURIComponent\(walletId\)\}\/sweeps/);
   assert.doesNotMatch(shared, /\/accounts\/\$\{accountId\}\/sweeps\?walletID=/);
-  assert.doesNotMatch(aws, /\/accounts\/\$\{accountId\}\/sweeps\?walletID=/);
+  assert.doesNotMatch(reader, /\/accounts\/\$\{accountId\}\/sweeps\?walletID=/);
+});
+
+test('8 last payout date uses accrualEndedOn when createdOn is missing', () => {
+  const at = sweepTimestamp({
+    sweepID: '2d11f2b6-16ad-4b2e-af4d-d8a1d2aad238',
+    transferAmount: '5.00',
+    accrualEndedOn: '2026-10-01T20:00:15Z',
+  });
+  assert.equal(at, '2026-10-01T20:00:15Z');
+});
+
+test('9 disable looks up the sweep config when the id is omitted', () => {
+  const onboard = readFileSync(new URL('../../aws/functions/api/providers/parity/moov-onboard.mjs', import.meta.url), 'utf8');
+  assert.match(onboard, /There is no automatic payout to turn off/);
+  assert.match(onboard, /sweepConfigID/);
 });
