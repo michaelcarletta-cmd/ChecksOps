@@ -4,6 +4,42 @@
   "notes": "Reviewed exact-path overlap exceptions. These entries do not merge, close, edit, deploy, or authorize any other PR. They require every overlapping PR to rebase onto current main before any later merge so independent Cursor workstreams cannot overwrite the finalized OCR/release-lock state.",
   "allow": [
     {
+      "other_pr": 595,
+      "path": "ops/release-locks/contracts/delete-check-contract.json",
+      "reason": "PR #595 consolidates the Delete Check changes from PR #586; allow parallel review of this exact contract file.",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 595,
+      "path": "ops/release-locks/evidence-matrix.json",
+      "reason": "PR #595 consolidates the Delete Check changes from PR #586; allow parallel review of this exact evidence file.",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 595,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #595 consolidates the Delete Check changes from PR #586; allow parallel review of this exact manifest file.",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 595,
+      "path": "ops/release-locks/proof/delete-check-production-acceptance-2026-09-26.md",
+      "reason": "PR #595 consolidates the Delete Check changes from PR #586; allow parallel review of this exact proof file.",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 595,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #595 consolidates the Delete Check changes from PR #586; allow parallel review of this exact ownership file.",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 595,
+      "path": "ops/release-locks/tests/delete-check-invariants.test.mjs",
+      "reason": "PR #595 consolidates the Delete Check changes from PR #586; allow parallel review of this exact test file.",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
       "other_pr": 369,
       "path": "ops/release-locks/locked-components.json",
       "reason": "Release-lock reconciliation must update locked-components tree hashes; PR #369 also edits locked-components.json. This exception is limited to that single file.",

@@ -969,9 +969,15 @@ export function allowlistRepoWide(pathValue) {
 
 export function allowlistPathPermitted(rowPath, protectedPaths) {
   if (allowlistRepoWide(rowPath)) return false;
+  const segments = rowPath.split('/');
+  const pathSegments = rowPath.endsWith('/') ? segments.slice(0, -1) : segments;
+  if (rowPath.includes('\\') || pathSegments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    return false;
+  }
   for (const group of Object.values(protectedPaths.ownership_groups || {})) {
     for (const prefix of group.paths || []) {
       if (rowPath === prefix) return true;
+      if (prefix.endsWith('/') && rowPath.startsWith(prefix) && !rowPath.endsWith('/')) return true;
     }
   }
   return false;
