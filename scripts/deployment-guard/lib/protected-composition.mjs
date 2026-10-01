@@ -174,12 +174,18 @@ export function evaluateMoovSourceContracts(files = {}) {
       && /Refresh status/.test(stakeholders);
     out.moov_stakeholder_status_from_linked_tables = /decorateStakeholderBank/.test(stakeholders)
       && /external_payment_recipients/.test(stakeholders);
+    out.moov_settings_no_admin_override_button = !/adminOverride/.test(stakeholders)
+      && !/Admin override: mark as verified/.test(stakeholders)
+      && !/> Override</.test(stakeholders);
   }
   if (hasFile(files, 'src/components/settings/TenantBankAccountSettings.tsx')) {
     const operating = String(files['src/components/settings/TenantBankAccountSettings.tsx'] || '');
     out.moov_settings_last_four_from_provider = /provider_last_four/.test(operating)
       && /decorateStakeholderBank/.test(operating)
       && /display_last_four_label/.test(operating);
+    out.moov_operating_no_admin_override_button = !/adminOverride/.test(operating)
+      && !/Admin override: mark as verified/.test(operating)
+      && !/> Override</.test(operating);
   }
   if (hasFile(files, 'aws/functions/api/providers/parity/moov-functions.mjs')
     || hasFile(files, 'aws/functions/api/providers/parity/moov-onboard.mjs')) {

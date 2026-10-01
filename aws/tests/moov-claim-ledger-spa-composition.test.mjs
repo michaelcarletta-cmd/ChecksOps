@@ -55,6 +55,10 @@ test('combined SPA source keeps Moov GA frontend behavior', () => {
   assert.match(webhook, /applyMoovBankVerificationEvent/);
   assert.match(webhookApply, /applyMoovBankVerificationEvent/);
   assert.match(bankVerify, /applyMoovBankVerificationEvent/);
+  assert.doesNotMatch(accounts, /adminOverride/);
+  assert.doesNotMatch(accounts, /> Override</);
+  assert.doesNotMatch(operating, /adminOverride/);
+  assert.doesNotMatch(operating, /> Override</);
 });
 
 test('combined SPA source keeps Claim Ledger find/link/create and update-only save', () => {

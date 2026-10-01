@@ -10,11 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2 } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
 import { BankVerification } from "@/components/disbursement/BankVerification";
-import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
@@ -25,7 +24,6 @@ export function TenantBankAccountSettings() {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isAdmin } = usePermissions();
   const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [isStarting, setIsStarting] = useState(false);
@@ -180,27 +178,6 @@ export function TenantBankAccountSettings() {
     onError: (e: any) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
   });
 
-  const adminOverride = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("stakeholder_accounts")
-        .update({ verification_status: "admin_override", verified_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Account marked as verified (admin override)" });
-      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
-    },
-    onError: (e: any) => toast({
-      title: "Override failed",
-      description: e.message === "writes_disabled"
-        ? "Admin override is not enabled on this environment yet."
-        : e.message,
-      variant: "destructive",
-    }),
-  });
-
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading...</div>;
 
   return (
@@ -280,18 +257,6 @@ export function TenantBankAccountSettings() {
                         disabled={resendVerification.isPending}
                       >
                         <MailCheck className="h-3 w-3 mr-1" /> Resend
-                      </Button>
-                    )}
-                    {isAdmin && vStatus !== "verified" && vStatus !== "admin_override" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                        onClick={() => adminOverride.mutate(acct.id)}
-                        disabled={adminOverride.isPending}
-                        title="Admin override: mark as verified without micro-deposits"
-                      >
-                        <ShieldAlert className="h-3 w-3 mr-1" /> Override
                       </Button>
                     )}
                     <Button

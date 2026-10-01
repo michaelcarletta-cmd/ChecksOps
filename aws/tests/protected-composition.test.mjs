@@ -202,8 +202,25 @@ test('removing Settings Moov last-four / stakeholder sync is rejected', () => {
   assert.equal(result.code, CODES.REGRESSION_DETECTED);
   assert.match(
     JSON.stringify(result.errors),
-    /moov_settings_last_four_from_provider|moov_stakeholder_status_from_linked_tables|moov_sync_writes_stakeholder_banks|moov_webhook_writes_stakeholder_verification/,
+    /moov_settings_last_four_from_provider|moov_stakeholder_status_from_linked_tables|moov_sync_writes_stakeholder_banks|moov_webhook_writes_stakeholder_verification|moov_settings_no_admin_override_button|moov_operating_no_admin_override_button/,
   );
+});
+
+test('restoring Settings Override is rejected', () => {
+  const files = loadWalletOpsFiles({
+    'src/components/disbursement/StakeholderAccountSettings.tsx': `${readRepo('src/components/disbursement/StakeholderAccountSettings.tsx')}
+      const adminOverride = () => {};
+      <button title="Admin override: mark as verified without a bank login"> Override </button>`,
+    'src/components/settings/TenantBankAccountSettings.tsx': `${readRepo('src/components/settings/TenantBankAccountSettings.tsx')}
+      const adminOverride = () => {};
+      <button title="Admin override: mark as verified without micro-deposits"> Override </button>`,
+  });
+  const result = evaluateProtectedComposition(validInput({
+    candidate_source: { files },
+  }), { root: ROOT });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.REGRESSION_DETECTED);
+  assert.match(JSON.stringify(result.errors), /moov_settings_no_admin_override_button|moov_operating_no_admin_override_button/);
 });
 
 test('removing Bank verified / Provider linked Moov status is rejected', () => {

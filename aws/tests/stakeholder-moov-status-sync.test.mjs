@@ -298,4 +298,8 @@ test('Settings and moov-sync source use the Moov-linked resolver', () => {
   assert.match(webhook, /applyMoovBankVerificationEvent/);
   assert.match(webhookApply, /applyMoovBankVerificationEvent/);
   assert.match(bankVerify, /applyMoovBankVerificationEvent/);
+  assert.doesNotMatch(stakeholders, /adminOverride/);
+  assert.doesNotMatch(stakeholders, /> Override</);
+  assert.doesNotMatch(operating, /adminOverride/);
+  assert.doesNotMatch(operating, /> Override</);
 });

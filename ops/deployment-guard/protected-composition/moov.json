@@ -19,6 +19,7 @@
     "Settings stakeholder verification reads linked recipient and payment_provider_methods status",
     "moov-sync writes verified last four and status onto stakeholder_accounts",
     "Moov bank verification webhooks write stakeholder verification through the linked recipient, even when provider_account_id is missing",
+    "Settings does not offer an admin Override button for Moov bank verification",
     "merchant capability request keeps transfers, send-funds, wallet, send-funds.ach",
     "hosted onboarding-link still requests collect-funds"
   ],
@@ -51,6 +52,8 @@
     "moov_settings_last_four_from_provider",
     "moov_sync_writes_stakeholder_banks",
     "moov_webhook_writes_stakeholder_verification",
+    "moov_settings_no_admin_override_button",
+    "moov_operating_no_admin_override_button",
     "moov_merchant_capability_codes",
     "moov_onboarding_link_collect_funds"
   ],

@@ -17,7 +17,6 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { decorateStakeholderBank } from "@/lib/payments/stakeholderBankDisplay";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
-import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 
@@ -66,7 +65,6 @@ export function StakeholderAccountSettings() {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isAdmin } = usePermissions();
   const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -320,28 +318,6 @@ export function StakeholderAccountSettings() {
     onError: (e: any) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
   });
 
-  const adminOverride = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("stakeholder_accounts")
-        .update({ verification_status: "admin_override", verified_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Account marked as verified (admin override)" });
-      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
-    },
-    onError: (e: any) => toast({
-      title: "Override failed",
-      description: e.message === "writes_disabled"
-        ? "Admin override is not enabled on this environment yet."
-        : e.message,
-      variant: "destructive",
-    }),
-  });
-
-
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   return (
@@ -582,18 +558,6 @@ export function StakeholderAccountSettings() {
                       disabled={resendVerification.isPending}
                     >
                       <MailCheck className="h-3 w-3 mr-1" /> Resend
-                    </Button>
-                  )}
-                  {isAdmin && vStatus !== "verified" && vStatus !== "admin_override" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                      onClick={() => adminOverride.mutate(acct.id)}
-                      disabled={adminOverride.isPending}
-                      title="Admin override: mark as verified without a bank login"
-                    >
-                      <ShieldAlert className="h-3 w-3 mr-1" /> Override
                     </Button>
                   )}
                   {["verified", "admin_override"].includes(vStatus) && (

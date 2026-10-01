@@ -1375,10 +1375,6 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'contractor_profiles') return executeContractorProfiles({ client, mapping, values, filters });
   if (table === 'audit_logs') return executeAuditLogsTable({ client, mapping, values });
   if (table === 'user_sessions') return executeUserSessionsTable({ client, mapping, op, values, filters });
-  if (table === 'stakeholder_accounts') {
-    const { executeStakeholderAdminOverride } = await import('./write-stakeholder-override.mjs');
-    return executeStakeholderAdminOverride({ client, mapping, op, values, filters });
-  }
   if ([
     'notifications', 'tenant_documents', 'loss_draft_documents', 'mortgage_companies',
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
