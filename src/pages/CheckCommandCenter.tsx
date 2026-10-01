@@ -487,48 +487,26 @@ export default function CheckCommandCenter() {
   const canAccessManager = isAdmin || (isWhiteLabel && ["admin", "owner"].includes(tenantMembershipRole ?? ""));
 
   // Admin: allow delete at any stage
-  const canDeleteAnyCheck = true;
+  const canDeleteAnyCheck = isAdmin;
 
   const deleteCheckMutation = useMutation({
-    mutationFn: async (checkId: string) => {
-      // Delete all related records first (order matters for FK constraints)
-      const tables = [
-        "check_endorsement_events",
-        "check_endorsements",
-        "check_review_decisions",
-        "check_reissue_requests",
-        "check_eligibility_results",
-        "check_audit_log",
-        "check_payees",
-      ] as const;
+    mutationFn: async ({ checkId, reason }: { checkId: string; reason: string }) => {
+      if (!user?.id) throw new Error("Not signed in");
+      const trimmed = String(reason || "").trim();
+      if (trimmed.length < 3) throw new Error("A deletion reason (min 3 characters) is required");
 
-      for (const table of tables) {
-        const { error } = await supabase.from(table).delete().eq("check_id", checkId);
-        if (error) {
-          console.error(`[DELETE] Failed to delete from ${table}:`, error);
-          throw new Error(`Failed to clear ${table}: ${error.message}`);
-        }
-      }
-
-      // Remove any accounting rows and unlink any active loss draft before deleting the check
-      const { error: ccErr } = await supabase.from("claim_checks").delete().eq("check_intake_item_id", checkId);
-      if (ccErr) console.warn("[DELETE] claim_checks cleanup:", ccErr.message);
-
-      const { error: lossDraftErr } = await supabase
-        .from("loss_draft_tracking")
-        .update({ check_intake_item_id: null })
-        .eq("check_intake_item_id", checkId);
-      if (lossDraftErr) {
-        console.error("[DELETE] loss_draft_tracking unlink:", lossDraftErr);
-        throw new Error(`Failed to unlink loss draft: ${lossDraftErr.message}`);
-      }
-
-      const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
-      if (error) throw new Error(`Failed to delete check: ${error.message}`);
+      // Use the existing admin delete RPC. On AWS staging this is bridged to
+      // DELETE /workflow/checks/:id (generic table DELETE is intentionally blocked).
+      const { error } = await supabase.rpc("admin_delete_check" as any, {
+        p_check_id: checkId,
+        p_actor_id: user.id,
+        p_reason: trimmed,
+      });
+      if (error) throw new Error(error.message || "Delete failed");
     },
     // Phase 4: drop the row from the queue immediately, restore it if the
     // delete fails server-side.
-    onMutate: (checkId: string) => {
+    onMutate: ({ checkId }) => {
       const rollback = optimisticRemove(qc, [checkId]);
       return { rollback };
     },
@@ -2222,9 +2200,17 @@ export default function CheckCommandCenter() {
                                     className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (confirm("Delete this check? This cannot be undone.")) {
-                                        deleteCheckMutation.mutate(check.id);
+                                      if (!confirm("Delete this check? This cannot be undone.")) return;
+                                      const reason = prompt("Reason for deletion (required; min 3 characters). This is logged to the audit trail.");
+                                      if (!reason || reason.trim().length < 3) {
+                                        toast({
+                                          title: "Reason required",
+                                          description: "Please provide a reason (min 3 characters).",
+                                          variant: "destructive",
+                                        });
+                                        return;
                                       }
+                                      deleteCheckMutation.mutate({ checkId: check.id, reason });
                                     }}
                                     disabled={deleteCheckMutation.isPending}
                                   >

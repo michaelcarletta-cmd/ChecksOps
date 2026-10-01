@@ -38,7 +38,7 @@ test('rejected Endorsing retry does not return a success confirmation or write a
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
-import { handleCreateCheck, handleCheckTransition, handleWorkflowStatus } from '../functions/api/workflow.mjs';
+import { handleCreateCheck, handleCheckTransition, handleDeleteCheck, handleWorkflowStatus } from '../functions/api/workflow.mjs';
 import { handleWrite } from '../functions/api/write.mjs';
 import {
   evaluateTransition,
@@ -103,6 +103,7 @@ const mockClient = ({
   rows = [createdRow],
   payees,
   endorsements,
+  claimOwnedLossDrafts = [],
 } = {}) => {
   const queries = [];
   const defaultPayees = payees || [{
@@ -112,6 +113,7 @@ const mockClient = ({
     payee_type: 'insured',
     endorsement_status: 'signed',
     endorsed_at: '2026-01-01T00:00:00.000Z',
+    endorsement_image_path: `checks/${check?.id || CHECK_ID}/endorsement/payee-ready-1.png`,
   }];
   const defaultEndorsements = endorsements || [{
     id: 'endo-ready-1',
@@ -121,6 +123,7 @@ const mockClient = ({
     payee_type: 'insured',
     status: 'signed',
     signed_at: '2026-01-01T00:00:00.000Z',
+    signature_image_url: `checks/${check?.id || CHECK_ID}/endorsement/signature-1.png`,
   }];
   return {
     queries,
@@ -142,8 +145,36 @@ const mockClient = ({
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id, uploaded_by/.test(sql)) {
         return { rows: check ? [check] : [] };
       }
+      if (/SELECT id, tenant_id,\s*front_image_path/i.test(sql) && /FROM public\.check_intake_items/i.test(sql)) {
+        return {
+          rows: [{
+            id: params?.[0] || CHECK_ID,
+            tenant_id: FREEDOM_TENANT,
+            front_image_path: `checks/${CHECK_ID}/front.jpg`,
+            back_image_path: `checks/${CHECK_ID}/back.jpg`,
+            back_image_original_path: `checks/${CHECK_ID}/back_original.jpg`,
+            back_image_deposit_path: `checks/${CHECK_ID}/back_deposit.jpg`,
+            endorsement_packet_path: `endorsement-packets/${FREEDOM_TENANT}/${CHECK_ID}/packet.pdf`,
+          }],
+        };
+      }
       if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
         return { rows: [{ id: params[0], tenant_id: FREEDOM_TENANT }] };
+      }
+      if (/SELECT file_path FROM public\.check_files/.test(sql)) {
+        return { rows: [{ file_path: `check-intake/${CHECK_ID}/files/unit-test-delete-check.txt` }] };
+      }
+      if (/SELECT id FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
+        return { rows: [{ id: 'ld-1' }] };
+      }
+      if (/SELECT 1 FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
+        return { rows: claimOwnedLossDrafts };
+      }
+      if (/SELECT file_path FROM public\.loss_draft_documents/.test(sql)) {
+        return { rows: [{ file_path: 'escrow/claim-not-this-check.pdf' }] };
+      }
+      if (/DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
+        return { rows: [] };
       }
       if (/INSERT INTO public.check_intake_items/.test(sql)) return { rows };
       if (/UPDATE public.check_intake_items/.test(sql)) {
@@ -159,6 +190,16 @@ const mockClient = ({
       if (/FROM public.loss_draft_tracking d/.test(sql)) {
         return { rows: [{ id: params[0], check_intake_item_id: CHECK_ID, tenant_id: FREEDOM_TENANT }] };
       }
+      if (/SELECT 1 FROM public\.deposit_items/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.checkalt_deposits/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.disbursement_batches/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.claim_check_payments/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.check_billing_events/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.check_payment_directions/.test(sql)) return { rows: [] };
+      if (/SELECT to_regclass\('public\.check_deletion_log'\)/.test(sql)) return { rows: [{ t: 'public.check_deletion_log' }] };
+      if (/INSERT INTO public\.check_deletion_log/.test(sql)) return { rows: [{ id: 'log-1' }] };
+      if (/SELECT \* FROM public\.check_intake_items WHERE id =/.test(sql)) return { rows: [check] };
+      if (/DELETE FROM public\.check_intake_items/.test(sql) && /RETURNING id/.test(sql)) return { rows: [{ id: params[0] }] };
       return { rows };
     },
     end: async () => {},
@@ -168,6 +209,7 @@ const mockClient = ({
 const depsFor = (client, extra = {}) => ({
   forceEnabled: true,
   forceWorkflow: true,
+  disableS3Cleanup: true,
   loadDatabaseCredentials: async () => ({
     username: 'checksops',
     password: 'unit-test-only-not-a-real-secret',
@@ -401,4 +443,191 @@ test('provider execution routes remain disabled', async () => {
   const body = JSON.parse(result.body);
   assert.equal(result.statusCode, 403);
   assert.equal(body.error, 'provider_disabled');
+});
+
+test('admin can delete a safe check via workflow delete route', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+  });
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.data.deleted, true);
+  assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id = \$1::uuid AND claim_id IS NULL/.test(String(q.sql))));
+  assert.ok(!client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id = \$1::uuid\s*$/.test(String(q.sql))));
+  assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+});
+
+test('non-admin cannot delete check', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'staff' }],
+  });
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'not_authorized');
+});
+
+test('workflow delete denies claim-linked, partner-linked, and deposited checks', async () => {
+  const claimLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(mockClient({
+    check: { ...createdRow, claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+    roles: [{ role: 'admin' }],
+  })));
+  assert.equal(claimLinked.statusCode, 403);
+  assert.equal(claimLinked.error, 'cleanup_denied');
+
+  const claimOwnedClient = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+    claimOwnedLossDrafts: [{ '?column?': 1 }],
+  });
+  const claimOwnedDraft = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(claimOwnedClient));
+  assert.equal(claimOwnedDraft.statusCode, 403);
+  assert.equal(claimOwnedDraft.error, 'cleanup_denied');
+  assert.equal(claimOwnedDraft.blocker, 'loss_draft_tracking');
+  assert.ok(!claimOwnedDraft.ok);
+  assert.ok(!claimOwnedClient.queries.some((q) => /DELETE FROM public\.loss_draft_tracking/.test(String(q.sql))));
+  assert.ok(!claimOwnedClient.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+
+  const partnerLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(mockClient({
+    check: { ...createdRow, external_origin: { source_app: 'freedom_crm', source_check_id: 'abc' } },
+    roles: [{ role: 'admin' }],
+  })));
+  assert.equal(partnerLinked.statusCode, 403);
+  assert.equal(partnerLinked.error, 'cleanup_denied');
+
+  const deposited = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(mockClient({
+    check: { ...createdRow, check_stage: 'deposited', status: 'deposited', deposited_at: '2026-01-01T00:00:00.000Z' },
+    roles: [{ role: 'admin' }],
+  })));
+  assert.equal(deposited.statusCode, 403);
+  assert.equal(deposited.error, 'cleanup_denied');
+});
+
+test('workflow delete validates UUID and requires reason', async () => {
+  const client = mockClient({ roles: [{ role: 'admin' }] });
+  const badId = await handleDeleteCheck(jwtEvent('/workflow/checks/not-a-uuid', 'DELETE', {
+    check_id: 'not-a-uuid',
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(badId.statusCode, 400);
+  assert.equal(badId.error, 'invalid_uuid');
+
+  const missingReason = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'x',
+  }), depsFor(mockClient({ roles: [{ role: 'admin' }] })));
+  assert.equal(missingReason.statusCode, 400);
+  assert.equal(missingReason.error, 'missing_required_field');
+});
+
+test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+  });
+
+  const sent = [];
+  const s3 = {
+    send: async (cmd) => {
+      sent.push(cmd);
+      const name = cmd?.constructor?.name || '';
+      if (name === 'ListObjectsV2Command') {
+        const prefix = cmd?.input?.Prefix || '';
+        const key = prefix.endsWith('/')
+          ? `${prefix}generated.png`
+          : `${prefix}/packet.pdf`;
+        return { IsTruncated: false, Contents: [{ Key: key }] };
+      }
+      if (name === 'DeleteObjectsCommand') {
+        const objs = cmd?.input?.Delete?.Objects || [];
+        return { Deleted: objs.map((o) => ({ Key: o.Key })), Errors: [] };
+      }
+      return {};
+    },
+  };
+
+  const prevBucket = process.env.FILES_BUCKET;
+  process.env.FILES_BUCKET = 'unit-test-files-bucket';
+  try {
+    const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+      check_id: CHECK_ID,
+      reason: 'duplicate',
+    }), depsFor(client, { disableS3Cleanup: false, forceStorageWrites: true, s3 }));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.deleted, true);
+    assert.equal(result.storageCleanup.ok, true);
+    assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id = \$1::uuid AND claim_id IS NULL/.test(String(q.sql))));
+    assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+    assert.ok(!client.queries.some((q) => /FROM public\.loss_draft_documents/.test(String(q.sql))));
+
+    const listed = sent.filter((c) => (c?.constructor?.name || '') === 'ListObjectsV2Command');
+    const deleted = sent.find((c) => (c?.constructor?.name || '') === 'DeleteObjectsCommand');
+    assert.ok(listed.length >= 1);
+    assert.ok(deleted);
+    const deleteKeys = (deleted?.input?.Delete?.Objects || []).map((o) => o.Key).filter(Boolean);
+    assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/checks/${CHECK_ID}/`)));
+    assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/check-intake/${CHECK_ID}/files/`)));
+    assert.ok(!deleteKeys.some((k) => String(k).includes('loss-draft-documents')));
+    assert.ok(!deleteKeys.some((k) => String(k).includes('escrow/claim-not-this-check.pdf')));
+  } finally {
+    if (prevBucket === undefined) delete process.env.FILES_BUCKET;
+    else process.env.FILES_BUCKET = prevBucket;
+  }
+});
+
+test('workflow delete reports storage cleanup failure without rolling back DB delete (stubbed)', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+  });
+
+  const s3 = {
+    send: async (cmd) => {
+      const name = cmd?.constructor?.name || '';
+      if (name === 'ListObjectsV2Command') {
+        const prefix = cmd?.input?.Prefix || '';
+        return { IsTruncated: false, Contents: [{ Key: `${prefix}generated.png` }] };
+      }
+      if (name === 'DeleteObjectsCommand') {
+        const objs = cmd?.input?.Delete?.Objects || [];
+        return { Deleted: [], Errors: [{ Key: objs[0]?.Key || null, Code: 'AccessDenied', Message: 'denied' }] };
+      }
+      return {};
+    },
+  };
+
+  const prevBucket = process.env.FILES_BUCKET;
+  process.env.FILES_BUCKET = 'unit-test-files-bucket';
+  try {
+    const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+      check_id: CHECK_ID,
+      reason: 'duplicate',
+    }), depsFor(client, { disableS3Cleanup: false, forceStorageWrites: true, s3 }));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.deleted, true);
+    assert.equal(result.storageCleanup.ok, false);
+    assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+  } finally {
+    if (prevBucket === undefined) delete process.env.FILES_BUCKET;
+    else process.env.FILES_BUCKET = prevBucket;
+  }
 });
