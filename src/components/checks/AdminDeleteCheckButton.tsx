@@ -93,7 +93,10 @@ export function AdminDeleteCheckButton({
         size={size}
         variant={variant}
         className={`text-destructive hover:bg-destructive/10 ${className ?? ""}`}
-        onClick={() => setOpen(true)}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
       >
         <Trash2 className="h-3.5 w-3.5 mr-1.5" />
         {label}

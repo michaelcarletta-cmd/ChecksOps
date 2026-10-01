@@ -416,6 +416,15 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
     }
+    const platformRoles = (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows
+      .map((row) => String(row.role || '').toLowerCase());
+    if (!platformRoles.includes('admin')) {
+      return denied(spoof, { error: 'admin_required', message: 'Only admins can delete checks' });
+    }
+    const reason = String(body.reason || body.p_reason || '').trim();
+    if (reason.length < 3) {
+      return denied(spoof, { error: 'deletion_reason_required', message: 'A deletion reason (min 3 characters) is required' });
+    }
     if (looked.check.claim_id) {
       return denied(spoof, {
         error: 'cleanup_denied',
@@ -428,6 +437,16 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         message: 'Refusing to delete a partner-linked or deposited check',
       });
     }
+    await client.query(
+      `INSERT INTO public.audit_logs (user_id, action, record_type, record_id, old_values, metadata)
+       VALUES ($1::uuid, 'admin_delete_check', 'check', $2::uuid, $3::jsonb, $4::jsonb)`,
+      [
+        mapping.application_user_id,
+        looked.check.id,
+        JSON.stringify(looked.check),
+        JSON.stringify({ reason }),
+      ],
+    );
     await deleteChildren(client, looked.check.id);
     const rows = (await client.query(
       'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',

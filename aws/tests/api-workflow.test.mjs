@@ -38,7 +38,7 @@ test('rejected Endorsing retry does not return a success confirmation or write a
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
-import { handleCreateCheck, handleCheckTransition, handleWorkflowStatus } from '../functions/api/workflow.mjs';
+import { handleCreateCheck, handleCheckTransition, handleDeleteCheck, handleWorkflowStatus } from '../functions/api/workflow.mjs';
 import { handleWrite } from '../functions/api/write.mjs';
 import {
   evaluateTransition,
@@ -254,6 +254,40 @@ test('T5 kill switch disables create without a write transaction', async () => {
   assert.equal(result.statusCode, 403);
   assert.equal(result.error, 'application_workflow_writes_disabled');
   assert.equal(client.queries.some((q) => String(q.sql).includes('INSERT INTO public.check_intake_items')), false);
+});
+
+test('admin delete uses the server-derived admin identity, requires a reason, and audits before cleanup', async () => {
+  const client = mockClient();
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'Duplicate intake',
+    p_actor_id: SPOOF_ID,
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.cleanedUp, true);
+  assert.equal(client.queries.filter((q) => /INSERT INTO public\.audit_logs/.test(q.sql)).length, 1);
+  const audit = client.queries.find((q) => /INSERT INTO public\.audit_logs/.test(q.sql));
+  assert.equal(audit.params[0], APP_ID);
+  assert.equal(JSON.parse(audit.params[3]).reason, 'Duplicate intake');
+  assert.ok(client.queries.findIndex((q) => /INSERT INTO public\.audit_logs/.test(q.sql))
+    < client.queries.findIndex((q) => /DELETE FROM public\.check_intake_items/.test(q.sql)));
+});
+
+test('admin delete rejects missing reasons and non-admin callers without deleting', async () => {
+  const noReasonClient = mockClient();
+  const noReason = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+  }), depsFor(noReasonClient));
+  assert.equal(noReason.error, 'deletion_reason_required');
+  assert.equal(noReasonClient.queries.some((q) => /^DELETE FROM/.test(q.sql)), false);
+
+  const nonAdminClient = mockClient({ roles: [{ role: 'staff' }] });
+  const nonAdmin = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'Duplicate intake',
+  }), depsFor(nonAdminClient));
+  assert.equal(nonAdmin.error, 'admin_required');
+  assert.equal(nonAdminClient.queries.some((q) => /^DELETE FROM/.test(q.sql)), false);
 });
 
 test('valid start_review then mark_ready; skip and deposited denied', async () => {

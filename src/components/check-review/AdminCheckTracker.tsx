@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Loader2,
   CheckCircle2,
@@ -83,6 +84,7 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
   const [routing, setRouting] = useState<string | null>(null); // check_intake_item_id currently being routed
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CheckRow | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
 
   async function load() {
     setLoading(true);
@@ -198,45 +200,24 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
     load();
   }
 
-  /** Permanently delete a check (claim_checks + check_intake_items + related rows). Admin only. */
+  /** Permanently delete a check through the AWS workflow delete operation. Admin only. */
   async function deleteCheck(c: CheckRow) {
     setDeleting(c.id);
     try {
       const intakeId = c.check_intake_item_id;
+      if (!intakeId) throw new Error("This check has no linked intake record and cannot be deleted through the AWS workflow.");
       const { data: ud } = await supabase.auth.getUser();
-
-      // Audit BEFORE delete so the log survives
-      if (intakeId) {
-        await supabase.from("check_audit_log").insert({
-          check_id: intakeId,
-          event_type: "admin_deleted",
-          event_description: `Admin deleted check from Check Tracker (claim_check ${c.id})`,
-          actor_id: ud.user?.id ?? null,
-          event_data: {
-            claim_check_id: c.id,
-            check_intake_item_id: intakeId,
-            payee_line: c.payee_line,
-            amount: c.amount,
-            check_number: c.check_number,
-          },
-        });
-      }
-
-      // Best-effort cleanup of dependent rows that may not cascade
-      if (intakeId) {
-        await (supabase.from("deposit_items") as any).delete().eq("check_id", intakeId);
-        await (supabase.from("check_endorsements") as any).delete().eq("check_intake_item_id", intakeId);
-      }
-      // Delete claim_checks first (FKs may reference it)
-      const { error: ccErr } = await (supabase.from("claim_checks") as any).delete().eq("id", c.id);
-      if (ccErr) throw ccErr;
-      if (intakeId) {
-        const { error: intakeErr } = await (supabase.from("check_intake_items") as any).delete().eq("id", intakeId);
-        if (intakeErr) throw intakeErr;
-      }
+      if (!ud.user?.id) throw new Error("Your session has expired. Please sign in again.");
+      const { error } = await supabase.rpc("admin_delete_check" as any, {
+        p_check_id: intakeId,
+        p_actor_id: ud.user.id,
+        p_reason: deleteReason.trim(),
+      });
+      if (error) throw error;
 
       toast.success("Check deleted");
       setDeleteTarget(null);
+      setDeleteReason("");
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["check-review-queue"] });
       qc.invalidateQueries({ queryKey: ["loss-draft-checks"] });
@@ -480,7 +461,12 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => {
+        if (!o) {
+          setDeleteTarget(null);
+          setDeleteReason("");
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -498,6 +484,17 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
               </div>
             </div>
           )}
+          <div className="space-y-2">
+            <Label htmlFor="tracker-delete-reason">Reason for deletion</Label>
+            <Textarea
+              id="tracker-delete-reason"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              placeholder="Enter a reason (at least 3 characters)"
+              rows={3}
+              disabled={!!deleting}
+            />
+          </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={!!deleting}>
               Cancel
@@ -505,7 +502,7 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
             <Button
               variant="destructive"
               onClick={() => deleteTarget && deleteCheck(deleteTarget)}
-              disabled={!!deleting}
+              disabled={!!deleting || deleteReason.trim().length < 3}
             >
               {deleting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Trash2 className="h-3 w-3 mr-1" />}
               Delete Check

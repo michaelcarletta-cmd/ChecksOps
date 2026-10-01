@@ -918,7 +918,7 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         const checkId = String(args.p_check_id || args.check_id || "");
         const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}`, {
           method: "DELETE",
-          body: JSON.stringify({ check_id: checkId }),
+          body: JSON.stringify({ check_id: checkId, reason: args.p_reason }),
         }, token);
         if (response.status === 401) {
           writeStored(null);
