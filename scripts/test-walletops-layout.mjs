@@ -97,6 +97,12 @@ test("Item #4 Funding & Billing and pending cards remain", () => {
   assert.match(page, /Available operating balance/);
 });
 
+test("Automatic payouts are explained and listed in activity", () => {
+  assert.match(page, /leftover wallet money is sent to your bank every day/);
+  assert.match(page, /summarizeSweepActivity/);
+  assert.match(page, /Automatic payout/);
+});
+
 test("WalletOps wallet reads are environment-aware and never maybeSingle all operating rows", () => {
   assert.match(hooks, /selectPaymentWallet/);
   assert.match(hooks, /resolveWalletOpsEnvironment/);

@@ -1101,7 +1101,7 @@ export const sweepConfig = {
     }
     if (action === 'sweeps') {
       const data = await moovFetch(
-        `/accounts/${accountId}/sweeps?walletID=${encodeURIComponent(wallet.provider_wallet_id)}&count=50`,
+        `/accounts/${accountId}/wallets/${encodeURIComponent(wallet.provider_wallet_id)}/sweeps?count=50`,
         { scopes: [`/accounts/${accountId}/wallets.read`], fetchImpl },
       );
       return jsonResult({ success: true, sweeps: data, liveProviderCalled: true });

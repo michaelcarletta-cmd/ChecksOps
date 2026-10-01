@@ -38,6 +38,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
+import { summarizeSweepActivity, sweepAmountCents } from "@/lib/payments/walletSweepActivity";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
@@ -155,8 +156,15 @@ export default function WalletOps() {
 
   const sweepsOn = config?.status === "enabled";
 
-  const lastSweep = history?.[0];
-  const pendingOut = transferData?.pendingOutCents ?? 0;
+  const lastSweep = (history ?? []).find((row) => sweepAmountCents(row) > 0) ?? history?.[0];
+  const sweepActivity = summarizeSweepActivity({
+    sweeps: history,
+    knownTransferIds: (transferData?.classified ?? []).map((row) => row.transfer.provider_transfer_id),
+    settlementLabel: settlementMethod
+      ? `${settlementMethod.bank_name ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
+      : "Connected bank",
+  });
+  const pendingOut = (transferData?.pendingOutCents ?? 0) + sweepActivity.pendingOutCents;
   const pendingIn = transferData?.pendingInCents ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
   const billingActivity = transferData?.billing ?? [];
@@ -217,6 +225,21 @@ export default function WalletOps() {
       amountCents: entry.amount_cents,
       balanceCents: entry.balance_after_cents,
       status: null as string | null,
+      walletCents: null as number | null,
+      bankCents: null as number | null,
+    })),
+    ...sweepActivity.rows.map((row) => ({
+      key: row.key,
+      at: row.at,
+      title: row.title,
+      subtitle: row.subtitle,
+      detail: row.detail,
+      route: row.detail,
+      kind: "sweep" as const,
+      credit: false,
+      amountCents: row.amountCents,
+      balanceCents: null as number | null,
+      status: row.status,
       walletCents: null as number | null,
       bankCents: null as number | null,
     })),
@@ -359,10 +382,20 @@ export default function WalletOps() {
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Automatic payouts</p>
             <p className="mt-0.5 font-medium">{sweepsOn ? "On" : "Off"}</p>
+            <p className="text-xs text-muted-foreground">
+              {sweepsOn
+                ? "When this is on, leftover wallet money is sent to your bank every day. You do not tap Send."
+                : "Leftover wallet money stays in the wallet until you move it."}
+            </p>
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Minimum retained balance</p>
             <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+            {sweepsOn && (
+              <p className="text-xs text-muted-foreground">
+                Anything above this is paid out automatically.
+              </p>
+            )}
           </div>
         </div>
         {billingActivity.length > 0 && (
@@ -564,7 +597,7 @@ export default function WalletOps() {
                           {item.status}
                         </Badge>
                         <span className={item.credit ? "font-semibold text-emerald-500" : "font-semibold"}>
-                          {item.kind === "transfer" && item.credit ? "+" : item.kind === "transfer" ? "−" : ""}
+                          {item.credit ? "+" : "−"}
                           {money(item.amountCents)}
                         </span>
                       </div>

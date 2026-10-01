@@ -247,6 +247,7 @@ export function purposeOfTransfer(transfer: WalletOpsTransferRow, classified: { 
   if (classified.isWalletSource && !classified.isWalletDestination) {
     const dest = resolveTransferPaymentMethodIds(transfer).destinationPaymentMethodId;
     if (CHECKSOPS_WALLET_PAYMENT_METHOD_IDS.has(dest)) return "ChecksOps Billing";
+    if (/^sweepID:/i.test(String(transfer.description || ""))) return "Automatic payout";
     return "Bank Withdrawal";
   }
   return transfer.description || "Transfer";

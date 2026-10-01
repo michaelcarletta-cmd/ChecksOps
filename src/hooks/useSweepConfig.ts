@@ -30,7 +30,7 @@ export function useSweepConfig(walletType: string = "operating") {
 
   const sweeps = useQuery({
     queryKey: [...key, "history"],
-    enabled: !!tenantId && enabled && query.data?.sweep_config?.status === "enabled",
+    enabled: !!tenantId && enabled,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: () => listRecentSweeps(tenantId!, walletType),
@@ -60,6 +60,7 @@ export function useSweepConfig(walletType: string = "operating") {
     },
     onSuccess: (data) => {
       qc.setQueryData(key, data);
+      qc.invalidateQueries({ queryKey: [...key, "history"] });
     },
   });
 

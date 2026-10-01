@@ -72,8 +72,11 @@ export interface SweepExecution {
   sweepID: string;
   status?: string | null;
   accruedAmount?: unknown;
+  transferAmount?: unknown;
+  transferID?: string | null;
   createdOn?: string | null;
   completedOn?: string | null;
+  accrualEndedOn?: string | null;
 }
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
