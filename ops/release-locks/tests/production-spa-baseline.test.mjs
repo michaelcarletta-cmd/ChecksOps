@@ -84,7 +84,7 @@ test('SPA-only PRODUCTION_LOCKED with empty SQL is allowed only with recorded sp
       spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
       spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
     },
-    rollback: { git_sha: ACCEPTED_PRODUCTION_SPA.source_lineage, artifact: '/assets/index-BAD1KYoF.js' },
+    rollback: { git_sha: ACCEPTED_PRODUCTION_SPA.source_lineage, artifact: '/assets/index-BPbQUNFr.js' },
     missing_evidence: [],
   }, 'production-spa', ROOT);
   assert.equal(ok.some((row) => /required_sql/.test(row)), false);
