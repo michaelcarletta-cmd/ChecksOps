@@ -9,6 +9,7 @@ import {
   shouldResumeExistingBank,
   tosRequirementOutstanding,
 } from "../_shared/recipientTosPolicy.ts";
+import { applyMoovBankVerificationEvent } from "../_shared/moovStakeholderSync.ts";
 
 /**
  * PUBLIC, token-authenticated bank collection for the branded recipient page
@@ -165,12 +166,17 @@ serve(async (req) => {
       })
       .eq("id", recipient.id);
 
-    if ((recipient as any).stakeholder_account_id) {
-      await supabase
-        .from("stakeholder_accounts")
-        .update({ verification_status: status === "verified" ? "verified" : "pending" })
-        .eq("id", (recipient as any).stakeholder_account_id);
-    }
+    await applyMoovBankVerificationEvent(supabase, {
+      environment,
+      providerAccountId: accountId,
+      tenantId: recipient.tenant_id,
+      bank: {
+        bankAccountID: bankAccountId,
+        bankName,
+        lastFourAccountNumber: lastFour,
+        status,
+      },
+    });
 
     await supabase.from("payment_event_log").insert(sanitize({
       tenant_id: recipient.tenant_id,

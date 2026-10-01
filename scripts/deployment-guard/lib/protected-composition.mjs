@@ -195,6 +195,12 @@ export function evaluateMoovSourceContracts(files = {}) {
       && /send-funds/.test(link)
       && /wallet/.test(link);
   }
+  if (hasFile(files, 'supabase/functions/moov-webhook/index.ts')
+    || hasFile(files, 'aws/functions/api/providers/webhook-apply.mjs')) {
+    const webhook = `${files['supabase/functions/moov-webhook/index.ts'] || ''}\n${files['aws/functions/api/providers/webhook-apply.mjs'] || ''}`;
+    out.moov_webhook_writes_stakeholder_verification = /applyMoovBankVerificationEvent/.test(webhook)
+      && /shouldApplyBankVerificationEvent/.test(webhook);
+  }
   for (const [id, okFlag] of Object.entries(out)) {
     out[id] = { ok: Boolean(okFlag) };
   }

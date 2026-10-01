@@ -17,6 +17,7 @@ import {
   shouldInitiateInstantMicroDeposit,
   tosRequirementOutstanding,
 } from "../_shared/recipientTosPolicy.ts";
+import { applyMoovBankVerificationEvent } from "../_shared/moovStakeholderSync.ts";
 
 /**
  * PUBLIC, token-authenticated instant micro-deposit verification for the
@@ -170,6 +171,13 @@ serve(async (req) => {
 
     if (action === "initiate") {
       if (interpreted.verified) {
+        await applyMoovBankVerificationEvent(supabase, {
+          environment,
+          providerAccountId: accountId,
+          tenantId: recipient.tenant_id,
+          bank: liveBank,
+          verification: liveVerify,
+        });
         return json({
           success: true,
           already_verified: true,
@@ -279,6 +287,13 @@ serve(async (req) => {
     }
 
     if (interpreted.verified) {
+      await applyMoovBankVerificationEvent(supabase, {
+        environment,
+        providerAccountId: accountId,
+        tenantId: recipient.tenant_id,
+        bank: liveBank,
+        verification: liveVerify,
+      });
       return json({
         success: true,
         already_verified: true,
@@ -375,6 +390,13 @@ serve(async (req) => {
         provider_last_four: refreshed?.lastFourAccountNumber ?? recipient.provider_last_four,
       })
       .eq("id", recipient.id);
+
+    await applyMoovBankVerificationEvent(supabase, {
+      environment,
+      providerAccountId: accountId,
+      tenantId: recipient.tenant_id,
+      bank: refreshed,
+    });
 
     await supabase.from("payment_event_log").insert(sanitize({
       tenant_id: recipient.tenant_id,

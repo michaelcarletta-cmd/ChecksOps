@@ -18,6 +18,7 @@
     "Settings Bank Account last four comes from Moov-linked provider fields, not placeholder chk_acct",
     "Settings stakeholder verification reads linked recipient and payment_provider_methods status",
     "moov-sync writes verified last four and status onto stakeholder_accounts",
+    "Moov bank verification webhooks write stakeholder verification through the linked recipient, even when provider_account_id is missing",
     "merchant capability request keeps transfers, send-funds, wallet, send-funds.ach",
     "hosted onboarding-link still requests collect-funds"
   ],
@@ -36,7 +37,9 @@
     "src/components/payments/PaymentAccountPanel.tsx",
     "aws/functions/api/providers/parity/moov-functions.mjs",
     "aws/functions/api/providers/parity/moov-onboard.mjs",
-    "supabase/functions/moov-onboarding-link/index.ts"
+    "supabase/functions/moov-onboarding-link/index.ts",
+    "supabase/functions/moov-webhook/index.ts",
+    "aws/functions/api/providers/webhook-apply.mjs"
   ],
   "source_contracts": [
     "moov_generally_available",
@@ -47,6 +50,7 @@
     "moov_stakeholder_status_from_linked_tables",
     "moov_settings_last_four_from_provider",
     "moov_sync_writes_stakeholder_banks",
+    "moov_webhook_writes_stakeholder_verification",
     "moov_merchant_capability_codes",
     "moov_onboarding_link_collect_funds"
   ],

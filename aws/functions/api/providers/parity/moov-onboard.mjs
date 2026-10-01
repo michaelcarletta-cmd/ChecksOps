@@ -55,6 +55,7 @@ import {
   tosConfirmedByMoov,
   tosRequirementOutstanding,
 } from '../moov-recipient-tos-policy.mjs';
+import { applyMoovBankVerificationEvent } from './moov-stakeholder-sync.mjs';
 
 const BUSINESS_TYPES = [
   'soleProprietorship', 'unincorporatedAssociation', 'trust', 'llc',
@@ -735,6 +736,18 @@ export const recipientBankAdd = {
        WHERE id = $1::uuid`,
       [recipient.id, bankName, lastFour],
     );
+    await applyMoovBankVerificationEvent(client, {
+      environment: 'sandbox',
+      providerAccountId: accountId,
+      tenantId: recipient.tenant_id,
+      bank: {
+        bankAccountID: bankAccountId,
+        bankName,
+        lastFourAccountNumber: lastFour,
+        status: created?.status ?? 'new',
+      },
+      sandboxOnly: true,
+    }).catch(() => ({ updated: 0 }));
     return jsonResult({
       success: true, bank_account_id: bankAccountId, bank_name: bankName, last_four: lastFour, liveProviderCalled: true,
     });
@@ -839,6 +852,13 @@ export const recipientBankVerify = {
     if (providerVerifySuccessIsNotComplete({ httpOk: true, bank: refreshed }) || !liveBankVerified([refreshed])) {
       return fail('bank_not_verified', 502);
     }
+    await applyMoovBankVerificationEvent(client, {
+      environment: 'sandbox',
+      providerAccountId: accountId,
+      tenantId: recipient.tenant_id,
+      bank: refreshed,
+      sandboxOnly: true,
+    }).catch(() => ({ updated: 0 }));
     return jsonResult({
       success: true,
       complete: recipientOnboardingCompleteFromMoov({

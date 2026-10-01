@@ -59,6 +59,8 @@ const SOURCE_PATHS = [
   'aws/functions/api/providers/parity/moov-functions.mjs',
   'aws/functions/api/providers/parity/moov-onboard.mjs',
   'supabase/functions/moov-onboarding-link/index.ts',
+  'supabase/functions/moov-webhook/index.ts',
+  'aws/functions/api/providers/webhook-apply.mjs',
 ];
 
 function readRepo(rel) {
@@ -188,6 +190,10 @@ test('removing Settings Moov last-four / stakeholder sync is rejected', () => {
     'aws/functions/api/providers/parity/moov-functions.mjs': readRepo('aws/functions/api/providers/parity/moov-functions.mjs')
       .replaceAll('applyMoovBanksToStakeholders', 'noopBanks')
       .replaceAll('syncLinkedStakeholderBanks', 'noopLinked'),
+    'supabase/functions/moov-webhook/index.ts': readRepo('supabase/functions/moov-webhook/index.ts')
+      .replaceAll('applyMoovBankVerificationEvent', 'noopWebhook'),
+    'aws/functions/api/providers/webhook-apply.mjs': readRepo('aws/functions/api/providers/webhook-apply.mjs')
+      .replaceAll('applyMoovBankVerificationEvent', 'noopWebhook'),
   });
   const result = evaluateProtectedComposition(validInput({
     candidate_source: { files },
@@ -196,7 +202,7 @@ test('removing Settings Moov last-four / stakeholder sync is rejected', () => {
   assert.equal(result.code, CODES.REGRESSION_DETECTED);
   assert.match(
     JSON.stringify(result.errors),
-    /moov_settings_last_four_from_provider|moov_stakeholder_status_from_linked_tables|moov_sync_writes_stakeholder_banks/,
+    /moov_settings_last_four_from_provider|moov_stakeholder_status_from_linked_tables|moov_sync_writes_stakeholder_banks|moov_webhook_writes_stakeholder_verification/,
   );
 });
 

@@ -38,6 +38,88 @@ export function interpretMoovBankStatus(bank = {}, verification = null) {
   return bankStatus || verifStatus || 'pending';
 }
 
+export function normalizeStakeholderEmail(value) {
+  const email = String(value ?? '').trim().toLowerCase();
+  return email || null;
+}
+
+export function bankEventFromPayload(data = {}) {
+  const bank = data?.bankAccount && typeof data.bankAccount === 'object' ? data.bankAccount : data;
+  return {
+    bankAccountID: data?.bankAccountID ?? data?.bankAccountId ?? bank?.bankAccountID ?? bank?.bankAccountId ?? null,
+    bankName: data?.bankName ?? bank?.bankName ?? bank?.bank_name ?? null,
+    lastFour: data?.lastFourAccountNumber ?? bank?.lastFourAccountNumber ?? data?.lastFour ?? bank?.last_four ?? null,
+    status: data?.status ?? bank?.status ?? null,
+    verification: data?.verification ?? bank?.verification ?? null,
+  };
+}
+
+export function shouldApplyBankVerificationEvent(eventType, data = {}) {
+  const type = String(eventType || '');
+  if (!type.startsWith('bankAccount') && !type.includes('verification')) return false;
+  const event = bankEventFromPayload(data);
+  return Boolean(event.bankAccountID || event.status || event.verification);
+}
+
+export function resolveStakeholderVerificationTargets({
+  providerAccountId,
+  bankAccountID = null,
+  stakeholders = [],
+  recipients = [],
+  methods = [],
+  isTenantOperatingAccount = false,
+} = {}) {
+  const ids = new Set();
+  const recipientLinks = [];
+
+  for (const stake of stakeholders) {
+    if (providerAccountId && stake.provider_account_id === providerAccountId) ids.add(stake.id);
+  }
+
+  const matchingRecipients = recipients.filter((row) => {
+    if (providerAccountId && row.provider_account_id === providerAccountId) return true;
+    if (bankAccountID && row.provider_bank_account_id === bankAccountID) return true;
+    return false;
+  });
+
+  for (const recipient of matchingRecipients) {
+    if (recipient.stakeholder_account_id) ids.add(recipient.stakeholder_account_id);
+  }
+
+  for (const method of methods) {
+    const matches = (bankAccountID && method.provider_bank_account_id === bankAccountID)
+      || (providerAccountId && method.provider_account_id === providerAccountId);
+    if (!matches || !method.external_recipient_id) continue;
+    const recipient = recipients.find((row) => row.id === method.external_recipient_id);
+    if (recipient?.stakeholder_account_id) ids.add(recipient.stakeholder_account_id);
+  }
+
+  for (const recipient of matchingRecipients) {
+    if (recipient.stakeholder_account_id || !normalizeStakeholderEmail(recipient.email)) continue;
+    const email = normalizeStakeholderEmail(recipient.email);
+    const candidates = stakeholders.filter((stake) => {
+      if (stake.provider_account_id && stake.provider_account_id !== providerAccountId) return false;
+      return normalizeStakeholderEmail(stake.verification_recipient_email) === email;
+    });
+    if (candidates.length === 1) {
+      ids.add(candidates[0].id);
+      recipientLinks.push({ recipientId: recipient.id, stakeholderId: candidates[0].id });
+    }
+  }
+
+  if (isTenantOperatingAccount) {
+    for (const stake of stakeholders) {
+      const operating = stake.account_type === 'operating' || stake.origin === 'provider_connected';
+      if (!operating) continue;
+      if (!stake.provider_account_id || stake.provider_account_id === providerAccountId) {
+        ids.add(stake.id);
+      }
+    }
+  }
+
+  return { stakeholderIds: [...ids], recipientLinks };
+}
+
 export function nextStakeholderVerification(current, incoming) {
   const now = String(current ?? 'unverified').toLowerCase();
   if (now === 'admin_override' || now === 'verified') return now;
@@ -89,12 +171,18 @@ export async function applyMoovBanksToStakeholders(client, {
   if (!bank) return { updated: 0 };
   const rows = (await client.query(
     `SELECT id, verification_status, verified_at, provider_last_four, provider_bank_name,
-            provider_bank_account_id, provider_environment, account_type, origin
+            provider_bank_account_id, provider_environment, account_type, origin, provider_account_id
      FROM public.stakeholder_accounts
      WHERE tenant_id = $1::uuid
        AND is_active = true
-       AND provider_account_id = $2
-       AND ($3::boolean = false OR account_type = 'operating' OR origin = 'provider_connected')`,
+       AND (
+         provider_account_id = $2
+         OR (
+           $3::boolean = true
+           AND (account_type = 'operating' OR origin = 'provider_connected')
+           AND (provider_account_id IS NULL OR provider_account_id = $2)
+         )
+       )`,
     [tenantId, providerAccountId, operatingOnly],
   )).rows;
   let updated = 0;
@@ -103,14 +191,17 @@ export async function applyMoovBanksToStakeholders(client, {
     const patch = stakeholderPatchFromBank(row, bank, verification);
     await client.query(
       `UPDATE public.stakeholder_accounts
-       SET provider_bank_account_id = $2,
-           provider_bank_name = $3,
-           provider_last_four = $4,
-           verification_status = $5,
-           verified_at = $6
+       SET provider = 'moov',
+           provider_account_id = $2,
+           provider_bank_account_id = $3,
+           provider_bank_name = $4,
+           provider_last_four = $5,
+           verification_status = $6,
+           verified_at = $7
        WHERE id = $1::uuid`,
       [
         row.id,
+        providerAccountId,
         patch.provider_bank_account_id,
         patch.provider_bank_name,
         patch.provider_last_four,
@@ -142,7 +233,7 @@ export async function syncLinkedStakeholderBanks(client, {
   )).rows;
   const recipients = (await client.query(
     `SELECT id, stakeholder_account_id, provider_account_id, onboarding_status,
-            provider_last_four, provider_bank_name, environment
+            provider_last_four, provider_bank_name, environment, email
      FROM public.external_payment_recipients
      WHERE tenant_id = $1::uuid AND provider_account_id IS NOT NULL`,
     [tenantId],
@@ -206,12 +297,35 @@ export async function syncLinkedStakeholderBanks(client, {
           safeLastFour(bank.lastFourAccountNumber ?? bank.last_four) ?? recipient.provider_last_four ?? null,
         ],
       );
-      if (recipient.stakeholder_account_id && !group.stakes.some((s) => s.id === recipient.stakeholder_account_id)) {
+      let linkedStakeholderId = recipient.stakeholder_account_id || null;
+      if (!linkedStakeholderId && recipient.email) {
+        const email = normalizeStakeholderEmail(recipient.email);
+        const matches = (await client.query(
+          `SELECT id, verification_status, verified_at, provider_last_four, provider_bank_name,
+                  provider_bank_account_id, provider_environment, provider_account_id
+           FROM public.stakeholder_accounts
+           WHERE tenant_id = $1::uuid
+             AND is_active = true
+             AND lower(trim(verification_recipient_email)) = $2
+             AND (provider_account_id IS NULL OR provider_account_id = $3)`,
+          [tenantId, email, accountId],
+        )).rows;
+        if (matches.length === 1) {
+          linkedStakeholderId = matches[0].id;
+          await client.query(
+            `UPDATE public.external_payment_recipients
+             SET stakeholder_account_id = $2::uuid
+             WHERE id = $1::uuid AND stakeholder_account_id IS NULL`,
+            [recipient.id, linkedStakeholderId],
+          );
+        }
+      }
+      if (linkedStakeholderId && !group.stakes.some((s) => s.id === linkedStakeholderId)) {
         const linked = (await client.query(
           `SELECT id, verification_status, verified_at, provider_last_four, provider_bank_name,
                   provider_bank_account_id, provider_environment
            FROM public.stakeholder_accounts WHERE id = $1::uuid`,
-          [recipient.stakeholder_account_id],
+          [linkedStakeholderId],
         )).rows[0];
         if (linked) {
           const patch = stakeholderPatchFromBank(linked, bank);
@@ -241,4 +355,184 @@ export async function syncLinkedStakeholderBanks(client, {
     }
   }
   return { accounts: byAccount.size, updated };
+}
+
+function mergeStakeholderRows(...lists) {
+  const byId = new Map();
+  for (const list of lists) {
+    for (const row of list || []) {
+      if (row?.id) byId.set(row.id, row);
+    }
+  }
+  return [...byId.values()];
+}
+
+export async function applyMoovBankVerificationEvent(client, {
+  environment = 'sandbox',
+  providerAccountId,
+  tenantId = null,
+  bank = {},
+  verification = null,
+  sandboxOnly = true,
+} = {}) {
+  if (!client?.query || !providerAccountId) return { updated: 0, recipients: 0 };
+  if (sandboxOnly && String(environment || '').toLowerCase() !== 'sandbox') {
+    return { updated: 0, recipients: 0, skipped: 'production_environment' };
+  }
+
+  const event = bankEventFromPayload(bank);
+  const scopedEnv = sandboxOnly ? 'sandbox' : environment;
+  const recipients = (await client.query(
+    `SELECT id, tenant_id, stakeholder_account_id, provider_account_id, email,
+            onboarding_status, provider_last_four, provider_bank_name, environment,
+            provider_bank_account_id
+     FROM public.external_payment_recipients
+     WHERE provider_account_id = $1 AND environment = $2`,
+    [providerAccountId, scopedEnv],
+  )).rows;
+  const methods = event.bankAccountID
+    ? (await client.query(
+      `SELECT id, provider_account_id, provider_bank_account_id, external_recipient_id, environment
+       FROM public.payment_provider_methods
+       WHERE provider_bank_account_id = $1 AND environment = $2`,
+      [event.bankAccountID, scopedEnv],
+    )).rows
+    : [];
+
+  let tenant = tenantId || recipients[0]?.tenant_id || null;
+  let isTenantOperatingAccount = false;
+  const account = (await client.query(
+    `SELECT id, tenant_id, environment
+     FROM public.payment_provider_accounts
+     WHERE provider = 'moov' AND provider_account_id = $1 AND environment = $2
+     LIMIT 1`,
+    [providerAccountId, scopedEnv],
+  )).rows[0];
+  if (account) {
+    tenant = tenant || account.tenant_id;
+    isTenantOperatingAccount = true;
+  }
+
+  let stakeholders = [];
+  if (tenant) {
+    stakeholders = (await client.query(
+      `SELECT id, tenant_id, provider_account_id, verification_status, verified_at,
+              provider_last_four, provider_bank_name, provider_bank_account_id,
+              provider_environment, account_type, origin, verification_recipient_email
+       FROM public.stakeholder_accounts
+       WHERE tenant_id = $1::uuid AND is_active = true`,
+      [tenant],
+    )).rows;
+  } else {
+    const linkedIds = recipients.map((row) => row.stakeholder_account_id).filter(Boolean);
+    const byLink = linkedIds.length
+      ? (await client.query(
+        `SELECT id, tenant_id, provider_account_id, verification_status, verified_at,
+                provider_last_four, provider_bank_name, provider_bank_account_id,
+                provider_environment, account_type, origin, verification_recipient_email
+         FROM public.stakeholder_accounts
+         WHERE id = ANY($1::uuid[]) AND is_active = true`,
+        [linkedIds],
+      )).rows
+      : [];
+    const byAccount = (await client.query(
+      `SELECT id, tenant_id, provider_account_id, verification_status, verified_at,
+              provider_last_four, provider_bank_name, provider_bank_account_id,
+              provider_environment, account_type, origin, verification_recipient_email
+       FROM public.stakeholder_accounts
+       WHERE provider_account_id = $1 AND is_active = true`,
+      [providerAccountId],
+    )).rows;
+    stakeholders = mergeStakeholderRows(byLink, byAccount);
+  }
+
+  if (sandboxOnly) {
+    stakeholders = stakeholders.filter((row) => sandboxScopedStakeholder(row, 'sandbox'));
+  }
+
+  const targets = resolveStakeholderVerificationTargets({
+    providerAccountId,
+    bankAccountID: event.bankAccountID,
+    stakeholders,
+    recipients,
+    methods,
+    isTenantOperatingAccount,
+  });
+
+  const lastFour = safeLastFour(event.lastFour);
+  const incoming = interpretMoovBankStatus({
+    status: event.status,
+    lastFourAccountNumber: event.lastFour,
+    bankAccountID: event.bankAccountID,
+    bankName: event.bankName,
+  }, verification ?? event.verification);
+
+  for (const recipient of recipients) {
+    const link = targets.recipientLinks.find((row) => row.recipientId === recipient.id);
+    await client.query(
+      `UPDATE public.external_payment_recipients
+       SET onboarding_status = $2,
+           provider_bank_name = COALESCE($3, provider_bank_name),
+           provider_last_four = COALESCE($4, provider_last_four),
+           stakeholder_account_id = COALESCE($5::uuid, stakeholder_account_id),
+           bank_linked_at = COALESCE(bank_linked_at, now())
+       WHERE id = $1::uuid`,
+      [
+        recipient.id,
+        incoming === 'verified' ? 'ready' : (recipient.onboarding_status || 'awaiting_bank'),
+        event.bankName,
+        lastFour,
+        link?.stakeholderId ?? null,
+      ],
+    );
+  }
+
+  let updated = 0;
+  for (const id of targets.stakeholderIds) {
+    let current = stakeholders.find((row) => row.id === id);
+    if (!current) {
+      current = (await client.query(
+        `SELECT id, verification_status, verified_at, provider_last_four, provider_bank_name,
+                provider_bank_account_id, provider_environment
+         FROM public.stakeholder_accounts WHERE id = $1::uuid`,
+        [id],
+      )).rows[0];
+    }
+    if (!current) continue;
+    if (sandboxOnly && !sandboxScopedStakeholder(current, 'sandbox')) continue;
+    const patch = stakeholderPatchFromBank(current, {
+      bankAccountID: event.bankAccountID,
+      bankName: event.bankName,
+      lastFourAccountNumber: event.lastFour,
+      status: event.status,
+    }, verification ?? event.verification);
+    await client.query(
+      `UPDATE public.stakeholder_accounts
+       SET provider = 'moov',
+           provider_account_id = $2,
+           provider_bank_account_id = $3,
+           provider_bank_name = $4,
+           provider_last_four = $5,
+           verification_status = $6,
+           verified_at = $7
+       WHERE id = $1::uuid`,
+      [
+        current.id,
+        providerAccountId,
+        patch.provider_bank_account_id,
+        patch.provider_bank_name,
+        patch.provider_last_four,
+        patch.verification_status,
+        patch.verified_at,
+      ],
+    );
+    updated += 1;
+  }
+
+  return {
+    updated,
+    recipients: recipients.length,
+    stakeholderIds: targets.stakeholderIds,
+    linked: targets.recipientLinks.length,
+  };
 }

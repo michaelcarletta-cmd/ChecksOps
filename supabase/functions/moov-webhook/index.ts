@@ -3,6 +3,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { normalizeTransferStatus } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize, serviceClient } from "../_shared/moovGuard.ts";
 import { postTransferLedger } from "../_shared/moovWallet.ts";
+import {
+  applyMoovBankVerificationEvent,
+  bankEventFromPayload,
+  shouldApplyBankVerificationEvent,
+} from "../_shared/moovStakeholderSync.ts";
 
 // Secure provider webhook endpoint.
 //
@@ -207,40 +212,35 @@ async function handleEvent(
     eventType.includes("verification") ||
     eventType.includes("representative")
   ) {
-    if (eventType.startsWith("bankAccount") && data?.bankAccountID) {
-      const status = String(data.status ?? "pending").toLowerCase();
-      await supabase
-        .from("payment_provider_methods")
-        .update({
-          verification_status: status,
-          connection_status: status === "verified" ? "connected" : status === "errored" ? "failed" : "pending",
-        })
-        .eq("provider_bank_account_id", data.bankAccountID)
-        .eq("environment", environment);
-
-      // Keep external recipients (homeowners, one-time payees, subs) and their
-      // mirrored stakeholder records in step with the provider.
-      if (providerAccountId) {
+    if (shouldApplyBankVerificationEvent(eventType, data) && providerAccountId) {
+      const event = bankEventFromPayload(data);
+      const status = String(event.status ?? data.status ?? "pending").toLowerCase();
+      if (event.bankAccountID) {
         await supabase
-          .from("external_payment_recipients")
+          .from("payment_provider_methods")
           .update({
-            onboarding_status: status === "verified" ? "ready" : "awaiting_bank",
+            verification_status: status,
+            connection_status: status === "verified" ? "connected" : status === "errored" ? "failed" : "pending",
           })
-          .eq("provider_account_id", providerAccountId)
+          .eq("provider_bank_account_id", event.bankAccountID)
           .eq("environment", environment);
-
-        await supabase
-          .from("stakeholder_accounts")
-          .update({
-            provider_bank_account_id: data.bankAccountID,
-            provider_bank_name: data.bankName ?? data.bankAccount?.bankName ?? null,
-            provider_last_four: data.lastFourAccountNumber ?? data.bankAccount?.lastFourAccountNumber ?? null,
-            verification_status: status === "verified" ? "verified" : "pending",
-            verified_at: status === "verified" ? new Date().toISOString() : null,
-          })
-          .eq("provider_account_id", providerAccountId)
-          .eq("provider", "moov");
       }
+
+      // Recipients are often the only ChecksOps row that already stores the
+      // Moov account id. Attach that verification onto the Settings
+      // stakeholder even when provider_account_id was never copied over.
+      await applyMoovBankVerificationEvent(supabase, {
+        environment,
+        providerAccountId,
+        tenantId,
+        bank: {
+          bankAccountID: event.bankAccountID,
+          bankName: event.bankName,
+          lastFourAccountNumber: event.lastFour,
+          status: event.status,
+        },
+        verification: event.verification,
+      });
     }
 
 
