@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
+import { summarizeAdminEditSave } from "@/components/check-review/adminEditSavedChanges";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -243,10 +244,12 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         changes.push(`account # → ${newAccount ? `***${newAccount.slice(-4)}` : "—"}`);
       }
 
+      let skippedIntakeFields: string[] = [];
       if (Object.keys(intakeUpdates).length > 0) {
         const persist = isAwsStaging()
           ? pickAwsSafeIntakeUpdates(intakeUpdates)
           : { safe: intakeUpdates, skipped: [] };
+        skippedIntakeFields = persist.skipped;
         if (Object.keys(persist.safe).length === 0) {
           if (!statusOverriddenOnAws) {
             throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
@@ -306,10 +309,14 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         }
       }
 
-      if (changes.length === 0) {
-        toast.info("No changes to save");
+      const saveSummary = summarizeAdminEditSave(changes, skippedIntakeFields);
+      if (saveSummary.warning) {
+        toast.warning(saveSummary.warning);
+      }
+      if (saveSummary.toast.kind === "info") {
+        toast.info(saveSummary.toast.message);
       } else {
-        toast.success(`Saved: ${changes.join(", ")}`);
+        toast.success(saveSummary.toast.message);
       }
 
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
