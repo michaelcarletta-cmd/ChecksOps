@@ -159,7 +159,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/cutover/WEBHOOK_TRANSITION.md"],
+        "evidence_refs": [
+          "aws/cutover/WEBHOOK_TRANSITION.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -173,7 +175,11 @@
         "signed webhook receipt hash",
         "independent proof the Supabase Moov webhook is disabled"
       ],
-      "open_pr_overlap": ["#314", "#315", "#308"],
+      "open_pr_overlap": [
+        "#314",
+        "#315",
+        "#308"
+      ],
       "notes": "WEBHOOK_TRANSITION.md on main still says production URLs remain on Supabase. Background claims AWS accepted events. UNVERIFIED."
     },
     "checkalt-submission": {
@@ -210,7 +216,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/sql/65_checkalt_production_writer.sql"],
+        "evidence_refs": [
+          "aws/financial/sql/65_checkalt_production_writer.sql"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -224,7 +232,13 @@
         "writer SQL apply hash",
         "deployed Lambda version"
       ],
-      "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"],
+      "open_pr_overlap": [
+        "#327",
+        "#332",
+        "#339",
+        "#322",
+        "#323"
+      ],
       "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. PR #359 retargets tree_hash for persistPollOutcome FinCapture depositDate mapping only. Writer SQL remains NOT_APPLIED. UNVERIFIED."
     },
     "financial-ledger": {
@@ -269,7 +283,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"],
+        "evidence_refs": [
+          "aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -282,7 +298,11 @@
         "production financial permission flag",
         "reconciliation apply proof"
       ],
-      "open_pr_overlap": ["#315", "#310", "#309"],
+      "open_pr_overlap": [
+        "#315",
+        "#310",
+        "#309"
+      ],
       "notes": "Freedom Adjustment reconciliation is claimed in background/open PRs, not proven on origin/main."
     },
     "tenant-email": {
@@ -319,7 +339,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/docs/tenant-ses-email-domain.md"],
+        "evidence_refs": [
+          "aws/docs/tenant-ses-email-domain.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -332,7 +354,11 @@
         "production SES enablement proof",
         "SQL apply hash"
       ],
-      "open_pr_overlap": ["#233", "#231", "#255"],
+      "open_pr_overlap": [
+        "#233",
+        "#231",
+        "#255"
+      ],
       "notes": "Source preserved; template flag false; SQL NOT_APPLIED."
     },
     "partner-sharing": {
@@ -343,7 +369,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "5ca194bc28ab21c840c1178bedb7863b66939c8bcf9e425b347dbbec2da641a9",
+        "tree_hash": "0354a5ac180296d44e19b139a37dc91697cbdc14e55c31b9bfc8c207eaf37cc0",
         "merged": true,
         "merged_pr": null
       },
@@ -458,7 +484,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/rls/sql/29_mortgage_ops_library_parity.sql"],
+        "evidence_refs": [
+          "aws/rls/sql/29_mortgage_ops_library_parity.sql"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -470,7 +498,11 @@
       "missing_evidence": [
         "production or staging apply proof for SQL 29/30"
       ],
-      "open_pr_overlap": ["#249", "#248", "#282"],
+      "open_pr_overlap": [
+        "#249",
+        "#248",
+        "#282"
+      ],
       "notes": "Matches background: merged code-only; SQL previously reported unapplied."
     },
     "auto-deposit": {
@@ -511,7 +543,12 @@
         "merged tenant auto-deposit source",
         "production activation proof"
       ],
-      "open_pr_overlap": ["#342", "#339", "#327", "#332"],
+      "open_pr_overlap": [
+        "#342",
+        "#339",
+        "#327",
+        "#332"
+      ],
       "notes": "Validated-as-ready in background is not production-locked. PR #339 is draft and not on main."
     },
     "database-rls": {
@@ -595,7 +632,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"],
+        "evidence_refs": [
+          "aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -607,7 +646,10 @@
       "missing_evidence": [
         "Secrets Manager version IDs (not secret values)"
       ],
-      "open_pr_overlap": ["#316", "#314"],
+      "open_pr_overlap": [
+        "#316",
+        "#314"
+      ],
       "notes": "Name/config references only."
     },
     "ocr-azure": {
@@ -723,7 +765,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "9592af2fbde3e691b8e411557af6d33a84c31c889d0ae2f02a96127d6cd1c260",
+        "tree_hash": "185db945d21b5d14f55f0fe58c1efedee3e07cba790eab6c488aefd5fc20e7ad",
         "merged": true,
         "merged_pr": null
       },
@@ -769,6 +811,5 @@
       ],
       "notes": "Fail-closed control-plane metadata reconciliation only. The protected release-control tree advanced on merged main, including PR #508 production SPA baseline safeguards and subsequent guard/lock maintenance. Classification remains UNVERIFIED. This source hash update does not change production, does not authorize deployment, and does not replace the authoritative live-SPA or current-live-Lambda requirements."
     }
-
   }
 }
