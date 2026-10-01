@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-30 (index-DSbVZXu8.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-01 (index-DyoF7zdg.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production."
   "components": {
     "delete-check-contract": {
       "id": "delete-check-contract",
