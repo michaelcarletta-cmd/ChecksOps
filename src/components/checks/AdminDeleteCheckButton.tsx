@@ -45,6 +45,7 @@ export function AdminDeleteCheckButton({
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reason, setReason] = useState("");
+  const showLabel = Boolean(label && label.trim().length > 0);
 
   if (!isAdmin) return null;
 
@@ -95,8 +96,8 @@ export function AdminDeleteCheckButton({
         className={`text-destructive hover:bg-destructive/10 ${className ?? ""}`}
         onClick={() => setOpen(true)}
       >
-        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-        {label}
+        <Trash2 className={showLabel ? "h-3.5 w-3.5 mr-1.5" : "h-3.5 w-3.5"} />
+        {showLabel ? label : null}
       </Button>
       <AlertDialog
         open={open}
