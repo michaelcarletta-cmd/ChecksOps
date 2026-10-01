@@ -628,16 +628,23 @@ export const WRITE_ALLOWLIST = {
   },
   tenants: {
     tranche: 6,
-    ops: new Set(['update']),
+    ops: new Set(['update', 'insert']),
     columns: new Set([
-      'name', 'logo_url', 'invoice_letterhead_url', 'primary_color',
+      'name', 'slug', 'logo_url', 'invoice_letterhead_url', 'primary_color',
       'invoice_footer_note', 'invoice_default_terms',
     ]),
     identityColumn: null,
-    requiredForWrite: { update: [] },
+    requiredForWrite: { update: [], insert: ['name', 'slug'] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set(['id', 'slug', 'created_at']),
-    frontend: { file: 'TenantManagement / CompanyBranding', op: 'update', reason: 'Branding/name only; billing/provider flags denied.' },
+    clientIgnored: new Set([
+      'id', 'created_at',
+      'payment_provider', 'moov_allowlisted', 'moov_environment', 'is_test_account',
+    ]),
+    frontend: {
+      file: 'AdminTenants / TenantManagement',
+      op: 'insert',
+      reason: 'Platform-admin create applies server Moov defaults. Branding update stays narrow; provider flags are not client-writable.',
+    },
   },
   privacy_notice_acknowledgments: {
     tranche: 6,

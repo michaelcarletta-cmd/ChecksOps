@@ -89,8 +89,8 @@ const wrap = (handler) => async (event, deps = {}) => {
         applicationUserId: mapping.application_user_id,
         authUid: mapping.application_user_id,
         cognitoSub: claims.sub,
-        productionExecution: false,
-        environment: 'sandbox',
+        productionExecution: ctx.environment === 'production',
+        environment: ctx.environment,
         apiVersion: ctx.moovContext.apiVersion,
       };
     } catch (error) {
@@ -116,7 +116,8 @@ const accountCreate = {
   requireAdmin: true,
   run: async ({ client, mapping, body, ctx, fetchImpl }) => {
     const tenantId = ctx.tenantId;
-    const existing = await loadMoovAccount(client, tenantId, 'sandbox');
+    const environment = ctx.environment || 'sandbox';
+    const existing = await loadMoovAccount(client, tenantId, environment);
     if (existing?.provider_account_id) {
       return jsonResult({ success: true, already_existed: true, account: existing, liveProviderCalled: false });
     }
@@ -147,7 +148,7 @@ const accountCreate = {
       }
       return null;
     })();
-    const idempotencyKey = `checksops-account-sandbox-${tenantId}`;
+    const idempotencyKey = `checksops-account-${environment}-${tenantId}`;
     try {
       await client.query(
         `INSERT INTO public.payment_idempotency_keys
@@ -186,22 +187,22 @@ const accountCreate = {
         (tenant_id, provider, environment, provider_account_id, account_type, display_name,
          onboarding_status, verification_status, provider_metadata, last_synced_at,
          tos_accepted_at, tos_accepted_by, tos_source)
-       VALUES ($1::uuid, 'moov', 'sandbox', $2, 'business', $3, 'onboarding_incomplete', 'not_started', $4::jsonb, now(),
-         ${tosToken ? 'now()' : 'NULL'}, ${tosToken ? '$5::uuid' : 'NULL'}, ${tosToken ? "'tos_drop'" : 'NULL'})
+       VALUES ($1::uuid, 'moov', $2, $3, 'business', $4, 'onboarding_incomplete', 'not_started', $5::jsonb, now(),
+         ${tosToken ? 'now()' : 'NULL'}, ${tosToken ? '$6::uuid' : 'NULL'}, ${tosToken ? "'tos_drop'" : 'NULL'})
        ON CONFLICT (tenant_id, provider, environment) DO UPDATE SET
          provider_account_id = EXCLUDED.provider_account_id,
          provider_metadata = EXCLUDED.provider_metadata,
          last_synced_at = now()
        RETURNING *`,
       tosToken
-        ? [tenantId, accountId, tenant.name ?? null, JSON.stringify(sanitize(created)), mapping.application_user_id]
-        : [tenantId, accountId, tenant.name ?? null, JSON.stringify(sanitize(created))],
+        ? [tenantId, environment, accountId, tenant.name ?? null, JSON.stringify(sanitize(created)), mapping.application_user_id]
+        : [tenantId, environment, accountId, tenant.name ?? null, JSON.stringify(sanitize(created))],
     )).rows[0];
     await logPaymentEvent(client, {
       tenant_id: tenantId,
       event_type: 'payment_account.created',
       new_status: 'onboarding_incomplete',
-      environment: 'sandbox',
+      environment,
       provider_metadata: { account_id: accountId, created_by: mapping.application_user_id },
     });
     return jsonResult({
@@ -216,13 +217,14 @@ const accountCreate = {
 
 const readiness = {
   run: async ({ client, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const environment = ctx.environment || 'sandbox';
+    const account = await loadMoovAccount(client, ctx.tenantId, environment);
     const accountId = account?.provider_account_id || null;
     if (!accountId) {
       return jsonResult({
         success: true,
         readiness: evaluateReadiness({
-          environment: 'sandbox',
+          environment,
           accountId: null,
           capabilities: [],
           banks: [],
@@ -267,7 +269,7 @@ const readiness = {
     const termsAccepted = !!(account?.tos_accepted_at || remoteTos);
     const verificationStatus = remote?.profile?.business?.verification?.status ?? remote?.verification?.status ?? null;
     const result = evaluateReadiness({
-      environment: 'sandbox',
+      environment,
       accountId,
       capabilities: capList,
       banks: (banks ?? []).map((b) => ({ status: b.status })),
@@ -293,7 +295,8 @@ const readiness = {
 const tosToken = {
   requireAdmin: true,
   run: async ({ client, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const environment = ctx.environment || 'sandbox';
+    const account = await loadMoovAccount(client, ctx.tenantId, environment);
     const accountId = account?.provider_account_id || null;
     const sessionScopes = accountId
       ? [`/accounts/${accountId}/profile.write`, `/accounts/${accountId}/profile.read`, '/ping.read']
@@ -302,7 +305,7 @@ const tosToken = {
     return jsonResult({
       success: true,
       token,
-      environment: 'sandbox',
+      environment,
       account_id: accountId,
       public_key: null,
       liveProviderCalled: true,
@@ -318,7 +321,7 @@ const tosAccept = {
       ? body.terms_of_service_token
       : null;
     if (!clientToken && body.accepted !== true) return fail('Terms must be explicitly accepted.', 400);
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const account = await loadMoovAccount(client, ctx.tenantId, ctx.environment || 'sandbox');
     if (!account?.provider_account_id) return fail('Set up the payment account first.', 409);
     if (account.tos_accepted_at) {
       return jsonResult({ success: true, already_accepted: true, accepted_at: account.tos_accepted_at });
@@ -392,7 +395,7 @@ const tosAccept = {
 
 const transferStatus = {
   run: async ({ client, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const account = await loadMoovAccount(client, ctx.tenantId, ctx.environment || 'sandbox');
     const rows = (await client.query(
       `SELECT id, tenant_id, provider_transfer_id, status, amount_cents, description, wallet_id
        FROM public.payment_transfers
@@ -465,7 +468,7 @@ const selftest = {
 
 const sync = {
   run: async ({ client, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const account = await loadMoovAccount(client, ctx.tenantId, ctx.environment || 'sandbox');
     if (!account?.provider_account_id) {
       return jsonResult({ success: true, status: 'not_started', account: account ?? null, liveProviderCalled: false });
     }
@@ -502,7 +505,7 @@ const walletSync = {
     if (!['operating', 'trust'].includes(walletType)) {
       return fail("wallet_type must be 'operating' or 'trust'", 400);
     }
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const account = await loadMoovAccount(client, ctx.tenantId, ctx.environment || 'sandbox');
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     const ledgerLimit = Math.min(Number(body.ledger_limit) || 50, 200);
     let wallet;
@@ -553,7 +556,7 @@ const HANDLERS = {
   'moov-wallet-sync': walletSync,
   'moov-underwriting': {
     run: async ({ client, ctx, body, fetchImpl }) => {
-      const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+      const account = await loadMoovAccount(client, ctx.tenantId, ctx.environment || 'sandbox');
       if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
       const id = account.provider_account_id;
       if (body.action === 'save' && body.answers) {

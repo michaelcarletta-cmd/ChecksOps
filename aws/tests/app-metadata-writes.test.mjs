@@ -20,6 +20,10 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
     assert.equal(WRITE_ALLOWLIST[table].tranche, 6, table);
   }
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('moov_allowlisted'));
+  assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('payment_provider'));
+  assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('moov_environment'));
+  assert.ok(WRITE_ALLOWLIST.tenants.ops.has('insert'));
+  assert.ok(WRITE_ALLOWLIST.tenants.clientIgnored.has('moov_allowlisted'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('checkalt_enabled'));
   assert.ok(WRITE_ALLOWLIST.shared_check_messages.clientIgnored.has('sender_user_id'));
   assert.deepEqual([...WRITE_ALLOWLIST.tenant_users.columns], ['role']);
@@ -126,6 +130,71 @@ test('tenant_users role updates require admin membership and valid enum', async 
   assert.equal(bad.error, 'invalid_field');
 });
 
+
+test('platform admin tenant insert applies server Moov defaults and ignores client provider flags', async () => {
+  const queries = [];
+  const client = {
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (/is_platform_owner|is_master_owner/.test(sql)) {
+        return { rows: [{ is_owner: true, is_master: true }] };
+      }
+      if (/INSERT INTO public.tenants/.test(sql)) {
+        return {
+          rows: [{
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            name: params[0],
+            slug: params[1],
+            payment_provider: params[2],
+            moov_allowlisted: params[3],
+            moov_environment: params[4],
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  };
+  const result = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'tenants',
+    op: 'insert',
+    values: {
+      name: 'North Shore Restoration',
+      slug: 'North Shore Restoration',
+      payment_provider: 'checkalt',
+      moov_allowlisted: false,
+      moov_environment: 'sandbox',
+    },
+    filters: [],
+  });
+  assert.equal(result.rows[0].payment_provider, 'moov');
+  assert.equal(result.rows[0].moov_allowlisted, true);
+  assert.equal(result.rows[0].moov_environment, 'production');
+  assert.equal(result.rows[0].slug, 'north-shore-restoration');
+  assert.equal(queries.at(-1).params[2], 'moov');
+});
+
+test('non-admin tenant insert is denied', async () => {
+  const client = {
+    query: async (sql) => {
+      if (/is_platform_owner|is_master_owner/.test(sql)) {
+        return { rows: [{ is_owner: false, is_master: false }] };
+      }
+      if (/FROM public.user_roles/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    },
+  };
+  const result = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'tenants',
+    op: 'insert',
+    values: { name: 'Nope', slug: 'nope' },
+    filters: [],
+  });
+  assert.equal(result.error, 'not_authorized');
+});
 
 test('cash_jobs denies payment columns; homeowner ledger denies amount via clientIgnored', () => {
   assert.ok(!WRITE_ALLOWLIST.cash_jobs.columns.has('total_paid'));
