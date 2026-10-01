@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "notes": "Extensible registry of accepted functionality/invariants. Do not hardcode only today's features. If a previously accepted contract disappears or fails, deployment must stop with REGRESSION_DETECTED.",
+  "contracts": [
+    {
+      "id": "review-claim-save",
+      "title": "Review Claim # Save",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["spa-promote", "lambda-overlay"],
+      "test": "aws/tests/wave1-review-patches.test.mjs",
+      "invariants": ["review claim number persists on save", "no silent overwrite of another reviewer's claim number"]
+    },
+    {
+      "id": "claim-ledger",
+      "title": "Claim Ledger discovery and grouping",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["spa-promote", "lambda-overlay", "sql-apply", "sql-executor-invoke"],
+      "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+      "tests": [
+        "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "aws/tests/claim-ledger-discovery-grouping.test.mjs",
+        "aws/tests/claim-ledger-link-or-create-sql.test.mjs",
+        "aws/tests/ledger-safety-pg.test.mjs"
+      ],
+      "evidence": "ops/deployment-guard/claim-ledger-accepted-695064-gq.json",
+      "invariants": [
+        "ledger writes are tenant-scoped",
+        "no silent backfill of unrelated ledger rows",
+        "existing real ledger discovery",
+        "same-tenant OCR/detected-number discovery",
+        "OCR remains discovery evidence, not ownership",
+        "one ledger for multiple same-tenant unlinked checks",
+        "all eligible unlinked siblings associate with that ledger",
+        "already-linked checks never move",
+        "foreign-tenant checks never associate",
+        "duplicate/race protection",
+        "linked claim-number Save remains update-only",
+        "generic claims INSERT remains denied",
+        "generic claim_id UPDATE remains denied",
+        "financial/check state remains untouched"
+      ]
+    },
+    {
+      "id": "signature-requests",
+      "title": "Signature Requests",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["spa-promote", "lambda-overlay"],
+      "test": "aws/tests/parity-signature-submit.test.mjs",
+      "invariants": ["signature submit path remains available"]
+    },
+    {
+      "id": "check-files",
+      "title": "Check Files",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["spa-promote", "lambda-overlay"],
+      "test": "aws/tests/check-image-invariants.test.mjs",
+      "invariants": ["check image contract remains intact"]
+    },
+    {
+      "id": "check-command-center-responsive",
+      "title": "Check Command Center responsive layout",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["staging-frontend", "production-spa"],
+      "deployment_types": ["spa-promote"],
+      "test": "scripts/test-walletops-layout.mjs",
+      "invariants": ["command center remains usable at responsive breakpoints"]
+    },
+    {
+      "id": "ocr",
+      "title": "OCR",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["checksops-staging-api", "checksops-production-prep-api"],
+      "deployment_types": ["lambda-overlay"],
+      "test": "ops/release-locks/tests/ocr-azure-invariants.test.mjs",
+      "invariants": ["Azure+Textract OCR runtime remains the accepted provider path"]
+    },
+    {
+      "id": "moov",
+      "title": "Moov",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["lambda-overlay", "spa-promote"],
+      "test": "scripts/test-moov-file-rules.mjs",
+      "invariants": ["Moov file/readiness rules remain enforced"]
+    },
+    {
+      "id": "checkalt",
+      "title": "CheckAlt",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["lambda-overlay", "spa-promote"],
+      "test": "aws/tests/checkalt-deposit-preflight.test.mjs",
+      "invariants": ["CheckAlt deposit preflight remains fail-closed"]
+    },
+    {
+      "id": "tenant-isolation",
+      "title": "tenant isolation",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["*"],
+      "test": "aws/tests/tenant-security-compliance.test.mjs",
+      "invariants": ["cross-tenant reads/writes remain denied"]
+    },
+    {
+      "id": "financial-write-protections",
+      "title": "financial write protections",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["lambda-overlay", "sql-apply", "sql-executor-invoke"],
+      "test": "aws/tests/api-write.test.mjs",
+      "invariants": ["financial writes stay gated; no inferred production money-flag enablement"]
+    }
+  ]
+}

@@ -24,12 +24,12 @@ Control-plane paths: `.github/CODEOWNERS`, `.github/workflows/release-locks.yml`
 
 ## Classifications
 
-1. `PRODUCTION_LOCKED` — merged code, required SQL applied in production with matching hashes, exact artifact deployed, production validation completed, immutable deployment fingerprint. Not used on this PR.
+1. `PRODUCTION_LOCKED` — production-active artifact with immutable fingerprint, validation evidence, and (except a SPA-only frontend with recorded `spa_bundle` + `spa_sha256`) required SQL applied in production with matching hashes. `production-spa` is the live checksops.com baseline.
 2. `SOURCE_LOCKED_NOT_ACTIVE` — approved source is pinned; SQL or deploy is not proven.
 3. `STAGING_LOCKED_NOT_PRODUCTION` — verified in staging only.
 4. `UNVERIFIED` — evidence incomplete, conflicting, or stale.
 
-No component is `PRODUCTION_LOCKED` on this PR. Documentation and merged PRs are not sufficient.
+`production-spa` is `PRODUCTION_LOCKED` to the live production frontend. Other components stay unlocked. Documentation and merged PRs alone are not sufficient. `origin/main` is not the live SPA.
 
 ## Checks
 

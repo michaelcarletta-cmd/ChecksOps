@@ -171,3 +171,30 @@ test('15) address text near payee does not become a payee entity', () => {
   assert.ok(out.payees[0].name.includes('John Doe'));
 });
 
+
+test('16) unrelated nearby OCR text is not appended to a completed payee line', () => {
+  const blocks = [
+    line('PAY TO THE ORDER OF', 0.28, 0.08, 95),
+    line('FREEDOM ADJUSTMENT & KRISTOPHER HALSEY', 0.32, 0.10, 95),
+    line('JONCJARNEY', 0.35, 0.10, 91),
+    line('$1,250.00', 0.42, 0.78, 94),
+  ];
+  const out = parse(blocks);
+  assert.equal(out.payee_line, 'Freedom Adjustment & Kristopher Halsey');
+  assert.equal(out.payees.length, 2);
+  assert.ok(out.payees.some((p) => p.name === 'Freedom Adjustment'));
+  assert.ok(out.payees.some((p) => p.name === 'Kristopher Halsey'));
+  assert.ok(!out.payee_line.includes('Joncjarney'));
+});
+
+test('17) explicit separator still allows a legitimate multiline payee continuation', () => {
+  const blocks = [
+    line('PAY TO THE ORDER OF', 0.28, 0.08, 95),
+    line('FREEDOM ADJUSTMENT &', 0.32, 0.10, 95),
+    line('KRISTOPHER HALSEY', 0.35, 0.10, 94),
+    line('$1,250.00', 0.42, 0.78, 94),
+  ];
+  const out = parse(blocks);
+  assert.equal(out.payee_line, 'Freedom Adjustment & Kristopher Halsey');
+  assert.equal(out.payees.length, 2);
+});

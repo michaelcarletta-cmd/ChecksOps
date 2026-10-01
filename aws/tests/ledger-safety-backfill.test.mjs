@@ -3,11 +3,19 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   assertCheckClaimLinkAllowed,
+  CLAIM_LEDGER_LINK_RPC,
   claimIsSelectableForTenant,
+  claimLedgerCreatedSummary,
+  claimLedgerDiscoverySummary,
+  claimLedgerLinkOrCreateArgs,
+  claimLedgerUserMessage,
+  claimNumberSaveWritePayload,
   evaluateCheckClaimLink,
   filterSelectableClaims,
   isCheckClaimLinkDenied,
   newTrackingClaimInsert,
+  planClaimNumberSave,
+  resolveAuthoritativeClaimId,
   resolveAutoLinkCandidate,
 } from '../../src/lib/checkClaimLinkGuard.ts';
 import { fundsReceivedForClaim, fundsReceivedFromScopedIntakeRows } from '../../src/lib/claimLedgerSync.ts';
@@ -143,6 +151,148 @@ test('new tracking claim is created with the check tenant/org', () => {
   assert.equal(row.status, 'tracking');
   assert.equal(row.org_id, TENANT_A);
   assert.equal(row.claim_number, 'CL-NEW');
+});
+
+test('existing claim number save updates in place and does not create or relink', () => {
+  const existing = planClaimNumberSave({ existingClaimId: CLAIM_A, claimNumber: '  CLM-NEW  ' });
+  assert.equal(existing.mode, 'update_existing');
+  assert.equal(existing.claimId, CLAIM_A);
+  assert.equal(existing.claimNumber, 'CLM-NEW');
+
+  const unlinked = planClaimNumberSave({ existingClaimId: null, claimNumber: 'CLM-LINK' });
+  assert.equal(unlinked.mode, 'link_or_create');
+  assert.equal(unlinked.claimNumber, 'CLM-LINK');
+
+  assert.throws(() => planClaimNumberSave({ existingClaimId: CLAIM_A, claimNumber: '   ' }));
+
+  const write = claimNumberSaveWritePayload(existing);
+  assert.deepEqual(write, {
+    table: 'claims',
+    op: 'update',
+    values: { claim_number: 'CLM-NEW' },
+    filters: [{ column: 'id', op: 'eq', value: CLAIM_A }],
+    single: true,
+    select: 'id, claim_number, policyholder_name, org_id, status, insurance_company, policyholder_address',
+  });
+  assert.throws(() => claimNumberSaveWritePayload(unlinked), /in-place claim_number update/);
+
+  const inspect = claimLedgerLinkOrCreateArgs({
+    checkId: CHECK_ID,
+    claimNumber: '  CLM-LINK  ',
+    action: 'inspect',
+  });
+  assert.deepEqual(inspect, {
+    p_check_id: CHECK_ID,
+    p_claim_number: 'CLM-LINK',
+    p_action: 'inspect',
+  });
+  assert.equal(CLAIM_LEDGER_LINK_RPC, 'claim_ledger_link_or_create');
+  assert.match(claimLedgerUserMessage('cross_tenant'), /another tenant/);
+  const existingLedger = claimLedgerDiscoverySummary({
+    code: 'existing_found',
+    claim_number: '695064-GQ',
+  });
+  assert.equal(existingLedger, null);
+  const oneOcr = claimLedgerDiscoverySummary({
+    code: 'no_match',
+    claim_number: '695064-GQ',
+    same_tenant_detected_count: 1,
+    same_tenant_unlinked_count: 1,
+    same_tenant_already_linked_count: 0,
+  });
+  assert.equal(oneOcr.kind, 'ocr_group');
+  assert.equal(oneOcr.headline, 'Claim #695064-GQ');
+  assert.deepEqual(oneOcr.lines, [
+    '1 check found for this claim number.',
+    'No Claim Ledger has been created yet.',
+  ]);
+  const fourOcr = claimLedgerDiscoverySummary({
+    code: 'no_match',
+    claim_number: '695064-GQ',
+    same_tenant_detected_count: 4,
+    same_tenant_unlinked_count: 4,
+    same_tenant_already_linked_count: 0,
+  });
+  assert.equal(fourOcr.headline, 'Claim #695064-GQ');
+  assert.equal(fourOcr.lines[0], '4 checks found for this claim number.');
+  const emptyOcr = claimLedgerDiscoverySummary({
+    code: 'no_match',
+    can_create: true,
+    same_tenant_detected_count: 0,
+    same_tenant_unlinked_count: 0,
+  });
+  assert.equal(emptyOcr.kind, 'not_found');
+  const skipped = claimLedgerCreatedSummary({
+    code: 'created',
+    claim_number: '695064-GQ',
+    associated_check_count: 4,
+    already_linked_sibling_count: 1,
+  });
+  assert.equal(skipped.headline, 'Claim #695064-GQ');
+  assert.ok(skipped.lines.includes('4 checks associated with this claim.'));
+  assert.ok(skipped.lines.includes('1 already-linked check was left unchanged.'));
+  assert.throws(() => claimLedgerLinkOrCreateArgs({
+    checkId: CHECK_ID,
+    claimNumber: '   ',
+    action: 'create_new',
+  }));
+
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: CLAIM_A,
+    loadedClaimId: CLAIM_B,
+    claimIdProp: null,
+  }), CLAIM_A);
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: null,
+    loadedClaimId: CLAIM_B,
+    claimIdProp: CLAIM_A,
+  }), CLAIM_B);
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: null,
+    loadedClaimId: null,
+    claimIdProp: CLAIM_A,
+  }), CLAIM_A);
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: null,
+    loadedClaimId: null,
+    claimIdProp: null,
+  }), null);
+
+  const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
+  assert.match(src, /planClaimNumberSave/);
+  assert.match(src, /resolveAuthoritativeClaimId/);
+  assert.match(src, /mode === "update_existing"/);
+  assert.match(src, /\.from\("claims"\)[\s\S]*\.update\(\{ claim_number: plan\.claimNumber \}\)/);
+  assert.match(src, /Claim number save did not keep the existing claim/);
+  assert.match(src, /handleLinkedSave/);
+  assert.match(src, /onClick=\{handleLinkedSave\}/);
+  assert.match(src, /claim_ledger_link_or_create|CLAIM_LEDGER_LINK_RPC/);
+  assert.match(src, /Find Existing Claim/);
+  assert.match(src, /Link Existing Ledger/);
+  assert.match(src, /Start New Claim Ledger/);
+  assert.match(src, /Existing claim found/);
+  assert.match(src, /claimLedgerDiscoverySummary/);
+  assert.match(src, /Typing a claim number does not create a claim/);
+  const guardSrc = readFileSync('src/lib/checkClaimLinkGuard.ts', 'utf8');
+  assert.match(guardSrc, /No Claim Ledger has been created yet/);
+  assert.match(guardSrc, /checks found for this claim number/);
+  assert.match(src, /\.from\("check_intake_items"\)[\s\S]*\.select\("id, claim_id"\)/);
+  assert.equal(/newTrackingClaimInsert/.test(src), false);
+  assert.equal(/\.from\("claims"\)[\s\S]*\.insert\(/.test(src), false);
+  assert.equal(/const handleSave/.test(src), false);
+  assert.equal(/onClick=\{handleSave\}/.test(src), false);
+  assert.equal(/ilike\("claim_number"/.test(src), false);
+  assert.doesNotMatch(src, /Claim Ledger Save only updates an existing linked claim/);
+  const updateBlock = src.slice(src.indexOf('plan.mode === "update_existing"'), src.indexOf('throw new Error(CLAIM_LEDGER_NOT_LINKED)'));
+  assert.equal(/\.insert\(/.test(updateBlock), false);
+  assert.equal(/detected_claim_number/.test(updateBlock), false);
+  assert.equal(/\.from\("check_intake_items"\)[\s\S]{0,80}\.update\(/.test(src), false);
+  assert.equal(/detected_claim_number:\s*trimmed/.test(src), false);
+
+  const ccc = readFileSync('src/pages/CheckCommandCenter.tsx', 'utf8');
+  assert.match(ccc, /lg:flex-row/);
+  assert.match(ccc, /selectedCheck \? "58%" : "80%"/);
+  assert.match(ccc, /selectedCheck \? "42%" : "20%"/);
 });
 
 test('manual link uses the same guard as the database', () => {
@@ -313,7 +463,7 @@ test('successful link invalidates Received queries without a full reload', () =>
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
   assert.match(src, /fundsReceivedFromScopedIntakeRows/);
   assert.equal(/fundsReceivedForClaim/.test(src), false);
-  assert.match(src, /filterSelectableClaims/);
+  assert.match(src, /resolveAuthoritativeClaimId/);
   assert.match(src, /invalidateQueries\(\{ queryKey: \["claim-ledger-checks", res\.claimId\] \}\)/);
   assert.match(src, /invalidateQueries\(\{ queryKey: \["check-detail", checkIntakeItemId\] \}\)/);
   assert.equal(/applyClaimLedgerSync/.test(src), false);
@@ -324,7 +474,7 @@ test('successful link invalidates Received queries without a full reload', () =>
 test('ClaimLedgerCard Received uses the actual scoped query shape without row.claim_id', () => {
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
   const siblingQuery = src.match(
-    /ownerSiblingChecks[\s\S]*?\.select\("([^"]+)"\)[\s\S]*?\.eq\("claim_id", claimId!\)/,
+    /ownerSiblingChecks[\s\S]*?\.select\("([^"]+)"\)[\s\S]*?\.eq\("claim_id", linkedClaimId!\)/,
   );
   assert.equal(Boolean(siblingQuery), true);
   assert.equal(siblingQuery?.[1].includes('claim_id'), false);

@@ -71,22 +71,22 @@ test('ocr-azure ownership group covers the eight runtime files only', () => {
   );
 });
 
-test('ocr-azure is staging-locked and not production-active', () => {
+test('ocr-azure reconciled lineage fails closed as UNVERIFIED and not production-active', () => {
   const manifest = loadJson(path.join(ROOT, 'ops/release-locks/locked-components.json'));
   const component = manifest.components['ocr-azure'];
   assert.ok(component, 'ocr-azure manifest component is required');
   assert.equal(component.id, 'ocr-azure');
   assert.equal(component.ownership_group, 'ocr-azure');
-  assert.equal(component.classification, 'STAGING_LOCKED_NOT_PRODUCTION');
+  assert.equal(component.classification, 'UNVERIFIED');
   assert.equal(component.production_active, false);
-  assert.equal(component.environment, 'staging');
-  assert.equal(component.source.git_sha, '8a3ead386d99f0e825d54093ebcb8c174a8c758e');
-  assert.equal(component.source.merged, true);
-  assert.equal(component.source.merged_pr, 370);
+  assert.equal(component.environment, 'unknown');
+  assert.equal(component.source.git_sha, '4c52e1835a4e5b677b763e6095acc67c951b74ee');
+  assert.equal(component.source.merged, false);
+  assert.equal(component.source.merged_pr, 561);
   assert.ok((component.required_sql || []).length === 0);
-  const refs = component.production_validation?.evidence_refs || [];
-  assert.ok(refs.some((ref) => /staging/i.test(ref)));
-  assert.ok((component.missing_evidence || []).length > 0);
+  assert.equal(component.production_validation?.completed, false);
+  assert.ok((component.missing_evidence || []).some((row) => /staging revalidation/i.test(row)));
+  assert.match(component.notes || '', /Fail-closed reconciliation only/i);
 });
 
 test('OCR runtime capability markers remain intact', () => {
@@ -164,7 +164,8 @@ test('OCR runtime capability markers remain intact', () => {
   assert.ok(safeLog, 'safeOcrLog whitelist body must remain');
   assert.doesNotMatch(safeLog[0], /routing_number|account_number|api_key|payee|amount|micr_check/);
 
-  // 17. Routing/account/MICR/amount are not newly persisted by this OCR path.
+  // 17. Only VERIFIED Azure MICR may fill blank routing/account fields.
+  //     Existing nonblank values remain authoritative; amount/status remain untouched.
   assert.match(ocr, /fallback_descriptive_only/);
   assert.match(ocr, /Do not touch ocr_status\/amount\/detected_claim_number/);
   const descriptiveUpdate = ocr.match(
@@ -172,6 +173,15 @@ test('OCR runtime capability markers remain intact', () => {
   );
   assert.ok(descriptiveUpdate, 'descriptive-only UPDATE must remain');
   assert.doesNotMatch(descriptiveUpdate[0], /routing_number|account_number|micr_check_number|amount =/);
+  assert.match(ocr, /parsed\.micr_routing_state === 'VERIFIED' \? parsed\.routing_number : null/);
+  assert.match(ocr, /parsed\.micr_account_state === 'VERIFIED' \? parsed\.account_number : null/);
+  const micrUpdate = ocr.match(
+    /UPDATE public\.check_intake_items[\s\S]{0,900}routing_number = CASE[\s\S]{0,900}account_number = CASE[\s\S]{0,900}WHERE id = \$1::uuid/,
+  );
+  assert.ok(micrUpdate, 'verified MICR persistence UPDATE must remain');
+  assert.match(micrUpdate[0], /routing_number IS NULL OR btrim\(routing_number\) = ''/);
+  assert.match(micrUpdate[0], /account_number IS NULL OR btrim\(account_number\) = ''/);
+  assert.doesNotMatch(micrUpdate[0], /amount\s*=|status\s*=|check_stage\s*=/);
 
   // 18. OCR does not trigger CheckAlt or Moov.
   for (const [rel, src] of [

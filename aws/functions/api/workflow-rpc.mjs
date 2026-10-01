@@ -105,6 +105,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'deposit_action',
   'save_checkalt_settings',
   'save_checkalt_tenant_auto_deposit',
+  'claim_ledger_link_or_create',
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
@@ -1121,6 +1122,53 @@ const executeDepositAction = async ({ client, mapping, args }) => {
   return { data: { success: true, batch_id: resolvedBatchId } };
 };
 
+export const CLAIM_LEDGER_LINK_OR_CREATE_SQL =
+  'SELECT public.claim_ledger_link_or_create($1::uuid, $2::uuid, $3::text, $4::text) AS result';
+
+const executeClaimLedgerLinkOrCreate = async ({ client, mapping, args }) => {
+  const checkId = arg(args, 'p_check_id', 'check_id');
+  const action = String(arg(args, 'p_action', 'action') || '').trim();
+  const claimNumber = arg(args, 'p_claim_number', 'claim_number');
+  if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'p_check_id' };
+  if (!['inspect', 'link_existing', 'create_new'].includes(action)) {
+    return { error: 'invalid_field', field: 'p_action' };
+  }
+  const check = (await client.query(
+    `SELECT id, tenant_id, claim_id, deposited_at, check_stage::text AS check_stage
+     FROM public.check_intake_items
+     WHERE id = $1::uuid
+     FOR UPDATE`,
+    [checkId],
+  )).rows[0];
+  if (!check) return { error: 'rls_denied', message: 'check not found or not writable' };
+  if (!isUuid(check.tenant_id)) {
+    return { error: 'not_authorized', message: 'This check has no tenant, so it cannot be linked to a claim.' };
+  }
+  const roles = await rolesOf(client, mapping.application_user_id);
+  const member = (await client.query(
+    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid`,
+    [mapping.application_user_id, check.tenant_id],
+  )).rows[0];
+  if (!roles.has('admin') && !roles.has('staff') && !member) {
+    return { error: 'not_authorized', message: 'Not authorized to link this check' };
+  }
+  const rpc = await client.query(CLAIM_LEDGER_LINK_OR_CREATE_SQL, [
+    checkId,
+    check.tenant_id,
+    claimNumber == null ? null : String(claimNumber),
+    action,
+  ]);
+  const result = rpc.rows?.[0]?.result || {};
+  if (result.ok === false) {
+    return {
+      error: result.code || 'claim_ledger_failed',
+      message: `Claim Ledger ${action} failed (${result.code || 'error'})`,
+      result,
+    };
+  }
+  return { data: result };
+};
+
 export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
   switch (name) {
     case 'log_audit':
@@ -1157,6 +1205,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeSaveCheckaltTenantAutoDeposit({ client, mapping, args });
     case 'deposit_action':
       return executeDepositAction({ client, mapping, args });
+    case 'claim_ledger_link_or_create':
+      return executeClaimLedgerLinkOrCreate({ client, mapping, args });
     default:
       return { error: 'rpc_disabled', name };
   }

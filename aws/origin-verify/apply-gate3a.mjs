@@ -28,6 +28,7 @@ import {
   requireStep3Temp,
   shouldExecute,
 } from './lib.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -48,6 +49,13 @@ if (!shouldExecute()) {
   console.log(JSON.stringify({ ...plan, note: 'Plan only. Set CHECKSOPS_STEP3_EXECUTE=1 to apply.' }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'checksops-production-origin-verify',
+  deployment_type: 'lambda-overlay',
+});
 
 const identity = requireStep3Temp();
 const account = '806168576068';

@@ -20,6 +20,10 @@ import {
   validateReleaseLocks,
 } from './lib/release-locks.mjs';
 import { loadReleaseLockInputs } from './validate-release-locks.mjs';
+import {
+  PRODUCTION_SPA_ID,
+  compareProductionSpaCandidate,
+} from './lib/production-spa-baseline.mjs';
 
 export function compareCandidate(manifest, candidate) {
   const errors = [];
@@ -36,6 +40,10 @@ export function compareCandidate(manifest, candidate) {
       if (row?.deploy === true || row?.production_active === true) {
         errors.push(`${id}: candidate deploys a component that is not PRODUCTION_LOCKED`);
       }
+      continue;
+    }
+    if (id === PRODUCTION_SPA_ID) {
+      errors.push(...compareProductionSpaCandidate(component, row));
       continue;
     }
     if (!row) {

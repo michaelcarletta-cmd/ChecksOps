@@ -10,6 +10,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { enforceSharedLambdaTarget } from './deployment-guard/require-guard.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
@@ -155,6 +156,10 @@ const invokeLambda = (payload) => {
 };
 
 const main = async () => {
+  enforceSharedLambdaTarget({
+    script: import.meta.url,
+    functionName: LAMBDA_NAME,
+  });
   await mkdir(OUT, { recursive: true });
   await assumeRole();
   const zip = await packOneshot();

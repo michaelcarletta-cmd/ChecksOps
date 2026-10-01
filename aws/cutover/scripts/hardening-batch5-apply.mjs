@@ -5,6 +5,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { enforceScriptGuard } from '../../../scripts/deployment-guard/require-guard.mjs';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
 const REGION = 'us-east-1';
@@ -15,6 +16,13 @@ if (!process.argv.includes('--confirm-batch5')) {
   console.error(JSON.stringify({ error: 'refusing_batch5_apply' }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'production-cloudtrail',
+  deployment_type: 'cloudformation',
+});
 
 const run = (args) => {
   try {

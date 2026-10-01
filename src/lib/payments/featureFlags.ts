@@ -22,20 +22,20 @@ function envFlag(name: string, fallback: boolean): boolean {
 
 export const PAYMENT_FLAGS: PaymentFeatureFlags = {
   USE_PLAID: envFlag("USE_PLAID", false),
-  // Moov is on, but still gated per-organization by the `moov_allowlisted`
-  // flag (enforced again on the backend), so only allowlisted orgs see it.
+  // Moov is generally available for every tenant. Identity/KYB, ToS, bank
+  // verification, wallet, and capability checks still gate money movement.
   USE_MOOV: envFlag("USE_MOOV", true),
   SHOW_PAYMENT_SETTINGS: envFlag("SHOW_PAYMENT_SETTINGS", true),
   SHOW_PAYMENT_ADMIN: envFlag("SHOW_PAYMENT_ADMIN", true),
 };
 
 /**
- * Moov actions are only allowed when the global flag is on AND the tenant is
- * on the allowlist. The backend enforces the same two conditions plus the
- * presence of sandbox credentials — this is purely so the UI stays quiet.
+ * Moov onboarding and UI are available to every organization when the global
+ * flag is on. The unused allowlist argument is kept so existing callers
+ * compile; it is ignored.
  */
-export function isMoovAllowedForTenant(tenantAllowlisted: boolean | null | undefined): boolean {
-  return PAYMENT_FLAGS.USE_MOOV && !!tenantAllowlisted;
+export function isMoovAllowedForTenant(_tenantAllowlisted?: boolean | null): boolean {
+  return PAYMENT_FLAGS.USE_MOOV;
 }
 
 export function isProviderEnabled(provider: PaymentProviderId): boolean {

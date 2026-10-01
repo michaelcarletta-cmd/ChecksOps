@@ -233,20 +233,30 @@ const pickPayee = (idx) => {
       payeeLine = inline;
       payeeConf = Math.min(95, safeLineConfidence(label));
     }
-    // Collect following close lines (multiline payees / leftover "& NAME").
+    // Collect only evidenced multiline payee continuations. The first nearby line
+    // may supply the payee when the label is standalone. After that, require an
+    // explicit separator at the line boundary so unrelated nearby OCR text is
+    // not appended to a completed payee name.
     const y = label.box?.Top ?? null;
     const close = (l) => (y == null || l?.box?.Top == null ? true : (l.box.Top - y) <= 0.14);
     const extras = [];
+    let accumulatedPayee = payeeLine;
     for (const l of idx.lines.slice(payIdx + 1, payIdx + 4)) {
       if (!l || !close(l)) continue;
       if (looksLikeAddress(l.text)) continue;
       if (/void|memo|date|dollars|amount|routing|account|authorized|signature/i.test(l.text) && !hasPayeeSeparator(l.text)) continue;
+      const nextText = String(l.text || '').trim();
+      if (!nextText) continue;
+      const boundaryContinues = !accumulatedPayee
+        || /(?:\band\b|&|＆|﹠|／|\/|;|；)\s*$/i.test(accumulatedPayee)
+        || /^\s*(?:\band\b|&|＆|﹠|／|\/|;|；)/i.test(nextText);
+      if (!boundaryContinues) continue;
       extras.push(l);
+      accumulatedPayee = accumulatedPayee ? `${accumulatedPayee} ${nextText}` : nextText;
     }
     if (extras.length) {
-      multipleLines = extras.length > 1 || Boolean(payeeLine);
-      const extraText = extras.map((c) => c.text).join(' ');
-      payeeLine = payeeLine ? `${payeeLine} ${extraText}` : extraText;
+      multipleLines = Boolean(payeeLine) || extras.length > 1;
+      payeeLine = accumulatedPayee;
       const confs = [payeeConf, ...extras.map((c) => safeLineConfidence(c))];
       payeeConf = Math.min(95, Math.round(confs.reduce((s, c) => s + c, 0) / confs.length));
     }

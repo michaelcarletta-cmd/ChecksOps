@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
-import { handleWrite } from '../functions/api/write.mjs';
+import { buildRejectedWriteLog, handleWrite } from '../functions/api/write.mjs';
 import {
   CLIENT_IDENTITY_KEYS,
   denyTableReason,
@@ -61,6 +61,30 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       }
       if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
         return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
+      }
+      if (/review_save_detected_claim_number/.test(sql)) {
+        return {
+          rows: [{
+            result: {
+              ok: true,
+              persisted: true,
+              code: 'written',
+              detected_claim_number: params[2],
+            },
+          }],
+        };
+      }
+      if (/SELECT \* FROM public.check_intake_items WHERE id =/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            detected_claim_number: '003779807',
+            claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            carrier_name: 'USAA',
+            amount: 18893.07,
+          }],
+        };
       }
       if (/FROM public.check_payees p/.test(sql)) {
         return {
@@ -607,5 +631,203 @@ test('Tranche 3 intake image path must be scoped to the same check', async () =>
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
   assert.equal(denied.statusCode, 403);
+});
+
+test('authorized claim_number update keeps UUID and tenant; extras and inserts stay denied', async () => {
+  const claimId = '8ff57eaf-f200-4466-a1cf-2debb56c88a8';
+  const tenantId = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+  const snapshot = {
+    id: claimId,
+    org_id: tenantId,
+    claim_number: 'CLM-OLD',
+    status: 'tracking',
+    policyholder_name: 'Jane Doe',
+    insurance_company: 'Acme',
+  };
+  const queries = [];
+  const client = mockClient();
+  const originalQuery = client.query.bind(client);
+  client.query = async (sql, params) => {
+    queries.push({ sql, params });
+    if (/FROM public.claims WHERE id = \$1::uuid LIMIT 1/.test(sql)) {
+      return { rows: [snapshot] };
+    }
+    if (/FROM public.tenant_users WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid LIMIT 1/.test(sql)) {
+      return { rows: params[1] === tenantId ? [{ ok: 1 }] : [] };
+    }
+    if (/UPDATE public.claims/.test(sql)) {
+      return { rows: [{ ...snapshot, claim_number: params[1] }] };
+    }
+    return originalQuery(sql, params);
+  };
+
+  const ok = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'update',
+    values: { claim_number: 'CLM-NEW' },
+    filters: [{ column: 'id', op: 'eq', value: claimId }],
+    single: true,
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.data.id, claimId);
+  assert.equal(ok.data.claim_number, 'CLM-NEW');
+  assert.equal(ok.data.org_id, tenantId);
+  assert.equal(ok.data.status, 'tracking');
+  assert.equal(ok.data.policyholder_name, 'Jane Doe');
+
+  const extra = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'update',
+    values: { claim_number: 'CLM-NEW', policyholder_name: 'rewritten', amount: 1 },
+    filters: [{ column: 'id', op: 'eq', value: claimId }],
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(extra.statusCode, 403);
+  assert.equal(extra.error, 'column_not_allowlisted');
+
+  const created = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'insert',
+    values: { claim_number: 'CLM-BRAND-NEW' },
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(created.statusCode, 403);
+  assert.equal(created.error, 'operation_not_allowlisted');
+});
+
+test('staging write-reject diagnostics omit values, tokens, and PII', () => {
+  const row = buildRejectedWriteLog({
+    event: {
+      requestContext: { requestId: 'req-pr532-diag' },
+      headers: { authorization: 'Bearer SUPER-SECRET-TOKEN', cookie: 'sid=abc' },
+    },
+    mapping: { application_user_id: APP_ID },
+    claims: { sub: COGNITO_SUB },
+    body: {
+      table: 'claims',
+      op: 'insert',
+      values: {
+        claim_number: 'SECRET-CLAIM-NUMBER',
+        status: 'tracking',
+        org_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+      },
+      filters: [{ column: 'id', op: 'eq', value: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+    },
+    reason: 'operation_not_allowlisted',
+    statusCode: 403,
+  });
+  const serialized = JSON.stringify(row);
+  assert.equal(row.event, 'write_rejected');
+  assert.equal(row.table, 'claims');
+  assert.equal(row.op, 'insert');
+  assert.deepEqual(row.valueColumns, ['claim_number', 'status', 'org_id']);
+  assert.deepEqual(row.filterColumns, ['id']);
+  assert.equal(row.reason, 'operation_not_allowlisted');
+  assert.equal(row.requestId, 'req-pr532-diag');
+  assert.equal(row.applicationUserId, APP_ID);
+  assert.equal(row.cognitoSub, COGNITO_SUB);
+  assert.equal(serialized.includes('SECRET-CLAIM-NUMBER'), false);
+  assert.equal(serialized.includes('SUPER-SECRET-TOKEN'), false);
+  assert.equal(serialized.includes('sid=abc'), false);
+  assert.equal(serialized.includes('Bearer'), false);
+  assert.equal(serialized.includes('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), false);
+});
+
+test('Review claim # save uses RPC and does not allowlist the column or amount', async () => {
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('detected_claim_number'), false);
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('claim_id'), false);
+  const stillDenied = pickAllowlistedValues('check_intake_items', { detected_claim_number: '003779807' });
+  assert.equal(stillDenied.error, 'column_not_allowlisted');
+  assert.deepEqual(stillDenied.columns, ['detected_claim_number']);
+
+  const client = mockClient();
+  const saved = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { detected_claim_number: '003779807' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(saved.ok, true);
+  assert.equal(saved.data?.[0]?.detected_claim_number, '003779807');
+  assert.equal(saved.data?.[0]?.claim_id, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  const rpc = client.queries.find((q) => String(q.sql).includes('review_save_detected_claim_number'));
+  assert.ok(rpc);
+  assert.equal(rpc.params[0], CHECK_ID);
+  assert.equal(rpc.params[2], '003779807');
+  assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items\s+SET/.test(String(q.sql))), false);
+  assert.equal(client.queries.some((q) => /INSERT INTO public\.claims/.test(String(q.sql))), false);
+  assert.equal(client.queries.some((q) => /UPDATE public\.claims/.test(String(q.sql))), false);
+
+  const amountStillDenied = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { amount: 50, detected_claim_number: '003779807' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(amountStillDenied.statusCode, 403);
+  assert.equal(amountStillDenied.error, 'column_not_allowlisted');
+  assert.ok(amountStillDenied.columns.includes('amount'));
+});
+
+test('Review claim # save denies invalid, missing, and cross-tenant checks without writing claims', async () => {
+  const invalid = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { detected_claim_number: '003779807' },
+    filters: [{ column: 'id', op: 'eq', value: 'not-a-uuid' }],
+  }), depsFor(mockClient()));
+  assert.equal(invalid.statusCode, 400);
+  assert.equal(invalid.error, 'invalid_uuid');
+
+  const missingClient = mockClient();
+  const originalMissing = missingClient.query.bind(missingClient);
+  missingClient.query = async (sql, params) => {
+    if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) return { rows: [] };
+    return originalMissing(sql, params);
+  };
+  const missing = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { detected_claim_number: '003779807' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(missingClient));
+  assert.equal(missing.statusCode, 403);
+  assert.equal(missing.error, 'rls_denied');
+  assert.equal(missingClient.queries.some((q) => String(q.sql).includes('review_save_detected_claim_number')), false);
+
+  const mismatchClient = mockClient();
+  const originalMismatch = mismatchClient.query.bind(mismatchClient);
+  mismatchClient.query = async (sql, params) => {
+    if (/review_save_detected_claim_number/.test(sql)) {
+      return { rows: [{ result: { ok: false, persisted: false, code: 'tenant_mismatch' } }] };
+    }
+    return originalMismatch(sql, params);
+  };
+  const mismatch = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { detected_claim_number: 'OTHER-TENANT' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(mismatchClient));
+  assert.equal(mismatch.statusCode, 403);
+  assert.equal(mismatch.error, 'tenant_mismatch');
+  assert.equal(mismatchClient.queries.some((q) => /INSERT INTO public\.claims/.test(String(q.sql))), false);
+});
+
+test('unrelated intake writes still use the generic allowlisted UPDATE', async () => {
+  const client = mockClient({
+    rows: [{ id: CHECK_ID, carrier_name: 'Safe Carrier', amount: 100, claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { carrier_name: 'Safe Carrier' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.data?.[0]?.carrier_name, 'Safe Carrier');
+  assert.equal(client.queries.some((q) => String(q.sql).includes('review_save_detected_claim_number')), false);
+  const update = client.queries.find((q) => /UPDATE public.check_intake_items\s+SET/.test(String(q.sql)));
+  assert.ok(update);
+  assert.equal(String(update.sql).includes('detected_claim_number'), false);
+  assert.equal(String(update.sql).includes('claim_id'), false);
 });
 

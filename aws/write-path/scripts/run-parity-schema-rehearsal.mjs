@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateParitySql } from './validate-parity-schema.mjs';
+import { enforceSharedLambdaTarget } from '../../../scripts/deployment-guard/require-guard.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
@@ -187,6 +188,10 @@ const invokeLambda = (payload) => {
 };
 
 const main = async () => {
+  enforceSharedLambdaTarget({
+    script: import.meta.url,
+    functionName: LAMBDA_NAME,
+  });
   const local = validateParitySql();
   if (!local.ok) {
     console.error(JSON.stringify({ step: 'local_sql', ...local }, null, 2));

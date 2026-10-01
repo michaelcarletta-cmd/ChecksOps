@@ -10,6 +10,7 @@ import {
   REQUIRE_KEY,
   rollbackOriginVerifyRequireAndConfirm,
 } from './gate3d-lib.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 if (String(process.env.CHECKSOPS_ROLLBACK_GATE || '') !== '3D') {
   console.error('Set CHECKSOPS_ROLLBACK_GATE=3D');
@@ -42,6 +43,13 @@ if (!shouldExecute()) {
   }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'checksops-production-origin-verify',
+  deployment_type: 'lambda-overlay',
+});
 
 const identity = requireStep3Temp();
 const rollback = await rollbackOriginVerifyRequireAndConfirm();

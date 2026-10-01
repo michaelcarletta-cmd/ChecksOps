@@ -23,7 +23,7 @@
       ".github/workflows/tax-profile-migration-guard.yml"
     ],
     "lambda_aliases_in_repo": "none",
-    "spa_lock_files_on_main": "absent; present only in open PRs"
+    "spa_lock_files_on_main": "production-spa component records live checksops.com index-BPbQUNFr.js; origin/main source is not that baseline"
   },
   "github_enforcement": {
     "status": "REVISION_REQUIRED_UNTIL_ENFORCED",
@@ -179,14 +179,25 @@
       ],
       "open_pr_overlap": []
     },
+    "production-spa": {
+      "classification": "PRODUCTION_LOCKED",
+      "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+      "merged_pr": 506,
+      "merge_commit": null,
+      "deployed_artifact": "/assets/index-BPbQUNFr.js sha256 78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5; index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394; s3 L.ND9yiehnJfDCocKdyFC_mRQZjchON3; CloudFront E1B0ZWWO5559U5",
+      "applied_migrations": "none; SPA-only component",
+      "environment": "production",
+      "missing_evidence": [],
+      "open_pr_overlap": ["#506"]
+    },
     "production-release": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-      "deployed_artifact": "conflicting SPA/CloudFront fingerprints across docs and open PRs",
+      "deployed_artifact": "control-plane only; live SPA fingerprint is on production-spa",
       "applied_migrations": "n/a",
       "environment": "unknown",
       "missing_evidence": [
-        "single approved production fingerprint on main",
+        "GitHub branch protection still required; live SPA fingerprint is recorded on production-spa",
         "GitHub branch protection requiring this workflow as a required status check",
         "code-owner review required",
         "direct pushes and administrator bypasses disabled"
