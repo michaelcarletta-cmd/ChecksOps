@@ -1,0 +1,84 @@
+{
+  "id": "freedom-stakeholder-moov-sync-source-composition",
+  "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+  "branch": "cursor/freedom-stakeholder-moov-sync-2d41",
+  "commit": "244d27d687eaca1b79bd9be9ae1569a6415ab0b8",
+  "accepted_composition": true,
+  "accepted_source_composition": true,
+  "wholesale_staging_spa": false,
+  "wholesale_old_production_dist": false,
+  "lambda_updated": false,
+  "production_updated": false,
+  "db_writes": 0,
+  "provider_financial_writes": 0,
+  "recreate_provider_transfer_ids": [],
+  "frontend_only": true,
+  "fresh_production_baseline": {
+    "kind": "current-live-production-spa-source",
+    "source_worktree": "/tmp/freedom-walletops-pending-setup-src",
+    "source_commit": "82460c8c2ebbc8c7996b9cc233058015933120df",
+    "live_entry": "/assets/index-DyoF7zdg.js",
+    "live_index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
+    "live_version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt",
+    "live_etag": "d45ae45a846ffb83eabea5a34d8415dd",
+    "live_last_modified": "2026-10-01T14:07:21+00:00",
+    "reason": "Live production still serves pending-setup DyoF7zdg (index rewritten 2026-10-01T14:07:21Z with CheckFilesSection importmap). Compose onto that leftover accepted source, not this branch HEAD and not an old hashed dist."
+  },
+  "settings_delta": {
+    "files": {
+      "src/lib/payments/stakeholderBankDisplay.ts": {
+        "kind": "new"
+      },
+      "src/components/disbursement/StakeholderAccountSettings.tsx": {
+        "kind": "narrow",
+        "hunks": [
+          "decorateStakeholderBank",
+          "remove Override"
+        ]
+      },
+      "src/components/settings/TenantBankAccountSettings.tsx": {
+        "kind": "narrow",
+        "hunks": [
+          "decorateStakeholderBank",
+          "remove Override"
+        ]
+      }
+    }
+  },
+  "walletops_files_unchanged_from_live_compose": [
+    "src/pages/WalletOps.tsx",
+    "src/hooks/useWallet.ts",
+    "src/lib/payments/loadWalletSnapshot.ts",
+    "src/lib/payments/selectPaymentWallet.ts"
+  ],
+  "isolated_build": {
+    "worktree": "/tmp/freedom-stakeholder-moov-sync-src",
+    "mode": "aws",
+    "clean_build": true,
+    "not_from_staging_dist": true,
+    "not_from_old_production_dist": true,
+    "not_from_this_whole_branch": true,
+    "env": {
+      "VITE_AUTH_PROVIDER": "cognito",
+      "VITE_APP_URL": "https://checksops.com",
+      "VITE_CHECKSOPS_API_URL": "/prep",
+      "VITE_COGNITO_USER_POOL_ID": "us-east-1_h00WorYMT",
+      "VITE_COGNITO_USER_POOL_CLIENT_ID": "3ja9fqaq2fjkv3i6up2varcqpe"
+    },
+    "dist": {
+      "entry": "/assets/index-5lb4YHS5.js",
+      "css": "/assets/index-Bdei11g4.css",
+      "walletops": "/assets/WalletOps-BaElnG-Z.js",
+      "use_wallet": "/assets/useWallet-deOg85_Z.js",
+      "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+      "entry_sha256": "9b774d74ebe24b1b44173cb87e64314be8269c714fe9e4f0a912f88a86a90943"
+    }
+  },
+  "protected_v2_hashes": {
+    "aws/functions/api/tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "aws/functions/api/tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "aws/functions/api/tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477",
+    "unchanged": true
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "id": "freedom-stakeholder-moov-sync-staging-accepted",
+  "verdict": "SETTINGS MOOV VERIFICATION SYNC — COMPOSED CANDIDATE ACCEPTED",
+  "captured_at": "2026-10-01T15:02:09.435Z",
+  "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+  "branch": "cursor/freedom-stakeholder-moov-sync-2d41",
+  "commit": "244d27d687eaca1b79bd9be9ae1569a6415ab0b8",
+  "production_promoted": false,
+  "lambda_updated": false,
+  "money_movement_changed": false,
+  "staging_s3_overwritten": false,
+  "reason": "Candidate is a production Cognito bake composed onto live DyoF7zdg. Staging S3 was not overwritten so staging does not receive a production bake. Acceptance is contract tests + composed bundle verification.",
+  "tests": {
+    "stakeholder_moov_status_sync": "14/14",
+    "moov_spa_composition": "pass",
+    "protected_composition": "pass",
+    "walletops_layout": "13/13",
+    "wallet_select": "8/8",
+    "wallet_relative": "pass",
+    "wallet_funding_reconcile": "pass",
+    "existing_wallet_not_pending_setup": "pass",
+    "tenant_isolation": "6/6",
+    "tenant_collection_v2": "pass",
+    "funding_contract": "pass",
+    "tenant_receivables": "pass",
+    "moov_file_rules": "20/21 pre-existing invalid-purpose fail; not introduced by this workstream"
+  },
+  "bundle": {
+    "entry": "/assets/index-5lb4YHS5.js",
+    "css": "/assets/index-Bdei11g4.css",
+    "walletops": "/assets/WalletOps-BaElnG-Z.js",
+    "use_wallet": "/assets/useWallet-deOg85_Z.js",
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "entry_sha256": "9b774d74ebe24b1b44173cb87e64314be8269c714fe9e4f0a912f88a86a90943"
+  },
+  "do_not_recreate_provider_transfer_ids": [
+    "9f9df312-32a9-4999-ace9-fc2b00669c75"
+  ]
+}
