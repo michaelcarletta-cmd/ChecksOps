@@ -1,0 +1,91 @@
+{
+  "id": "freedom-walletops-pending-setup-live-diagnosis",
+  "kind": "production-readonly-diagnosis",
+  "accepted": true,
+  "production_writes_this_task": 1,
+  "lambda_writes": 0,
+  "provider_financial_writes": 0,
+  "do_not_recreate_provider_transfer_ids": [
+    "9f9df312-32a9-4999-ace9-fc2b00669c75"
+  ],
+  "live": {
+    "observed_at_utc": "2026-10-01T00:30:47Z",
+    "entry": "/assets/index-CvCKsSsX.js",
+    "walletops": "/assets/WalletOps-B4ZiFA_r.js",
+    "use_wallet": "/assets/useWallet-c9yUOQIh.js",
+    "index_html_sha256": "0dac8cbceba15a086567511c447279c6a439c9c120079ebebb19309a8bf24e89",
+    "s3_version": "rLJElCrQEl1AqJJuW4YuKC.xuo06gfiV",
+    "etag": "b2d4400446f1ef8b6a84896b5c11bcd2",
+    "last_modified": "2026-09-30T23:36:22Z",
+    "apply_record": "ops/deployment-guard/2026-09-30-qdji-dsb-recovery-production-spa-apply.json"
+  },
+  "what_is_on_live": {
+    "walletops_activity_recovery_code": true,
+    "environment_aware_wallet_selection": true,
+    "funding_and_billing": true,
+    "checksops_billing": true,
+    "moov_bank_verified_provider_linked": true,
+    "hostname_guard": true,
+    "useWallet_readWallet_fallback": false,
+    "cognito_auth_provider_baked": false,
+    "vite_supabase_url": "",
+    "vite_auth_provider": ""
+  },
+  "why_freedom_is_wrong": [
+    "useWallet-c9yUOQIh.js only calls moov-wallet-sync. status 409/502 / edge non-2xx becomes setup_required with wallet null, so Freedom Adjustment already-provisioned production wallet is labeled Pending setup.",
+    "Without a wallet payment-method id, wallet-relative $5 funding and $139 September ChecksOps billing no longer classify the accepted way.",
+    "index-CvCKsSsX.js was applied 2026-09-30T23:36:22Z with empty VITE_AUTH_PROVIDER and empty Supabase URL. On checksops.com the AWS adapter is not selected and createClient(\"\",\"\") throws supabaseUrl is required, so the static Loading… loader can stay up.",
+    "Stakeholder Bank verified / Provider linked badges in the live entry are not the Freedom WalletOps hero/activity surface."
+  ],
+  "source_fix": {
+    "branch": "cursor/freedom-walletops-pending-setup-2d41",
+    "commit": "1efc2545f",
+    "files": [
+      "src/lib/payments/loadWalletSnapshot.ts",
+      "src/hooks/useWallet.ts"
+    ],
+    "behavior": "sync first; environment-aware readWallet on failure; existing wallet is never pending setup"
+  },
+  "candidate_isolated_build": {
+    "worktree": "/tmp/freedom-walletops-pending-setup-src",
+    "baseline_commit": "82460c8c2ebbc8c7996b9cc233058015933120df",
+    "overlays": {
+      "from_9afb57fe_walletops": 7,
+      "from_84ba11f4_moov_settings": 9,
+      "from_b97a8dc6_branding": 12,
+      "from_this_branch_pending_setup": [
+        "src/hooks/useWallet.ts",
+        "src/lib/payments/loadWalletSnapshot.ts"
+      ]
+    },
+    "env": {
+      "VITE_AUTH_PROVIDER": "cognito",
+      "VITE_APP_URL": "https://checksops.com",
+      "VITE_CHECKSOPS_API_URL": "/prep",
+      "VITE_COGNITO_USER_POOL_ID": "us-east-1_h00WorYMT",
+      "VITE_COGNITO_USER_POOL_CLIENT_ID": "3ja9fqaq2fjkv3i6up2varcqpe",
+      "note": "Same production bake as accepted WalletOps recovery. Not staging execute-api. Not empty CvCKsSsX bake."
+    },
+    "dist": {
+      "entry": "/assets/index-DyoF7zdg.js",
+      "entry_sha256": "82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080",
+      "index_html_sha256": "d1a24f1089416b6a9630195ce87c310a0798cbcce3f207ae9cd5438a7e0954ac",
+      "walletops": "/assets/WalletOps-B7dXmlXU.js",
+      "use_wallet": "/assets/useWallet-BS8nWJZS.js",
+      "verified": {
+        "authProvider_cognito": true,
+        "isAwsStaging_inlined_true": true,
+        "api_base_prep": true,
+        "hostname_guard": true,
+        "readWallet_fallback": true,
+        "existing_wallet_setup_required_false": true,
+        "funding_and_billing": true,
+        "checksops_billing": true,
+        "bank_verified": true,
+        "provider_linked": true,
+        "not_old_hashed_entry": true
+      }
+    }
+  },
+  "official_path": "preflight → protected-composition → TOCTOU → production-spa-apply. No direct S3 sync. Do not restore CvCKsSsX/DSbVZXu8/QDJiUFF1/DbYbvb6d as a wholesale SPA."
+}
