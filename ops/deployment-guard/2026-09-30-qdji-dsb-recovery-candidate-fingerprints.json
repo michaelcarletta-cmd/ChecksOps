@@ -1,0 +1,87 @@
+{
+  "id": "2026-09-30-qdji-dsb-recovery-candidate-fingerprints",
+  "kind": "fresh-aws-spa-candidate",
+  "production_writes_this_task": 1,
+  "lambda_writes_this_task": 0,
+  "unknown_checks_mutated": 0,
+  "ready_for_apply": false,
+  "applied": true,
+  "apply_id": "2026-09-30-qdji-dsb-recovery-production-spa-apply",
+  "stop_for_approval": false,
+  "built_at_utc": "2026-09-30T22:56:38Z",
+  "build": {
+    "command": "npm run build:aws",
+    "mode": "aws",
+    "fresh_dist": true,
+    "do_not_upload": true
+  },
+  "live_current_https": {
+    "observed_at_utc": "2026-09-30T22:57:00Z",
+    "entry": "/assets/index-DSbVZXu8.js",
+    "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw"
+  },
+  "historical_qdji": {
+    "entry": "/assets/index-QDJiUFF1.js",
+    "entry_sha256": "19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7"
+  },
+  "candidate": {
+    "source_branch": "cursor/compose-qdji-dsb-recovery-f477",
+    "base_commit": "82460c8c2ebbc8c7996b9cc233058015933120df",
+    "entry": "/assets/index-CvCKsSsX.js",
+    "entry_sha256": "cd55efcde625c03ab8bba60decec3c4d6b3bb53e3a8e45dd6a4c2b9991065007",
+    "entry_bytes": 897864,
+    "index_html_sha256": "0dac8cbceba15a086567511c447279c6a439c9c120079ebebb19309a8bf24e89",
+    "walletops_chunk": "/assets/WalletOps-B4ZiFA_r.js",
+    "bank_deposit_chunk": "/assets/BankDepositReconciliation-CowUe23o.js",
+    "bank_deposit_sha256": "d64fa27c35369e30bebac484ad113f42812a8c48d8576917186745b7c3525615",
+    "ccc_chunk": "/assets/CheckCommandCenter-BfeHKvNb.js"
+  },
+  "tenant_logo_readonly": {
+    "url": "https://checksops.com/prep/branding/logo/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "http": 200,
+    "bytes": 796240,
+    "sha256": "8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f",
+    "reread_at_utc": "2026-09-30T22:57:00Z"
+  },
+  "compiled_markers": {
+    "environmentReady": 3,
+    "Bank verified": 1,
+    "Provider linked": 1,
+    "Bank pending": 1,
+    "save-tenant-billing-account": 3,
+    "Billing save unexpectedly started a collection": 1,
+    "ChecksOps billing": 4,
+    "monthly_subscription": 3,
+    "groupDepositsBySubmissionDate": 1,
+    "Insured Name": 2,
+    "/branding/logo/": 3,
+    "save_claim_settlement_breakdown": 1,
+    "checksops-production-host": 2,
+    "delete_check": 2,
+    "Delete Check": 1,
+    "signature": 261,
+    "OCR": 15,
+    "MICR": 2,
+    "issue date": 4,
+    "new_stage": 3,
+    "Default payout speed": 0,
+    "DKIM DNS records": 0,
+    "invoice-letterhead-upload": 0,
+    "Wallet first, then connected bank": 1
+  },
+  "tests": {
+    "source_and_artifact": "aws/tests/unknown-check-spa-relabel.test.mjs, insured-name-branding.test.mjs, manager-bank-deposits-partners.test.mjs, checkalt-pending-sync.test.mjs, moov-stakeholder-status.test.mjs, qdji-dsb-recovery-candidate-artifacts.test.mjs",
+    "artifact_test": "pass after persistableLogoField minified-name adjustment; deposit chunk insert/upsert/delete=0",
+    "recovery_28_suite": "28 pass / 0 fail after DSb-absent capability trace",
+    "capability_equivalence": "aws/tests/dsb-candidate-capability-equivalence.test.mjs 3 pass"
+  },
+  "dsb_absent_capabilities": {
+    "default_payout_speed": "equivalent_via_moov_treasury_panel",
+    "invoice_letterhead_upload": "equivalent_via_independent_invoice_logo",
+    "dkim_sending_subdomain": "live_ui_feature_disabled_ses_flag_false",
+    "source_changed": false,
+    "rebuild_required": false,
+    "proof": "ops/release-locks/proof/2026-09-30-dsb-absent-capability-trace.md"
+  }
+}

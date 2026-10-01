@@ -1,0 +1,74 @@
+{
+  "id": "2026-09-30-cvc-loading-init-diagnosis",
+  "kind": "production-acceptance-failure-readonly",
+  "accepted": false,
+  "production_writes_this_task": 0,
+  "lambda_writes_this_task": 0,
+  "rollback_performed": false,
+  "rebuild_performed": false,
+  "spa_upload_performed": false,
+  "live_left_unchanged": true,
+  "live": {
+    "entry": "/assets/index-CvCKsSsX.js",
+    "entry_sha256": "cd55efcde625c03ab8bba60decec3c4d6b3bb53e3a8e45dd6a4c2b9991065007",
+    "index_html_sha256": "0dac8cbceba15a086567511c447279c6a439c9c120079ebebb19309a8bf24e89",
+    "s3_version": "rLJElCrQEl1AqJJuW4YuKC.xuo06gfiV",
+    "etag": "b2d4400446f1ef8b6a84896b5c11bcd2"
+  },
+  "first_runtime_failure": {
+    "module": "src/integrations/supabase/client.ts",
+    "compiled_in": "assets/index-CvCKsSsX.js",
+    "gate": "shouldUseAwsChecksOpsBackendFor({ hostname: window.location.hostname, authProvider: \"\" })",
+    "gate_result": false,
+    "client_path": "createClient(\"\", \"\")",
+    "error": "supabaseUrl is required.",
+    "user_visible": "index.html #initial-loader Loading… never replaced; React never mounts",
+    "not_first_failure": [
+      "dynamic chunk 404",
+      "Cognito checksops.aws.staging.auth restore",
+      "TenantProvider tenants_public",
+      "WhiteLabelRoutes loading || authLoading",
+      "composed #575/#581/#584 missing file",
+      "/prep API 4xx"
+    ]
+  },
+  "baked_compare": {
+    "QDJiUFF1": {
+      "authProvider": "cognito",
+      "isAwsStaging": true,
+      "api_base": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging"
+    },
+    "DSbVZXu8": {
+      "authProvider": "cognito",
+      "isAwsStaging": true,
+      "api_base": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging"
+    },
+    "CvCKsSsX": {
+      "authProvider": "",
+      "VITE_AUTH_PROVIDER": "",
+      "VITE_SUPABASE_URL": "",
+      "VITE_SUPABASE_PUBLISHABLE_KEY": "",
+      "isAwsStaging": false,
+      "api_base": ""
+    }
+  },
+  "smallest_additive_correction": {
+    "applied": false,
+    "do_not": [
+      "restore DSbVZXu8",
+      "restore QDJiUFF1",
+      "upload another SPA from this task",
+      "write Lambda / DB / IAM / Cognito / env / Moov / data"
+    ],
+    "rebuild_same_compose_with": {
+      "VITE_AUTH_PROVIDER": "cognito",
+      "VITE_APP_URL": "https://checksops.com",
+      "VITE_CHECKSOPS_API_URL": "/prep",
+      "VITE_AWS_REGION": "us-east-1",
+      "VITE_COGNITO_USER_POOL_ID": "us-east-1_h00WorYMT",
+      "VITE_COGNITO_USER_POOL_CLIENT_ID": "3ja9fqaq2fjkv3i6up2varcqpe"
+    },
+    "note": "AUTH_PROVIDER alone is insufficient because awsApiBaseUrl is also baked empty."
+  },
+  "proof": "ops/release-locks/proof/2026-09-30-cvc-loading-init-failure.md"
+}

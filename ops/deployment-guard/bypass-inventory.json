@@ -73,6 +73,12 @@
       "note": "Official staging SPA upload. Requires a staging-frontend spa-promote receipt. Refuses production."
     },
     {
+      "path": "scripts/deployment-guard/production-spa-upload.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["spa-index-upload", "cloudfront-invalidation"],
+      "note": "Official production SPA upload. Requires a production-spa spa-promote receipt, production approval, and immediately-before fingerprints matching the reviewed live baseline. Per-object put only. Refuses historical restore. SPA only — never writes Lambda."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]

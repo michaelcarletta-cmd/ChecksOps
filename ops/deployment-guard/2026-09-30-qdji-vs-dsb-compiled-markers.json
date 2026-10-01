@@ -1,0 +1,1082 @@
+{
+  "generatedAt": "2026-09-30T22:52:16.106Z",
+  "methodology": "Compared index-QDJiUFF1.js vs index-DSbVZXu8.js entries plus all mapDeps chunks and nested lazy chunks (WalletOps, BankDepositReconciliation) fetched read-only from checksops.com/assets.",
+  "entries": {
+    "qdji": {
+      "file": "index-QDJiUFF1.js",
+      "mapDepsChunks": 72,
+      "jsFiles": 75
+    },
+    "dsb": {
+      "file": "index-DSbVZXu8.js",
+      "mapDepsChunks": 71,
+      "jsFiles": 74
+    }
+  },
+  "nestedLazyChunks": {
+    "qdji": {
+      "wallet": "WalletOps-D5mOeN7Q.js",
+      "bankDeposit": "BankDepositReconciliation-CNd9vt9D.js"
+    },
+    "dsb": {
+      "wallet": "WalletOps-Dhje5XLB.js",
+      "bankDeposit": "BankDepositReconciliation-5yI_j5mi.js"
+    }
+  },
+  "chunks": {
+    "onlyInQdji": [
+      "AccountSecurity-m4njoLXA.js",
+      "AdminFinancialModel-JTpklw2M.js",
+      "AdminMortgageOps-BMSaFRrR.js",
+      "AdminTenants-DgEceeis.js",
+      "CashJobs-DsCRtvcv.js",
+      "CheckAltSettings-ukopvNYk.js",
+      "CheckCommandCenter-BdkfEkL_.js",
+      "CheckImageCropper-Q7ZVb0-i.js",
+      "CheckOpsLanding-CCva4iSg.js",
+      "CheckOpsLogin-DKZYK663.js",
+      "CheckOpsLogo-BiYHKbv5.js",
+      "CheckOpsPricing-DpNnWV2p.js",
+      "CheckOpsResetPassword-R1CSWA74.js",
+      "CheckOpsSecurity-yY5NYuG9.js",
+      "CheckOpsSignup-BNnGiaFA.js",
+      "DepositReports-B7Ob8qfQ.js",
+      "Endorse-D02PYWx_.js",
+      "FindAPro-DAjAfu1Y.js",
+      "HomeownerCheckUpload-NlfcDaFR.js",
+      "HomeownerClaimPortal-DOjSH3SJ.js",
+      "HomeownerLedger-CIhiXl2B.js",
+      "LossDraftDocsManager-CGSZhJaY.js",
+      "MortgageCompaniesDirectory-BqfqvSfg.js",
+      "MortgageCompanyEditorDialog-CgpBlMkS.js",
+      "MortgageOpsLogin-kODKv9jA.js",
+      "MortgageOpsQueue-BIu2lF0n.js",
+      "NotFound-DgHCzyRq.js",
+      "PaymentDirectionPage-DOsa56Tl.js",
+      "Payments-BH4uYpf8.js",
+      "PrivacyNotice-Ck8UDzTr.js",
+      "PublicInvoicePage-BPoz_Qre.js",
+      "RecipientPaymentSetup-CiLrvzjM.js",
+      "SettingsPageShell-Bdte0kNc.js",
+      "Sign-BkV-Qa6C.js",
+      "Skeletons-DbmfXRpb.js",
+      "Terms-DnBqnnQu.js",
+      "Unsubscribe-Cvb_S4Ns.js",
+      "VerifyAccountStart-CPI_OWCz.js",
+      "WhiteLabelApp-Du0c4eKG.js",
+      "ban-DpI2fODZ.js",
+      "briefcase-ChVDYEG8.js",
+      "browser-CjMAQN7q.js",
+      "calculator-B4eqg7aQ.js",
+      "calendar-range-Dqr5fVED.js",
+      "chart-line-CmkdQQGB.js",
+      "chevron-right-CsK1GaRU.js",
+      "circle-check-big-CU3ZIcx2.js",
+      "compressCheckImage-DeqPwkx-.js",
+      "dollar-sign-B4eHXLIE.js",
+      "dropdown-menu-DAU_7Pd9.js",
+      "fingerprint-D3geKX3e.js",
+      "generateCategoricalChart-BZiXyMTo.js",
+      "goToChecksOpsHome-Cspm4n0p.js",
+      "image-plus-DOoDm6fy.js",
+      "log-in-DhSrIjvO.js",
+      "mortgage-ops-logo-Cv8_CuuV.js",
+      "pen-line-wXUI5Rd0.js",
+      "pen-tool-CpnB7mHO.js",
+      "printer-Bu1LawOZ.js",
+      "publicWorkflowApi-DMDIcIdp.js",
+      "radio-group-Wdf-BR7y.js",
+      "sheet-DxRJaLxq.js",
+      "skeleton-CrrYFczm.js",
+      "slider-BC5CAC_a.js",
+      "trending-up-DVxKKpTw.js",
+      "useFinancialGuard-DL_rtK42.js",
+      "useWallet-CYdQ7K6s.js",
+      "zap-DVl7bl9O.js"
+    ],
+    "onlyInDsb": [
+      "AccountSecurity-VF7RdphX.js",
+      "AdminFinancialModel-QsY9Z7PC.js",
+      "AdminMortgageOps-DJzQGdrT.js",
+      "AdminTenants-Dk54aVoh.js",
+      "CashJobs-Bt4-QOvH.js",
+      "CheckAltSettings-JzPowHBe.js",
+      "CheckCommandCenter-CEe5Z_6a.js",
+      "CheckImageCropper-DMfW3has.js",
+      "CheckOpsLanding-C_UXLh1A.js",
+      "CheckOpsLogin-CeAqcT4p.js",
+      "CheckOpsLogo-BpvNVUVw.js",
+      "CheckOpsPricing-Cf7RwN_p.js",
+      "CheckOpsResetPassword-C8DdZ10D.js",
+      "CheckOpsSecurity-Cntx-gjW.js",
+      "CheckOpsSignup-BDsLG574.js",
+      "DepositReports-BMyjQoHx.js",
+      "Endorse-BIyUqbDN.js",
+      "FindAPro-CFS9MHuW.js",
+      "HomeownerCheckUpload-BpKQCZ5n.js",
+      "HomeownerClaimPortal-STWfQExg.js",
+      "HomeownerLedger-DcQC6q-I.js",
+      "LossDraftDocsManager-Cr2FMtB5.js",
+      "MortgageCompaniesDirectory-Cp4Y1V29.js",
+      "MortgageCompanyEditorDialog-D4j21JAz.js",
+      "MortgageOpsLogin-BsXQH0ES.js",
+      "MortgageOpsQueue-Cwm7eZ0l.js",
+      "NotFound-rF8mgxC-.js",
+      "PaymentDirectionPage-De4FVq8D.js",
+      "Payments-DkKUHuL5.js",
+      "PrivacyNotice-BujZf-Wa.js",
+      "PublicInvoicePage-xzUurVX9.js",
+      "RecipientPaymentSetup-QGkcX3tX.js",
+      "SettingsPageShell-BhZkyCx3.js",
+      "Sign-C7EBIZ3y.js",
+      "Skeletons-BDiK3zqD.js",
+      "Terms-qEMwIc28.js",
+      "Unsubscribe-5I4T9nla.js",
+      "VerifyAccountStart-DWhhpw6f.js",
+      "WhiteLabelApp-Dvtl3R8e.js",
+      "briefcase-CLBWap-f.js",
+      "browser-DlHYiggS.js",
+      "calculator-PhA0F8pf.js",
+      "calendar-range-BRh_CTU7.js",
+      "chart-line-0W9enbET.js",
+      "chevron-right-DBUyOdIh.js",
+      "circle-check-big-SowfaZiU.js",
+      "compressCheckImage-Bc_FPYzw.js",
+      "dollar-sign-CW8anUa0.js",
+      "dropdown-menu-D-cx8qbG.js",
+      "fingerprint-B8GWsnhA.js",
+      "generateCategoricalChart-BM_d-xas.js",
+      "goToChecksOpsHome-wo1y6Iwh.js",
+      "image-plus-DwVRCDsA.js",
+      "log-in-BnYWjh2J.js",
+      "mortgage-ops-logo-B1w6iuRH.js",
+      "pen-line-BYgVVRCQ.js",
+      "pen-tool-DZEPjIYt.js",
+      "printer-BJLIdFie.js",
+      "publicWorkflowApi-BT9YJrgh.js",
+      "radio-group-DDM1U2hv.js",
+      "sheet-D6xXPlX5.js",
+      "skeleton-aDdWhitz.js",
+      "slider-BZ_HwI-7.js",
+      "trending-up-DatarKA6.js",
+      "useFinancialGuard-jgVij9_Q.js",
+      "useWallet-DcgBzu0m.js",
+      "zap-CHP1NerX.js"
+    ],
+    "sharedBasenames": [
+      "AccountSecurity-m4njoLXA.js",
+      "AdminFinancialModel-JTpklw2M.js",
+      "AdminMortgageOps-BMSaFRrR.js",
+      "AdminTenants-DgEceeis.js",
+      "CashJobs-DsCRtvcv.js",
+      "CheckAltSettings-ukopvNYk.js",
+      "CheckCommandCenter-BdkfEkL_.js",
+      "CheckImageCropper-Q7ZVb0-i.js",
+      "CheckOpsLanding-CCva4iSg.js",
+      "CheckOpsLogin-DKZYK663.js",
+      "CheckOpsLogo-BiYHKbv5.js",
+      "CheckOpsPricing-DpNnWV2p.js",
+      "CheckOpsResetPassword-R1CSWA74.js",
+      "CheckOpsSecurity-yY5NYuG9.js",
+      "CheckOpsSignup-BNnGiaFA.js",
+      "DepositReports-B7Ob8qfQ.js",
+      "Endorse-D02PYWx_.js",
+      "FindAPro-DAjAfu1Y.js",
+      "HomeownerCheckUpload-NlfcDaFR.js",
+      "HomeownerClaimPortal-DOjSH3SJ.js",
+      "HomeownerLedger-CIhiXl2B.js",
+      "LossDraftDocsManager-CGSZhJaY.js",
+      "MortgageCompaniesDirectory-BqfqvSfg.js",
+      "MortgageCompanyEditorDialog-CgpBlMkS.js",
+      "MortgageOpsLogin-kODKv9jA.js",
+      "MortgageOpsQueue-BIu2lF0n.js",
+      "NotFound-DgHCzyRq.js",
+      "PaymentDirectionPage-DOsa56Tl.js",
+      "Payments-BH4uYpf8.js",
+      "PrivacyNotice-Ck8UDzTr.js",
+      "PublicInvoicePage-BPoz_Qre.js",
+      "RecipientPaymentSetup-CiLrvzjM.js",
+      "SettingsPageShell-Bdte0kNc.js",
+      "Sign-BkV-Qa6C.js",
+      "Skeletons-DbmfXRpb.js",
+      "Terms-DnBqnnQu.js",
+      "Unsubscribe-Cvb_S4Ns.js",
+      "VerifyAccountStart-CPI_OWCz.js",
+      "WhiteLabelApp-Du0c4eKG.js",
+      "briefcase-ChVDYEG8.js",
+      "browser-CjMAQN7q.js",
+      "browser-DL3kb7mT.js",
+      "calculator-B4eqg7aQ.js",
+      "calendar-range-Dqr5fVED.js",
+      "chart-line-CmkdQQGB.js",
+      "chevron-right-CsK1GaRU.js",
+      "circle-check-big-CU3ZIcx2.js",
+      "compressCheckImage-DeqPwkx-.js",
+      "dollar-sign-B4eHXLIE.js",
+      "dropdown-menu-DAU_7Pd9.js",
+      "fingerprint-D3geKX3e.js",
+      "generateCategoricalChart-BZiXyMTo.js",
+      "goToChecksOpsHome-Cspm4n0p.js",
+      "image-plus-DOoDm6fy.js",
+      "log-in-DhSrIjvO.js",
+      "mortgage-ops-logo-Cv8_CuuV.js",
+      "pen-line-wXUI5Rd0.js",
+      "pen-tool-CpnB7mHO.js",
+      "printer-Bu1LawOZ.js",
+      "publicWorkflowApi-DMDIcIdp.js",
+      "radio-group-Wdf-BR7y.js",
+      "sheet-DxRJaLxq.js",
+      "signer-display-templates-B5YRNMRm.js",
+      "skeleton-CrrYFczm.js",
+      "slider-BC5CAC_a.js",
+      "tiny-invariant-CopsF_GD.js",
+      "trending-up-DVxKKpTw.js",
+      "types-4og3oiYD.js",
+      "useFinancialGuard-DL_rtK42.js",
+      "useWallet-CYdQ7K6s.js",
+      "zap-DVl7bl9O.js"
+    ]
+  },
+  "markers": {
+    "qdji": {
+      "WalletOps": {
+        "environmentReady": {
+          "total": 3,
+          "files": {
+            "WalletOps-D5mOeN7Q.js": 2,
+            "index-QDJiUFF1.js": 1
+          }
+        },
+        "selectPaymentWallet": {
+          "total": 0,
+          "files": {}
+        },
+        "readWallet": {
+          "total": 0,
+          "files": {}
+        },
+        "payment-wallet": {
+          "total": 2,
+          "files": {
+            "WalletOps-D5mOeN7Q.js": 1,
+            "useWallet-CYdQ7K6s.js": 1
+          }
+        },
+        "Payment wallet environment is required": {
+          "total": 1,
+          "files": {
+            "WalletOps-D5mOeN7Q.js": 1
+          }
+        }
+      },
+      "Moov/status": {
+        "Bank verified": {
+          "total": 1,
+          "files": {
+            "index-QDJiUFF1.js": 1
+          }
+        },
+        "Provider linked": {
+          "total": 1,
+          "files": {
+            "index-QDJiUFF1.js": 1
+          }
+        },
+        "Not verified": {
+          "total": 2,
+          "files": {
+            "index-QDJiUFF1.js": 2
+          }
+        },
+        "Bank pending": {
+          "total": 1,
+          "files": {
+            "index-QDJiUFF1.js": 1
+          }
+        },
+        "provider_account_id": {
+          "total": 15,
+          "files": {
+            "AdminTenants-DgEceeis.js": 3,
+            "CheckCommandCenter-BdkfEkL_.js": 8,
+            "index-QDJiUFF1.js": 4
+          }
+        },
+        "Admin override": {
+          "total": 5,
+          "files": {
+            "CheckCommandCenter-BdkfEkL_.js": 1,
+            "index-QDJiUFF1.js": 4
+          }
+        }
+      },
+      "Branding": {
+        "tenantLogoUrl": {
+          "total": 0,
+          "files": {}
+        },
+        "persistableLogoField": {
+          "total": 0,
+          "files": {}
+        },
+        "/prep/branding/logo": {
+          "total": 0,
+          "files": {}
+        },
+        "tenant-logos": {
+          "total": 12,
+          "files": {
+            "AdminTenants-DgEceeis.js": 2,
+            "index-QDJiUFF1.js": 10
+          }
+        },
+        "company-branding": {
+          "total": 3,
+          "files": {
+            "index-QDJiUFF1.js": 3
+          }
+        },
+        "tenant-branding-for-email": {
+          "total": 3,
+          "files": {
+            "index-QDJiUFF1.js": 3
+          }
+        },
+        "save-tenant-billing-account": {
+          "total": 3,
+          "files": {
+            "index-QDJiUFF1.js": 3
+          }
+        }
+      },
+      "Billing": {
+        "TenantBilling": {
+          "total": 0,
+          "files": {}
+        },
+        "TenantBillingAccountPanel": {
+          "total": 0,
+          "files": {}
+        },
+        "monthly billing": {
+          "total": 0,
+          "files": {}
+        },
+        "monthly_subscription": {
+          "total": 3,
+          "files": {
+            "WalletOps-D5mOeN7Q.js": 3
+          }
+        },
+        "ChecksOps billing": {
+          "total": 4,
+          "files": {
+            "AdminTenants-DgEceeis.js": 2,
+            "WalletOps-D5mOeN7Q.js": 2
+          }
+        },
+        "Billing account linked": {
+          "total": 1,
+          "files": {
+            "index-QDJiUFF1.js": 1
+          }
+        },
+        "Billing save unexpectedly": {
+          "total": 1,
+          "files": {
+            "index-QDJiUFF1.js": 1
+          }
+        }
+      },
+      "Deposits": {
+        "Date unknown": {
+          "total": 1,
+          "files": {
+            "BankDepositReconciliation-CNd9vt9D.js": 1
+          }
+        },
+        "groupDepositsBySubmissionDate": {
+          "total": 1,
+          "files": {
+            "BankDepositReconciliation-CNd9vt9D.js": 1
+          }
+        },
+        "Insured Name": {
+          "total": 0,
+          "files": {}
+        },
+        "payee_line": {
+          "total": 44,
+          "files": {
+            "BankDepositReconciliation-CNd9vt9D.js": 4,
+            "CashJobs-DsCRtvcv.js": 1,
+            "CheckAltSettings-ukopvNYk.js": 4,
+            "CheckCommandCenter-BdkfEkL_.js": 33,
+            "MortgageOpsQueue-BIu2lF0n.js": 2
+          }
+        },
+        "bankDepositDayKey": {
+          "total": 1,
+          "files": {
+            "BankDepositReconciliation-CNd9vt9D.js": 1
+          }
+        },
+        "cleared_at": {
+          "total": 2,
+          "files": {
+            "BankDepositReconciliation-CNd9vt9D.js": 1,
+            "DepositReports-B7Ob8qfQ.js": 1
+          }
+        },
+        "submitted_at": {
+          "total": 22,
+          "files": {
+            "BankDepositReconciliation-CNd9vt9D.js": 3,
+            "CheckAltSettings-ukopvNYk.js": 3,
+            "CheckCommandCenter-BdkfEkL_.js": 7,
+            "LossDraftDocsManager-CGSZhJaY.js": 6,
+            "MortgageOpsQueue-BIu2lF0n.js": 1,
+            "Payments-BH4uYpf8.js": 1,
+            "WalletOps-D5mOeN7Q.js": 1
+          }
+        }
+      },
+      "Settlement": {
+        "save_claim_settlement_breakdown": {
+          "total": 0,
+          "files": {}
+        }
+      },
+      "Hostname": {
+        "checksops-production-host": {
+          "total": 0,
+          "files": {}
+        }
+      },
+      "Check ops": {
+        "Delete check": {
+          "total": 0,
+          "files": {}
+        },
+        "delete check": {
+          "total": 3,
+          "files": {
+            "CheckCommandCenter-BdkfEkL_.js": 3
+          }
+        },
+        "Delete Check": {
+          "total": 1,
+          "files": {
+            "CheckCommandCenter-BdkfEkL_.js": 1
+          }
+        },
+        "delete_check": {
+          "total": 2,
+          "files": {
+            "CheckCommandCenter-BdkfEkL_.js": 1,
+            "index-QDJiUFF1.js": 1
+          }
+        },
+        "signature": {
+          "total": 159,
+          "files": {
+            "CheckCommandCenter-BdkfEkL_.js": 63,
+            "CheckOpsPricing-DpNnWV2p.js": 1,
+            "Endorse-D02PYWx_.js": 7,
+            "HomeownerClaimPortal-DOjSH3SJ.js": 13,
+            "HomeownerLedger-CIhiXl2B.js": 5,
+            "LossDraftDocsManager-CGSZhJaY.js": 8,
+            "MortgageOpsQueue-BIu2lF0n.js": 29,
+            "Sign-BkV-Qa6C.js": 13,
+            "Terms-DnBqnnQu.js": 1,
+            "index-QDJiUFF1.js": 7,
+            "publicWorkflowApi-DMDIcIdp.js": 6,
+            "signer-display-templates-B5YRNMRm.js": 6
+          }
+        },
+        "OCR": {
+          "total": 10,
+          "files": {
+            "CheckAltSettings-ukopvNYk.js": 1,
+            "CheckCommandCenter-BdkfEkL_.js": 7,
+            "index-QDJiUFF1.js": 2
+          }
+        },
+        "MICR": {
+          "total": 1,
+          "files": {
+            "CheckAltSettings-ukopvNYk.js": 1
+          }
+        },
+        "payee": {
+          "total": 301,
+          "files": {
+            "AdminFinancialModel-JTpklw2M.js": 3,
+            "AdminTenants-DgEceeis.js": 2,
+            "BankDepositReconciliation-CNd9vt9D.js": 4,
+            "CashJobs-DsCRtvcv.js": 1,
+            "CheckAltSettings-ukopvNYk.js": 9,
+            "CheckCommandCenter-BdkfEkL_.js": 240,
+            "Endorse-D02PYWx_.js": 5,
+            "HomeownerClaimPortal-DOjSH3SJ.js": 1,
+            "HomeownerLedger-CIhiXl2B.js": 3,
+            "MortgageCompaniesDirectory-BqfqvSfg.js": 4,
+            "MortgageOpsQueue-BIu2lF0n.js": 5,
+            "Payments-BH4uYpf8.js": 10,
+            "Terms-DnBqnnQu.js": 2,
+            "index-QDJiUFF1.js": 11,
+            "signer-display-templates-B5YRNMRm.js": 1
+          }
+        },
+        "issue date": {
+          "total": 3,
+          "files": {
+            "CheckCommandCenter-BdkfEkL_.js": 3
+          }
+        }
+      },
+      "Endorsing": {
+        "new_stage": {
+          "total": 3,
+          "files": {
+            "CheckCommandCenter-BdkfEkL_.js": 3
+          }
+        }
+      }
+    },
+    "dsb": {
+      "WalletOps": {
+        "environmentReady": {
+          "total": 0,
+          "files": {}
+        },
+        "selectPaymentWallet": {
+          "total": 0,
+          "files": {}
+        },
+        "readWallet": {
+          "total": 0,
+          "files": {}
+        },
+        "payment-wallet": {
+          "total": 2,
+          "files": {
+            "WalletOps-Dhje5XLB.js": 1,
+            "useWallet-DcgBzu0m.js": 1
+          }
+        },
+        "Payment wallet environment is required": {
+          "total": 0,
+          "files": {}
+        }
+      },
+      "Moov/status": {
+        "Bank verified": {
+          "total": 0,
+          "files": {}
+        },
+        "Provider linked": {
+          "total": 0,
+          "files": {}
+        },
+        "Not verified": {
+          "total": 3,
+          "files": {
+            "live_entry.js": 3
+          }
+        },
+        "Bank pending": {
+          "total": 0,
+          "files": {}
+        },
+        "provider_account_id": {
+          "total": 13,
+          "files": {
+            "AdminTenants-Dk54aVoh.js": 3,
+            "CheckCommandCenter-CEe5Z_6a.js": 8,
+            "live_entry.js": 2
+          }
+        },
+        "Admin override": {
+          "total": 4,
+          "files": {
+            "CheckCommandCenter-CEe5Z_6a.js": 1,
+            "live_entry.js": 3
+          }
+        }
+      },
+      "Branding": {
+        "tenantLogoUrl": {
+          "total": 0,
+          "files": {}
+        },
+        "persistableLogoField": {
+          "total": 0,
+          "files": {}
+        },
+        "/prep/branding/logo": {
+          "total": 0,
+          "files": {}
+        },
+        "tenant-logos": {
+          "total": 3,
+          "files": {
+            "AdminTenants-Dk54aVoh.js": 2,
+            "live_entry.js": 1
+          }
+        },
+        "company-branding": {
+          "total": 7,
+          "files": {
+            "live_entry.js": 7
+          }
+        },
+        "tenant-branding-for-email": {
+          "total": 1,
+          "files": {
+            "live_entry.js": 1
+          }
+        },
+        "save-tenant-billing-account": {
+          "total": 0,
+          "files": {}
+        }
+      },
+      "Billing": {
+        "TenantBilling": {
+          "total": 0,
+          "files": {}
+        },
+        "TenantBillingAccountPanel": {
+          "total": 0,
+          "files": {}
+        },
+        "monthly billing": {
+          "total": 0,
+          "files": {}
+        },
+        "monthly_subscription": {
+          "total": 0,
+          "files": {}
+        },
+        "ChecksOps billing": {
+          "total": 0,
+          "files": {}
+        },
+        "Billing account linked": {
+          "total": 1,
+          "files": {
+            "live_entry.js": 1
+          }
+        },
+        "Billing save unexpectedly": {
+          "total": 0,
+          "files": {}
+        }
+      },
+      "Deposits": {
+        "Date unknown": {
+          "total": 1,
+          "files": {
+            "BankDepositReconciliation-5yI_j5mi.js": 1
+          }
+        },
+        "groupDepositsBySubmissionDate": {
+          "total": 0,
+          "files": {}
+        },
+        "Insured Name": {
+          "total": 0,
+          "files": {}
+        },
+        "payee_line": {
+          "total": 44,
+          "files": {
+            "BankDepositReconciliation-5yI_j5mi.js": 4,
+            "CashJobs-Bt4-QOvH.js": 1,
+            "CheckAltSettings-JzPowHBe.js": 4,
+            "CheckCommandCenter-CEe5Z_6a.js": 33,
+            "MortgageOpsQueue-Cwm7eZ0l.js": 2
+          }
+        },
+        "bankDepositDayKey": {
+          "total": 1,
+          "files": {
+            "BankDepositReconciliation-5yI_j5mi.js": 1
+          }
+        },
+        "cleared_at": {
+          "total": 4,
+          "files": {
+            "BankDepositReconciliation-5yI_j5mi.js": 3,
+            "DepositReports-BMyjQoHx.js": 1
+          }
+        },
+        "submitted_at": {
+          "total": 21,
+          "files": {
+            "BankDepositReconciliation-5yI_j5mi.js": 3,
+            "CheckAltSettings-JzPowHBe.js": 3,
+            "CheckCommandCenter-CEe5Z_6a.js": 7,
+            "LossDraftDocsManager-Cr2FMtB5.js": 6,
+            "MortgageOpsQueue-Cwm7eZ0l.js": 1,
+            "Payments-DkKUHuL5.js": 1
+          }
+        }
+      },
+      "Settlement": {
+        "save_claim_settlement_breakdown": {
+          "total": 1,
+          "files": {
+            "live_entry.js": 1
+          }
+        }
+      },
+      "Hostname": {
+        "checksops-production-host": {
+          "total": 0,
+          "files": {}
+        }
+      },
+      "Check ops": {
+        "Delete check": {
+          "total": 0,
+          "files": {}
+        },
+        "delete check": {
+          "total": 3,
+          "files": {
+            "CheckCommandCenter-CEe5Z_6a.js": 3
+          }
+        },
+        "Delete Check": {
+          "total": 1,
+          "files": {
+            "CheckCommandCenter-CEe5Z_6a.js": 1
+          }
+        },
+        "delete_check": {
+          "total": 2,
+          "files": {
+            "CheckCommandCenter-CEe5Z_6a.js": 1,
+            "live_entry.js": 1
+          }
+        },
+        "signature": {
+          "total": 159,
+          "files": {
+            "CheckCommandCenter-CEe5Z_6a.js": 63,
+            "CheckOpsPricing-Cf7RwN_p.js": 1,
+            "Endorse-BIyUqbDN.js": 7,
+            "HomeownerClaimPortal-STWfQExg.js": 13,
+            "HomeownerLedger-DcQC6q-I.js": 5,
+            "LossDraftDocsManager-Cr2FMtB5.js": 8,
+            "MortgageOpsQueue-Cwm7eZ0l.js": 29,
+            "Sign-C7EBIZ3y.js": 13,
+            "Terms-qEMwIc28.js": 1,
+            "live_entry.js": 7,
+            "publicWorkflowApi-BT9YJrgh.js": 6,
+            "signer-display-templates-B5YRNMRm.js": 6
+          }
+        },
+        "OCR": {
+          "total": 10,
+          "files": {
+            "CheckAltSettings-JzPowHBe.js": 1,
+            "CheckCommandCenter-CEe5Z_6a.js": 7,
+            "live_entry.js": 2
+          }
+        },
+        "MICR": {
+          "total": 1,
+          "files": {
+            "CheckAltSettings-JzPowHBe.js": 1
+          }
+        },
+        "payee": {
+          "total": 301,
+          "files": {
+            "AdminFinancialModel-QsY9Z7PC.js": 3,
+            "AdminTenants-Dk54aVoh.js": 2,
+            "BankDepositReconciliation-5yI_j5mi.js": 4,
+            "CashJobs-Bt4-QOvH.js": 1,
+            "CheckAltSettings-JzPowHBe.js": 9,
+            "CheckCommandCenter-CEe5Z_6a.js": 240,
+            "Endorse-BIyUqbDN.js": 5,
+            "HomeownerClaimPortal-STWfQExg.js": 1,
+            "HomeownerLedger-DcQC6q-I.js": 3,
+            "MortgageCompaniesDirectory-Cp4Y1V29.js": 4,
+            "MortgageOpsQueue-Cwm7eZ0l.js": 5,
+            "Payments-DkKUHuL5.js": 10,
+            "Terms-qEMwIc28.js": 2,
+            "live_entry.js": 11,
+            "signer-display-templates-B5YRNMRm.js": 1
+          }
+        },
+        "issue date": {
+          "total": 3,
+          "files": {
+            "CheckCommandCenter-CEe5Z_6a.js": 3
+          }
+        }
+      },
+      "Endorsing": {
+        "new_stage": {
+          "total": 3,
+          "files": {
+            "CheckCommandCenter-CEe5Z_6a.js": 3
+          }
+        }
+      }
+    },
+    "lost": [
+      {
+        "family": "WalletOps",
+        "marker": "environmentReady",
+        "qdjiCount": 3,
+        "qdjiFiles": {
+          "WalletOps-D5mOeN7Q.js": 2,
+          "index-QDJiUFF1.js": 1
+        },
+        "capability": "WalletOps environment readiness gate (production vs staging wallet selection)"
+      },
+      {
+        "family": "WalletOps",
+        "marker": "Payment wallet environment is required",
+        "qdjiCount": 1,
+        "qdjiFiles": {
+          "WalletOps-D5mOeN7Q.js": 1
+        },
+        "capability": "WalletOps environment-required error UX"
+      },
+      {
+        "family": "Moov/status",
+        "marker": "Bank verified",
+        "qdjiCount": 1,
+        "qdjiFiles": {
+          "index-QDJiUFF1.js": 1
+        },
+        "capability": "Moov bank verification status badge (\"Bank verified\")"
+      },
+      {
+        "family": "Moov/status",
+        "marker": "Provider linked",
+        "qdjiCount": 1,
+        "qdjiFiles": {
+          "index-QDJiUFF1.js": 1
+        },
+        "capability": "Moov provider linked status badge"
+      },
+      {
+        "family": "Moov/status",
+        "marker": "Bank pending",
+        "qdjiCount": 1,
+        "qdjiFiles": {
+          "index-QDJiUFF1.js": 1
+        },
+        "capability": "Bank pending verification status"
+      },
+      {
+        "family": "Branding",
+        "marker": "save-tenant-billing-account",
+        "qdjiCount": 3,
+        "qdjiFiles": {
+          "index-QDJiUFF1.js": 3
+        },
+        "capability": "Save tenant billing account API (monthly billing persist)"
+      },
+      {
+        "family": "Billing",
+        "marker": "monthly_subscription",
+        "qdjiCount": 3,
+        "qdjiFiles": {
+          "WalletOps-D5mOeN7Q.js": 3
+        },
+        "capability": "Monthly subscription billing type"
+      },
+      {
+        "family": "Billing",
+        "marker": "ChecksOps billing",
+        "qdjiCount": 4,
+        "qdjiFiles": {
+          "AdminTenants-DgEceeis.js": 2,
+          "WalletOps-D5mOeN7Q.js": 2
+        },
+        "capability": "ChecksOps billing UI section"
+      },
+      {
+        "family": "Billing",
+        "marker": "Billing save unexpectedly",
+        "qdjiCount": 1,
+        "qdjiFiles": {
+          "index-QDJiUFF1.js": 1
+        },
+        "capability": "Billing persist guard (no collection on save)"
+      },
+      {
+        "family": "Deposits",
+        "marker": "groupDepositsBySubmissionDate",
+        "qdjiCount": 1,
+        "qdjiFiles": {
+          "BankDepositReconciliation-CNd9vt9D.js": 1
+        },
+        "capability": "Group bank deposits by submission date (submitted_at)"
+      }
+    ],
+    "added": [
+      {
+        "family": "Settlement",
+        "marker": "save_claim_settlement_breakdown",
+        "dsbCount": 1,
+        "dsbFiles": {
+          "live_entry.js": 1
+        },
+        "capability": "Claim settlement breakdown save API intercept"
+      }
+    ],
+    "changed": [
+      {
+        "family": "Moov/status",
+        "marker": "Not verified",
+        "qdji": 2,
+        "dsb": 3,
+        "delta": 1
+      },
+      {
+        "family": "Moov/status",
+        "marker": "provider_account_id",
+        "qdji": 15,
+        "dsb": 13,
+        "delta": -2
+      },
+      {
+        "family": "Moov/status",
+        "marker": "Admin override",
+        "qdji": 5,
+        "dsb": 4,
+        "delta": -1
+      },
+      {
+        "family": "Branding",
+        "marker": "tenant-logos",
+        "qdji": 12,
+        "dsb": 3,
+        "delta": -9
+      },
+      {
+        "family": "Branding",
+        "marker": "company-branding",
+        "qdji": 3,
+        "dsb": 7,
+        "delta": 4
+      },
+      {
+        "family": "Branding",
+        "marker": "tenant-branding-for-email",
+        "qdji": 3,
+        "dsb": 1,
+        "delta": -2
+      },
+      {
+        "family": "Deposits",
+        "marker": "cleared_at",
+        "qdji": 2,
+        "dsb": 4,
+        "delta": 2
+      },
+      {
+        "family": "Deposits",
+        "marker": "submitted_at",
+        "qdji": 22,
+        "dsb": 21,
+        "delta": -1
+      }
+    ]
+  },
+  "strings": {
+    "qdjiTotalUserish": 4462,
+    "dsbTotalUserish": 4438,
+    "onlyInQdjiCapability": [
+      " Admin override",
+      " Bank pending",
+      " Bank verified",
+      ",deposit_account_number:n.deposit_account_number??",
+      ". All bank accounts are added through the secure bank login in the Bank Account section — no manual entry. Saving authorization does not charge your account.",
+      ". Other tenants are never included.",
+      "A Moov account exists. This is not bank verification.",
+      "Automatic payouts",
+      "Available wallet funds are used first. Any remainder is collected from ",
+      "Bank Withdrawal",
+      "Bank not verified",
+      "Bank provider transfer",
+      "Billing account linked — auto-debit is on",
+      "Billing save unexpectedly started a collection",
+      "ChecksOps Billing",
+      "ChecksOps billing",
+      "ChecksOps billing history",
+      "Connected bank for this organization",
+      "Email brand color",
+      "Funding & Billing",
+      "Funding: Wallet ",
+      "Invoices use the same logo configured in Branding & Appearance. There is no separate invoice logo.",
+      "Last successful payment",
+      "Monthly fees owed, attempted, and received for ",
+      "No logo configured. Add one above or in Branding & Appearance.",
+      "No logo configured. Add one in Branding & Appearance.",
+      "No tenant-fee receivables for this filter.",
+      "PARTIALLY PAID / BANK FAILED",
+      "Payment wallet environment is required.",
+      "Primary funding account",
+      "Provider linked",
+      "Tenant attribution comes from the ChecksOps billing operation that created the transfer — not bank name or last4. Pending or originated ACH is not treated as received.",
+      "Tenant payments / receivables",
+      "This is the tenant logo from Branding & Appearance.",
+      "Wallet first, then connected bank for the remainder",
+      "Wallet provider transfer",
+      "You can view branding. Only tenant administrators or platform administrators can save changes.",
+      "ambiguous_wallet",
+      "id, tenant_id, amount_cents, status, notes, created_at, period_start, period_end, submitted_at",
+      "id, tenant_id, provider_payment_method_id, last_four, bank_name, rail_payment_method_ids, is_default, connection_status",
+      "id, tenant_id, wallet_type, environment",
+      "id, tenant_id, wallet_type, environment, provider_payment_method_id, provider_wallet_id, provider_metadata",
+      "monthly_subscription",
+      "moov-transfer-status",
+      "name, business_address, business_phone, email_reply_to, logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color",
+      "payment-wallet",
+      "payment_provider_methods",
+      "save-tenant-billing-account",
+      "tenant-billing-account",
+      "tenant-branding-for-email",
+      "tenant_maintenance_payments"
+    ],
+    "onlyInDsbCapability": [
+      " Settled into your bank",
+      ",deposit_account_number:r.deposit_account_number??",
+      ". All bank accounts are added through the secure bank login in the Bank Account section — no manual entry.",
+      "Checking your account status…",
+      "Choose a speed",
+      "Click to upload invoice letterhead",
+      "Customize the visual presentation and default terms of your customer-facing invoices.",
+      "DKIM DNS records",
+      "Default payout speed",
+      "Each row below is one bank credit. Expand a day to see exactly which checks make up that amount. Daily total equals the sum of the checks shown.",
+      "No deposits found yet.",
+      "Only administrators can change payout preferences.",
+      "Open Payment Account",
+      "Payment Account Setup",
+      "Save payout preference",
+      "Settlement bank ",
+      "Still pending. DNS changes may take minutes to 48 hours.",
+      "Verify a subdomain such as notify.yourcompany.com. Do not use your inbound MX hostname.",
+      "You can view branding. Only tenant administrators or platform administrators can change the sending domain.",
+      "id, amount_cents, status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee",
+      "invoice-letterhead-upload",
+      "invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color",
+      "noreply@checksops.com",
+      "walletops-rail"
+    ]
+  },
+  "indexHtml": {
+    "checksopsProductionHost": true
+  }
+}

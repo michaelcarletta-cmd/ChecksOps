@@ -58,14 +58,17 @@ test('Date unknown is a client regroup of the same deposit ids, not an insert', 
   assert.equal(EXISTING_ROWS.every((row) => row.created_at < '2026-09-30T20:15:00.000Z'), true);
 });
 
-test('current Bank Deposits query is select-only on existing checkalt_deposits', () => {
+test('candidate Bank Deposits query is select-only and groups by submitted_at', () => {
   const src = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
   assert.match(src, /\.from\("checkalt_deposits"\)/);
   assert.match(src, /\.select\(/);
-  assert.match(src, /cleared_at \?\? row\.submitted_at|cleared_at \?\? .*submitted_at/);
+  assert.match(src, /groupDepositsBySubmissionDate/);
+  assert.match(src, /bankDepositDayKey\(row\.submitted_at\)/);
+  assert.equal(/cleared_at \?\?/.test(src), false);
   assert.equal(/\.insert\(/.test(src), false);
   assert.equal(/\.upsert\(/.test(src), false);
   assert.equal(/\.delete\(/.test(src), false);
+  assert.match(src, /Insured Name/);
   assert.match(src, /if \(dayKey === "unknown"\) return "Date unknown"/);
 });
 

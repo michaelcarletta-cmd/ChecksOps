@@ -91,6 +91,13 @@ test('direct SPA writer fails before AWS mutation', () => {
   assert.equal(result.awsLog, '');
 });
 
+test('direct official production SPA writer fails before AWS mutation', () => {
+  const result = spawnWriter('scripts/deployment-guard/production-spa-upload.mjs', ['--environment', 'production']);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.equal(result.awsLog, '');
+});
+
 test('direct staging SPA writer fails before AWS mutation', () => {
   const result = spawnWriter('scripts/deployment-guard/staging-spa-upload.mjs', ['--environment', 'staging']);
   assert.notEqual(result.status, 0);

@@ -88,6 +88,47 @@ test('Deposit Ops backend console remains intact after Manager tab removal', () 
   assert.equal(/DepositOperationsConsole/.test(whiteLabel), false);
 });
 
+const bankDepositDayKey = (iso) => {
+  if (!iso) return 'unknown';
+  const day = String(iso).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : 'unknown';
+};
+
+const groupDepositsBySubmissionDate = (rows) => {
+  const map = new Map();
+  for (const row of rows) {
+    const dayKey = bankDepositDayKey(row.submitted_at);
+    if (!map.has(dayKey)) map.set(dayKey, []);
+    map.get(dayKey).push(row);
+  }
+  return Array.from(map.entries())
+    .map(([dayKey, groupRows]) => ({
+      dayKey,
+      rows: groupRows,
+      total: groupRows.reduce((s, r) => s + Number(r.amount ?? 0), 0),
+    }))
+    .sort((a, b) => {
+      if (a.dayKey === 'unknown') return 1;
+      if (b.dayKey === 'unknown') return -1;
+      return b.dayKey.localeCompare(a.dayKey);
+    });
+};
+
+test('same-day submitted deposits stay in one group regardless of later clearing status', () => {
+  const groups = groupDepositsBySubmissionDate([
+    { id: '1', submitted_at: '2026-09-16T18:00:00.000Z', status: 'cleared', amount: 100 },
+    { id: '2', submitted_at: '2026-09-16T09:00:00.000Z', status: 'submitted', amount: 50.25 },
+    { id: '3', submitted_at: null, status: 'submitted', amount: 9 },
+    { id: '4', submitted_at: '2026-09-17T12:00:00.000Z', status: 'pending', amount: 10 },
+  ]);
+  assert.equal(groups[0].dayKey, '2026-09-17');
+  assert.equal(groups[1].dayKey, '2026-09-16');
+  assert.equal(groups[1].rows.length, 2);
+  assert.equal(groups[1].total, 150.25);
+  assert.equal(groups[2].dayKey, 'unknown');
+  assert.equal(groups.some((g) => g.dayKey === 'cleared' || g.label === 'Settled'), false);
+});
+
 test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of checks', () => {
   const src = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
   assert.match(src, /type="date"/);
@@ -96,10 +137,35 @@ test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of che
   assert.match(src, /sumDepositAmounts/);
   assert.match(src, />TOTAL</);
   assert.match(src, /bankDepositDayKey/);
-  assert.match(src, /isBankDepositSettled/);
+  assert.match(src, /groupDepositsBySubmissionDate/);
+  assert.match(src, /submitted_at/);
+  assert.equal(/Settled into your bank/.test(src), false);
+  assert.equal(/In transit/.test(src), false);
   assert.equal(/CheckAltSettings/.test(src), false);
   assert.equal(/from\("checkalt_config"\)/.test(src), false);
   assert.equal(/deposit_date/.test(src), false);
+});
+
+const EXCLUDED_BANK_DEPOSIT_STATUSES = Object.freeze(['rejected', 'returned', 'error', 'declined']);
+
+test('Bank Deposits query excludes rejected/returned/error/declined before grouping', () => {
+  const src = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
+  assert.match(src, /\.not\("status", "in", "\(rejected,returned,error,declined\)"\)/);
+  const rawSameDay = [
+    { id: 'r', submitted_at: '2026-08-20T14:00:00.000Z', status: 'rejected', amount: 100 },
+    { id: 's', submitted_at: '2026-08-20T15:00:00.000Z', status: 'submitted', amount: 200 },
+    { id: 'c', submitted_at: '2026-08-20T16:00:00.000Z', status: 'cleared', amount: 50 },
+  ];
+  const groupingFixture = groupDepositsBySubmissionDate(rawSameDay);
+  assert.equal(groupingFixture.length, 1);
+  assert.equal(groupingFixture[0].dayKey, '2026-08-20');
+  assert.deepEqual(groupingFixture[0].rows.map((row) => row.status).sort(), ['cleared', 'rejected', 'submitted']);
+  const uiRows = rawSameDay.filter((row) => !EXCLUDED_BANK_DEPOSIT_STATUSES.includes(row.status));
+  const uiGroups = groupDepositsBySubmissionDate(uiRows);
+  assert.equal(uiGroups.length, 1);
+  assert.deepEqual(uiGroups[0].rows.map((row) => row.status).sort(), ['cleared', 'submitted']);
+  assert.equal(uiGroups[0].total, 250);
+  assert.equal(uiGroups[0].rows.some((row) => EXCLUDED_BANK_DEPOSIT_STATUSES.includes(row.status)), false);
 });
 
 test('SQL 35 recreates tenants_public as public-column security_invoker=false', () => {

@@ -36,6 +36,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     clean_build: input.clean_build,
     frontend_workstreams: input.frontend_workstreams,
     accepted_composition: input.accepted_composition,
+    accepted_source_composition: input.accepted_source_composition,
     source_composition_manifest: input.source_composition_manifest,
     filename: input.filename,
     migration_id: input.migration_id,
@@ -72,7 +73,11 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     payload.lease = lease.details.lease;
   }
 
-  const result = evaluateDeployment(payload, { root, env, skip_contracts: flags['skip-contracts'] === true });
+  const result = evaluateDeployment(payload, {
+    root,
+    env,
+    skip_contracts: flags.has('skip-contracts') || opts['skip-contracts'] === true,
+  });
   if (result.ok && (flags.receipt || payload.lease)) {
     const file = writeReceipt(root, result, {
       workstream_id: payload.workstream_id,
