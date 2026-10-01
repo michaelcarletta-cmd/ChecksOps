@@ -50,12 +50,11 @@ export function useIdentityTenantAccess() {
   };
 }
 
-/** True for a tenant operator (or platform admin). Viewers stay read-only. */
+/** True for any company user on this tenant (or platform admin). */
 export function useCanMoveChecks(): boolean {
-  const { roles, isTenantMember, tenantRole } = useIdentityTenantAccess();
+  const { roles, isTenantMember } = useIdentityTenantAccess();
   return canMoveTenantChecks({
     systemRoles: roles,
     isTenantMember,
-    tenantRole,
   });
 }

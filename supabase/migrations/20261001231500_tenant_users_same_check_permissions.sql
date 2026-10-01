@@ -1,5 +1,5 @@
--- View-only tenant members must not call the status override RPC.
--- Operating company roles may. Platform admin still can. Deposit stays out.
+-- Any company user on the tenant may override check workflow status.
+-- Role titles are ignored. Platform admin still can. Deposit stays out.
 
 CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks(_user_id uuid, _tenant_id uuid)
 RETURNS boolean
@@ -10,13 +10,7 @@ SET search_path TO 'public'
 AS $$
   SELECT
     public.has_role(_user_id, 'admin'::app_role)
-    OR EXISTS (
-      SELECT 1
-      FROM public.tenant_users
-      WHERE user_id = _user_id
-        AND tenant_id = _tenant_id
-        AND lower(role::text) IN ('admin', 'operator', 'owner', 'member', 'staff')
-    )
+    OR public.user_belongs_to_tenant(_user_id, _tenant_id)
 $$;
 
 CREATE OR REPLACE FUNCTION public.admin_override_check_status(p_check_id uuid, p_new_status text, p_actor_id uuid)

@@ -99,17 +99,13 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
 
   const member = check.tenant_id
     ? (await client.query(
-      `SELECT role FROM public.tenant_users
+      `SELECT 1 FROM public.tenant_users
        WHERE user_id = $1::uuid AND tenant_id = $2::uuid
        LIMIT 1`,
       [mapping.application_user_id, check.tenant_id],
     )).rows[0]
     : null;
-  if (!canMoveTenantChecks({
-    roles,
-    isTenantMember: !!member,
-    tenantRole: member?.role ?? null,
-  })) {
+  if (!canMoveTenantChecks({ roles, isTenantMember: !!member })) {
     return { error: 'not_authorized', message: 'Not permitted to override this check' };
   }
 
