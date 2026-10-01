@@ -14,7 +14,7 @@ DECLARE
     'uploaded','processing','ocr_complete','needs_review','manual_review_required',
     'reissue_requested','endorsements_in_progress','endorsements_complete',
     'approved_for_deposit','branch_deposit_required','loss_draft_required',
-    'deposited','voided'
+    'voided'
   ];
 BEGIN
   IF p_actor_id IS NULL THEN
@@ -42,7 +42,6 @@ BEGIN
     WHEN 'approved_for_deposit' THEN 'ready_for_deposit'
     WHEN 'branch_deposit_required' THEN 'ready_for_deposit'
     WHEN 'loss_draft_required' THEN 'loss_draft'
-    WHEN 'deposited' THEN 'deposited'
     ELSE 'review'
   END)::public.check_stage;
 
