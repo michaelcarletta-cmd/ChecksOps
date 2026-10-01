@@ -2,10 +2,11 @@
  * AWS staging bridge for admin_override_check_status.
  *
  * Replicates the production SECURITY DEFINER function without GRANT EXECUTE
- * and without provider or money-movement side effects. Admins may move a
- * check to any non-deposit status, including backwards to Review.
+ * and without provider or money-movement side effects. Any tenant user may
+ * move a check to any non-deposit status, including backwards to Review.
  */
 import { USER_ROLES_SQL } from './identity.mjs';
+import { canMoveTenantChecks } from './tenant-check-user.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -86,11 +87,6 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
     (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows
       .map((row) => String(row.role || '').toLowerCase()),
   );
-  const isAdmin = roles.has('admin');
-  const isStaff = roles.has('staff');
-  if (!isAdmin && !isStaff) {
-    return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
-  }
 
   const check = (await client.query(
     `SELECT id, tenant_id, status, check_stage::text AS check_stage
@@ -101,15 +97,15 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
   )).rows[0];
   if (!check) return { error: 'rls_denied', message: 'Check not found' };
 
-  if (!isAdmin) {
-    const member = (await client.query(
+  const member = check.tenant_id
+    ? (await client.query(
       `SELECT 1 FROM public.tenant_users
        WHERE user_id = $1::uuid AND tenant_id = $2::uuid`,
       [mapping.application_user_id, check.tenant_id],
-    )).rows[0];
-    if (!member) {
-      return { error: 'not_authorized', message: 'Not permitted to override this check' };
-    }
+    )).rows[0]
+    : null;
+  if (!canMoveTenantChecks({ roles, isTenantMember: !!member })) {
+    return { error: 'not_authorized', message: 'Not permitted to override this check' };
   }
 
   const nextStage = stageForAdminOverrideStatus(newStatus);

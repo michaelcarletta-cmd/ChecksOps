@@ -22,7 +22,7 @@ import {
   RotateCcw, Shield, Users, FileCheck, Loader2, Merge,
   Trash2, Plus, FileImage, Share2, ShieldAlert,
 } from "lucide-react";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@/lib/reviewQueueQuery";
@@ -669,7 +669,7 @@ export function ReviewDecisionPanel({
   const { user } = useAuth();
   const qc = useQueryClient();
 
-  const { isAdmin } = usePermissions();
+  const canMoveChecks = useCanMoveChecks();
   const formDirtyRef = useRef(false);
 
   const { data: check } = useQuery({
@@ -1388,11 +1388,11 @@ export function ReviewDecisionPanel({
                 </div>
               )}
 
-              {isAdmin && (
+              {canMoveChecks && (
                 <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
                   <summary className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex items-center gap-1.5 select-none">
                     <ShieldAlert className="h-3 w-3 text-amber-500" />
-                    <span className="underline underline-offset-2">Admin: override status</span>
+                    <span className="underline underline-offset-2">Override status</span>
                   </summary>
                   <div className="mt-2 space-y-2">
                     <Select

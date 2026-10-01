@@ -53,7 +53,7 @@ import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
-import { usePermissions } from "@/hooks/usePermissions";
+import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
@@ -287,7 +287,7 @@ export default function CheckCommandCenter() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
-  const { isAdmin } = usePermissions();
+  const canMoveChecks = useCanMoveChecks();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [classFilter, setClassFilter] = useState<string>("all");
@@ -468,23 +468,7 @@ export default function CheckCommandCenter() {
   // Realtime: consolidated in useCheckCommandRealtime (debounced invalidations).
   useCheckCommandRealtime(tenantId);
 
-  const { data: tenantMembershipRole } = useQuery({
-    queryKey: ["check-command-center-tenant-role", tenantId, user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("role")
-        .eq("tenant_id", tenantId!)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data?.role ?? null;
-    },
-    enabled: !!tenantId && !!user?.id && isWhiteLabel,
-  });
-
-  const canAccessManager = isAdmin || (isWhiteLabel && ["admin", "owner"].includes(tenantMembershipRole ?? ""));
+  const canAccessManager = canMoveChecks;
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
@@ -1350,7 +1334,7 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Manager Hub — Bank Deposits, History, Reports, Mortgage Cos (admin only) */}
+        {/* Manager Hub — Bank Deposits, History, Reports, Mortgage Cos */}
         {activeTab === "manager" && canAccessManager && (
           <div className="mt-3">
             <Tabs defaultValue={SHOW_CHECKALT ? "pending_approvals" : "reports"}>

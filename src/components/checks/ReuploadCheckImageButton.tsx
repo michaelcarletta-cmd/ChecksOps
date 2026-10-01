@@ -4,13 +4,13 @@ import { Upload, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { compressCheckImage } from "@/lib/compressCheckImage";
 import { useAuth } from "@/hooks/useAuth";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 
 /**
- * Admin-only "Reupload Front/Back Image" button. Uploads a new image to the
+ * Tenant-user "Reupload Front/Back Image" button. Uploads a new image to the
  * claim-files bucket and updates check_intake_items.{front,back}_image_path.
  * Used to recover checks whose original images were lost (e.g. shared from
  * an external CRM before image bytes were persisted locally).
@@ -37,14 +37,14 @@ export function ReuploadCheckImageButton({
   imagePath?: string | null;
 }) {
   const { user } = useAuth();
-  const { isAdmin } = usePermissions();
+  const canMoveChecks = useCanMoveChecks();
   const { toast } = useToast();
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<File | null>(null);
 
-  // Admins can upload/replace the check image at any status. When an image
+  // Tenant users can upload/replace the check image at any status. When an image
   // already exists we simply change the label to "Replace" so it's obvious
   // the action overwrites the existing one.
   const pathIsUsable =
@@ -52,7 +52,7 @@ export function ReuploadCheckImageButton({
       ? !!imagePath && !/^https?:\/\//i.test(imagePath)
       : !!hasImage;
 
-  if (!isAdmin) return null;
+  if (!canMoveChecks) return null;
 
   const column = side === "front" ? "front_image_path" : "back_image_path";
   const sideLabel = side === "front" ? "Front" : "Back";

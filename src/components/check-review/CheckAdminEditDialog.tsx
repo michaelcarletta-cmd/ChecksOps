@@ -337,7 +337,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-amber-400" />
-            Edit Check (Admin)
+            Edit Check
           </DialogTitle>
           <DialogDescription>
             Manually enter or correct check details, override workflow status, and adjust mortgage routing. All changes are logged.
@@ -492,7 +492,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs">Override Status (admin)</Label>
+              <Label className="text-xs">Override Status</Label>
               <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
