@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,7 +60,7 @@ const fmtMoney = (v: number) =>
 
 export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
   const { user } = useAuth();
-  const { isAdmin } = usePermissions();
+  const canMoveChecks = useCanMoveChecks();
   const { toast } = useToast();
 
   const [actionAmount, setActionAmount] = useState("");
@@ -357,14 +357,14 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
           ))}
         </div>
 
-        {/* Admin Override */}
-        {isAdmin && (
+        {/* Status override — available to every tenant user */}
+        {canMoveChecks && (
           <>
             <Separator />
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Shield className="h-3 w-3" /> Admin Override
+                  <Shield className="h-3 w-3" /> Override
                 </p>
                 <Button
                   size="sm"
@@ -382,7 +382,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
                     Change the escrow status and monitoring type. This overrides normal workflow.
                   </p>
                   <div>
-                    <Label className="text-xs">Override Status (admin)</Label>
+                    <Label className="text-xs">Override Status</Label>
                     <select
                       className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs"
                       value={adminTargetStatus}

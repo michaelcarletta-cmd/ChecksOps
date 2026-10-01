@@ -11,6 +11,10 @@ import {
   evaluateReadiness,
   findCapability,
 } from "../supabase/functions/_shared/moovReadiness.ts";
+import {
+  capabilityFlags,
+  missingRequestedCapabilities,
+} from "../supabase/functions/_shared/moovCapabilities.ts";
 import { previewImport, validateRow, MAX_IMPORT_ROWS } from "../supabase/functions/_shared/moovImportRules.ts";
 
 const tests = [];
@@ -29,6 +33,19 @@ const readyInput = {
   termsAccepted: true,
   feePlanCode: "standard",
 };
+
+test("granular capability flags treat send-funds.ach as ACH credit", () => {
+  const flags = capabilityFlags([
+    { capability: "send-funds.ach", status: "enabled" },
+    { capability: "collect-funds.ach", status: "enabled" },
+  ]);
+  assert.equal(flags.can_ach_credit, true);
+  assert.equal(flags.can_ach_debit, true);
+  assert.deepEqual(
+    missingRequestedCapabilities([{ capability: "send-funds", status: "enabled" }]),
+    ["transfers", "collect-funds.ach", "send-funds.ach", "wallet.balance"],
+  );
+});
 
 test("dotted capability ids resolve to their family", () => {
   assert.equal(capabilityFamily("send-funds.ach"), "send-funds");

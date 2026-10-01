@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, scopes } from "../_shared/moovClient.ts";
+import { MOOV_CAPABILITIES_API_VERSION, RECIPIENT_CAPABILITIES } from "../_shared/moovCapabilities.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
 
 // Creates a lightweight recipient for a payee who has NO ChecksOps login —
@@ -119,6 +120,7 @@ serve(async (req) => {
       method: "POST",
       scopes: scopes.accountsWrite(),
       idempotencyKey,
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
       body: recipient_type === "business"
         ? {
           accountType: "business",
@@ -126,7 +128,7 @@ serve(async (req) => {
           // Receive-only stakeholder accounts use the baseline transfers
           // capability. Requesting send-funds incorrectly turns the recipient
           // into a sender and adds platform-agreement/full-KYC requirements.
-          capabilities: ["transfers"],
+          capabilities: [...RECIPIENT_CAPABILITIES],
           foreignID: recipient.id,
           metadata: { checksops_recipient_id: recipient.id, checksops_tenant_id: tenant_id },
         }
@@ -138,7 +140,7 @@ serve(async (req) => {
               email: email ?? undefined,
             },
           },
-          capabilities: ["transfers"],
+          capabilities: [...RECIPIENT_CAPABILITIES],
           foreignID: recipient.id,
           metadata: { checksops_recipient_id: recipient.id, checksops_tenant_id: tenant_id },
         },

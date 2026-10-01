@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, scopes } from "../_shared/moovClient.ts";
+import { MERCHANT_CAPABILITIES, MOOV_CAPABILITIES_API_VERSION } from "../_shared/moovCapabilities.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller } from "../_shared/moovGuard.ts";
 
 // Generates the hosted onboarding (KYB/KYC) link for a tenant's own connected
@@ -121,6 +122,7 @@ serve(async (req) => {
     const invite = await moovFetch<any>("/onboarding-invites", {
       method: "POST",
       scopes: [...scopes.accountsWrite(), ...scopes.accountWrite(accountId)],
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
       body: {
         scopes: [
           "/accounts.write",
@@ -129,7 +131,7 @@ serve(async (req) => {
           `/accounts/${accountId}/bank-accounts.write`,
           `/accounts/${accountId}/capabilities.write`,
         ],
-        capabilities: ["transfers", "send-funds", "collect-funds", "wallet"],
+        capabilities: [...MERCHANT_CAPABILITIES],
         feePlanCodes,
         partnerAccountID: platformAccountId,
         redirectURL: redirect,
