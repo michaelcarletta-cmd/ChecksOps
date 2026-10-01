@@ -146,6 +146,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         effectiveStatus = "needs_review";
       }
 
+      let statusOverriddenOnAws = false;
       if (effectiveStatus !== data.intake.status) {
         if (isAwsStaging()) {
           const { data: override, error: overrideError } = await supabase.rpc("admin_override_check_status", {
@@ -157,6 +158,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
           if (override && (override as { ok?: boolean }).ok === false) {
             throw new Error((override as { error?: string }).error ?? "Override rejected");
           }
+          statusOverriddenOnAws = true;
           changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
         } else {
           intakeUpdates.status = effectiveStatus;
@@ -246,24 +248,29 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
           ? pickAwsSafeIntakeUpdates(intakeUpdates)
           : { safe: intakeUpdates, skipped: [] };
         if (Object.keys(persist.safe).length === 0) {
-          throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
-        }
-        persist.safe.updated_at = new Date().toISOString();
-        const { error } = await supabase
-          .from("check_intake_items")
-          .update(persist.safe)
-          .eq("id", checkId);
-        if (error) throw error;
+          if (!statusOverriddenOnAws) {
+            throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
+          }
+          // Status already committed via RPC. Do not fail the save for leftover
+          // AWS-prohibited columns (amount, routing, account, mortgage).
+        } else {
+          persist.safe.updated_at = new Date().toISOString();
+          const { error } = await supabase
+            .from("check_intake_items")
+            .update(persist.safe)
+            .eq("id", checkId);
+          if (error) throw error;
 
-        await supabase.from("check_audit_log").insert([{
-          check_id: checkId,
-          event_type: "admin_correction",
-          actor_id: user?.id ?? null,
-          event_description: `Admin edit: ${Object.entries(persist.safe)
-            .filter(([k]) => k !== "updated_at")
-            .map(([k, v]) => `${k}=${v}`).join(", ")}`,
-          event_data: persist.safe as Record<string, any>,
-        }]);
+          await supabase.from("check_audit_log").insert([{
+            check_id: checkId,
+            event_type: "admin_correction",
+            actor_id: user?.id ?? null,
+            event_description: `Admin edit: ${Object.entries(persist.safe)
+              .filter(([k]) => k !== "updated_at")
+              .map(([k, v]) => `${k}=${v}`).join(", ")}`,
+            event_data: persist.safe as Record<string, any>,
+          }]);
+        }
       }
 
       // 3. Mirror descriptive fields to claim_checks if the row exists.

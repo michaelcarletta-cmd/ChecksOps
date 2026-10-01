@@ -132,16 +132,18 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
   );
   await client.query(
     `INSERT INTO public.check_audit_log (
-       check_id, event_type, actor_id, event_description, event_data
+       check_id, tenant_id, event_type, actor_id, event_description, event_data
      ) VALUES (
        $1::uuid,
-       'status_manual_override',
        $2::uuid,
-       $3::text,
-       $4::jsonb
+       'status_manual_override',
+       $3::uuid,
+       $4::text,
+       $5::jsonb
      )`,
     [
       checkId,
+      check.tenant_id,
       mapping.application_user_id,
       `Status manually changed from "${check.status}" to "${newStatus}"`,
       JSON.stringify({

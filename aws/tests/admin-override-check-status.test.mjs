@@ -121,8 +121,10 @@ test('admin can move a claim-linked check from Endorsing back to Review', async 
 
   const audit = client.queries.find((q) => /INSERT INTO public.check_audit_log/.test(q.sql));
   assert.ok(audit);
-  assert.equal(audit.params[1], APP_ID);
-  assert.match(audit.params[2], /endorsements_in_progress/);
+  assert.match(audit.sql, /tenant_id/);
+  assert.equal(audit.params[1], FREEDOM);
+  assert.equal(audit.params[2], APP_ID);
+  assert.match(audit.params[3], /endorsements_in_progress/);
 });
 
 test('admin can move forward to endorsing without T5 from-state blockers', async () => {
