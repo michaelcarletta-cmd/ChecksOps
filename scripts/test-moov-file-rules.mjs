@@ -56,7 +56,7 @@ test("identity/individual KYC purposes are accepted", () => {
 });
 
 test("invalid purpose is rejected", () => {
-  const r = validateUpload({ ...base, purpose: "bank_statement" });
+  const r = validateUpload({ ...base, purpose: "not_a_real_purpose" });
   assert.equal(r.ok, false);
   assert.equal(r.code, "invalid_purpose");
 });

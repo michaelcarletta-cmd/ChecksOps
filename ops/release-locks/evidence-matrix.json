@@ -1,6 +1,6 @@
 {
   "baseline_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-  "generated_at": "2026-09-16",
+  "generated_at": "2026-09-26",
   "fail_closed": true,
   "historical_audit_baseline_unverified": {
     "discovered_controls": 1421,
@@ -23,7 +23,7 @@
       ".github/workflows/tax-profile-migration-guard.yml"
     ],
     "lambda_aliases_in_repo": "none",
-    "spa_lock_files_on_main": "production-spa component records live checksops.com index-BPbQUNFr.js; origin/main source is not that baseline"
+      "spa_lock_files_on_main": "production-spa component records live checksops.com index-DyoF7zdg.js; origin/main source is not guaranteed to be that baseline"
   },
   "github_enforcement": {
     "status": "REVISION_REQUIRED_UNTIL_ENFORCED",
@@ -41,6 +41,19 @@
     "Open PRs #316/#317/#319/#326/#333 record SPA bundle names (including index-CiOVNYWh.js) that are not on origin/main."
   ],
   "components": {
+    "delete-check-contract": {
+      "classification": "UNVERIFIED",
+      "git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
+      "merged_pr": 501,
+      "deployed_artifact": "Accepted post-deploy production-prep Lambda CodeSha256 Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM= (staging-accepted workflow.mjs overlaid onto then-live production-prep package).",
+      "applied_migrations": "n/a (behavioral contract guarded by release-locks + invariant tests)",
+      "environment": "production-prep",
+      "missing_evidence": [
+        "immutable production-prep Lambda version/alias fingerprint recorded in-repo for the Delete Check contract",
+        "independent live-package hash capture for the accepted CodeSha256 baseline"
+      ],
+      "open_pr_overlap": []
+    },
     "identity-cognito": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
@@ -181,14 +194,14 @@
     },
     "production-spa": {
       "classification": "PRODUCTION_LOCKED",
-      "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-      "merged_pr": 506,
+      "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+      "merged_pr": null,
       "merge_commit": null,
-      "deployed_artifact": "/assets/index-BPbQUNFr.js sha256 78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5; index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394; s3 L.ND9yiehnJfDCocKdyFC_mRQZjchON3; CloudFront E1B0ZWWO5559U5",
+      "deployed_artifact": "/assets/index-DyoF7zdg.js sha256 82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080; index.html sha256 f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726; s3 SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt; CloudFront E1B0ZWWO5559U5",
       "applied_migrations": "none; SPA-only component",
       "environment": "production",
       "missing_evidence": [],
-      "open_pr_overlap": ["#506"]
+      "open_pr_overlap": []
     },
     "production-release": {
       "classification": "UNVERIFIED",
