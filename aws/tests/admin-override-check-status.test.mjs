@@ -12,6 +12,7 @@ import {
   executeSafeWriteRpc,
   handleSafeWriteRpc,
 } from '../functions/api/workflow-rpc.mjs';
+import { handleDataRpc } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
 
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -171,6 +172,28 @@ test('non-admin non-staff is rejected', async () => {
     args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
   });
   assert.equal(result.error, 'not_authorized');
+});
+
+test('handleDataRpc no longer returns the staging-read deny for admin override', async () => {
+  process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
+  process.env.AWS_WRITES_ENABLED = 'true';
+  const client = mockClient();
+  const result = await handleDataRpc(
+    jwtEvent({
+      name: 'admin_override_check_status',
+      args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
+    }),
+    {
+      loadDatabaseCredentials: async () => ({ host: 'x', username: 'checksops', password: 'x', database: 'checksops' }),
+      createClient: () => client,
+      forceEnabled: true,
+    },
+  );
+  assert.notEqual(result.error, 'rpc_disabled');
+  assert.equal(String(result.message || '').includes('not enabled for AWS staging reads'), false);
+  assert.equal(result.ok, true);
+  assert.equal(result.data.new_status, 'needs_review');
+  assert.equal(result.data.new_stage, 'review');
 });
 
 test('HTTP /data/rpc routes admin override to the write bridge', async () => {
