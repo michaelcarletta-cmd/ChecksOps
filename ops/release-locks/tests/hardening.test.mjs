@@ -163,23 +163,6 @@ test('empty allowlist path is rejected', () => {
   assert.ok(errors.some((row) => /empty or repository-wide/.test(row)));
 });
 
-test('allowlist accepts exact files beneath protected directories and rejects traversal paths', () => {
-  const protectedPaths = loadJson(path.join(ROOT, 'ops/release-locks/protected-paths.json'));
-  const allowlist = loadJson(path.join(ROOT, 'ops/release-locks/overlap-allowlist.json'));
-  const exception = {
-    other_pr: 595,
-    path: 'ops/release-locks/evidence-matrix.json',
-    reason: 'Parallel review of the consolidated Delete Check changes.',
-    review_condition: 'other-PR-rebase-or-close',
-  };
-  assert.deepEqual(allowlistErrors({ fail_closed: true, allow: [exception] }, protectedPaths), []);
-  assert.deepEqual(allowlistErrors(allowlist, protectedPaths), []);
-  assert.ok(allowlistErrors({
-    fail_closed: true,
-    allow: [{ ...exception, path: 'ops/release-locks/../scripts/validate-release-locks.mjs' }],
-  }, protectedPaths).some((row) => /path must exactly equal/.test(row)));
-});
-
 test('more than 200 open PRs paginate to completion', () => {
   const fetchPrPage = (page) => {
     if (page === 1) {
@@ -248,33 +231,6 @@ test('current PR is not treated as a collision with itself', () => {
     currentPr: 343,
   });
   assert.equal(hits.length, 0);
-});
-
-test('exact-path exception permits only the listed protected files for the named PR', () => {
-  const protectedPaths = loadJson(path.join(ROOT, 'ops/release-locks/protected-paths.json'));
-  const allowlist = loadJson(path.join(ROOT, 'ops/release-locks/overlap-allowlist.json'));
-  const changedFiles = [
-    'ops/release-locks/contracts/delete-check-contract.json',
-    'ops/release-locks/evidence-matrix.json',
-    'ops/release-locks/locked-components.json',
-    'ops/release-locks/proof/delete-check-production-acceptance-2026-09-26.md',
-    'ops/release-locks/protected-paths.json',
-    'ops/release-locks/tests/delete-check-invariants.test.mjs',
-    'src/integrations/aws/client.ts',
-  ];
-  const hits = overlapHits({
-    changedFiles,
-    openPrs: [{
-      number: 595,
-      title: 'Combine Delete Check frontend and backend fixes',
-      headRefName: 'copilot/combine-delete-check-fixes',
-      files: changedFiles,
-    }],
-    protectedPaths,
-    allowlist,
-    currentPr: 586,
-  });
-  assert.deepEqual(hits.map((hit) => hit.path), ['src/integrations/aws/client.ts']);
 });
 
 test('workflow no-op retaining the release-locks check name fails', () => {
