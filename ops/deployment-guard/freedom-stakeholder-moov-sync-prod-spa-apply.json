@@ -1,0 +1,76 @@
+{
+  "ok": true,
+  "id": "freedom-stakeholder-moov-sync-prod-spa-apply",
+  "verdict": "SETTINGS MOOV VERIFICATION SYNC — PRODUCTION SPA APPLIED",
+  "applied_at_utc": "2026-10-01T15:04:19Z",
+  "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+  "branch": "cursor/freedom-stakeholder-moov-sync-2d41",
+  "commit": "244d27d687eaca1b79bd9be9ae1569a6415ab0b8",
+  "evidence_commit": "a6e2dc303",
+  "writer": "scripts/deployment-guard/production-spa-apply.mjs",
+  "role": "ChecksOpsProductionSpaDeploy",
+  "deploy_mode": "per_object_put",
+  "s3_sync_delete": false,
+  "lambda_updated": false,
+  "db_writes": 0,
+  "provider_financial_writes": 0,
+  "do_not_recreate_provider_transfer_ids": [
+    "9f9df312-32a9-4999-ace9-fc2b00669c75"
+  ],
+  "before": {
+    "entry": "/assets/index-DyoF7zdg.js",
+    "index_html_sha256": "f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726",
+    "etag": "d45ae45a846ffb83eabea5a34d8415dd",
+    "last_modified": "2026-10-01T14:07:21+00:00",
+    "version_id": "SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt"
+  },
+  "after": {
+    "entry": "/assets/index-5lb4YHS5.js",
+    "entry_sha256": "9b774d74ebe24b1b44173cb87e64314be8269c714fe9e4f0a912f88a86a90943",
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "walletops": "/assets/WalletOps-BaElnG-Z.js",
+    "use_wallet": "/assets/useWallet-deOg85_Z.js",
+    "uploaded_count": 108,
+    "invalidation_id": "IASJ9IN1HU08NOELUDBB9IO8I7",
+    "https_cloudfront_cache": "Miss",
+    "s3_version": "aaaB_SMbiGp4NIcSHDlrxoaHrwpZ.F5p",
+    "etag": "c6d283e8a4fd73af2427640949a613ae",
+    "last_modified": "2026-10-01T15:04:19Z"
+  },
+  "https_verify": {
+    "entry": "/assets/index-5lb4YHS5.js",
+    "index_html_sha256": "a38a916084293f7fb9f0cfa532ef4602c0e94e5e6d2301000cfd1448dc5045d2",
+    "authProvider_cognito": 14,
+    "empty_AUTH_PROVIDER": false,
+    "api_base_prep": true,
+    "hostname_guard": true,
+    "Bank_verified": 1,
+    "Provider_linked": 1,
+    "display_last_four": 8,
+    "provider_last_four": 9,
+    "admin_override_button": 0,
+    "Funding_and_Billing": 1,
+    "Recent_Wallet_Activity": 1,
+    "useWallet_readWallet": 2,
+    "useWallet_setup_required_false_on_existing": 2,
+    "staging_execute_api": 0
+  },
+  "lambda_untouched": {
+    "function": "checksops-production-prep-api",
+    "CodeSha256": "jN5d0C340DZlKM7/zbxxiZk+atoAqv9CI2quPZq5IG8=",
+    "RevisionId": "a37c1225-1287-4070-9ef5-be5f04f9efe8",
+    "LastModified": "2026-09-30T21:07:10.000+0000",
+    "this_apply_did_not_call_UpdateFunctionCode": true
+  },
+  "not_restored": [
+    "/assets/index-DyoF7zdg.js",
+    "/assets/index-CvCKsSsX.js",
+    "/assets/index-DSbVZXu8.js",
+    "/assets/index-QDJiUFF1.js",
+    "/assets/index-DbYbvb6d.js"
+  ],
+  "webhook_not_applied": {
+    "note": "Production HMAC webhook remains supabase/functions/moov-webhook. This apply is SPA only. Automatic write-back when provider_account_id is missing still needs the official function apply.",
+    "spa_display": "Settings now reads linked recipient/method last-four and verification without Override"
+  }
+}
