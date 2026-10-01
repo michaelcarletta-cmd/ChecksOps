@@ -10,13 +10,13 @@ export const PRODUCTION_SPA_ID = 'production-spa';
 
 export const ACCEPTED_PRODUCTION_SPA = Object.freeze({
   host: 'https://checksops.com',
-  spa_bundle: '/assets/index-DyoF7zdg.js',
-  spa_sha256: '82002b64741255e8fd73e3fea61d8a2abebb255088d4508fa0ce23c425565080',
-  index_html_sha256: 'f114be0b9c9a963b5de63c06753a3887ddabd90b009439244a16245769c19726',
-  s3_version: 'SiE1MfXK8lnrffWWNEWs3BkYZRoyXqMt',
+  spa_bundle: '/assets/index-CTqMys28.js',
+  spa_sha256: 'ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd',
+  index_html_sha256: 'ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b',
+  s3_version: '0AuwkrSXSQDHFGUBHFw93_symfzRvIkv',
   cloudfront_id: 'E1B0ZWWO5559U5',
-  last_modified: 'Thu, 01 Oct 2026 14:07:21 GMT',
-  accepted_at: '2026-10-01T14:07:21Z',
+  last_modified: 'Thu, 01 Oct 2026 15:15:51 GMT',
+  accepted_at: '2026-10-01T15:15:51Z',
   source_lineage: '6c679a120d5d4b0dd23d7035ecaf309558df29d0',
   banner_overlay: 'e3e4649478a0c3978065b71b0528dd93baa8dac1',
   s3_bucket: 'checksops-production-frontend-806168576068',
@@ -29,6 +29,7 @@ export const SUPERSEDED_PRODUCTION_SPA_BUNDLES = Object.freeze([
   '/assets/index-C24V_ODo.js',
   '/assets/index-reP2FWHf.js',
   '/assets/index-CiOVNYWh.js',
+  '/assets/index-DyoF7zdg.js',
 ]);
 
 export const SAFE_SPA_DEPLOY_MODE = 'per_object_put';
