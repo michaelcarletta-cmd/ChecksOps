@@ -91,10 +91,11 @@ test("check movement UI uses tenant-user access instead of admin-only", () => {
   assert.match(reupload, /useCanMoveChecks/);
   assert.match(lossDraft, /useCanMoveChecks/);
   assert.doesNotMatch(review, /isAdmin && \(/);
-  assert.doesNotMatch(hook, /@\/integrations\/supabase\/client/);
-  assert.doesNotMatch(hook, /from\("tenant_users"\)/);
-  assert.doesNotMatch(hook, /isAdmin \|\| isStaff/);
+  assert.match(hook, /isAwsStaging/);
   assert.match(hook, /loadTenantCheckIdentity/);
+  assert.match(hook, /@\/integrations\/supabase\/client/);
+  assert.match(hook, /from\("tenant_users"\)/);
+  assert.doesNotMatch(hook, /isAdmin \|\| isStaff/);
   assert.match(command, /isWhiteLabel && \["admin", "owner"\]\.includes/);
   assert.doesNotMatch(command, /canAccessManager = canMoveChecks/);
 });
