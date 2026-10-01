@@ -122,7 +122,7 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
   );
   await client.query(
     `UPDATE public.claim_checks
-     SET check_stage = $2::text, updated_at = now()
+     SET check_stage = $2::public.check_stage, updated_at = now()
      WHERE check_intake_item_id = $1::uuid`,
     [checkId, nextStage],
   );

@@ -117,6 +117,7 @@ test('admin can move a claim-linked check from Endorsing back to Review', async 
 
   const mirror = client.queries.find((q) => /UPDATE public.claim_checks/.test(q.sql));
   assert.ok(mirror);
+  assert.match(mirror.sql, /check_stage = \$2::public\.check_stage/);
   assert.equal(mirror.params[1], 'review');
 
   const audit = client.queries.find((q) => /INSERT INTO public.check_audit_log/.test(q.sql));

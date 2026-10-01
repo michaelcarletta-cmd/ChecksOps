@@ -89,7 +89,13 @@ test('write allowlist gained non-financial workflow tables', () => {
   assert.ok(WRITE_ALLOWLIST.contractor_profiles.clientIgnored.has('moov_account_id'));
 });
 
-const mockClient = ({ roles = [{ role: 'mortgage_agent' }], mortgageRow = null, draft = null } = {}) => {
+const mockClient = ({
+  roles = [{ role: 'mortgage_agent' }],
+  mortgageRow = null,
+  draft = null,
+  tenantId = FREEDOM,
+  isTenantMember = true,
+} = {}) => {
   const queries = [];
   return {
     queries,
@@ -112,6 +118,12 @@ const mockClient = ({ roles = [{ role: 'mortgage_agent' }], mortgageRow = null, 
         };
       }
       if (sql === USER_ROLES_SQL) return { rows: roles };
+      if (/SELECT tenant_id FROM public.check_intake_items/.test(sql)) {
+        return { rows: tenantId ? [{ tenant_id: tenantId }] : [] };
+      }
+      if (/FROM public.tenant_users/.test(sql)) {
+        return { rows: isTenantMember ? [{ '?column?': 1 }] : [] };
+      }
       if (/UPDATE public.mortgage_handling_requests/.test(sql) && /assigned_employee_id/.test(sql)) {
         return {
           rows: mortgageRow || [{
@@ -209,6 +221,42 @@ test('loss_draft_action blocks financial amount actions', async () => {
     },
   });
   assert.equal(result.error, 'rpc_financial_disabled');
+});
+
+test('loss_draft_action admin_reset_status allows tenant members without admin role', async () => {
+  const client = mockClient({ roles: [] });
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'loss_draft_action',
+    args: {
+      p_loss_draft_id: DRAFT_ID,
+      p_action: 'admin_reset_status',
+      p_extra: { target_status: 'pending_send' },
+    },
+  });
+  assert.equal(result.error, undefined);
+  assert.ok(client.queries.some((q) => /UPDATE public.loss_draft_tracking/.test(q.sql) && q.params[1] === 'pending_send'));
+});
+
+test('loss_draft_action admin_reset_status rejects outsiders', async () => {
+  const client = mockClient({
+    roles: [{ role: 'client' }],
+    tenantId: '99999999-9999-4999-8999-999999999999',
+    isTenantMember: false,
+  });
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'loss_draft_action',
+    args: {
+      p_loss_draft_id: DRAFT_ID,
+      p_action: 'admin_reset_status',
+      p_extra: { target_status: 'pending_send' },
+    },
+  });
+  assert.equal(result.error, 'not_authorized');
+  assert.equal(client.queries.some((q) => /UPDATE public.loss_draft_tracking/.test(q.sql)), false);
 });
 
 test('loss_draft_action mark_sent updates tracking metadata', async () => {

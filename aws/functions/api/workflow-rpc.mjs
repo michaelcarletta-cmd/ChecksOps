@@ -11,6 +11,7 @@ import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { writesEnabled } from './write-allowlist.mjs';
 import { executeAdminOverrideCheckStatus } from './admin-override-check-status.mjs';
+import { canMoveTenantChecks } from './tenant-check-user.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -466,8 +467,23 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
       );
     }
   } else if (action === 'admin_reset_status') {
-    const gated = await requireRole(client, mapping.application_user_id, ['admin', 'staff']);
-    if (gated.error) return gated;
+    const roles = await rolesOf(client, mapping.application_user_id);
+    const tenantId = draft.check_intake_item_id
+      ? (await client.query(
+        `SELECT tenant_id FROM public.check_intake_items WHERE id = $1::uuid`,
+        [draft.check_intake_item_id],
+      )).rows[0]?.tenant_id
+      : null;
+    const member = tenantId
+      ? (await client.query(
+        `SELECT 1 FROM public.tenant_users
+         WHERE user_id = $1::uuid AND tenant_id = $2::uuid`,
+        [mapping.application_user_id, tenantId],
+      )).rows[0]
+      : null;
+    if (!canMoveTenantChecks({ roles, isTenantMember: !!member })) {
+      return { error: 'not_authorized', message: 'Not permitted to override this check' };
+    }
     const target = String(extra?.target_status || '').trim();
     if (!SAFE_LOSS_DRAFT_RESET_STATUSES.has(target)) {
       return {
