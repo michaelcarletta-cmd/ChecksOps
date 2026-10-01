@@ -53,6 +53,11 @@ test('class A function path parsing and registry', () => {
   assert.ok(CLASS_A_FUNCTIONS.has('send-signature-request'));
   assert.ok(CLASS_A_FUNCTIONS.has('check-ocr-intake'));
   assert.ok(CLASS_A_FUNCTIONS.has('tenant-tax-profiles'));
+  assert.ok(CLASS_A_FUNCTIONS.has('save-tenant-billing-account'));
+  assert.ok(CLASS_A_FUNCTIONS.has('tenant-company-branding-save'));
+  assert.ok(CLASS_A_FUNCTIONS.has('tenant-billing-admin'));
+  assert.ok(CLASS_A_FUNCTIONS.has('tenant-billing-authorize'));
+  assert.ok(CLASS_A_FUNCTIONS.has('tenant-email-branding-save'));
   assert.ok(!CLASS_A_FUNCTIONS.has('moov-disburse'));
 });
 

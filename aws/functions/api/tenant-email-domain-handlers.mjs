@@ -7,6 +7,9 @@ import { defaultFromAddress } from './email-policy.mjs';
 import {
   resolveEmailBranding,
   brandingForTemplate,
+  isSafeHexColor,
+  isSafeHttpUrl,
+  safeHttpUrl,
 } from './email-branding.mjs';
 import { renderChecksOpsEmail } from './email-layout.mjs';
 import {
@@ -215,6 +218,33 @@ export const runSaveEmailBranding = async ({ client, mapping, body, spoof }) => 
   const fromAddress = domain ? `${local.localPart}@${domain}` : null;
   const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_save', spoof);
   if (limited) return limited;
+  const tenantPatch = {};
+  if ('primaryColor' in body || 'primary_color' in body) {
+    const color = String(body.primaryColor || body.primary_color || '').trim();
+    if (color && !isSafeHexColor(color)) {
+      return { ok: false, statusCode: 400, error: 'invalid_field', field: 'primary_color', spoofFieldsIgnored: spoof };
+    }
+    if (color) tenantPatch.primary_color = color;
+  }
+  if ('logoUrl' in body || 'logo_url' in body) {
+    const raw = body.logoUrl ?? body.logo_url;
+    if (raw === null || raw === '') tenantPatch.logo_url = null;
+    else {
+      const text = String(raw).trim();
+      const ok = text.startsWith('/') || !text.includes('://') || isSafeHttpUrl(text);
+      if (!ok) {
+        return { ok: false, statusCode: 400, error: 'invalid_field', field: 'logo_url', spoofFieldsIgnored: spoof };
+      }
+      tenantPatch.logo_url = text.includes('://') ? safeHttpUrl(text, null) : text;
+    }
+  }
+  if (Object.keys(tenantPatch).length) {
+    const sets = Object.keys(tenantPatch).map((col, i) => `${col} = $${i + 1}`);
+    await client.query(
+      `UPDATE public.tenants SET ${sets.join(', ')} WHERE id = $${sets.length + 1}::uuid`,
+      [...Object.values(tenantPatch), resolved.tenantId],
+    );
+  }
   await upsertTenantEmailSettings(client, resolved.tenantId, {
     from_name: fromName,
     reply_to: reply.replyTo,
@@ -227,11 +257,12 @@ export const runSaveEmailBranding = async ({ client, mapping, body, spoof }) => 
   }, spoof);
   if (auditError) return auditError;
   const row = await loadTenantEmailSettings(client, resolved.tenantId);
+  const tenant = await loadTenant(client, resolved.tenantId) || resolved.tenant;
   return {
     ok: true,
     statusCode: 200,
     saved: true,
-    settings: publicSettings(row, resolved.tenant, resolved.access),
+    settings: publicSettings(row, tenant, resolved.access),
     ignoredClientFields: ['domain_status', 'sending_mode', 'verified', 'ses_identity_name'].filter((k) => k in body),
     spoofFieldsIgnored: spoof,
   };

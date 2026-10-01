@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
@@ -8,29 +8,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, Mail, ShieldCheck, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
+import { Loader2, Mail, ShieldCheck, Upload } from "lucide-react";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-interface DnsRecord {
-  record?: string;
-  name: string;
-  type: string;
-  value: string;
-  ttl?: string | number;
-  purpose?: string;
-}
 
 interface EmailSettings {
   fromName?: string | null;
@@ -47,9 +29,6 @@ interface EmailSettings {
   domainStatus?: string | null;
   domain_status?: string | null;
   domainStatusLabel?: string | null;
-  dnsRecords?: DnsRecord[] | null;
-  dns_records?: DnsRecord[] | null;
-  mailFromRecords?: DnsRecord[] | null;
   logoUrl?: string | null;
   primaryColor?: string | null;
   tenantName?: string | null;
@@ -81,16 +60,6 @@ interface EmailPreview extends FunctionErrorBody {
 
 const PLATFORM_FROM_ADDRESS = "noreply@checksops.com";
 
-const STATUS_LABELS: Record<string, string> = {
-  not_configured: "Not configured",
-  unverified: "Not configured",
-  pending: "Pending DNS",
-  verifying: "Verifying",
-  verified: "Verified",
-  failed: "Failed",
-  disabled: "Disabled",
-};
-
 async function invokeFunction<T extends FunctionErrorBody>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) throw error;
@@ -105,10 +74,6 @@ function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
 }
 
-function copyText(value: string) {
-  void navigator.clipboard.writeText(value);
-  toast.success("Copied");
-}
 
 export function EmailSenderSettings() {
   const { tenantId } = useTenantFilter();
@@ -168,21 +133,21 @@ export function EmailSenderSettings() {
 
   const [fromName, setFromName] = useState("");
   const [replyTo, setReplyTo] = useState("");
-  const [domain, setDomain] = useState("");
-  const [fromLocal, setFromLocal] = useState("noreply");
+  const [primaryColorEdit, setPrimaryColorEdit] = useState("#1a56db");
+  const [logoUrlEdit, setLogoUrlEdit] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setFromName(settings.fromName || settings.from_name || "");
       setReplyTo(settings.replyTo || settings.reply_to || "");
-      const sending = settings.sendingDomain || settings.sending_domain;
-      if (sending) setDomain(sending);
-      const addr = settings.fromAddress || settings.from_address;
-      if (addr) setFromLocal(String(addr).split("@")[0] || "noreply");
-      else if (settings.fromLocalPart) setFromLocal(settings.fromLocalPart);
+      setPrimaryColorEdit(settings.primaryColor || tenant?.primary_color || "#1a56db");
+      setLogoUrlEdit(settings.logoUrl || tenant?.logo_url || null);
     } else if (tenant && !isLoading) {
       setFromName(tenant.name || "");
       setReplyTo("");
+      setPrimaryColorEdit(tenant.primary_color || "#1a56db");
+      setLogoUrlEdit(tenant.logo_url || null);
     }
   }, [settings, tenant, isLoading]);
 
@@ -190,18 +155,14 @@ export function EmailSenderSettings() {
   const isVerified = (settings?.sendingMode || settings?.sending_mode) === "custom" && status === "verified";
   const tenantName = tenant?.name || settings?.tenantName || "ChecksOps";
   const fallbackFrom = `${tenantName} via ChecksOps <${PLATFORM_FROM_ADDRESS}>`;
-  const customFrom = `${fromName || tenantName} <${fromLocal || "noreply"}@${domain || "notify.yourdomain.com"}>`;
-  const previewFrom = isVerified ? customFrom : fallbackFrom;
-  const allDns = useMemo<DnsRecord[]>(() => {
-    const dkim = settings?.dnsRecords || settings?.dns_records || [];
-    const mailFrom = settings?.mailFromRecords || [];
-    return [...dkim, ...mailFrom];
-  }, [settings]);
-  const logoUrl = settings?.logoUrl || tenant?.logo_url || null;
-  const primaryColor = settings?.primaryColor || tenant?.primary_color || "#1a56db";
+  const previewFrom = isVerified
+    ? `${fromName || tenantName} <${settings?.fromAddress || PLATFORM_FROM_ADDRESS}>`
+    : fallbackFrom;
+  const logoUrl = logoUrlEdit || settings?.logoUrl || tenant?.logo_url || null;
+  const primaryColor = primaryColorEdit || settings?.primaryColor || tenant?.primary_color || "#1a56db";
 
   const { data: preview } = useQuery({
-    queryKey: ["tenant-email-preview", tenantId, aws, isVerified, fromName],
+    queryKey: ["tenant-email-preview", tenantId, aws, isVerified, fromName, primaryColor, logoUrl],
     enabled: aws && !!tenantId,
     queryFn: () => invokeFunction<EmailPreview>("tenant-email-preview", { tenantId }),
   });
@@ -210,91 +171,46 @@ export function EmailSenderSettings() {
     mutationFn: async () => {
       if (!tenantId) throw new Error("No tenant");
       if (!canConfigure) throw new Error("Not authorized");
-      if (aws) {
-        return invokeFunction<BrandingPayload>("tenant-email-branding-save", {
-          tenantId,
-          fromName: fromName.trim(),
-          replyTo: replyTo.trim(),
-          fromLocalPart: fromLocal.trim().toLowerCase(),
-        });
-      }
-      const { error } = await supabase
-        .from("tenant_email_settings")
-        .upsert(
-          {
-            tenant_id: tenantId,
-            from_name: fromName.trim() || null,
-            reply_to: replyTo.trim() || null,
-          },
-          { onConflict: "tenant_id" },
-        );
-      if (error) throw error;
+      return invokeFunction<BrandingPayload>("tenant-email-branding-save", {
+        tenantId,
+        fromName: fromName.trim(),
+        replyTo: replyTo.trim(),
+        primaryColor: primaryColorEdit,
+        logoUrl: logoUrlEdit,
+      });
     },
     onSuccess: () => {
       toast.success("Email branding saved");
       qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
       qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
+      qc.invalidateQueries({ queryKey: ["tenant-branding-for-email", tenantId] });
     },
     onError: (err) => toast.error(errorMessage(err, "Failed to save email settings")),
   });
 
-  const registerDomain = useMutation({
-    mutationFn: async () => {
-      if (!canConfigure) throw new Error("Not authorized");
-      return invokeFunction<FunctionErrorBody>("tenant-domain-verify", {
-        tenantId,
-        domain: domain.trim().toLowerCase(),
-        fromLocalPart: fromLocal.trim().toLowerCase(),
-        fromName: fromName.trim(),
-        replyTo: replyTo.trim(),
-      });
-    },
-    onSuccess: () => {
-      toast.success("Domain submitted. Add the DKIM CNAME records below. DNS can take time.");
-      qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
-    },
-    onError: (err) => toast.error(errorMessage(err, "Failed to start domain verification")),
-  });
-
-  const checkDomain = useMutation({
-    mutationFn: async () => {
-      if (!canConfigure) throw new Error("Not authorized");
-      return invokeFunction<FunctionErrorBody>("tenant-domain-check", { tenantId });
-    },
-    onSuccess: (data) => {
-      const next = data?.status || data?.domainStatus;
-      if (data?.verified || next === "verified") toast.success("Domain verified. Custom From is now active.");
-      else if (next === "failed") toast.error(data.error || "Verification failed");
-      else toast.info("Still pending. DNS changes may take minutes to 48 hours.");
-      qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
-      qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
-    },
-    onError: (err) => toast.error(errorMessage(err, "Check failed")),
-  });
-
-  const disableCustom = useMutation({
-    mutationFn: async () => {
-      if (!tenantId) throw new Error("No tenant");
-      if (!canConfigure) throw new Error("Not authorized");
-      if (aws) {
-        return invokeFunction<FunctionErrorBody>("tenant-domain-disable", { tenantId });
-      }
-      const { error } = await supabase
-        .from("tenant_email_settings")
-        .update({ sending_mode: "platform" })
-        .eq("tenant_id", tenantId);
+  const uploadLogo = async (file: File) => {
+    if (!tenantId) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file");
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${tenantId}/email-logo-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("tenant-logos")
+        .upload(path, file, { upsert: true, contentType: file.type });
       if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Custom sending disabled. Mail uses the ChecksOps platform From.");
-      qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
-      qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
-    },
-    onError: (err) => toast.error(errorMessage(err, "Failed to disable custom sending")),
-  });
-
-  const statusLabel = settings?.domainStatusLabel || STATUS_LABELS[status] || "Not configured";
-  const badgeVariant = status === "verified" ? "default" : status === "failed" ? "destructive" : "secondary";
+      const { data } = supabase.storage.from("tenant-logos").getPublicUrl(path);
+      setLogoUrlEdit(data?.publicUrl || path);
+      toast.success("Logo uploaded — click Save branding to apply");
+    } catch (err) {
+      toast.error(errorMessage(err, "Logo upload failed"));
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   if (!tenantId) {
     return (
@@ -310,7 +226,7 @@ export function EmailSenderSettings() {
     <div className="space-y-6">
       <SettingsHero
         title="Email Branding"
-        description="Send branded ChecksOps application emails from a verified tenant subdomain."
+        description="Logo, color theme, and sender identity used by ChecksOps application emails."
         badge="Communication"
         icon={<Mail className="h-4 w-4 text-primary" />}
       />
@@ -323,22 +239,9 @@ export function EmailSenderSettings() {
         >
           <Alert>
             <ShieldCheck className="h-4 w-4" />
-            <AlertTitle>
-              {isVerified ? "Custom sending domain (active)" : "Platform sender (active)"}
-            </AlertTitle>
+            <AlertTitle>Platform sender (active)</AlertTitle>
             <AlertDescription>
-              {isVerified ? (
-                <>
-                  Emails send from your verified subdomain <code>{settings?.sendingDomain || settings?.sending_domain}</code>.
-                  Reply-To stays your operational mailbox. ChecksOps remains the delivery platform.
-                </>
-              ) : (
-                <>
-                  Until the subdomain is verified, mail is sent as{" "}
-                  <code>{fallbackFrom}</code>. Your logo, color, company name, and Reply-To still apply.
-                  DNS changes can take minutes to 48 hours.
-                </>
-              )}
+              Mail is sent as <code>{preview?.from || previewFrom}</code>. Your logo, color theme, company name, and Reply-To apply to the preview and the live email layout. Existing SES delivery is unchanged.
             </AlertDescription>
           </Alert>
 
@@ -360,6 +263,55 @@ export function EmailSenderSettings() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Email logo</Label>
+              <div className="flex items-center gap-3">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={`${tenantName} logo`} className="h-10 max-w-[160px] object-contain" />
+                ) : (
+                  <span className="text-xs text-muted-foreground">No logo</span>
+                )}
+                <Label htmlFor="email-logo-upload" className="cursor-pointer">
+                  <div className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs">
+                    {uploadingLogo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                    Upload
+                  </div>
+                </Label>
+                <Input
+                  id="email-logo-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={!canConfigure || uploadingLogo}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void uploadLogo(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email-color">Color theme</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  id="email-color"
+                  type="color"
+                  aria-label="Email brand color"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColorEdit(e.target.value)}
+                  className="h-10 w-14 cursor-pointer rounded-md border border-border bg-transparent p-1"
+                  disabled={!canConfigure}
+                />
+                <Input
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColorEdit(e.target.value)}
+                  placeholder="#1a56db"
+                  className="font-mono"
+                  disabled={!canConfigure}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="from-name">From display name</Label>
               <Input
@@ -383,7 +335,7 @@ export function EmailSenderSettings() {
                 disabled={!canConfigure}
               />
               <p className="text-xs text-muted-foreground">
-                Operational mailbox such as claims@yourcompany.com. This may differ from the sending subdomain.
+                Operational mailbox such as claims@yourcompany.com.
               </p>
             </div>
           </div>
@@ -396,157 +348,8 @@ export function EmailSenderSettings() {
           </div>
           {!canConfigure && (
             <p className="text-xs text-muted-foreground">
-              You can view branding. Only tenant administrators or platform administrators can change the sending domain.
+              You can view branding. Only tenant administrators or platform administrators can save changes.
             </p>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Sending subdomain"
-          icon={<Globe className="h-4 w-4 text-violet-500" />}
-          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-          description="Verify a subdomain such as notify.yourcompany.com. Do not use your inbound MX hostname."
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={badgeVariant}>{statusLabel}</Badge>
-            {aws && payload?.settings && payload.settings.domainFeatureEnabled === false && (
-              <span className="text-xs text-muted-foreground">SES domain APIs are not enabled in this environment.</span>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
-            <div className="space-y-2">
-              <Label htmlFor="domain">Sending subdomain</Label>
-              <Input
-                id="domain"
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                placeholder="notify.yourcompany.com"
-                disabled={!canConfigure || isVerified}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="from-local">From local part</Label>
-              <div className="flex items-center gap-1">
-                <Input
-                  id="from-local"
-                  value={fromLocal}
-                  onChange={(e) => setFromLocal(e.target.value)}
-                  placeholder="noreply"
-                  disabled={!canConfigure || isVerified}
-                />
-                <span className="whitespace-nowrap text-sm text-muted-foreground">@{domain || "…"}</span>
-              </div>
-            </div>
-          </div>
-
-          {canConfigure && (
-            <div className="flex flex-wrap gap-2">
-              {!isVerified && (
-                <Button
-                  onClick={() => registerDomain.mutate()}
-                  disabled={registerDomain.isPending || !domain.trim()}
-                >
-                  {registerDomain.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Start domain verification
-                </Button>
-              )}
-              {status !== "not_configured" && status !== "disabled" && (
-                <Button
-                  variant="outline"
-                  onClick={() => checkDomain.mutate()}
-                  disabled={checkDomain.isPending}
-                >
-                  {checkDomain.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  Check verification
-                </Button>
-              )}
-              {(isVerified || status === "pending" || status === "verifying" || status === "failed") && (
-                <Button
-                  variant="outline"
-                  onClick={() => disableCustom.mutate()}
-                  disabled={disableCustom.isPending}
-                >
-                  {disableCustom.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Ban className="mr-2 h-4 w-4" />
-                  )}
-                  Disable custom sending
-                </Button>
-              )}
-            </div>
-          )}
-
-          {isVerified && (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertTitle>Verified</AlertTitle>
-              <AlertDescription>
-                From: <code>{settings?.fromAddress || customFrom}</code>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {(settings?.lastVerificationError || settings?.last_verification_error) && status === "failed" && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Verification failed</AlertTitle>
-              <AlertDescription>
-                {settings.lastVerificationError || settings.last_verification_error}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {allDns.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-sm font-medium">DKIM DNS records</div>
-              <p className="text-xs text-muted-foreground">
-                Add these CNAME records at your DNS host. Do not change your existing inbound MX records.
-                Propagation often takes a few minutes and can take up to 48 hours. Then click Check verification.
-                Only ChecksOps can mark the domain verified after Amazon SES confirms DKIM signing.
-              </p>
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Name / host</TableHead>
-                      <TableHead>Value / target</TableHead>
-                      <TableHead className="w-16">TTL</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {allDns.map((r, i) => (
-                      <TableRow key={`${r.name}-${i}`}>
-                        <TableCell className="font-mono text-xs">{r.type}</TableCell>
-                        <TableCell className="break-all font-mono text-xs">
-                          <div className="flex items-start gap-2">
-                            <span className="flex-1">{r.name}</span>
-                            <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => copyText(r.name)}>
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell className="break-all font-mono text-xs">
-                          <div className="flex items-start gap-2">
-                            <span className="flex-1">{r.value}</span>
-                            <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => copyText(r.value)}>
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs">{r.ttl || "600"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
           )}
         </SectionCard>
 

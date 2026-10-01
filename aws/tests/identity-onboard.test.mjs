@@ -26,3 +26,17 @@ test('probe sub is not treated as an application UUID', () => {
   assert.notEqual(PROBE_SUB, TESTER_ID);
   assert.notEqual(PROBE_SUB, NINTH_ID);
 });
+
+test('isolated staging test-tenant onboarding uses tenant-invite-user, not Freedom remaps', () => {
+  const invite = fs.readFileSync(path.join(ROOT, '../functions/api/tenant-admin.mjs'), 'utf8');
+  const lookup = fs.readFileSync(path.join(ROOT, '../functions/api/identity-env.mjs'), 'utf8');
+  const expected = fs.readFileSync(path.join(ROOT, 'expected-mappings.mjs'), 'utf8');
+  assert.match(invite, /export const runTenantInviteUser/);
+  assert.match(invite, /AdminCreateUser/);
+  assert.match(invite, /INSERT INTO public\.identity_accounts/);
+  assert.match(invite, /INSERT INTO public\.tenant_users/);
+  assert.match(invite, /refusing identity mapping where application_user_id equals cognito_sub|unsafe_or_missing_cognito_sub/);
+  assert.match(lookup, /status IN \('active', 'isolated_test'\)/);
+  assert.match(expected, /EXPECTED_DUAL_ENV_IDENTITIES/);
+  assert.doesNotMatch(invite, /FREEDOM_TENANT = '2eff5f1a/);
+});

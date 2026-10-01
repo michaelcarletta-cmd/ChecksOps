@@ -80,7 +80,7 @@ export function StakeholderAccountSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, homeowner_name, verification_status, verified_at, verification_recipient_email, origin")
+        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, homeowner_name, verification_status, verified_at, verification_recipient_email, origin, provider, provider_account_id, provider_bank_account_id, provider_last_four, provider_bank_name")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
@@ -125,6 +125,24 @@ export function StakeholderAccountSettings() {
     },
   });
   const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
+
+  const syncStatuses = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("moov-sync", {
+        body: { tenant_id: tenant!.id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stakeholder-accounts", tenant?.id] });
+      qc.invalidateQueries({ queryKey: ["tenant-verified-bank-accounts"] });
+      qc.invalidateQueries({ queryKey: ["tenant-billing-account"] });
+      toast({ title: "Verification status refreshed from Moov" });
+    },
+    onError: (e: any) => toast({ title: "Could not refresh status", description: e.message, variant: "destructive" }),
+  });
 
   // One shared limit across vendors, sales reps and subcontractors.
   const CAPPED_TYPES = ["sales_rep", "subcontractor", "vendor"];
@@ -324,6 +342,17 @@ export function StakeholderAccountSettings() {
               Stakeholder Accounts
               <Badge variant="outline" className="text-xs">{accounts.length}</Badge>
             </CardTitle>
+            <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => syncStatuses.mutate()}
+              disabled={syncStatuses.isPending || !tenant?.id}
+            >
+              {syncStatuses.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <ShieldCheck className="h-3 w-3 mr-1" />}
+              Refresh status
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -340,6 +369,7 @@ export function StakeholderAccountSettings() {
               <Plus className="h-3 w-3 mr-1" />
               Add account
             </Button>
+            </div>
 
           </div>
         </CardHeader>
@@ -481,6 +511,8 @@ export function StakeholderAccountSettings() {
 
           {accounts.map((acct: any) => {
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            const hasProviderAccount = Boolean(acct.provider_account_id);
+            const bankVerified = vStatus === "verified";
             return (
               <React.Fragment key={acct.id}>
                 <div className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background">
@@ -492,22 +524,29 @@ export function StakeholderAccountSettings() {
                       <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
                         {ACCOUNT_TYPE_LABELS[acct.account_type]}
                       </Badge>
-                      <Badge variant="outline" className={`text-[10px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
-                        {vStatus === "verified" || vStatus === "admin_override" ? (
-                          <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</>
+                      <Badge variant="outline" className={`text-[10px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={`Bank verification: ${VERIFICATION_LABEL[vStatus]}`}>
+                        {bankVerified ? (
+                          <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Bank verified</>
+                        ) : vStatus === "admin_override" ? (
+                          <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Admin override</>
                         ) : vStatus === "pending" ? (
-                          <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting confirmation</>
+                          <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Bank pending</>
                         ) : vStatus === "locked" ? (
                           <><Lock className="h-2.5 w-2.5 mr-0.5 inline" /> Locked</>
                         ) : vStatus === "failed" ? (
-                          "Failed"
+                          "Bank failed"
                         ) : (
-                          "Not verified"
+                          "Bank not verified"
                         )}
                       </Badge>
+                      {hasProviderAccount && !bankVerified && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 bg-muted text-muted-foreground border-border" title="A Moov account exists. This is not bank verification.">
+                          Provider linked
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
-                      {acct.nickname ? `${acct.nickname} · ` : ""}{acct.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"}
+                      {acct.nickname ? `${acct.nickname} · ` : ""}{acct.chk_acct || acct.provider_last_four ? `••••${(acct.chk_acct || acct.provider_last_four).slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"}
                     </p>
                   </div>
                 </div>

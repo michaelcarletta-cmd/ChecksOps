@@ -3,14 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { TenantAutoApproveCard } from "@/components/billing/TenantAutoApproveCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Banknote, ChevronDown, ChevronRight, Clock, Settings } from "lucide-react";
+import { ChevronDown, ChevronRight, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 interface DepositRow {
@@ -31,7 +30,7 @@ interface DepositRow {
 const fmtMoney = (n: number | null | undefined) =>
   `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** Bank-credit day from persisted FinCapture depositDate (cleared_at) or submitted_at. */
+/** Submission day from persisted submitted_at. Missing dates stay unknown. */
 export const bankDepositDayKey = (iso: string | null | undefined) => {
   if (!iso) return "unknown";
   const day = String(iso).slice(0, 10);
@@ -41,9 +40,27 @@ export const bankDepositDayKey = (iso: string | null | undefined) => {
 export const sumDepositAmounts = (rows: { amount: number | null | undefined }[]) =>
   rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
 
-/** Settled only when local status is cleared and provider depositDate was stored. */
-export const isBankDepositSettled = (row: { status?: string | null; cleared_at?: string | null }) =>
-  row?.status === "cleared" && Boolean(row?.cleared_at);
+export const groupDepositsBySubmissionDate = <T extends { submitted_at?: string | null }>(
+  rows: T[],
+): { dayKey: string; rows: T[]; total: number }[] => {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const dayKey = bankDepositDayKey(row.submitted_at);
+    if (!map.has(dayKey)) map.set(dayKey, []);
+    map.get(dayKey)!.push(row);
+  }
+  return Array.from(map.entries())
+    .map(([dayKey, groupRows]) => ({
+      dayKey,
+      rows: groupRows,
+      total: sumDepositAmounts(groupRows),
+    }))
+    .sort((a, b) => {
+      if (a.dayKey === "unknown") return 1;
+      if (b.dayKey === "unknown") return -1;
+      return b.dayKey.localeCompare(a.dayKey);
+    });
+};
 
 const labelForDay = (dayKey: string) => {
   if (dayKey === "unknown") return "Date unknown";
@@ -58,7 +75,6 @@ interface DepositGroup {
   key: string;
   dayKey: string;
   label: string;
-  settled: boolean;
   total: number;
   rows: DepositRow[];
 }
@@ -104,30 +120,13 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         .some((v) => String(v).toLowerCase().includes(q));
     });
 
-    const map = new Map<string, DepositGroup>();
-    for (const row of rows) {
-      const settled = isBankDepositSettled(row);
-      const dayKey = bankDepositDayKey(row.cleared_at ?? row.submitted_at);
-      const key = `${settled ? "settled" : "pending"}:${dayKey}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          dayKey,
-          label: labelForDay(dayKey),
-          settled,
-          total: 0,
-          rows: [],
-        });
-      }
-      const g = map.get(key)!;
-      g.rows.push(row);
-      g.total = sumDepositAmounts(g.rows);
-    }
-
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.settled !== b.settled) return a.settled ? 1 : -1;
-      return b.key.localeCompare(a.key);
-    });
+    return groupDepositsBySubmissionDate(rows).map((g) => ({
+      key: g.dayKey,
+      dayKey: g.dayKey,
+      label: labelForDay(g.dayKey),
+      total: g.total,
+      rows: g.rows,
+    }));
   }, [data, searchQuery]);
 
   const visibleGroups = useMemo(() => {
@@ -145,9 +144,6 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
       return next;
     });
   }, [jumpDate, groups]);
-
-  const settledTotal = visibleGroups.filter((g) => g.settled).reduce((s, g) => s + g.total, 0);
-  const pendingTotal = visibleGroups.filter((g) => !g.settled).reduce((s, g) => s + g.total, 0);
 
   if (isLoading) {
     return (
@@ -196,32 +192,9 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         <TenantAutoApproveCard tenantId={tenantId} />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-              <Banknote className="h-3.5 w-3.5" /> Settled into your bank
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-2xl font-semibold tabular-nums">{fmtMoney(settledTotal)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5" /> In transit / not yet cleared
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-2xl font-semibold tabular-nums">{fmtMoney(pendingTotal)}</div>
-          </CardContent>
-        </Card>
-      </div>
-
       <p className="text-xs text-muted-foreground">
-        Each row below is one bank credit. Expand a day to see exactly which checks make up that amount.
-        Daily total equals the sum of the checks shown.
+        Checks are grouped by the date they were submitted for deposit. Later clearing status does not split a day.
+        These records are deposit submissions, not confirmed bank credits. Daily total equals the sum of the checks shown.
       </p>
 
       {visibleGroups.length === 0 && (
@@ -245,9 +218,6 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
               <div className="flex items-center gap-2 min-w-0">
                 {isOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                 <span className="font-medium truncate">{g.label}</span>
-                <Badge variant={g.settled ? "default" : "secondary"} className="text-[10px]">
-                  {g.settled ? "Settled" : "Pending"}
-                </Badge>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {g.rows.length} check{g.rows.length === 1 ? "" : "s"}
                 </span>
@@ -316,7 +286,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                       const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
                       const a = document.createElement("a");
                       a.href = url;
-                      a.download = `bank-deposit-${g.key.replace(":", "-")}.csv`;
+                      a.download = `bank-deposit-${g.dayKey}.csv`;
                       a.click();
                       URL.revokeObjectURL(url);
                     }}

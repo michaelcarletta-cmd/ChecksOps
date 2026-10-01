@@ -58,6 +58,8 @@ test('dedicated Plan/Usage settings tab is unchanged', () => {
   assert.match(usageTracker, /export function TenantUsageTracker/);
   assert.match(usageTracker, /get_tenant_check_usage/);
   assert.match(billingPanel, /export function TenantBillingAccountPanel/);
+  assert.match(billingPanel, /save-tenant-billing-account/);
+  assert.doesNotMatch(billingPanel, /writes_disabled/);
 });
 
 test('notification preference component and persistence remain available', () => {
