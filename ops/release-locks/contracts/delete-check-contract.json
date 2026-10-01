@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "recorded_at": "2026-09-26T00:00:00Z",
+  "environment": "production-prep",
+  "lambda": {
+    "function_name": "checksops-production-prep-api",
+    "accepted_code_sha256_base64": "Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM=",
+    "accepted_git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
+    "accepted_source": "staging-accepted workflow.mjs overlaid onto live production-prep package"
+  },
+  "staging_source": {
+    "function_name": "checksops-staging-api",
+    "accepted_code_sha256_base64": "U2veBoccUbthwAXZ8b1TiZFkmL6c41EASYxMmX4OZXQ="
+  },
+  "files": {
+    "workflow_mjs": {
+      "path": "aws/functions/api/workflow.mjs",
+      "sha256_hex": "46747e79d9de56c754fe5342631d749ae335cf053c6c05c0f8e053c6424e4f81"
+    },
+    "delete_check_bridge_ts": {
+      "path": "src/integrations/aws/deleteCheckBridge.ts"
+    }
+  },
+  "invariants": [
+    "admin_only",
+    "reason_min_3_trimmed",
+    "claim_linkage_not_blocker",
+    "partner_shared_blocked",
+    "terminal_financial_blocked",
+    "dependent_financial_provider_blocked",
+    "tenant_rls_isolation",
+    "non_financial_cleanup_allowed",
+    "s3_cleanup_after_db_delete",
+    "s3_cleanup_check_scoped_only",
+    "s3_other_check_untouched",
+    "storage_cleanup_failure_explicit",
+    "specific_refusal_codes",
+    "bridge_forwards_trimmed_reason"
+  ]
+}

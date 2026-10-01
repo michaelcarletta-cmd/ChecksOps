@@ -15,6 +15,48 @@
   },
   "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-27 (index-BPbQUNFr.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
+    "delete-check-contract": {
+      "id": "delete-check-contract",
+      "ownership_group": "delete-check-contract",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "production",
+      "source": {
+        "git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
+        "tree_hash": "9cbb0c039cc263c7fd535127d0088cc07400a2e51d2966774970bac1034c3a18",
+        "merged": false,
+        "merged_pr": 501
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "ops/release-locks/proof/delete-check-production-acceptance-2026-09-26.md"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
+        "artifact": null,
+        "notes": "Rollback is to the pre-overlay live production-prep package; see acceptance proof for provenance. Lambda version/alias rollback remains an operator-recorded artifact."
+      },
+      "missing_evidence": [
+        "candidate fingerprint schema does not yet record production-prep Lambda version and immutable artifact identity for Delete Check contract; contract is enforced via invariant tests + tree hash lock"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Accepted production contract: checksops-production-prep-api CodeSha256 Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM=. workflow.mjs content matches staging-accepted workflow.mjs overlaid onto the then-live production package. This lock prevents silent regression by requiring intentional tree_hash updates and invariant tests to pass."
+    },
     "identity-cognito": {
       "id": "identity-cognito",
       "ownership_group": "identity-cognito",
@@ -23,7 +65,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "cd6feb820a4accec582313f5f462f97656232be817a04b54c1a7b3a54d92abf0",
+        "tree_hash": "8929f6661d28e70ab5be17e124ee251fc398a6e4cd3517e6de4757f36d48014a",
         "merged": true,
         "merged_pr": null
       },
@@ -681,7 +723,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "aeff94e68383a05e088b9c1a66ce2afcfb0d26ffd5e6e137e94c77df34ad85ee",
+        "tree_hash": "19503007023530e41a0a19468e32c5e50f4d8f1db94dbfadbf1363f6e6194e33",
         "merged": true,
         "merged_pr": null
       },
