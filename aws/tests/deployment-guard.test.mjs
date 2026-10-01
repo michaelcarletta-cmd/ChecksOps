@@ -268,6 +268,59 @@ test('M. production requires explicit approval', () => {
   assert.equal(okProd.ok, true);
 });
 
+test('M2. production spa-promote preflight requires accepted_source_composition', () => {
+  const registry = loadContractRegistry(ROOT);
+  const contract_results = passingContractResults(registry);
+  const good = identity({
+    target_environment: 'production',
+    target_component: 'production-spa',
+    deployment_type: 'spa-promote',
+    owned_components: ['index.html'],
+    clean_build: true,
+    dist: { clean_build: true },
+    preflight: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-live.js' },
+    immediately_before: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-live.js' },
+    production_fingerprint: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-live.js' },
+    immediately_before_fingerprint: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-live.js' },
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    accepted_source_composition: true,
+    accepted_composition: true,
+    source_composition_manifest: { files: ['src/integrations/aws/client.ts'] },
+    frontend_workstreams: ['workstream-a'],
+    contract_results,
+  });
+
+  const ok = spawnSync(process.execPath, [
+    path.join(ROOT, 'scripts/deployment-guard/preflight.mjs'),
+    '--json',
+    JSON.stringify(good),
+  ], { encoding: 'utf8' });
+  assert.equal(ok.status, 0, ok.stderr || ok.stdout);
+  const parsed = JSON.parse(ok.stdout || '{}');
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.details?.production?.production_gate, 'allowed');
+
+  const badMissing = { ...good };
+  delete badMissing.accepted_source_composition;
+  const missing = spawnSync(process.execPath, [
+    path.join(ROOT, 'scripts/deployment-guard/preflight.mjs'),
+    '--json',
+    JSON.stringify(badMissing),
+  ], { encoding: 'utf8' });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /SOURCE_COMPOSITION_REQUIRED/);
+
+  const badFalse = { ...good, accepted_source_composition: false };
+  const rejected = spawnSync(process.execPath, [
+    path.join(ROOT, 'scripts/deployment-guard/preflight.mjs'),
+    '--json',
+    JSON.stringify(badFalse),
+  ], { encoding: 'utf8' });
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr, /SOURCE_COMPOSITION_REQUIRED/);
+});
+
 test('N. accepted-contract regression blocks deployment', () => {
   const registry = loadContractRegistry(ROOT);
   const disappeared = evaluateAcceptedContracts({
