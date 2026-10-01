@@ -2,9 +2,9 @@
  * Pure, testable Moov readiness logic.
  *
  * Naomi (Moov) confirmed the minimum bar for the ChecksOps disbursement use
- * case: the merchant account needs `send-funds` (ACH credit) enabled, and
- * `wallet` balance access — which Moov enables automatically once the account
- * is approved. On top of that ChecksOps requires:
+ * case: the merchant account needs `send-funds.ach` enabled, and
+ * `wallet.balance` — which Moov enables automatically once collect/send
+ * capabilities are approved. On top of that ChecksOps requires:
  *   - Terms of Service accepted (Moov-hosted onboarding OR the ToS Drop token)
  *   - a bank account that actually completed verification
  *   - no outstanding underwriting / identity requirements
@@ -236,7 +236,7 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     blocking.every((c) => c.state === "ready") ||
     // Wallet balance and same-day ACH are additive; don't block basic ACH sends on them.
     (blocking
-      .filter((c) => c.id !== "wallet_balance" && c.id !== "send_funds_ach_sameday")
+      .filter((c) => c.id !== "wallet_balance" && c.id !== "send_funds_ach_sameday" && c.id !== "collect_funds_ach")
       .every((c) => c.state === "ready"));
 
   const overall: ReadinessState = canMoveMoney
