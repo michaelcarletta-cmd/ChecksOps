@@ -590,6 +590,685 @@
       "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #448 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
       "expires": "2026-10-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 585,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #585 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 582,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #582 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 581,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #581 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 579,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #579 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 570,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #570 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #566 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #565 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 560,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #560 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 536,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #536 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #525 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #512 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #505 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 504,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #504 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 448,
+      "path": "ops/release-locks/",
+      "reason": "Delete Check regression reconciliation updates release-lock control-plane evidence; allow overlap while PR #448 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 581,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "Production SPA baseline pin drifted; reconcile requires updating production-spa baseline helper while PR #581 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 570,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "Production SPA baseline pin drifted; reconcile requires updating production-spa baseline helper while PR #570 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "Production SPA baseline pin drifted; reconcile requires updating production-spa baseline helper while PR #566 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "Production SPA baseline pin drifted; reconcile requires updating production-spa baseline helper while PR #565 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 459,
+      "path": "src/components/checks/AdminDeleteCheckButton.tsx",
+      "reason": "Delete Check regression fix preserves the admin Delete Check UI component; allow overlap while PR #459 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 453,
+      "path": "src/components/checks/AdminDeleteCheckButton.tsx",
+      "reason": "Delete Check regression fix preserves the admin Delete Check UI component; allow overlap while PR #453 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 449,
+      "path": "src/components/checks/AdminDeleteCheckButton.tsx",
+      "reason": "Delete Check regression fix preserves the admin Delete Check UI component; allow overlap while PR #449 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 592,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #592 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 588,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #588 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 585,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #585 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 582,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #582 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 577,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #577 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 572,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #572 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #566 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #565 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 532,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #532 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #525 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 514,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #514 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 513,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #513 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #512 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #505 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 503,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #503 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 502,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #502 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 500,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #500 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 498,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #498 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 497,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #497 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 485,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #485 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 478,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #478 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 468,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #468 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 459,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #459 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 453,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #453 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 449,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #449 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 430,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #430 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 429,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #429 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 411,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #411 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 410,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #410 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 364,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #364 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 347,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #347 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 316,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #316 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 312,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #312 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 310,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #310 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 309,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #309 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 283,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #283 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 282,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #282 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 257,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #257 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 254,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #254 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 237,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #237 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 234,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #234 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 229,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #229 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 226,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #226 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 222,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "Delete Check regression fix requires patching the runtime AWS dispatcher in client.ts; allow overlap while PR #222 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 585,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #585 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #525 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #512 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #505 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 503,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #503 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 502,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #502 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 500,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #500 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 498,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #498 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 497,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #497 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 485,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #485 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 478,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #478 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 468,
+      "path": "src/integrations/aws/deleteCheckBridge.ts",
+      "reason": "Delete Check regression fix updates the shared delete-check body builder; allow overlap while PR #468 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #566 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #565 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #525 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #512 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #505 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 503,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #503 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 502,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #502 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 500,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #500 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 498,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #498 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 497,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #497 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 493,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #493 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 485,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #485 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 468,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #468 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 467,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #467 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 459,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #459 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 453,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #453 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 449,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #449 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 438,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #438 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 432,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #432 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 428,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Delete Check regression fix reroutes queue-row delete to the admin Delete Check RPC; allow overlap while PR #428 remains open. Other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
