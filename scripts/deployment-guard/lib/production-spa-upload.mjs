@@ -8,7 +8,6 @@ import { validateReceipt } from './receipt.mjs';
 import { lookupSharedBucket, lookupSharedCloudFront } from './shared-targets.mjs';
 import { evaluateIndexToctou } from './spa-promote.mjs';
 import { CODES, errorEntry, fail, failMany, ok } from './errors.mjs';
-import { consumeReceiptOnce } from './consumed-receipts.mjs';
 
 function sha256Text(text) {
   return createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
@@ -135,6 +134,7 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   const guardRoot = ctx.guardRoot;
   const target = ctx.target;
   const aws = ctx.aws;
+  const receiptRegistry = ctx.receiptRegistry || ctx.receipt_registry || null;
   const fetchImpl = ctx.fetchImpl;
   const now = ctx.now || Date.now();
 
@@ -183,6 +183,9 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
 
   if (!aws?.readIndexHtml || !aws?.putObject || !aws?.createInvalidation) {
     return fail(CODES.INVALID_MANIFEST, 'applyProductionSpaUpload requires aws adapter with readIndexHtml/putObject/createInvalidation');
+  }
+  if (!receiptRegistry?.consumeOnce || typeof receiptRegistry.consumeOnce !== 'function') {
+    return fail(CODES.INVALID_MANIFEST, 'applyProductionSpaUpload requires a shared receiptRegistry.consumeOnce implementation');
   }
 
   // Validate the receipt/lease first (fail closed before any AWS call).
@@ -261,14 +264,6 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     return fail(error.code || CODES.DEPLOYMENT_GUARD_REQUIRED, error.message, error.details || {});
   }
 
-  // Enforce single-use receipt only after all pre-write validation passes.
-  const consumed = consumeReceiptOnce(guardRoot, authorized.details.receipt, {
-    now,
-    actor: input.operator || env.USER || null,
-    script: ctx.script || null,
-  });
-  if (!consumed.ok) return consumed;
-
   // Re-read immediately before the first write; abort on any drift.
   const immediatelyBeforeWrite = await aws.readIndexHtml({ bucket: target.s3_bucket, key: 'index.html' });
   if (!immediatelyBeforeWrite?.ok) {
@@ -279,6 +274,16 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     immediatelyBefore: immediatelyBeforeWrite.details.fingerprint,
   });
   if (!beforeWriteToctou.ok) return beforeWriteToctou;
+
+  // Enforce shared single-use receipt consumption (across independent worktrees).
+  const consumed = await receiptRegistry.consumeOnce({
+    receipt: authorized.details.receipt,
+    target,
+    now,
+    actor: operator || env.USER || null,
+    script: ctx.script || null,
+  });
+  if (!consumed?.ok) return consumed || fail(CODES.DEPLOYMENT_COLLISION, 'receipt consumption registry failed closed');
 
   // Upload assets first (non-index.html) with per-object put.
   const uploads = [];
@@ -360,7 +365,7 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     receipt: {
       file: authorized.details.receipt_file || null,
       mac: authorized.details.receipt.mac,
-      consumed_marker: consumed.details.file,
+      consumed_marker: consumed.details,
     },
     workstream_id,
     commit,

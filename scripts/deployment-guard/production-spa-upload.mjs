@@ -20,6 +20,7 @@ import { CODES, fail, ok } from './lib/errors.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
 import { enforceScriptGuard, resolveGuardRoot } from './require-guard.mjs';
 import { applyProductionSpaUpload, defaultScriptName } from './lib/production-spa-upload.mjs';
+import { createS3ConsumedReceiptRegistry } from './lib/shared-consumed-receipts.mjs';
 
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
@@ -154,6 +155,10 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     }));
   }
   const aws = createAwsAdapter(env);
+  const receiptRegistry = createS3ConsumedReceiptRegistry({
+    bucket: target.s3_bucket,
+    region: REGION,
+  });
   const fetchImpl = globalThis.fetch ? globalThis.fetch.bind(globalThis) : null;
   if (!fetchImpl) {
     return printResult(fail(CODES.INVALID_MANIFEST, 'Node.js fetch() is unavailable; cannot perform required post-deploy HTTPS verification'));
@@ -163,6 +168,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     guardRoot,
     target,
     aws,
+    receiptRegistry,
     fetchImpl,
     script: defaultScriptName(import.meta.url),
   });

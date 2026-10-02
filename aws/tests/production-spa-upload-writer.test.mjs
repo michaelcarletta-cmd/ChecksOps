@@ -80,6 +80,25 @@ function okResult(details) {
   return { ok: true, code: null, message: null, details, errors: [] };
 }
 
+function createSharedReceiptRegistry() {
+  const consumed = new Set();
+  const calls = [];
+  return {
+    kind: 'in-memory-consumed-receipts',
+    calls,
+    consumed,
+    async consumeOnce({ receipt, target }) {
+      calls.push({ mac: receipt?.mac || null, target: target?.id || null });
+      const mac = String(receipt?.mac || '').trim();
+      if (consumed.has(mac)) {
+        return { ok: false, code: CODES.RECEIPT_REUSED, message: 'already consumed', details: { mac }, errors: [{ code: CODES.RECEIPT_REUSED, message: 'already consumed', details: { mac } }] };
+      }
+      consumed.add(mac);
+      return okResult({ consumed: true, mac, registry: 'memory' });
+    },
+  };
+}
+
 function createFakeAws({ liveBefore, liveBeforeIndex = '<html></html>' } = {}) {
   const calls = [];
   let current = { ...liveBefore };
@@ -160,6 +179,7 @@ test('production SPA writer: happy-path upload order, drift checks, and post-ver
 
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -181,6 +201,7 @@ test('production SPA writer: happy-path upload order, drift checks, and post-ver
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
     script: 'test',
@@ -202,6 +223,7 @@ test('production SPA writer: missing receipt fails closed', async () => {
   const aws = createFakeAws({ liveBefore: { index_html_sha256: 'x', entry_bundle: '/assets/index-x.js' } });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -220,6 +242,7 @@ test('production SPA writer: missing receipt fails closed', async () => {
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(path.join(root, 'dist')),
     now: NOW,
   });
@@ -236,6 +259,7 @@ test('production SPA writer: expired receipt is rejected', async () => {
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -255,6 +279,7 @@ test('production SPA writer: expired receipt is rejected', async () => {
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW + 5000,
   });
@@ -271,6 +296,7 @@ test('production SPA writer: wrong workstream is RECEIPT_MISMATCH', async () => 
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-b',
@@ -290,6 +316,7 @@ test('production SPA writer: wrong workstream is RECEIPT_MISMATCH', async () => 
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -307,6 +334,7 @@ test('production SPA writer: lost lease is fail-closed', async () => {
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -326,6 +354,7 @@ test('production SPA writer: lost lease is fail-closed', async () => {
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -350,6 +379,7 @@ test('production SPA writer: production changed between asset upload and index s
   };
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -369,6 +399,7 @@ test('production SPA writer: production changed between asset upload and index s
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -386,6 +417,7 @@ test('production SPA writer: production drift before first write => DEPLOYMENT_C
 
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
     commit: SHA,
@@ -404,6 +436,7 @@ test('production SPA writer: production drift before first write => DEPLOYMENT_C
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -424,6 +457,7 @@ test('production SPA writer: malformed/dist missing entry bundle => STALE_PACKAG
 
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -443,6 +477,7 @@ test('production SPA writer: malformed/dist missing entry bundle => STALE_PACKAG
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -458,6 +493,7 @@ test('production SPA writer: wrong environment or bucket is rejected', async () 
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const wrongEnv = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -477,6 +513,7 @@ test('production SPA writer: wrong environment or bucket is rejected', async () 
     guardRoot: root,
     target: { ...TARGET, environment: 'staging' },
     aws: createFakeAws({ liveBefore }),
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -501,6 +538,7 @@ test('production SPA writer: wrong environment or bucket is rejected', async () 
     guardRoot: root,
     target: { ...TARGET, s3_bucket: 'unregistered-bucket' },
     aws: createFakeAws({ liveBefore }),
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -516,6 +554,7 @@ test('production SPA writer: destructive deployment mode is rejected', async () 
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -535,6 +574,7 @@ test('production SPA writer: destructive deployment mode is rejected', async () 
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -551,6 +591,7 @@ test('production SPA writer: missing staging acceptance fails production gate', 
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -569,6 +610,7 @@ test('production SPA writer: missing staging acceptance fails production gate', 
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -585,6 +627,7 @@ test('production SPA writer: missing production approval fails production gate',
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -603,6 +646,7 @@ test('production SPA writer: missing production approval fails production gate',
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -619,6 +663,7 @@ test('production SPA writer: missing accepted_source_composition fails closed', 
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -637,6 +682,7 @@ test('production SPA writer: missing accepted_source_composition fails closed', 
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -654,6 +700,7 @@ test('production SPA writer: failing accepted contract blocks deployment', async
 
   const registry = loadContractRegistry(root);
   const contract_results = { ...passingContractResults(registry), 'tenant-isolation': { ok: false } };
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -673,6 +720,7 @@ test('production SPA writer: failing accepted contract blocks deployment', async
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -700,6 +748,7 @@ test('production SPA writer: post-deploy verification mismatch fails without rol
 
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const result = await applyProductionSpaUpload({
     workstream_id: 'workstream-a',
@@ -719,6 +768,7 @@ test('production SPA writer: post-deploy verification mismatch fails without rol
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir, { overrideIndexHtml: '<html>WRONG</html>' }),
     now: NOW,
   });
@@ -734,6 +784,7 @@ test('production SPA writer: receipt reuse is blocked (single-use)', async () =>
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
+  const receiptRegistry = createSharedReceiptRegistry();
 
   const makeCall = async () => {
     const aws = createFakeAws({ liveBefore });
@@ -756,6 +807,7 @@ test('production SPA writer: receipt reuse is blocked (single-use)', async () =>
     guardRoot: root,
     target: TARGET,
     aws,
+    receiptRegistry,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
@@ -766,5 +818,205 @@ test('production SPA writer: receipt reuse is blocked (single-use)', async () =>
   const second = await makeCall();
   assert.equal(second.ok, false);
   assert.equal(second.code, CODES.RECEIPT_REUSED);
+});
+
+test('production SPA writer: same receipt consumed across independent guard roots', async () => {
+  const rootA = tmpRootWithOps();
+  const rootB = tmpRootWithOps();
+  const distA = writeDist(rootA);
+  const distB = writeDist(rootB);
+  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const issued = issueSpaReceipt(rootA, { fingerprint: liveBefore });
+
+  // Copy issuer key + lease so rootB can validate the signed receipt.
+  fs.mkdirSync(path.join(rootB, '.deployment-guard'), { recursive: true });
+  fs.copyFileSync(
+    path.join(rootA, '.deployment-guard/issuer.key'),
+    path.join(rootB, '.deployment-guard/issuer.key'),
+  );
+  fs.mkdirSync(path.join(rootB, '.deployment-guard/leases'), { recursive: true });
+  fs.copyFileSync(
+    path.join(rootA, '.deployment-guard/leases/production::production-spa.json'),
+    path.join(rootB, '.deployment-guard/leases/production::production-spa.json'),
+  );
+
+  const contract_results_a = passingContractResults(loadContractRegistry(rootA));
+  const contract_results_b = passingContractResults(loadContractRegistry(rootB));
+  const receiptRegistry = createSharedReceiptRegistry();
+
+  const first = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distA,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results: contract_results_a,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: rootA,
+    target: TARGET,
+    aws: (() => {
+      const aws = createFakeAws({ liveBefore });
+      aws.setAfterIndexHtml(fs.readFileSync(path.join(distA, 'index.html'), 'utf8'));
+      return aws;
+    })(),
+    receiptRegistry,
+    fetchImpl: fetchFromDist(distA),
+    now: NOW,
+  });
+  assert.equal(first.ok, true, JSON.stringify(first, null, 2));
+
+  const secondAws = createFakeAws({ liveBefore });
+  secondAws.setAfterIndexHtml(fs.readFileSync(path.join(distB, 'index.html'), 'utf8'));
+  const second = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distB,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results: contract_results_b,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: rootB,
+    target: TARGET,
+    aws: secondAws,
+    receiptRegistry,
+    fetchImpl: fetchFromDist(distB),
+    now: NOW,
+  });
+  assert.equal(second.ok, false);
+  assert.equal(second.code, CODES.RECEIPT_REUSED);
+  assert.equal(secondAws.calls.filter((c) => c.method === 'putObject').length, 0);
+});
+
+test('production SPA writer: simultaneous consumption attempts -> exactly one succeeds', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root);
+  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const contract_results = passingContractResults(loadContractRegistry(root));
+  const receiptRegistry = createSharedReceiptRegistry();
+
+  const makeCall = () => {
+    const aws = createFakeAws({ liveBefore });
+    aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
+    const p = applyProductionSpaUpload({
+      workstream_id: 'workstream-a',
+      commit: SHA,
+      deployment_type: 'spa-promote',
+      receipt: issued.receipt,
+      dist_dir: distDir,
+      deploy_mode: 'per_object_put',
+      accepted_source_composition: true,
+      source_composition_manifest: { files: ['src/App.tsx'] },
+      frontend_workstreams: ['workstream-a'],
+      staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+      approval: { approved: true, workstream_id: 'workstream-a' },
+      contract_results,
+    }, {
+      env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+      guardRoot: root,
+      target: TARGET,
+      aws,
+      receiptRegistry,
+      fetchImpl: fetchFromDist(distDir),
+      now: NOW,
+    });
+    return { p, aws };
+  };
+
+  const a = makeCall();
+  const b = makeCall();
+  const settled = await Promise.allSettled([a.p, b.p]);
+  const oks = settled.filter((r) => r.status === 'fulfilled' && r.value?.ok === true);
+  const reuses = settled.filter((r) => r.status === 'fulfilled' && r.value?.code === CODES.RECEIPT_REUSED);
+  assert.equal(oks.length, 1, JSON.stringify(settled, null, 2));
+  assert.equal(reuses.length, 1, JSON.stringify(settled, null, 2));
+});
+
+test('production SPA writer: different receipts are independent', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root);
+  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const r1 = issueSpaReceipt(root, { fingerprint: liveBefore, now: NOW });
+  const r2 = issueSpaReceipt(root, { fingerprint: liveBefore, now: NOW + 1000 });
+  const contract_results = passingContractResults(loadContractRegistry(root));
+  const receiptRegistry = createSharedReceiptRegistry();
+
+  for (const issued of [r1, r2]) {
+    const aws = createFakeAws({ liveBefore });
+    aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
+    const result = await applyProductionSpaUpload({
+      workstream_id: 'workstream-a',
+      commit: SHA,
+      deployment_type: 'spa-promote',
+      receipt: issued.receipt,
+      dist_dir: distDir,
+      deploy_mode: 'per_object_put',
+      accepted_source_composition: true,
+      source_composition_manifest: { files: ['src/App.tsx'] },
+      frontend_workstreams: ['workstream-a'],
+      staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+      approval: { approved: true, workstream_id: 'workstream-a' },
+      contract_results,
+    }, {
+      env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+      guardRoot: root,
+      target: TARGET,
+      aws,
+      receiptRegistry,
+      fetchImpl: fetchFromDist(distDir),
+      now: NOW,
+    });
+    assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+  }
+});
+
+test('production SPA writer: invalid receipts do not get recorded as consumed', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root);
+  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore, ttlMs: 1000, now: NOW });
+  const contract_results = passingContractResults(loadContractRegistry(root));
+  const receiptRegistry = createSharedReceiptRegistry();
+  const aws = createFakeAws({ liveBefore });
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry,
+    fetchImpl: fetchFromDist(distDir),
+    now: NOW + 5000,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.RECEIPT_EXPIRED);
+  assert.equal(receiptRegistry.calls.length, 0);
 });
 
