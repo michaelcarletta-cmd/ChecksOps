@@ -79,6 +79,18 @@ export function extractPinnedFunctionSql(sqlText, name) {
   return match ? match[0] : null;
 }
 
+export function canonicalizeFunctionDef(text) {
+  let sql = String(text || '').replace(/\r\n/g, '\n').trim();
+  if (sql.endsWith(';')) sql = sql.slice(0, -1).trimEnd();
+  const match = sql.match(/^([\s\S]*?)\nAS\s+(\$[A-Za-z0-9_]*\$)([\s\S]*)\2\s*$/i);
+  if (!match) return sql;
+  const header = match[1].replace(
+    /\n[ \t]*((?:RETURNS|LANGUAGE|STABLE|IMMUTABLE|VOLATILE|SECURITY|SET)\b)/gi,
+    '\n $1',
+  );
+  return `${header}\nAS $function$${match[3]}$function$`;
+}
+
 export function hashTenantPermissionLiveDefs(defs = {}) {
   return hashSqlDefinition(JSON.stringify({
     user_can_move_tenant_checks: defs.user_can_move_tenant_checks || null,
@@ -91,8 +103,10 @@ export function tenantPermissionDefsAreExact(live, sourceText) {
   const intendedOverride = extractPinnedFunctionSql(sourceText, 'admin_override_check_status');
   if (!intendedMove || !intendedOverride) return false;
   if (!live?.user_can_move_tenant_checks || !live?.admin_override_check_status) return false;
-  return hashSqlDefinition(live.user_can_move_tenant_checks) === hashSqlDefinition(intendedMove)
-    && hashSqlDefinition(live.admin_override_check_status) === hashSqlDefinition(intendedOverride);
+  return hashSqlDefinition(canonicalizeFunctionDef(live.user_can_move_tenant_checks))
+    === hashSqlDefinition(canonicalizeFunctionDef(intendedMove))
+    && hashSqlDefinition(canonicalizeFunctionDef(live.admin_override_check_status))
+    === hashSqlDefinition(canonicalizeFunctionDef(intendedOverride));
 }
 
 export function tenantPermissionMarkersMatch(live = {}) {
@@ -115,8 +129,8 @@ export function loadPredecessorOverrideSql(sqlFile) {
 export function isExactKnownPredecessor(live = {}, predecessorOverrideSql = '') {
   if (live?.user_can_move_tenant_checks) return false;
   if (!live?.admin_override_check_status || !predecessorOverrideSql) return false;
-  return hashSqlDefinition(live.admin_override_check_status)
-    === hashSqlDefinition(predecessorOverrideSql);
+  return hashSqlDefinition(canonicalizeFunctionDef(live.admin_override_check_status))
+    === hashSqlDefinition(canonicalizeFunctionDef(predecessorOverrideSql));
 }
 
 function readEmbeddedSql(sqlFile = SQL_FILE, authorizedSha = AUTHORIZED_SQL44.source_sha256) {
@@ -188,7 +202,7 @@ async function readFunctionDef(client, identity) {
     FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
-      AND p.oid = $1::regprocedure
+      AND p.oid = to_regprocedure($1)
   `, [identity]);
   return rows.rows[0]?.def || null;
 }

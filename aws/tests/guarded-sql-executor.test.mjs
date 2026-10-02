@@ -96,6 +96,9 @@ function mockConnect({
       }
       if (text.includes('current_database')) return { rows: [{ d: 'checksops' }] };
       if (text.includes('pg_get_functiondef')) {
+        if (text.includes('::regprocedure') && !text.includes('to_regprocedure')) {
+          throw new Error(`function ${params?.[0]} does not exist`);
+        }
         if (String(params?.[0] || '').includes('claim_ledger')) {
           return { rows: [{ def: applied ? afterDef : beforeDef }] };
         }
@@ -235,6 +238,19 @@ const PREDECESSOR_SQL_TEXT = fs.readFileSync(PREDECESSOR_SQL, 'utf8');
 const PINNED_MOVE = extractPinnedFunctionSql(TENANT_SQL_TEXT, 'user_can_move_tenant_checks');
 const PINNED_OVERRIDE = extractPinnedFunctionSql(TENANT_SQL_TEXT, 'admin_override_check_status');
 const PREDECESSOR_OVERRIDE = extractPinnedFunctionSql(PREDECESSOR_SQL_TEXT, 'admin_override_check_status');
+const CATALOG_MOVE = `CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks(_user_id uuid, _tenant_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT
+    public.has_role(_user_id, 'admin'::app_role)
+    OR public.user_belongs_to_tenant(_user_id, _tenant_id)
+$function$`;
+const CATALOG_OVERRIDE = PINNED_OVERRIDE.replace(/;\s*$/, '');
+const CATALOG_PREDECESSOR = PREDECESSOR_OVERRIDE.replace(/;\s*$/, '');
 const MARKER_SIMILAR_MOVE = `CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks(p_check_id uuid, p_user_id uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -303,13 +319,16 @@ function mockTenantConnect({
         return { rows: [] };
       }
       if (text.includes('pg_get_functiondef')) {
+        if (text.includes('::regprocedure') && !text.includes('to_regprocedure')) {
+          throw new Error(`function ${params?.[0]} does not exist`);
+        }
         const ident = String(params?.[0] || '');
         if (ident.includes('user_can_move_tenant_checks')) {
-          const def = applied ? PINNED_MOVE : moveDef;
+          const def = applied ? CATALOG_MOVE : moveDef;
           return { rows: def ? [{ def }] : [] };
         }
         if (ident.includes('admin_override_check_status')) {
-          const def = applied ? PINNED_OVERRIDE : overrideDef;
+          const def = applied ? CATALOG_OVERRIDE : overrideDef;
           return { rows: def ? [{ def }] : [] };
         }
         return { rows: [] };
@@ -347,10 +366,13 @@ test('#601 absent definitions are eligible to apply from the pinned file', async
 
 test('#601 exact existing definition is idempotent and does not rewrite', async () => {
   const live = {
-    user_can_move_tenant_checks: PINNED_MOVE,
-    admin_override_check_status: PINNED_OVERRIDE,
+    user_can_move_tenant_checks: CATALOG_MOVE,
+    admin_override_check_status: CATALOG_OVERRIDE,
   };
-  const connect = mockTenantConnect({ moveDef: PINNED_MOVE, overrideDef: PINNED_OVERRIDE });
+  assert.notEqual(hashSqlDefinition(PINNED_MOVE), hashSqlDefinition(CATALOG_MOVE));
+  assert.notEqual(hashSqlDefinition(PINNED_OVERRIDE), hashSqlDefinition(CATALOG_OVERRIDE));
+  assert.equal(tenantPermissionDefsAreExact(live, TENANT_SQL_TEXT), true);
+  const connect = mockTenantConnect({ moveDef: CATALOG_MOVE, overrideDef: CATALOG_OVERRIDE });
   const handler = tenantHandler(connect);
   const result = await handler(tenantAuthEvent({ liveDefs: live }));
   assert.equal(result.ok, true, result.message);
@@ -414,13 +436,14 @@ test('#601 exact known predecessor 20261001193100 is eligible to apply', async (
   assert.ok(PREDECESSOR_OVERRIDE);
   const live = {
     user_can_move_tenant_checks: null,
-    admin_override_check_status: PREDECESSOR_OVERRIDE,
+    admin_override_check_status: CATALOG_PREDECESSOR,
   };
+  assert.notEqual(hashSqlDefinition(PREDECESSOR_OVERRIDE), hashSqlDefinition(CATALOG_PREDECESSOR));
   assert.equal(isExactKnownPredecessor(live, PREDECESSOR_OVERRIDE), true);
   assert.equal(tenantPermissionDefsAreExact(live, TENANT_SQL_TEXT), false);
   const connect = mockTenantConnect({
     moveDef: null,
-    overrideDef: PREDECESSOR_OVERRIDE,
+    overrideDef: CATALOG_PREDECESSOR,
   });
   const handler = tenantHandler(connect);
   const result = await handler(tenantAuthEvent({ liveDefs: live }));

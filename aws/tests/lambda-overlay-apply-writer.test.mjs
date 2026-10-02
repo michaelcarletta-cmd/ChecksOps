@@ -143,10 +143,11 @@ function createMockAws(state, hooks = {}) {
             state.zip = Buffer.from(command.input.ZipFile);
             state.codeSha256 = sha256(state.zip);
             state.revisionId = 'rev-2';
+            if (hooks.afterUpdateStatus) state.lastUpdateStatus = hooks.afterUpdateStatus;
             return {
               CodeSha256: state.codeSha256,
               RevisionId: state.revisionId,
-              LastUpdateStatus: 'Successful',
+              LastUpdateStatus: state.lastUpdateStatus,
             };
           }
           throw new Error(`unexpected ${command.operation}`);
@@ -657,6 +658,27 @@ function zipWithDuplicateMember() {
   eocdBuf.writeUInt32LE(cdSize + firstCd.length, 12);
   return Buffer.concat([base.subarray(0, cdOffset + cdSize), firstCd, eocdBuf]);
 }
+
+test('InProgress LastUpdateStatus does not pass wait and fails closed after consume', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root);
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state, { afterUpdateStatus: 'InProgress' });
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+    waitAttempts: 3,
+    waitDelayMs: 0,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /did not complete/);
+  assert.equal(state.updates.length, 1);
+  assert.equal(receiptConsumed(root, issued.receipt), true);
+});
 
 test('duplicate live ZIP member names fail closed before overlay/rebuild', async () => {
   const root = tmpRootWithOps();

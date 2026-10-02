@@ -139,21 +139,27 @@ export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
   return ok({ path: fileReal });
 }
 
-async function waitForFunctionUpdated(aws, functionName, { attempts = 20, delayMs = 0 } = {}) {
+async function waitForFunctionUpdated(aws, functionName, { attempts = 20, delayMs = 1500 } = {}) {
   let last = null;
   for (let i = 0; i < attempts; i += 1) {
     last = await aws.getFunctionConfiguration({ functionName });
     if (!last?.ok) return last || fail(CODES.DEPLOYMENT_COLLISION, 'failed to read Lambda configuration after update');
     const status = last.details.lastUpdateStatus || last.details.configuration?.LastUpdateStatus || last.details.LastUpdateStatus;
-    if (!status || status === 'Successful') return last;
+    if (status === 'Successful') return last;
     if (status === 'Failed') {
       return fail(CODES.DEPLOYMENT_COLLISION, 'Lambda update failed; stopping without restore', {
         lastUpdateStatus: status,
       });
     }
-    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (i < attempts - 1 && delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  return last || fail(CODES.DEPLOYMENT_COLLISION, 'Lambda update did not complete');
+  const status = last?.details?.lastUpdateStatus
+    || last?.details?.configuration?.LastUpdateStatus
+    || last?.details?.LastUpdateStatus
+    || null;
+  return fail(CODES.DEPLOYMENT_COLLISION, 'Lambda update did not complete', {
+    lastUpdateStatus: status,
+  });
 }
 
 export async function applyLambdaOverlay(input = {}, ctx = {}) {
@@ -381,7 +387,7 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
 
   const afterCfg = await waitForFunctionUpdated(aws, functionName, {
     attempts: ctx.waitAttempts || 20,
-    delayMs: ctx.waitDelayMs || 0,
+    delayMs: ctx.waitDelayMs ?? 1500,
   });
   if (!afterCfg?.ok) return afterCfg;
 
