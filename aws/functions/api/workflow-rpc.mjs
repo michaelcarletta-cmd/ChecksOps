@@ -302,6 +302,12 @@ const executeAcceptMortgage = async ({ client, mapping, args }) => {
     [requestId, mapping.application_user_id],
   )).rows;
   if (!rows.length) return { error: 'already_taken', message: 'already_taken' };
+  try {
+    const { accrueMortgageOpsAcceptedRequest } = await import('./mortgage-ops-usage.mjs');
+    await accrueMortgageOpsAcceptedRequest(client, { request: rows[0], persist: true });
+  } catch {
+    // Accept must succeed even if usage accrual is retried later by the DB trigger.
+  }
   return { data: rows[0] };
 };
 
