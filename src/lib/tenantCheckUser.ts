@@ -1,6 +1,6 @@
-/** Company people who may move checks. Outsiders (client, contractor,
- *  mortgage agent, read-only) stay out unless they also have a tenant_users
- *  row. Platform admin can still act across tenants.
+/** A company user may move checks. Role titles are ignored.
+ *  Outsiders (client, contractor, and anyone not on the tenant) stay out.
+ *  Platform admin can still act across tenants.
  */
 export function canMoveTenantChecks(input: {
   systemRoles?: Iterable<string | null | undefined> | null;

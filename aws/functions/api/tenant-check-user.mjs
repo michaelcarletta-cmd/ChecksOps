@@ -1,4 +1,6 @@
-/** Company tenant users may move checks. Platform admin still can too. */
+/** A company user may move checks. Role titles are ignored.
+ *  Platform admin can still act across tenants.
+ */
 export function canMoveTenantChecks({ roles, isTenantMember } = {}) {
   const set = roles instanceof Set
     ? roles
