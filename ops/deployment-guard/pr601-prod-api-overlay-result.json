@@ -1,0 +1,80 @@
+{
+  "workstream_id": "pr601-prod-api-overlay-a2a4",
+  "branch": "cursor/pr601-prod-api-overlay-a2a4",
+  "commit": "5ee536f162947f4af863aaaff6eb2cf47bb09ec5",
+  "final_601_status": "API overlay already live with exact three-member delta; this workstream did not write Lambda. SQL functions EXACT to pinned source. Legitimate Freedom movement is 503 on live overlay because claim_checks.check_stage is enum and the reconciled AWS bridge assigns text.",
+  "lambda_write": {
+    "attempted": false,
+    "stopped": true,
+    "reason": "live CodeSha256/RevisionId drifted from expected authority before lease/receipt"
+  },
+  "before": {
+    "codeSha256": "kqXCfyf3PVmKxV4ncmLgWKH/A6iwbi/IgsOgFTbIedQ=",
+    "revisionId": "1f5bb42a-047d-4bd2-80f4-1ec11c97c2c6",
+    "lastModified": "2026-10-02T17:10:27.000+0000",
+    "zip_sha256": "92a5c27f27f73d598ac55e277262e058a1ff03a8b06e2fc882c3a01536c879d4",
+    "workflow_rpc_sha256": "2656cdeea19ae57265ca4cb035bd7e88bc55f8e2bc05daf690092a905f5a8f49"
+  },
+  "after": {
+    "codeSha256": "99pRyM/t6zqXMz8ePhNlcYMjxUazGaXHcEek/DyZ93Q=",
+    "revisionId": "8fcb8a47-d750-473e-a155-2935a247f5fa",
+    "lastModified": "2026-10-02T18:56:39.000+0000",
+    "zip_sha256": "f7da51c8cfedeb3a97333f1e3e1365718323c546b319a5c77047a4fc3c99f774",
+    "workflow_rpc_sha256": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "tenant_check_user_mjs": "43232e75394bfc649de90f2a1c6ed598134b9f2a04ed6080f05e4c570955a931",
+    "admin_override_check_status_mjs": "6adb59a07584c5a45f97d900a4ee89045187958faee20eeafc184ac82323506e"
+  },
+  "member_delta": {
+    "added": ["admin-override-check-status.mjs", "tenant-check-user.mjs"],
+    "changed": ["workflow-rpc.mjs"],
+    "deleted": [],
+    "identical_count": 6474
+  },
+  "sql": {
+    "source_sha256": "573ec6a0178d04a041e053aeb724560950b504d162b6f113563bec5108a0e518",
+    "both_exact": true,
+    "user_can_move_tenant_checks": {
+      "identity": "public.user_can_move_tenant_checks(uuid,uuid)",
+      "exact": true,
+      "live_definition_sha256": "6117128f04865fbd2dfd758bec1ecbc7f283e1fe047651d5f3b84521e61d3fe2"
+    },
+    "admin_override_check_status": {
+      "identity": "public.admin_override_check_status(uuid,text,uuid)",
+      "exact": true,
+      "live_definition_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+    },
+    "expected_pair_fingerprint": "4138ead09bc27ebeeaf5e902f8685d945165d65501bd3fb90b1bcce168db2802",
+    "computed_hex_concat_pair": "290d44b98a15a6683089aa6db480c3cee7bf83020321bc9204bc8aa7858e3272",
+    "provided_pair_reproduced": false,
+    "mutated": false
+  },
+  "acceptance": {
+    "role_neutral_contracts": { "tests": 14, "fail": 0, "ok": true },
+    "freedom_movement": {
+      "ok": false,
+      "check_id": "00062a57-13b5-493d-a996-cf6e72d5cc89",
+      "from": "endorsements_in_progress",
+      "status_unchanged": true,
+      "audit_created": false,
+      "error": "data_query_failed",
+      "message": "column \"check_stage\" is of type check_stage but expression is of type text"
+    },
+    "outsider_override_denied": true,
+    "deposited_destination_denied": true,
+    "deposited_destination_error": "rpc_financial_disabled",
+    "generic_status_write_blocked": true,
+    "claim_ledger_generic_write_blocked": true,
+    "claim_ledger_cross_tenant_blocked": true,
+    "delete_check_admin_only": true,
+    "delete_check_requires_reason": true,
+    "signatures_consent_required": true,
+    "ocr_rpc_disabled": true,
+    "moov_wallet_writes_blocked": true,
+    "freedom_cannot_list_c1c_only_checks": true,
+    "c1c_can_list_shared_freedom_checks": true
+  },
+  "spa_write": false,
+  "sql_write": false,
+  "grant_revoke": false,
+  "cognito_iam_env_changes": false
+}
