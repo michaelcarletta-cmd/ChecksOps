@@ -64,6 +64,16 @@ CREATE OR REPLACE FUNCTION public.user_belongs_to_tenant(_user_id uuid, _tenant_
 RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 `;
 
+const THROWAY_DATABASE = 'repro';
+
+function databaseFromConnectionString(url) {
+  try {
+    return decodeURIComponent(new URL(url).pathname.replace(/^\/+/, '').split('/')[0] || '');
+  } catch {
+    return '';
+  }
+}
+
 function pgConfig() {
   if (process.env.CHECKSOPS_TEST_DATABASE_URL) {
     return { connectionString: process.env.CHECKSOPS_TEST_DATABASE_URL };
@@ -73,7 +83,7 @@ function pgConfig() {
     port: Number(process.env.PGPORT || 5432),
     user: process.env.PGUSER || 'repro',
     password: process.env.PGPASSWORD || 'repro',
-    database: process.env.PGDATABASE || 'repro',
+    database: THROWAY_DATABASE,
   };
 }
 
@@ -85,11 +95,31 @@ async function connectOrSkip(t) {
     t.skip('pg module is not installed');
     return null;
   }
+  if (process.env.CHECKSOPS_TEST_DATABASE_URL) {
+    const named = databaseFromConnectionString(process.env.CHECKSOPS_TEST_DATABASE_URL);
+    if (named !== THROWAY_DATABASE) {
+      t.skip(`refusing to drop public on non-throwaway database ${named || '(unknown)'}; expected ${THROWAY_DATABASE}`);
+      return null;
+    }
+  }
   const client = new pg.Client(pgConfig());
   try {
     await client.connect();
+  } catch (error) {
+    t.skip(`PostgreSQL is not available for create→inspect: ${error.message}`);
+    return null;
+  }
+  try {
+    const { rows } = await client.query('SELECT current_database() AS d');
+    const database = rows[0]?.d;
+    if (database !== THROWAY_DATABASE) {
+      await client.end();
+      t.skip(`refusing to drop public on non-throwaway database ${database}; expected ${THROWAY_DATABASE}`);
+      return null;
+    }
     return client;
   } catch (error) {
+    await client.end().catch(() => {});
     t.skip(`PostgreSQL is not available for create→inspect: ${error.message}`);
     return null;
   }
