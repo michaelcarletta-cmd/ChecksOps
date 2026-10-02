@@ -6,7 +6,10 @@ import {
   FUNCTION_DEF_LOOKUP_SQL,
   catalogInputTypesMatch,
   classifyFunctionDefRows,
+  extractDollarQuotedBody,
   functionDefLookupParams,
+  functionDefsMatchExactly,
+  functionHeaderFlags,
   matchFunctionCatalog,
   parseFunctionIdentity,
   readFunctionDef,
@@ -124,7 +127,7 @@ test('lookup SQL binds schema, name, and catalog type OIDs; it does not compare 
   assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('::regprocedure'), false);
   assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('to_regprocedure'), false);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /pg_proc/);
-  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes::oid\[\]/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /unnest\(p\.proargtypes::oid\[\]\)/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.pronargs/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /::regtype::oid/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /\$1::text/);
@@ -146,8 +149,10 @@ test('lookup SQL never casts oid[] to oidvector; live PG error stays fail-closed
   const compactSql = FUNCTION_DEF_LOOKUP_SQL.replace(/\s+/g, '');
   assert.equal(/AS\s+oidvector/i.test(FUNCTION_DEF_LOOKUP_SQL), false);
   assert.equal(compactSql.includes(invalid610Cast.replace(/\s+/g, '')), false);
-  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes::oid\[\]\s*=/);
+  assert.equal(/p\.proargtypes::oid\[\]\s*=/.test(FUNCTION_DEF_LOOKUP_SQL), false);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /unnest\(p\.proargtypes::oid\[\]\) WITH ORDINALITY/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY_AGG\(u\.typ::regtype::oid ORDER BY u\.ord\)/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY_AGG\(proc_t\.typ ORDER BY proc_t\.ord\)/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY\[\]::oid\[\]/);
   assert.equal(/p\.proargtypes\s*=/.test(FUNCTION_DEF_LOOKUP_SQL), false);
 
@@ -377,4 +382,55 @@ test('parseFunctionIdentity keeps requested identities as ordered type names', (
     identity_args: 'uuid, text, uuid',
     args: ['uuid', 'text', 'uuid'],
   });
+});
+
+const SOURCE_MOVE = `CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks(_user_id uuid, _tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT
+    public.has_role(_user_id, 'admin'::app_role)
+    OR public.user_belongs_to_tenant(_user_id, _tenant_id)
+$$;`;
+
+const LIVE_MOVE = `CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks(_user_id uuid, _tenant_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT
+    public.has_role(_user_id, 'admin'::app_role)
+    OR public.user_belongs_to_tenant(_user_id, _tenant_id)
+$function$`;
+
+test('pg_get_functiondef-shaped live text matches the pinned #601 body and flags', () => {
+  assert.equal(functionDefsMatchExactly(LIVE_MOVE, SOURCE_MOVE), true);
+  assert.equal(extractDollarQuotedBody(LIVE_MOVE), extractDollarQuotedBody(SOURCE_MOVE));
+  assert.deepEqual(functionHeaderFlags(LIVE_MOVE), functionHeaderFlags(SOURCE_MOVE));
+});
+
+test('exact match fails closed on a different body or dropped SECURITY DEFINER', () => {
+  const changedBody = LIVE_MOVE.replace('user_belongs_to_tenant', 'always_true');
+  assert.equal(functionDefsMatchExactly(changedBody, SOURCE_MOVE), false);
+  const noDefiner = LIVE_MOVE.replace('STABLE SECURITY DEFINER', 'STABLE');
+  assert.equal(functionDefsMatchExactly(noDefiner, SOURCE_MOVE), false);
+});
+
+test('oidvector lower bound 0 vs ARRAY_AGG lower bound 1 is why #616 create-then-inspect missed', () => {
+  const procOids = [2950, 2950];
+  const aggOids = [2950, 2950];
+  const procLower = 0;
+  const aggLower = 1;
+  assert.deepEqual(procOids, aggOids);
+  assert.notEqual(procLower, aggLower);
+  assert.equal(
+    FUNCTION_DEF_LOOKUP_SQL.includes('p.proargtypes::oid[] ='),
+    false,
+    '#616 compared 0-based proargtypes::oid[] to 1-based ARRAY_AGG',
+  );
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /unnest\(p\.proargtypes::oid\[\]\) WITH ORDINALITY/);
 });

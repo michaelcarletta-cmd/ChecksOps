@@ -13,9 +13,15 @@ import { CODES, fail, ok } from './errors.mjs';
  * custom types keep their own OIDs unless PostgreSQL says they are the
  * same type.
  *
- * Compare p.proargtypes::oid[] to that aggregated oid[]. PostgreSQL
- * cannot CAST(oid[] AS oidvector); that form fails closed as a lookup
- * error and must never be treated as exists:false.
+ * Do not compare p.proargtypes::oid[] directly to ARRAY_AGG(...).
+ * oidvector is 0-based, so the cast keeps lower bound 0; ARRAY_AGG is
+ * 1-based. PostgreSQL array equality requires matching bounds, so that
+ * form returns zero rows for every function that has arguments — the
+ * create-then-absent #601 failure. Re-aggregate both sides through
+ * unnest ... WITH ORDINALITY so both arrays are 1-based.
+ *
+ * PostgreSQL cannot CAST(oid[] AS oidvector); that form fails closed as
+ * a lookup error and must never be treated as exists:false.
  */
 export const FUNCTION_DEF_LOOKUP_SQL = `
 SELECT n.nspname AS schema_name,
@@ -26,11 +32,43 @@ JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = $1::text
   AND p.proname = $2::text
   AND p.pronargs = COALESCE(cardinality($3::text[]), 0)
-  AND p.proargtypes::oid[] = (
+  AND (
+    SELECT COALESCE(ARRAY_AGG(proc_t.typ ORDER BY proc_t.ord), ARRAY[]::oid[])
+    FROM unnest(p.proargtypes::oid[]) WITH ORDINALITY AS proc_t(typ, ord)
+  ) = (
     SELECT COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])
     FROM unnest(COALESCE($3::text[], ARRAY[]::text[])) WITH ORDINALITY AS u(typ, ord)
   )
 `.trim();
+
+const DOLLAR_BODY_RE = /\bAS\s+(\$[A-Za-z0-9_]*\$)([\s\S]*?)\1/i;
+
+export function extractDollarQuotedBody(sql) {
+  const match = String(sql || '').match(DOLLAR_BODY_RE);
+  return match ? match[2].trim() : null;
+}
+
+export function functionHeaderFlags(sql) {
+  const text = String(sql || '');
+  return {
+    language: (text.match(/\bLANGUAGE\s+(\w+)/i) || [])[1]?.toLowerCase() || null,
+    security_definer: /\bSECURITY\s+DEFINER\b/i.test(text),
+    stable: /\bSTABLE\b/i.test(text),
+    search_path_public: /SET\s+search_path\s+TO\s+'public'/i.test(text),
+  };
+}
+
+export function functionDefsMatchExactly(liveDef, sourceSql) {
+  const liveBody = extractDollarQuotedBody(liveDef);
+  const sourceBody = extractDollarQuotedBody(sourceSql);
+  if (!liveBody || !sourceBody || liveBody !== sourceBody) return false;
+  const live = functionHeaderFlags(liveDef);
+  const source = functionHeaderFlags(sourceSql);
+  return live.language === source.language
+    && live.security_definer === source.security_definer
+    && live.stable === source.stable
+    && live.search_path_public === source.search_path_public;
+}
 
 const IDENTITY_RE = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)\s*$/;
 const SIMPLE_TYPE_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?$/;
