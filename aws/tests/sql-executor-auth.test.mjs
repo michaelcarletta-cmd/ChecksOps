@@ -247,6 +247,9 @@ test('#601 exact pin is accepted and wrong hash/commit/filename are refused', ()
   const sha = createHash('sha256').update(bytes).digest('hex');
   assert.equal(sha, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256);
   const absentLive = '0'.repeat(64);
+  // Frozen clock matches guarded-sql-executor #601 fixtures so the reviewed
+  // expiry 2026-10-02T02:00:00.000Z is evaluated independently of wall time.
+  const pinNow = Date.parse('2026-10-02T00:00:00.000Z');
   const pin = evaluateSqlExecutorAuthorization({
     workstream_id: 'tenant-permissions',
     branch: 'cursor/staging-guard-writers-ad6f',
@@ -271,7 +274,7 @@ test('#601 exact pin is accepted and wrong hash/commit/filename are refused', ()
       expected_live_definition_sha256: absentLive,
       one_use_id: 'tenant-perm-0001',
     }),
-  });
+  }, { now: pinNow });
   assert.equal(pin.ok, true, pin.message);
 
   const wrongHash = evaluateSqlExecutorAuthorization({
@@ -294,7 +297,7 @@ test('#601 exact pin is accepted and wrong hash/commit/filename are refused', ()
     action: 'authorize',
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: '2026-10-02T00:00:00.000Z',
-  });
+  }, { now: pinNow });
   assert.equal(wrongHash.ok, false);
   assert.equal(wrongHash.code, CODES.SQL_COLLISION);
 
@@ -316,7 +319,7 @@ test('#601 exact pin is accepted and wrong hash/commit/filename are refused', ()
     expiry: '2026-10-02T02:00:00.000Z',
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: '2026-10-02T00:00:00.000Z',
-  });
+  }, { now: pinNow });
   assert.equal(wrongCommit.ok, false);
   assert.equal(wrongCommit.code, CODES.SQL_COLLISION);
 
@@ -338,13 +341,14 @@ test('#601 exact pin is accepted and wrong hash/commit/filename are refused', ()
     expiry: '2026-10-02T02:00:00.000Z',
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: '2026-10-02T00:00:00.000Z',
-  });
+  }, { now: pinNow });
   assert.equal(wrongFile.ok, false);
   assert.equal(wrongFile.code, CODES.SQL_COLLISION);
 });
 
 test('#601 arbitrary SQL and production remain refused', () => {
   const absentLive = '0'.repeat(64);
+  const pinNow = Date.parse('2026-10-02T00:00:00.000Z');
   const base = {
     workstream_id: 'tenant-permissions',
     branch: 'cursor/staging-guard-writers-ad6f',
@@ -367,12 +371,12 @@ test('#601 arbitrary SQL and production remain refused', () => {
   assert.equal(evaluateSqlExecutorAuthorization({
     ...base,
     sql_text: 'DROP FUNCTION public.user_can_move_tenant_checks',
-  }).code, CODES.UNRELATED_MUTATION);
+  }, { now: pinNow }).code, CODES.UNRELATED_MUTATION);
   assert.equal(evaluateSqlExecutorAuthorization({
     ...base,
     target_environment: 'production',
     target_component: 'production-sql',
-  }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  }, { now: pinNow }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
 test('sql-executor-ensure refuses shared API and billing sql44 retarget before AWS', () => {
