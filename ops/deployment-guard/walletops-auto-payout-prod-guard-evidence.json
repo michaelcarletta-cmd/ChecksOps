@@ -1,0 +1,276 @@
+{
+  "id": "walletops-auto-payout-prod-guard-evidence",
+  "verdict": "EVIDENCE / LINEAGE RECONCILIATION PREPARED — NOT A PRODUCTION APPLY. Production-spa Release Lock is NOT changed in this commit.",
+  "captured_at": "2026-10-02T01:20:00Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-prod-guard-evidence-2d41",
+  "accepted_source_sha_unchanged": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "accepted_source_sha_modified": false,
+  "accepted_staging_artifacts_rebuilt": false,
+  "production_modified": false,
+  "production_receipt_created": false,
+  "do_not_deploy_production": true,
+  "do_not_change_production_spa_release_lock_in_this_commit": true,
+  "method": "Classify each tree_hash mismatch from commit/file lineage. Retarget only A/B/E evidence to the already-accepted source trees. Do not replace hashes without lineage. Do not change source files at b39738cab.",
+  "refs": {
+    "accepted_source": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "composition_main_at_acceptance": "2fe6f7f5eabf42d4f9253d84808e25e5fd46b747",
+    "origin_main_at_investigation": "6b222b63c955e8c47569ef3704541303680c649e",
+    "merge_base_accepted_vs_origin_main": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
+    "head_before_evidence_commit": "e31829abfc4f33f83f63f0739dd470ef330ac810"
+  },
+  "classifications": {
+    "identity-cognito": {
+      "codes": ["A", "B", "E"],
+      "not": ["C", "D", "F"],
+      "recorded": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "b2fc9e1152ca2ffbfac86c43fccdc22461dda17266bbea2d447f6d3f7cbb1bed"
+      },
+      "tree_at_recorded_sha": "d66c11f6775d39eacb19ed9a1bf6b467ff11943c164b0228588b85d959e5f5bc",
+      "accepted_tree": "cd6feb820a4accec582313f5f462f97656232be817a04b54c1a7b3a54d92abf0",
+      "origin_main_tree": "8929f6661d28e70ab5be17e124ee251fc398a6e4cd3517e6de4757f36d48014a",
+      "origin_main_lock_tree": "8929f6661d28e70ab5be17e124ee251fc398a6e4cd3517e6de4757f36d48014a",
+      "why": "Recorded tree_hash does not equal the ownership hash of the recorded git_sha (E). Hash was written in da0a8471d without matching 5567757e. After that SHA, aws/identity/sql/11_identity_environment_cognito.sql was added by b84646fc5 (on accepted and main) (A). src/integrations/aws/client.ts then changed on the accepted stack via 2df224527 and 244d27d68 (Settings Override / Moov writes verification). Current main has a different later client.ts change (edc65d41c delete-check reason) that is not in accepted source. Lock on this branch was never retargeted (B). Retarget to accepted tree only. Do not change client.ts.",
+      "files": {
+        "added_after_recorded_sha": ["aws/identity/sql/11_identity_environment_cognito.sql"],
+        "content_changed_accepted_vs_recorded": ["src/integrations/aws/client.ts"],
+        "accepted_vs_origin_main": ["src/integrations/aws/client.ts"]
+      },
+      "commits": [
+        "da0a8471d wrote recorded hash b2fc9e11",
+        "b84646fc5 added 11_identity_environment_cognito.sql",
+        "2df224527 / 244d27d68 accepted-stack client.ts (not on origin/main)",
+        "edc65d41c origin/main-only client.ts (not applied; accepted source frozen)"
+      ]
+    },
+    "moov-webhooks": {
+      "codes": ["A", "B"],
+      "not": ["C", "D", "F"],
+      "recorded": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "18037c16ab16c004828d9c6e19cfc309bb7fa1017aaf798487fb163664f96a89"
+      },
+      "tree_at_recorded_sha": "18037c16ab16c004828d9c6e19cfc309bb7fa1017aaf798487fb163664f96a89",
+      "accepted_tree": "228929814e8454b901ea8773a7bef24cf05cbdc992a34a64032e8bfe22ec02c0",
+      "origin_main_tree": "18037c16ab16c004828d9c6e19cfc309bb7fa1017aaf798487fb163664f96a89",
+      "why": "Recorded hash still matches recorded SHA and current origin/main. Accepted source differs only because 6a17bf5c6 wrote Settings verification from Moov bank events into webhook-apply.mjs and supabase/functions/moov-webhook/index.ts. That is legitimate newer source on the frozen accepted candidate (A). Lock was not updated when that stack commit landed (B). Not a production-only change and not a regression of main into the accepted SHA.",
+      "files": {
+        "content_changed_accepted_vs_main": [
+          "aws/functions/api/providers/webhook-apply.mjs",
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      },
+      "commits": ["6a17bf5c6 Write Settings verification from Moov bank events automatically"]
+    },
+    "partner-sharing": {
+      "codes": ["A", "B", "E"],
+      "not": ["C", "D", "F"],
+      "recorded": {
+        "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
+        "tree_hash": "ea919c1c1726542c2dff4c4e704b73d2d56db30098154ef577f27adbe0b4b2d1"
+      },
+      "tree_at_recorded_sha": "42ad751d8e58546f7d07a88227c3c309a46c8122579529fa65967b63d06d90ea",
+      "accepted_tree": "5ca194bc28ab21c840c1178bedb7863b66939c8bcf9e425b347dbbec2da641a9",
+      "origin_main_tree": "bccd737ce6a9af9acfc0bcd0ef7dbce83b6c236fc9332e4d9b7de3cfa74adfba",
+      "origin_main_lock_tree": "bccd737ce6a9af9acfc0bcd0ef7dbce83b6c236fc9332e4d9b7de3cfa74adfba",
+      "why": "Recorded tree_hash does not equal the tree at recorded git_sha (E; written da0a8471d). authorization.mjs and partner tests on accepted match origin/main and are newer than the recorded SHA (A). CheckCommandCenter.tsx on accepted is newer than the lock but older than current origin/main (0fc376335 / 67a15ee98 / 0e51f8938 tenant-user movement). That later main work is outside frozen accepted source and is not applied. Lock on this branch is stale (B). SQL 31-34 bytes unchanged. Not a source regression versus the lock.",
+      "files": {
+        "accepted_equals_main": [
+          "aws/functions/api/authorization.mjs",
+          "aws/tests/partner-shared-check-read-pg.test.mjs",
+          "aws/tests/partner-stage-totals.test.mjs"
+        ],
+        "accepted_behind_current_main_not_changed": ["src/pages/CheckCommandCenter.tsx"]
+      },
+      "commits": [
+        "da0a8471d wrote recorded hash ea919c1c",
+        "b84646fc5 / 2585fcde6 authorization + tests on accepted and main",
+        "0fc376335 / 67a15ee98 / 0e51f8938 origin/main-only CheckCommandCenter (not applied)"
+      ]
+    },
+    "auto-deposit": {
+      "codes": ["A", "B", "E"],
+      "not": ["C", "D", "F"],
+      "recorded": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "7537faf0225986f9dc73d8aab4dc578adb3bea0015b47b288479fd00ab6dd900"
+      },
+      "tree_at_recorded_sha": "4b6e3016ed0eb32a6ea82c8fb235df52648ca3bd67cc632af6b3769385650eca",
+      "accepted_tree": "9463000d220bef217b858dc737544dece8fc7468dfb262aea9188ac313280e9d",
+      "origin_main_tree": "7537faf0225986f9dc73d8aab4dc578adb3bea0015b47b288479fd00ab6dd900",
+      "why": "Recorded hash matches current origin/main but not the tree at recorded git_sha (E; ebf7b3caf reconciled hashes for then-main without updating git_sha). Accepted differs only by 90d219cb3 adding four lines to scheduled.mjs for proposed Tenant Collection Contract v2 (A). Lock was not retargeted on this stack (B).",
+      "files": {
+        "content_changed_accepted_vs_main": ["aws/functions/api/scheduled.mjs"]
+      },
+      "commits": [
+        "ebf7b3caf wrote recorded hash 7537faf0 against then-main",
+        "90d219cb3 accepted-stack scheduled.mjs collection-v2 watch"
+      ]
+    },
+    "database-rls": {
+      "codes": ["A", "B", "E"],
+      "not": ["C", "D", "F"],
+      "recorded": {
+        "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
+        "tree_hash": "a67d882ccedcffb80007aa936f270398dd62617220c2b0ab790c4a8612002fbd"
+      },
+      "tree_at_recorded_sha": "8351637e1022963d53f0581eed13140f8a46167c86252dce084a64038cb14a7d",
+      "accepted_tree": "22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306",
+      "origin_main_tree": "22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306",
+      "origin_main_lock_tree": "22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306",
+      "why": "Recorded hash does not equal the tree at recorded git_sha (E; f385ed00c). Accepted source and origin/main now share the same 37-file tree: new 35_manager_partner_parity.sql, 37_checkalt_ui_access_reads.sql, 38_checkalt_auto_deposit_persist.sql plus write.mjs / write-allowlist.mjs updates (A). origin/main lock already retargeted to 22152a19. This branch lock was left stale (B).",
+      "files": {
+        "added": [
+          "aws/rls/sql/35_manager_partner_parity.sql",
+          "aws/rls/sql/37_checkalt_ui_access_reads.sql",
+          "aws/rls/sql/38_checkalt_auto_deposit_persist.sql"
+        ],
+        "content_changed": [
+          "aws/functions/api/write.mjs",
+          "aws/functions/api/write-allowlist.mjs"
+        ]
+      },
+      "commits": ["f385ed00c wrote recorded hash a67d882c"]
+    },
+    "ocr-azure": {
+      "codes": ["A", "B", "E"],
+      "not": ["C", "D", "F"],
+      "recorded": {
+        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
+        "tree_hash": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801"
+      },
+      "tree_at_recorded_sha": "168126958fcbe8ec09f36b6b86df26e22a053f407edfeb159d431e85fdb0b69b",
+      "accepted_tree": "f427516ee1ea870165b438244efac59b252c010dc994e52fdfe0957375e12932",
+      "origin_main_tree": "9ae779b2de694bcf7c36741b90bc0296527791b80165e3cac925e1383ee68fee",
+      "origin_main_lock_tree": "9ae779b2de694bcf7c36741b90bc0296527791b80165e3cac925e1383ee68fee",
+      "why": "Recorded hash does not equal the tree at recorded git_sha (E; 1ed69c725). azure-di-secret.mjs and ocr.mjs on accepted equal origin/main and are newer than the lock (A). ocr-parse.mjs on accepted includes 496468ca4 (Tighten multiline OCR payee continuation). Current main bytes differ; accepted source is not rewritten. Lock on this branch stale (B).",
+      "files": {
+        "accepted_equals_main": [
+          "aws/functions/api/azure-di-secret.mjs",
+          "aws/functions/api/ocr.mjs"
+        ],
+        "accepted_vs_origin_main": ["aws/functions/api/ocr-parse.mjs"]
+      },
+      "commits": [
+        "1ed69c725 wrote recorded hash 9ecc8ae0",
+        "496468ca4 ocr-parse payee continuation (in accepted source)"
+      ]
+    },
+    "production-release": {
+      "codes": ["A", "B", "E"],
+      "not": ["C", "D", "F"],
+      "recorded": {
+        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
+        "tree_hash": "b9b38e62b4e03efb3a2bcb50548457eeafa16608e888459396bd61a9613c8abc"
+      },
+      "tree_at_recorded_sha": "8e15a6d6da996d49a316bf71ac22cfdbce41dd64159545baf39379b1ad882e01",
+      "accepted_tree_before_this_evidence": "b2496804d96a761cee9de8f4e65670fbc1e59239fc2ac49ea7a27fac08dd271d",
+      "tree_after_evidence_matrix_completeness": "129e703a2cbb0eb2433cfbb65c71fe1c29e648839d271ba884d879a730bed5b7",
+      "why": "Recorded hash does not equal the tree at recorded git_sha (E). Control-plane tree grew 31→37 files after 8a3ead38, including freedom-platform-funding contract/proof/tests and production-spa baseline files (A/B). locked-components.json is excluded from this hash. Adding the missing evidence-matrix row changes this tree again; hash is recomputed last after that completeness edit. Production-spa artifact pins are not changed here.",
+      "commits": [
+        "1b831792b wrote recorded hash b9b38e62 while adding production-spa baseline",
+        "a3a6f0b27 added freedom-platform-funding lock files on this stack"
+      ]
+    }
+  },
+  "freedom_platform_funding": {
+    "absent_from_evidence_matrix": true,
+    "present_in_locked_components": true,
+    "present_in_protected_paths": true,
+    "present_on_origin_main": false,
+    "present_on_composition_main_2fe6f7f5": false,
+    "present_on_accepted_source_b39738cab": true,
+    "tree_hash_already_matches": "f0429720e459320c420ee9c543168604257a6e552663590643bdd0d4ed05b60c",
+    "introduced": {
+      "commit": "a3a6f0b27282070392a97a0b45a7c4b51f1d5755",
+      "date": "2026-09-29T19:50:45Z",
+      "message": "Fix collection v2 edge cases and record staging-only acceptance."
+    },
+    "paths": [
+      "ops/release-locks/contracts/freedom-platform-funding-contract.json",
+      "ops/release-locks/tests/freedom-platform-funding-contract.test.mjs",
+      "ops/release-locks/proof/freedom-platform-funding-freeze.md",
+      "scripts/lib/freedom-platform-funding-contract.mjs"
+    ],
+    "why_missing": "evidence-matrix.json is a 2026-09-16 snapshot (origin_main_sha 5567757e). The component was added to the lock manifest on 2026-09-29 in a3a6f0b27 on this stack and was never appended to the matrix. origin/main still does not contain the component.",
+    "production_behavior": "The freeze records already-live Freedom→ChecksOps funding behavior (known-good provider transfer 367c5353-ed20-430b-b767-c3e5d47f28ad) and explicitly does not pin a whole-Lambda SHA. Current production Lambda GRkRQ2RK… is newer than the freeze SHA nJup1+WV… and remains authoritative. Adding the matrix row records the already-accepted lock component; it does not change classification, production_active, or deployment policy.",
+    "adding_entry_invents_evidence": false,
+    "adding_entry_changes_deployment_policy": false
+  },
+  "production_spa_release_lock": {
+    "changed_in_this_commit": false,
+    "this_branch_still_pins": {
+      "entry": "/assets/index-BPbQUNFr.js",
+      "entry_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+      "index_html_sha256": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
+      "s3_version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+      "accepted_at": "2026-09-27T01:34:04Z"
+    },
+    "live_production": {
+      "entry": "/assets/index-CTqMys28.js",
+      "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b"
+    },
+    "how_CTqMys28_became_production": {
+      "apply_commit": "4685b329cdb1a6aa731e6d8dfd611caf16a633c9",
+      "apply_message": "Apply Settings unique-email Bank verified match to production.",
+      "applied_at_utc": "2026-10-01T15:16:00Z",
+      "writer": "scripts/deployment-guard/production-spa-apply.mjs",
+      "receipt": "ops/deployment-guard/freedom-stakeholder-email-match-prod-spa-apply.json",
+      "source_commit": "57a04ea534b3247add8ac0f4a161d8c49feaafbb",
+      "before_entry": "/assets/index-5lb4YHS5.js",
+      "after_entry": "/assets/index-CTqMys28.js",
+      "invalidation_id": "IDVDS1NI9TEQO3VJ2FD0D1WM9X",
+      "s3_version_from_origin_main_lock": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+      "lambda_updated": false
+    },
+    "origin_main_already_reconciled": {
+      "commits": [
+        "49cf5ad7630f3587463a829f4d4285e9b40afe19",
+        "a09ca22a0eddf6d6ce4c2fa7096f7ab0d8ddc27b",
+        "01b0040f4caf5f1a8dfda137903280cce5d9d897"
+      ],
+      "accurate_refresh_commit": "01b0040f4caf5f1a8dfda137903280cce5d9d897",
+      "origin_main_pins": {
+        "entry": "/assets/index-CTqMys28.js",
+        "entry_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
+        "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+        "s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+        "accepted_at": "2026-10-01T15:15:51Z",
+        "source_lineage": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+        "banner_overlay": "e3e4649478a0c3978065b71b0528dd93baa8dac1"
+      },
+      "supersedes_BPbQUNFr": true
+    },
+    "proposed_correction_NOT_APPLIED": {
+      "do_not_restore_BPbQUNFr": true,
+      "adopt_origin_main_production_spa_lock": true,
+      "copy_from_origin_main_commit": "01b0040f4caf5f1a8dfda137903280cce5d9d897",
+      "update_files_later": [
+        "ops/release-locks/locked-components.json production-spa artifact + fingerprint",
+        "scripts/lib/production-spa-baseline.mjs ACCEPTED_PRODUCTION_SPA and SUPERSEDED list (add BPbQUNFr as superseded)",
+        "ops/release-locks/proof/production-spa-baseline.md",
+        "ops/release-locks/evidence-matrix.json production-spa deployed_artifact",
+        "ops/release-locks/tests/validate-release-locks.test.mjs expected entry",
+        "ops/release-locks/OPERATOR.md Production SPA baseline section"
+      ],
+      "after_that_update_recompute": ["production-spa.source.tree_hash", "production-release.source.tree_hash"],
+      "reason_not_applied_now": "User required the proposed CTqMys28 vs BPbQUNFr correction to be reported first and the Release Lock not changed yet."
+    }
+  },
+  "accepted_staging_artifacts_unchanged": {
+    "spa_index_html_sha256": "fb6f655441a6ef611b21e38a4088a873f6f2ae40b8aafdb26f7774ecb2f1430f",
+    "spa_entry": "/assets/index-CqMVJIBN.js",
+    "spa_entry_sha256": "307d12ab167bafc85604f31b108ede90ea3f0e09a32b9ebb5175b22ac13958a5",
+    "walletops_chunk": "/assets/WalletOps-Bod_AZnd.js",
+    "walletops_chunk_sha256": "f7dd181d0a8a2a4c9dc9e5bdd512e787257e527e1a8e2f3fb826904f2e7ce7b7",
+    "lambda_CodeSha256": "3t0ZrlEX9nlZgeOd/v6jxhkYlT+hE5+t2WsdkcJ9D4Y="
+  },
+  "production_packaging_note": "A later separately authorized production package cannot reuse these staging hashes. Staging SPA was baked with staging Cognito us-east-1_vPmQ7cL1F / vite --mode aws. Production SPA bake uses the production pool and will produce different index/entry hashes. Production Lambda must overlay the live production zip (GRkRQ2RK…), not the staging zip, so CodeSha256 will differ. New production acceptance would be required after that packaging.",
+  "eligibility_after_this_evidence": {
+    "tree_hash_and_matrix_completeness": "expected PASS after this reconciliation",
+    "production_spa_lock_matches_live": false,
+    "production_deploy_authorized": false,
+    "reason": "Even with matching source trees, the PRODUCTION_LOCKED SPA pin remains BPbQUNFr while live production is CTqMys28. A later production candidate cannot match the stale pin without restoring BPbQUNFr, which is forbidden. Reconcile the SPA lock in a later reviewed step, then package production artifacts separately."
+  }
+}
