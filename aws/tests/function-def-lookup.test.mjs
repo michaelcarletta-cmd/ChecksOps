@@ -146,7 +146,7 @@ test('lookup SQL never casts oid[] to oidvector; live PG error stays fail-closed
   const compactSql = FUNCTION_DEF_LOOKUP_SQL.replace(/\s+/g, '');
   assert.equal(/AS\s+oidvector/i.test(FUNCTION_DEF_LOOKUP_SQL), false);
   assert.equal(compactSql.includes(invalid610Cast.replace(/\s+/g, '')), false);
-  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes::oid\[\]\s*=/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY\(SELECT unnest\(p\.proargtypes::oid\[\]\)\)\s*=/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY_AGG\(u\.typ::regtype::oid ORDER BY u\.ord\)/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY\[\]::oid\[\]/);
   assert.equal(/p\.proargtypes\s*=/.test(FUNCTION_DEF_LOOKUP_SQL), false);

@@ -13,7 +13,9 @@ import { CODES, fail, ok } from './errors.mjs';
  * custom types keep their own OIDs unless PostgreSQL says they are the
  * same type.
  *
- * Compare p.proargtypes::oid[] to that aggregated oid[]. PostgreSQL
+ * Rebuild p.proargtypes::oid[] with ARRAY(SELECT unnest(...)) so both
+ * sides are 1-based oid[]. oidvector::oid[] keeps lower bound 0;
+ * ARRAY_AGG is 1-based; array = requires matching bounds. PostgreSQL
  * cannot CAST(oid[] AS oidvector); that form fails closed as a lookup
  * error and must never be treated as exists:false.
  */
@@ -26,7 +28,7 @@ JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = $1::text
   AND p.proname = $2::text
   AND p.pronargs = COALESCE(cardinality($3::text[]), 0)
-  AND p.proargtypes::oid[] = (
+  AND ARRAY(SELECT unnest(p.proargtypes::oid[])) = (
     SELECT COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])
     FROM unnest(COALESCE($3::text[], ARRAY[]::text[])) WITH ORDINALITY AS u(typ, ord)
   )
