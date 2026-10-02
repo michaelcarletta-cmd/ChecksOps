@@ -1,0 +1,207 @@
+{
+  "id": "walletops-auto-payout-prod-candidate-accepted",
+  "verdict": "PRODUCTION CANDIDATE ACCEPTED — NOT DEPLOYED",
+  "authorization": "This record is evidence only. It is NOT deployment authorization.",
+  "captured_at": "2026-10-02T01:36:46Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-prod-package-2d41",
+  "accepted_application_source_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "accepted_application_source_modified": false,
+  "required_composition": "current live production behavior + current main including PR #598 + WalletOps automatic-payout / sweep-history",
+  "pr_598_authoritative": true,
+  "staging_hashes_promoted": false,
+  "production_modified": false,
+  "production_written": false,
+  "production_receipt_created": false,
+  "production_lease_created": false,
+  "production_unlocked": false,
+  "do_not_deploy_production": true,
+  "CHECKSOPS_PRODUCTION_DEPLOY": null,
+  "CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT": null,
+  "production_before_state": {
+    "spa": {
+      "entry": "/assets/index-CTqMys28.js",
+      "entry_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
+      "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+      "s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+      "role": "reconciled accepted production baseline / BEFORE state for any later SPA promotion"
+    },
+    "lambda": {
+      "function_name": "checksops-production-prep-api",
+      "CodeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+      "RevisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+      "LastModified": "2026-10-01T18:02:46.000+0000"
+    }
+  },
+  "proposed_spa": {
+    "dist_origin": "fresh-isolated-clean-build",
+    "worktree": "/tmp/walletops-prod-spa-b39738cab",
+    "source_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "mode": "aws",
+    "not_from_staging_dist": true,
+    "not_from_workspace_stale_dist": true,
+    "not_from_old_production_dist": true,
+    "configuration_identity": {
+      "VITE_AUTH_PROVIDER": "cognito",
+      "VITE_APP_URL": "https://checksops.com",
+      "VITE_CHECKSOPS_API_URL": "/prep",
+      "VITE_AWS_REGION": "us-east-1",
+      "VITE_COGNITO_USER_POOL_ID": "us-east-1_h00WorYMT",
+      "VITE_COGNITO_USER_POOL_CLIENT_ID": "present-in-build-env-not-echoed-here"
+    },
+    "index_html_sha256": "791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805",
+    "entry_bundle": "/assets/index-gYa_BW8r.js",
+    "entry_bundle_sha256": "71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280",
+    "walletops_chunk": "/assets/WalletOps-CfLLgWtM.js",
+    "walletops_chunk_sha256": "a820403da8d574f3e1708c5318420a4673ebaf4937a2ed35208bbfb02066d683",
+    "uploaded": false,
+    "distinct_from_staging_spa": {
+      "staging_entry": "/assets/index-CqMVJIBN.js",
+      "staging_entry_sha256": "307d12ab167bafc85604f31b108ede90ea3f0e09a32b9ebb5175b22ac13958a5",
+      "must_not_promote_staging_hashes": true
+    },
+    "acceptance": {
+      "manage_sweeps": true,
+      "turn_off_automatic_payouts": true,
+      "moov_sweep_config": true,
+      "automatic_payout_success_copy": true,
+      "automatic_payout_failure_copy": true,
+      "obsolete_sweeps_walletID_absent": true,
+      "auth_provider_cognito": true,
+      "app_url_https_checksops_com": true,
+      "api_url_prep": true,
+      "staging_cognito_pool_absent": true,
+      "staging_cognito_client_absent": true,
+      "staging_execute_api_absent": true,
+      "cognito_pool_client_literals": "not present as JS string literals; AWS_STAGING_PUBLIC_CONFIG is an unused export and is tree-shaken, matching the accepted staging bake and live CTqMys28 pattern. Production pool/client were the isolated build-env values. Staging pool/client were not used."
+    }
+  },
+  "proposed_lambda": {
+    "package_origin": "fresh-live-download",
+    "overlay_method": "surgical-live-patch of moov-functions/onboard/client + WalletOps disable lookup + add moov-capabilities.mjs + replace sweep-read.mjs from accepted source",
+    "wholesale_git_onboard_replace": false,
+    "function_name": "checksops-production-prep-api",
+    "baseline_live_CodeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+    "baseline_RevisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+    "baseline_matched_before_overlay": true,
+    "live_zip_sha256": "19191143644a9f7a52dbb7cd329147a4c67cdd252fa381cd6c2260345096ad1c",
+    "candidate_zip": "/tmp/walletops-prod-lambda-candidate.zip",
+    "candidate_zip_sha256": "339c0ccc4583c6334643499fc5392c7843d751f0cd550f555112a76fb730a86c",
+    "proposed_aws_CodeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "proposed_aws_CodeSha256_note": "SHA-256 of this exact candidate ZIP, base64-encoded. Deterministic for this ZIP. AWS would report this CodeSha256 only if this exact ZIP were uploaded later.",
+    "changed_members": [
+      "providers/parity/moov-client.mjs",
+      "providers/parity/moov-functions.mjs",
+      "providers/parity/moov-onboard.mjs",
+      "providers/parity/sweep-read.mjs"
+    ],
+    "added_members": [
+      "providers/parity/moov-capabilities.mjs"
+    ],
+    "deleted_members": [],
+    "unchanged_member_count": 153,
+    "live_member_count": 157,
+    "candidate_member_count": 158,
+    "unexpected_member_changes": [],
+    "owned_hashes": {
+      "providers/parity/moov-functions.mjs": "f30afd17cedaf4e120534f3e71f2a0ab7f707d3d8e80bee5535c70143821d764",
+      "providers/parity/moov-onboard.mjs": "cc1d6a361647c8b47cddac78e3f233328f482ac9d5c918c4590618f553364533",
+      "providers/parity/moov-client.mjs": "5efa05258b5e1ea51989d175d3b1d374d70b9ce79053b86bc2591c85da1738ab",
+      "providers/parity/moov-capabilities.mjs": "35467356e9e7c0109da6fabcb27219a2cf61fc58601d5db0ae5439fc2b072665",
+      "providers/parity/sweep-read.mjs": "6816dbce1dd7cd1d0e9740725f394b8e06099cd46511dd7cc49dc5bd5db962ed"
+    },
+    "owned_module_hash_note": "These five owned-module hashes match the staging overlay of the same accepted source patches. They are not a promotion of the staging ZIP. Staging Lambda CodeSha256 3t0ZrlEX… must not be used as the production artifact.",
+    "invoice_publicInvoice_normalizeInvoiceLineItems_preserved": true,
+    "env_changed": false,
+    "uploaded": false
+  },
+  "granular_capability_proof": {
+    "merchant": ["transfers", "collect-funds.ach", "send-funds.ach", "wallet.balance"],
+    "recipient": ["transfers"],
+    "homeowner_deductible": ["transfers", "collect-funds.ach"],
+    "sites": {
+      "moov-functions.mjs:272": "account create MERCHANT",
+      "moov-functions.mjs:586": "missing-cap sync MERCHANT",
+      "moov-onboard.mjs:188": "capability POST MERCHANT",
+      "moov-onboard.mjs:907": "hosted invite MERCHANT",
+      "moov-onboard.mjs:914": "platform invite fallback MERCHANT",
+      "moov-onboard.mjs:489": "recipient transfers",
+      "moov-onboard.mjs:496": "recipient transfers fallback",
+      "moov-capabilities.mjs": "COLLECT_ACH_CAPABILITIES"
+    },
+    "mixed_legacy_array_absent": "['transfers', 'send-funds', 'wallet', 'send-funds.ach']",
+    "family_ids_not_requested_in_capabilities_arrays": ["send-funds", "collect-funds", "wallet"],
+    "capabilityFlags": {
+      "legacy_enabled_ids_recognized": true,
+      "granular_enabled_ids_recognized": true,
+      "prefix_match": "name === target || name.startsWith(target + '.')"
+    },
+    "X-Moov-Version": "v2025.07.00",
+    "capability_requests_against_production": false
+  },
+  "walletops_sweep_proof": {
+    "manage_sweeps": true,
+    "turn_off_automatic_payouts": true,
+    "disable_uses_moov_sweep_config": true,
+    "backend_resolves_sweep_config_id": true,
+    "disable_PATCH_body": "{ status: 'disabled' }",
+    "readSweepHistory": "/accounts/${accountId}/wallets/${walletId}/sweeps?count=50",
+    "readSweepSnapshot": true,
+    "wallet_scoped_history": true,
+    "obsolete_sweeps_walletID_absent": true,
+    "live_sweep_disabled": false
+  },
+  "regression": {
+    "invoice_publicInvoice_preserved": true,
+    "moov_transaction_read_modules_untouched": true,
+    "funding_reads_untouched": true,
+    "recipient_transfers_preserved": true,
+    "bank_tos_unrelated_members_preserved": true,
+    "existing_walletops_disable_and_history_preserved_plus_lookup": true,
+    "production_auth_configuration": "cognito + https://checksops.com + /prep; staging Cognito absent",
+    "unrelated_lambda_members_unchanged": 153,
+    "real_money_movement": false,
+    "tests": {
+      "aws/tests/moov-granular-capabilities-overlay.test.mjs": "PASS 3/3",
+      "aws/tests/moov-capabilities.test.mjs": "PASS 4/4",
+      "aws/tests/walletops-598-capability-composition.test.mjs": "PASS 6/6",
+      "aws/tests/walletops-sweep-activity.test.mjs": "PASS 9/9",
+      "scripts/test-walletops-layout.mjs": "PASS 15/15",
+      "scripts/test-moov-readiness.mjs": "PASS 16/16",
+      "ops/release-locks/tests/production-spa-baseline.test.mjs": "PASS 9/9",
+      "ops/release-locks/tests/validate-release-locks.test.mjs": "PASS 13/13",
+      "ops/release-locks/tests/freedom-platform-funding-contract.test.mjs": "PASS 23/23",
+      "artifact_proof_against_proposed_dist_and_unpack": "PASS"
+    }
+  },
+  "guards": {
+    "mode": "EVALUATE_ONLY",
+    "validate_release_locks": "PASS (append-only vs trusted base d5418ab63cb9af8024c746c4393c0f801f15fd1d)",
+    "production_deploy_guard": "PASS ok (no production unlock; fail-closed)",
+    "candidate_file": "ops/deployment-guard/walletops-auto-payout-prod-package-evaluate-only.json",
+    "production_spa_based_on_baseline": "/assets/index-CTqMys28.js",
+    "deploy_false": true,
+    "unlocked": false,
+    "receipt_created": false,
+    "lease_created": false,
+    "guards_weakened": false
+  },
+  "final_toctou": {
+    "captured_at": "2026-10-02T01:36:46.191Z",
+    "spa": {
+      "entry": "/assets/index-CTqMys28.js",
+      "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+      "s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+      "matches_expected": true
+    },
+    "lambda": {
+      "CodeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+      "RevisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+      "LastModified": "2026-10-01T18:02:46.000+0000",
+      "matches_expected": true
+    },
+    "stop_because_drifted": false
+  },
+  "ready_for_separate_explicit_deployment_authorization": true,
+  "ready_note": "These exact production-specific artifacts are packaged and accepted as a candidate. A later separately authorized production apply would still need a receipt, lease, TOCTOU, and official writers. This record does not authorize that apply."
+}
