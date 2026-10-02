@@ -9,7 +9,7 @@ FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = $1
   AND p.proname = $2
-  AND regexp_replace(lower(pg_get_function_identity_arguments(p.oid)), '\\s+', '', 'g')
+  AND regexp_replace(lower(pg_catalog.oidvectortypes(p.proargtypes)), '\\s+', '', 'g')
       = regexp_replace(lower($3), '\\s+', '', 'g')
 `.trim();
 
