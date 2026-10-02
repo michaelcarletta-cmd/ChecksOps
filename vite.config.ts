@@ -7,7 +7,7 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const awsMode = mode === "aws" || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  const awsMode = mode === "aws";
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
@@ -16,6 +16,47 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_ANON_KEY;
+
+  if (awsMode) {
+    const required = (key: string) => String(env[key] || process.env[key] || "").trim();
+    const missing: string[] = [];
+    const authProvider = required("VITE_AUTH_PROVIDER");
+    if (authProvider.toLowerCase() !== "cognito") missing.push("VITE_AUTH_PROVIDER=cognito");
+    const appUrl = required("VITE_APP_URL");
+    if (!appUrl) missing.push("VITE_APP_URL");
+    const apiUrl = required("VITE_CHECKSOPS_API_URL");
+    if (!apiUrl) missing.push("VITE_CHECKSOPS_API_URL");
+    const region = required("VITE_AWS_REGION");
+    if (!region) missing.push("VITE_AWS_REGION");
+    const poolId = required("VITE_COGNITO_USER_POOL_ID");
+    if (!poolId) missing.push("VITE_COGNITO_USER_POOL_ID");
+    const clientId = required("VITE_COGNITO_USER_POOL_CLIENT_ID");
+    if (!clientId) missing.push("VITE_COGNITO_USER_POOL_CLIENT_ID");
+
+    // Production AWS frontend uses same-origin `/prep`.
+    try {
+      const url = new URL(appUrl);
+      const host = url.hostname.toLowerCase();
+      const isProdChecksOps = host === "checksops.com" || host === "www.checksops.com";
+      if (isProdChecksOps) {
+        const token = apiUrl.trim().toLowerCase();
+        const ok = token === "/prep" || token === "same-origin" || token === "same-origin:/prep";
+        if (!ok) missing.push("VITE_CHECKSOPS_API_URL=/prep");
+      }
+    } catch {
+      /* ignore */
+    }
+
+    // Supabase must never be present in an AWS/Cognito build.
+    if (String(supabaseUrl || "").trim()) missing.push("VITE_SUPABASE_URL (must be unset in aws mode)");
+    if (String(supabasePublishableKey || "").trim()) missing.push("VITE_SUPABASE_PUBLISHABLE_KEY (must be unset in aws mode)");
+
+    if (missing.length) {
+      throw new Error(
+        `AWS frontend build misconfigured (mode=aws). Missing/invalid: ${missing.join(", ")}`,
+      );
+    }
+  }
 
   return {
   server: {
@@ -90,7 +131,7 @@ export default defineConfig(({ mode }) => {
   },
   define: awsMode
     ? {
-        // Never bake production Supabase URL/keys into the AWS staging bundle.
+        // Never bake Supabase URL/keys into an AWS bundle.
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(""),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(""),
       }

@@ -4,7 +4,7 @@
  */
 
 const AWS_SESSION_KEY = "checksops.aws.staging.auth";
-const LEGACY_BACKEND = /supabase\.co|lovable|nbcqwpysqgyxrrbgtmkw/i;
+const LEGACY_BACKEND = /supabase\.co|lovable/i;
 
 export type TenantCheckIdentity = {
   roles: string[];
