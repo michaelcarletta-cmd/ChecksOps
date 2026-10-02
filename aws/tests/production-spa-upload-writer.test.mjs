@@ -701,7 +701,10 @@ test('production SPA writer: receipt reuse is blocked (single-use)', async () =>
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
 
-  const makeCall = async () => applyProductionSpaUpload({
+  const makeCall = async () => {
+    const aws = createFakeAws({ liveBefore });
+    aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
+    return applyProductionSpaUpload({
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
@@ -718,10 +721,11 @@ test('production SPA writer: receipt reuse is blocked (single-use)', async () =>
     env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
     guardRoot: root,
     target: TARGET,
-    aws: createFakeAws({ liveBefore }),
+    aws,
     fetchImpl: fetchFromDist(distDir),
     now: NOW,
   });
+  };
 
   const first = await makeCall();
   assert.equal(first.ok, true, JSON.stringify(first, null, 2));
