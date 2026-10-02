@@ -3278,21 +3278,21 @@ function CheckDetailPanel({
     return () => { cancelled = true; };
   }, [frontImageUrl]);
 
-
-
-   // Fetch reviewer profile for name display
-  const { data: reviewerProfile } = useQuery({
-    queryKey: ["reviewer-profile", check?.reviewed_by],
-    enabled: !!check?.reviewed_by,
+  const linkedClaimQuery = useQuery({
+    queryKey: ["check-detail-linked-claim", check?.claim_id],
+    enabled: !!check?.claim_id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", check!.reviewed_by!)
-        .single();
-      return data;
+      const { data, error } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name")
+        .eq("id", check!.claim_id!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id: string; claim_number: string | null; policyholder_name: string | null } | null;
     },
+    staleTime: 60_000,
   });
+  const linkedClaim = linkedClaimQuery.data;
 
   const { data: auditLog = [] } = useQuery({
     queryKey: ["check-audit", checkId],
@@ -3591,7 +3591,7 @@ function CheckDetailPanel({
       });
 
       sonnerToast.success("Check moved to Deposited", {
-        description: `Check #${check.check_number ?? checkId.slice(0, 8)} now visible in Deposit Operations.`,
+        description: `${check.check_number ? `Check #${check.check_number}` : "Check"} now visible in Deposit Operations.`,
       });
       setBranchApprovedAt(null);
       setShowForceMove(false);
@@ -3637,7 +3637,7 @@ function CheckDetailPanel({
         });
       } else {
         sonnerToast.success("Deposit queued", {
-          description: `Check #${check.check_number ?? checkId.slice(0, 8)} — status will update shortly.`,
+          description: `${check.check_number ? `Check #${check.check_number}` : "Check"} — status will update shortly.`,
         });
       }
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
@@ -4324,22 +4324,6 @@ function CheckDetailPanel({
                   })()}
                 </div>
               )}
-              <Separator />
-              {check.reviewed_by && (
-                <>
-                  <Separator />
-                  <div className="bg-muted/30 rounded-md p-2.5 space-y-1">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Reviewed By</p>
-                    <p className="text-sm font-medium">{reviewerProfile?.full_name || reviewerProfile?.email || check.reviewed_by.slice(0, 8) + "..."}</p>
-                    {check.reviewed_at && (
-                      <p className="text-xs text-muted-foreground">{format(new Date(check.reviewed_at), "MMM d, yyyy h:mm a")}</p>
-                    )}
-                    {check.review_notes && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">"{check.review_notes}"</p>
-                    )}
-                  </div>
-                </>
-               )}
               {canUndo && !isSharedView && (
                 <Button
                   size="sm"
@@ -4409,9 +4393,60 @@ function CheckDetailPanel({
                   )}
                 </Button>
               )}
-              {check.claim_id && (
-                <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />
-              )}
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground shrink-0">Linked Claim</span>
+                <div className="min-w-0 flex-1">
+                  {check.claim_id ? (
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => setDetailTab("funds")}
+                        className="font-medium underline underline-offset-2 hover:opacity-90 break-words"
+                        title="Open claim ledger"
+                      >
+                        {(() => {
+                          if (linkedClaimQuery.isLoading) return "Loading linked claim…";
+                          if (linkedClaimQuery.isError) return "Linked claim (unavailable)";
+                          if (!linkedClaim) return "Linked claim (not found)";
+                          const num = linkedClaim.claim_number?.trim();
+                          const name = linkedClaim.policyholder_name?.trim();
+                          const left = num ? `Claim #${num}` : "Claim";
+                          return name ? `${left} — ${name}` : left;
+                        })()}
+                      </button>
+                      {linkedClaimQuery.isError && (
+                        <div className="mt-1 flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); linkedClaimQuery.refetch(); }}
+                            title="Retry linked claim lookup"
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="font-medium text-muted-foreground">Not linked</span>
+                      {!isSharedView && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px]"
+                          onClick={() => setDetailTab("funds")}
+                        >
+                          Link / Select
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="endorsements" className="p-4 mt-0 space-y-4">
@@ -4805,7 +4840,7 @@ function CheckDetailPanel({
     <DepositImageViewer
       open={depositViewerOpen}
       imageUrl={depositViewerUrl}
-      title={`Mobile Deposit — Check #${check?.check_number ?? checkId.slice(0, 8)}`}
+      title={check?.check_number ? `Mobile Deposit — Check #${check.check_number}` : "Mobile Deposit — Check"}
       onClose={() => {
         setDepositViewerOpen(false);
         setDepositViewerUrl(null);
