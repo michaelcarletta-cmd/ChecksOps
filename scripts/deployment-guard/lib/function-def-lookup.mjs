@@ -12,6 +12,10 @@ import { CODES, fail, ok } from './errors.mjs';
  * $3 is a text[] of type names, each cast with ::regtype so domains and
  * custom types keep their own OIDs unless PostgreSQL says they are the
  * same type.
+ *
+ * Compare p.proargtypes::oid[] to that aggregated oid[]. PostgreSQL
+ * cannot CAST(oid[] AS oidvector); that form fails closed as a lookup
+ * error and must never be treated as exists:false.
  */
 export const FUNCTION_DEF_LOOKUP_SQL = `
 SELECT n.nspname AS schema_name,
@@ -22,11 +26,8 @@ JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = $1::text
   AND p.proname = $2::text
   AND p.pronargs = COALESCE(cardinality($3::text[]), 0)
-  AND p.proargtypes = (
-    SELECT CAST(
-      COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])
-      AS oidvector
-    )
+  AND p.proargtypes::oid[] = (
+    SELECT COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])
     FROM unnest(COALESCE($3::text[], ARRAY[]::text[])) WITH ORDINALITY AS u(typ, ord)
   )
 `.trim();

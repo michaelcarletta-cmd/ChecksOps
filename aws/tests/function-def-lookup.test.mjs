@@ -124,7 +124,7 @@ test('lookup SQL binds schema, name, and catalog type OIDs; it does not compare 
   assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('::regprocedure'), false);
   assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('to_regprocedure'), false);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /pg_proc/);
-  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes::oid\[\]/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.pronargs/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /::regtype::oid/);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /\$1::text/);
@@ -134,6 +134,33 @@ test('lookup SQL binds schema, name, and catalog type OIDs; it does not compare 
   const where = FUNCTION_DEF_LOOKUP_SQL.slice(FUNCTION_DEF_LOOKUP_SQL.indexOf('WHERE'));
   assert.equal(where.includes('pg_get_function_identity_arguments'), false);
   assert.equal(where.includes('regexp_replace'), false);
+});
+
+test('lookup SQL never casts oid[] to oidvector; live PG error stays fail-closed', async () => {
+  const livePgError = 'cannot cast type oid[] to oidvector';
+  const invalid610Cast = [
+    'CAST(',
+    'COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])',
+    'AS oidvector',
+  ].join('');
+  const compactSql = FUNCTION_DEF_LOOKUP_SQL.replace(/\s+/g, '');
+  assert.equal(/AS\s+oidvector/i.test(FUNCTION_DEF_LOOKUP_SQL), false);
+  assert.equal(compactSql.includes(invalid610Cast.replace(/\s+/g, '')), false);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes::oid\[\]\s*=/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY_AGG\(u\.typ::regtype::oid ORDER BY u\.ord\)/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /ARRAY\[\]::oid\[\]/);
+  assert.equal(/p\.proargtypes\s*=/.test(FUNCTION_DEF_LOOKUP_SQL), false);
+
+  const result = await readFunctionDef({
+    async query() {
+      throw new Error(livePgError);
+    },
+  }, 'public.user_can_move_tenant_checks(uuid,uuid)');
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.match(String(result.details.error || result.message), /cannot cast type oid\[\] to oidvector/);
+  assert.equal(result.details.exists, undefined);
+  assert.notEqual(result.details.exists, false);
 });
 
 test('named #601 catalog arguments match unnamed requested type identities', () => {
