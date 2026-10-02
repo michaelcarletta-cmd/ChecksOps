@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CODES, fail, ok } from './lib/errors.mjs';
+import { readFunctionDef } from './lib/function-def-lookup.mjs';
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
@@ -16,6 +17,8 @@ import {
   evaluateSqlExecutorAuthorization,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
+
+export { readFunctionDef } from './lib/function-def-lookup.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SQL_FILE = path.join(ROOT, 'sql/44_claim_ledger_link_or_create.sql');
@@ -182,15 +185,10 @@ async function defaultConnect() {
   return client;
 }
 
-async function readFunctionDef(client, identity) {
-  const rows = await client.query(`
-    SELECT pg_get_functiondef(p.oid) AS def
-    FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
-      AND p.oid = $1::regprocedure
-  `, [identity]);
-  return rows.rows[0]?.def || null;
+async function definitionTextOrFail(client, identity) {
+  const lookup = await readFunctionDef(client, identity);
+  if (!lookup.ok) return lookup;
+  return ok({ definition: lookup.details.exists ? lookup.details.definition : null });
 }
 
 async function readGrants(client) {
@@ -333,14 +331,20 @@ function executionReceipt({
 }
 
 async function readTenantPermissionDefs(client) {
-  const [move, override] = await Promise.all([
-    readFunctionDef(client, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.function_identities[0]),
-    readFunctionDef(client, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.function_identities[1]),
-  ]);
-  return {
-    user_can_move_tenant_checks: move || null,
-    admin_override_check_status: override || null,
-  };
+  const move = await readFunctionDef(
+    client,
+    AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.function_identities[0],
+  );
+  if (!move.ok) return move;
+  const override = await readFunctionDef(
+    client,
+    AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.function_identities[1],
+  );
+  if (!override.ok) return override;
+  return ok({
+    user_can_move_tenant_checks: move.details.exists ? move.details.definition : null,
+    admin_override_check_status: override.details.exists ? override.details.definition : null,
+  });
 }
 
 async function handleTenantPermissions({
@@ -360,7 +364,9 @@ async function handleTenantPermissions({
   let client;
   try {
     client = await connect();
-    const live = await readTenantPermissionDefs(client);
+    const liveLookup = await readTenantPermissionDefs(client);
+    if (!liveLookup.ok) return liveLookup;
+    const live = liveLookup.details;
     const liveHash = hashTenantPermissionLiveDefs(live);
     if (
       event.expected_live_definition_sha256
@@ -429,7 +435,9 @@ async function handleTenantPermissions({
     }
 
     await client.query(embedded.details.text);
-    const after = await readTenantPermissionDefs(client);
+    const afterLookup = await readTenantPermissionDefs(client);
+    if (!afterLookup.ok) return afterLookup;
+    const after = afterLookup.details;
     const afterHash = hashTenantPermissionLiveDefs(after);
     if (!after.user_can_move_tenant_checks || !after.admin_override_check_status) {
       return fail(CODES.SQL_COLLISION, 'apply did not create the expected #601 functions');
@@ -500,9 +508,13 @@ export function createHandler({
     let client;
     try {
       client = await connect();
-      const beforeDef = await readFunctionDef(client, AUTHORIZED_SQL44.function_identity);
+      const beforeLookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+      if (!beforeLookup.ok) return beforeLookup;
+      const beforeDef = beforeLookup.details.definition;
       const beforeHash = beforeDef ? hashSqlDefinition(beforeDef) : null;
-      const sql43Def = await readFunctionDef(client, AUTHORIZED_SQL44.sql43_function_identity);
+      const sql43Lookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.sql43_function_identity);
+      if (!sql43Lookup.ok) return sql43Lookup;
+      const sql43Def = sql43Lookup.details.definition;
       const sql43Hash = sql43Def ? hashSqlDefinition(sql43Def) : null;
 
       if (event.action === 'verify_data') {
@@ -592,9 +604,13 @@ export function createHandler({
 
       const dataBefore = await readClaimFingerprint(client);
       await client.query(embedded.details.text);
-      const afterDef = await readFunctionDef(client, AUTHORIZED_SQL44.function_identity);
+      const afterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+      if (!afterLookup.ok) return afterLookup;
+      const afterDef = afterLookup.details.definition;
       const afterHash = afterDef ? hashSqlDefinition(afterDef) : null;
-      const sql43After = await readFunctionDef(client, AUTHORIZED_SQL44.sql43_function_identity);
+      const sql43AfterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.sql43_function_identity);
+      if (!sql43AfterLookup.ok) return sql43AfterLookup;
+      const sql43After = sql43AfterLookup.details.definition;
       const sql43AfterHash = sql43After ? hashSqlDefinition(sql43After) : null;
 
       if (sql43AfterHash !== expectedSql43Hash) {

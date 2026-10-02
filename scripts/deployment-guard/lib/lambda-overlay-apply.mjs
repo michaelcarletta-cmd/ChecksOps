@@ -11,6 +11,7 @@ import {
 import { evaluateProductionGate } from './production.mjs';
 import { refuseUnguardedDeploy } from '../require-guard.mjs';
 import { lookupSharedLambda } from './shared-targets.mjs';
+import { classifyOwnedMembers, evaluateOwnedMemberPresence } from './lambda-owned-members.mjs';
 import { hashZipMembers, overlayZipMembers } from './zip-members.mjs';
 
 function iso(now) {
@@ -221,10 +222,17 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
   if (!authorized.ok) return authorized;
 
   const receipt = authorized.details.receipt;
-  const owned = [...(receipt.owned_components || [])];
-  if (!owned.length) {
-    return fail(CODES.INVALID_MANIFEST, 'receipt must list owned ZIP members');
+  if (Object.prototype.hasOwnProperty.call(input, 'owned_member_ops')) {
+    return fail(
+      CODES.RECEIPT_MISMATCH,
+      'owned_member_ops may only come from the signed receipt; caller input cannot add or reinterpret members',
+    );
   }
+  const classified = classifyOwnedMembers(receipt);
+  if (!classified.ok) return classified;
+  const owned = [...classified.details.all];
+  const replaceMembers = [...classified.details.replace];
+  const addMembers = [...classified.details.add];
   const memberSources = input.member_sources || {};
   for (const member of owned) {
     if (!memberSources[member]) {
@@ -270,15 +278,12 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
   const liveHashed = hashZipMembersClosed(downloaded.details.zip, 'live');
   if (!liveHashed.ok) return liveHashed;
   const liveMembers = liveHashed.details.members;
-  for (const member of owned) {
-    if (!Object.prototype.hasOwnProperty.call(liveMembers, member)) {
-      return fail(
-        CODES.DEPLOYMENT_COLLISION,
-        'receipt-owned ZIP member is absent from the current live Lambda ZIP',
-        { member },
-      );
-    }
-  }
+  const presence = evaluateOwnedMemberPresence({
+    liveMembers,
+    replace: replaceMembers,
+    add: addMembers,
+  });
+  if (!presence.ok) return presence;
 
   const replacements = {};
   const sourceRoot = repoRoot || guardRoot;
@@ -330,6 +335,7 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     deployment_type: 'lambda-overlay',
     owned_members: owned,
     owned_components: owned,
+    add_members: addMembers,
     preflight: liveIdentity.details,
     immediately_before: immediatelyBefore.details,
     live_members: liveMembers,
@@ -399,6 +405,7 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     liveMembersBefore: liveMembers,
     liveMembersAfter: afterMembers,
     ownedMembers: owned,
+    addMembers,
   });
   if (!post.ok) return post;
 
@@ -427,6 +434,8 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     workstream_id: workstream_id || receipt.workstream_id,
     commit: commit || receipt.commit,
     owned_members: owned,
+    replaced_members: replaceMembers,
+    added_members: addMembers,
     receipt: {
       file: authorized.details.receipt_file || null,
       mac: receipt.mac,

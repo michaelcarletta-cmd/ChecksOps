@@ -48,6 +48,7 @@ export function packExecutor(root) {
     ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
     ['scripts/deployment-guard/lib/errors.mjs', 'lib/errors.mjs'],
     ['scripts/deployment-guard/lib/identity.mjs', 'lib/identity.mjs'],
+    ['scripts/deployment-guard/lib/function-def-lookup.mjs', 'lib/function-def-lookup.mjs'],
   ];
   for (const [from, to] of copies) {
     fs.copyFileSync(path.join(root, from), path.join(staging, to));

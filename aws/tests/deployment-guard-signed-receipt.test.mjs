@@ -204,6 +204,51 @@ test('11. expired or missing lease remains fail-closed', () => {
   assert.equal(noLease.code, CODES.LEASE_EXPIRED);
 });
 
+test('owned_member_ops is MAC-covered and cannot be added after issuance', () => {
+  const root = tmpRoot();
+  const issued = issueValidReceipt(root, {
+    owned_components: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+  });
+  assert.equal(issued.receipt.owned_member_ops, undefined);
+  const tampered = {
+    ...issued.receipt,
+    owned_member_ops: {
+      replace: ['admin-override-check-status.mjs'],
+      add: ['tenant-check-user.mjs'],
+    },
+  };
+  const result = present(root, tampered, matchingRequest());
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.RECEIPT_FORGED);
+});
+
+test('owned_member_ops add list cannot be expanded after issuance', () => {
+  const root = tmpRoot();
+  const issued = issueValidReceipt(root, {
+    owned_components: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: {
+      replace: ['admin-override-check-status.mjs'],
+      add: ['tenant-check-user.mjs'],
+    },
+  });
+  assert.deepEqual(issued.receipt.owned_member_ops.add, ['tenant-check-user.mjs']);
+  const tampered = {
+    ...issued.receipt,
+    owned_components: [
+      'admin-override-check-status.mjs',
+      'tenant-check-user.mjs',
+      'second.mjs',
+    ],
+    owned_member_ops: {
+      replace: ['admin-override-check-status.mjs'],
+      add: ['tenant-check-user.mjs', 'second.mjs'],
+    },
+  };
+  const result = present(root, tampered, matchingRequest());
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.RECEIPT_FORGED);
+});
+
 test('12. environment variables cannot bypass receipt validation', () => {
   const root = tmpRoot();
   const issued = issueValidReceipt(root);

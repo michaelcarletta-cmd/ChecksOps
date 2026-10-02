@@ -24,11 +24,12 @@ export function memberDiff(liveMembers, candidateMembers) {
   return { added, deleted, changed, identical };
 }
 
-export function evaluateMembership({ liveMembers, candidateMembers, ownedMembers }) {
+export function evaluateMembership({ liveMembers, candidateMembers, ownedMembers, addMembers }) {
   const errors = [];
   const owned = new Set(ownedMembers || []);
   const diff = memberDiff(liveMembers, candidateMembers);
-  const unexpectedAdded = diff.added.filter((key) => !owned.has(key));
+  const authorizedAdd = addMembers === undefined ? owned : new Set(addMembers || []);
+  const unexpectedAdded = diff.added.filter((key) => !authorizedAdd.has(key));
   const unexpectedDeleted = diff.deleted.filter((key) => !owned.has(key));
   const unexpectedChanged = diff.changed.filter((key) => !owned.has(key));
 
@@ -205,7 +206,7 @@ export function evaluateApplyFingerprintCas({
   });
 }
 
-export function evaluatePostOverlay({ liveMembersBefore, liveMembersAfter, ownedMembers }) {
+export function evaluatePostOverlay({ liveMembersBefore, liveMembersAfter, ownedMembers, addMembers }) {
   const owned = new Set(ownedMembers || []);
   const before = normalizeMembers(liveMembersBefore);
   const after = normalizeMembers(liveMembersAfter);
@@ -217,6 +218,22 @@ export function evaluatePostOverlay({ liveMembersBefore, liveMembersAfter, owned
         file: path,
         before: hash,
         after: after[path] || null,
+      }));
+    }
+  }
+  if (addMembers !== undefined) {
+    const authorizedAdd = new Set(addMembers || []);
+    const added = Object.keys(after).filter((key) => !Object.prototype.hasOwnProperty.call(before, key));
+    const unexpectedAdded = added.filter((key) => !authorizedAdd.has(key));
+    if (unexpectedAdded.length) {
+      errors.push(errorEntry(CODES.DEPLOYMENT_COLLISION, 'unexpected Lambda ZIP additions after overlay', {
+        unexpected_added: unexpectedAdded,
+      }));
+    }
+    const missingAdd = [...authorizedAdd].filter((key) => !after[key]);
+    if (missingAdd.length) {
+      errors.push(errorEntry(CODES.DEPLOYMENT_COLLISION, 'authorized add member missing after overlay', {
+        missing_add: missingAdd,
       }));
     }
   }
@@ -250,6 +267,7 @@ export function evaluateLambdaOverlay(input = {}) {
     liveMembers: input.live_members,
     candidateMembers: input.candidate_members,
     ownedMembers: input.owned_members,
+    ...('add_members' in input ? { addMembers: input.add_members } : {}),
   });
   if (!membership.ok) return membership;
 
@@ -279,6 +297,7 @@ export function evaluateLambdaOverlay(input = {}) {
       liveMembersBefore: input.live_members,
       liveMembersAfter: input.post_members,
       ownedMembers: input.owned_members,
+      ...('add_members' in input ? { addMembers: input.add_members } : {}),
     });
     if (!post.ok) return post;
   }
