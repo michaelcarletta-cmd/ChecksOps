@@ -16,7 +16,7 @@ import {
   scopes,
   withMoovContext,
 } from './moov-client.mjs';
-import { fail, jsonResult, moovParityContext } from './caller.mjs';
+import { fail, jsonResult, moovParityContext, moovProductionReadContext } from './caller.mjs';
 import {
   MERCHANT_CAPABILITIES,
   MOOV_CAPABILITIES_API_VERSION,
@@ -67,20 +67,37 @@ import {
   sweepConfig,
 } from './moov-onboard.mjs';
 
-const wrap = (handler) => async (event, deps = {}) => {
-  const { withIdentityWrite } = await import('../../data.mjs');
+const wrap = (handler, name) => async (event, deps = {}) => {
+  const { parseBody, withIdentity, withIdentityWrite } = await import('../../data.mjs');
   const { loadSandboxCredentials } = await import('../../sandbox-credentials.mjs');
+  const { executionAllowed } = await import('../../provider-flags.mjs');
   const loader = typeof deps.loadSandboxCredentials === 'function'
     ? deps.loadSandboxCredentials
     : loadSandboxCredentials;
-  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
-    const ctx = await moovParityContext({
-      client,
-      mapping,
-      body,
-      requireAdmin: handler.requireAdmin === true,
-      loadSandbox: loader,
-    });
+  const early = parseBody(event);
+  const action = String(early?.action ?? 'get').toLowerCase();
+  const productionRead = (
+    name === 'moov-sweep-config'
+    && (action === 'get' || action === 'list' || action === 'sweeps')
+    && executionAllowed('moov')
+  );
+  const identity = productionRead ? withIdentity : withIdentityWrite;
+  return identity(event, async ({ client, mapping, claims, body, spoof }) => {
+    const ctx = productionRead
+      ? await moovProductionReadContext({
+        client,
+        mapping,
+        body,
+        requireAdmin: handler.requireAdmin === true,
+        loadProviderSecrets: deps.loadProviderSecrets,
+      })
+      : await moovParityContext({
+        client,
+        mapping,
+        body,
+        requireAdmin: handler.requireAdmin === true,
+        loadSandbox: loader,
+      });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
     try {
       const fetchImpl = deps.fetchImpl || fetch;
@@ -95,7 +112,7 @@ const wrap = (handler) => async (event, deps = {}) => {
         authUid: mapping.application_user_id,
         cognitoSub: claims.sub,
         productionExecution: false,
-        environment: 'sandbox',
+        environment: ctx.environment || 'sandbox',
         apiVersion: ctx.moovContext.apiVersion,
       };
     } catch (error) {
@@ -625,5 +642,5 @@ const HANDLERS = {
 };
 
 export const MOOV_PARITY_HANDLERS = Object.fromEntries(
-  Object.entries(HANDLERS).map(([name, handler]) => [name, wrap(handler)]),
+  Object.entries(HANDLERS).map(([name, handler]) => [name, wrap(handler, name)]),
 );

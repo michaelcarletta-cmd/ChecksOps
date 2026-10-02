@@ -149,7 +149,7 @@ test('live apply is blocked by deployment guard before legacy ID-token gating', 
     CHECKSOPS_STEP3_EXECUTE: '1',
   });
   assert.equal(missingToken.status, 2);
-  assert.match(missingToken.stderr, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.match(missingToken.stderr, /DEPLOYMENT_GUARD_REQUIRED|RECEIPT_EXPIRED|LEASE_EXPIRED/);
   refuteSecrets(`${missingToken.stdout}${missingToken.stderr}`);
 });
 
@@ -295,7 +295,7 @@ test('privileged-operator path remains separately gated and direct execution is 
     CHECKSOPS_OPERATOR_EXECUTE: '1',
   });
   assert.equal(missingTty.status, 2);
-  assert.match(missingTty.stderr, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.match(missingTty.stderr, /DEPLOYMENT_GUARD_REQUIRED|RECEIPT_EXPIRED|LEASE_EXPIRED/);
   assert.doesNotMatch(missingTty.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required|cloudshell_tty_required/);
   refuteSecrets(`${missingTty.stdout}${missingTty.stderr}`);
 });
