@@ -112,12 +112,16 @@ const mockClient = ({ roles = [{ role: 'mortgage_agent' }], mortgageRow = null, 
         };
       }
       if (sql === USER_ROLES_SQL) return { rows: roles };
-      if (/UPDATE public.mortgage_handling_requests/.test(sql) && /assigned_employee_id/.test(sql)) {
+      if (/UPDATE public.mortgage_handling_requests/.test(sql) && /accepted_at/.test(sql)) {
         return {
           rows: mortgageRow || [{
             id: REQUEST_ID,
             status: 'in_progress',
             assigned_employee_id: APP_ID,
+            tenant_id: FREEDOM,
+            check_intake_item_id: CHECK_ID,
+            claim_id: null,
+            accepted_at: '2026-10-02T18:00:00.000Z',
           }],
         };
       }
@@ -194,6 +198,25 @@ test('accept_mortgage_handling_request assigns caller', async () => {
   assert.equal(result.error, undefined);
   assert.equal(result.data.status, 'in_progress');
   assert.equal(result.data.assigned_employee_id, APP_ID);
+  assert.equal(
+    client.queries.some((q) => /INSERT INTO public\.check_billing_events/.test(q.sql)
+      || /FROM public\.mortgage_ops_billing_launch/.test(q.sql)),
+    true,
+  );
+  assert.equal(client.queries.some((q) => /bill-mortgage-handling|moov|stripe/i.test(q.sql)), false);
+});
+
+test('update_mortgage_handling_request_status complete does not accrue usage', async () => {
+  const client = mockClient();
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'update_mortgage_handling_request_status',
+    args: { _request_id: REQUEST_ID, _status: 'completed', _notes: null },
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.data.status, 'completed');
+  assert.equal(client.queries.some((q) => /INSERT INTO public\.check_billing_events/.test(q.sql)), false);
 });
 
 test('loss_draft_action blocks financial amount actions', async () => {

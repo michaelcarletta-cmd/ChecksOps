@@ -176,22 +176,8 @@ export default function MortgageOpsQueue() {
           description: "Our mortgage team finished working with your mortgage company on this check.",
         } as any);
       }
-      // Trigger billing
-
-      const { data: bill, error: billErr } = await supabase.functions.invoke("bill-mortgage-handling", {
-        body: { request_id: id },
-      });
       setBusyId(null);
-      if (billErr || !bill?.ok) {
-        const detail = (bill as any)?.error || billErr?.message || "billing failed";
-        toast.error(`Marked complete — billing failed: ${detail}`);
-      } else if ((bill as any)?.already_billed) {
-        toast.success("Marked complete (already billed)");
-      } else {
-        const totalCents = (bill as any).total_cents ?? (bill as any).flat_fee_cents;
-        const dollars = (totalCents / 100).toFixed(2);
-        toast.success(`Marked complete — billed $${dollars} to ${(bill as any).tenant_name}`);
-      }
+      toast.success("Marked complete");
     } else {
       setBusyId(null);
       toast.success("Cancelled");
