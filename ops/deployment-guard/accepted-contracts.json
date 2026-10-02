@@ -141,6 +141,27 @@
       "invariants": ["cross-tenant reads/writes remain denied"]
     },
     {
+      "id": "claim-ledger-figures-save",
+      "title": "Claim Ledger figures save",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["staging-frontend", "production-spa"],
+      "deployment_types": ["spa-promote"],
+      "test": "aws/tests/claim-ledger-figures-save-contract.test.mjs",
+      "evidence": "ops/deployment-guard/claim-ledger-figures-save-contract.json",
+      "invariants": [
+        "legitimate Claim Ledger figures can be saved",
+        "values persist after refresh",
+        "calculated totals remain correct",
+        "unauthorized/cross-tenant writes remain blocked",
+        "arbitrary financial table writes remain blocked",
+        "Claim Ledger cannot create duplicate claims",
+        "existing claim-number Save still works",
+        "settlement/other financial protections are not weakened"
+      ]
+    },
+    {
       "id": "financial-write-protections",
       "title": "financial write protections",
       "accepted": true,
