@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-27 (index-BPbQUNFr.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-01T15:15:51Z (index-CTqMys28.js) using the origin/main reconciliation in 01b0040f4. This records an already-existing production state from apply 4685b329c; it does not deploy. index-BPbQUNFr.js is superseded. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "identity-cognito": {
       "id": "identity-cognito",
@@ -659,17 +659,17 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "tree_hash": "8a794da51c14a4520e987fcce8fc738e1dc196eca1b3f994fc17b57a2c2b2c7f",
-        "merged": false,
-        "merged_pr": 506
+        "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+        "tree_hash": "1e75908f910c1372cb67de6968008b1dd0f686f5c3900304a5d956a5565ef225",
+        "merged": true,
+        "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-BPbQUNFr.js",
-        "version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
-        "hash": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "name": "/assets/index-CTqMys28.js",
+        "version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+        "hash": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
@@ -680,39 +680,37 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-09-27T01:34:04Z",
+        "recorded_at": "2026-10-01T15:15:51Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "artifact_identity": "/assets/index-BPbQUNFr.js",
+        "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+        "artifact_identity": "/assets/index-CTqMys28.js",
         "evidence_producer": "read-only live HTTPS verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-BPbQUNFr.js",
-        "spa_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "spa_bundle": "/assets/index-CTqMys28.js",
+        "spa_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+        "cloudfront_deployment_fingerprint": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
-        "notes": "Accepted live production SPA 2026-09-27T01:34:04Z. Host checksops.com. Entry /assets/index-BPbQUNFr.js. index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394. S3 version L.ND9yiehnJfDCocKdyFC_mRQZjchON3. CloudFront E1B0ZWWO5559U5. Source lineage 1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720. Banner overlay 6c679a120d5d4b0dd23d7035ecaf309558df29d0. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. origin/main is not this baseline."
+        "config_hash": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+        "notes": "Accepted live production SPA 2026-10-01T15:15:51Z. Host checksops.com. Entry /assets/index-CTqMys28.js. index.html sha256 ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b. S3 version 0AuwkrSXSQDHFGUBHFw93_symfzRvIkv. CloudFront E1B0ZWWO5559U5. Source lineage 6c679a120d5d4b0dd23d7035ecaf309558df29d0. Banner overlay e3e4649478a0c3978065b71b0528dd93baa8dac1. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. This branch adopted the 01b0040f4 reconciliation; it does not deploy. index-BPbQUNFr.js is superseded."
       },
       "rollback": {
-        "git_sha": "1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720",
-        "artifact": "/assets/index-BAD1KYoF.js",
-        "notes": "Pre-overlay live lineage before the accepted banner fix. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
+        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+        "artifact": "/assets/index-BPbQUNFr.js",
+        "notes": "This branch previously PRODUCTION_LOCKED index-BPbQUNFr.js (2026-09-27T01:34:04Z, s3 L.ND9yiehnJfDCocKdyFC_mRQZjchON3). That pin is superseded by the already-live CTqMys28 baseline recorded in 01b0040f4. Do not restore BPbQUNFr or any older SPA over the current live identity."
       },
       "missing_evidence": [],
-      "open_pr_overlap": [
-        "#506"
-      ],
-      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This PR records evidence only and does not deploy."
+      "open_pr_overlap": [],
+      "notes": "Authoritative production frontend baseline. Current accepted live identity is /assets/index-CTqMys28.js from the official 2026-10-01 apply (4685b329c / ops/deployment-guard/freedom-stakeholder-email-match-prod-spa-apply.json), repository-reconciled on origin/main in 01b0040f4. This update records that already-existing production state and does not deploy. index-BPbQUNFr.js is superseded lineage only. SPA-only lock: no SQL."
     },
     "production-release": {
       "id": "production-release",
@@ -722,7 +720,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
-        "tree_hash": "129e703a2cbb0eb2433cfbb65c71fe1c29e648839d271ba884d879a730bed5b7",
+        "tree_hash": "95828dc739b01f295fe548ab0fd14e50edcde4c8d6650f5cb9b8d4d3dbfd9709",
         "merged": true,
         "merged_pr": 343
       },
@@ -766,7 +764,7 @@
         "#326",
         "#328"
       ],
-      "notes": "Control-plane lock tooling only. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-BPbQUNFr.js); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs. Control-plane tree_hash retargeted 2026-10-02 after A/B/E lineage and freedom-platform-funding evidence-matrix completeness. production-spa artifact pins are unchanged (still BPbQUNFr); CTqMys28 reconciliation is proposed, not applied. See ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json."
+      "notes": "Control-plane lock tooling only. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-CTqMys28.js, adopted from 01b0040f4); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs. Control-plane tree_hash retargeted 2026-10-02 after A/B/E lineage, freedom-platform-funding evidence-matrix completeness, and CTqMys28 SPA lock reconciliation. See ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json and ops/deployment-guard/walletops-auto-payout-spa-lock-reconciliation.json."
     },
     "freedom-platform-funding": {
       "id": "freedom-platform-funding",

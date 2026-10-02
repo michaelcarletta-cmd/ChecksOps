@@ -107,8 +107,10 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 ## Production SPA baseline
 
 `production-spa` is the authoritative live frontend at `checksops.com`
-(`/assets/index-BPbQUNFr.js`). Proof:
+(`/assets/index-CTqMys28.js`). Proof:
 `ops/release-locks/proof/production-spa-baseline.md`.
+
+`index-BPbQUNFr.js` is a superseded production baseline. Do not restore it.
 
 `origin/main` is not that SPA. Do not promote main, another branch, or a
 worktree unless the candidate contains or reconciles this baseline. If live

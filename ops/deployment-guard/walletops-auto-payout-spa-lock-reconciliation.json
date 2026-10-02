@@ -1,0 +1,65 @@
+{
+  "id": "walletops-auto-payout-spa-lock-reconciliation",
+  "verdict": "CONTROL-PLANE ONLY — adopted origin/main 01b0040f4 CTqMys28 production-spa lock. NOT a production apply. NOT a new deployment.",
+  "captured_at": "2026-10-02T01:25:00Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-prod-guard-evidence-2d41",
+  "accepted_application_source_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "accepted_application_source_modified": false,
+  "staging_artifacts_rebuilt": false,
+  "production_modified": false,
+  "production_receipt_created": false,
+  "production_lease_created": false,
+  "do_not_deploy_production": true,
+  "do_not_package_production": true,
+  "authority": {
+    "kind": "existing-repository-reconciliation",
+    "commit": "01b0040f4caf5f1a8dfda137903280cce5d9d897",
+    "message": "ops(release-locks): refresh production SPA baseline pins",
+    "does_not_invent_fingerprints": true
+  },
+  "already_existing_production_apply": {
+    "commit": "4685b329cdb1a6aa731e6d8dfd611caf16a633c9",
+    "receipt": "ops/deployment-guard/freedom-stakeholder-email-match-prod-spa-apply.json",
+    "source": "57a04ea534b3247add8ac0f4a161d8c49feaafbb",
+    "applied_at_utc": "2026-10-01T15:16:00Z",
+    "this_task_did_not_repeat_that_apply": true
+  },
+  "before": {
+    "entry": "/assets/index-BPbQUNFr.js",
+    "entry_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+    "index_html_sha256": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
+    "s3_version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+    "accepted_at": "2026-09-27T01:34:04Z",
+    "role_after_this_commit": "superseded"
+  },
+  "after": {
+    "entry": "/assets/index-CTqMys28.js",
+    "entry_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
+    "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+    "s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+    "accepted_at": "2026-10-01T15:15:51Z",
+    "role": "current accepted production baseline"
+  },
+  "copied_exactly_from_01b0040f4": [
+    "scripts/lib/production-spa-baseline.mjs",
+    "ops/release-locks/proof/production-spa-baseline.md"
+  ],
+  "tree_hashes": {
+    "production-spa": "1e75908f910c1372cb67de6968008b1dd0f686f5c3900304a5d956a5565ef225",
+    "production-spa_matches_01b0040f4": true,
+    "production-release": "95828dc739b01f295fe548ab0fd14e50edcde4c8d6650f5cb9b8d4d3dbfd9709",
+    "unrelated_components_retargeted": false
+  },
+  "BPbQUNFr": {
+    "restored": false,
+    "current_baseline": false,
+    "superseded": true,
+    "retained_in": [
+      "SUPERSEDED_PRODUCTION_SPA_BUNDLES",
+      "production-spa.rollback.artifact",
+      "ops/release-locks/proof/production-spa-baseline.md superseded list",
+      "ops/release-locks/OPERATOR.md"
+    ]
+  }
+}
