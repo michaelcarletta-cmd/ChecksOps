@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "kind": "deployment-guard-receipt",
+  "issued_at": "2026-10-02T01:48:09.384Z",
+  "expiry": "2026-10-02T02:03:09.384Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-prod-package-2d41",
+  "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "checksops-production-prep-api",
+  "deployment_type": "lambda-overlay",
+  "owned_components": [
+    "providers/parity/moov-client.mjs",
+    "providers/parity/moov-functions.mjs",
+    "providers/parity/moov-onboard.mjs",
+    "providers/parity/sweep-read.mjs",
+    "providers/parity/moov-capabilities.mjs"
+  ],
+  "preflight_live_fingerprint": {
+    "codeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+    "revisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+    "lastModified": "2026-10-01T18:02:46.000+0000"
+  },
+  "lease": {
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "component": "checksops-production-prep-api",
+    "environment": "production",
+    "acquired_at": "2026-10-02T01:48:09.380Z",
+    "expiry": "2026-10-02T02:03:09.380Z",
+    "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "operator": "cursor-cloud-agent",
+    "replaced_expired": true,
+    "previous_workstream": "tenant-collection-v2-prod-2d41"
+  },
+  "mac": "d5cd11d98c8f8e96ed899c201125563d54d091a1caf7f764992175287111a04c"
+}

@@ -1,0 +1,98 @@
+{
+  "id": "walletops-auto-payout-prod-apply-accepted",
+  "verdict": "PRODUCTION APPLIED AND ACCEPTED",
+  "captured_at": "2026-10-02T01:54:00Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-prod-package-2d41",
+  "accepted_application_source_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "required_composition": "current live production behavior + current main including PR #598 + WalletOps automatic-payout / sweep-history",
+  "rebuilt": false,
+  "s3_sync_used": false,
+  "unguarded_writes": false,
+  "guards_modified": false,
+  "release_lock_changed_before_success": false,
+  "prewrite_spa_toctou": {
+    "captured_at": "2026-10-02T01:48:02.936Z",
+    "entry": "/assets/index-CTqMys28.js",
+    "entry_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
+    "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+    "s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+    "matches_expected": true
+  },
+  "prewrite_lambda_toctou": {
+    "captured_at": "2026-10-02T01:48:02.936Z",
+    "CodeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+    "RevisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+    "LastModified": "2026-10-01T18:02:46.000+0000",
+    "matches_expected": true
+  },
+  "accepted_spa_rehash_before_write": {
+    "index_html_sha256": "791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805",
+    "entry": "/assets/index-gYa_BW8r.js",
+    "entry_sha256": "71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280",
+    "walletops": "/assets/WalletOps-CfLLgWtM.js",
+    "walletops_sha256": "a820403da8d574f3e1708c5318420a4673ebaf4937a2ed35208bbfb02066d683",
+    "matches_authorized": true
+  },
+  "accepted_lambda_rehash_before_write": {
+    "zip_sha256": "339c0ccc4583c6334643499fc5392c7843d751f0cd550f555112a76fb730a86c",
+    "proposed_aws_CodeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "matches_authorized": true
+  },
+  "guard_result": {
+    "validate_release_locks": "PASS",
+    "production_deploy_guard": "PASS",
+    "lambda_preflight": "overlay_allowed",
+    "spa_preflight": "spa_promote_allowed; protected_composition preserved"
+  },
+  "lambda_lease": {
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "component": "checksops-production-prep-api",
+    "acquired_at": "2026-10-02T01:48:09.380Z",
+    "expiry": "2026-10-02T02:03:09.380Z"
+  },
+  "lambda_receipt": {
+    "file": "ops/deployment-guard/walletops-auto-payout-prod-lambda-receipt.json",
+    "issued_at": "2026-10-02T01:48:09.384Z",
+    "expiry": "2026-10-02T02:03:09.384Z"
+  },
+  "spa_lease": {
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "component": "production-spa",
+    "acquired_at": "2026-10-02T01:49:29.413Z",
+    "expiry": "2026-10-02T02:04:29.413Z"
+  },
+  "spa_receipt": {
+    "file": "ops/deployment-guard/walletops-auto-payout-prod-spa-receipt.json",
+    "issued_at": "2026-10-02T01:49:29.418Z",
+    "expiry": "2026-10-02T02:04:29.418Z"
+  },
+  "lambda_before_after": {
+    "before_CodeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+    "before_RevisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+    "after_CodeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "after_RevisionId": "91753f93-71ab-4126-a3f8-6a5cfa08b291",
+    "LastUpdateStatus": "Successful",
+    "env_changed": false
+  },
+  "spa_before_after": {
+    "before_entry": "/assets/index-CTqMys28.js",
+    "before_index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+    "before_s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+    "after_entry": "/assets/index-gYa_BW8r.js",
+    "after_index_html_sha256": "791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805",
+    "after_entry_sha256": "71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280",
+    "after_s3_version": "TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ"
+  },
+  "cloudfront_invalidation": {
+    "id": "I2702DHJBLILBWQYTJNBG085KU",
+    "distribution": "E1B0ZWWO5559U5",
+    "paths": ["/index.html", "/assets/*"],
+    "get_invalidation_status": "AccessDenied for both CloudStaging and ProductionSpaDeploy; hosted HTTPS already resolved to the new entry (x-cache Miss from cloudfront)"
+  },
+  "CTqMys28": {
+    "current_baseline": false,
+    "superseded_only": true,
+    "rollback_artifact": "/assets/index-CTqMys28.js"
+  }
+}

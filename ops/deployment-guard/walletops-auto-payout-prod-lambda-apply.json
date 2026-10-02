@@ -1,0 +1,100 @@
+{
+  "ok": true,
+  "id": "walletops-auto-payout-prod-lambda-apply",
+  "verdict": "PRODUCTION LAMBDA APPLIED",
+  "writer": "scripts/deployment-guard/production-lambda-apply.mjs",
+  "function_name": "checksops-production-prep-api",
+  "candidate_zip": "/tmp/walletops-prod-lambda-candidate.zip",
+  "candidate_zip_sha256": "339c0ccc4583c6334643499fc5392c7843d751f0cd550f555112a76fb730a86c",
+  "before": {
+    "codeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+    "revisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+    "lastModified": "2026-10-01T18:02:46.000+0000",
+    "codeSize": 11715529
+  },
+  "update": {
+    "codeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "revisionId": "936cbdad-b71d-4299-adf0-c3a2e9ecf055",
+    "lastModified": "2026-10-02T01:48:24.000+0000"
+  },
+  "after": {
+    "codeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "revisionId": "91753f93-71ab-4126-a3f8-6a5cfa08b291",
+    "lastModified": "2026-10-02T01:48:24.000+0000",
+    "codeSize": 11326815
+  },
+  "verify": {
+    "expected_CodeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "after_CodeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "after_RevisionId": "91753f93-71ab-4126-a3f8-6a5cfa08b291",
+    "after_LastModified": "2026-10-02T01:48:24.000+0000",
+    "after_LastUpdateStatus": "Successful",
+    "after_State": "Active",
+    "env_names_unchanged": true,
+    "env_values_unchanged": true
+  },
+  "env_changed": false,
+  "compare_and_swap": true,
+  "lease": {
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "component": "checksops-production-prep-api",
+    "environment": "production",
+    "acquired_at": "2026-10-02T01:48:09.380Z",
+    "expiry": "2026-10-02T02:03:09.380Z",
+    "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "operator": "cursor-cloud-agent",
+    "replaced_expired": true,
+    "previous_workstream": "tenant-collection-v2-prod-2d41"
+  },
+  "receipt": {
+    "schema_version": 1,
+    "kind": "deployment-guard-receipt",
+    "issued_at": "2026-10-02T01:48:09.384Z",
+    "expiry": "2026-10-02T02:03:09.384Z",
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "branch": "cursor/walletops-prod-package-2d41",
+    "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "operator": "cursor-cloud-agent",
+    "target_environment": "production",
+    "target_component": "checksops-production-prep-api",
+    "deployment_type": "lambda-overlay",
+    "owned_components": [
+      "providers/parity/moov-client.mjs",
+      "providers/parity/moov-functions.mjs",
+      "providers/parity/moov-onboard.mjs",
+      "providers/parity/sweep-read.mjs",
+      "providers/parity/moov-capabilities.mjs"
+    ],
+    "preflight_live_fingerprint": {
+      "codeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+      "revisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+      "lastModified": "2026-10-01T18:02:46.000+0000"
+    },
+    "lease": {
+      "workstream_id": "walletops-auto-payout-visible-2d41",
+      "component": "checksops-production-prep-api",
+      "environment": "production",
+      "acquired_at": "2026-10-02T01:48:09.380Z",
+      "expiry": "2026-10-02T02:03:09.380Z",
+      "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+      "operator": "cursor-cloud-agent",
+      "replaced_expired": true,
+      "previous_workstream": "tenant-collection-v2-prod-2d41"
+    }
+  },
+  "membership": {
+    "changed": [
+      "providers/parity/moov-client.mjs",
+      "providers/parity/moov-functions.mjs",
+      "providers/parity/moov-onboard.mjs",
+      "providers/parity/sweep-read.mjs"
+    ],
+    "added": [
+      "providers/parity/moov-capabilities.mjs"
+    ],
+    "deleted": [],
+    "unchanged": 153,
+    "unexpected_non_owned": [],
+    "live_zip_byte_identical_to_accepted": true
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "ok": true,
+  "id": "walletops-auto-payout-prod-spa-apply",
+  "verdict": "WALLETOPS AUTOMATIC-PAYOUT / PR #598 \u2014 PRODUCTION SPA APPLIED",
+  "applied_at_utc": "2026-10-02T01:51:18Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-prod-package-2d41",
+  "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "writer": "scripts/deployment-guard/production-spa-apply.mjs",
+  "role": "ChecksOpsProductionSpaDeploy",
+  "deploy_mode": "per_object_put",
+  "s3_sync_delete": false,
+  "lambda_updated_in_this_writer": false,
+  "before": {
+    "entry": "/assets/index-CTqMys28.js",
+    "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+    "s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv"
+  },
+  "after": {
+    "entry": "/assets/index-gYa_BW8r.js",
+    "index_html_sha256": "791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805",
+    "s3_version": "TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ",
+    "entry_sha256": "71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280",
+    "walletops": "assets/WalletOps-CfLLgWtM.js",
+    "walletops_sha256": "a820403da8d574f3e1708c5318420a4673ebaf4937a2ed35208bbfb02066d683",
+    "uploaded_count": 107,
+    "invalidation_id": "I2702DHJBLILBWQYTJNBG085KU"
+  },
+  "https_verify": {
+    "entry": "/assets/index-gYa_BW8r.js",
+    "index_html_sha256": "791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805",
+    "last_modified": "Fri, 02 Oct 2026 01:51:18 GMT",
+    "x_amz_version": "TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ",
+    "age": null,
+    "x_cache": "Miss from cloudfront",
+    "entry_sha256": "71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280"
+  },
+  "receipt": {
+    "schema_version": 1,
+    "kind": "deployment-guard-receipt",
+    "issued_at": "2026-10-02T01:49:29.418Z",
+    "expiry": "2026-10-02T02:04:29.418Z",
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "branch": "cursor/walletops-prod-package-2d41",
+    "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "operator": "cursor-cloud-agent",
+    "target_environment": "production",
+    "target_component": "production-spa",
+    "deployment_type": "spa-promote",
+    "owned_components": [
+      "src/pages/WalletOps.tsx",
+      "src/components/payments/MoovTreasuryPanel.tsx",
+      "src/hooks/useSweepConfig.ts",
+      "src/lib/payments/sweeps.ts",
+      "src/lib/payments/walletSweepActivity.ts",
+      "src/lib/payments/walletRelativeTransfers.ts",
+      "aws/functions/api/providers/parity/sweep-read.mjs",
+      "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "aws/functions/api/providers/parity/moov-functions.mjs",
+      "aws/functions/api/providers/parity/moov-client.mjs",
+      "aws/functions/api/providers/parity/moov-capabilities.mjs",
+      "ops/deployment-guard/walletops-auto-payout-source-composition.json",
+      "ops/deployment-guard/walletops-auto-payout-prod-candidate-accepted.json",
+      "index.html"
+    ],
+    "preflight_live_fingerprint": {
+      "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+      "entry_bundle": "/assets/index-CTqMys28.js",
+      "etag": "5457bf6e48a307af69a34c4e56f685ce",
+      "last_modified": "2026-10-01T15:15:51+00:00",
+      "version_id": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv"
+    },
+    "lease": {
+      "workstream_id": "walletops-auto-payout-visible-2d41",
+      "component": "production-spa",
+      "environment": "production",
+      "acquired_at": "2026-10-02T01:49:29.413Z",
+      "expiry": "2026-10-02T02:04:29.413Z",
+      "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+      "operator": "cursor-cloud-agent",
+      "replaced_expired": true,
+      "previous_workstream": "freedom-stakeholder-moov-sync-2d41"
+    }
+  },
+  "lease": {
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "component": "production-spa",
+    "environment": "production",
+    "acquired_at": "2026-10-02T01:49:29.413Z",
+    "expiry": "2026-10-02T02:04:29.413Z",
+    "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "operator": "cursor-cloud-agent",
+    "replaced_expired": true,
+    "previous_workstream": "freedom-stakeholder-moov-sync-2d41"
+  }
+}

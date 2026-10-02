@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "kind": "deployment-guard-receipt",
+  "issued_at": "2026-10-02T01:49:29.418Z",
+  "expiry": "2026-10-02T02:04:29.418Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-prod-package-2d41",
+  "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "production-spa",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/pages/WalletOps.tsx",
+    "src/components/payments/MoovTreasuryPanel.tsx",
+    "src/hooks/useSweepConfig.ts",
+    "src/lib/payments/sweeps.ts",
+    "src/lib/payments/walletSweepActivity.ts",
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "aws/functions/api/providers/parity/sweep-read.mjs",
+    "aws/functions/api/providers/parity/moov-onboard.mjs",
+    "aws/functions/api/providers/parity/moov-functions.mjs",
+    "aws/functions/api/providers/parity/moov-client.mjs",
+    "aws/functions/api/providers/parity/moov-capabilities.mjs",
+    "ops/deployment-guard/walletops-auto-payout-source-composition.json",
+    "ops/deployment-guard/walletops-auto-payout-prod-candidate-accepted.json",
+    "index.html"
+  ],
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+    "entry_bundle": "/assets/index-CTqMys28.js",
+    "etag": "5457bf6e48a307af69a34c4e56f685ce",
+    "last_modified": "2026-10-01T15:15:51+00:00",
+    "version_id": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv"
+  },
+  "lease": {
+    "workstream_id": "walletops-auto-payout-visible-2d41",
+    "component": "production-spa",
+    "environment": "production",
+    "acquired_at": "2026-10-02T01:49:29.413Z",
+    "expiry": "2026-10-02T02:04:29.413Z",
+    "commit": "b39738cab7c1afd68e97c88781766b6cabe04896",
+    "operator": "cursor-cloud-agent",
+    "replaced_expired": true,
+    "previous_workstream": "freedom-stakeholder-moov-sync-2d41"
+  },
+  "mac": "089eac72ec3a3771bbea17279319cb9040eaa05525275cf6a684d291826faeb2"
+}
