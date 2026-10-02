@@ -325,6 +325,8 @@ async function applyApi() {
     branch: BRANCH,
     commit: COMMIT,
     operator: 'cursor-agent',
+    receipt: receipt.details.receipt,
+    receipt_path: receipt.details.file,
     member_sources: {
       'tenant-check-user.mjs': 'aws/functions/api/tenant-check-user.mjs',
       'admin-override-check-status.mjs': 'aws/functions/api/admin-override-check-status.mjs',
