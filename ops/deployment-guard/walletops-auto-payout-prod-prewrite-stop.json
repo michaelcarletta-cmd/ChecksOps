@@ -1,0 +1,149 @@
+{
+  "ok": false,
+  "verdict": "STOP — do not write production",
+  "id": "walletops-auto-payout-prod-prewrite-stop",
+  "recorded_at_utc": "2026-10-02T00:30:30Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-auto-payout-visible-2d41",
+  "candidate_commit": "b81d7c1a01ec0e18c240f0688022e75fdbfbbd5b",
+  "pr": 603,
+  "aws_writes": 0,
+  "s3_sync_delete": false,
+  "restore_previous_index": false,
+  "agreement": false,
+  "stop_reasons": [
+    "live production SPA is newer than the Release Lock baseline (index-CTqMys28.js vs locked index-BPbQUNFr.js); do not restore the older lock",
+    "candidate is not composed onto live CTqMys28 plus current origin/main",
+    "workspace dist/ is stale (index-C9QrEEkl.js, 2026-09-29) and does not contain Turn off automatic payouts",
+    "production-deploy-guard failed (source.tree_hash drift + missing freedom-platform-funding evidence-matrix row)",
+    "deployment-guard preflight failed (SOURCE_COMPOSITION_REQUIRED, no staging acceptance, no explicit approval)",
+    "no active production-spa or production-lambda lease/receipt for this workstream"
+  ],
+  "pre_write_report": {
+    "1_current_main_sha": "2fe6f7f5eabf42d4f9253d84808e25e5fd46b747",
+    "1_current_main_subject": "Merge pull request #602 from michaelcarletta-cmd/cursor/preflight-forward-accepted-source-composition-fb87",
+    "1_current_main_committed": "2026-10-01 19:37:59 -0400",
+    "2_current_live_production_fingerprint": {
+      "host": "https://checksops.com",
+      "entry": "/assets/index-CTqMys28.js",
+      "entry_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
+      "index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+      "etag": "5457bf6e48a307af69a34c4e56f685ce",
+      "last_modified": "Thu, 01 Oct 2026 15:15:51 GMT",
+      "s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+      "walletops_chunk": "/assets/WalletOps-CjjkWlk9.js",
+      "walletops_sha256": "26a1fa7359feba92061149d524db478082e4a81c5c5f4276646ba1010e1925d3",
+      "walletops_has_turn_off_automatic_payouts": false,
+      "walletops_has_manage_sweeps": true,
+      "lambda": {
+        "name": "checksops-production-prep-api",
+        "readable_this_pass": false,
+        "error": "ExpiredTokenException",
+        "last_known_from_prior_read": {
+          "codeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+          "lastModified": "2026-10-01T18:02:46",
+          "revisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee"
+        }
+      },
+      "apply_lineage": "ops/deployment-guard/freedom-stakeholder-email-match-prod-spa-apply.json"
+    },
+    "3_locked_production_baseline": {
+      "classification": "PRODUCTION_LOCKED",
+      "component": "production-spa",
+      "entry": "/assets/index-BPbQUNFr.js",
+      "entry_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+      "index_html_sha256": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
+      "s3_version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+      "accepted_at": "2026-09-27T01:34:04Z",
+      "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+      "live_equals_lock": false
+    },
+    "4_candidate_fingerprint": {
+      "accepted_composed_dist": false,
+      "branch_head": "b81d7c1a01ec0e18c240f0688022e75fdbfbbd5b",
+      "workspace_dist": {
+        "stale": true,
+        "dated": "2026-09-29",
+        "entry": "/assets/index-C9QrEEkl.js",
+        "entry_sha256": "10c0aab80ddc918744c5acdad0e25ef75d957aaf5c0409707abf06f9e35864f9",
+        "index_html_sha256": "2a8e5245d18a4a84b6175cace303dff9c06b27e5114e4cc439fe9854b2e53575",
+        "contains_turn_off_automatic_payouts": false
+      },
+      "must_not_deploy": true
+    },
+    "5_release_lock_production_guard": {
+      "command": "node scripts/production-deploy-guard.mjs",
+      "ok": false,
+      "errors": [
+        "components.identity-cognito: protected source tree changed without an explicit manifest source.tree_hash update",
+        "components.moov-webhooks: protected source tree changed without an explicit manifest source.tree_hash update",
+        "components.partner-sharing: protected source tree changed without an explicit manifest source.tree_hash update",
+        "components.auto-deposit: protected source tree changed without an explicit manifest source.tree_hash update",
+        "components.database-rls: protected source tree changed without an explicit manifest source.tree_hash update",
+        "components.ocr-azure: protected source tree changed without an explicit manifest source.tree_hash update",
+        "components.production-release: protected source tree changed without an explicit manifest source.tree_hash update",
+        "manifest component freedom-platform-funding is missing from evidence-matrix"
+      ]
+    },
+    "6_deployment_guard": {
+      "command": "node scripts/deployment-guard/preflight.mjs --input /tmp/walletops-auto-payout-prod-preflight-input.json",
+      "ok": false,
+      "code": "SOURCE_COMPOSITION_REQUIRED",
+      "errors": [
+        "SOURCE_COMPOSITION_REQUIRED: production SPA requires accepted source composition",
+        "PRODUCTION_APPROVAL_REQUIRED: production deployment requires a successful staging acceptance reference",
+        "PRODUCTION_APPROVAL_REQUIRED: production requires an explicit approval marker/input"
+      ],
+      "aws_adapter": "forbidden",
+      "aws_calls": []
+    },
+    "7_active_lease_receipt_status": {
+      "production_spa_lease": {
+        "present": true,
+        "expired": true,
+        "status": "expired",
+        "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+        "expiry": "2026-10-01T15:29:22.593Z",
+        "commit": "57a04ea534b3247add8ac0f4a161d8c49feaafbb"
+      },
+      "production_spa_receipt": {
+        "present": true,
+        "expired": true,
+        "workstream_id": "freedom-stakeholder-moov-sync-2d41",
+        "expiry": "2026-10-01T15:29:22.597Z"
+      },
+      "production_lambda_lease": {
+        "present": true,
+        "expired": true,
+        "status": "expired",
+        "workstream_id": "tenant-collection-v2-prod-2d41",
+        "component": "checksops-production-prep-api",
+        "expiry": "2026-09-29T20:25:17.073Z"
+      },
+      "this_workstream_active_lease": false,
+      "this_workstream_active_receipt": false
+    },
+    "8_production_changed_since_preflight": {
+      "spa": false,
+      "preflight_entry": "/assets/index-CTqMys28.js",
+      "toctou_entry": "/assets/index-CTqMys28.js",
+      "preflight_index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+      "toctou_index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+      "preflight_s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+      "toctou_s3_version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+      "still_differs_from_locked_baseline": true,
+      "lambda_rechecked": false,
+      "lambda_recheck_error": "ExpiredTokenException"
+    }
+  },
+  "required_before_any_write": [
+    "reconcile candidate onto live index-CTqMys28.js and current origin/main 2fe6f7f5eabf42d4f9253d84808e25e5fd46b747",
+    "accepted source composition",
+    "staging acceptance for this workstream",
+    "explicit approval for walletops-auto-payout-visible-2d41",
+    "passing contracts / protected-composition",
+    "active deployment lease and short-lived receipt for this workstream",
+    "fresh clean dist (do not use /workspace/dist)",
+    "TOCTOU re-read immediately before AWS write; stop if live changed"
+  ]
+}
