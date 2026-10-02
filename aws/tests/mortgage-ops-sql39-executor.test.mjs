@@ -315,6 +315,33 @@ test('SQL 39 apply stops if FORCE RLS or #601 hashes change', async () => {
   assert.equal(result.code, CODES.UNRELATED_MUTATION);
 });
 
+test('already-exact helper ignores checksops_admin table UPDATE and refuses authenticated/checksops table UPDATE', () => {
+  const intended = `CREATE OR REPLACE FUNCTION public.aws_is_mortgage_ops_agent()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.aws_is_authenticated()
+     AND public.has_role(auth.uid(), 'mortgage_agent'::public.app_role);
+$$;`;
+  const withAdmin = exactSnapshot();
+  withAdmin.table_grants.push({
+    table_name: 'mortgage_handling_requests',
+    grantee: 'checksops_admin',
+    privilege_type: 'UPDATE',
+  });
+  assert.equal(mortgageOpsAlreadyExact(withAdmin, intended), true);
+  const withLogin = exactSnapshot();
+  withLogin.table_grants.push({
+    table_name: 'mortgage_handling_requests',
+    grantee: 'authenticated',
+    privilege_type: 'UPDATE',
+  });
+  assert.equal(mortgageOpsAlreadyExact(withLogin, intended), false);
+});
+
 test('already-exact helper requires the three column grants and no table UPDATE', () => {
   assert.equal(mortgageOpsAlreadyExact(exactSnapshot(), AGENT_FN.replaceAll('$function$', '$$')), false);
   const intended = `CREATE OR REPLACE FUNCTION public.aws_is_mortgage_ops_agent()

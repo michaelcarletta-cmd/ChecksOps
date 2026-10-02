@@ -81,10 +81,7 @@ export function mortgageOpsAlreadyExact(snapshot = {}, intendedFnSql = '') {
     const sourceBody = extractDollarQuotedBody(intendedFnSql);
     if (!liveBody || !sourceBody || liveBody !== sourceBody) return false;
   }
-  const tableUpdate = (snapshot.table_grants || []).filter((row) => (
-    row.table_name === 'mortgage_handling_requests' && row.privilege_type === 'UPDATE'
-  ));
-  if (tableUpdate.length) return false;
+  if (tableLevelUpdateRoles(snapshot).length) return false;
   const wanted = new Set(['assigned_employee_id', 'accepted_at', 'completed_at']);
   const granted = new Set(
     (snapshot.column_update_grants || [])
@@ -202,10 +199,16 @@ function financialGrantsUnchanged(before, after) {
   return JSON.stringify(beforeFin) === JSON.stringify(afterFin);
 }
 
-function tableLevelUpdatePresent(snapshot) {
-  return (snapshot.table_grants || []).some((row) => (
-    row.table_name === 'mortgage_handling_requests' && row.privilege_type === 'UPDATE'
+function tableLevelUpdateRoles(snapshot) {
+  return (snapshot.table_grants || []).filter((row) => (
+    row.table_name === 'mortgage_handling_requests'
+    && row.privilege_type === 'UPDATE'
+    && (row.grantee === 'authenticated' || row.grantee === 'checksops')
   ));
+}
+
+function tableLevelUpdatePresent(snapshot) {
+  return tableLevelUpdateRoles(snapshot).length > 0;
 }
 
 export async function handleMortgageOpsAcceptComplete({
