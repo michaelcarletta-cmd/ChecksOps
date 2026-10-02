@@ -22,8 +22,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "b2fc9e1152ca2ffbfac86c43fccdc22461dda17266bbea2d447f6d3f7cbb1bed",
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "tree_hash": "cd6feb820a4accec582313f5f462f97656232be817a04b54c1a7b3a54d92abf0",
         "merged": true,
         "merged_pr": null
       },
@@ -81,7 +81,7 @@
         "#313",
         "#240"
       ],
-      "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED."
+      "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED. tree_hash retargeted 2026-10-02 to accepted source b39738cab7c1afd68e97c88781766b6cabe04896 after A/B/E lineage in ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json. Source files at that SHA were not rewritten."
     },
     "moov-webhooks": {
       "id": "moov-webhooks",
@@ -90,8 +90,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "18037c16ab16c004828d9c6e19cfc309bb7fa1017aaf798487fb163664f96a89",
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "tree_hash": "228929814e8454b901ea8773a7bef24cf05cbdc992a34a64032e8bfe22ec02c0",
         "merged": true,
         "merged_pr": null
       },
@@ -138,7 +138,7 @@
         "#315",
         "#308"
       ],
-      "notes": "WEBHOOK_TRANSITION.md on main still says production URLs remain on Supabase. Background claims AWS accepted events. UNVERIFIED."
+      "notes": "WEBHOOK_TRANSITION.md on main still says production URLs remain on Supabase. Background claims AWS accepted events. UNVERIFIED. tree_hash retargeted 2026-10-02 to accepted source b39738cab7c1afd68e97c88781766b6cabe04896 after A/B/E lineage in ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json. Source files at that SHA were not rewritten."
     },
     "checkalt-submission": {
       "id": "checkalt-submission",
@@ -326,8 +326,8 @@
       "production_active": false,
       "environment": "source-only",
       "source": {
-        "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "ea919c1c1726542c2dff4c4e704b73d2d56db30098154ef577f27adbe0b4b2d1",
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "tree_hash": "5ca194bc28ab21c840c1178bedb7863b66939c8bcf9e425b347dbbec2da641a9",
         "merged": true,
         "merged_pr": 354
       },
@@ -397,7 +397,7 @@
         "#332",
         "#327"
       ],
-      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation, tenants_public partner names, and the disposable shared-check READ fixture columns needed by SQL 33; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
+      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation, tenants_public partner names, and the disposable shared-check READ fixture columns needed by SQL 33; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access. tree_hash retargeted 2026-10-02 to accepted source b39738cab7c1afd68e97c88781766b6cabe04896 after A/B/E lineage in ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json. Source files at that SHA were not rewritten."
     },
     "mortgage-ops": {
       "id": "mortgage-ops",
@@ -469,8 +469,8 @@
       "production_active": false,
       "environment": "source-only",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "7537faf0225986f9dc73d8aab4dc578adb3bea0015b47b288479fd00ab6dd900",
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "tree_hash": "9463000d220bef217b858dc737544dece8fc7468dfb262aea9188ac313280e9d",
         "merged": false,
         "merged_pr": null
       },
@@ -506,7 +506,7 @@
         "#327",
         "#332"
       ],
-      "notes": "Validated-as-ready in background is not production-locked. PR #339 is draft and not on main."
+      "notes": "Validated-as-ready in background is not production-locked. PR #339 is draft and not on main. tree_hash retargeted 2026-10-02 to accepted source b39738cab7c1afd68e97c88781766b6cabe04896 after A/B/E lineage in ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json. Source files at that SHA were not rewritten."
     },
     "database-rls": {
       "id": "database-rls",
@@ -515,8 +515,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
-        "tree_hash": "a67d882ccedcffb80007aa936f270398dd62617220c2b0ab790c4a8612002fbd",
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "tree_hash": "22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306",
         "merged": false,
         "merged_pr": null
       },
@@ -561,7 +561,7 @@
         "#350",
         "#310"
       ],
-      "notes": "Path-hashed only. Adding 33_partner_stage_totals.sql and 34_c1c_partner_visibility.sql changes this tree. Those two files plus 31/32 are APPLIED IN PRODUCTION for partner sharing; do not reapply. PR #310 adds a different 33_ tenant-billing file and must not overwrite the partner-share 33/34 contract."
+      "notes": "Path-hashed only. Adding 33_partner_stage_totals.sql and 34_c1c_partner_visibility.sql changes this tree. Those two files plus 31/32 are APPLIED IN PRODUCTION for partner sharing; do not reapply. PR #310 adds a different 33_ tenant-billing file and must not overwrite the partner-share 33/34 contract. tree_hash retargeted 2026-10-02 to accepted source b39738cab7c1afd68e97c88781766b6cabe04896 after A/B/E lineage in ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json. Source files at that SHA were not rewritten."
     },
     "provider-secrets": {
       "id": "provider-secrets",
@@ -616,7 +616,7 @@
       "environment": "staging",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801",
+        "tree_hash": "f427516ee1ea870165b438244efac59b252c010dc994e52fdfe0957375e12932",
         "merged": true,
         "merged_pr": 370
       },
@@ -650,7 +650,7 @@
         "production OCR validation evidence"
       ],
       "open_pr_overlap": [],
-      "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked."
+      "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked. tree_hash retargeted 2026-10-02 to accepted source b39738cab7c1afd68e97c88781766b6cabe04896 after A/B/E lineage in ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json. Source files at that SHA were not rewritten."
     },
     "production-spa": {
       "id": "production-spa",
@@ -721,8 +721,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "b9b38e62b4e03efb3a2bcb50548457eeafa16608e888459396bd61a9613c8abc",
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "tree_hash": "129e703a2cbb0eb2433cfbb65c71fe1c29e648839d271ba884d879a730bed5b7",
         "merged": true,
         "merged_pr": 343
       },
@@ -766,7 +766,7 @@
         "#326",
         "#328"
       ],
-      "notes": "Control-plane lock tooling only. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-BPbQUNFr.js); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
+      "notes": "Control-plane lock tooling only. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-BPbQUNFr.js); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs. Control-plane tree_hash retargeted 2026-10-02 after A/B/E lineage and freedom-platform-funding evidence-matrix completeness. production-spa artifact pins are unchanged (still BPbQUNFr); CTqMys28 reconciliation is proposed, not applied. See ops/deployment-guard/walletops-auto-payout-prod-guard-evidence.json."
     },
     "freedom-platform-funding": {
       "id": "freedom-platform-funding",
@@ -811,7 +811,7 @@
         "payment_event_log has no row for provider transfer 367c5353-ed20-430b-b767-c3e5d47f28ad"
       ],
       "open_pr_overlap": [],
-      "notes": "Protects Freedom \u2192 ChecksOps funding BEHAVIOR and does not pin an obsolete whole-Lambda SHA. Known-good provider transfer 367c5353-ed20-430b-b767-c3e5d47f28ad. Monthly billing PRODUCTION_POST stays false."
+      "notes": "Protects Freedom → ChecksOps funding BEHAVIOR and does not pin an obsolete whole-Lambda SHA. Known-good provider transfer 367c5353-ed20-430b-b767-c3e5d47f28ad. Monthly billing PRODUCTION_POST stays false."
     }
   }
 }
