@@ -1,0 +1,45 @@
+{
+  "read_only": true,
+  "mutated": false,
+  "workstream": "claim-settlement-privs-diag-a2a4",
+  "authority": {
+    "production_spa_entry": "/assets/index-B2T1Wfw7.js",
+    "production_index_sha256": "a696053f8d8f4ae32fe2bc39622a97452b6b98ed27a03563d7f3ae50fe20ef3e",
+    "production_lambda_function": "checksops-production-prep-api",
+    "production_lambda_code_sha256": "kqXCfyf3PVmKxV4ncmLgWKH/A6iwbi/IgsOgFTbIedQ=",
+    "production_lambda_revision_id": "1f5bb42a-047d-4bd2-80f4-1ec11c97c2c6",
+    "writer_member_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+    "writer_identical_on_staging": true,
+    "postgresql_version": "18.3"
+  },
+  "failing_sql": "SELECT id, org_id FROM public.claims WHERE id = $1::uuid FOR UPDATE",
+  "execution_role": "checksops",
+  "api_error": {
+    "status": 403,
+    "error": "rls_denied",
+    "pg_code": "42501",
+    "message": "permission denied for table claims",
+    "classification_note": "42501 is a GRANT failure; data.mjs maps it to rls_denied"
+  },
+  "production_claims_has_table_privilege": {
+    "canSelect": true,
+    "canInsert": true,
+    "canUpdate": false,
+    "canDelete": false,
+    "rlsEnabled": true,
+    "rlsForced": false
+  },
+  "staging_claims_has_table_privilege": {
+    "canSelect": true,
+    "canInsert": false,
+    "canUpdate": false,
+    "canDelete": false,
+    "rlsEnabled": true,
+    "rlsForced": false
+  },
+  "intended_grant": "GRANT UPDATE (claim_number, updated_at) ON TABLE public.claims TO checksops;",
+  "intended_grant_file": "aws/workflows/sql/70_staging_claims_number_grant.sql",
+  "sql43_sql44_production": "exact",
+  "pr_601_overlap": "none on claims/claim_settlements grants; serialize production-sql apply",
+  "proposed_minimum_sql_applied": false
+}

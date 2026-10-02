@@ -1,0 +1,48 @@
+{
+  "read_only": true,
+  "mutated": false,
+  "inspected_at": "2026-10-02T18:41:00Z",
+  "inspect_oneshot": "checksops-prod-sql70-priv-inspect-a2a4",
+  "inspect_only": true,
+  "no_601_lambda": true,
+  "production_spa_entry": "/assets/index-B2T1Wfw7.js",
+  "production_index_sha256": "a696053f8d8f4ae32fe2bc39622a97452b6b98ed27a03563d7f3ae50fe20ef3e",
+  "production_lambda_code_sha256": "kqXCfyf3PVmKxV4ncmLgWKH/A6iwbi/IgsOgFTbIedQ=",
+  "production_lambda_revision_id": "1f5bb42a-047d-4bd2-80f4-1ec11c97c2c6",
+  "sql70_source_sha256": "0a5109e102f6d8014c9e6e6e6d99c259eecb82c0c576fef62834ebb869bffa5c",
+  "privilege_sha256": "46589287c22aabc4f3f3bfd30784ad46dccc4e58c693e9953c13e8cd91028f18",
+  "already_has_required_claims_column_update": false,
+  "stop_required_before_apply": false,
+  "checksops": {
+    "claims_table": {
+      "SELECT": true,
+      "INSERT": true,
+      "UPDATE": false,
+      "DELETE": false
+    },
+    "claims_columns": {
+      "id": { "SELECT": true, "INSERT": true, "UPDATE": false },
+      "org_id": { "SELECT": true, "INSERT": true, "UPDATE": false },
+      "claim_number": { "SELECT": true, "INSERT": true, "UPDATE": false },
+      "updated_at": { "SELECT": true, "INSERT": true, "UPDATE": false }
+    },
+    "claim_settlements_table": {
+      "SELECT": true,
+      "INSERT": true,
+      "UPDATE": true,
+      "DELETE": true
+    }
+  },
+  "rls": {
+    "claims": { "enabled": true, "forced": false, "owner": "checksops_admin" },
+    "claim_settlements": { "enabled": true, "forced": false, "owner": "checksops_admin" }
+  },
+  "notes": [
+    "Required column UPDATE is absent. SQL70 grant is not already present.",
+    "No UPDATE on claims.id or claims.org_id.",
+    "No table-level UPDATE on public.claims.",
+    "claim_settlements already has SELECT/INSERT/UPDATE/DELETE. Inspect-only; do not change.",
+    "Production uniquely has INSERT on claims. Do not copy or revoke.",
+    "Official GET /db-readonly-validate as checksops: claims canSelect true, canInsert true, canUpdate false, canDelete false."
+  ]
+}

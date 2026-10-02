@@ -31,3 +31,5 @@ aws/.aws-sam/
 
 # AWS SAM build output
 aws/.aws-sam/
+
+.deployment-guard/
