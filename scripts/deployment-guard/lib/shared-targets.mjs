@@ -14,6 +14,12 @@ export const SHARED_LAMBDAS = Object.freeze({
     target_component: 'checksops-production-origin-verify',
     deployment_type: 'lambda-overlay',
   },
+  'checksops-staging-guarded-sql-executor': {
+    target_environment: 'staging',
+    target_component: 'checksops-staging-guarded-sql-executor',
+    deployment_type: 'lambda-overlay',
+    package_root: 'aws/write-path/guarded-sql-executor',
+  },
 });
 
 export const SHARED_SPA_BUCKETS = Object.freeze({

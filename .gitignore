@@ -35,5 +35,7 @@ aws/.aws-sam/
 # Deployment-guard local leases/receipts (never commit live locks)
 .deployment-guard/
 
-# Packed copies of guard libs for the VPC SQL executor (created by tests/pack)
-aws/write-path/guarded-sql-executor/lib/
+# Packed copies of guard libs for the VPC SQL executor (created by tests/pack).
+# sql-executor-auth.mjs is the live overlay source and must remain tracked.
+aws/write-path/guarded-sql-executor/lib/*
+!aws/write-path/guarded-sql-executor/lib/sql-executor-auth.mjs

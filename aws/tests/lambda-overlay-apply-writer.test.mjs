@@ -10,7 +10,7 @@ import { createLiveAwsAdapter } from '../../scripts/deployment-guard/lib/aws-ada
 import { consumedReceiptFile } from '../../scripts/deployment-guard/lib/consumed-receipts.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
-import { applyLambdaOverlay } from '../../scripts/deployment-guard/lib/lambda-overlay-apply.mjs';
+import { applyLambdaOverlay, resolveOwnedMemberSource } from '../../scripts/deployment-guard/lib/lambda-overlay-apply.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { hashZipMembers, readZipMembers, writeZipMembers } from '../../scripts/deployment-guard/lib/zip-members.mjs';
 
@@ -1190,6 +1190,84 @@ test('add-member RevisionId drift performs no write', async () => {
   assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
   assert.equal(state.updates.length, 0);
   assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('executor package_root resolves executor members and refuses api-root paths', () => {
+  const root = tmpRootWithOps();
+  const execDir = path.join(root, 'aws/write-path/guarded-sql-executor');
+  fs.mkdirSync(path.join(execDir, 'sql'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
+  fs.writeFileSync(path.join(execDir, 'index.mjs'), 'export const executor = true;\n');
+  fs.writeFileSync(path.join(root, 'aws/functions/api/index.mjs'), 'export const api = true;\n');
+  const okExec = resolveOwnedMemberSource(root, 'index.mjs', 'aws/write-path/guarded-sql-executor/index.mjs', {
+    packageRoot: 'aws/write-path/guarded-sql-executor',
+  });
+  assert.equal(okExec.ok, true, okExec.message);
+  assert.equal(okExec.details.package_root, 'aws/write-path/guarded-sql-executor');
+  const apiPath = resolveOwnedMemberSource(root, 'index.mjs', 'aws/functions/api/index.mjs', {
+    packageRoot: 'aws/write-path/guarded-sql-executor',
+  });
+  assert.equal(apiPath.ok, false);
+  assert.equal(apiPath.code, CODES.UNRELATED_MUTATION);
+  const defaultApi = resolveOwnedMemberSource(root, 'index.mjs', 'aws/functions/api/index.mjs');
+  assert.equal(defaultApi.ok, true, defaultApi.message);
+});
+
+test('staging SQL executor overlay uses package_root and does not rewrite unowned #601 SQL', async () => {
+  const root = tmpRootWithOps();
+  const execDir = path.join(root, 'aws/write-path/guarded-sql-executor');
+  fs.mkdirSync(path.join(execDir, 'sql'), { recursive: true });
+  fs.mkdirSync(path.join(execDir, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(execDir, 'index.mjs'), 'export const handler = "candidate";\n');
+  fs.writeFileSync(path.join(execDir, 'lib/sql-executor-auth.mjs'), 'export const auth = "candidate";\n');
+  fs.writeFileSync(path.join(execDir, 'mortgage-ops-sql39.mjs'), 'export const sql39 = true;\n');
+  fs.writeFileSync(path.join(execDir, 'sql/39_mortgage_ops_agent_accept_complete.sql'), '-- sql39\n');
+  const issued = issueOverlayReceipt(root, {
+    component: 'checksops-staging-guarded-sql-executor',
+    owned: [
+      'index.mjs',
+      'lib/sql-executor-auth.mjs',
+      'mortgage-ops-sql39.mjs',
+      'sql/39_mortgage_ops_agent_accept_complete.sql',
+    ],
+    owned_member_ops: {
+      replace: ['index.mjs', 'lib/sql-executor-auth.mjs'],
+      add: ['mortgage-ops-sql39.mjs', 'sql/39_mortgage_ops_agent_accept_complete.sql'],
+    },
+  });
+  const zip = writeZipMembers({
+    'index.mjs': 'export const handler = "live";\n',
+    'lib/sql-executor-auth.mjs': 'export const auth = "live";\n',
+    'sql/20261002200000_user_can_move_tenant_checks_membership_only.sql': '-- membership only\n',
+    'unrelated.mjs': 'export const keep = true;\n',
+  });
+  const state = createLambdaState({ zip });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    apply: true,
+    function_name: 'checksops-staging-guarded-sql-executor',
+    receipt: issued.receipt,
+    member_sources: {
+      'index.mjs': 'aws/write-path/guarded-sql-executor/index.mjs',
+      'lib/sql-executor-auth.mjs': 'aws/write-path/guarded-sql-executor/lib/sql-executor-auth.mjs',
+      'mortgage-ops-sql39.mjs': 'aws/write-path/guarded-sql-executor/mortgage-ops-sql39.mjs',
+      'sql/39_mortgage_ops_agent_accept_complete.sql': 'aws/write-path/guarded-sql-executor/sql/39_mortgage_ops_agent_accept_complete.sql',
+    },
+  }, {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, true, result.message);
+  const after = readZipMembers(state.zip);
+  assert.equal(after['index.mjs'].toString(), 'export const handler = "candidate";\n');
+  assert.equal(after['sql/20261002200000_user_can_move_tenant_checks_membership_only.sql'].toString(), '-- membership only\n');
+  assert.equal(after['unrelated.mjs'].toString(), 'export const keep = true;\n');
+  assert.equal(after['mortgage-ops-sql39.mjs'].toString(), 'export const sql39 = true;\n');
 });
 
 test('duplicate live ZIP member names fail closed before overlay/rebuild', async () => {

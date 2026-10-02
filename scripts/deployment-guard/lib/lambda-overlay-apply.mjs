@@ -73,7 +73,18 @@ function hashZipMembersClosed(buffer, label) {
   }
 }
 
-export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
+function resolvePackageRootRel(opts = {}) {
+  const raw = opts.packageRoot == null || opts.packageRoot === ''
+    ? 'aws/functions/api'
+    : String(opts.packageRoot);
+  const normalized = raw.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  if (!normalized || normalized.includes('\0') || normalized.split('/').includes('..')) {
+    return fail(CODES.UNRELATED_MUTATION, 'package_root is malformed', { package_root: raw });
+  }
+  return ok({ packageRoot: normalized });
+}
+
+export function resolveOwnedMemberSource(repoRoot, member, sourcePath, opts = {}) {
   if (!repoRoot) {
     return fail(CODES.INVALID_MANIFEST, 'member_sources confinement requires a repository root', { member });
   }
@@ -93,6 +104,10 @@ export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
     );
   }
 
+  const packageRootRel = resolvePackageRootRel(opts);
+  if (!packageRootRel.ok) return packageRootRel;
+  const packageRoot = packageRootRel.details.packageRoot;
+
   let rootReal;
   try {
     rootReal = fs.realpathSync(repoRoot);
@@ -102,17 +117,17 @@ export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
 
   let lambdaRootReal;
   try {
-    lambdaRootReal = fs.realpathSync(path.join(rootReal, 'aws/functions/api'));
+    lambdaRootReal = fs.realpathSync(path.join(rootReal, ...packageRoot.split('/')));
   } catch {
-    return fail(CODES.INVALID_MANIFEST, 'Lambda package root aws/functions/api is not resolvable', { member });
+    return fail(CODES.INVALID_MANIFEST, `Lambda package root ${packageRoot} is not resolvable`, { member });
   }
   try {
     const stat = fs.statSync(lambdaRootReal);
     if (!stat.isDirectory()) {
-      return fail(CODES.INVALID_MANIFEST, 'Lambda package root aws/functions/api is not a directory', { member });
+      return fail(CODES.INVALID_MANIFEST, `Lambda package root ${packageRoot} is not a directory`, { member });
     }
   } catch {
-    return fail(CODES.INVALID_MANIFEST, 'Lambda package root aws/functions/api is not readable', { member });
+    return fail(CODES.INVALID_MANIFEST, `Lambda package root ${packageRoot} is not readable`, { member });
   }
 
   const candidate = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(rootReal, raw);
@@ -163,19 +178,19 @@ export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
   if (!relToLambdaRoot || relToLambdaRoot.startsWith('..') || path.isAbsolute(relToLambdaRoot)) {
     return fail(
       CODES.UNRELATED_MUTATION,
-      'owned member source must resolve inside the Lambda package root aws/functions/api',
-      { member, path: raw, resolved: fileReal },
+      `owned member source must resolve inside the Lambda package root ${packageRoot}`,
+      { member, path: raw, resolved: fileReal, package_root: packageRoot },
     );
   }
   const normalizedRel = relToLambdaRoot.replace(/\\/g, '/');
   if (normalizedRel !== member) {
     return fail(
       CODES.UNRELATED_MUTATION,
-      'owned member source path must match the receipt-approved ZIP member (relative to aws/functions/api)',
-      { member, path: raw, resolved: fileReal, relative: normalizedRel },
+      `owned member source path must match the receipt-approved ZIP member (relative to ${packageRoot})`,
+      { member, path: raw, resolved: fileReal, relative: normalizedRel, package_root: packageRoot },
     );
   }
-  return ok({ path: fileReal });
+  return ok({ path: fileReal, package_root: packageRoot });
 }
 
 async function waitForFunctionUpdated(aws, functionName, { attempts = 20, delayMs = 0 } = {}) {
@@ -326,7 +341,9 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
   const replacements = {};
   const sourceRoot = repoRoot || guardRoot;
   for (const member of owned) {
-    const resolved = resolveOwnedMemberSource(sourceRoot, member, memberSources[member]);
+    const resolved = resolveOwnedMemberSource(sourceRoot, member, memberSources[member], {
+      packageRoot: shared.package_root,
+    });
     if (!resolved.ok) return resolved;
     replacements[member] = fs.readFileSync(resolved.details.path);
   }
