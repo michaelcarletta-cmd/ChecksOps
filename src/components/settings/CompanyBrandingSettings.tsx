@@ -13,7 +13,8 @@ import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
 export function CompanyBrandingSettings() {
-  const { refreshTenant } = useTenant();
+  const { tenant, refreshTenant } = useTenant();
+  const tenantId = tenant?.id ?? null;
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -23,7 +24,6 @@ export function CompanyBrandingSettings() {
   const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
   const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
   const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
-  const [tenantId, setTenantId] = useState<string | null>(null);
   
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -34,7 +34,7 @@ export function CompanyBrandingSettings() {
 
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [tenantId]);
 
   const loadSettings = async () => {
     // 1. Get branding details from company_branding
@@ -54,30 +54,20 @@ export function CompanyBrandingSettings() {
       setLetterheadUrl(branding.letterhead_url || null);
     }
 
-    // 2. Application/sidebar logo and allowlisted invoice fields live on tenants.
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: tenantUser } = await supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
+    // 2. Application/sidebar logo and allowlisted invoice fields live on the current tenant.
+    if (tenantId) {
+      const { data: tenantRow } = await supabase
+        .from("tenants")
+        .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+        .eq("id", tenantId)
         .maybeSingle();
-
-      if (tenantUser) {
-        setTenantId(tenantUser.tenant_id);
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
-          .eq("id", tenantUser.tenant_id)
-          .maybeSingle();
-        
-        if (tenant) {
-          const t = tenant as any;
-          if (t.logo_url) setLogoUrl(t.logo_url);
-          setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
-          setInvoiceFooterNote(t.invoice_footer_note || "");
-          setInvoiceDefaultTerms(t.invoice_default_terms || "");
-        }
+      
+      if (tenantRow) {
+        const t = tenantRow as any;
+        if (t.logo_url) setLogoUrl(t.logo_url);
+        setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
+        setInvoiceFooterNote(t.invoice_footer_note || "");
+        setInvoiceDefaultTerms(t.invoice_default_terms || "");
       }
     }
   };
