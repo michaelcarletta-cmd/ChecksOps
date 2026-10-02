@@ -84,20 +84,31 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
   if (!rel) return { ok: false, statusCode: 400, error: 'invalid_path' };
 
   if (bucket === 'claim-files' || bucket === 'endorsement-packets') {
-    const checkId = matchCheckScopedPath(rel);
-    if (!checkId) {
-      if (bucket === 'claim-files') {
-        const existing = await lookupWritableCheckByImagePath(client, rel);
-        if (existing) {
+    // Prefer the check that actually owns this object via image columns.
+    // Migrated claim-folder paths look like checks/{claimId}/... and must not
+    // be trusted as check_intake_items.id.
+    if (bucket === 'claim-files') {
+      const existing = await lookupWritableCheckByImagePath(client, rel);
+      if (existing) {
+        if (!(await hasTenantMembership(client, userId, existing.tenant_id))) {
           return {
-            ok: true,
-            rel,
-            check: existing,
-            key: s3KeyFor(bucket, rel),
-            strategy: 'existing_check_image_or_deposit2',
+            ok: false,
+            statusCode: 403,
+            error: 'rls_denied',
+            message: 'Not authorized for this check image',
           };
         }
+        return {
+          ok: true,
+          rel,
+          check: existing,
+          key: s3KeyFor(bucket, rel),
+          strategy: 'existing_check_image_or_deposit2',
+        };
       }
+    }
+    const checkId = matchCheckScopedPath(rel);
+    if (!checkId) {
       return {
         ok: false,
         statusCode: 403,
@@ -117,6 +128,14 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     }
     if (!isCheckScopedPathFor(rel, looked.check.id)) {
       return { ok: false, statusCode: 403, error: 'rls_denied', message: 'path is not scoped to this check' };
+    }
+    if (!(await hasTenantMembership(client, userId, looked.check.tenant_id))) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'rls_denied',
+        message: 'Not authorized for this check image',
+      };
     }
     return { ok: true, rel, check: looked.check, key: s3KeyFor(bucket, rel), strategy: 'check' };
   }
