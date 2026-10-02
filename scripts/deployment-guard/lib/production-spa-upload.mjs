@@ -201,6 +201,11 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   });
   if (!authorized.ok) return authorized;
 
+  const receiptIdentity = authorized.details?.receipt || {};
+  const branch = input.branch || receiptIdentity.branch || env.CHECKSOPS_BRANCH || env.GITHUB_REF_NAME || 'unknown-branch';
+  const operator = input.operator || receiptIdentity.operator || env.CHECKSOPS_OPERATOR || env.USER || null;
+  const build_timestamp = input.build_timestamp || input.buildTimestamp || new Date(now).toISOString();
+
   const distDir = input.dist_dir || input.distDir || input.dist_path || input.distPath || 'dist';
   const dist = distFingerprint(distDir);
   if (!dist.ok) return dist;
@@ -231,7 +236,9 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     requireDeploymentGuard({
       ...input,
       workstream_id,
+      branch,
       commit,
+      operator,
       target_environment: 'production',
       target_component: 'production-spa',
       deployment_type: 'spa-promote',
@@ -243,6 +250,7 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
       immediately_before_fingerprint: before.details.fingerprint,
       dist: { ...(typeof input.dist === 'object' ? input.dist : {}), clean_build: true },
       clean_build: true,
+      build_timestamp,
     }, {
       root: guardRoot,
       env: ctx.guardEnv || env,
