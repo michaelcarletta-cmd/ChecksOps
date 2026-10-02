@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "workstream_id": "claim-sql70-prod-grant-a2a4",
+  "authorized_sql": "GRANT UPDATE (claim_number, updated_at) ON TABLE public.claims TO checksops;",
+  "stopped": true,
+  "further_grants": false,
+  "production_api_lambda_modified": false,
+  "production_spa_modified": false
+}

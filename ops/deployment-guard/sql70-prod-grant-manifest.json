@@ -1,6 +1,7 @@
 {
   "workstream_id": "claim-sql70-prod-grant-a2a4",
   "branch": "cursor/claim-sql70-prod-grant-a2a4",
+  "commit": "a34fbd7e045eb9e5980dbd7c9d2db712a50b16a9",
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",

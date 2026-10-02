@@ -8,10 +8,10 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { repoRootFrom } from '../../../../scripts/deployment-guard/lib/paths.mjs';
 import { enforceScriptGuard } from '../../../../scripts/deployment-guard/require-guard.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const ROOT = repoRootFrom(import.meta.url);
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
 const REGION = 'us-east-1';
 const ONESHOT = 'checksops-prod-sql70-grant-a2a4';
