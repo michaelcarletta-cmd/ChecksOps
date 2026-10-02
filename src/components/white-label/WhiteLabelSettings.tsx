@@ -18,8 +18,6 @@ import {
   ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
-import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
-import { Mail } from "lucide-react";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
@@ -175,7 +173,7 @@ export function WhiteLabelSettings() {
             {canManageTenant && <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Account/Stakeholders</TabsTrigger>}
-            {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding & Email</TabsTrigger>}
+            {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>}
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
             {canManageTenant && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
             <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
@@ -213,7 +211,6 @@ export function WhiteLabelSettings() {
 
               <TabsContent value="branding" className="space-y-6">
                 <CompanyBrandingSettings />
-                <EmailSenderSettings />
               </TabsContent>
             </>
           )}
