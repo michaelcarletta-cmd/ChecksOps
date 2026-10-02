@@ -1,19 +1,65 @@
 import { CODES, fail, ok } from './errors.mjs';
 
+/**
+ * Resolve a function by schema + name + ordered INPUT argument type OIDs.
+ *
+ * Matching uses pg_proc.proargtypes / pronargs, not
+ * pg_get_function_identity_arguments(). Parameter names therefore cannot
+ * change the result. OUT/TABLE arguments are not in proargtypes, so they
+ * cannot create a false match. Defaults and variadic broadening are not
+ * applied: the requested type vector must equal the catalog type vector.
+ *
+ * $3 is a text[] of type names, each cast with ::regtype so domains and
+ * custom types keep their own OIDs unless PostgreSQL says they are the
+ * same type.
+ */
 export const FUNCTION_DEF_LOOKUP_SQL = `
 SELECT n.nspname AS schema_name,
        p.proname AS function_name,
-       pg_get_function_identity_arguments(p.oid) AS identity_args,
        pg_get_functiondef(p.oid) AS def
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = $1
-  AND p.proname = $2
-  AND regexp_replace(lower(pg_get_function_identity_arguments(p.oid)), '\\s+', '', 'g')
-      = regexp_replace(lower($3), '\\s+', '', 'g')
+WHERE n.nspname = $1::text
+  AND p.proname = $2::text
+  AND p.pronargs = COALESCE(cardinality($3::text[]), 0)
+  AND p.proargtypes = (
+    SELECT CAST(
+      COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])
+      AS oidvector
+    )
+    FROM unnest(COALESCE($3::text[], ARRAY[]::text[])) WITH ORDINALITY AS u(typ, ord)
+  )
 `.trim();
 
 const IDENTITY_RE = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)\s*$/;
+const SIMPLE_TYPE_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?$/;
+const MULTIWORD_TYPES = new Set([
+  'double precision',
+  'double precision[]',
+  'character varying',
+  'character varying[]',
+  'bit varying',
+  'bit varying[]',
+  'timestamp with time zone',
+  'timestamp with time zone[]',
+  'timestamp without time zone',
+  'timestamp without time zone[]',
+  'time with time zone',
+  'time with time zone[]',
+  'time without time zone',
+  'time without time zone[]',
+]);
+
+function isAllowedTypeName(token) {
+  const type = String(token || '').trim().toLowerCase().replace(/\s+\[\]$/, '[]');
+  if (!type) return false;
+  if (MULTIWORD_TYPES.has(type)) return true;
+  return SIMPLE_TYPE_RE.test(type);
+}
+
+function normalizeTypeName(token) {
+  return String(token || '').trim().toLowerCase().replace(/\s+\[\]$/, '[]');
+}
 
 export function parseFunctionIdentity(identity) {
   if (typeof identity !== 'string' || !identity.trim()) {
@@ -33,15 +79,29 @@ export function parseFunctionIdentity(identity) {
   if (rawArgs.includes('(') || rawArgs.includes(')')) {
     return fail(CODES.UNRELATED_MUTATION, 'unexpected nested function identity', { identity: text });
   }
-  const args = rawArgs.split(',').map((part) => part.trim()).filter((part) => part.length > 0);
   if (rawArgs.trim() && rawArgs.split(',').some((part) => !part.trim())) {
     return fail(CODES.UNRELATED_MUTATION, 'function identity has an empty argument token', { identity: text });
+  }
+  const tokens = rawArgs.trim()
+    ? rawArgs.split(',').map((part) => part.trim()).filter((part) => part.length > 0)
+    : [];
+  const arg_types = [];
+  for (const token of tokens) {
+    if (!isAllowedTypeName(token)) {
+      return fail(
+        CODES.UNRELATED_MUTATION,
+        'function identity argument must be a type name, not a named parameter',
+        { identity: text, token },
+      );
+    }
+    arg_types.push(normalizeTypeName(token));
   }
   return ok({
     schema,
     name,
-    identity_args: args.join(', '),
-    args,
+    arg_types,
+    identity_args: arg_types.join(', '),
+    args: arg_types,
   });
 }
 
@@ -69,6 +129,42 @@ export function classifyFunctionDefRows(rows, identity) {
   return ok({ exists: true, definition: def });
 }
 
+export function catalogInputTypesMatch(requestedTypes, catalogTypes) {
+  if (!Array.isArray(requestedTypes) || !Array.isArray(catalogTypes)) return false;
+  if (requestedTypes.length !== catalogTypes.length) return false;
+  return requestedTypes.every((type, index) => (
+    normalizeTypeName(type) === normalizeTypeName(catalogTypes[index])
+  ));
+}
+
+export function matchFunctionCatalog(catalog, identity) {
+  const parsed = parseFunctionIdentity(identity);
+  if (!parsed.ok) return parsed;
+  if (!Array.isArray(catalog)) {
+    return fail(CODES.UNRELATED_MUTATION, 'function definition lookup returned an unexpected result set', {
+      identity,
+    });
+  }
+  const matches = catalog.filter((row) => (
+    row
+    && row.schema === parsed.details.schema
+    && row.name === parsed.details.name
+    && catalogInputTypesMatch(parsed.details.arg_types, row.input_types)
+  ));
+  return classifyFunctionDefRows(matches.map((row) => ({ def: row.def })), identity);
+}
+
+export function functionDefLookupParams(identity) {
+  const parsed = parseFunctionIdentity(identity);
+  if (!parsed.ok) return parsed;
+  return ok({
+    schema: parsed.details.schema,
+    name: parsed.details.name,
+    arg_types: parsed.details.arg_types,
+    query_params: [parsed.details.schema, parsed.details.name, parsed.details.arg_types],
+  });
+}
+
 export async function readFunctionDef(client, identity) {
   const parsed = parseFunctionIdentity(identity);
   if (!parsed.ok) return parsed;
@@ -77,7 +173,7 @@ export async function readFunctionDef(client, identity) {
     result = await client.query(FUNCTION_DEF_LOOKUP_SQL, [
       parsed.details.schema,
       parsed.details.name,
-      parsed.details.identity_args,
+      parsed.details.arg_types,
     ]);
   } catch (error) {
     return fail(CODES.UNRELATED_MUTATION, 'function definition lookup failed', {
