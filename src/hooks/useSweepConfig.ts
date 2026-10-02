@@ -89,7 +89,7 @@ export function useSweepConfig(walletType: string = "operating") {
     pullAvailable: !!query.data?.pull_available,
     stale: !!query.data?.stale,
     history: sweeps.data?.sweeps ?? [],
-    historyUnavailable: sweeps.isError || (!sweeps.isLoading && (sweeps.data?.sweeps?.length ?? 0) === 0),
+    historyUnavailable: sweeps.isError,
     isLoading: query.isLoading,
     error: query.error as Error | null,
     refetch: query.refetch,

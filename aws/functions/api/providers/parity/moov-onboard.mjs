@@ -34,7 +34,7 @@ import {
   secureToken,
 } from './db.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
-import { readSweepHistory, readSweepSnapshot, resolveSweepAccount } from './sweep-read.mjs';
+import { matchSweepForWallet, readSweepHistory, readSweepSnapshot, resolveSweepAccount } from './sweep-read.mjs';
 import {
   buildIndividualKycPatch,
   dropTokenFromBody,
@@ -1139,9 +1139,7 @@ export const sweepConfig = {
           scopes: [`/accounts/${accountId}/wallets.read`], fetchImpl,
         }).catch(() => []);
         const rows = Array.isArray(listed) ? listed : [];
-        const match = rows.find((row) => (
-          (row?.walletID ?? row?.walletId) === wallet?.provider_wallet_id
-        )) ?? rows[0];
+        const match = matchSweepForWallet(rows, wallet?.provider_wallet_id);
         id = match?.sweepConfigID ?? match?.sweepConfigId ?? null;
       }
       if (!id) {

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { loadWalletSnapshot } from "@/lib/payments/loadWalletSnapshot";
+import { resolveWalletOpsEnvironment } from "@/lib/payments/selectPaymentWallet";
 import {
   fundWallet,
   readWallet,
@@ -14,20 +15,26 @@ import {
  * its per-matter sub-ledgers.
  */
 export function useWallet(walletType: WalletType = "operating") {
-  const { tenantId, enabled, tenantMoovEnvironment } = usePaymentProviderEligibility();
+  const { tenantId, enabled, tenantMoovEnvironment, environmentReady } = usePaymentProviderEligibility();
   const qc = useQueryClient();
-  const key = ["payment-wallet", tenantId, walletType];
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname;
+  const walletEnvironment = resolveWalletOpsEnvironment({
+    hostname,
+    tenantMoovEnvironment,
+    appUrl: import.meta.env.VITE_APP_URL,
+  });
+  const key = ["payment-wallet", tenantId, walletType, walletEnvironment];
 
   const query = useQuery<WalletSnapshot & { setup_required?: boolean }>({
     queryKey: key,
-    enabled: !!tenantId && enabled,
+    enabled: !!tenantId && enabled && environmentReady,
     staleTime: 30_000,
     retry: false,
     queryFn: () =>
       loadWalletSnapshot({
         tenantId: tenantId!,
         walletType,
-        tenantMoovEnvironment,
+        tenantMoovEnvironment: walletEnvironment,
         syncWallet,
         readWallet,
       }) as Promise<WalletSnapshot & { setup_required?: boolean }>,

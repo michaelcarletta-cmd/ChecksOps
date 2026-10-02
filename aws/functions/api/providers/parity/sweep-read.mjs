@@ -111,11 +111,10 @@ export function railsFromPaymentMethods(methods, bankAccountId = null) {
 }
 
 export function matchSweepForWallet(configs, walletId) {
-  if (!Array.isArray(configs) || !configs.length) return null;
-  if (!walletId) return configs[0] ?? null;
+  if (!Array.isArray(configs) || !configs.length || !walletId) return null;
   return configs.find((cfg) => (
     (cfg.walletID ?? cfg.walletId ?? cfg.provider_wallet_id) === walletId
-  )) ?? configs[0] ?? null;
+  )) ?? null;
 }
 
 export function normalizeSweepConfig(cfg, { tenantId, railMap = {}, walletId = null } = {}) {
