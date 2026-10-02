@@ -1,0 +1,70 @@
+{
+  "workstream_id": "pr601-prod-api-overlay-a2a4",
+  "branch": "cursor/pr601-prod-api-overlay-a2a4",
+  "target_environment": "production",
+  "target_component": "checksops-production-prep-api",
+  "deployment_type": "lambda-overlay",
+  "write_attempted": false,
+  "write_stopped_reason": "live production Lambda drifted from expected authority kqXCfyf3 / 1f5bb42a before this workstream could acquire a lease; the intended three-member #601 overlay is already live",
+  "expected_authority_before_this_workstream": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "kqXCfyf3PVmKxV4ncmLgWKH/A6iwbi/IgsOgFTbIedQ=",
+    "revisionId": "1f5bb42a-047d-4bd2-80f4-1ec11c97c2c6",
+    "lastModified": "2026-10-02T17:10:27.000+0000",
+    "codeSize": 11097800,
+    "zip_sha256": "92a5c27f27f73d598ac55e277262e058a1ff03a8b06e2fc882c3a01536c879d4",
+    "workflow_rpc_sha256": "2656cdeea19ae57265ca4cb035bd7e88bc55f8e2bc05daf690092a905f5a8f49",
+    "tenant_check_user_mjs": null,
+    "admin_override_check_status_mjs": null
+  },
+  "live_after_foreign_overlay": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "99pRyM/t6zqXMz8ePhNlcYMjxUazGaXHcEek/DyZ93Q=",
+    "revisionId": "8fcb8a47-d750-473e-a155-2935a247f5fa",
+    "lastModified": "2026-10-02T18:56:39.000+0000",
+    "codeSize": 11100128,
+    "zip_sha256": "f7da51c8cfedeb3a97333f1e3e1365718323c546b319a5c77047a4fc3c99f774",
+    "workflow_rpc_sha256": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "tenant_check_user_mjs": "43232e75394bfc649de90f2a1c6ed598134b9f2a04ed6080f05e4c570955a931",
+    "admin_override_check_status_mjs": "6adb59a07584c5a45f97d900a4ee89045187958faee20eeafc184ac82323506e"
+  },
+  "member_delta": {
+    "added": [
+      "admin-override-check-status.mjs",
+      "tenant-check-user.mjs"
+    ],
+    "changed": [
+      "workflow-rpc.mjs"
+    ],
+    "deleted": [],
+    "identical_count": 6474,
+    "before_count": 6475,
+    "after_count": 6477
+  },
+  "workflow_rpc_surgical_edits": [
+    "ADD import executeAdminOverrideCheckStatus from ./admin-override-check-status.mjs",
+    "CHANGE admin_override_check_status classification financial_sensitive -> safe_now",
+    "ADD admin_override_check_status to SAFE_WRITE_RPCS",
+    "ADD switch case admin_override_check_status -> executeAdminOverrideCheckStatus"
+  ],
+  "workflow_rpc_not_replaced_from_main": {
+    "live": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "origin_main": "c289af0b575e543ae6a6f266b4f179c5711c98b0be21d82cfde4ea1cc7e9856e",
+    "previous_live": "2656cdeea19ae57265ca4cb035bd7e88bc55f8e2bc05daf690092a905f5a8f49"
+  },
+  "preserved_live_members": {
+    "write-claim-settlement.mjs": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+    "write.mjs": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
+    "write-app-metadata.mjs": "20b062fff58158b48a09f7e5cf1694f118743f91b4925066e21e94ec0ca5b84e",
+    "data.mjs": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+    "index.mjs": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+    "ocr.mjs": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f"
+  },
+  "origin_main_add_members_match_live": true,
+  "official_writer_would_refuse_second_add": true,
+  "sql_expected_pair_fingerprint": "4138ead09bc27ebeeaf5e902f8685d945165d65501bd3fb90b1bcce168db2802",
+  "spa_write": false,
+  "sql_write": false,
+  "grant_revoke": false,
+  "cognito_iam_env_changes": false
+}
