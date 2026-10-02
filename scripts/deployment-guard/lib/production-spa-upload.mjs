@@ -269,6 +269,17 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   });
   if (!consumed.ok) return consumed;
 
+  // Re-read immediately before the first write; abort on any drift.
+  const immediatelyBeforeWrite = await aws.readIndexHtml({ bucket: target.s3_bucket, key: 'index.html' });
+  if (!immediatelyBeforeWrite?.ok) {
+    return immediatelyBeforeWrite || fail(CODES.DEPLOYMENT_COLLISION, 'failed to re-read live index.html immediately before first write');
+  }
+  const beforeWriteToctou = evaluateIndexToctou({
+    preflight: before.details.fingerprint,
+    immediatelyBefore: immediatelyBeforeWrite.details.fingerprint,
+  });
+  if (!beforeWriteToctou.ok) return beforeWriteToctou;
+
   // Upload assets first (non-index.html) with per-object put.
   const uploads = [];
   const files = walkDistFiles(dist.details.dist);
@@ -354,6 +365,7 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     workstream_id,
     commit,
     old_production_fingerprint: before.details.fingerprint,
+    immediately_before_first_write_fingerprint: immediatelyBeforeWrite.details.fingerprint,
     immediately_before_switch_fingerprint: immediatelyBefore.details.fingerprint,
     candidate_fingerprint: expected,
     after_s3_fingerprint: after.details.fingerprint,

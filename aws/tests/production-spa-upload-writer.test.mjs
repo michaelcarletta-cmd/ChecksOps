@@ -345,7 +345,7 @@ test('production SPA writer: production changed between asset upload and index s
   const originalRead = aws.readIndexHtml;
   aws.readIndexHtml = async (...args) => {
     reads += 1;
-    if (reads === 2) return okResult({ fingerprint: { ...liveBefore, index_html_sha256: 'idx-CHANGED' }, head: {} });
+    if (reads === 3) return okResult({ fingerprint: { ...liveBefore, index_html_sha256: 'idx-CHANGED' }, head: {} });
     return originalRead(...args);
   };
   const registry = loadContractRegistry(root);
