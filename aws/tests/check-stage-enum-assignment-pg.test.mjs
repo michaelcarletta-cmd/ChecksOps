@@ -167,7 +167,8 @@ max_connections = 20
   const scalar = (sql) => {
     const raw = psql(['-d', dbName, '-A', '-t', '-c', sql]).stdout.trim();
     const line = raw.split('\n').map((part) => part.trim()).find((part) => (
-      part && !/^(INSERT|UPDATE|DELETE|SELECT)\b/i.test(part)
+      part
+      && !/^(INSERT|UPDATE|DELETE|SELECT|CREATE|DO|ALTER|DROP|PREPARE|EXECUTE)\b/i.test(part)
     ));
     return line || raw;
   };
@@ -187,15 +188,31 @@ max_connections = 20
   assert.notEqual(textAssign.status, 0);
   const textError = `${textAssign.stderr}\n${textAssign.stdout}`;
   assert.match(textError, /column "check_stage" is of type check_stage but expression is of type text/);
-  assert.match(textError, /42804/);
 
-  const enumAssign = psql(['-d', dbName, '-c', `PREPARE good_claim_stage(text, uuid) AS
-    UPDATE public.claim_checks
-    SET check_stage = $1::public.check_stage, updated_at = now()
-    WHERE check_intake_item_id = $2::uuid;`]);
-  note(`enum assignment prepare stdout=${enumAssign.stdout.trim()}`);
-  const executed = psql(['-d', dbName, '-c', `EXECUTE good_claim_stage('review', '${CHECK_ID}');`]);
-  note(`enum assignment execute stdout=${executed.stdout.trim()}`);
+  const sqlstateRaw = psql(['-d', dbName, '-A', '-t'], `
+    CREATE TEMP TABLE check_stage_cast_error (sqlstate text, message text);
+    DO $$
+    BEGIN
+      UPDATE public.claim_checks SET check_stage = 'review'::text;
+    EXCEPTION WHEN others THEN
+      INSERT INTO check_stage_cast_error VALUES (SQLSTATE, SQLERRM);
+    END $$;
+    SELECT sqlstate FROM check_stage_cast_error;
+  `).stdout.trim();
+  const sqlstate = sqlstateRaw.split('\n').map((part) => part.trim()).find((part) => /^\d{5}$/.test(part));
+  note(`text assignment sqlstate raw=${sqlstateRaw} parsed=${sqlstate}`);
+  assert.equal(sqlstate, '42804');
+
+  const enumAssign = psql(['-d', dbName, '-A', '-t'], `
+    PREPARE good_claim_stage(text, uuid) AS
+      UPDATE public.claim_checks
+      SET check_stage = $1::public.check_stage, updated_at = now()
+      WHERE check_intake_item_id = $2::uuid;
+    EXECUTE good_claim_stage('review', '${CHECK_ID}');
+    SELECT check_stage::text FROM public.claim_checks WHERE check_intake_item_id = '${CHECK_ID}';
+  `);
+  note(`enum assignment stdout=${enumAssign.stdout.trim()}`);
+  assert.match(enumAssign.stdout, /^review$/m);
   assert.equal(scalar(`SELECT check_stage::text FROM public.claim_checks WHERE check_intake_item_id = '${CHECK_ID}'`), 'review');
 
   const applyFile = (rel) => {
@@ -219,7 +236,10 @@ max_connections = 20
 
   const moveHash = defHash('public.user_can_move_tenant_checks(uuid,uuid)');
   const overrideHash = defHash('public.admin_override_check_status(uuid,text,uuid)');
-  const moveDef = scalar(`SELECT pg_get_functiondef('public.user_can_move_tenant_checks(uuid,uuid)'::regprocedure)`);
+  const moveDef = psql([
+    '-d', dbName, '-A', '-t', '-c',
+    `SELECT pg_get_functiondef('public.user_can_move_tenant_checks(uuid,uuid)'::regprocedure)`,
+  ]).stdout;
   note(`new user_can_move_tenant_checks sha256=${moveHash}`);
   note(`post-migration admin_override_check_status sha256=${overrideHash}`);
   note(`new user_can_move_tenant_checks def=\n${moveDef}`);

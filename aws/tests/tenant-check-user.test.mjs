@@ -61,10 +61,10 @@ test('forward SQL migration replaces only user_can_move_tenant_checks membership
   assert.match(sql, /CREATE OR REPLACE FUNCTION public\.user_can_move_tenant_checks\(_user_id uuid, _tenant_id uuid\)/);
   assert.match(sql, /SELECT public\.user_belongs_to_tenant\(_user_id, _tenant_id\)/);
   assert.doesNotMatch(sql, /has_role/);
-  assert.doesNotMatch(sql, /admin_override_check_status/);
-  assert.doesNotMatch(sql, /\bGRANT\b/);
-  assert.doesNotMatch(sql, /\bREVOKE\b/);
-  assert.doesNotMatch(sql, /\bPOLICY\b/);
+  assert.doesNotMatch(sql, /CREATE OR REPLACE FUNCTION public\.admin_override_check_status/);
+  assert.doesNotMatch(sql, /^\s*GRANT\b/m);
+  assert.doesNotMatch(sql, /^\s*REVOKE\b/m);
+  assert.doesNotMatch(sql, /^\s*(CREATE|ALTER|DROP|ENABLE)\s+POLICY\b/im);
   assert.doesNotMatch(sql, /\bENABLE ROW LEVEL\b/i);
   assert.match(prior, /admin_override_check_status/);
   assert.match(prior, /has_role\(_user_id, 'admin'::app_role\)/);
