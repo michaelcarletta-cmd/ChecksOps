@@ -1375,6 +1375,10 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'contractor_profiles') return executeContractorProfiles({ client, mapping, values, filters });
   if (table === 'audit_logs') return executeAuditLogsTable({ client, mapping, values });
   if (table === 'user_sessions') return executeUserSessionsTable({ client, mapping, op, values, filters });
+  if (table === 'signature_requests' || table === 'signature_signers') {
+    const { executeSignatureWrite } = await import('./write-signature.mjs');
+    return executeSignatureWrite({ client, mapping, table, op, values, filters });
+  }
   if ([
     'notifications', 'tenant_documents', 'loss_draft_documents', 'mortgage_companies',
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
