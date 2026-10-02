@@ -1,0 +1,82 @@
+{
+  "workstream_id": "pr601-prod-final-a2a4",
+  "branch": "cursor/pr601-prod-final-a2a4",
+  "kind": "production_601_final_guarded_deploy",
+  "ok": true,
+  "spa_write": false,
+  "grant_revoke_rls": false,
+  "cognito_iam_env_moov_changes": false,
+  "claim_ledger_sql": false,
+  "six20_not_rolled_back": true,
+  "lambda": {
+    "function_name": "checksops-production-prep-api",
+    "before": {
+      "CodeSha256": "rWKOsHhlnZB+4a0SMiM0KDN0eflwVbgu9h1YPDP2KeQ=",
+      "RevisionId": "822ac283-370e-45af-aab6-58cf3e967b5c",
+      "LastModified": "2026-10-02T19:59:26.000+0000",
+      "note": "authorized #620 Moov deployment; preserved, not restored"
+    },
+    "immediately_before": {
+      "CodeSha256": "rWKOsHhlnZB+4a0SMiM0KDN0eflwVbgu9h1YPDP2KeQ=",
+      "RevisionId": "822ac283-370e-45af-aab6-58cf3e967b5c"
+    },
+    "after": {
+      "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+      "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+      "LastModified": "2026-10-02T20:26:42.000+0000"
+    }
+  },
+  "two_member_delta": {
+    "tenant-check-user.mjs": {
+      "before": "43232e75394bfc649de90f2a1c6ed598134b9f2a04ed6080f05e4c570955a931",
+      "after": "27f477de81c555ff8cf44e12d3a191d5c1a2d0a4c16c01f7f4c881a74e16f1db"
+    },
+    "admin-override-check-status.mjs": {
+      "before": "6adb59a07584c5a45f97d900a4ee89045187958faee20eeafc184ac82323506e",
+      "after": "166e0e640b782faf21ca884fba75ebcd3cba5965f6f64ed4e2f98271759c3c00"
+    }
+  },
+  "preservation": {
+    "member_count": 6477,
+    "dropped": [],
+    "only_two_owned_changed": true,
+    "workflow-rpc.mjs": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "providers.mjs": "8c403a326b1775cb35f9ea0916aa47434615192e908bdb013f2c9c78aa4807f0",
+    "providers/parity/caller.mjs": "1958eaa287ad2623d8cff9885c56cbb1948d069d2dd34093a56ac08e669c0470",
+    "providers/parity/moov-functions.mjs": "645b89ac038f2d29796f5b167f78410957c26cdc0057cab1e1db958068138ffd"
+  },
+  "sql": {
+    "source_sha256": "298506c90be829222c75781dd7c546fdefc6c5b2fa5cf86442eed30d383ef22e",
+    "user_can_move_tenant_checks": {
+      "before": "6117128f04865fbd2dfd758bec1ecbc7f283e1fe047651d5f3b84521e61d3fe2",
+      "after": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "membership_only": true
+    },
+    "admin_override_check_status": {
+      "before": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+      "after": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+      "unchanged": true
+    },
+    "pair_sha256": {
+      "before": "4138ead09bc27ebeeaf5e902f8685d945165d65501bd3fb90b1bcce168db2802",
+      "after": "0cd4a7b515656be4777a1f467aa7ca3e0160060031fca66b207cc9fb0854b48e"
+    },
+    "inspect_lambda_restored": "IJMzXCA6+5bzhGOKuPBo6egcU7c1XThNUYguf0bG3A0="
+  },
+  "acceptance": {
+    "ok": true,
+    "check_id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+    "move": "endorsements_in_progress -> needs_review -> restored",
+    "intake_and_claim_checks_persisted": true,
+    "audit_ids": [
+      "ae3e1738-6f58-4e31-bccb-0992d62de846",
+      "53cb7f9c-196a-4c85-9ee4-498215da97b9"
+    ],
+    "c1c_denied": true,
+    "platform_admin_denied": true,
+    "from_deposited_blocked_no_write": true,
+    "to_deposited_blocked_no_write": true,
+    "six20_reads_200": true,
+    "six20_mutations_blocked": true
+  }
+}

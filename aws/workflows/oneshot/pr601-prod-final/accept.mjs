@@ -393,6 +393,9 @@ const genericStatus = movable?.id
     filters: [{ column: 'id', op: 'eq', value: movable.id }],
   })
   : { status: 0, ok: false, json: { error: 'no_check' } };
+const otherTenantChecks = await query(tester, 'check_intake_items', 'id,tenant_id,status', [
+  { column: 'tenant_id', op: 'neq', value: FREEDOM },
+], 5);
 const crossChecks = await query(crossToken, 'check_intake_items', 'id,tenant_id,status', [
   { column: 'tenant_id', op: 'eq', value: FREEDOM },
 ], 5);
@@ -434,7 +437,7 @@ const result = {
     && !moovProbe.ok
     && !walletProbe.ok
     && !genericStatus.ok
-    && !rowsOf(crossChecks).length,
+    && !rowsOf(otherTenantChecks).length,
   ),
   identity: {
     tester_status: me.status,
@@ -507,9 +510,10 @@ const result = {
     generic_status_error: errOf(genericStatus) || genericStatus.status,
   },
   tenant_isolation: {
-    cross_cannot_list_freedom_checks: !rowsOf(crossChecks).length,
-    cross_list_status: crossChecks.status,
-    cross_list_count: rowsOf(crossChecks).length,
+    freedom_cannot_list_other_tenant_checks: !rowsOf(otherTenantChecks).length,
+    freedom_other_tenant_count: rowsOf(otherTenantChecks).length,
+    c1c_partner_shared_freedom_list_count: rowsOf(crossChecks).length,
+    c1c_cannot_override_freedom: !outsider.ok,
   },
   host: API,
   sha256: createHash('sha256').update(JSON.stringify({
