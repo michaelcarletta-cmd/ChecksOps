@@ -1,16 +1,25 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   FUNCTION_DEF_LOOKUP_SQL,
   functionDefsMatchExactly,
   readFunctionDef,
 } from '../../scripts/deployment-guard/lib/function-def-lookup.mjs';
-import {
+
+const EXECUTOR_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor');
+const GUARD_LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/deployment-guard/lib');
+fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
+for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs']) {
+  fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
+}
+const {
   extractPinnedFunctionSql,
   tenantPermissionDefsAreExact,
-} from '../write-path/guarded-sql-executor/index.mjs';
+} = await import('../write-path/guarded-sql-executor/index.mjs');
 
 const MIGRATION = fs.readFileSync(
   new URL('../../supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', import.meta.url),
