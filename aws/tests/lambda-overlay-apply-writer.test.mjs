@@ -43,12 +43,37 @@ function writeSources(root) {
   };
 }
 
+function writeNestedSources(root) {
+  const owned = path.join(root, 'aws/functions/api/providers/parity');
+  fs.mkdirSync(owned, { recursive: true });
+  fs.writeFileSync(path.join(owned, 'moov-onboard.mjs'), 'export const nested = "new";\n');
+  return {
+    'providers/parity/moov-onboard.mjs': 'aws/functions/api/providers/parity/moov-onboard.mjs',
+  };
+}
+
+function writeNestedMismatchSources(root) {
+  const owned = path.join(root, 'aws/functions/api/providers/parity');
+  fs.mkdirSync(owned, { recursive: true });
+  fs.writeFileSync(path.join(owned, 'other.mjs'), 'export const nested = "wrong";\n');
+  return {
+    'providers/parity/moov-onboard.mjs': 'aws/functions/api/providers/parity/other.mjs',
+  };
+}
+
 function liveZip() {
   return writeZipMembers({
     'admin-override-check-status.mjs': 'export const overlay = "admin-old";\n',
     'tenant-check-user.mjs': 'export const overlay = "tenant-old";\n',
     'unrelated.mjs': 'export const keep = true;\n',
     'index.mjs': 'export const handler = true;\n',
+  });
+}
+
+function liveZipWithNested() {
+  return writeZipMembers({
+    ...readZipMembers(liveZip()),
+    'providers/parity/moov-onboard.mjs': 'export const nested = "old";\n',
   });
 }
 
@@ -425,6 +450,129 @@ test('happy path overlays only owned members and preserves env/config', async ()
   assert.notEqual(afterMembers['tenant-check-user.mjs'], beforeMembers['tenant-check-user.mjs']);
   assert.equal(result.details.after.configuration.Environment.KEEP, '1');
   assert.deepEqual(result.details.after.configuration.Environment, result.details.before.configuration.Environment);
+});
+
+test('nested member overlay succeeds when member_sources matches aws/functions/api relative path', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { owned: ['providers/parity/moov-onboard.mjs'] });
+  const before = liveZipWithNested();
+  const state = createLambdaState({ zip: before });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: writeNestedSources(root),
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+  assert.equal(state.updates.length, 1);
+  const afterMembers = hashZipMembers(state.zip);
+  const beforeMembers = hashZipMembers(before);
+  assert.equal(afterMembers['unrelated.mjs'], beforeMembers['unrelated.mjs']);
+  assert.equal(afterMembers['index.mjs'], beforeMembers['index.mjs']);
+  assert.notEqual(afterMembers['providers/parity/moov-onboard.mjs'], beforeMembers['providers/parity/moov-onboard.mjs']);
+  assert.equal(receiptConsumed(root, issued.receipt), true);
+});
+
+test('nested member/source mismatch fails closed before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { owned: ['providers/parity/moov-onboard.mjs'] });
+  const before = liveZipWithNested();
+  const state = createLambdaState({ zip: before });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: writeNestedMismatchSources(root),
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('nested member ../ traversal in member_sources fails closed', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { owned: ['providers/parity/moov-onboard.mjs'] });
+  const before = liveZipWithNested();
+  const state = createLambdaState({ zip: before });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: {
+      'providers/parity/moov-onboard.mjs': 'aws/functions/api/providers/../parity/moov-onboard.mjs',
+    },
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('nested member absolute source path outside repo fails closed', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { owned: ['providers/parity/moov-onboard.mjs'] });
+  const before = liveZipWithNested();
+  const state = createLambdaState({ zip: before });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: {
+      'providers/parity/moov-onboard.mjs': '/etc/passwd',
+    },
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('nested member source outside aws/functions/api fails closed', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { owned: ['providers/parity/moov-onboard.mjs'] });
+  const before = liveZipWithNested();
+  const state = createLambdaState({ zip: before });
+  const aws = createMockAws(state);
+  const outside = path.join(root, 'scripts/outside.mjs');
+  fs.mkdirSync(path.dirname(outside), { recursive: true });
+  fs.writeFileSync(outside, 'export const nested = "nope";\n');
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: {
+      'providers/parity/moov-onboard.mjs': 'scripts/outside.mjs',
+    },
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
 });
 
 test('production structurally requires approval and is not exercised', async () => {

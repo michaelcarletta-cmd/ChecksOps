@@ -100,8 +100,36 @@ export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
     return fail(CODES.INVALID_MANIFEST, 'repository root is not resolvable', { repoRoot });
   }
 
+  let lambdaRootReal;
+  try {
+    lambdaRootReal = fs.realpathSync(path.join(rootReal, 'aws/functions/api'));
+  } catch {
+    return fail(CODES.INVALID_MANIFEST, 'Lambda package root aws/functions/api is not resolvable', { member });
+  }
+  try {
+    const stat = fs.statSync(lambdaRootReal);
+    if (!stat.isDirectory()) {
+      return fail(CODES.INVALID_MANIFEST, 'Lambda package root aws/functions/api is not a directory', { member });
+    }
+  } catch {
+    return fail(CODES.INVALID_MANIFEST, 'Lambda package root aws/functions/api is not readable', { member });
+  }
+
   const candidate = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(rootReal, raw);
   if (!fs.existsSync(candidate)) {
+    return fail(CODES.STALE_PACKAGE, 'owned member source file is missing', { member, path: candidate });
+  }
+
+  try {
+    const stat = fs.lstatSync(candidate);
+    if (stat.isSymbolicLink()) {
+      return fail(
+        CODES.UNRELATED_MUTATION,
+        'owned member source must not be a symlink',
+        { member, path: raw },
+      );
+    }
+  } catch {
     return fail(CODES.STALE_PACKAGE, 'owned member source file is missing', { member, path: candidate });
   }
 
@@ -130,11 +158,21 @@ export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
   if (!stat.isFile()) {
     return fail(CODES.STALE_PACKAGE, 'owned member source is not a regular file', { member, path: fileReal });
   }
-  if (path.basename(fileReal) !== member) {
+
+  const relToLambdaRoot = path.relative(lambdaRootReal, fileReal);
+  if (!relToLambdaRoot || relToLambdaRoot.startsWith('..') || path.isAbsolute(relToLambdaRoot)) {
     return fail(
       CODES.UNRELATED_MUTATION,
-      'member source basename must match the receipt-approved ZIP member',
-      { member, path: raw, basename: path.basename(fileReal) },
+      'owned member source must resolve inside the Lambda package root aws/functions/api',
+      { member, path: raw, resolved: fileReal },
+    );
+  }
+  const normalizedRel = relToLambdaRoot.replace(/\\/g, '/');
+  if (normalizedRel !== member) {
+    return fail(
+      CODES.UNRELATED_MUTATION,
+      'owned member source path must match the receipt-approved ZIP member (relative to aws/functions/api)',
+      { member, path: raw, resolved: fileReal, relative: normalizedRel },
     );
   }
   return ok({ path: fileReal });
