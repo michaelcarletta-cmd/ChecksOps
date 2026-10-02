@@ -43,6 +43,12 @@
       "capabilities": ["lambda-overlay-evaluate"]
     },
     {
+      "path": "scripts/deployment-guard/lambda-overlay-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lambda-overlay-apply", "lambda-update-function-code"],
+      "note": "Official receipt-gated Lambda overlay apply. Starts from CURRENT live ZIP, replaces only receipt-owned members, RevisionId CAS. Never restores an old ZIP."
+    },
+    {
       "path": "scripts/deployment-guard/spa-promote.mjs",
       "classification": "GUARDED",
       "capabilities": ["spa-evaluate"]
