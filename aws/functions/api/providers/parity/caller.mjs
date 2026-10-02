@@ -86,6 +86,11 @@ export function effectiveMoovEnvironment(tenantEnv) {
   return 'sandbox';
 }
 
+export function productionMoovRuntimeAllowed(env = process.env.CHECKSOPS_ENV) {
+  const value = String(env || '').toLowerCase();
+  return value === 'production' || value === 'production-prep';
+}
+
 export async function requireParityEnabled(provider) {
   if (executionAllowed(provider)) {
     return fail('production_execution_blocked', 403, {
@@ -167,6 +172,12 @@ export async function moovProductionReadContext({
     return fail('provider_disabled', 403, {
       provider: 'moov',
       message: 'Production Moov read-only access is not enabled.',
+    });
+  }
+
+  if (!productionMoovRuntimeAllowed()) {
+    return fail('production_credentials_refused', 403, {
+      message: 'Production Moov keys are not used on AWS staging.',
     });
   }
 

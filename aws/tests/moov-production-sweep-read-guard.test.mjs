@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
+import { LOOKUP_MAPPING_SQL, LOOKUP_PRODUCTION_IDENTITY_SQL } from '../functions/api/identity.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
+import { moovProductionReadContext } from '../functions/api/providers/parity/caller.mjs';
 
 const FREEDOM_APP = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
@@ -100,7 +101,7 @@ const mockClient = ({
       if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT') return { rows: [] };
       if (sql === 'SET TRANSACTION READ WRITE') return { rows: [] };
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
-      if (sql === LOOKUP_MAPPING_SQL) {
+      if (sql === LOOKUP_MAPPING_SQL || sql === LOOKUP_PRODUCTION_IDENTITY_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
       if (sql.includes('FROM public.tenant_users')) return { rows: memberships };
@@ -156,6 +157,7 @@ const moovFetchStub = async (url) => {
 
 test('production moov-sweep-config get is allowed and returns settlement bank from connected production method', async () => {
   await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
     AWS_PROVIDER_EXECUTION_ENABLED: 'true',
     AWS_MOOV_ENABLED: 'true',
     AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
@@ -180,8 +182,52 @@ test('production moov-sweep-config get is allowed and returns settlement bank fr
   });
 });
 
+test('moovProductionReadContext refuses production keys when CHECKSOPS_ENV is staging', async () => {
+  await withEnv({
+    CHECKSOPS_ENV: 'staging',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'true',
+    AWS_MOOV_ENABLED: 'true',
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+  }, async () => {
+    const result = await moovProductionReadContext({
+      client: mockClient(),
+      mapping: mappingFor(),
+      body: { tenant_id: FREEDOM_TENANT },
+      loadProviderSecrets: async () => ({ MOOV_PUBLIC_KEY: 'pk_live_x', MOOV_SECRET_KEY: 'sk_live_x' }),
+    });
+    assert.equal(result.statusCode, 403);
+    assert.equal(result.error, 'production_credentials_refused');
+    assert.equal(result.moovContext, undefined);
+  });
+});
+
+test('staging CHECKSOPS_ENV refuses production Moov credentials for sweep reads', async () => {
+  await withEnv({
+    CHECKSOPS_ENV: 'staging',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'true',
+    AWS_MOOV_ENABLED: 'true',
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
+  }, async () => {
+    const result = await handleProviderRequest(
+      jwtEvent('/functions/v1/moov-sweep-config', 'POST', { action: 'get', tenant_id: FREEDOM_TENANT, wallet_type: 'operating' }),
+      '/functions/v1/moov-sweep-config',
+      'POST',
+      {
+        loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+        createClient: () => mockClient(),
+        loadProviderSecrets: async () => ({ MOOV_PUBLIC_KEY: 'pk_live_x', MOOV_SECRET_KEY: 'sk_live_x', MOOV_ENVIRONMENT: 'production' }),
+        fetchImpl: moovFetchStub,
+      },
+    );
+    assert.equal(result.statusCode, 403);
+    assert.equal(result.error, 'production_execution_blocked');
+  });
+});
+
 test('production moov-sweep-config mutations remain hard-blocked', async () => {
   await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
     AWS_PROVIDER_EXECUTION_ENABLED: 'true',
     AWS_MOOV_ENABLED: 'true',
     AWS_PROVIDER_LIVE_READS_ENABLED: 'true',

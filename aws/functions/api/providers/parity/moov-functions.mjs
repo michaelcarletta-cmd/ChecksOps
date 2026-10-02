@@ -16,7 +16,7 @@ import {
   scopes,
   withMoovContext,
 } from './moov-client.mjs';
-import { fail, jsonResult, moovParityContext, moovProductionReadContext } from './caller.mjs';
+import { fail, jsonResult, moovParityContext, moovProductionReadContext, productionMoovRuntimeAllowed } from './caller.mjs';
 import {
   MERCHANT_CAPABILITIES,
   MOOV_CAPABILITIES_API_VERSION,
@@ -80,6 +80,7 @@ const wrap = (handler, name) => async (event, deps = {}) => {
     name === 'moov-sweep-config'
     && (action === 'get' || action === 'list' || action === 'sweeps')
     && executionAllowed('moov')
+    && productionMoovRuntimeAllowed()
   );
   const identity = productionRead ? withIdentity : withIdentityWrite;
   return identity(event, async ({ client, mapping, claims, body, spoof }) => {
