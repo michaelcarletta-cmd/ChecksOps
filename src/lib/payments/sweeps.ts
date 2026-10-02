@@ -72,8 +72,11 @@ export interface SweepExecution {
   sweepID: string;
   status?: string | null;
   accruedAmount?: unknown;
+  transferAmount?: unknown;
+  transferID?: string | null;
   createdOn?: string | null;
   completedOn?: string | null;
+  accrualEndedOn?: string | null;
 }
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
@@ -139,8 +142,29 @@ export const createSweep = (input: SweepWriteInput) =>
 export const updateSweep = (input: SweepWriteInput) =>
   invoke<SweepSnapshot>(writeBody(input, "update"));
 
-export const disableSweep = (tenantId: string, walletType = "operating") =>
-  invoke<SweepSnapshot>({ action: "disable", tenant_id: tenantId, wallet_type: walletType });
+export const disableSweep = (
+  tenantId: string,
+  walletType = "operating",
+  sweepConfigId?: string | null,
+) =>
+  invoke<SweepSnapshot>({
+    action: "disable",
+    tenant_id: tenantId,
+    wallet_type: walletType,
+    sweep_config_id: sweepConfigId || undefined,
+  });
+
+export const enableSweep = (
+  tenantId: string,
+  walletType = "operating",
+  sweepConfigId?: string | null,
+) =>
+  invoke<SweepSnapshot>({
+    action: "enable",
+    tenant_id: tenantId,
+    wallet_type: walletType,
+    sweep_config_id: sweepConfigId || undefined,
+  });
 
 /** Cents from a dollar string typed by a person. Throws on bad input. */
 export function dollarsToCents(input: string): number {
