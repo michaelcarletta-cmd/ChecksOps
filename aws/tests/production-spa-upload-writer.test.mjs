@@ -10,7 +10,8 @@ import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { loadContractRegistry, passingContractResults } from '../../scripts/deployment-guard/lib/contracts.mjs';
-import { applyProductionSpaUpload, distFingerprint } from '../../scripts/deployment-guard/lib/production-spa-upload.mjs';
+import { applyProductionSpaUpload, distFingerprint, entryFromHtml } from '../../scripts/deployment-guard/lib/production-spa-upload.mjs';
+import { ACCEPTED_PRODUCTION_SPA } from '../../scripts/lib/production-spa-baseline.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -18,6 +19,24 @@ const NOW = Date.parse('2026-10-01T00:00:00.000Z');
 
 function sha256Text(text) {
   return createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
+}
+
+const LOCKED_PINS = Object.freeze({
+  spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+  spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+  index_html_sha256: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
+  s3_version: ACCEPTED_PRODUCTION_SPA.s3_version,
+});
+
+function lockedLiveBefore(overrides = {}) {
+  return {
+    index_html_sha256: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
+    entry_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+    etag: 'etag-live',
+    last_modified: ACCEPTED_PRODUCTION_SPA.last_modified,
+    s3_version_id: ACCEPTED_PRODUCTION_SPA.s3_version,
+    ...overrides,
+  };
 }
 
 function tmpRootWithOps() {
@@ -68,6 +87,8 @@ function issueSpaReceipt(root, {
     target_environment: 'production',
     target_component: 'production-spa',
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     owned_components: ['index.html'],
     preflight_live_fingerprint: fingerprint,
     lease: lease.details.lease,
@@ -116,7 +137,7 @@ function createFakeAws({ liveBefore, liveBeforeIndex = '<html></html>' } = {}) {
         current = {
           ...current,
           index_html_sha256: sha256Text(afterIndexHtml),
-          entry_bundle: (String(afterIndexHtml).match(/\/assets\/index-[^"'\\s]+\.js/) || [null])[0],
+          entry_bundle: entryFromHtml(afterIndexHtml),
         };
       }
       return okResult({ fingerprint: current, head: { VersionId: current.s3_version_id || null } });
@@ -129,6 +150,10 @@ function createFakeAws({ liveBefore, liveBeforeIndex = '<html></html>' } = {}) {
     async createInvalidation({ distributionId, paths }) {
       calls.push({ method: 'createInvalidation', distributionId, paths });
       return okResult({ distribution_id: distributionId, invalidation_id: 'INV123' });
+    },
+    async waitForInvalidation({ distributionId, invalidationId }) {
+      calls.push({ method: 'waitForInvalidation', distributionId, invalidationId });
+      return okResult({ distribution_id: distributionId, invalidation_id: invalidationId, status: 'Completed' });
     },
   };
 }
@@ -164,13 +189,7 @@ test('production SPA writer: happy-path upload order, drift checks, and post-ver
   const candidate = distFingerprint(distDir);
   assert.equal(candidate.ok, true);
 
-  const liveBefore = {
-    index_html_sha256: 'idx-live-1',
-    entry_bundle: '/assets/index-live.js',
-    etag: 'etag-live',
-    last_modified: '2026-10-01T00:00:00.000Z',
-    s3_version_id: 'v1',
-  };
+  const liveBefore = lockedLiveBefore();
 
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
@@ -185,6 +204,8 @@ test('production SPA writer: happy-path upload order, drift checks, and post-ver
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     operator: 'test-agent',
     receipt: issued.receipt,
     dist_dir: distDir,
@@ -212,8 +233,10 @@ test('production SPA writer: happy-path upload order, drift checks, and post-ver
   assert.ok(putKeys.includes('index.html'));
   assert.equal(putKeys[putKeys.length - 1], 'index.html', `expected index.html last, got: ${putKeys.join(', ')}`);
   const invalidationIdx = aws.calls.findIndex((c) => c.method === 'createInvalidation');
+  const waitIdx = aws.calls.findIndex((c) => c.method === 'waitForInvalidation');
   const indexPutIdx = aws.calls.findIndex((c) => c.method === 'putObject' && c.key === 'index.html');
   assert.ok(invalidationIdx > indexPutIdx, 'expected invalidation after index.html upload');
+  assert.ok(waitIdx > invalidationIdx, 'expected waitForInvalidation after createInvalidation');
   assert.equal(result.details.receipt.mac, issued.receipt.mac);
 });
 
@@ -229,6 +252,8 @@ test('production SPA writer: missing receipt fails closed', async () => {
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     dist_dir: path.join(root, 'dist'),
     deploy_mode: 'per_object_put',
     accepted_source_composition: true,
@@ -254,7 +279,7 @@ test('production SPA writer: missing receipt fails closed', async () => {
 test('production SPA writer: expired receipt is rejected', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore, ttlMs: 1000, now: NOW });
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
@@ -265,6 +290,8 @@ test('production SPA writer: expired receipt is rejected', async () => {
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -291,7 +318,7 @@ test('production SPA writer: expired receipt is rejected', async () => {
 test('production SPA writer: wrong workstream is RECEIPT_MISMATCH', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore, workstream_id: 'workstream-a' });
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
@@ -302,6 +329,8 @@ test('production SPA writer: wrong workstream is RECEIPT_MISMATCH', async () => 
     workstream_id: 'workstream-b',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -328,7 +357,7 @@ test('production SPA writer: wrong workstream is RECEIPT_MISMATCH', async () => 
 test('production SPA writer: lost lease is fail-closed', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   fs.rmSync(path.join(root, '.deployment-guard/leases/production::production-spa.json'));
   const aws = createFakeAws({ liveBefore });
@@ -340,6 +369,8 @@ test('production SPA writer: lost lease is fail-closed', async () => {
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -366,7 +397,7 @@ test('production SPA writer: lost lease is fail-closed', async () => {
 test('production SPA writer: production changed between asset upload and index switch => DEPLOYMENT_COLLISION', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-live.js', etag: 'e1', last_modified: 't1', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
   // simulate drift on second read (immediately before)
@@ -385,6 +416,8 @@ test('production SPA writer: production changed between asset upload and index s
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -422,6 +455,8 @@ test('production SPA writer: production drift before first write => DEPLOYMENT_C
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -451,7 +486,7 @@ test('production SPA writer: malformed/dist missing entry bundle => STALE_PACKAG
   fs.mkdirSync(distDir, { recursive: true });
   fs.writeFileSync(path.join(distDir, 'index.html'), '<html><script type="module" src="/assets/index-missing.js"></script></html>');
 
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
 
@@ -463,6 +498,8 @@ test('production SPA writer: malformed/dist missing entry bundle => STALE_PACKAG
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -489,7 +526,7 @@ test('production SPA writer: malformed/dist missing entry bundle => STALE_PACKAG
 test('production SPA writer: wrong environment or bucket is rejected', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
@@ -499,6 +536,8 @@ test('production SPA writer: wrong environment or bucket is rejected', async () 
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -524,6 +563,8 @@ test('production SPA writer: wrong environment or bucket is rejected', async () 
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -549,7 +590,7 @@ test('production SPA writer: wrong environment or bucket is rejected', async () 
 test('production SPA writer: destructive deployment mode is rejected', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
@@ -560,6 +601,8 @@ test('production SPA writer: destructive deployment mode is rejected', async () 
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'sync',
@@ -586,7 +629,7 @@ test('production SPA writer: destructive deployment mode is rejected', async () 
 test('production SPA writer: missing staging acceptance fails production gate', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
@@ -597,6 +640,8 @@ test('production SPA writer: missing staging acceptance fails production gate', 
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -622,7 +667,7 @@ test('production SPA writer: missing staging acceptance fails production gate', 
 test('production SPA writer: missing production approval fails production gate', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
@@ -633,6 +678,8 @@ test('production SPA writer: missing production approval fails production gate',
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -658,7 +705,7 @@ test('production SPA writer: missing production approval fails production gate',
 test('production SPA writer: missing accepted_source_composition fails closed', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
   const registry = loadContractRegistry(root);
@@ -669,6 +716,8 @@ test('production SPA writer: missing accepted_source_composition fails closed', 
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -694,7 +743,7 @@ test('production SPA writer: missing accepted_source_composition fails closed', 
 test('production SPA writer: failing accepted contract blocks deployment', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
 
@@ -706,6 +755,8 @@ test('production SPA writer: failing accepted contract blocks deployment', async
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -735,13 +786,7 @@ test('production SPA writer: post-deploy verification mismatch fails without rol
   const candidate = distFingerprint(distDir);
   assert.equal(candidate.ok, true);
 
-  const liveBefore = {
-    index_html_sha256: 'idx-live-1',
-    entry_bundle: '/assets/index-live.js',
-    etag: 'etag-live',
-    last_modified: '2026-10-01T00:00:00.000Z',
-    s3_version_id: 'v1',
-  };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const aws = createFakeAws({ liveBefore });
   aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
@@ -754,6 +799,8 @@ test('production SPA writer: post-deploy verification mismatch fails without rol
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -780,7 +827,7 @@ test('production SPA writer: post-deploy verification mismatch fails without rol
 test('production SPA writer: receipt reuse is blocked (single-use)', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const registry = loadContractRegistry(root);
   const contract_results = passingContractResults(registry);
@@ -793,6 +840,8 @@ test('production SPA writer: receipt reuse is blocked (single-use)', async () =>
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -825,7 +874,7 @@ test('production SPA writer: same receipt consumed across independent guard root
   const rootB = tmpRootWithOps();
   const distA = writeDist(rootA);
   const distB = writeDist(rootB);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(rootA, { fingerprint: liveBefore });
 
   // Copy issuer key + lease so rootB can validate the signed receipt.
@@ -848,6 +897,8 @@ test('production SPA writer: same receipt consumed across independent guard root
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distA,
     deploy_mode: 'per_object_put',
@@ -878,6 +929,8 @@ test('production SPA writer: same receipt consumed across independent guard root
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distB,
     deploy_mode: 'per_object_put',
@@ -904,7 +957,7 @@ test('production SPA writer: same receipt consumed across independent guard root
 test('production SPA writer: simultaneous consumption attempts -> exactly one succeeds', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
   const contract_results = passingContractResults(loadContractRegistry(root));
   const receiptRegistry = createSharedReceiptRegistry();
@@ -916,6 +969,8 @@ test('production SPA writer: simultaneous consumption attempts -> exactly one su
       workstream_id: 'workstream-a',
       commit: SHA,
       deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
       receipt: issued.receipt,
       dist_dir: distDir,
       deploy_mode: 'per_object_put',
@@ -949,7 +1004,7 @@ test('production SPA writer: simultaneous consumption attempts -> exactly one su
 test('production SPA writer: different receipts are independent', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const r1 = issueSpaReceipt(root, { fingerprint: liveBefore, now: NOW });
   const r2 = issueSpaReceipt(root, { fingerprint: liveBefore, now: NOW + 1000 });
   const contract_results = passingContractResults(loadContractRegistry(root));
@@ -962,6 +1017,8 @@ test('production SPA writer: different receipts are independent', async () => {
       workstream_id: 'workstream-a',
       commit: SHA,
       deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
       receipt: issued.receipt,
       dist_dir: distDir,
       deploy_mode: 'per_object_put',
@@ -987,7 +1044,7 @@ test('production SPA writer: different receipts are independent', async () => {
 test('production SPA writer: invalid receipts do not get recorded as consumed', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
-  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const liveBefore = lockedLiveBefore();
   const issued = issueSpaReceipt(root, { fingerprint: liveBefore, ttlMs: 1000, now: NOW });
   const contract_results = passingContractResults(loadContractRegistry(root));
   const receiptRegistry = createSharedReceiptRegistry();
@@ -997,6 +1054,8 @@ test('production SPA writer: invalid receipts do not get recorded as consumed', 
     workstream_id: 'workstream-a',
     commit: SHA,
     deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
     receipt: issued.receipt,
     dist_dir: distDir,
     deploy_mode: 'per_object_put',
@@ -1018,5 +1077,149 @@ test('production SPA writer: invalid receipts do not get recorded as consumed', 
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.RECEIPT_EXPIRED);
   assert.equal(receiptRegistry.calls.length, 0);
+});
+
+test('production SPA writer: entry regex accepts hashes containing s', () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-CTqMys28.js', js: "console.log('live');\n" });
+  const candidate = distFingerprint(distDir);
+  assert.equal(candidate.ok, true, JSON.stringify(candidate, null, 2));
+  assert.equal(candidate.details.entry_bundle, '/assets/index-CTqMys28.js');
+  assert.equal(entryFromHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8')), '/assets/index-CTqMys28.js');
+});
+
+test('production SPA writer: superseded SPA bundle is refused before write', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-DSbVZXu8.js', js: "console.log('stale');\n" });
+  const liveBefore = lockedLiveBefore();
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  const contract_results = passingContractResults(loadContractRegistry(root));
+  const receiptRegistry = createSharedReceiptRegistry();
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry,
+    fetchImpl: fetchFromDist(distDir),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.STALE_PACKAGE);
+  assert.equal(aws.calls.filter((c) => c.method === 'putObject').length, 0);
+  assert.equal(receiptRegistry.calls.length, 0);
+});
+
+test('production SPA writer: live lock pin mismatch is refused before write', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-candidate.js' });
+  const liveBefore = lockedLiveBefore({
+    entry_bundle: '/assets/index-Unexpected.js',
+    index_html_sha256: 'd'.repeat(64),
+    s3_version_id: 'OTHER',
+  });
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  const contract_results = passingContractResults(loadContractRegistry(root));
+  const receiptRegistry = createSharedReceiptRegistry();
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry,
+    fetchImpl: fetchFromDist(distDir),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(aws.calls.filter((c) => c.method === 'putObject').length, 0);
+  assert.equal(receiptRegistry.calls.length, 0);
+});
+
+test('production SPA writer: host verify waits for CloudFront invalidation', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-CTqMys28.js', js: "console.log('candidate');\n" });
+  const liveBefore = lockedLiveBefore();
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
+  const order = [];
+  const originalWait = aws.waitForInvalidation.bind(aws);
+  aws.waitForInvalidation = async (...args) => {
+    order.push('wait');
+    return originalWait(...args);
+  };
+  const fetchImpl = fetchFromDist(distDir);
+  const wrappedFetch = async (...args) => {
+    order.push('host');
+    return fetchImpl(...args);
+  };
+  const contract_results = passingContractResults(loadContractRegistry(root));
+  const receiptRegistry = createSharedReceiptRegistry();
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    clean_build: true,
+    based_on_baseline: LOCKED_PINS,
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry,
+    fetchImpl: wrappedFetch,
+    now: NOW,
+  });
+
+  assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+  assert.ok(order.indexOf('wait') >= 0);
+  assert.ok(order.indexOf('host') > order.indexOf('wait'));
 });
 

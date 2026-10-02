@@ -19,7 +19,7 @@ import { parseArgs, printResult, readInput } from './lib/cli.mjs';
 import { CODES, fail, ok } from './lib/errors.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
 import { enforceScriptGuard, resolveGuardRoot } from './require-guard.mjs';
-import { applyProductionSpaUpload, defaultScriptName } from './lib/production-spa-upload.mjs';
+import { applyProductionSpaUpload, defaultScriptName, entryFromHtml } from './lib/production-spa-upload.mjs';
 import { createS3ConsumedReceiptRegistry } from './lib/shared-consumed-receipts.mjs';
 
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
@@ -29,9 +29,8 @@ function sha256Text(text) {
   return createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
 }
 
-function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
-  return match ? match[0] : null;
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function loadProtectedTarget(root, id) {
@@ -123,6 +122,49 @@ function createAwsAdapter(env) {
       } catch (error) {
         return fail(CODES.DEPLOYMENT_COLLISION, 'CloudFront invalidation failed', {
           distribution_id: distributionId,
+          error: error?.message || String(error),
+        });
+      }
+    },
+    async waitForInvalidation({ distributionId, invalidationId }) {
+      const timeoutMs = Number(env.CHECKSOPS_CLOUDFRONT_INVALIDATION_TIMEOUT_MS) || 15 * 60 * 1000;
+      const intervalMs = Number(env.CHECKSOPS_CLOUDFRONT_INVALIDATION_POLL_MS) || 5000;
+      const started = Date.now();
+      try {
+        for (;;) {
+          const out = awsJson([
+            'cloudfront', 'get-invalidation',
+            '--distribution-id', distributionId,
+            '--id', invalidationId,
+          ], env);
+          const status = out.Invalidation?.Status || null;
+          if (status === 'Completed') {
+            return ok({
+              distribution_id: distributionId,
+              invalidation_id: invalidationId,
+              status,
+            });
+          }
+          if (status === 'Failed') {
+            return fail(CODES.DEPLOYMENT_COLLISION, 'CloudFront invalidation failed', {
+              distribution_id: distributionId,
+              invalidation_id: invalidationId,
+              status,
+            });
+          }
+          if (Date.now() - started >= timeoutMs) {
+            return fail(CODES.DEPLOYMENT_COLLISION, 'CloudFront invalidation did not complete before host verification', {
+              distribution_id: distributionId,
+              invalidation_id: invalidationId,
+              status,
+            });
+          }
+          await sleep(intervalMs);
+        }
+      } catch (error) {
+        return fail(CODES.DEPLOYMENT_COLLISION, 'CloudFront invalidation wait failed', {
+          distribution_id: distributionId,
+          invalidation_id: invalidationId,
           error: error?.message || String(error),
         });
       }

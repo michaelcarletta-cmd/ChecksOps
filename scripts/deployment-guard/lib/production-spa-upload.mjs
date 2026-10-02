@@ -7,7 +7,13 @@ import { requireDeploymentGuard, refuseUnguardedDeploy } from '../require-guard.
 import { validateReceipt } from './receipt.mjs';
 import { lookupSharedBucket, lookupSharedCloudFront } from './shared-targets.mjs';
 import { evaluateIndexToctou } from './spa-promote.mjs';
+import { repoRootFrom } from './paths.mjs';
 import { CODES, errorEntry, fail, failMany, ok } from './errors.mjs';
+import {
+  PRODUCTION_SPA_ID,
+  compareProductionSpaCandidate,
+  lockedSpaPins,
+} from '../../lib/production-spa-baseline.mjs';
 
 function sha256Text(text) {
   return createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
@@ -18,8 +24,8 @@ function sha256File(file) {
   return createHash('sha256').update(buf).digest('hex');
 }
 
-function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+export function entryFromHtml(html) {
+  const match = String(html || '').match(/\/assets\/index-[^"'\\\s]+\.js/);
   return match ? match[0] : null;
 }
 
@@ -78,6 +84,69 @@ function walkDistFiles(distDir) {
   };
   walk(distDir);
   return files;
+}
+
+function loadLockedSpaComponent(root) {
+  const file = path.join(root, 'ops/release-locks/locked-components.json');
+  if (!fs.existsSync(file)) return null;
+  try {
+    const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return json?.components?.[PRODUCTION_SPA_ID] || null;
+  } catch {
+    return null;
+  }
+}
+
+function livePinsFromFingerprint(fp, locked) {
+  const lockedPins = lockedSpaPins(locked);
+  const spa_bundle = fp?.entry_bundle || fp?.spa_bundle || null;
+  return {
+    spa_bundle,
+    spa_sha256: spa_bundle && spa_bundle === lockedPins.spa_bundle
+      ? lockedPins.spa_sha256
+      : (fp?.spa_sha256 || fp?.entry_bundle_sha256 || null),
+    index_html_sha256: fp?.index_html_sha256 || null,
+    s3_version: fp?.s3_version_id || fp?.s3_version || null,
+  };
+}
+
+function evaluateProductionSpaLockPins({ lockedComponent, dist, liveFingerprint, input, branch }) {
+  if (!lockedComponent) {
+    return fail(CODES.INVALID_MANIFEST, 'production-spa PRODUCTION_LOCKED component is missing from release locks');
+  }
+  const declared = input.components?.[PRODUCTION_SPA_ID] || input.production_spa || {};
+  const livePins = livePinsFromFingerprint(liveFingerprint, lockedComponent);
+  const row = {
+    deploy: true,
+    deploy_mode: input.deploy_mode || declared.deploy_mode || 'per_object_put',
+    spa_bundle: dist.entry_bundle,
+    hash: dist.entry_bundle_sha256,
+    spa_sha256: dist.entry_bundle_sha256,
+    index_html_sha256: dist.index_html_sha256,
+    s3_version: livePins.s3_version,
+    based_on_baseline: declared.based_on_baseline || input.based_on_baseline || null,
+    preflight_production: declared.preflight_production || input.preflight_production || livePins,
+    live_production: {
+      ...(declared.live_production || input.live_production || livePins),
+      spa_bundle: livePins.spa_bundle,
+      index_html_sha256: livePins.index_html_sha256,
+      s3_version: livePins.s3_version,
+      spa_sha256: livePins.spa_sha256 || declared.live_production?.spa_sha256 || input.live_production?.spa_sha256 || null,
+    },
+    contains_accepted_baseline: declared.contains_accepted_baseline ?? input.contains_accepted_baseline,
+    reconciled_to_production_baseline: declared.reconciled_to_production_baseline ?? input.reconciled_to_production_baseline,
+    source_branch: declared.source_branch || input.source_branch || input.source_ref || branch,
+    unreconciled_main: declared.unreconciled_main ?? input.unreconciled_main,
+    destructive: declared.destructive === true || input.destructive === true,
+  };
+  const errors = compareProductionSpaCandidate(lockedComponent, row);
+  if (errors.length) {
+    const code = errors.some((message) => /TOCTOU|does not match locked baseline/i.test(message))
+      ? CODES.DEPLOYMENT_COLLISION
+      : CODES.STALE_PACKAGE;
+    return fail(code, errors[0], { production_spa_pin_errors: errors, candidate: row });
+  }
+  return ok({ candidate: row });
 }
 
 export async function verifySpaHost({ fetchImpl, host, expected }) {
@@ -181,8 +250,8 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     });
   }
 
-  if (!aws?.readIndexHtml || !aws?.putObject || !aws?.createInvalidation) {
-    return fail(CODES.INVALID_MANIFEST, 'applyProductionSpaUpload requires aws adapter with readIndexHtml/putObject/createInvalidation');
+  if (!aws?.readIndexHtml || !aws?.putObject || !aws?.createInvalidation || !aws?.waitForInvalidation) {
+    return fail(CODES.INVALID_MANIFEST, 'applyProductionSpaUpload requires aws adapter with readIndexHtml/putObject/createInvalidation/waitForInvalidation');
   }
   if (!receiptRegistry?.consumeOnce || typeof receiptRegistry.consumeOnce !== 'function') {
     return fail(CODES.INVALID_MANIFEST, 'applyProductionSpaUpload requires a shared receiptRegistry.consumeOnce implementation');
@@ -251,8 +320,8 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
       immediately_before: before.details.fingerprint,
       production_fingerprint: before.details.fingerprint,
       immediately_before_fingerprint: before.details.fingerprint,
-      dist: { ...(typeof input.dist === 'object' ? input.dist : {}), clean_build: true },
-      clean_build: true,
+      dist: typeof input.dist === 'object' ? input.dist : { clean_build: input.clean_build },
+      clean_build: input.clean_build,
       build_timestamp,
     }, {
       root: guardRoot,
@@ -263,6 +332,16 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   } catch (error) {
     return fail(error.code || CODES.DEPLOYMENT_GUARD_REQUIRED, error.message, error.details || {});
   }
+
+  const lockRoot = ctx.lockRoot || repoRootFrom();
+  const pinCheck = evaluateProductionSpaLockPins({
+    lockedComponent: ctx.lockedComponent || loadLockedSpaComponent(lockRoot),
+    dist: dist.details,
+    liveFingerprint: before.details.fingerprint,
+    input,
+    branch,
+  });
+  if (!pinCheck.ok) return pinCheck;
 
   // Re-read immediately before the first write; abort on any drift.
   const immediatelyBeforeWrite = await aws.readIndexHtml({ bucket: target.s3_bucket, key: 'index.html' });
@@ -345,6 +424,16 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
       actual: after.details.fingerprint,
     });
   }
+
+  const invalidationId = invalidation.details?.invalidation_id || null;
+  if (!invalidationId) {
+    return fail(CODES.DEPLOYMENT_COLLISION, 'cloudfront invalidation did not return an invalidation id');
+  }
+  const waited = await aws.waitForInvalidation({
+    distributionId: target.cloudfront_id,
+    invalidationId,
+  });
+  if (!waited?.ok) return waited || fail(CODES.DEPLOYMENT_COLLISION, 'cloudfront invalidation wait failed');
 
   const hostVerify = await verifySpaHost({
     fetchImpl,
