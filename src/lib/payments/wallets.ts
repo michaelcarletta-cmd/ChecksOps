@@ -1,4 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  normalizePaymentEnvironment,
+  PaymentWalletSelectionError,
+} from "@/lib/payments/selectPaymentWallet";
 
 /**
  * Provider-agnostic access to organization balances (wallets).
@@ -106,11 +110,21 @@ export async function fundWallet(input: {
 export async function readWallet(
   tenantId: string,
   walletType: WalletType = "operating",
+  environment?: string | null,
 ): Promise<Wallet | null> {
+  const env = normalizePaymentEnvironment(environment);
+  if (!env) {
+    throw new PaymentWalletSelectionError(
+      "environment_required",
+      "Payment wallet environment is required.",
+    );
+  }
   const { data, error } = await supabase
     .from("payment_wallets")
     .select("*")
     .eq("tenant_id", tenantId)
+    .eq("provider", "moov")
+    .eq("environment", env)
     .eq("wallet_type", walletType)
     .maybeSingle();
   if (error) throw error;

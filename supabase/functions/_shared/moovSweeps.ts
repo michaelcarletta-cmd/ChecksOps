@@ -136,7 +136,7 @@ export async function listSweeps(
   limit = 20,
 ): Promise<MoovSweep[]> {
   const res = await moovFetch<MoovSweep[]>(
-    `/accounts/${accountId}/sweeps?walletID=${encodeURIComponent(walletId)}&count=${limit}`,
+    `/accounts/${accountId}/wallets/${encodeURIComponent(walletId)}/sweeps?count=${limit}`,
     { scopes: sweepScopes.read(accountId), apiVersion: moovApiVersion() },
   ).catch((e) => {
     console.warn("[moovSweeps] sweep history unavailable", (e as Error).message);

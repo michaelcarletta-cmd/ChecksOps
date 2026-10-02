@@ -32,6 +32,8 @@ export function usePaymentProviderEligibility() {
     tenantId,
     allowlisted: true,
     environment: data?.environment ?? "production",
+    tenantMoovEnvironment: data?.environment ?? null,
+    environmentReady: !isLoading,
     globallyEnabled: PAYMENT_FLAGS.USE_MOOV,
     /** True when Moov is on and this session has an organization. */
     enabled: isMoovAllowedForTenant() && !!tenantId,
