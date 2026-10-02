@@ -84,13 +84,20 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
   }
 
   const check = (await client.query(
-    `SELECT id, tenant_id, status, check_stage::text AS check_stage
+    `SELECT id, tenant_id, status, check_stage::text AS check_stage, deposited_at
      FROM public.check_intake_items
      WHERE id = $1::uuid
      FOR UPDATE`,
     [checkId],
   )).rows[0];
   if (!check) return { error: 'rls_denied', message: 'Check not found' };
+  if (check.status === 'deposited' || check.deposited_at) {
+    return {
+      error: 'rpc_financial_disabled',
+      message: "admin_override_check_status cannot move a deposited check (money movement)",
+      status: check.status,
+    };
+  }
 
   const member = check.tenant_id
     ? (await client.query(

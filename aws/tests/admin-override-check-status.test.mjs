@@ -262,6 +262,25 @@ test('deposited remains a financial destination and performs no intake or claim_
   assertNoFinancialWrites(client);
 });
 
+test('already-deposited checks cannot be moved and perform no write', async () => {
+  const client = mockClient({
+    check: {
+      id: CHECK_ID,
+      tenant_id: FREEDOM,
+      status: 'deposited',
+      check_stage: 'funds_released',
+      deposited_at: '2026-07-31T18:31:06.538Z',
+    },
+  });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: overrideArgs,
+  });
+  assert.equal(result.error, 'rpc_financial_disabled');
+  assertNoFinancialWrites(client);
+});
+
 test('handleDataRpc no longer returns the staging-read deny for admin override', async () => {
   process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
   process.env.AWS_WRITES_ENABLED = 'true';
