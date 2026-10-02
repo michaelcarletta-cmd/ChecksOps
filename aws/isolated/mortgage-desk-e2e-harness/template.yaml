@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Isolated staging-only Mortgage Desk E2E harness. New resources only.
+  Direct Lambda invoke. Fail-closed to the ChecksOps staging database.
+  No provider credentials. Does not update existing Lambdas, IAM, SPA, or schema.
+
+Parameters:
+  StagingDatabaseSecretArn:
+    Type: String
+    Description: Staging application RDS secret ARN only. Never admin or production.
+    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-.+'
+  StagingVpcId:
+    Type: String
+    Default: vpc-09f2268778966ce97
+  StagingSubnetA:
+    Type: String
+    Default: subnet-0df2518070c5b9ff0
+  StagingSubnetB:
+    Type: String
+    Default: subnet-092e4e41821fba6c4
+  StagingLambdaSecurityGroupId:
+    Type: String
+    Default: sg-0fe2698f236959353
+
+Resources:
+  MortgageDeskE2ELogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/checksops-staging-mortgage-desk-e2e-harness
+      RetentionInDays: 1
+
+  MortgageDeskE2ERole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-staging-mortgage-desk-e2e-harness-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: checksops-staging-mortgage-desk-e2e-harness-exec
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: OwnLogsOnly
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/checksops-staging-mortgage-desk-e2e-harness:*
+              - Sid: StagingAppSecretOnly
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-*
+              - Sid: ApplicationShaReadOnly
+                Effect: Allow
+                Action:
+                  - lambda:GetFunctionConfiguration
+                Resource:
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:checksops-staging-api
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:checksops-production-prep-api
+              - Sid: VpcEniForStagingRds
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+
+  MortgageDeskE2EFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - MortgageDeskE2ELogGroup
+      - MortgageDeskE2ERole
+    Properties:
+      FunctionName: checksops-staging-mortgage-desk-e2e-harness
+      Description: Staging-only Mortgage Desk E2E harness. Direct invoke. Fail-closed. No provider execution.
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      Handler: index.handler
+      CodeUri: pack/
+      Role: !GetAtt MortgageDeskE2ERole.Arn
+      MemorySize: 512
+      Timeout: 60
+      ReservedConcurrentExecutions: 1
+      VpcConfig:
+        SubnetIds:
+          - !Ref StagingSubnetA
+          - !Ref StagingSubnetB
+        SecurityGroupIds:
+          - !Ref StagingLambdaSecurityGroupId
+      Environment:
+        Variables:
+          CHECKSOPS_ENV: staging
+          DATABASE_NAME: checksops
+          RDS_HOST: checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com
+          DATABASE_SECRET_ARN: !Ref StagingDatabaseSecretArn
+          HARNESS_FUNCTION_NAME: checksops-staging-mortgage-desk-e2e-harness
+          STAGING_API_URL: https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging
+          ALLOW_SYNTHETIC_WRITES: 'false'
+
+Outputs:
+  StackName:
+    Value: checksops-staging-mortgage-desk-e2e-harness
+  FunctionName:
+    Value: !Ref MortgageDeskE2EFunction
+  FunctionArn:
+    Value: !GetAtt MortgageDeskE2EFunction.Arn
+  RoleArn:
+    Value: !GetAtt MortgageDeskE2ERole.Arn
+  LogGroupName:
+    Value: /aws/lambda/checksops-staging-mortgage-desk-e2e-harness
+  StagingDatabaseSecretNameOnly:
+    Value: rds-db-credentials/checksops-staging/checksops/1788286468693
