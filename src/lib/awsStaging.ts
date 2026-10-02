@@ -1,8 +1,7 @@
 /**
- * AWS Cognito frontend switch.
- *
- * - `--mode aws` is the authoritative AWS frontend build mode.
- * - `VITE_AUTH_PROVIDER=cognito` remains supported for legacy/dev flows.
+ * AWS Cognito frontend switch. Production Vite builds use `.env.production`
+ * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
+ * until an approved production AWS frontend env is deployed.
  */
 
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
@@ -35,7 +34,6 @@ export const AWS_STAGING_AUTH_SESSION_KEY = "checksops.aws.staging.auth";
 export const AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY = "checksops.aws.staging.auth.mortgage-ops";
 
 export function isAwsStaging(): boolean {
-  if (import.meta.env.MODE === "aws") return true;
   return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
 }
 
