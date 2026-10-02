@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-30 (index-DSbVZXu8.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-02T01:51:18Z (index-gYa_BW8r.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "delete-check-contract": {
       "id": "delete-check-contract",
@@ -704,20 +704,20 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
-        "tree_hash": "1e75908f910c1372cb67de6968008b1dd0f686f5c3900304a5d956a5565ef225",
-        "merged": true,
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "tree_hash": "8897674f0291decf23e2d35414d7e92389461822f107e72ceaff244c080df250",
+        "merged": false,
         "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-CTqMys28.js",
-        "version": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
-        "hash": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
+        "name": "/assets/index-gYa_BW8r.js",
+        "version": "TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ",
+        "hash": "71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": null,
+        "lambda_version": "91753f93-71ab-4126-a3f8-6a5cfa08b291",
         "lambda_alias": null
       },
       "production_validation": {
@@ -725,37 +725,37 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-10-01T15:15:51Z",
+        "recorded_at": "2026-10-02T01:51:18Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
-        "artifact_identity": "/assets/index-CTqMys28.js",
+        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+        "artifact_identity": "/assets/index-gYa_BW8r.js",
         "evidence_producer": "read-only live HTTPS verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-CTqMys28.js",
-        "spa_sha256": "ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd",
+        "spa_bundle": "/assets/index-gYa_BW8r.js",
+        "spa_sha256": "71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "0AuwkrSXSQDHFGUBHFw93_symfzRvIkv",
+        "cloudfront_deployment_fingerprint": "TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": null,
+        "lambda_version": "91753f93-71ab-4126-a3f8-6a5cfa08b291",
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
-        "notes": "Accepted live production SPA 2026-10-01T15:15:51Z. Host checksops.com. Entry /assets/index-CTqMys28.js. index.html sha256 ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b. S3 version 0AuwkrSXSQDHFGUBHFw93_symfzRvIkv. CloudFront E1B0ZWWO5559U5. Source lineage 6c679a120d5d4b0dd23d7035ecaf309558df29d0. Banner overlay e3e4649478a0c3978065b71b0528dd93baa8dac1. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved."
+        "config_hash": "791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805",
+        "notes": "Accepted live production SPA 2026-10-02T01:51:18Z. Host checksops.com. Entry /assets/index-gYa_BW8r.js. index.html sha256 791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805. S3 version TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ. Previous CTqMys28 baseline is superseded lineage only. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved."
       },
       "rollback": {
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "artifact": "/assets/index-DyoF7zdg.js",
-        "notes": "Previous accepted live baseline. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
+        "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+        "artifact": "/assets/index-CTqMys28.js",
+        "notes": "Immediate previous accepted baseline is /assets/index-CTqMys28.js (2026-10-01T15:15:51Z, s3 0AuwkrSXSQDHFGUBHFw93_symfzRvIkv, sha256 ff377c4ab411eb8401595124018d7d54b2b3457a7ea30d82b8f39c54a81711bd). Do not restore CTqMys28 over the current live identity unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
-      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This PR records evidence only and does not deploy."
+      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This update records evidence only and does not deploy."
     },
     "production-release": {
       "id": "production-release",
@@ -765,7 +765,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "c7ef8b69db695ab617737f4ed76e1efa63bfc27f0cb2ac7242a7f443d7bef44f",
+        "tree_hash": "529584cf086884db7d177402b1a99189917873e36487194513ffca425ec7e59b",
         "merged": true,
         "merged_pr": null
       },
