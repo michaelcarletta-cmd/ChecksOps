@@ -17,6 +17,7 @@ export const CODES = Object.freeze({
   RECEIPT_MISMATCH: 'RECEIPT_MISMATCH',
   RECEIPT_EXPIRED: 'RECEIPT_EXPIRED',
   RECEIPT_FORGED: 'RECEIPT_FORGED',
+  RECEIPT_REUSED: 'RECEIPT_REUSED',
 });
 
 export class GuardError extends Error {
