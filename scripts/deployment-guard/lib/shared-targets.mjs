@@ -66,3 +66,8 @@ export function lookupSharedBucket(name) {
   const key = String(name || '').trim();
   return SHARED_SPA_BUCKETS[key] || SHARED_FILE_BUCKETS[key] || null;
 }
+
+export function lookupSharedCloudFront(distributionId) {
+  const key = String(distributionId || '').trim();
+  return SHARED_CLOUDFRONT[key] || null;
+}
