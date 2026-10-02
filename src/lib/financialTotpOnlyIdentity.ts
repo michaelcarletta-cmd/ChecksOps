@@ -6,7 +6,7 @@
 import { identityMeFinancialRoles } from "./financialTotpOnlyTest.ts";
 
 const AWS_SESSION_KEY = "checksops.aws.staging.auth";
-const LEGACY_BACKEND = /supabase\.co|lovable|nbcqwpysqgyxrrbgtmkw/i;
+const LEGACY_BACKEND = /supabase\.co|lovable/i;
 
 const readIdToken = (sessionKey = AWS_SESSION_KEY): string | null => {
   try {

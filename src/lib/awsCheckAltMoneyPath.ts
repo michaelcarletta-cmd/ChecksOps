@@ -17,7 +17,7 @@ export const LEGACY_CHECKALT_PROVIDER_FUNCTIONS = Object.freeze([
 /** @deprecated Use LEGACY_CHECKALT_PROVIDER_FUNCTIONS */
 export const LEGACY_CHECKALT_MONEY_FUNCTIONS = LEGACY_CHECKALT_PROVIDER_FUNCTIONS;
 
-export const LEGACY_CHECKALT_MONEY_HOST = /supabase\.co|lovable|nbcqwpysqgyxrrbgtmkw/i;
+export const LEGACY_CHECKALT_MONEY_HOST = /supabase\.co|lovable/i;
 
 export const LEGACY_CHECKALT_PROVIDER_BLOCKED = "legacy_checkalt_provider_path_blocked";
 
