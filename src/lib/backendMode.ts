@@ -36,13 +36,17 @@ export type BackendModeInput = {
  * routing (`/prep`) for tenant branding assets like logos.
  */
 export function shouldUseAwsChecksOpsBackendFor(input: BackendModeInput): boolean {
-  const authProvider = String(input.authProvider || "").trim().toLowerCase();
-  if (authProvider !== "cognito") return false;
-
   const hostname = String(input.hostname || "").trim().toLowerCase();
   if (!hostname) return false;
   if (LOCALHOSTS.has(hostname)) return true;
-  return isChecksOpsPlatformHostname(hostname);
+  const isChecksOpsHost = isChecksOpsPlatformHostname(hostname);
+  if (!isChecksOpsHost) return false;
+
+  // AWS build mode must never fall back to real Supabase.
+  if (import.meta.env.MODE === "aws") return true;
+
+  const authProvider = String(input.authProvider || "").trim().toLowerCase();
+  return authProvider === "cognito";
 }
 
 export function runtimeHostname(): string {

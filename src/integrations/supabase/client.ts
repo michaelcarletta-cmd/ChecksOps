@@ -12,7 +12,8 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-const shouldUseAws = shouldUseAwsChecksOpsBackendFor({
+const AWS_BUILD = import.meta.env.MODE === "aws";
+const shouldUseAws = AWS_BUILD || shouldUseAwsChecksOpsBackendFor({
   hostname: runtimeHostname(),
   authProvider: String(import.meta.env.VITE_AUTH_PROVIDER || ""),
 });

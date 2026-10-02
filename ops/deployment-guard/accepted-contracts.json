@@ -81,6 +81,22 @@
       "invariants": ["command center remains usable at responsive breakpoints"]
     },
     {
+      "id": "aws-spa-bootstrap",
+      "title": "AWS SPA bootstrap + no Supabase embed",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["staging-frontend", "production-spa"],
+      "deployment_types": ["spa-promote"],
+      "test": "aws/tests/aws-production-spa-bootstrap.test.mjs",
+      "invariants": [
+        "aws build fails fast when required selectors are missing",
+        "aws build inlines cognito + /prep",
+        "aws build does not embed production supabase endpoints/keys/tokens",
+        "browser bootstrap does not throw and progresses beyond Loading"
+      ]
+    },
+    {
       "id": "ocr",
       "title": "OCR",
       "accepted": true,
