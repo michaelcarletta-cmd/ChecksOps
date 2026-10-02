@@ -1085,6 +1085,19 @@ export const plaidBridge = {
   },
 };
 
+/**
+ * Moov sweep-config PATCH body.
+ * Status values are Moov's documented SweepConfig status enum only:
+ * https://docs.moov.io/api/money-movement/sweeps/patch-config/
+ * Possible values: `enabled`, `disabled`. Re-enable the existing config;
+ * do not POST a replacement.
+ */
+export function sweepConfigPatchBody(action, body = {}) {
+  if (action === 'disable') return { status: 'disabled' };
+  if (action === 'enable') return { status: 'enabled' };
+  return body.patch || body;
+}
+
 export const sweepConfig = {
   run: async ({ client, body, ctx, fetchImpl }) => {
     const resolved = await resolveSweepAccount({ client, ctx });
@@ -1142,7 +1155,7 @@ export const sweepConfig = {
       });
       return jsonResult({ success: true, config: created, liveProviderCalled: true, environment });
     }
-    if (action === 'update' || action === 'disable') {
+    if (action === 'update' || action === 'disable' || action === 'enable') {
       const wallet = await readWallet(client, ctx.tenantId, environment, walletType);
       let id = body.sweep_config_id;
       if (!id) {
@@ -1155,10 +1168,17 @@ export const sweepConfig = {
         )) ?? rows[0];
         id = match?.sweepConfigID ?? match?.sweepConfigId ?? null;
       }
-      if (!id) return fail('There is no automatic payout to turn off.', 404);
+      if (!id) {
+        return fail(
+          action === 'enable'
+            ? 'There is no automatic payout to turn on.'
+            : 'There is no automatic payout to turn off.',
+          404,
+        );
+      }
       const updated = await moovFetch(`/accounts/${accountId}/sweep-configs/${id}`, {
         method: 'PATCH', scopes: [`/accounts/${accountId}/wallets.write`], fetchImpl,
-        body: action === 'disable' ? { status: 'disabled' } : (body.patch || body),
+        body: sweepConfigPatchBody(action, body),
       });
       return jsonResult({ success: true, config: updated, liveProviderCalled: true, environment });
     }

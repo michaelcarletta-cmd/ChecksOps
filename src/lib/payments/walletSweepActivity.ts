@@ -108,3 +108,21 @@ export function summarizeSweepActivity({
 
   return { pendingOutCents, rows };
 }
+
+/** WalletOps on/off control derived from the live sweep-config row. */
+export function automaticPayoutControl(config: {
+  status?: string | null;
+  provider_sweep_config_id?: string | null;
+} | null | undefined) {
+  const id = config?.provider_sweep_config_id ?? null;
+  const sweepsOn = String(config?.status ?? "").toLowerCase() === "enabled";
+  if (!id) {
+    return { show: false, action: null as "enable" | "disable" | null, label: null as string | null, sweepsOn };
+  }
+  return {
+    show: true,
+    action: (sweepsOn ? "disable" : "enable") as "enable" | "disable",
+    label: sweepsOn ? "Turn off automatic payouts" : "Turn on automatic payouts",
+    sweepsOn,
+  };
+}

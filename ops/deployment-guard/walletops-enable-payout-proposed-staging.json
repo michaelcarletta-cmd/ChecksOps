@@ -1,0 +1,32 @@
+{
+  "id": "walletops-enable-payout-proposed-staging",
+  "status": "PROPOSED STAGING CANDIDATE — NOT DEPLOYED",
+  "production_untouched": true,
+  "authoritative_production_baseline": {
+    "spa_entry": "/assets/index-gYa_BW8r.js",
+    "index_html_sha256": "791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805",
+    "lambda": "checksops-production-prep-api",
+    "CodeSha256": "M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=",
+    "RevisionId": "91753f93-71ab-4126-a3f8-6a5cfa08b291"
+  },
+  "readonly_moov_get": {
+    "account": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "wallet": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+    "sweepConfigID": "2d2c900d-6efb-43a2-ba90-2fd77e22afdd",
+    "status": "disabled",
+    "minimumBalance": "0.00",
+    "updatedOn": "2026-10-02T01:59:24.021879Z",
+    "writes": { "PATCH": 0, "POST": 0 }
+  },
+  "moov_operation": {
+    "source": "https://docs.moov.io/api/money-movement/sweeps/patch-config/",
+    "method": "PATCH",
+    "path": "/accounts/{accountID}/sweep-configs/{sweepConfigID}",
+    "body": { "status": "enabled" },
+    "possible_status_values": ["enabled", "disabled"],
+    "create_replacement": false
+  },
+  "branch": "cursor/walletops-enable-payout-2d41",
+  "base_branch": "cursor/walletops-prod-package-2d41",
+  "do_not_deploy_until_authorized": true
+}

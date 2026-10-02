@@ -103,9 +103,13 @@ test("Automatic payouts are explained and listed in activity", () => {
   assert.match(page, /Automatic payout/);
 });
 
-test("WalletOps has a Turn off automatic payouts button", () => {
+test("WalletOps toggles automatic payouts from sweep config state", () => {
   assert.match(page, /Turn off automatic payouts/);
+  assert.match(page, /Turn on automatic payouts/);
+  assert.match(page, /automaticPayoutControl/);
   assert.match(page, /disableSweeps\.mutateAsync/);
+  assert.match(page, /enableSweeps\.mutateAsync/);
+  assert.match(page, /refreshSweeps\.mutateAsync/);
 });
 
 test("WalletOps wallet reads are environment-aware and never maybeSingle all operating rows", () => {

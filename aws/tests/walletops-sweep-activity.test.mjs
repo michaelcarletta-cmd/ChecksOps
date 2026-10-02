@@ -100,8 +100,11 @@ test('8 last payout date uses accrualEndedOn when createdOn is missing', () => {
   assert.equal(at, '2026-10-01T20:00:15Z');
 });
 
-test('9 disable looks up the sweep config when the id is omitted', () => {
+test('9 disable/enable look up the sweep config when the id is omitted', () => {
   const onboard = readFileSync(new URL('../../aws/functions/api/providers/parity/moov-onboard.mjs', import.meta.url), 'utf8');
   assert.match(onboard, /There is no automatic payout to turn off/);
+  assert.match(onboard, /There is no automatic payout to turn on/);
   assert.match(onboard, /sweepConfigID/);
+  assert.match(onboard, /sweepConfigPatchBody/);
+  assert.match(onboard, /status: 'enabled'/);
 });

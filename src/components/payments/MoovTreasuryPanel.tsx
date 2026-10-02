@@ -56,6 +56,7 @@ export function MoovTreasuryPanel() {
     refresh,
     save,
     disable,
+    enable,
   } = useSweepConfig("operating");
 
   const [rail, setRail] = useState<SweepPushRail | "">("");
@@ -104,10 +105,28 @@ export function MoovTreasuryPanel() {
   async function handleDisable() {
     try {
       await disable.mutateAsync();
+      try { await refresh.mutateAsync(); } catch { /* invalidate already queued */ }
       toast({ title: "Daily payouts turned off" });
     } catch (e) {
       toast({ title: "Could not turn off", description: (e as Error).message, variant: "destructive" });
     }
+  }
+
+  async function handleTurnOn() {
+    if (config?.provider_sweep_config_id) {
+      try {
+        await enable.mutateAsync();
+        try { await refresh.mutateAsync(); } catch { /* invalidate already queued */ }
+        toast({
+          title: "Automatic payouts turned on",
+          description: "Leftover wallet money will be sent to your bank on the next daily sweep.",
+        });
+      } catch (e) {
+        toast({ title: "Could not turn on automatic payouts", description: (e as Error).message, variant: "destructive" });
+      }
+      return;
+    }
+    await handleSave();
   }
 
   return (
@@ -268,8 +287,11 @@ export function MoovTreasuryPanel() {
 
             {isAdmin && pushRails.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                <Button onClick={handleSave} disabled={save.isPending}>
-                  {save.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                <Button
+                  onClick={isOn ? handleSave : handleTurnOn}
+                  disabled={save.isPending || enable.isPending}
+                >
+                  {(save.isPending || enable.isPending) && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
                   {isOn ? "Save changes" : "Turn on daily payouts"}
                 </Button>
                 {isOn && (

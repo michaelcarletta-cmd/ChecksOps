@@ -154,6 +154,18 @@ export const disableSweep = (
     sweep_config_id: sweepConfigId || undefined,
   });
 
+export const enableSweep = (
+  tenantId: string,
+  walletType = "operating",
+  sweepConfigId?: string | null,
+) =>
+  invoke<SweepSnapshot>({
+    action: "enable",
+    tenant_id: tenantId,
+    wallet_type: walletType,
+    sweep_config_id: sweepConfigId || undefined,
+  });
+
 /** Cents from a dollar string typed by a person. Throws on bad input. */
 export function dollarsToCents(input: string): number {
   const raw = input.trim().replace(/[$,\s]/g, "");
