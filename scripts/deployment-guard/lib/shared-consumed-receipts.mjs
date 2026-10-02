@@ -1,4 +1,3 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 
@@ -33,11 +32,10 @@ export function createS3ConsumedReceiptRegistry({
   bucket,
   region,
   prefix = DEFAULT_CONSUMED_PREFIX,
-  client = null,
 } = {}) {
-  const s3 = client || new S3Client({ region });
   const bucketName = String(bucket || '').trim();
   if (!bucketName) throw new Error('createS3ConsumedReceiptRegistry requires bucket');
+  let cached = null;
   return {
     kind: 's3-consumed-receipts',
     bucket: bucketName,
@@ -49,6 +47,21 @@ export function createS3ConsumedReceiptRegistry({
       actor = null,
       script = null,
     } = {}) {
+      if (!cached) {
+        try {
+          const mod = await import('@aws-sdk/client-s3');
+          cached = {
+            s3: new mod.S3Client({ region }),
+            PutObjectCommand: mod.PutObjectCommand,
+          };
+        } catch (error) {
+          return failMany([errorEntry(
+            CODES.DEPLOYMENT_COLLISION,
+            'AWS SDK dependency is missing; refusing shared receipt consumption and production mutation',
+            { dependency: '@aws-sdk/client-s3', error: error?.message || String(error) },
+          )], CODES.DEPLOYMENT_COLLISION);
+        }
+      }
       const mac = String(receipt?.mac || '').trim();
       if (!/^[0-9a-f]{64}$/.test(mac)) {
         return failMany([errorEntry(
@@ -79,7 +92,7 @@ export function createS3ConsumedReceiptRegistry({
         },
       };
       try {
-        const res = await s3.send(new PutObjectCommand({
+        const res = await cached.s3.send(new cached.PutObjectCommand({
           Bucket: bucketName,
           Key: key,
           Body: JSON.stringify(payload),
