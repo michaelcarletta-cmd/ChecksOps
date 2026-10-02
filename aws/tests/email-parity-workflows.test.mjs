@@ -517,16 +517,30 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
   console.warn = (...args) => logs.push(args.map(String).join(' '));
   let issuedHire = null;
   let issuedInvite = null;
+  const assertStrongTemp = (value) => {
+    const pw = String(value || '');
+    assert.ok(pw.length >= 32, `expected temp password length >= 32, got ${pw.length}`);
+    assert.match(pw, /[A-Z]/, 'expected uppercase');
+    assert.match(pw, /[a-z]/, 'expected lowercase');
+    assert.match(pw, /[0-9]/, 'expected digit');
+    assert.match(pw, /[^A-Za-z0-9]/, 'expected special char');
+  };
   try {
     const hire = await runHireMortgageAgent({
       mapping,
       spoof,
+      identityScope: {
+        ok: true,
+        identityEnv: 'staging',
+        mappingSource: 'identity_accounts',
+      },
       send: capturingMailer(sent),
       body: { email: 'agent@example.com', full_name: 'Mo Agent' },
       cognitoJson: async (target, payload) => {
         if (target === 'AdminCreateUser') {
           issuedHire = payload.TemporaryPassword;
           assert.equal(payload.MessageAction, 'SUPPRESS');
+          assertStrongTemp(issuedHire);
           return { User: { Username: 'cog', Attributes: [{ Name: 'sub', Value: COGNITO_SUB }] } };
         }
         throw new Error(`unexpected ${target}`);
@@ -544,9 +558,10 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
           match: (sql) => sql.includes('FROM public.profiles'),
           result: () => ({ rows: [] }),
         },
+        { match: (sql) => sql.includes('INSERT INTO public.identity_accounts'), result: () => ({ rows: [], rowCount: 1 }) },
         {
-          match: (sql) => sql.includes('INSERT INTO public.user_roles') && sql.includes('mortgage_agent'),
-          result: () => ({ rows: [{ id: '1' }] }),
+          match: (sql) => sql.includes('aws_hire_mortgage_agent_provision'),
+          result: () => ({ rows: [{ result: { ok: true, mortgage_agent_granted: true } }], rowCount: 1 }),
         },
       ]),
     });
@@ -563,12 +578,18 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     const invite = await runTenantInviteUser({
       mapping,
       spoof,
+      identityScope: {
+        ok: true,
+        identityEnv: 'staging',
+        mappingSource: 'identity_accounts',
+      },
       send: capturingMailer(sent),
       body: { tenant_id: TENANT, email: 'member@example.com', role: 'member', full_name: 'New Member' },
       cognitoJson: async (target, payload) => {
         if (target === 'AdminCreateUser') {
           issuedInvite = payload.TemporaryPassword;
           assert.equal(payload.MessageAction, 'SUPPRESS');
+          assertStrongTemp(issuedInvite);
           return { User: { Username: 'cog2', Attributes: [{ Name: 'sub', Value: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] } };
         }
         throw new Error(`unexpected ${target}`);
@@ -584,6 +605,10 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
         },
         {
           match: (sql) => sql.includes('FROM public.profiles'),
+          result: () => ({ rows: [] }),
+        },
+        {
+          match: (sql) => sql.includes('identity_production_cognito_locks') || sql.includes('set_config'),
           result: () => ({ rows: [] }),
         },
       ]),

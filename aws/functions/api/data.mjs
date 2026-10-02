@@ -230,7 +230,14 @@ export const withIdentity = async (event, fn, deps = {}) => {
     refuseSubAsApplicationId(mapping.application_user_id, claimsResult.claims.sub);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || claimsResult.claims.email || '']);
-    const result = await fn({ client, mapping, claims: claimsResult.claims, body, spoof });
+    const result = await fn({
+      client,
+      mapping,
+      claims: claimsResult.claims,
+      body,
+      spoof,
+      identityScope: scope,
+    });
     const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
     if (commit && result?.ok !== false && status < 400) {
       await client.query('COMMIT');

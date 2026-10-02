@@ -1,7 +1,7 @@
 /**
  * Tenant Cognito invite / admin (Class A) + domain + OpenAI BYOK helpers.
  */
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import {
   SecretsManagerClient,
   CreateSecretCommand,
@@ -17,6 +17,7 @@ import {
   AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity } from './data.mjs';
+import { bindProductionCognitoLock } from './identity-env.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
@@ -26,6 +27,40 @@ const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
 const sm = () => new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const cognito = () => new CognitoIdentityProviderClient({ region: process.env.AWS_REGION || 'us-east-1' });
+
+const randomFrom = (alphabet) => alphabet[randomInt(0, alphabet.length)];
+const shuffle = (chars) => {
+  const a = chars.slice();
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = randomInt(0, i + 1);
+    const tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
+  return a;
+};
+
+/**
+ * Cognito temporary password generator for staging/prod-prep pools.
+ * Guaranteed: uppercase + lowercase + number + special, and comfortably long.
+ */
+const generateCognitoTempPassword = (minLength = 40) => {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const digits = '23456789';
+  const special = '!@#$%^&*';
+  const all = `${upper}${lower}${digits}${special}`;
+
+  const required = [
+    randomFrom(upper),
+    randomFrom(lower),
+    randomFrom(digits),
+    randomFrom(special),
+  ];
+  const remaining = Math.max(Number(minLength) || 40, required.length) - required.length;
+  const extra = Array.from({ length: remaining }, () => randomFrom(all));
+  return shuffle([...required, ...extra]).join('');
+};
 
 /** Admin Cognito APIs require SigV4 (Lambda execution role). Unsigned fetch returns Missing Authentication Token. */
 const cognitoJson = async (target, payload) => {
@@ -72,7 +107,7 @@ const assertTenantAdmin = async (client, mapping, tenantId) => {
 };
 
 export const runTenantInviteUser = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
@@ -92,7 +127,7 @@ export const runTenantInviteUser = async ({
   )).rows[0];
   if (!tenant) return { ok: false, statusCode: 404, error: 'Tenant not found', spoofFieldsIgnored: spoof };
 
-  const tempPassword = `Tmp-${randomBytes(9).toString('base64url')}!a1`;
+  const tempPassword = generateCognitoTempPassword(40);
   let cognitoSub = null;
   let isNewUser = false;
   try {
@@ -164,6 +199,24 @@ export const runTenantInviteUser = async ({
              linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
       [cognitoSub, appUserId, email],
     ).catch(() => {});
+  }
+
+  // Production /identity/me resolves via identity_production_cognito_locks.
+  // Login must not write that table. Bind here with the server-resolved
+  // Cognito sub + application user only (never email, client user id, or tenant_id).
+  const lockResult = await bindProductionCognitoLock(client, {
+    cognitoSub,
+    applicationUserId: appUserId,
+    identityScope,
+  });
+  if (!lockResult.ok) {
+    return {
+      ok: false,
+      statusCode: lockResult.error === 'identity_lock_conflict' ? 409 : 500,
+      error: lockResult.error,
+      message: lockResult.message || undefined,
+      spoofFieldsIgnored: spoof,
+    };
   }
 
   await client.query(
@@ -354,8 +407,10 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
  * or returned. The invite is passwordless login.
  */
 export const runHireMortgageAgent = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
+  const HIRE_PROVISION_SQL =
+    'SELECT public.aws_hire_mortgage_agent_provision($1::uuid, $2::text, $3::text) AS result';
   const adminCognito = cognitoFn || cognitoJson;
   const system = (await client.query(
     `SELECT role FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
@@ -376,7 +431,7 @@ export const runHireMortgageAgent = async ({
     ? String(body.password)
     : null;
   const tempPassword = providedPassword
-    || `MortgageOps!${randomBytes(6).toString('base64url')}9a`;
+    || generateCognitoTempPassword(40);
 
   let appUserId = (await client.query(
     `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
@@ -489,51 +544,42 @@ export const runHireMortgageAgent = async ({
     [cognitoSub, appUserId, email],
   );
 
-  await client.query(
-    `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
-     VALUES ($1::uuid, $2, $3, now(), now())
-     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, updated_at = now()`,
-    [appUserId, email, fullName],
-  );
-
-  let roleOk = false;
-  try {
-    const roleInsert = await client.query(
-      `INSERT INTO public.user_roles (user_id, role)
-       VALUES ($1::uuid, 'mortgage_agent')
-       ON CONFLICT DO NOTHING
-       RETURNING id`,
-      [appUserId],
-    );
-    roleOk = Boolean(roleInsert?.rows?.length);
-  } catch {
-    try {
-      const roleInsert = await client.query(
-        `INSERT INTO public.user_roles (id, user_id, role)
-         VALUES ($1::uuid, $2::uuid, 'mortgage_agent')
-         ON CONFLICT DO NOTHING
-         RETURNING id`,
-        [randomUUID(), appUserId],
-      );
-      roleOk = Boolean(roleInsert?.rows?.length);
-    } catch {
-      roleOk = false;
-    }
+  const provisionRaw = (await client.query(HIRE_PROVISION_SQL, [appUserId, email, fullName])).rows[0]?.result;
+  const provision = typeof provisionRaw === 'string'
+    ? (() => { try { return JSON.parse(provisionRaw); } catch { return null; } })()
+    : provisionRaw;
+  if (!provision || provision.ok !== true) {
+    const err = provision?.error || 'hire_provision_failed';
+    const statusCode = err === 'not_authorized' || err === 'not_authenticated' ? 403 : 400;
+    return {
+      ok: false,
+      statusCode,
+      error: err,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (provision.mortgage_agent_granted !== true) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'Failed to grant mortgage_agent role',
+      spoofFieldsIgnored: spoof,
+    };
   }
 
-  if (!roleOk) {
-    const has = (await client.query(
-      `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'mortgage_agent' LIMIT 1`,
-      [appUserId],
-    )).rows[0];
-    if (!has) {
-      return {
-        ok: false,
-        statusCode: 400,
-        error: 'Failed to grant mortgage_agent role',
-        spoofFieldsIgnored: spoof,
-      };
-    }
+  const lockResult = await bindProductionCognitoLock(client, {
+    cognitoSub,
+    applicationUserId: appUserId,
+    identityScope,
+  });
+  if (!lockResult.ok) {
+    return {
+      ok: false,
+      statusCode: lockResult.error === 'identity_lock_conflict' ? 409 : 500,
+      error: lockResult.error,
+      message: lockResult.message || undefined,
+      spoofFieldsIgnored: spoof,
+    };
   }
 
   const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;
