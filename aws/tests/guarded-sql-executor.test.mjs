@@ -500,11 +500,15 @@ test('#601 one exact and one modified definition is SQL_COLLISION', async () => 
 test('readFunctionDef returns exists:false only for a true zero-row catalog miss', async () => {
   assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('::regprocedure'), false);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /pg_proc/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes/);
+  assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('pg_get_function_identity_arguments'), false);
   const client = {
     async query(sql, params) {
       assert.equal(sql.includes('::regprocedure'), false);
+      assert.match(sql, /p\.proargtypes/);
       assert.equal(params[0], 'public');
       assert.equal(params[1], 'user_can_move_tenant_checks');
+      assert.deepEqual(params[2], ['uuid', 'uuid']);
       return { rows: [] };
     },
   };
