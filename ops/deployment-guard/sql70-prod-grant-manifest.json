@@ -1,0 +1,51 @@
+{
+  "workstream_id": "claim-sql70-prod-grant-a2a4",
+  "branch": "cursor/claim-sql70-prod-grant-a2a4",
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "owned_components": [
+    "aws/workflows/sql/70_staging_claims_number_grant.sql"
+  ],
+  "filename": "aws/workflows/sql/70_staging_claims_number_grant.sql",
+  "migration_id": "70_staging_claims_number_grant",
+  "source_sha256": "0a5109e102f6d8014c9e6e6e6d99c259eecb82c0c576fef62834ebb869bffa5c",
+  "intended_replacement_sha256": "0a5109e102f6d8014c9e6e6e6d99c259eecb82c0c576fef62834ebb869bffa5c",
+  "expected_live_definition_sha256": "46589287c22aabc4f3f3bfd30784ad46dccc4e58c693e9953c13e8cd91028f18",
+  "live_definition_sha256": "46589287c22aabc4f3f3bfd30784ad46dccc4e58c693e9953c13e8cd91028f18",
+  "plan": {
+    "mutation_scope": "declared-objects-only",
+    "silent_backfill": false,
+    "mutate_unrelated_data": false
+  },
+  "preflight_live_fingerprint": {
+    "sql": "46589287c22aabc4f3f3bfd30784ad46dccc4e58c693e9953c13e8cd91028f18",
+    "spa_entry": "/assets/index-B2T1Wfw7.js",
+    "spa_index_sha256": "a696053f8d8f4ae32fe2bc39622a97452b6b98ed27a03563d7f3ae50fe20ef3e",
+    "lambda_code_sha256": "kqXCfyf3PVmKxV4ncmLgWKH/A6iwbi/IgsOgFTbIedQ=",
+    "lambda_revision_id": "1f5bb42a-047d-4bd2-80f4-1ec11c97c2c6"
+  },
+  "production_fingerprint": {
+    "spa_entry": "/assets/index-B2T1Wfw7.js",
+    "spa_index_sha256": "a696053f8d8f4ae32fe2bc39622a97452b6b98ed27a03563d7f3ae50fe20ef3e",
+    "lambda_code_sha256": "kqXCfyf3PVmKxV4ncmLgWKH/A6iwbi/IgsOgFTbIedQ=",
+    "lambda_revision_id": "1f5bb42a-047d-4bd2-80f4-1ec11c97c2c6"
+  },
+  "immediately_before_fingerprint": {
+    "spa_entry": "/assets/index-B2T1Wfw7.js",
+    "spa_index_sha256": "a696053f8d8f4ae32fe2bc39622a97452b6b98ed27a03563d7f3ae50fe20ef3e",
+    "lambda_code_sha256": "kqXCfyf3PVmKxV4ncmLgWKH/A6iwbi/IgsOgFTbIedQ=",
+    "lambda_revision_id": "1f5bb42a-047d-4bd2-80f4-1ec11c97c2c6"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "staging SQL70 grant (aws/workflows/sql/70_staging_claims_number_grant.sql) plus staging settlement acceptance on claim 695064-GQ / 398df4b8 save_status 200 persist true"
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "claim-sql70-prod-grant-a2a4",
+    "inherited": false,
+    "from_previous_workstream": false,
+    "scope": "GRANT UPDATE (claim_number, updated_at) ON TABLE public.claims TO checksops;"
+  }
+}
