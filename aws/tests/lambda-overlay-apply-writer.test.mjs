@@ -52,12 +52,21 @@ function liveZip() {
   });
 }
 
+function liveZipWithoutTenant() {
+  return writeZipMembers({
+    'admin-override-check-status.mjs': 'export const overlay = "admin-old";\n',
+    'unrelated.mjs': 'export const keep = true;\n',
+    'index.mjs': 'export const handler = true;\n',
+  });
+}
+
 function issueOverlayReceipt(root, {
   workstream_id = 'workstream-a',
   environment = 'staging',
   component = 'checksops-staging-api',
   fingerprint = { codeSha256: 'live-sha', revisionId: 'rev-1' },
   owned = ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+  owned_member_ops,
   ttlMs = 15 * 60 * 1000,
   now = NOW,
 } = {}) {
@@ -78,6 +87,7 @@ function issueOverlayReceipt(root, {
     target_component: component,
     deployment_type: 'lambda-overlay',
     owned_components: owned,
+    ...(owned_member_ops ? { owned_member_ops } : {}),
     preflight_live_fingerprint: fingerprint,
     lease: lease.details.lease,
   }, { now, ttlMs });
@@ -657,6 +667,382 @@ function zipWithDuplicateMember() {
   eocdBuf.writeUInt32LE(cdSize + firstCd.length, 12);
   return Buffer.concat([base.subarray(0, cdOffset + cdSize), firstCd, eocdBuf]);
 }
+
+const ADD_OPS = {
+  replace: ['admin-override-check-status.mjs'],
+  add: ['tenant-check-user.mjs'],
+};
+
+test('explicitly authorized absent add member is eligible in mocked apply', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+  });
+  assert.ok(issued.receipt.owned_member_ops);
+  const before = liveZipWithoutTenant();
+  const state = createLambdaState({ zip: before });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+  assert.equal(state.updates.length, 1);
+  assert.equal(state.updates[0].RevisionId, 'rev-1');
+  const afterMembers = hashZipMembers(state.zip);
+  const beforeMembers = hashZipMembers(before);
+  assert.equal(afterMembers['unrelated.mjs'], beforeMembers['unrelated.mjs']);
+  assert.equal(afterMembers['index.mjs'], beforeMembers['index.mjs']);
+  assert.notEqual(afterMembers['admin-override-check-status.mjs'], beforeMembers['admin-override-check-status.mjs']);
+  assert.ok(afterMembers['tenant-check-user.mjs']);
+  assert.equal(beforeMembers['tenant-check-user.mjs'], undefined);
+  assert.deepEqual(result.details.added_members, ['tenant-check-user.mjs']);
+  assert.deepEqual(result.details.after.configuration.Environment, result.details.before.configuration.Environment);
+});
+
+test('add member already present is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+  });
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /already exists/);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('absent replacement member is refused even when add is authorized', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['missing-replace.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: { replace: ['missing-replace.mjs'], add: ['tenant-check-user.mjs'] },
+  });
+  const sources = writeSources(root);
+  fs.writeFileSync(path.join(root, 'aws/functions/api/missing-replace.mjs'), 'export const x = 1;\n');
+  const memberSources = {
+    'missing-replace.mjs': 'aws/functions/api/missing-replace.mjs',
+    'tenant-check-user.mjs': sources['tenant-check-user.mjs'],
+  };
+  const state = createLambdaState({ zip: liveZipWithoutTenant() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: memberSources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /absent from the current live Lambda ZIP/);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('unlisted new member is refused', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs'],
+  });
+  const sources = writeSources(root);
+  const state = createLambdaState({ zip: liveZipWithoutTenant() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+});
+
+test('second unapproved new member is refused', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+  });
+  const sources = writeSources(root);
+  fs.writeFileSync(path.join(root, 'aws/functions/api/brand-new-member.mjs'), 'export const created = true;\n');
+  sources['brand-new-member.mjs'] = 'aws/functions/api/brand-new-member.mjs';
+  const state = createLambdaState({ zip: liveZipWithoutTenant() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('replace-only receipt cannot be reinterpreted as add by caller input', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+  });
+  assert.equal(issued.receipt.owned_member_ops, undefined);
+  const state = createLambdaState({ zip: liveZipWithoutTenant() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    owned_member_ops: ADD_OPS,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.RECEIPT_MISMATCH);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('receipt replace/add tampering fails signature validation', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+  });
+  const tampered = {
+    ...issued.receipt,
+    owned_member_ops: {
+      replace: ['admin-override-check-status.mjs'],
+      add: ['tenant-check-user.mjs', 'brand-new-member.mjs'],
+    },
+    owned_components: [
+      'admin-override-check-status.mjs',
+      'tenant-check-user.mjs',
+      'brand-new-member.mjs',
+    ],
+  };
+  const state = createLambdaState({ zip: liveZipWithoutTenant() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: tampered }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.RECEIPT_FORGED);
+  assert.equal(state.updates.length, 0);
+});
+
+test('traversal destination is refused', async () => {
+  const root = tmpRootWithOps();
+  const lease = acquireLease(root, {
+    workstream_id: 'workstream-a',
+    component: 'checksops-staging-api',
+    environment: 'staging',
+    commit: SHA,
+    operator: 'test-agent',
+  }, NOW);
+  const issued = issueReceipt(root, {
+    workstream_id: 'workstream-a',
+    branch: 'cursor/test',
+    commit: SHA,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'checksops-staging-api',
+    deployment_type: 'lambda-overlay',
+    owned_components: ['../evil.mjs'],
+    owned_member_ops: { replace: [], add: ['../evil.mjs'] },
+    preflight_live_fingerprint: { codeSha256: 'live-sha', revisionId: 'rev-1' },
+    lease: lease.details.lease,
+  }, { now: NOW });
+  assert.equal(issued.ok, false);
+  assert.equal(issued.code, CODES.UNRELATED_MUTATION);
+});
+
+test('absolute destination is refused', async () => {
+  const root = tmpRootWithOps();
+  const lease = acquireLease(root, {
+    workstream_id: 'workstream-a',
+    component: 'checksops-staging-api',
+    environment: 'staging',
+    commit: SHA,
+    operator: 'test-agent',
+  }, NOW);
+  const result = issueReceipt(root, {
+    workstream_id: 'workstream-a',
+    branch: 'cursor/test',
+    commit: SHA,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'checksops-staging-api',
+    deployment_type: 'lambda-overlay',
+    owned_components: ['/tmp/evil.mjs'],
+    owned_member_ops: { replace: ['/tmp/evil.mjs'], add: [] },
+    preflight_live_fingerprint: { codeSha256: 'live-sha', revisionId: 'rev-1' },
+    lease: lease.details.lease,
+  }, { now: NOW });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+});
+
+test('duplicate destination between replace and add is refused', async () => {
+  const root = tmpRootWithOps();
+  const lease = acquireLease(root, {
+    workstream_id: 'workstream-a',
+    component: 'checksops-staging-api',
+    environment: 'staging',
+    commit: SHA,
+    operator: 'test-agent',
+  }, NOW);
+  const result = issueReceipt(root, {
+    workstream_id: 'workstream-a',
+    branch: 'cursor/test',
+    commit: SHA,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'checksops-staging-api',
+    deployment_type: 'lambda-overlay',
+    owned_components: ['tenant-check-user.mjs'],
+    owned_member_ops: {
+      replace: ['tenant-check-user.mjs'],
+      add: ['tenant-check-user.mjs'],
+    },
+    preflight_live_fingerprint: { codeSha256: 'live-sha', revisionId: 'rev-1' },
+    lease: lease.details.lease,
+  }, { now: NOW });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.INVALID_MANIFEST);
+});
+
+test('add-member source traversal is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+  });
+  const sources = writeSources(root);
+  sources['tenant-check-user.mjs'] = '../../evil.mjs';
+  const state = createLambdaState({ zip: liveZipWithoutTenant() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('add-member source symlink escape is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+  });
+  const evil = path.join(os.tmpdir(), `checksops-add-symlink-evil-${process.pid}.mjs`);
+  fs.writeFileSync(evil, 'export const pwned = true;\n');
+  const sources = writeSources(root);
+  const link = path.join(root, 'aws/functions/api/tenant-check-user.mjs');
+  fs.unlinkSync(link);
+  fs.symlinkSync(evil, link);
+  const state = createLambdaState({ zip: liveZipWithoutTenant() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('add-member CodeSha256 drift performs no write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+    fingerprint: { codeSha256: 'old-sha', revisionId: 'rev-1' },
+  });
+  const state = createLambdaState({ zip: liveZipWithoutTenant(), codeSha256: 'new-sha', revisionId: 'rev-1' });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('add-member RevisionId drift performs no write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+    owned_member_ops: ADD_OPS,
+    fingerprint: { codeSha256: 'live-sha', revisionId: 'rev-old' },
+  });
+  const state = createLambdaState({ zip: liveZipWithoutTenant(), codeSha256: 'live-sha', revisionId: 'rev-1' });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
 
 test('duplicate live ZIP member names fail closed before overlay/rebuild', async () => {
   const root = tmpRootWithOps();

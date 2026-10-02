@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
+import { FUNCTION_DEF_LOOKUP_SQL } from '../../scripts/deployment-guard/lib/function-def-lookup.mjs';
 import { hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
@@ -15,7 +16,7 @@ import {
 const EXECUTOR_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor');
 const GUARD_LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/deployment-guard/lib');
 fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
-for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs']) {
+for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs']) {
   fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
 }
 const {
@@ -23,6 +24,7 @@ const {
   extractPinnedFunctionSql,
   hashTenantPermissionLiveDefs,
   isExactKnownPredecessor,
+  readFunctionDef,
   tenantPermissionDefsAreExact,
   tenantPermissionMarkersMatch,
 } = await import('../write-path/guarded-sql-executor/index.mjs');
@@ -95,8 +97,12 @@ function mockConnect({
         return { rows: [] };
       }
       if (text.includes('current_database')) return { rows: [{ d: 'checksops' }] };
-      if (text.includes('pg_get_functiondef')) {
-        if (String(params?.[0] || '').includes('claim_ledger')) {
+      if (text.includes('FROM pg_proc') || text.includes('pg_get_functiondef')) {
+        if (text.includes('::regprocedure')) {
+          throw new Error('function definition lookup must not cast through regprocedure');
+        }
+        const name = String(params?.[1] || params?.[0] || '');
+        if (name.includes('claim_ledger')) {
           return { rows: [{ def: applied ? afterDef : beforeDef }] };
         }
         return { rows: [{ def: sql43Def }] };
@@ -291,10 +297,14 @@ function tenantAuthEvent(overrides = {}) {
 function mockTenantConnect({
   moveDef = null,
   overrideDef = null,
+  lookupError = null,
+  duplicateFor = null,
 } = {}) {
   let applied = false;
+  const lookups = [];
   const client = {
     applied() { return applied; },
+    lookups() { return lookups; },
     async query(sql, params = []) {
       const text = String(sql);
       if (text.includes('current_database')) return { rows: [{ d: 'checksops' }] };
@@ -302,13 +312,21 @@ function mockTenantConnect({
         applied = true;
         return { rows: [] };
       }
-      if (text.includes('pg_get_functiondef')) {
-        const ident = String(params?.[0] || '');
-        if (ident.includes('user_can_move_tenant_checks')) {
+      if (text.includes('FROM pg_proc') || text.includes('pg_get_functiondef')) {
+        if (text.includes('::regprocedure')) {
+          throw new Error('function definition lookup must not cast through regprocedure');
+        }
+        const name = String(params?.[1] || '');
+        lookups.push({ schema: params?.[0], name, args: params?.[2], sql: text });
+        if (lookupError) throw new Error(lookupError);
+        if (duplicateFor && name.includes(duplicateFor)) {
+          return { rows: [{ def: 'CREATE FUNCTION duplicate A' }, { def: 'CREATE FUNCTION duplicate B' }] };
+        }
+        if (name.includes('user_can_move_tenant_checks')) {
           const def = applied ? PINNED_MOVE : moveDef;
           return { rows: def ? [{ def }] : [] };
         }
-        if (ident.includes('admin_override_check_status')) {
+        if (name.includes('admin_override_check_status')) {
           const def = applied ? PINNED_OVERRIDE : overrideDef;
           return { rows: def ? [{ def }] : [] };
         }
@@ -444,4 +462,101 @@ test('#601 predecessor-shaped but hash-different override remains SQL_COLLISION'
   assert.equal(result.code, CODES.SQL_COLLISION);
   const client = await connect();
   assert.equal(client.applied(), false);
+});
+
+test('#601 inspect of both-absent functions is an explicit absent state and does not create them', async () => {
+  const connect = mockTenantConnect();
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent({ action: 'inspect' }));
+  assert.equal(result.ok, true, result.message);
+  assert.deepEqual(result.details.receipt.live_functions, {
+    user_can_move_tenant_checks: false,
+    admin_override_check_status: false,
+  });
+  assert.equal(result.details.receipt.exact, false);
+  assert.equal(result.details.receipt.known_predecessor, false);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+  assert.equal(client.lookups().every((row) => !row.sql.includes('::regprocedure')), true);
+});
+
+test('#601 one exact and one modified definition is SQL_COLLISION', async () => {
+  const live = {
+    user_can_move_tenant_checks: PINNED_MOVE,
+    admin_override_check_status: MARKER_SIMILAR_OVERRIDE,
+  };
+  const connect = mockTenantConnect({
+    moveDef: PINNED_MOVE,
+    overrideDef: MARKER_SIMILAR_OVERRIDE,
+  });
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent({ liveDefs: live }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('readFunctionDef returns exists:false only for a true zero-row catalog miss', async () => {
+  assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('::regprocedure'), false);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /pg_proc/);
+  const client = {
+    async query(sql, params) {
+      assert.equal(sql.includes('::regprocedure'), false);
+      assert.equal(params[0], 'public');
+      assert.equal(params[1], 'user_can_move_tenant_checks');
+      return { rows: [] };
+    },
+  };
+  const result = await readFunctionDef(client, 'public.user_can_move_tenant_checks(uuid,uuid)');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.details, { exists: false });
+});
+
+test('readFunctionDef returns the exact definition for an existing function', async () => {
+  const client = {
+    async query() {
+      return { rows: [{ def: PINNED_MOVE }] };
+    },
+  };
+  const result = await readFunctionDef(client, 'public.user_can_move_tenant_checks(uuid,uuid)');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.details, { exists: true, definition: PINNED_MOVE });
+});
+
+test('readFunctionDef fails closed on lookup/database error and does not report absent', async () => {
+  const client = {
+    async query() {
+      throw new Error('permission denied for table pg_proc');
+    },
+  };
+  const result = await readFunctionDef(client, 'public.user_can_move_tenant_checks(uuid,uuid)');
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(result.details.exists, undefined);
+  const connect = mockTenantConnect({ lookupError: 'permission denied for table pg_proc' });
+  const handler = tenantHandler(connect);
+  const applied = await handler(tenantAuthEvent());
+  assert.equal(applied.ok, false);
+  assert.equal(applied.code, CODES.UNRELATED_MUTATION);
+  const live = await connect();
+  assert.equal(live.applied(), false);
+});
+
+test('readFunctionDef fails closed on unexpected duplicate/ambiguous catalog rows', async () => {
+  const client = {
+    async query() {
+      return { rows: [{ def: 'A' }, { def: 'B' }] };
+    },
+  };
+  const result = await readFunctionDef(client, 'public.user_can_move_tenant_checks(uuid,uuid)');
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const connect = mockTenantConnect({ duplicateFor: 'user_can_move_tenant_checks' });
+  const handler = tenantHandler(connect);
+  const applied = await handler(tenantAuthEvent());
+  assert.equal(applied.ok, false);
+  assert.equal(applied.code, CODES.SQL_COLLISION);
+  const live = await connect();
+  assert.equal(live.applied(), false);
 });

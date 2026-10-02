@@ -423,6 +423,33 @@ test('concurrent lease acquire: exactly one competing workstream succeeds', asyn
   assert.ok(parsed.filter((row) => row.code === CODES.LEASE_HELD).length >= 7);
 });
 
+test('replace-only receipt cannot authorize an add member', () => {
+  const root = tmpRoot();
+  const issued = issueValidReceipt(root, {
+    target_environment: 'staging',
+    target_component: 'checksops-staging-api',
+    owned_components: ['admin-override-check-status.mjs', 'tenant-check-user.mjs'],
+  });
+  assert.equal(issued.receipt.owned_member_ops, undefined);
+  const tampered = {
+    ...issued.receipt,
+    owned_member_ops: {
+      replace: ['admin-override-check-status.mjs'],
+      add: ['tenant-check-user.mjs'],
+    },
+  };
+  const result = refuseUnguardedDeploy({
+    receipt: tampered,
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    target_environment: 'staging',
+    target_component: 'checksops-staging-api',
+    deployment_type: 'lambda-overlay',
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.RECEIPT_FORGED);
+});
+
 test('interrupted apply never rolls back and reports UNKNOWN after unverified mutation', () => {
   const afterLease = evaluateInterruptedApply({ lease_acquired: true, mutated: false, verified: false });
   assert.equal(afterLease.ok, true);

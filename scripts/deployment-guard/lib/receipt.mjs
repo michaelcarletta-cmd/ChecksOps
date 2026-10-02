@@ -4,6 +4,7 @@ import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 import { receiptDir, leaseKey } from './paths.mjs';
 import { inspectLease } from './lease.mjs';
 import { signReceipt, verifyReceiptMac } from './issuer.mjs';
+import { validateOwnedMemberOps } from './lambda-owned-members.mjs';
 
 export const RECEIPT_KIND = 'deployment-guard-receipt';
 export const DEFAULT_RECEIPT_TTL_MS = 15 * 60 * 1000;
@@ -17,7 +18,7 @@ export function receiptFile(root, environment, component) {
 export function buildReceipt(input = {}, { now = Date.now(), ttlMs = DEFAULT_RECEIPT_TTL_MS } = {}) {
   const issuedAt = new Date(now).toISOString();
   const expiry = new Date(now + Math.min(ttlMs, MAX_RECEIPT_TTL_MS)).toISOString();
-  return {
+  const receipt = {
     schema_version: 1,
     kind: RECEIPT_KIND,
     issued_at: issuedAt,
@@ -33,6 +34,10 @@ export function buildReceipt(input = {}, { now = Date.now(), ttlMs = DEFAULT_REC
     preflight_live_fingerprint: input.preflight_live_fingerprint || input.preflight || null,
     lease: input.lease || null,
   };
+  if (Object.prototype.hasOwnProperty.call(input, 'owned_member_ops')) {
+    receipt.owned_member_ops = input.owned_member_ops;
+  }
+  return receipt;
 }
 
 function requireActiveMatchingLease(root, receipt, now = Date.now()) {
@@ -121,6 +126,10 @@ function validateReceiptShape(receipt, { requireMac = true } = {}) {
   }
   if (!Array.isArray(receipt.owned_components) || receipt.owned_components.length === 0) {
     errors.push(errorEntry(CODES.INVALID_MANIFEST, 'receipt missing owned_components'));
+  }
+  if (Object.prototype.hasOwnProperty.call(receipt, 'owned_member_ops')) {
+    const ops = validateOwnedMemberOps(receipt.owned_member_ops, receipt.owned_components);
+    if (!ops.ok) return ops;
   }
   if (!receipt.lease || typeof receipt.lease !== 'object') {
     errors.push(errorEntry(CODES.DEPLOYMENT_GUARD_REQUIRED, 'receipt missing lease; mutating deploys require a short-lived lease'));

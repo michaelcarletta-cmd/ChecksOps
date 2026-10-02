@@ -379,6 +379,12 @@ test('#601 arbitrary SQL and production remain refused', () => {
   }, { now: pinNow }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
+test('sql-executor-ensure packs the non-throwing function-def lookup', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/sql-executor-ensure.mjs'), 'utf8');
+  assert.match(src, /function-def-lookup\.mjs/);
+  assert.equal(src.includes('::regprocedure'), false);
+});
+
 test('sql-executor-ensure refuses shared API and billing sql44 retarget before AWS', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-ens-'));
   const log = path.join(dir, 'aws-calls.log');

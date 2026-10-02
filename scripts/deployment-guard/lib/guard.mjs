@@ -116,6 +116,7 @@ export function writeReceipt(root, result, extras = {}) {
     owned_components: extras.owned_components || identity.owned_components,
     preflight_live_fingerprint: extras.preflight_live_fingerprint || identity.preflight_live_fingerprint,
     lease: extras.lease || result.details?.lease || null,
+    ...(extras.owned_member_ops != null ? { owned_member_ops: extras.owned_member_ops } : {}),
   }, { now: extras.now, ttlMs: extras.ttl_ms });
   if (!issued.ok) return issued;
   const dir = receiptDir(root);

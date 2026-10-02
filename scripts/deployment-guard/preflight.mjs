@@ -25,6 +25,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     deployment_type: opts.type || input.deployment_type,
     owned_members: input.owned_members || input.owned_components,
     owned_components: input.owned_components || input.owned_members,
+    owned_member_ops: input.owned_member_ops,
     preflight: input.preflight || input.preflight_live_fingerprint,
     preflight_live_fingerprint: input.preflight || input.preflight_live_fingerprint,
     immediately_before: input.immediately_before,
@@ -84,6 +85,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
       target_component: payload.target_component,
       deployment_type: payload.deployment_type,
       owned_components: payload.owned_components,
+      owned_member_ops: payload.owned_member_ops,
       preflight_live_fingerprint: payload.preflight_live_fingerprint,
       lease: payload.lease,
     });
