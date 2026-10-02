@@ -2,10 +2,10 @@
  * AWS staging bridge for admin_override_check_status.
  *
  * Replicates the production SECURITY DEFINER function without GRANT EXECUTE
- * and without provider or money-movement side effects. Any tenant user may
- * move a check to any non-deposit status, including backwards to Review.
+ * and without provider or money-movement side effects. Same-company
+ * tenant_users members may move a check to any non-deposit status,
+ * including backwards to Review.
  */
-import { USER_ROLES_SQL } from './identity.mjs';
 import { canMoveTenantChecks } from './tenant-check-user.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -83,11 +83,6 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
     return { error: 'invalid_status', message: `Invalid status: ${newStatus}`, status: newStatus };
   }
 
-  const roles = new Set(
-    (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows
-      .map((row) => String(row.role || '').toLowerCase()),
-  );
-
   const check = (await client.query(
     `SELECT id, tenant_id, status, check_stage::text AS check_stage
      FROM public.check_intake_items
@@ -105,7 +100,7 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
       [mapping.application_user_id, check.tenant_id],
     )).rows[0]
     : null;
-  if (!canMoveTenantChecks({ roles, isTenantMember: !!member })) {
+  if (!canMoveTenantChecks({ isTenantMember: !!member })) {
     return { error: 'not_authorized', message: 'Not permitted to override this check' };
   }
 
@@ -123,7 +118,7 @@ export const executeAdminOverrideCheckStatus = async ({ client, mapping, args })
   );
   await client.query(
     `UPDATE public.claim_checks
-     SET check_stage = $2::text, updated_at = now()
+     SET check_stage = $2::public.check_stage, updated_at = now()
      WHERE check_intake_item_id = $1::uuid`,
     [checkId, nextStage],
   );

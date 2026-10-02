@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   ADMIN_OVERRIDE_ALLOWED_STATUSES,
@@ -19,6 +20,7 @@ const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
 const CHECK_ID = '33333333-3333-4333-8333-333333333333';
 const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const OTHER = '99999999-9999-4999-8999-999999999999';
 
 const jwtEvent = (body) => ({
   rawPath: '/data/rpc',
@@ -35,6 +37,7 @@ const jwtEvent = (body) => ({
 
 const mockClient = ({
   roles = [{ role: 'admin' }],
+  member,
   check = {
     id: CHECK_ID,
     tenant_id: FREEDOM,
@@ -68,6 +71,8 @@ const mockClient = ({
         return { rows: check ? [check] : [] };
       }
       if (/FROM public.tenant_users/.test(sql)) {
+        if (member === false) return { rows: [] };
+        if (member === true) return { rows: [{ '?column?': 1 }] };
         return { rows: check?.tenant_id === FREEDOM ? [{ '?column?': 1 }] : [] };
       }
       if (/UPDATE public.check_intake_items/.test(sql)) return { rows: [] };
@@ -76,6 +81,14 @@ const mockClient = ({
       return { rows: [] };
     },
   };
+};
+
+const overrideArgs = { p_check_id: CHECK_ID, p_new_status: 'needs_review', p_actor_id: APP_ID };
+
+const assertNoFinancialWrites = (client) => {
+  assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
+  assert.equal(client.queries.some((q) => /UPDATE public.claim_checks/.test(q.sql)), false);
+  assert.equal(client.queries.some((q) => /INSERT INTO public.check_audit_log/.test(q.sql)), false);
 };
 
 test('admin override is allowlisted as a safe write RPC', () => {
@@ -88,8 +101,26 @@ test('admin override is allowlisted as a safe write RPC', () => {
   assert.equal(recommendationForAdminOverrideStatus('needs_review'), null);
 });
 
-test('admin can move a claim-linked check from Endorsing back to Review', async () => {
+test('live #601 routing composition is preserved', () => {
+  const source = readFileSync('aws/functions/api/workflow-rpc.mjs', 'utf8');
+  assert.match(
+    source,
+    /case 'admin_override_check_status':\s*return executeAdminOverrideCheckStatus\(\{\s*client,\s*mapping,\s*args\s*\}\);/,
+  );
+  assert.match(source, /admin_override_check_status: 'safe_now'/);
+});
+
+test('claim_checks.check_stage uses ::public.check_stage and #601 does not query USER_ROLES_SQL', () => {
+  const source = readFileSync('aws/functions/api/admin-override-check-status.mjs', 'utf8');
+  assert.match(source, /SET check_stage = \$2::public\.check_stage, updated_at = now\(\)/);
+  assert.doesNotMatch(source, /SET check_stage = \$2::text/);
+  assert.doesNotMatch(source, /USER_ROLES_SQL/);
+  assert.doesNotMatch(source, /from '\.\/identity\.mjs'/);
+});
+
+test('same-company tenant_users member can move a claim-linked check back to Review', async () => {
   const client = mockClient({
+    roles: [{ role: 'staff' }],
     check: {
       id: CHECK_ID,
       tenant_id: FREEDOM,
@@ -101,13 +132,14 @@ test('admin can move a claim-linked check from Endorsing back to Review', async 
   const result = await executeAdminOverrideCheckStatus({
     client,
     mapping: { application_user_id: APP_ID },
-    args: { p_check_id: CHECK_ID, p_new_status: 'needs_review', p_actor_id: APP_ID },
+    args: overrideArgs,
   });
   assert.equal(result.error, undefined);
   assert.equal(result.data.ok, true);
   assert.equal(result.data.old_status, 'endorsements_in_progress');
   assert.equal(result.data.new_status, 'needs_review');
   assert.equal(result.data.new_stage, 'review');
+  assert.equal(client.queries.some((q) => q.sql === USER_ROLES_SQL), false);
 
   const intake = client.queries.find((q) => /UPDATE public.check_intake_items/.test(q.sql));
   assert.ok(intake);
@@ -117,6 +149,7 @@ test('admin can move a claim-linked check from Endorsing back to Review', async 
 
   const mirror = client.queries.find((q) => /UPDATE public.claim_checks/.test(q.sql));
   assert.ok(mirror);
+  assert.match(mirror.sql, /SET check_stage = \$2::public\.check_stage/);
   assert.equal(mirror.params[1], 'review');
 
   const audit = client.queries.find((q) => /INSERT INTO public.check_audit_log/.test(q.sql));
@@ -127,8 +160,32 @@ test('admin can move a claim-linked check from Endorsing back to Review', async 
   assert.match(audit.params[3], /endorsements_in_progress/);
 });
 
-test('admin can move forward to endorsing without T5 from-state blockers', async () => {
+test('same-company member with no privileged role can override', async () => {
+  const client = mockClient({ roles: [] });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: overrideArgs,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.data.new_status, 'needs_review');
+  assert.equal(client.queries.some((q) => q.sql === USER_ROLES_SQL), false);
+});
+
+test('same-company member labeled viewer can still override', async () => {
+  const client = mockClient({ roles: [{ role: 'read_only' }] });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: overrideArgs,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.data.new_status, 'needs_review');
+});
+
+test('same-company member can move forward to endorsing without T5 from-state blockers', async () => {
   const client = mockClient({
+    roles: [{ role: 'client' }],
     check: { id: CHECK_ID, tenant_id: FREEDOM, status: 'needs_review', check_stage: 'review' },
   });
   const result = await executeSafeWriteRpc({
@@ -142,7 +199,52 @@ test('admin can move forward to endorsing without T5 from-state blockers', async
   assert.equal(result.data.new_stage, 'endorsing');
 });
 
-test('deposited remains a financial destination', async () => {
+test('other-company user labeled admin is denied', async () => {
+  const client = mockClient({
+    roles: [{ role: 'admin' }],
+    member: false,
+    check: { id: CHECK_ID, tenant_id: OTHER, status: 'endorsements_in_progress' },
+  });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: overrideArgs,
+  });
+  assert.equal(result.error, 'not_authorized');
+  assertNoFinancialWrites(client);
+});
+
+test('other-company user labeled staff is denied', async () => {
+  const client = mockClient({
+    roles: [{ role: 'staff' }],
+    check: { id: CHECK_ID, tenant_id: OTHER, status: 'endorsements_in_progress' },
+  });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: overrideArgs,
+  });
+  assert.equal(result.error, 'not_authorized');
+  assertNoFinancialWrites(client);
+});
+
+test('non-member platform admin is denied', async () => {
+  const client = mockClient({
+    roles: [{ role: 'admin' }],
+    member: false,
+    check: { id: CHECK_ID, tenant_id: FREEDOM, status: 'endorsements_in_progress' },
+  });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: overrideArgs,
+  });
+  assert.equal(result.error, 'not_authorized');
+  assert.equal(client.queries.some((q) => q.sql === USER_ROLES_SQL), false);
+  assertNoFinancialWrites(client);
+});
+
+test('deposited remains a financial destination and performs no intake or claim_checks update', async () => {
   const client = mockClient();
   const result = await executeAdminOverrideCheckStatus({
     client,
@@ -150,55 +252,7 @@ test('deposited remains a financial destination', async () => {
     args: { p_check_id: CHECK_ID, p_new_status: 'deposited' },
   });
   assert.equal(result.error, 'rpc_financial_disabled');
-  assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
-});
-
-test('staff outside the tenant cannot override', async () => {
-  const client = mockClient({
-    roles: [{ role: 'staff' }],
-    check: { id: CHECK_ID, tenant_id: '99999999-9999-4999-8999-999999999999', status: 'endorsements_in_progress' },
-  });
-  const result = await executeAdminOverrideCheckStatus({
-    client,
-    mapping: { application_user_id: APP_ID },
-    args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
-  });
-  assert.equal(result.error, 'not_authorized');
-});
-
-test('company user without admin role can override', async () => {
-  const client = mockClient({ roles: [{ role: 'staff' }] });
-  const result = await executeAdminOverrideCheckStatus({
-    client,
-    mapping: { application_user_id: APP_ID },
-    args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
-  });
-  assert.equal(result.error, undefined);
-  assert.equal(result.data.new_status, 'needs_review');
-});
-
-test('company user labeled viewer can still override', async () => {
-  const client = mockClient({ roles: [{ role: 'read_only' }] });
-  const result = await executeAdminOverrideCheckStatus({
-    client,
-    mapping: { application_user_id: APP_ID },
-    args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
-  });
-  assert.equal(result.error, undefined);
-  assert.equal(result.data.new_status, 'needs_review');
-});
-
-test('outsider without tenant membership is rejected', async () => {
-  const client = mockClient({
-    roles: [{ role: 'client' }],
-    check: { id: CHECK_ID, tenant_id: '99999999-9999-4999-8999-999999999999', status: 'endorsements_in_progress' },
-  });
-  const result = await executeAdminOverrideCheckStatus({
-    client,
-    mapping: { application_user_id: APP_ID },
-    args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
-  });
-  assert.equal(result.error, 'not_authorized');
+  assertNoFinancialWrites(client);
 });
 
 test('handleDataRpc no longer returns the staging-read deny for admin override', async () => {

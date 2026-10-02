@@ -2842,8 +2842,8 @@ function StatusOverride({
     }
     setSaving(true);
     try {
-      // Route through the security-definer RPC: it validates the admin/staff
-      // permission server-side, updates status + stage + recommendation
+      // Route through the security-definer RPC: it validates same-company
+      // tenant_users membership server-side, updates status + stage + recommendation
       // atomically, mirrors claim_checks, and writes the audit log — bypassing
       // the RLS failures that blocked direct frontend updates.
       const { data, error } = await supabase.rpc("admin_override_check_status", {
@@ -2873,7 +2873,7 @@ function StatusOverride({
 
   return (
     <div className="space-y-2 rounded-md border border-border/60 p-2 bg-muted/30">
-      <Label className="text-[10px] text-muted-foreground">Override Status (admin)</Label>
+      <Label className="text-[10px] text-muted-foreground">Override Status</Label>
       <Select value={newStatus} onValueChange={setNewStatus}>
         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
         <SelectContent>
