@@ -1,0 +1,192 @@
+{
+  "id": "walletops-auto-payout-staging-accepted",
+  "verdict": "STAGING ACCEPTED — composed candidate (live production behavior + origin/main including PR #598 + WalletOps automatic-payout/sweep-history). NOT authorized for production apply.",
+  "captured_at": "2026-10-02T01:01:30Z",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-auto-payout-visible-2d41",
+  "source_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
+  "current_main_sha": "2fe6f7f5eabf42d4f9253d84808e25e5fd46b747",
+  "required_merge": {
+    "pr": 598,
+    "merge_sha": "a1d0347f7e219648e926d78fe145d2c72b9a76ff"
+  },
+  "source_composition_manifest": "ops/deployment-guard/walletops-auto-payout-source-composition.json",
+  "environment": "staging",
+  "production_promoted": false,
+  "production_updated": false,
+  "production_receipt_created": false,
+  "db_writes": 0,
+  "provider_financial_writes": 0,
+  "recreate_provider_transfer_ids": [],
+  "do_not_deploy_production": true,
+  "source_changes_during_acceptance": false,
+  "wholesale_staging_onboard_replace": false,
+  "stale_dist_reused": false,
+  "spa": {
+    "bucket": "checksops-staging-frontend-c48b",
+    "distribution": "E1CG52WRQZI7X1",
+    "invalidation_id": "I6BIB9HBEWZLHIEA9PNUM5OE1A",
+    "writer": "scripts/deployment-guard/staging-spa-upload.mjs",
+    "dist_origin": "fresh-clean-build",
+    "dist_path": "/tmp/walletops-spa-src/dist",
+    "index_html_sha256": "fb6f655441a6ef611b21e38a4088a873f6f2ae40b8aafdb26f7774ecb2f1430f",
+    "entry_bundle": "/assets/index-CqMVJIBN.js",
+    "entry_bundle_sha256": "307d12ab167bafc85604f31b108ede90ea3f0e09a32b9ebb5175b22ac13958a5",
+    "walletops_chunk": "/assets/WalletOps-Bod_AZnd.js",
+    "walletops_chunk_sha256": "f7dd181d0a8a2a4c9dc9e5bdd512e787257e527e1a8e2f3fb826904f2e7ce7b7",
+    "walletops_importer": "/assets/WhiteLabelApp-Hk7BFx73.js",
+    "last_modified": "2026-10-02T01:00:44+00:00",
+    "etag": "6e3a877dc63f47c4a182812f8c9487fa",
+    "cognito_bake": {
+      "VITE_AUTH_PROVIDER": "cognito",
+      "VITE_APP_URL": "https://staging.checksops.com",
+      "VITE_COGNITO_USER_POOL_ID": "us-east-1_vPmQ7cL1F"
+    }
+  },
+  "lambda": {
+    "function_name": "checksops-staging-api",
+    "writer": "/tmp/staging-lambda-apply.mjs",
+    "package_origin": "fresh-live-download",
+    "candidate_zip_sha256": "dedd19ae5117f6795981e39dfefea3c61918953fa1139fadd96b1d91c27d0f86",
+    "before": {
+      "CodeSha256": "+0xq9YipIFnvQaP0tPW7Wsk9c0d/6dD6z12PxMthsvE=",
+      "RevisionId": "c955b2fe-5674-438f-b093-a747de2f3f50",
+      "LastModified": "2026-10-01T18:43:54.000+0000"
+    },
+    "after": {
+      "CodeSha256": "3t0ZrlEX9nlZgeOd/v6jxhkYlT+hE5+t2WsdkcJ9D4Y=",
+      "RevisionId": "3020e8ad-f2f4-4f7e-bb48-22040efb2b24",
+      "LastModified": "2026-10-02T00:59:17.000+0000",
+      "CodeSize": 11718288
+    },
+    "compare_and_swap": true,
+    "env_changed": false,
+    "owned_members": {
+      "providers/parity/moov-functions.mjs": "f30afd17cedaf4e120534f3e71f2a0ab7f707d3d8e80bee5535c70143821d764",
+      "providers/parity/moov-onboard.mjs": "cc1d6a361647c8b47cddac78e3f233328f482ac9d5c918c4590618f553364533",
+      "providers/parity/moov-client.mjs": "5efa05258b5e1ea51989d175d3b1d374d70b9ce79053b86bc2591c85da1738ab",
+      "providers/parity/sweep-read.mjs": "6816dbce1dd7cd1d0e9740725f394b8e06099cd46511dd7cc49dc5bd5db962ed",
+      "providers/parity/moov-capabilities.mjs": "35467356e9e7c0109da6fabcb27219a2cf61fc58601d5db0ae5439fc2b072665"
+    },
+    "non_owned_members_preserved": 154,
+    "unexpected_member_changes": []
+  },
+  "acceptance_areas": {
+    "1_granular_merchant_capabilities": {
+      "ok": true,
+      "observed_request_arrays": [
+        "['transfers', 'collect-funds.ach', 'send-funds.ach', 'wallet.balance']"
+      ],
+      "sites": [
+        "providers/parity/moov-functions.mjs:272 account create",
+        "providers/parity/moov-onboard.mjs:188 capability POST",
+        "providers/parity/moov-onboard.mjs:907 hosted onboarding invite",
+        "providers/parity/moov-onboard.mjs:914 platform invite fallback"
+      ],
+      "legacy_merchant_set_absent": true
+    },
+    "2_capability_flag_interpretation": {
+      "ok": true,
+      "deployed_client_prefix_match": "name === target || name.startsWith(target + '.')",
+      "legacy_enabled_ids_still_recognized": {
+        "can_receive_payments": true,
+        "can_send_payments": true,
+        "can_ach_debit": true,
+        "can_ach_credit": true
+      },
+      "granular_enabled_ids_recognized": {
+        "can_receive_payments": true,
+        "can_send_payments": true,
+        "can_ach_debit": true,
+        "can_ach_credit": true
+      },
+      "production_capabilities_changed": false
+    },
+    "3_recipient_behavior": {
+      "ok": true,
+      "observed": "capabilities: ['transfers']",
+      "sites": [
+        "providers/parity/moov-onboard.mjs:489",
+        "providers/parity/moov-onboard.mjs:496"
+      ]
+    },
+    "4_homeowner_deductible": {
+      "ok": true,
+      "COLLECT_ACH_CAPABILITIES": ["transfers", "collect-funds.ach"],
+      "source_request_site": "supabase/functions/homeowner-deductible-pay/index.ts uses [...COLLECT_ACH_CAPABILITIES]",
+      "deployed_lambda_constant": "providers/parity/moov-capabilities.mjs",
+      "legacy_ids_not_requested": true,
+      "real_money_transaction_initiated": false
+    },
+    "5_walletops_automatic_payouts": {
+      "ok": true,
+      "walletops_chunk_contains": [
+        "Turn off automatic payouts",
+        "Manage sweeps",
+        "Automatic payouts turned off",
+        "Could not turn off automatic payouts",
+        "moov-sweep-config"
+      ],
+      "disable_backend": "sweepConfig action disable looks up sweep_config_id then PATCH /accounts/{id}/sweep-configs/{id} {status:disabled}",
+      "live_disable_not_executed": true,
+      "reason_disable_not_clicked": "Would mutate a live sweep config. Success/failure UI paths are present in the deployed chunk; unit test 9 covers lookup."
+    },
+    "6_sweep_history": {
+      "ok": true,
+      "readSweepHistory": "/accounts/${accountId}/wallets/${walletId}/sweeps?count=50",
+      "readSweepSnapshot": "preserved on live overlay",
+      "normalizeSweepHistoryRows": true,
+      "obsolete_CTqMys28_path_absent": "/sweeps?walletID="
+    },
+    "7_existing_moov_funding_transaction": {
+      "ok": true,
+      "invoice_exports_preserved": ["INVOICE_API_VERSION", "normalizeInvoiceLineItems", "publicInvoice"],
+      "non_owned_lambda_members_preserved": 154,
+      "lambda_env_changed": false,
+      "money_flags_remain_off": [
+        "AWS_PROVIDER_EXECUTION_ENABLED=false",
+        "AWS_PROVIDER_LIVE_READS_ENABLED=false",
+        "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST=false"
+      ],
+      "real_production_money_movement": false
+    }
+  },
+  "legacy_capability_request_absence_proof": {
+    "mixed_live_array_absent": "['transfers', 'send-funds', 'wallet', 'send-funds.ach']",
+    "family_ids_not_in_capabilities_arrays": ["send-funds", "collect-funds", "wallet"],
+    "tests": [
+      "aws/tests/walletops-598-capability-composition.test.mjs",
+      "aws/tests/moov-capabilities.test.mjs",
+      "aws/tests/moov-granular-capabilities-overlay.test.mjs"
+    ]
+  },
+  "deployment_contracts": {
+    "staging_lambda_preflight": "PASS overlay_allowed compare-and-swap",
+    "staging_spa_preflight": "PASS spa_promote_allowed; SOURCE_COMPOSITION_REQUIRED not raised (single workstream + accepted composition manifest)",
+    "protected_composition": "not_applicable on staging",
+    "production_gate": "not_applicable on staging"
+  },
+  "unresolved_release_lock_issues": {
+    "do_not_modify_locks_to_force_pass": true,
+    "production_deploy_guard": "FAIL",
+    "source_tree_hash_mismatches": [
+      "identity-cognito",
+      "moov-webhooks",
+      "partner-sharing",
+      "auto-deposit",
+      "database-rls",
+      "ocr-azure",
+      "production-release"
+    ],
+    "missing_evidence_matrix_component": "freedom-platform-funding",
+    "note": "These remain unresolved. They are not staging defects and were not edited to obtain PASS. They continue to block any production authorization."
+  },
+  "production_untouched": {
+    "spa_entry": "/assets/index-CTqMys28.js",
+    "spa_index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+    "lambda_function": "checksops-production-prep-api",
+    "lambda_CodeSha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+    "lambda_RevisionId": "9d5a60f5-8b00-4eec-b4f2-5b4620a9f1ee",
+    "lambda_LastModified": "2026-10-01T18:02:46.000+0000"
+  }
+}
