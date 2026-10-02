@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CODES, fail, ok } from './lib/errors.mjs';
-import { readFunctionDef } from './lib/function-def-lookup.mjs';
+import { functionDefsMatchExactly, readFunctionDef } from './lib/function-def-lookup.mjs';
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
@@ -94,8 +94,8 @@ export function tenantPermissionDefsAreExact(live, sourceText) {
   const intendedOverride = extractPinnedFunctionSql(sourceText, 'admin_override_check_status');
   if (!intendedMove || !intendedOverride) return false;
   if (!live?.user_can_move_tenant_checks || !live?.admin_override_check_status) return false;
-  return hashSqlDefinition(live.user_can_move_tenant_checks) === hashSqlDefinition(intendedMove)
-    && hashSqlDefinition(live.admin_override_check_status) === hashSqlDefinition(intendedOverride);
+  return functionDefsMatchExactly(live.user_can_move_tenant_checks, intendedMove)
+    && functionDefsMatchExactly(live.admin_override_check_status, intendedOverride);
 }
 
 export function tenantPermissionMarkersMatch(live = {}) {
