@@ -7,13 +7,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
+import { useAuth } from "@/hooks/useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
 export function CompanyBrandingSettings() {
-  const { refreshTenant } = useTenant();
+  const { tenant, refreshTenant } = useTenant();
+  const { user } = useAuth();
+  const canWriteCompanyBranding = isPlatformOwner(user?.email, user?.id);
+  const tenantId = tenant?.id ?? null;
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -23,7 +28,6 @@ export function CompanyBrandingSettings() {
   const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
   const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
   const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
-  const [tenantId, setTenantId] = useState<string | null>(null);
   
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -33,51 +37,44 @@ export function CompanyBrandingSettings() {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    void loadSettings();
+  }, [tenantId, canWriteCompanyBranding]);
 
   const loadSettings = async () => {
-    // 1. Get branding details from company_branding
-    const { data: brandingData } = await supabase
-      .from("company_branding" as any)
-      .select("*")
-      .limit(1)
-      .maybeSingle();
-    
-    if (brandingData) {
-      const branding = brandingData as any;
-      setBrandingId(branding.id);
-      setCompanyName(branding.company_name || "");
-      setAddress(branding.company_address || "");
-      setPhone(branding.company_phone || "");
-      setEmail(branding.company_email || "");
-      setLetterheadUrl(branding.letterhead_url || null);
-    }
-
-    // 2. Application/sidebar logo and allowlisted invoice fields live on tenants.
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: tenantUser } = await supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
+    // Platform-owner singleton. Tenant admins are not authorized to read/write it.
+    if (canWriteCompanyBranding) {
+      const { data: brandingData } = await supabase
+        .from("company_branding" as any)
+        .select("*")
+        .limit(1)
         .maybeSingle();
 
-      if (tenantUser) {
-        setTenantId(tenantUser.tenant_id);
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
-          .eq("id", tenantUser.tenant_id)
-          .maybeSingle();
-        
-        if (tenant) {
-          const t = tenant as any;
-          if (t.logo_url) setLogoUrl(t.logo_url);
-          setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
-          setInvoiceFooterNote(t.invoice_footer_note || "");
-          setInvoiceDefaultTerms(t.invoice_default_terms || "");
-        }
+      if (brandingData) {
+        const branding = brandingData as any;
+        setBrandingId(branding.id);
+        setCompanyName(branding.company_name || "");
+        setAddress(branding.company_address || "");
+        setPhone(branding.company_phone || "");
+        setEmail(branding.company_email || "");
+        setLetterheadUrl(branding.letterhead_url || null);
+      }
+    }
+
+    // Application/sidebar logo and allowlisted invoice fields live on tenants.
+    // Route-scoped tenant from TenantContext — never tenant_users.maybeSingle.
+    if (tenantId) {
+      const { data: tenantRow } = await supabase
+        .from("tenants")
+        .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+        .eq("id", tenantId)
+        .maybeSingle();
+
+      if (tenantRow) {
+        const t = tenantRow as any;
+        if (t.logo_url) setLogoUrl(t.logo_url);
+        setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
+        setInvoiceFooterNote(t.invoice_footer_note || "");
+        setInvoiceDefaultTerms(t.invoice_default_terms || "");
       }
     }
   };
@@ -178,30 +175,6 @@ export function CompanyBrandingSettings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const brandingData = {
-        company_name: companyName,
-        company_address: address,
-        company_phone: phone,
-        company_email: email,
-        letterhead_url: letterheadUrl,
-      };
-
-      if (brandingId) {
-        const { error } = await supabase
-          .from("company_branding" as any)
-          .update(brandingData)
-          .eq("id", brandingId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from("company_branding" as any)
-          .insert(brandingData)
-          .select()
-          .single();
-        if (error) throw error;
-        if (data) setBrandingId((data as any).id);
-      }
-
       const resolvedTenantId = tenantId;
       if (!resolvedTenantId) {
         if (logoUrl) throw new Error("Unable to persist company logo without a tenant.");
@@ -217,6 +190,32 @@ export function CompanyBrandingSettings() {
           .eq("id", resolvedTenantId);
         if (tenantError) throw tenantError;
         await refreshTenant();
+      }
+
+      if (canWriteCompanyBranding) {
+        const brandingData = {
+          company_name: companyName,
+          company_address: address,
+          company_phone: phone,
+          company_email: email,
+          letterhead_url: letterheadUrl,
+        };
+
+        if (brandingId) {
+          const { error } = await supabase
+            .from("company_branding" as any)
+            .update(brandingData)
+            .eq("id", brandingId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase
+            .from("company_branding" as any)
+            .insert(brandingData)
+            .select()
+            .single();
+          if (error) throw error;
+          if (data) setBrandingId((data as any).id);
+        }
       }
 
       toast({ title: "Company settings saved" });
@@ -237,6 +236,7 @@ export function CompanyBrandingSettings() {
       />
 
       <div className="grid gap-6">
+        {canWriteCompanyBranding && (
         <SectionCard
           title="Company Information"
           icon={<Building2 className="h-4 w-4 text-sky-500" />}
@@ -283,6 +283,7 @@ export function CompanyBrandingSettings() {
             </div>
           </div>
         </SectionCard>
+        )}
 
         <SectionCard
           title="Logos & Brand Assets"
@@ -290,7 +291,7 @@ export function CompanyBrandingSettings() {
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
           description="Manage your company logo for the application sidebar and letterhead for generated documents."
         >
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className={`grid gap-6 ${canWriteCompanyBranding ? "md:grid-cols-2" : ""}`}>
             {/* Sidebar Logo */}
             <div className="space-y-4">
               <Label className="text-sm font-medium">Application Sidebar Logo</Label>
@@ -326,7 +327,7 @@ export function CompanyBrandingSettings() {
               </div>
             </div>
 
-            {/* Document Letterhead */}
+            {canWriteCompanyBranding && (
             <div className="space-y-4">
               <Label className="text-sm font-medium">Document Letterhead</Label>
               <p className="text-xs text-muted-foreground">Used at the top of generated reports, demand letters, and claim documents.</p>
@@ -360,6 +361,7 @@ export function CompanyBrandingSettings() {
                 />
               </div>
             </div>
+            )}
           </div>
         </SectionCard>
 
