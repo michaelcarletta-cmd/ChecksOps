@@ -166,8 +166,19 @@ test('staff outside the tenant cannot override', async () => {
   assert.equal(result.error, 'not_authorized');
 });
 
-test('tenant user without admin role can override', async () => {
+test('company user without admin role can override', async () => {
   const client = mockClient({ roles: [{ role: 'staff' }] });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.data.new_status, 'needs_review');
+});
+
+test('company user labeled viewer can still override', async () => {
+  const client = mockClient({ roles: [{ role: 'read_only' }] });
   const result = await executeAdminOverrideCheckStatus({
     client,
     mapping: { application_user_id: APP_ID },

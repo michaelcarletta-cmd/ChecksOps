@@ -7,9 +7,10 @@ import {
   parseIdentityTenantAccess,
 } from "../src/lib/tenantCheckIdentity.ts";
 
-test("a tenant user can move checks without an admin role", () => {
+test("any company user can move checks without an admin role", () => {
   assert.equal(canMoveTenantChecks({ systemRoles: ["staff"], isTenantMember: true }), true);
   assert.equal(canMoveTenantChecks({ systemRoles: [], isTenantMember: true }), true);
+  assert.equal(canMoveTenantChecks({ systemRoles: ["read_only"], isTenantMember: true }), true);
 });
 
 test("platform admin can move checks without tenant membership", () => {
@@ -37,10 +38,9 @@ test("identity/me membership is tenant-scoped and fails closed", () => {
   const member = parseIdentityTenantAccess({
     applicationUserId: "u1",
     roles: [],
-    tenants: [{ tenant_id: "current-tenant", role: "member" }],
+    tenants: [{ tenant_id: "current-tenant", role: "viewer" }],
   }, "current-tenant");
   assert.equal(member.isTenantMember, true);
-  assert.equal(member.tenantRole, "member");
   assert.equal(canMoveTenantChecks({
     systemRoles: member.roles,
     isTenantMember: member.isTenantMember,
@@ -80,12 +80,13 @@ test("identity/me tenant lookup refuses legacy hosts and fails closed", async ()
   assert.deepEqual(failed, { roles: [], isTenantMember: false, tenantRole: null });
 });
 
-test("check movement UI uses tenant-user access instead of admin-only", () => {
+test("check movement UI treats every company user the same", () => {
   const review = readFileSync("src/components/check-review/CheckReviewConsole.tsx", "utf8");
   const command = readFileSync("src/pages/CheckCommandCenter.tsx", "utf8");
   const reupload = readFileSync("src/components/checks/ReuploadCheckImageButton.tsx", "utf8");
   const lossDraft = readFileSync("src/components/loss-draft/detail/LossDraftActionsTab.tsx", "utf8");
   const hook = readFileSync("src/hooks/useCanMoveChecks.ts", "utf8");
+  const helper = readFileSync("src/lib/tenantCheckUser.ts", "utf8");
   assert.match(review, /useCanMoveChecks/);
   assert.match(command, /useCanMoveChecks/);
   assert.match(reupload, /useCanMoveChecks/);
@@ -96,6 +97,19 @@ test("check movement UI uses tenant-user access instead of admin-only", () => {
   assert.match(hook, /@\/integrations\/supabase\/client/);
   assert.match(hook, /from\("tenant_users"\)/);
   assert.doesNotMatch(hook, /isAdmin \|\| isStaff/);
-  assert.match(command, /isWhiteLabel && \["admin", "owner"\]\.includes/);
-  assert.doesNotMatch(command, /canAccessManager = canMoveChecks/);
+  assert.match(command, /canAccessManager = canMoveChecks/);
+  assert.doesNotMatch(command, /\["admin", "owner"\]/);
+  assert.doesNotMatch(helper, /OPERATING_TENANT_ROLES/);
+  assert.doesNotMatch(helper, /VIEW_ONLY_TENANT_ROLES/);
+});
+
+test("SQL override uses tenant membership, not role titles", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql",
+    "utf8",
+  );
+  assert.match(sql, /user_can_move_tenant_checks/);
+  assert.match(sql, /user_belongs_to_tenant\(_user_id, _tenant_id\)/);
+  assert.doesNotMatch(sql, /lower\(role::text\)/);
+  assert.doesNotMatch(sql, /'deposited'/);
 });

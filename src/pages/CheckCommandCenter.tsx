@@ -53,7 +53,7 @@ import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
-import { useIdentityTenantAccess } from "@/hooks/useCanMoveChecks";
+import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
@@ -287,7 +287,7 @@ export default function CheckCommandCenter() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
-  const { isAdmin, tenantRole: tenantMembershipRole } = useIdentityTenantAccess();
+  const canMoveChecks = useCanMoveChecks();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [classFilter, setClassFilter] = useState<string>("all");
@@ -468,7 +468,7 @@ export default function CheckCommandCenter() {
   // Realtime: consolidated in useCheckCommandRealtime (debounced invalidations).
   useCheckCommandRealtime(tenantId);
 
-  const canAccessManager = isAdmin || (isWhiteLabel && ["admin", "owner"].includes(tenantMembershipRole ?? ""));
+  const canAccessManager = canMoveChecks;
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;

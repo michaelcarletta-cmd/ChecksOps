@@ -50,7 +50,7 @@ export function useIdentityTenantAccess() {
   };
 }
 
-/** True for a tenant company user (or platform admin). Used for check movement UI. */
+/** True for any company user on this tenant (or platform admin). */
 export function useCanMoveChecks(): boolean {
   const { roles, isTenantMember } = useIdentityTenantAccess();
   return canMoveTenantChecks({
