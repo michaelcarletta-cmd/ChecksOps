@@ -1,0 +1,137 @@
+{
+  "id": "walletops-auto-payout-source-composition",
+  "workstream_id": "walletops-auto-payout-visible-2d41",
+  "branch": "cursor/walletops-auto-payout-visible-2d41",
+  "accepted_source_composition": true,
+  "accepted_composition": false,
+  "wholesale_staging_spa": false,
+  "wholesale_old_production_dist": false,
+  "lambda_updated": false,
+  "production_updated": false,
+  "db_writes": 0,
+  "provider_financial_writes": 0,
+  "recreate_provider_transfer_ids": [],
+  "do_not_deploy_production": true,
+  "restore_57a04ea_capability_files": false,
+  "use_live_lambda_as_capability_baseline": false,
+  "verdict": "CANDIDATE SOURCE = live production behavior + origin/main including PR #598 + WalletOps automatic-payout/sweep-history. Not authorized for production apply.",
+  "authoritative_capability_source": {
+    "kind": "current-main-including-pr-598",
+    "pr": 598,
+    "merge_sha": "a1d0347f7e219648e926d78fe145d2c72b9a76ff",
+    "current_main_sha": "2fe6f7f5eabf42d4f9253d84808e25e5fd46b747",
+    "merchant_capabilities": [
+      "transfers",
+      "collect-funds.ach",
+      "send-funds.ach",
+      "wallet.balance"
+    ],
+    "legacy_do_not_restore": [
+      "send-funds",
+      "collect-funds",
+      "wallet"
+    ],
+    "live_mixed_array_do_not_restore": "['transfers', 'send-funds', 'wallet', 'send-funds.ach']",
+    "files_identical_to_origin_main": [
+      "aws/functions/api/providers/parity/moov-capabilities.mjs",
+      "aws/functions/api/providers/parity/moov-client.mjs",
+      "aws/functions/api/providers/readiness.mjs",
+      "supabase/functions/_shared/moovCapabilities.ts",
+      "supabase/functions/_shared/moovClient.ts"
+    ]
+  },
+  "forbidden_capability_baseline": {
+    "kind": "ctqmys28-era-source",
+    "commit": "57a04ea534b3247add8ac0f4a161d8c49feaafbb",
+    "reason": "Corresponds to live SPA index-CTqMys28.js. Still requests the mixed legacy capability array. Must not be used as the source baseline for Moov capability-related files.",
+    "do_not_restore": [
+      "aws/functions/api/providers/parity/moov-functions.mjs",
+      "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "aws/functions/api/providers/parity/moov-client.mjs",
+      "aws/functions/api/providers/parity/moov-capabilities.mjs"
+    ]
+  },
+  "live_production_behavior_kept": {
+    "spa_entry": "/assets/index-CTqMys28.js",
+    "spa_index_html_sha256": "ed911a7c5cc9ca9544500e4d3760da9a3fcc207ec5f7893d2fac60a06c08af9b",
+    "note": "Unrelated live production SPA/Lambda members stay in the candidate lineage. Capability request sites are taken from main/#598, not from the live Lambda package or 57a04ea."
+  },
+  "walletops_delta": {
+    "files": {
+      "src/pages/WalletOps.tsx": {
+        "kind": "narrow",
+        "hunks": [
+          "Turn off automatic payouts",
+          "last automatic payout amount/date",
+          "merge sweep activity into Pending Out / Recent Activity"
+        ]
+      },
+      "src/components/payments/MoovTreasuryPanel.tsx": {
+        "kind": "narrow",
+        "hunks": ["Turn off automatic payouts", "sweepAmountCents / sweepTimestamp"]
+      },
+      "src/hooks/useSweepConfig.ts": {
+        "kind": "narrow",
+        "hunks": ["history always", "disable passes provider_sweep_config_id"]
+      },
+      "src/lib/payments/sweeps.ts": {
+        "kind": "narrow",
+        "hunks": ["disableSweep accepts sweep_config_id"]
+      },
+      "src/lib/payments/walletSweepActivity.ts": {
+        "kind": "new"
+      },
+      "src/lib/payments/walletRelativeTransfers.ts": {
+        "kind": "narrow",
+        "hunks": ["sweepID → Automatic payout"]
+      },
+      "aws/functions/api/providers/parity/sweep-read.mjs": {
+        "kind": "new",
+        "hunks": ["wallet-scoped GET /accounts/{id}/wallets/{walletID}/sweeps"]
+      },
+      "supabase/functions/_shared/moovSweeps.ts": {
+        "kind": "narrow",
+        "hunks": ["wallet-scoped sweep history path"]
+      },
+      "aws/functions/api/providers/parity/moov-onboard.mjs": {
+        "kind": "composed",
+        "capability_source": "PR #598 / origin/main MERCHANT_CAPABILITIES + RECIPIENT_CAPABILITIES + v2025.07.00",
+        "walletops_hunks": [
+          "import readSweepHistory / readSweepSnapshot / resolveSweepAccount from sweep-read.mjs",
+          "GET history uses wallet-scoped path, not /sweeps?walletID=",
+          "disable looks up sweep_config_id"
+        ],
+        "not_from": "57a04ea534b3247add8ac0f4a161d8c49feaafbb"
+      },
+      "aws/functions/api/providers/parity/moov-functions.mjs": {
+        "kind": "composed",
+        "capability_source": "PR #598 MERCHANT_CAPABILITIES + missingRequestedCapabilities + v2025.07.00",
+        "keeps_production_era_members": true,
+        "not_from": "57a04ea534b3247add8ac0f4a161d8c49feaafbb"
+      }
+    }
+  },
+  "legacy_request_array_proof": {
+    "test": "aws/tests/walletops-598-capability-composition.test.mjs",
+    "also": "aws/tests/moov-capabilities.test.mjs",
+    "request_sites_must_not_contain": [
+      "send-funds",
+      "collect-funds",
+      "wallet"
+    ],
+    "inside": "capabilities: [ ... ]"
+  },
+  "staging_required_before_production_authorization": {
+    "ok": false,
+    "reason": "Staging must separately verify the seven items below. This composition record is not staging acceptance and not production approval.",
+    "must_verify": [
+      "granular capability requests",
+      "capability flag interpretation",
+      "recipient capability behavior",
+      "homeowner deductible capability behavior",
+      "WalletOps automatic-payout controls",
+      "sweep history",
+      "existing Moov funding/transaction behavior"
+    ]
+  }
+}
