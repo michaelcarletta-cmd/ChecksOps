@@ -33,7 +33,8 @@ import {
   sanitize,
   secureToken,
 } from './db.mjs';
-import { syncWallet } from './moov-wallet.mjs';
+import { readWallet, syncWallet } from './moov-wallet.mjs';
+import { readSweepHistory, readSweepSnapshot, resolveSweepAccount } from './sweep-read.mjs';
 import {
   buildIndividualKycPatch,
   dropTokenFromBody,
@@ -1060,29 +1061,64 @@ export const plaidBridge = {
   },
 };
 
+/**
+ * Moov sweep-config PATCH body.
+ * Status values are Moov's documented SweepConfig status enum only:
+ * https://docs.moov.io/api/money-movement/sweeps/patch-config/
+ * Possible values: `enabled`, `disabled`. Re-enable the existing config;
+ * do not POST a replacement.
+ */
+export function sweepConfigPatchBody(action, body = {}) {
+  if (action === 'disable') return { status: 'disabled' };
+  if (action === 'enable') return { status: 'enabled' };
+  return body.patch || body;
+}
+
 export const sweepConfig = {
   run: async ({ client, body, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const accountId = account.provider_account_id;
+    const resolved = await resolveSweepAccount({ client, ctx });
+    if (!resolved.ok) {
+      return fail(resolved.message || resolved.error, resolved.statusCode, { error: resolved.error });
+    }
+    const environment = resolved.environment;
+    const accountId = resolved.account.provider_account_id;
     const action = String(body?.action ?? 'get');
-    const wallet = await syncWallet(client, {
-      tenantId: ctx.tenantId, accountId, environment: 'sandbox', fetchImpl,
-    });
+    const walletType = body?.wallet_type || 'operating';
     if (action === 'list' || action === 'get') {
-      const data = await moovFetch(`/accounts/${accountId}/sweep-configs`, {
-        scopes: [`/accounts/${accountId}/wallets.read`], fetchImpl,
+      const snapshot = await readSweepSnapshot({
+        client,
+        tenantId: ctx.tenantId,
+        accountId,
+        environment,
+        walletType,
+        fetchImpl,
       });
-      return jsonResult({ success: true, configs: data, wallet, liveProviderCalled: true });
+      return jsonResult({
+        success: true,
+        ...snapshot,
+        liveProviderCalled: true,
+        environment,
+      });
     }
     if (action === 'sweeps') {
-      const data = await moovFetch(
-        `/accounts/${accountId}/sweeps?walletID=${encodeURIComponent(wallet.provider_wallet_id)}&count=50`,
-        { scopes: [`/accounts/${accountId}/wallets.read`], fetchImpl },
-      );
-      return jsonResult({ success: true, sweeps: data, liveProviderCalled: true });
+      const wallet = await readWallet(client, ctx.tenantId, environment, walletType);
+      const history = await readSweepHistory({
+        accountId,
+        walletId: wallet?.provider_wallet_id,
+        fetchImpl,
+      });
+      return jsonResult({
+        success: true,
+        sweeps: history.sweeps,
+        historyUnavailable: history.historyUnavailable,
+        liveProviderCalled: !history.historyUnavailable,
+        environment,
+      });
     }
     if (action === 'create') {
+      const wallet = await syncWallet(client, {
+        tenantId: ctx.tenantId, accountId, environment, fetchImpl,
+      });
       const created = await moovFetch(`/accounts/${accountId}/sweep-configs`, {
         method: 'POST', scopes: [`/accounts/${accountId}/wallets.write`], fetchImpl,
         body: {
@@ -1093,16 +1129,34 @@ export const sweepConfig = {
           statementDescriptor: body.statement_descriptor ?? 'CHECKOPS',
         },
       });
-      return jsonResult({ success: true, config: created, liveProviderCalled: true });
+      return jsonResult({ success: true, config: created, liveProviderCalled: true, environment });
     }
-    if (action === 'update' || action === 'disable') {
-      const id = body.sweep_config_id;
-      if (!id) return fail('sweep_config_id is required', 400);
+    if (action === 'update' || action === 'disable' || action === 'enable') {
+      const wallet = await readWallet(client, ctx.tenantId, environment, walletType);
+      let id = body.sweep_config_id;
+      if (!id) {
+        const listed = await moovFetch(`/accounts/${accountId}/sweep-configs`, {
+          scopes: [`/accounts/${accountId}/wallets.read`], fetchImpl,
+        }).catch(() => []);
+        const rows = Array.isArray(listed) ? listed : [];
+        const match = rows.find((row) => (
+          (row?.walletID ?? row?.walletId) === wallet?.provider_wallet_id
+        )) ?? rows[0];
+        id = match?.sweepConfigID ?? match?.sweepConfigId ?? null;
+      }
+      if (!id) {
+        return fail(
+          action === 'enable'
+            ? 'There is no automatic payout to turn on.'
+            : 'There is no automatic payout to turn off.',
+          404,
+        );
+      }
       const updated = await moovFetch(`/accounts/${accountId}/sweep-configs/${id}`, {
         method: 'PATCH', scopes: [`/accounts/${accountId}/wallets.write`], fetchImpl,
-        body: action === 'disable' ? { status: 'disabled' } : (body.patch || body),
+        body: sweepConfigPatchBody(action, body),
       });
-      return jsonResult({ success: true, config: updated, liveProviderCalled: true });
+      return jsonResult({ success: true, config: updated, liveProviderCalled: true, environment });
     }
     return fail('Unknown sweep action', 400);
   },

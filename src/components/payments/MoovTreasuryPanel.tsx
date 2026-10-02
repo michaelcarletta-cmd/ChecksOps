@@ -23,6 +23,7 @@ import {
   SWEEP_RAIL_LABEL,
   type SweepPushRail,
 } from "@/lib/payments/sweeps";
+import { sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", {
@@ -31,16 +32,6 @@ const money = (cents: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-
-const sweepAmount = (value: unknown): string => {
-  if (value && typeof value === "object") {
-    const v = value as Record<string, unknown>;
-    if (v.valueDecimal !== undefined) return money(Math.round(Number(v.valueDecimal) * 100));
-    if (v.value !== undefined) return money(Number(v.value));
-  }
-  if (value === undefined || value === null) return "—";
-  return money(Math.round(Number(value) * 100));
-};
 
 /**
  * Moov-native treasury sweeps: the provider automatically pays out the
@@ -65,6 +56,7 @@ export function MoovTreasuryPanel() {
     refresh,
     save,
     disable,
+    enable,
   } = useSweepConfig("operating");
 
   const [rail, setRail] = useState<SweepPushRail | "">("");
@@ -113,10 +105,28 @@ export function MoovTreasuryPanel() {
   async function handleDisable() {
     try {
       await disable.mutateAsync();
+      try { await refresh.mutateAsync(); } catch { /* invalidate already queued */ }
       toast({ title: "Daily payouts turned off" });
     } catch (e) {
       toast({ title: "Could not turn off", description: (e as Error).message, variant: "destructive" });
     }
+  }
+
+  async function handleTurnOn() {
+    if (config?.provider_sweep_config_id) {
+      try {
+        await enable.mutateAsync();
+        try { await refresh.mutateAsync(); } catch { /* invalidate already queued */ }
+        toast({
+          title: "Automatic payouts turned on",
+          description: "Leftover wallet money will be sent to your bank on the next daily sweep.",
+        });
+      } catch (e) {
+        toast({ title: "Could not turn on automatic payouts", description: (e as Error).message, variant: "destructive" });
+      }
+      return;
+    }
+    await handleSave();
   }
 
   return (
@@ -277,14 +287,17 @@ export function MoovTreasuryPanel() {
 
             {isAdmin && pushRails.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                <Button onClick={handleSave} disabled={save.isPending}>
-                  {save.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                <Button
+                  onClick={isOn ? handleSave : handleTurnOn}
+                  disabled={save.isPending || enable.isPending}
+                >
+                  {(save.isPending || enable.isPending) && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
                   {isOn ? "Save changes" : "Turn on daily payouts"}
                 </Button>
                 {isOn && (
                   <Button variant="outline" onClick={handleDisable} disabled={disable.isPending}>
                     {disable.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                    Turn off
+                    Turn off automatic payouts
                   </Button>
                 )}
               </div>
@@ -295,30 +308,30 @@ export function MoovTreasuryPanel() {
               </p>
             )}
 
-            {isOn && (
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Recent payouts</p>
-                {history.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No automatic payouts yet. They appear here after the first daily run.
-                  </p>
-                ) : (
-                  <div className="divide-y rounded-md border">
-                    {history.slice(0, 8).map((s) => (
-                      <div key={s.sweepID} className="flex items-center justify-between px-3 py-2 text-sm">
-                        <div>
-                          <p>{sweepAmount(s.accruedAmount)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(s.completedOn ?? s.createdOn ?? Date.now()).toLocaleString()}
-                          </p>
-                        </div>
-                        <Badge variant="outline">{s.status ?? "pending"}</Badge>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Recent payouts</p>
+              {history.filter((s) => sweepAmountCents(s) > 0).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No automatic payouts yet. They appear here after the first daily run.
+                </p>
+              ) : (
+                <div className="divide-y rounded-md border">
+                  {history.filter((s) => sweepAmountCents(s) > 0).slice(0, 8).map((s) => (
+                    <div key={s.sweepID} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <div>
+                        <p>{money(sweepAmountCents(s))}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {sweepTimestamp(s)
+                            ? new Date(sweepTimestamp(s)!).toLocaleString()
+                            : "Date unavailable"}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                      <Badge variant="outline">{s.status ?? "pending"}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
       </CardContent>

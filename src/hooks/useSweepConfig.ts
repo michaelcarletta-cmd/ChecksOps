@@ -3,6 +3,7 @@ import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibi
 import {
   createSweep,
   disableSweep,
+  enableSweep,
   getSweepSnapshot,
   listRecentSweeps,
   updateSweep,
@@ -30,7 +31,7 @@ export function useSweepConfig(walletType: string = "operating") {
 
   const sweeps = useQuery({
     queryKey: [...key, "history"],
-    enabled: !!tenantId && enabled && query.data?.sweep_config?.status === "enabled",
+    enabled: !!tenantId && enabled,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: () => listRecentSweeps(tenantId!, walletType),
@@ -49,7 +50,20 @@ export function useSweepConfig(walletType: string = "operating") {
   });
 
   const disable = useMutation({
-    mutationFn: () => disableSweep(tenantId!, walletType),
+    mutationFn: () => disableSweep(
+      tenantId!,
+      walletType,
+      query.data?.sweep_config?.provider_sweep_config_id,
+    ),
+    onSuccess: invalidate,
+  });
+
+  const enable = useMutation({
+    mutationFn: () => enableSweep(
+      tenantId!,
+      walletType,
+      query.data?.sweep_config?.provider_sweep_config_id,
+    ),
     onSuccess: invalidate,
   });
 
@@ -60,6 +74,7 @@ export function useSweepConfig(walletType: string = "operating") {
     },
     onSuccess: (data) => {
       qc.setQueryData(key, data);
+      qc.invalidateQueries({ queryKey: [...key, "history"] });
     },
   });
 
@@ -81,5 +96,6 @@ export function useSweepConfig(walletType: string = "operating") {
     refresh,
     save,
     disable,
+    enable,
   };
 }

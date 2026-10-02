@@ -29,10 +29,10 @@ import {
  * remediate a negative balance. This function only reads and writes that
  * config — it never moves money itself.
  *
- * Actions: get | create | update | disable | sweeps
+ * Actions: get | create | update | disable | enable | sweeps
  */
 
-type Action = "get" | "create" | "update" | "disable" | "sweeps";
+type Action = "get" | "create" | "update" | "disable" | "enable" | "sweeps";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -48,7 +48,7 @@ serve(async (req) => {
     if (!["operating", "trust"].includes(walletType)) {
       return json({ error: "wallet_type must be 'operating' or 'trust'" }, 400);
     }
-    if (!["get", "create", "update", "disable", "sweeps"].includes(action)) {
+    if (!["get", "create", "update", "disable", "enable", "sweeps"].includes(action)) {
       return json({ error: "Unknown action" }, 400);
     }
 
@@ -210,18 +210,33 @@ serve(async (req) => {
     /* ----------------------------- writes ---------------------------- */
     const existing = await localRow();
 
-    if (action === "disable") {
-      const configId = existing?.provider_sweep_config_id;
-      if (!configId) return json({ error: "There is no sweep to turn off." }, 404);
+    if (action === "disable" || action === "enable") {
+      let configId = existing?.provider_sweep_config_id
+        ?? (body?.sweep_config_id as string | undefined)
+        ?? null;
+      if (!configId) {
+        const remote = await listSweepConfigs(accountId).catch(() => [] as { walletID?: string; sweepConfigID?: string }[]);
+        const match = remote.find((c) => c.walletID === wallet!.provider_wallet_id);
+        configId = match?.sweepConfigID ?? null;
+      }
+      if (!configId) {
+        return json({
+          error: action === "enable"
+            ? "There is no automatic payout to turn on."
+            : "There is no sweep to turn off.",
+        }, 404);
+      }
 
-      const updated = await updateSweepConfig(accountId, configId, { status: "disabled" });
+      const updated = await updateSweepConfig(accountId, configId, {
+        status: action === "enable" ? "enabled" : "disabled",
+      });
       const row = await persist(
         normalizeSweepConfig(updated),
         existing?.push_rail ?? null,
       );
       await logPaymentEvent(supabase, {
         tenant_id: tenantId,
-        event_type: "sweep_config.disabled",
+        event_type: action === "enable" ? "sweep_config.enabled" : "sweep_config.disabled",
         environment,
         provider_metadata: { sweep_config_id: configId, actor: userId },
       });

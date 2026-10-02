@@ -1,32 +1,22 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  BadgeCheck,
   Banknote,
   Clock,
   Gauge,
   Landmark,
   Loader2,
+  Power,
+  PowerOff,
   RefreshCw,
   Sparkles,
   TrendingUp,
   Wallet,
-  Zap,
 } from "lucide-react";
 import {
   Area,
@@ -41,7 +31,6 @@ import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
   useRefreshTransferStatuses,
-  useWalletOpsReadiness,
   useWalletOpsTransfers,
   useWalletRunningBalance,
 } from "@/hooks/useWalletOps";
@@ -50,14 +39,12 @@ import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibi
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
-import { SWEEP_RAIL_HINT, SWEEP_RAIL_LABEL, type SweepPushRail } from "@/lib/payments/sweeps";
+import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
+import { automaticPayoutControl, summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
-import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
-import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
-import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
@@ -136,16 +123,16 @@ export default function WalletOps() {
   const {
     config,
     settlementMethod,
-    pushRails,
     history,
+    historyUnavailable,
     stale,
     refresh: refreshSweeps,
-    save,
+    disable: disableSweeps,
+    enable: enableSweeps,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   const refreshStatuses = useRefreshTransferStatuses();
 
-  const { data: readiness } = useWalletOpsReadiness();
   const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
 
   const runningPoints = runningData?.points ?? [];
@@ -155,7 +142,6 @@ export default function WalletOps() {
   }));
 
 
-  const [payoutRail, setPayoutRail] = useState<SweepPushRail | "">("");
   const refreshingBalances = refreshWallet.isPending || refreshSweeps.isPending;
 
   const tenantBase = tenant?.slug
@@ -173,38 +159,95 @@ export default function WalletOps() {
         ? "Pending setup"
         : "Pending sync";
 
-  const sweepsOn = config?.status === "enabled";
-  const effectiveRail = (payoutRail || (config?.push_rail as SweepPushRail) || pushRails[0] || "") as
-    | SweepPushRail
-    | "";
+  const payoutControl = automaticPayoutControl(config);
+  const sweepsOn = payoutControl.sweepsOn;
 
-  const lastSweep = history?.[0];
-  const pendingOut = transferData?.pendingOutCents ?? 0;
+  const lastSweep = (history ?? []).find((row) => sweepAmountCents(row) > 0) ?? history?.[0];
+  const sweepActivity = summarizeSweepActivity({
+    sweeps: history,
+    knownTransferIds: (transferData?.classified ?? []).map((row) => row.transfer.provider_transfer_id),
+    settlementLabel: settlementMethod
+      ? `${settlementMethod.bank_name ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
+      : "Connected bank",
+  });
+  const pendingOut = (transferData?.pendingOutCents ?? 0) + sweepActivity.pendingOutCents;
   const pendingIn = transferData?.pendingInCents ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
+  const billingActivity = transferData?.billing ?? [];
+  const classifiedTransfers = transferData?.classified ?? [];
+  const fundingBank = settlementMethod
+    ? `${settlementMethod.bank_name ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
+    : "Not connected";
+  const billingTransferKeys = new Set(
+    billingActivity.flatMap((row) => row.transfer_ids.map((id) => String(id))),
+  );
 
   const recentActivity = [
+    ...billingActivity.map((bill) => ({
+      key: `billing-${bill.id}`,
+      at: bill.period ? `${bill.period}-01` : new Date().toISOString(),
+      title: "ChecksOps Billing",
+      subtitle: bill.period_label,
+      detail: `Funding: Wallet ${money(bill.wallet_cents)} + ${fundingBank} ${money(bill.bank_cents)}`,
+      route: `To: ChecksOps`,
+      kind: "billing" as const,
+      credit: false,
+      amountCents: bill.amount_cents,
+      balanceCents: null as number | null,
+      status: bill.status,
+      walletCents: bill.wallet_cents,
+      bankCents: bill.bank_cents,
+    })),
+    ...classifiedTransfers
+      .filter((row) => {
+        if (row.billing) return false;
+        const providerId = String(row.transfer.provider_transfer_id || "");
+        return !billingTransferKeys.has(providerId) && !billingTransferKeys.has(row.transfer.id);
+      })
+      .map((row) => ({
+        key: `transfer-${row.transfer.id}`,
+        at: row.transfer.created_at || new Date().toISOString(),
+        title: row.purpose,
+        subtitle: new Date(row.transfer.created_at || Date.now()).toLocaleString(),
+        detail: `${row.from_label} → ${row.to_label}`,
+        route: `${row.from_label} → ${row.to_label}`,
+        kind: "transfer" as const,
+        credit: row.isWalletDestination && !row.isWalletSource,
+        amountCents: row.amountCents,
+        balanceCents: null as number | null,
+        status: row.transfer.provider_status || row.transfer.status || null,
+        walletCents: null as number | null,
+        bankCents: null as number | null,
+      })),
     ...ledger.map((entry) => ({
       key: `ledger-${entry.id}`,
       at: entry.created_at,
       title: ENTRY_LABEL[entry.entry_type] ?? entry.entry_type,
       subtitle: new Date(entry.created_at).toLocaleString(),
+      detail: null as string | null,
+      route: null as string | null,
       kind: "ledger" as const,
       credit: entry.direction === "credit",
       amountCents: entry.amount_cents,
       balanceCents: entry.balance_after_cents,
       status: null as string | null,
+      walletCents: null as number | null,
+      bankCents: null as number | null,
     })),
-    ...(transferData?.transfers ?? []).map((t) => ({
-      key: `transfer-${t.id}`,
-      at: t.created_at,
-      title: t.is_facilitator_fee ? "Processing fee" : t.description || "Payout",
-      subtitle: new Date(t.created_at).toLocaleString(),
-      kind: "transfer" as const,
+    ...sweepActivity.rows.map((row) => ({
+      key: row.key,
+      at: row.at,
+      title: row.title,
+      subtitle: row.subtitle,
+      detail: row.detail,
+      route: row.detail,
+      kind: "sweep" as const,
       credit: false,
-      amountCents: t.amount_cents,
+      amountCents: row.amountCents,
       balanceCents: null as number | null,
-      status: t.status,
+      status: row.status,
+      walletCents: null as number | null,
+      bankCents: null as number | null,
     })),
   ]
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
@@ -221,26 +264,6 @@ export default function WalletOps() {
     } catch (e) {
       toast({
         title: "Could not refresh balances",
-        description: (e as Error).message,
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function handleSavePayoutSpeed() {
-    if (!effectiveRail) return;
-    try {
-      await save.mutateAsync({
-        pushRail: effectiveRail,
-        minimumBalanceCents: minimumCents,
-        statementDescriptor: config?.statement_descriptor ?? null,
-        status: sweepsOn ? "enabled" : "disabled",
-        enablePull: true,
-      });
-      toast({ title: "Payout speed updated" });
-    } catch (e) {
-      toast({
-        title: "Could not update payout speed",
         description: (e as Error).message,
         variant: "destructive",
       });
@@ -339,6 +362,75 @@ export default function WalletOps() {
         </div>
       </div>
 
+      <SectionCard
+        title="Funding & Billing"
+        icon={<Landmark className="h-4 w-4 text-primary" />}
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Wallet</p>
+            <p className="mt-0.5 font-medium">{walletLoading ? "…" : balanceLabel}</p>
+            <p className="text-xs text-muted-foreground">Available operating balance</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Primary funding account</p>
+            <p className="mt-0.5 font-medium">{fundingBank}</p>
+            <p className="text-xs text-muted-foreground">Connected bank for this organization</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">ChecksOps billing</p>
+            <p className="mt-0.5 font-medium">Wallet first, then connected bank for the remainder</p>
+            <p className="text-xs text-muted-foreground">
+              Available wallet funds are used first. Any remainder is collected from {fundingBank}.
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Automatic payouts</p>
+            <p className="mt-0.5 font-medium">{sweepsOn ? "On" : "Off"}</p>
+            <p className="text-xs text-muted-foreground">
+              {sweepsOn
+                ? "When this is on, leftover wallet money is sent to your bank every day. You do not tap Send."
+                : "Leftover wallet money stays in the wallet until you move it."}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Minimum retained balance</p>
+            <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+            {sweepsOn && (
+              <p className="text-xs text-muted-foreground">
+                Anything above this is paid out automatically.
+              </p>
+            )}
+          </div>
+        </div>
+        {billingActivity.length > 0 && (
+          <div className="divide-y rounded-md border">
+            {billingActivity.map((bill) => (
+              <div key={bill.id} className="flex flex-col gap-1 px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium">ChecksOps Billing</p>
+                  <p className="text-xs text-muted-foreground">{bill.period_label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Funding: Wallet {money(bill.wallet_cents)} + {fundingBank} {money(bill.bank_cents)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">To: ChecksOps</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${STATUS_TONE[bill.status.toLowerCase()] ?? "border-amber-500/40 text-amber-500 bg-amber-500/5"}`}
+                  >
+                    {bill.status}
+                  </Badge>
+                  <span className="font-semibold">{money(bill.amount_cents)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Wallet & Treasury */}
         <SectionCard
@@ -374,8 +466,10 @@ export default function WalletOps() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last automatic payout</p>
               <p className="mt-0.5 font-medium">
                 {lastSweep
-                  ? new Date(lastSweep.completedOn ?? lastSweep.createdOn ?? Date.now()).toLocaleDateString()
-                  : "None yet"}
+                  ? `${money(sweepAmountCents(lastSweep))}${sweepTimestamp(lastSweep) ? ` · ${new Date(sweepTimestamp(lastSweep)!).toLocaleDateString()}` : ""}`
+                  : historyUnavailable
+                    ? "Couldn't load"
+                    : "None yet"}
               </p>
             </div>
           </div>
@@ -387,9 +481,56 @@ export default function WalletOps() {
           )}
 
           <div className="flex flex-wrap gap-2">
+            {payoutControl.show && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={disableSweeps.isPending || enableSweeps.isPending || refreshSweeps.isPending}
+                onClick={async () => {
+                  const turningOff = payoutControl.action === "disable";
+                  try {
+                    if (turningOff) {
+                      await disableSweeps.mutateAsync();
+                    } else {
+                      await enableSweeps.mutateAsync();
+                    }
+                    try {
+                      await refreshSweeps.mutateAsync();
+                    } catch {
+                      /* mutation already invalidated the query; do not claim failure */
+                    }
+                    toast({
+                      title: turningOff ? "Automatic payouts turned off" : "Automatic payouts turned on",
+                      description: turningOff
+                        ? "Leftover wallet money will stay in the wallet until you move it."
+                        : "Leftover wallet money will be sent to your bank on the next daily sweep.",
+                    });
+                  } catch (e) {
+                    toast({
+                      title: turningOff
+                        ? "Could not turn off automatic payouts"
+                        : "Could not turn on automatic payouts",
+                      description: (e as Error).message,
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                {disableSweeps.isPending || enableSweeps.isPending ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : payoutControl.action === "disable" ? (
+                  <PowerOff className="h-4 w-4" />
+                ) : (
+                  <Power className="h-4 w-4" />
+                )}
+                {payoutControl.action === "disable"
+                  ? "Turn off automatic payouts"
+                  : "Turn on automatic payouts"}
+              </Button>
+            )}
             <Dialog>
               <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2" variant={sweepsOn ? "secondary" : "default"}>
                   <Gauge className="h-4 w-4" />
                   Manage sweeps
                 </Button>
@@ -481,6 +622,14 @@ export default function WalletOps() {
                     <div className="min-w-0">
                       <p className="truncate font-medium">{item.title}</p>
                       <p className="text-xs text-muted-foreground">{item.subtitle}</p>
+                      {item.detail && (
+                        <p className="text-xs text-muted-foreground">{item.detail}</p>
+                      )}
+                      {item.kind === "billing" && item.walletCents != null && item.bankCents != null && (
+                        <p className="text-xs text-muted-foreground">
+                          Wallet {money(item.walletCents)} · Bank {money(item.bankCents)}
+                        </p>
+                      )}
                     </div>
                     {item.kind === "ledger" ? (
                       <div className="text-right">
@@ -502,7 +651,10 @@ export default function WalletOps() {
                         >
                           {item.status}
                         </Badge>
-                        <span className="font-semibold">{money(item.amountCents)}</span>
+                        <span className={item.credit ? "font-semibold text-emerald-500" : "font-semibold"}>
+                          {item.credit ? "+" : "−"}
+                          {money(item.amountCents)}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -511,129 +663,6 @@ export default function WalletOps() {
             )}
           </SectionCard>
         </div>
-
-        {/* Readiness shortcut */}
-        <SectionCard
-          title="Payment Account"
-          icon={<BadgeCheck className="h-4 w-4 text-emerald-500" />}
-          accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-          action={
-            <Badge
-              variant="outline"
-              className={READINESS_COPY[readiness?.overall ?? "not_started"].tone}
-            >
-              {READINESS_COPY[readiness?.overall ?? "not_started"].label}
-            </Badge>
-          }
-        >
-          <div className="space-y-2">
-            {(readiness?.checks ?? []).slice(0, 5).map((c) => (
-              <div key={c.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate">{c.label}</span>
-                <Badge variant="outline" className={`text-[10px] ${READINESS_COPY[c.state].tone}`}>
-                  {READINESS_COPY[c.state].label}
-                </Badge>
-              </div>
-            ))}
-            {!readiness && (
-              <p className="text-sm text-muted-foreground">Checking your account status…</p>
-            )}
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-muted-foreground">
-              Settlement bank {settlementMethod ? "connected" : "not connected"}
-            </span>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm">Open Payment Account</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Payment Account Setup</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <PaymentAccountPanel />
-                  <PaymentReadinessPanel />
-                  <VerificationDocumentsPanel />
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </SectionCard>
-
-        {/* Payout preferences */}
-        <SectionCard
-          title="Payout Preferences"
-          icon={<Zap className="h-4 w-4 text-violet-500" />}
-          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-        >
-          {pushRails.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {settlementMethod
-                  ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"} is connected. Load payout speeds from the bank to choose how quickly funds are sent.`
-                  : "Connect and verify a settlement bank to choose payout speeds."}
-              </p>
-              {settlementMethod && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={refreshingBalances}
-                  onClick={handleRefreshBalances}
-                >
-                  {refreshingBalances ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  )}
-                  Load payout speeds
-                </Button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="walletops-rail">Default payout speed</Label>
-                <Select
-                  value={effectiveRail}
-                  onValueChange={(v) => setPayoutRail(v as SweepPushRail)}
-                  disabled={!isAdmin}
-                >
-                  <SelectTrigger id="walletops-rail">
-                    <SelectValue placeholder="Choose a speed" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pushRails.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {SWEEP_RAIL_LABEL[r] ?? r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {effectiveRail && (
-                  <p className="text-xs text-muted-foreground">{SWEEP_RAIL_HINT[effectiveRail]}</p>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 text-xs text-muted-foreground">
-                Instant delivery is used automatically when the receiving bank supports it; otherwise the
-                payment falls back to same-day or standard ACH so it always lands.
-              </div>
-
-              {isAdmin ? (
-                <Button onClick={handleSavePayoutSpeed} disabled={save.isPending || !effectiveRail}>
-                  {save.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                  Save payout preference
-                </Button>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Only administrators can change payout preferences.
-                </p>
-              )}
-            </>
-          )}
-        </SectionCard>
       </div>
 
       {/* Running balance */}
