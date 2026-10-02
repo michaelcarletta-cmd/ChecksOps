@@ -79,6 +79,12 @@
       "note": "Official staging SPA upload. Requires a staging-frontend spa-promote receipt. Refuses production."
     },
     {
+      "path": "scripts/deployment-guard/production-spa-upload.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["spa-index-upload", "cloudfront-invalidation", "s3-put-object"],
+      "note": "Official production SPA writer. Requires a production-spa spa-promote receipt + active lease and fails on any drift."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]

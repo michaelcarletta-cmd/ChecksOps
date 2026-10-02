@@ -61,3 +61,4 @@ export function consumeReceiptOnce(root, receipt, {
     throw error;
   }
 }
+
