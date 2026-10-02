@@ -1,20 +1,47 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Dedicated ChecksOps production API/Lambda execution role (Hardening Batch 1).
-  Least privilege for RDS app secret, private files bucket, VPC ENI, and logs.
-  Does not grant staging provider/sandbox secrets, the RDS admin secret, or Cognito admin.
+  Dedicated ChecksOps production API/Lambda execution role.
+  Reconciled candidate for stack checksops-production-api-role.
+  Matches the authoritative live inline policies on
+  checksops-production-api-execution, except ProductionApiLeastPrivilege
+  resources are the working production RDS secret and private-files bucket
+  instead of the stale staging ARNs still stored on the 2026-09-06 stack.
+  Does not grant TOTP wrap-key, general provider-secret, staging
+  providers, the RDS admin secret, or Cognito wildcards.
+  Do not CloudFormation-update until the reconciliation report is reviewed.
+  A stack update MUST pass the production parameter values below; the live
+  stack still stores staging secret/bucket parameters from create.
 
 Parameters:
   RoleName:
     Type: String
     Default: checksops-production-api-execution
+    AllowedValues:
+      - checksops-production-api-execution
   FilesBucketName:
     Type: String
-    Default: checksops-staging-privatefilesbucket-erzqsolpucjp
+    Default: checksops-production-privatefiles-806168576068
+    AllowedPattern: '^checksops-production-privatefiles-806168576068$'
+    Description: Production private-files bucket only. Staging bucket names are rejected.
   AppDatabaseSecretArn:
     Type: String
-    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn
-    Description: Application DB secret only. Never the RDS admin secret or staging providers secret.
+    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw
+    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/.+'
+    Description: Production application DB secret only. Staging and admin secrets are rejected.
+  ProductionUserPoolArn:
+    Type: String
+    Default: arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT
+    AllowedPattern: '^arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT$'
+    Description: Production ChecksOps user pool only. Do not point at staging.
+  AzureDiSecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-*
+    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-\*$'
+    Description: Production Azure Document Intelligence secret prefix exactly as live.
+  RecipientBankVerifyStateTableArn:
+    Type: String
+    Default: arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state
+    AllowedPattern: '^arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state$'
 
 Resources:
   ProductionApiExecutionRole:
@@ -56,6 +83,55 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::${FilesBucketName}
                   - !Sub arn:aws:s3:::${FilesBucketName}/*
+        - PolicyName: ProductionApiSesSend
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SesSendVerifiedChecksOpsIdentities
+                Effect: Allow
+                Action:
+                  - ses:SendEmail
+                Resource:
+                  - arn:aws:ses:us-east-1:806168576068:identity/checksops.com
+                  - arn:aws:ses:us-east-1:806168576068:identity/Support@checksops.com
+        - PolicyName: RecipientBankVerifyStateLeastPrivilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: RecipientBankVerifyStateLeastPrivilege
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DescribeTable
+                Resource: !Ref RecipientBankVerifyStateTableArn
+        - PolicyName: OcrAzureProductionAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AzureDiProductionSecretRead
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref AzureDiSecretArn
+              - Sid: ProductionTextractOcr
+                Effect: Allow
+                Action:
+                  - textract:AnalyzeDocument
+                  - textract:DetectDocumentText
+                Resource: '*'
+        - PolicyName: TenantInviteUserProductionCognito
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: TenantInviteUserProductionCognito
+                Effect: Allow
+                Action:
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminGetUser
+                  - cognito-idp:AdminSetUserPassword
+                Resource: !Ref ProductionUserPoolArn
       Tags:
         - Key: Environment
           Value: production

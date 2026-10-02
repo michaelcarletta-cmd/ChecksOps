@@ -1,0 +1,16 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SesSendVerifiedChecksOpsIdentities",
+      "Effect": "Allow",
+      "Action": [
+        "ses:SendEmail"
+      ],
+      "Resource": [
+        "arn:aws:ses:us-east-1:806168576068:identity/checksops.com",
+        "arn:aws:ses:us-east-1:806168576068:identity/Support@checksops.com"
+      ]
+    }
+  ]
+}
