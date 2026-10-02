@@ -1,4 +1,4 @@
-import { CODES, errorEntry, failMany, ok } from './errors.mjs';
+import { CODES, errorEntry, fail, failMany, ok } from './errors.mjs';
 import { evaluatePackageProvenance } from './packages.mjs';
 import { validateWorkstreamIdentity } from './identity.mjs';
 
@@ -134,6 +134,74 @@ export function evaluateFingerprintCas({ preflight, immediatelyBefore }) {
     revision_id: immediatelyBefore.revisionId,
     code_sha256: immediatelyBefore.codeSha256,
     compare_and_swap: true,
+  });
+}
+
+function fingerprintField(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function requireLambdaApplyFingerprint(fp, label = 'apply') {
+  if (!fp || typeof fp !== 'object' || Array.isArray(fp)) {
+    return fail(
+      CODES.INVALID_MANIFEST,
+      `${label} fingerprint must be a non-array object`,
+      { label, fingerprint: fp || null },
+    );
+  }
+  const codeSha256 = fingerprintField(fp.codeSha256 || fp.CodeSha256);
+  const revisionId = fingerprintField(fp.revisionId || fp.RevisionId);
+  if (!codeSha256) {
+    return fail(
+      CODES.DEPLOYMENT_COLLISION,
+      `${label} CodeSha256 is required for Lambda overlay apply`,
+      { label },
+    );
+  }
+  if (!revisionId) {
+    return fail(
+      CODES.DEPLOYMENT_COLLISION,
+      `${label} RevisionId is required for Lambda overlay apply`,
+      { label },
+    );
+  }
+  return ok({ codeSha256, revisionId });
+}
+
+export function evaluateApplyFingerprintCas({
+  preflight,
+  immediatelyBefore,
+  label = 'apply',
+} = {}) {
+  const pinned = requireLambdaApplyFingerprint(preflight, `${label} preflight`);
+  if (!pinned.ok) return pinned;
+  const live = requireLambdaApplyFingerprint(immediatelyBefore, `${label} immediately-before`);
+  if (!live.ok) return live;
+  if (pinned.details.codeSha256 !== live.details.codeSha256) {
+    return fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'CodeSha256 changed after preflight; fail closed and do not reclaim the Lambda',
+      {
+        preflight_codeSha256: pinned.details.codeSha256,
+        live_codeSha256: live.details.codeSha256,
+      },
+    );
+  }
+  if (pinned.details.revisionId !== live.details.revisionId) {
+    return fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'RevisionId changed after preflight; fail closed and do not reclaim the Lambda',
+      {
+        preflight_revisionId: pinned.details.revisionId,
+        live_revisionId: live.details.revisionId,
+      },
+    );
+  }
+  return ok({
+    revision_id: live.details.revisionId,
+    code_sha256: live.details.codeSha256,
+    compare_and_swap: true,
+    apply_cas_required: true,
   });
 }
 

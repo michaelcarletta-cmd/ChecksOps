@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { consumeReceiptOnce } from './consumed-receipts.mjs';
 import { CODES, fail, ok } from './errors.mjs';
-import { evaluateFingerprintCas, evaluateLambdaOverlay, evaluatePostOverlay } from './lambda-overlay.mjs';
+import {
+  evaluateApplyFingerprintCas,
+  evaluateLambdaOverlay,
+  evaluatePostOverlay,
+  requireLambdaApplyFingerprint,
+} from './lambda-overlay.mjs';
 import { evaluateProductionGate } from './production.mjs';
 import { refuseUnguardedDeploy } from '../require-guard.mjs';
 import { lookupSharedLambda } from './shared-targets.mjs';
@@ -39,11 +44,99 @@ function lambdaFingerprint(details = {}) {
 }
 
 function receiptLambdaFingerprint(receipt) {
-  const raw = receipt?.preflight_live_fingerprint || {};
-  return {
-    codeSha256: raw.codeSha256 || raw.CodeSha256 || null,
-    revisionId: raw.revisionId || raw.RevisionId || null,
-  };
+  const required = requireLambdaApplyFingerprint(receipt?.preflight_live_fingerprint, 'receipt preflight');
+  if (!required.ok) return required;
+  return ok({
+    codeSha256: required.details.codeSha256,
+    revisionId: required.details.revisionId,
+  });
+}
+
+function liveLambdaFingerprint(details, label) {
+  return requireLambdaApplyFingerprint(details, label);
+}
+
+function hashZipMembersClosed(buffer, label) {
+  try {
+    return ok({ members: hashZipMembers(buffer) });
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (message.startsWith('DUPLICATE_ZIP_MEMBER')) {
+      return fail(
+        CODES.DEPLOYMENT_COLLISION,
+        `${label} Lambda ZIP contains duplicate member names; fail closed without overlay or rebuild`,
+        { error: message },
+      );
+    }
+    return fail(CODES.DEPLOYMENT_COLLISION, `failed to read ${label} Lambda ZIP members`, { error: message });
+  }
+}
+
+export function resolveOwnedMemberSource(repoRoot, member, sourcePath) {
+  if (!repoRoot) {
+    return fail(CODES.INVALID_MANIFEST, 'member_sources confinement requires a repository root', { member });
+  }
+  if (typeof sourcePath !== 'string' || !sourcePath.trim()) {
+    return fail(CODES.STALE_PACKAGE, 'owned member source path is missing', { member });
+  }
+  const raw = sourcePath.trim();
+  if (raw.includes('\0')) {
+    return fail(CODES.UNRELATED_MUTATION, 'member source path is malformed', { member, path: raw });
+  }
+  const segments = raw.split(/[\\/]+/).filter(Boolean);
+  if (segments.includes('..')) {
+    return fail(
+      CODES.UNRELATED_MUTATION,
+      'member_sources must not traverse outside the approved repository root',
+      { member, path: raw },
+    );
+  }
+
+  let rootReal;
+  try {
+    rootReal = fs.realpathSync(repoRoot);
+  } catch {
+    return fail(CODES.INVALID_MANIFEST, 'repository root is not resolvable', { repoRoot });
+  }
+
+  const candidate = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(rootReal, raw);
+  if (!fs.existsSync(candidate)) {
+    return fail(CODES.STALE_PACKAGE, 'owned member source file is missing', { member, path: candidate });
+  }
+
+  let fileReal;
+  try {
+    fileReal = fs.realpathSync(candidate);
+  } catch {
+    return fail(CODES.STALE_PACKAGE, 'owned member source file is missing', { member, path: candidate });
+  }
+
+  const relative = path.relative(rootReal, fileReal);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return fail(
+      CODES.UNRELATED_MUTATION,
+      'member_sources must resolve inside the approved repository root',
+      { member, path: raw, resolved: fileReal },
+    );
+  }
+
+  let stat;
+  try {
+    stat = fs.statSync(fileReal);
+  } catch {
+    return fail(CODES.STALE_PACKAGE, 'owned member source file is missing', { member, path: fileReal });
+  }
+  if (!stat.isFile()) {
+    return fail(CODES.STALE_PACKAGE, 'owned member source is not a regular file', { member, path: fileReal });
+  }
+  if (path.basename(fileReal) !== member) {
+    return fail(
+      CODES.UNRELATED_MUTATION,
+      'member source basename must match the receipt-approved ZIP member',
+      { member, path: raw, basename: path.basename(fileReal) },
+    );
+  }
+  return ok({ path: fileReal });
 }
 
 async function waitForFunctionUpdated(aws, functionName, { attempts = 20, delayMs = 0 } = {}) {
@@ -146,33 +239,24 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     }
   }
 
+  const receiptIdentity = receiptLambdaFingerprint(receipt);
+  if (!receiptIdentity.ok) return receiptIdentity;
+
   const liveFn = await aws.getFunction({ functionName });
   if (!liveFn?.ok) return liveFn || fail(CODES.DEPLOYMENT_COLLISION, 'failed to read current live Lambda');
   const liveCfg = await aws.getFunctionConfiguration({ functionName });
   if (!liveCfg?.ok) return liveCfg || fail(CODES.DEPLOYMENT_COLLISION, 'failed to read current live Lambda configuration');
 
-  const liveIdentity = lambdaFingerprint(liveFn.details);
-  const receiptIdentity = receiptLambdaFingerprint(receipt);
-  const firstCas = evaluateFingerprintCas({
-    preflight: receiptIdentity,
-    immediatelyBefore: liveIdentity,
+  const liveIdentity = liveLambdaFingerprint(liveFn.details, 'first live');
+  if (!liveIdentity.ok) return liveIdentity;
+  const firstCas = evaluateApplyFingerprintCas({
+    preflight: receiptIdentity.details,
+    immediatelyBefore: liveIdentity.details,
+    label: 'receipt-to-first-live',
   });
   if (!firstCas.ok) return firstCas;
 
   const configBefore = configFingerprint(liveCfg.details.configuration || liveCfg.details);
-
-  if (target_environment === 'production') {
-    const gate = evaluateProductionGate({
-      target_environment,
-      deployment_type: 'lambda-overlay',
-      workstream_id: workstream_id || receipt.workstream_id,
-      production_fingerprint: receipt.preflight_live_fingerprint,
-      immediately_before_fingerprint: receipt.preflight_live_fingerprint,
-      staging_acceptance: input.staging_acceptance,
-      approval: input.approval,
-    });
-    if (!gate.ok) return gate;
-  }
 
   const downloaded = await aws.downloadFunctionCode({
     functionName,
@@ -183,28 +267,56 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     return fail(CODES.STALE_PACKAGE, 'downloadFunctionCode did not return a fresh-live-download');
   }
 
-  const liveMembers = hashZipMembers(downloaded.details.zip);
-  const replacements = {};
+  const liveHashed = hashZipMembersClosed(downloaded.details.zip, 'live');
+  if (!liveHashed.ok) return liveHashed;
+  const liveMembers = liveHashed.details.members;
   for (const member of owned) {
-    const abs = path.resolve(repoRoot || guardRoot, memberSources[member]);
-    if (!fs.existsSync(abs)) {
-      return fail(CODES.STALE_PACKAGE, 'owned member source file is missing', { member, path: abs });
+    if (!Object.prototype.hasOwnProperty.call(liveMembers, member)) {
+      return fail(
+        CODES.DEPLOYMENT_COLLISION,
+        'receipt-owned ZIP member is absent from the current live Lambda ZIP',
+        { member },
+      );
     }
-    replacements[member] = fs.readFileSync(abs);
   }
-  const candidateZip = overlayZipMembers(downloaded.details.zip, replacements);
-  const candidateMembers = hashZipMembers(candidateZip);
+
+  const replacements = {};
+  const sourceRoot = repoRoot || guardRoot;
+  for (const member of owned) {
+    const resolved = resolveOwnedMemberSource(sourceRoot, member, memberSources[member]);
+    if (!resolved.ok) return resolved;
+    replacements[member] = fs.readFileSync(resolved.details.path);
+  }
+
+  let candidateZip;
+  try {
+    candidateZip = overlayZipMembers(downloaded.details.zip, replacements);
+  } catch (error) {
+    const message = String(error?.message || error);
+    return fail(CODES.DEPLOYMENT_COLLISION, 'failed to overlay live Lambda ZIP members', { error: message });
+  }
+  const candidateHashed = hashZipMembersClosed(candidateZip, 'candidate');
+  if (!candidateHashed.ok) return candidateHashed;
+  const candidateMembers = candidateHashed.details.members;
 
   const immediatelyBeforeFn = await aws.getFunction({ functionName });
   if (!immediatelyBeforeFn?.ok) {
     return immediatelyBeforeFn || fail(CODES.DEPLOYMENT_COLLISION, 'failed to re-read Lambda immediately before mutation');
   }
-  const immediatelyBefore = lambdaFingerprint(immediatelyBeforeFn.details);
-  const toctou = evaluateFingerprintCas({
-    preflight: liveIdentity,
-    immediatelyBefore,
+  const immediatelyBefore = liveLambdaFingerprint(immediatelyBeforeFn.details, 'immediately-before');
+  if (!immediatelyBefore.ok) return immediatelyBefore;
+  const receiptToImmediate = evaluateApplyFingerprintCas({
+    preflight: receiptIdentity.details,
+    immediatelyBefore: immediatelyBefore.details,
+    label: 'receipt-to-immediately-before',
   });
-  if (!toctou.ok) return toctou;
+  if (!receiptToImmediate.ok) return receiptToImmediate;
+  const priorToImmediate = evaluateApplyFingerprintCas({
+    preflight: liveIdentity.details,
+    immediatelyBefore: immediatelyBefore.details,
+    label: 'prior-live-to-immediately-before',
+  });
+  if (!priorToImmediate.ok) return priorToImmediate;
 
   const branch = input.branch || receipt.branch || env.CHECKSOPS_BRANCH || 'unknown-branch';
   const operator = input.operator || receipt.operator || env.CHECKSOPS_OPERATOR || env.USER || null;
@@ -218,8 +330,8 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     deployment_type: 'lambda-overlay',
     owned_members: owned,
     owned_components: owned,
-    preflight: liveIdentity,
-    immediately_before: immediatelyBefore,
+    preflight: liveIdentity.details,
+    immediately_before: immediatelyBefore.details,
     live_members: liveMembers,
     candidate_members: candidateMembers,
     package: {
@@ -232,6 +344,19 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     peer_sources: input.peer_sources || [],
   });
   if (!evaluation.ok) return evaluation;
+
+  if (target_environment === 'production') {
+    const gate = evaluateProductionGate({
+      target_environment,
+      deployment_type: 'lambda-overlay',
+      workstream_id: workstream_id || receipt.workstream_id,
+      production_fingerprint: receiptIdentity.details,
+      immediately_before_fingerprint: immediatelyBefore.details,
+      staging_acceptance: input.staging_acceptance,
+      approval: input.approval,
+    });
+    if (!gate.ok) return gate;
+  }
 
   const consumed = consumeReceiptOnce(guardRoot, receipt, {
     now,
@@ -250,7 +375,7 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
   const updated = await aws.updateFunctionCode({
     functionName,
     zip: candidateZip,
-    revisionId: immediatelyBefore.revisionId,
+    revisionId: immediatelyBefore.details.revisionId,
   });
   if (!updated?.ok) return updated || fail(CODES.DEPLOYMENT_COLLISION, 'UpdateFunctionCode failed');
 
@@ -267,7 +392,9 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     location: afterFn.details.code_location,
   });
   if (!afterDownload?.ok) return afterDownload || fail(CODES.DEPLOYMENT_COLLISION, 'failed to download Lambda ZIP after update');
-  const afterMembers = hashZipMembers(afterDownload.details.zip);
+  const afterHashed = hashZipMembersClosed(afterDownload.details.zip, 'post-update');
+  if (!afterHashed.ok) return afterHashed;
+  const afterMembers = afterHashed.details.members;
   const post = evaluatePostOverlay({
     liveMembersBefore: liveMembers,
     liveMembersAfter: afterMembers,
@@ -306,10 +433,10 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
       consumed: consumed.details,
     },
     before: {
-      fingerprint: liveIdentity,
+      fingerprint: liveIdentity.details,
       configuration: configBefore,
     },
-    immediately_before: immediatelyBefore,
+    immediately_before: immediatelyBefore.details,
     after: {
       fingerprint: lambdaFingerprint(afterFn.details),
       configuration: configAfter,

@@ -18,7 +18,14 @@ fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
 for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs']) {
   fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
 }
-const { createHandler, extractPinnedFunctionSql, hashTenantPermissionLiveDefs } = await import('../write-path/guarded-sql-executor/index.mjs');
+const {
+  createHandler,
+  extractPinnedFunctionSql,
+  hashTenantPermissionLiveDefs,
+  isExactKnownPredecessor,
+  tenantPermissionDefsAreExact,
+  tenantPermissionMarkersMatch,
+} = await import('../write-path/guarded-sql-executor/index.mjs');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SQL_FILE = path.join(ROOT, AUTHORIZED_SQL44.filename);
@@ -223,8 +230,31 @@ test('create_new remains forbidden on the executor', async () => {
 
 const TENANT_SQL = path.join(ROOT, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename);
 const TENANT_SQL_TEXT = fs.readFileSync(TENANT_SQL, 'utf8');
+const PREDECESSOR_SQL = path.join(ROOT, 'supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql');
+const PREDECESSOR_SQL_TEXT = fs.readFileSync(PREDECESSOR_SQL, 'utf8');
 const PINNED_MOVE = extractPinnedFunctionSql(TENANT_SQL_TEXT, 'user_can_move_tenant_checks');
 const PINNED_OVERRIDE = extractPinnedFunctionSql(TENANT_SQL_TEXT, 'admin_override_check_status');
+const PREDECESSOR_OVERRIDE = extractPinnedFunctionSql(PREDECESSOR_SQL_TEXT, 'admin_override_check_status');
+const MARKER_SIMILAR_MOVE = `CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks(p_check_id uuid, p_user_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+AS $function$
+  SELECT public.user_belongs_to_tenant(p_user_id, '00000000-0000-0000-0000-000000000000')
+      OR public.has_role(p_user_id, 'admin');
+$function$;`;
+const MARKER_SIMILAR_OVERRIDE = `CREATE OR REPLACE FUNCTION public.admin_override_check_status(p_check_id uuid, p_new_status text, p_actor_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+  v_allowed text[] := ARRAY['uploaded','voided'];
+BEGIN
+  IF NOT public.user_can_move_tenant_checks(p_check_id, p_actor_id) THEN
+    RAISE EXCEPTION 'marker-similar but not exact';
+  END IF;
+  RETURN jsonb_build_object('ok', true, 'adversarial', true);
+END
+$function$;`;
 
 function tenantAuthEvent(overrides = {}) {
   const live = overrides.liveDefs || { user_can_move_tenant_checks: null, admin_override_check_status: null };
@@ -299,6 +329,7 @@ function tenantHandler(connect, extra = {}) {
     connect,
     now: () => Date.parse('2026-10-02T00:00:00.000Z'),
     sqlFile601: TENANT_SQL,
+    sqlFile601Predecessor: PREDECESSOR_SQL,
     ...extra,
   });
 }
@@ -333,11 +364,84 @@ test('#601 conflicting live definition fails closed with SQL_COLLISION', async (
     user_can_move_tenant_checks: 'CREATE FUNCTION public.user_can_move_tenant_checks() OLD',
     admin_override_check_status: 'CREATE FUNCTION public.admin_override_check_status() OLD',
   };
-  const handler = tenantHandler(mockTenantConnect({
+  const connect = mockTenantConnect({
     moveDef: live.user_can_move_tenant_checks,
     overrideDef: live.admin_override_check_status,
-  }));
+  });
+  const handler = tenantHandler(connect);
   const result = await handler(tenantAuthEvent({ liveDefs: live }));
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('#601 one-absent one-present live definitions are SQL_COLLISION', async () => {
+  const live = {
+    user_can_move_tenant_checks: PINNED_MOVE,
+    admin_override_check_status: null,
+  };
+  const connect = mockTenantConnect({ moveDef: PINNED_MOVE, overrideDef: null });
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent({ liveDefs: live }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('#601 marker-similar but definition-different body is SQL_COLLISION, not idempotent', async () => {
+  const live = {
+    user_can_move_tenant_checks: MARKER_SIMILAR_MOVE,
+    admin_override_check_status: MARKER_SIMILAR_OVERRIDE,
+  };
+  assert.equal(tenantPermissionMarkersMatch(live), true);
+  assert.equal(tenantPermissionDefsAreExact(live, TENANT_SQL_TEXT), false);
+  const connect = mockTenantConnect({
+    moveDef: MARKER_SIMILAR_MOVE,
+    overrideDef: MARKER_SIMILAR_OVERRIDE,
+  });
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent({ liveDefs: live }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  assert.equal(result.details.marker_similar, true);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('#601 exact known predecessor 20261001193100 is eligible to apply', async () => {
+  assert.ok(PREDECESSOR_OVERRIDE);
+  const live = {
+    user_can_move_tenant_checks: null,
+    admin_override_check_status: PREDECESSOR_OVERRIDE,
+  };
+  assert.equal(isExactKnownPredecessor(live, PREDECESSOR_OVERRIDE), true);
+  assert.equal(tenantPermissionDefsAreExact(live, TENANT_SQL_TEXT), false);
+  const connect = mockTenantConnect({
+    moveDef: null,
+    overrideDef: PREDECESSOR_OVERRIDE,
+  });
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent({ liveDefs: live }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'applied');
+  const client = await connect();
+  assert.equal(client.applied(), true);
+});
+
+test('#601 predecessor-shaped but hash-different override remains SQL_COLLISION', async () => {
+  const almost = `${PREDECESSOR_OVERRIDE}\n-- extra comment changes the hash\n`;
+  const live = {
+    user_can_move_tenant_checks: null,
+    admin_override_check_status: almost,
+  };
+  assert.equal(isExactKnownPredecessor(live, PREDECESSOR_OVERRIDE), false);
+  const connect = mockTenantConnect({ moveDef: null, overrideDef: almost });
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent({ liveDefs: live }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
 });

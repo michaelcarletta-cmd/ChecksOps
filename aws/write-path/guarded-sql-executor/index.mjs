@@ -23,6 +23,10 @@ const TENANT_PERMISSIONS_SQL_FILE = path.join(
   ROOT,
   'sql/20261001231500_tenant_users_same_check_permissions.sql',
 );
+const TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE = path.join(
+  ROOT,
+  'sql/20261001193100_tenant_users_can_override_check_status.sql',
+);
 const CA_CANDIDATES = [
   path.join(ROOT, 'rds-global-bundle.pem'),
   '/var/task/rds-global-bundle.pem',
@@ -101,6 +105,18 @@ export function tenantPermissionMarkersMatch(live = {}) {
   if (!allow) return false;
   if (allow[1].includes("'deposited'")) return false;
   return true;
+}
+
+export function loadPredecessorOverrideSql(sqlFile) {
+  if (!sqlFile || !fs.existsSync(sqlFile)) return null;
+  return extractPinnedFunctionSql(fs.readFileSync(sqlFile, 'utf8'), 'admin_override_check_status');
+}
+
+export function isExactKnownPredecessor(live = {}, predecessorOverrideSql = '') {
+  if (live?.user_can_move_tenant_checks) return false;
+  if (!live?.admin_override_check_status || !predecessorOverrideSql) return false;
+  return hashSqlDefinition(live.admin_override_check_status)
+    === hashSqlDefinition(predecessorOverrideSql);
 }
 
 function readEmbeddedSql(sqlFile = SQL_FILE, authorizedSha = AUTHORIZED_SQL44.source_sha256) {
@@ -333,6 +349,7 @@ async function handleTenantPermissions({
   identity,
   connect,
   sqlFile601,
+  sqlFile601Predecessor,
 }) {
   const embedded = readEmbeddedSql(
     sqlFile601,
@@ -355,9 +372,11 @@ async function handleTenantPermissions({
       });
     }
 
-    const exact = tenantPermissionDefsAreExact(live, embedded.details.text)
-      || tenantPermissionMarkersMatch(live);
+    const exact = tenantPermissionDefsAreExact(live, embedded.details.text);
     const absent = !live.user_can_move_tenant_checks && !live.admin_override_check_status;
+    const predecessorOverrideSql = loadPredecessorOverrideSql(sqlFile601Predecessor);
+    const knownPredecessor = isExactKnownPredecessor(live, predecessorOverrideSql);
+    const markerSimilar = tenantPermissionMarkersMatch(live);
 
     if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
       return ok({
@@ -374,6 +393,9 @@ async function handleTenantPermissions({
             user_can_move_tenant_checks: Boolean(live.user_can_move_tenant_checks),
             admin_override_check_status: Boolean(live.admin_override_check_status),
           },
+          exact,
+          known_predecessor: knownPredecessor,
+          marker_similar: markerSimilar,
         },
       });
     }
@@ -397,9 +419,12 @@ async function handleTenantPermissions({
       });
     }
 
-    if (!absent) {
+    if (!absent && !knownPredecessor) {
       return fail(CODES.SQL_COLLISION, 'live function definition conflicts with the pinned #601 migration', {
         live_definition_sha256: liveHash,
+        exact: false,
+        known_predecessor: false,
+        marker_similar: markerSimilar,
       });
     }
 
@@ -409,7 +434,7 @@ async function handleTenantPermissions({
     if (!after.user_can_move_tenant_checks || !after.admin_override_check_status) {
       return fail(CODES.SQL_COLLISION, 'apply did not create the expected #601 functions');
     }
-    if (!tenantPermissionDefsAreExact(after, embedded.details.text) && !tenantPermissionMarkersMatch(after)) {
+    if (!tenantPermissionDefsAreExact(after, embedded.details.text)) {
       return fail(CODES.SQL_COLLISION, 'applied #601 definitions do not match the pinned migration');
     }
     consumeOneUse(event.one_use_id);
@@ -438,6 +463,7 @@ export function createHandler({
   now = () => Date.now(),
   sqlFile = SQL_FILE,
   sqlFile601 = TENANT_PERMISSIONS_SQL_FILE,
+  sqlFile601Predecessor = TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
 } = {}) {
   return async function handler(event = {}) {
@@ -464,6 +490,7 @@ export function createHandler({
         identity,
         connect,
         sqlFile601,
+        sqlFile601Predecessor,
       });
     }
 

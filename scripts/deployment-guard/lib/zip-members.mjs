@@ -50,6 +50,9 @@ export function readZipMembers(buffer) {
     const name = buf.slice(p + 46, p + 46 + nameLen).toString('utf8');
     p += 46 + nameLen + extraLen + commentLen;
     if (!name || name.endsWith('/')) continue;
+    if (Object.prototype.hasOwnProperty.call(members, name)) {
+      throw new Error(`DUPLICATE_ZIP_MEMBER: ${name}`);
+    }
     const localNameLen = buf.readUInt16LE(localOffset + 26);
     const localExtraLen = buf.readUInt16LE(localOffset + 28);
     const dataStart = localOffset + 30 + localNameLen + localExtraLen;

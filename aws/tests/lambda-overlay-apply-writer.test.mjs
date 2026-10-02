@@ -7,11 +7,12 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { createLiveAwsAdapter } from '../../scripts/deployment-guard/lib/aws-adapter.mjs';
+import { consumedReceiptFile } from '../../scripts/deployment-guard/lib/consumed-receipts.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { applyLambdaOverlay } from '../../scripts/deployment-guard/lib/lambda-overlay-apply.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
-import { hashZipMembers, writeZipMembers } from '../../scripts/deployment-guard/lib/zip-members.mjs';
+import { hashZipMembers, readZipMembers, writeZipMembers } from '../../scripts/deployment-guard/lib/zip-members.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -104,16 +105,26 @@ function createLambdaState({ zip, codeSha256 = 'live-sha', revisionId = 'rev-1',
   return state;
 }
 
-function createMockAws(state) {
+function receiptConsumed(root, receipt) {
+  const file = consumedReceiptFile(root, receipt);
+  return Boolean(file && fs.existsSync(file));
+}
+
+function createMockAws(state, hooks = {}) {
+  let getCount = 0;
   return createLiveAwsAdapter({
     clients: {
       lambda: {
         async send(command) {
           if (command.operation === 'GetFunction') {
+            getCount += 1;
+            const identity = typeof hooks.functionIdentity === 'function'
+              ? hooks.functionIdentity({ getCount, state })
+              : { CodeSha256: state.codeSha256, RevisionId: state.revisionId };
             return {
               Configuration: {
-                CodeSha256: state.codeSha256,
-                RevisionId: state.revisionId,
+                CodeSha256: identity.CodeSha256,
+                RevisionId: identity.RevisionId,
                 ...state.configuration,
               },
               Code: { Location: 'https://example.test/current.zip' },
@@ -313,6 +324,7 @@ test('CodeSha256 drift performs no write', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
   assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
 });
 
 test('RevisionId drift performs no write', async () => {
@@ -330,6 +342,7 @@ test('RevisionId drift performs no write', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
   assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
 });
 
 test('reused receipt performs no second write', async () => {
@@ -426,4 +439,242 @@ test('production structurally requires approval and is not exercised', async () 
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('valid receipt + lease + incomplete { note: "no-sha" } fingerprint is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { fingerprint: { note: 'no-sha' } });
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /CodeSha256/);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('valid receipt + lease missing only CodeSha256 is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { fingerprint: { revisionId: 'rev-1' } });
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /CodeSha256/);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('valid receipt + lease missing only RevisionId is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, { fingerprint: { codeSha256: 'live-sha' } });
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /RevisionId/);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('production gate uses actual immediately-before live identity, not receipt-to-itself', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    environment: 'production',
+    component: 'checksops-production-prep-api',
+  });
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state, {
+    functionIdentity({ getCount, state: live }) {
+      if (getCount >= 2) return { CodeSha256: 'drifted-sha', RevisionId: 'rev-drift' };
+      return { CodeSha256: live.codeSha256, RevisionId: live.revisionId };
+    },
+  });
+  const result = await applyLambdaOverlay({
+    ...applyOpts(root, { receipt: issued.receipt }),
+    function_name: 'checksops-production-prep-api',
+    target_environment: 'production',
+    staging_acceptance: { ok: true, reference: 'staging-accept-606' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+  }, {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('/tmp member source is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root);
+  const evil = path.join(os.tmpdir(), `checksops-evil-${process.pid}.mjs`);
+  fs.writeFileSync(evil, 'export const pwned = true;\n');
+  const sources = writeSources(root);
+  sources['admin-override-check-status.mjs'] = evil;
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('traversal member source is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root);
+  const sources = writeSources(root);
+  sources['admin-override-check-status.mjs'] = '../../evil.mjs';
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('symlink-escape member source is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root);
+  const evil = path.join(os.tmpdir(), `checksops-symlink-evil-${process.pid}.mjs`);
+  fs.writeFileSync(evil, 'export const pwned = true;\n');
+  const sources = writeSources(root);
+  const link = path.join(root, 'aws/functions/api/admin-override-check-status.mjs');
+  fs.unlinkSync(link);
+  fs.symlinkSync(evil, link);
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+test('owned member absent from the current live ZIP is refused before consume/write', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: ['admin-override-check-status.mjs', 'tenant-check-user.mjs', 'brand-new-member.mjs'],
+  });
+  const sources = writeSources(root);
+  fs.writeFileSync(path.join(root, 'aws/functions/api/brand-new-member.mjs'), 'export const created = true;\n');
+  sources['brand-new-member.mjs'] = 'aws/functions/api/brand-new-member.mjs';
+  const state = createLambdaState({ zip: liveZip() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /absent from the current live Lambda ZIP/);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+function zipWithDuplicateMember() {
+  const base = writeZipMembers({
+    'admin-override-check-status.mjs': 'export const overlay = "admin-old";\n',
+    'tenant-check-user.mjs': 'export const overlay = "tenant-old";\n',
+  });
+  let eocd = -1;
+  for (let i = base.length - 22; i >= 0; i -= 1) {
+    if (base.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  const cdOffset = base.readUInt32LE(eocd + 16);
+  const cdSize = base.readUInt32LE(eocd + 12);
+  const nameLen = base.readUInt16LE(cdOffset + 28);
+  const extraLen = base.readUInt16LE(cdOffset + 30);
+  const commentLen = base.readUInt16LE(cdOffset + 32);
+  const firstCd = base.subarray(cdOffset, cdOffset + 46 + nameLen + extraLen + commentLen);
+  const eocdBuf = Buffer.from(base.subarray(eocd));
+  eocdBuf.writeUInt16LE(base.readUInt16LE(eocd + 8) + 1, 8);
+  eocdBuf.writeUInt16LE(base.readUInt16LE(eocd + 10) + 1, 10);
+  eocdBuf.writeUInt32LE(cdSize + firstCd.length, 12);
+  return Buffer.concat([base.subarray(0, cdOffset + cdSize), firstCd, eocdBuf]);
+}
+
+test('duplicate live ZIP member names fail closed before overlay/rebuild', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root);
+  const duplicate = zipWithDuplicateMember();
+  assert.throws(() => readZipMembers(duplicate), /DUPLICATE_ZIP_MEMBER/);
+  const state = createLambdaState({ zip: duplicate });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /duplicate member names/);
+  assert.equal(state.updates.length, 0);
+  assert.equal(receiptConsumed(root, issued.receipt), false);
 });
