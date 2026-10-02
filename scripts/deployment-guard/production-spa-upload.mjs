@@ -30,7 +30,7 @@ function sha256Text(text) {
 }
 
 function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+  const match = String(html || '').match(/\/assets\/index-[^"'\s]+\.js/);
   return match ? match[0] : null;
 }
 

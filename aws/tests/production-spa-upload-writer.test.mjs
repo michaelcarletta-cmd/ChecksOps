@@ -116,7 +116,7 @@ function createFakeAws({ liveBefore, liveBeforeIndex = '<html></html>' } = {}) {
         current = {
           ...current,
           index_html_sha256: sha256Text(afterIndexHtml),
-          entry_bundle: (String(afterIndexHtml).match(/\/assets\/index-[^"'\\s]+\.js/) || [null])[0],
+          entry_bundle: (String(afterIndexHtml).match(/\/assets\/index-[^"'\s]+\.js/) || [null])[0],
         };
       }
       return okResult({ fingerprint: current, head: { VersionId: current.s3_version_id || null } });
