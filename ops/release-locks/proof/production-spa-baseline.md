@@ -14,12 +14,12 @@ protects it.
 | Host | `https://checksops.com` |
 | CloudFront | `E1B0ZWWO5559U5` |
 | S3 bucket | `checksops-production-frontend-806168576068` |
-| Entry | `/assets/index-gYa_BW8r.js` |
-| Entry JS SHA256 | `71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280` |
-| index.html SHA256 | `791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805` |
-| index.html S3 version | `TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ` |
-| Last-Modified | `Fri, 02 Oct 2026 01:51:18 GMT` |
-| Previous accepted baseline | `/assets/index-CTqMys28.js` |
+| Entry | `/assets/index-HXTuSrE0.js` |
+| Entry JS SHA256 | `d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d` |
+| index.html SHA256 | `a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52` |
+| index.html S3 version | `PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX` |
+| Last-Modified | `Fri, 02 Oct 2026 15:03:04 GMT` |
+| Previous accepted baseline | `/assets/index-gYa_BW8r.js` |
 
 ## Accepted behavior
 
@@ -35,9 +35,9 @@ branch, or another worktree must demonstrate that it contains or reconciles
 this accepted production SPA. If it cannot, deployment must be refused.
 
 Do not restore a superseded entry (`index-CTqMys28.js`, `index-BPbQUNFr.js`,
-`index-DSbVZXu8.js`, `index-BAD1KYoF.js`, `index-DyoF7zdg.js`, or earlier
-conflicting bundle names) over this baseline. `index-CTqMys28.js` is
-superseded lineage only after this successful acceptance.
+`index-DSbVZXu8.js`, `index-BtDKt23D.js`, `index-gYa_BW8r.js`, `index-BAD1KYoF.js`,
+`index-DyoF7zdg.js`, or earlier conflicting bundle names) over this baseline.
+`index-gYa_BW8r.js` is superseded lineage only after this successful acceptance.
 
 ## Fail-closed promotion rules
 
@@ -55,19 +55,19 @@ write.
 
 HTTPS `GET https://checksops.com/index.html` returned:
 
-- `last-modified: Fri, 02 Oct 2026 01:51:18 GMT`
-- `x-amz-version-id: TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ`
+- `last-modified: Fri, 02 Oct 2026 15:03:04 GMT`
+- `x-amz-version-id: PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX`
 - `x-cache: RefreshHit from cloudfront`
-- index.html SHA256 `791bae2c9157442e0c7ea9f412db54bae482f57f476703c6434df57275f06805`
-- entry `/assets/index-gYa_BW8r.js`
-- entry SHA256 `71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280`
+- index.html SHA256 `a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52`
+- entry `/assets/index-HXTuSrE0.js`
+- entry SHA256 `d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d`
 
 Exact match to the accepted baseline. Freeze proceeded.
 
 Lambda `checksops-production-prep-api` identity is recorded for continuity only and was not modified.
 Live fingerprint during verification:
 
-- CodeSha256 `M5wMzEWDxjNGQ0mfxTkseEPXUfDNVQ9VURKnb7cwqGw=`
-- RevisionId `91753f93-71ab-4126-a3f8-6a5cfa08b291`
+- CodeSha256 `S8ma0PVG3pzjuJSD17eznstHuB+AgD7M3/35OcKSoPY=`
+- RevisionId `9f673420-a5a1-43df-a798-cc7022a4fb8d`
 
 This task performed **zero** production writes.
