@@ -1,0 +1,79 @@
+{
+  "workstream_id": "pr601-deposited-restore-a2a4",
+  "branch": "cursor/claim-deposited-restore-a2a4",
+  "kind": "one_time_staging_corrective_restore",
+  "not_user_status_movement": true,
+  "production_deployed": false,
+  "check_id": "5f14f3f1-4db1-4fe5-b2cd-5ec72e840fb7",
+  "claim_checks_id": "91de2e5d-4078-4cc9-8289-802020b6d148",
+  "claim_id": "7041ee80-9040-49bc-86a1-a79b47bc5460",
+  "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+  "pre_test_evidence": {
+    "accidental_audit_id": "12929576-c701-4256-a8ad-a4a100266cbc",
+    "accidental_audit_at": "2026-10-02T19:39:04.686Z",
+    "old_status": "deposited",
+    "old_stage": "deposited",
+    "old_stage_source": "hle_deposited_without_funds_released_plus_moved_to_deposited_audit",
+    "moved_to_deposited_audit_id": "81f67db8-c0ac-46a6-9bf0-d2bc2a3ce632",
+    "hle_deposited_at": "2026-07-31T18:31:06.538Z",
+    "hle_funds_released": false,
+    "claim_payments": [],
+    "claim_disbursements": []
+  },
+  "accidental_state": {
+    "intake_status": "needs_review",
+    "intake_check_stage": "review",
+    "claim_checks_check_stage": "review",
+    "deposited_at": "2026-07-31T18:31:06.538Z",
+    "updated_at": "2026-10-02T19:39:04.633Z"
+  },
+  "restore": {
+    "applied_at": "2026-10-02T20:05:35.009Z",
+    "one_use_id": "pr601-dep-restore-apply-10",
+    "intake_status": "deposited",
+    "intake_check_stage": "deposited",
+    "claim_checks_check_stage": "deposited",
+    "financials_unchanged": true,
+    "deposited_at": "2026-07-31T18:31:06.538Z",
+    "deposit_status": "pending_review",
+    "deposit_method": "branch",
+    "partner_status": "released"
+  },
+  "corrective_audit": {
+    "id": "08f27cff-1a79-4922-9852-52ba537579b1",
+    "event_type": "staging_corrective_restore_601",
+    "created_at": "2026-10-02T20:05:35.042Z",
+    "not_user_status_movement": true
+  },
+  "post_verify": {
+    "from_deposited": {
+      "status": 403,
+      "error": "rpc_financial_disabled",
+      "message": "admin_override_check_status cannot move a deposited check (money movement)",
+      "returned_status": "deposited"
+    },
+    "to_deposited": {
+      "status": 403,
+      "error": "rpc_financial_disabled",
+      "message": "admin_override_check_status to 'deposited' remains disabled (money movement)"
+    },
+    "unchanged_after_probes": true
+  },
+  "guards_not_weakened": {
+    "source_deposited_guard": true,
+    "destination_deposited_guard": true,
+    "no_grant": true,
+    "membership_only_helper_unchanged": true,
+    "permanent_sql_function_unchanged": true,
+    "ordinary_601_override_not_used_as_backdoor": true,
+    "sql_pair_sha256": "0cd4a7b515656be4777a1f467aa7ca3e0160060031fca66b207cc9fb0854b48e"
+  },
+  "fingerprints_after": {
+    "staging_api": "70LMF4qoKSCbCzZKdmczXPwlEIPx5KWlW9bgKthzUCA=",
+    "executor_restored_to_601": "GlI2hMNdge353F0vvlxWI0z4f7G98gvLMSicOF8Zo8I=",
+    "production_prep_api": "rWKOsHhlnZB+4a0SMiM0KDN0eflwVbgu9h1YPDP2KeQ=",
+    "production_prep_api_previous": "99pRyM/t6zqXMz8ePhNlcYMjxUazGaXHcEek/DyZ93Q=",
+    "spa_index_sha256": "1b040bd04326418e7e9df39628200fbe8cc84b05617e65c1a53bf6f2e9dc7ffe",
+    "spa_entry": "/assets/index-BcLmLtnF.js"
+  }
+}
