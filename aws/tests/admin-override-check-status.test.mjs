@@ -78,6 +78,20 @@ const mockClient = ({
       if (/UPDATE public.check_intake_items/.test(sql)) return { rows: [] };
       if (/UPDATE public.claim_checks/.test(sql)) return { rows: [] };
       if (/INSERT INTO public.check_audit_log/.test(sql)) return { rows: [{ id: 'audit' }] };
+      if (/SELECT public.admin_override_check_status/.test(sql)) {
+        const nextStatus = params?.[1];
+        return {
+          rows: [{
+            result: {
+              ok: true,
+              check_id: CHECK_ID,
+              old_status: check?.status || 'endorsements_in_progress',
+              new_status: nextStatus,
+              new_stage: stageForAdminOverrideStatus(nextStatus),
+            },
+          }],
+        };
+      }
       return { rows: [] };
     },
   };
@@ -89,6 +103,7 @@ const assertNoFinancialWrites = (client) => {
   assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
   assert.equal(client.queries.some((q) => /UPDATE public.claim_checks/.test(q.sql)), false);
   assert.equal(client.queries.some((q) => /INSERT INTO public.check_audit_log/.test(q.sql)), false);
+  assert.equal(client.queries.some((q) => /SELECT public.admin_override_check_status/.test(q.sql)), false);
 };
 
 test('admin override is allowlisted as a safe write RPC', () => {
@@ -110,9 +125,11 @@ test('live #601 routing composition is preserved', () => {
   assert.match(source, /admin_override_check_status: 'safe_now'/);
 });
 
-test('claim_checks.check_stage uses ::public.check_stage and #601 does not query USER_ROLES_SQL', () => {
+test('persist goes through SECURITY DEFINER RPC and #601 does not query USER_ROLES_SQL', () => {
   const source = readFileSync('aws/functions/api/admin-override-check-status.mjs', 'utf8');
-  assert.match(source, /SET check_stage = \$2::public\.check_stage, updated_at = now\(\)/);
+  assert.match(source, /SELECT public\.admin_override_check_status\(\$1::uuid, \$2::text, \$3::uuid\)/);
+  assert.doesNotMatch(source, /UPDATE public\.check_intake_items/);
+  assert.doesNotMatch(source, /UPDATE public\.claim_checks/);
   assert.doesNotMatch(source, /SET check_stage = \$2::text/);
   assert.doesNotMatch(source, /USER_ROLES_SQL/);
   assert.doesNotMatch(source, /from '\.\/identity\.mjs'/);
@@ -141,23 +158,13 @@ test('same-company tenant_users member can move a claim-linked check back to Rev
   assert.equal(result.data.new_stage, 'review');
   assert.equal(client.queries.some((q) => q.sql === USER_ROLES_SQL), false);
 
-  const intake = client.queries.find((q) => /UPDATE public.check_intake_items/.test(q.sql));
-  assert.ok(intake);
-  assert.equal(intake.params[1], 'needs_review');
-  assert.equal(intake.params[2], 'review');
-  assert.equal(intake.params[3], null);
-
-  const mirror = client.queries.find((q) => /UPDATE public.claim_checks/.test(q.sql));
-  assert.ok(mirror);
-  assert.match(mirror.sql, /SET check_stage = \$2::public\.check_stage/);
-  assert.equal(mirror.params[1], 'review');
-
-  const audit = client.queries.find((q) => /INSERT INTO public.check_audit_log/.test(q.sql));
-  assert.ok(audit);
-  assert.match(audit.sql, /tenant_id/);
-  assert.equal(audit.params[1], FREEDOM);
-  assert.equal(audit.params[2], APP_ID);
-  assert.match(audit.params[3], /endorsements_in_progress/);
+  const invoke = client.queries.find((q) => /SELECT public.admin_override_check_status/.test(q.sql));
+  assert.ok(invoke);
+  assert.equal(invoke.params[0], CHECK_ID);
+  assert.equal(invoke.params[1], 'needs_review');
+  assert.equal(invoke.params[2], APP_ID);
+  assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
+  assert.equal(client.queries.some((q) => /UPDATE public.claim_checks/.test(q.sql)), false);
 });
 
 test('same-company member with no privileged role can override', async () => {
