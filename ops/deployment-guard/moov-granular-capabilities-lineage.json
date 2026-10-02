@@ -1,0 +1,119 @@
+{
+  "ok": true,
+  "verdict": "GRANULAR CAPABILITIES ARE ON MAIN AND ON THE WALLETOPS CANDIDATE; ABSENT FROM LIVE PRODUCTION AND FROM CTqMys28 SOURCE",
+  "id": "moov-granular-capabilities-lineage",
+  "recorded_at_utc": "2026-10-02T00:41:00Z",
+  "aws_writes": 0,
+  "deployed": false,
+  "stop_for_incomplete_lineage": false,
+  "flag_merged_main_absent_live": true,
+  "authoritative_main_pr": {
+    "number": 598,
+    "title": "Port Moov granular ACH capabilities onto main",
+    "url": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/598",
+    "head": "cursor/moov-granular-capabilities-8543",
+    "base": "main",
+    "merged": true,
+    "merged_at_utc": "2026-10-01T22:15:47Z",
+    "merge_sha": "a1d0347f7e219648e926d78fe145d2c72b9a76ff",
+    "present_on_current_main": true,
+    "current_main_sha": "2fe6f7f5eabf42d4f9253d84808e25e5fd46b747",
+    "source_commits_on_main": [
+      "277ed97f2b04096562e6b784d77be6c66519eaa8",
+      "9c6dc2fa53a4d110f621b03545e1a47f86c319db",
+      "3824fd532ddd94160e2ee31f03bc04d88288dcc5"
+    ]
+  },
+  "precursor_pr_not_on_main": {
+    "number": 594,
+    "title": "Switch Moov requests from legacy capabilities to granular ACH IDs",
+    "url": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/594",
+    "head": "cursor/moov-granular-capabilities-2d41",
+    "base": "cursor/freedom-stakeholder-moov-sync-2d41",
+    "merged": true,
+    "merged_at_utc": "2026-10-01T17:39:59Z",
+    "merge_sha": "abf0695037d5bc09c8ed84065b9e2c00bb381a1c",
+    "present_on_current_main": false,
+    "note": "Original workstream. Cherry-picked onto main as #598 without the later OCR payee-regex commit a5868d7c6."
+  },
+  "legacy_replaced": ["send-funds", "collect-funds", "wallet"],
+  "live_mixed_request_array_still_on_lambda": ["transfers", "send-funds", "wallet", "send-funds.ach"],
+  "granular_introduced": {
+    "merchant": ["transfers", "collect-funds.ach", "send-funds.ach", "wallet.balance"],
+    "recipient": ["transfers"],
+    "homeowner_deductible": ["transfers", "collect-funds.ach"],
+    "capability_write_api_version": "v2025.07.00",
+    "flag_compat": "capabilityFlags treats both legacy family IDs and granular dotted IDs as enabled"
+  },
+  "affected_files_pr_598": [
+    "aws/functions/api/providers/parity/moov-capabilities.mjs",
+    "aws/functions/api/providers/parity/moov-client.mjs",
+    "aws/functions/api/providers/parity/moov-functions.mjs",
+    "aws/functions/api/providers/parity/moov-onboard.mjs",
+    "aws/functions/api/providers/readiness.mjs",
+    "aws/tests/api-behind-cloudfront-step3-package.test.mjs",
+    "aws/tests/moov-capabilities.test.mjs",
+    "aws/tests/moov-granular-capabilities-overlay.test.mjs",
+    "scripts/deployment-guard/build-moov-granular-capabilities-overlay.mjs",
+    "scripts/test-moov-readiness.mjs",
+    "supabase/functions/_shared/moovCapabilities.ts",
+    "supabase/functions/_shared/moovClient.ts",
+    "supabase/functions/_shared/moovPlaidBridge.ts",
+    "supabase/functions/_shared/moovReadiness.ts",
+    "supabase/functions/homeowner-deductible-pay/index.ts",
+    "supabase/functions/moov-account-create/index.ts",
+    "supabase/functions/moov-account-onboard/index.ts",
+    "supabase/functions/moov-onboarding-link/index.ts",
+    "supabase/functions/moov-recipient-bank-add/index.ts",
+    "supabase/functions/moov-recipient-create/index.ts",
+    "supabase/functions/moov-sync/index.ts"
+  ],
+  "live_production": {
+    "spa": {
+      "entry": "/assets/index-CTqMys28.js",
+      "contains_capability_request_ids": false,
+      "note": "Frontend does not request Moov capabilities. Absence in the SPA bundle is expected."
+    },
+    "lambda": {
+      "function": "checksops-production-prep-api",
+      "last_known_code_sha256": "GRkRQ2RKn3pS27fNMpFHpMZ83SUvo4HNbCJgNFCWrRw=",
+      "last_known_modified": "2026-10-01T18:02:46.000+0000",
+      "zip_inspected": "/tmp/prod-lambda-live.zip",
+      "zip_mtime_utc": "2026-10-01T23:22:07Z",
+      "has_moov_capabilities_mjs": false,
+      "request_array": "['transfers', 'send-funds', 'wallet', 'send-funds.ach']",
+      "capabilityFlags": "exact family match only (no prefix for .ach / .balance)",
+      "granular_overlay_applied": false
+    },
+    "freedom_moov_account_2026-10-01T23:23Z": {
+      "enabled": ["collect-funds", "send-funds", "transfers", "wallet"],
+      "missing_granular": ["collect-funds.ach", "send-funds.ach", "wallet.balance"]
+    }
+  },
+  "ctqmys28_source": {
+    "commit": "57a04ea534b3247add8ac0f4a161d8c49feaafbb",
+    "committed_at_utc": "2026-10-01T15:12:44Z",
+    "applied_at_utc": "2026-10-01T15:16:00Z",
+    "branch": "cursor/freedom-stakeholder-moov-sync-2d41",
+    "predates_pr_594": true,
+    "predates_pr_598": true,
+    "moov_capabilities_mjs": false,
+    "moov_functions_request": "['transfers', 'send-funds', 'wallet', 'send-funds.ach']",
+    "moov_onboard_request": "['transfers', 'send-funds', 'wallet', 'send-funds.ach']",
+    "granular_code_present": false
+  },
+  "walletops_candidate": {
+    "branch": "cursor/walletops-auto-payout-visible-2d41",
+    "head": "69122273fbe99efc3131ac995d555392ca7cf169",
+    "moov_capabilities_mjs_blob": "50d5ea766d58315b5d77a94c8d5a0336cf66190d",
+    "matches_origin_main_capability_module": true,
+    "requests_merchant_capabilities_constant": true,
+    "legacy_request_arrays": [],
+    "walletops_edits_to_moov_onboard": "sweep history path only; does not revert capability IDs",
+    "preserves_granular": true,
+    "pr_598_merge_is_git_ancestor": false,
+    "note": "Candidate carries the #594/#598 capability source (identical module to main) via the granular-capabilities-2d41 stack, not via merge-commit ancestry of a1d0347."
+  },
+  "composition_rule": "When composing WalletOps onto live CTqMys28 plus current main, keep main/#598 capability files. Do not take moov-functions.mjs, moov-onboard.mjs, or moov-client.mjs from 57a04ea / CTqMys28 source. That would restore the legacy request list.",
+  "required_before_any_write": "Do not deploy from this report. Granular source is merged to main and absent from live Lambda; a later guarded overlay is a separate apply."
+}
