@@ -12,6 +12,7 @@ import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-gu
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
 import {
   AUTHORIZED_SQL44,
+  AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   authorizationFingerprint,
@@ -60,6 +61,13 @@ test('source SQL 44 SHA matches the authorized binding', () => {
   const sha = createHash('sha256').update(bytes).digest('hex');
   assert.equal(sha, AUTHORIZED_SQL44.source_sha256);
   assert.equal(hashSqlDefinition(bytes.toString('utf8')), AUTHORIZED_SQL44.intended_replacement_sha256);
+});
+
+test('source SQL 39 SHA matches the authorized Mortgage Ops binding', () => {
+  const bytes = fs.readFileSync(path.join(ROOT, AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE.filename));
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  assert.equal(sha, AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE.source_sha256);
+  assert.equal(AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE.commit, '1ed46900077cf5834ba8ab5c1b30a332b6c692d6');
 });
 
 test('sql-apply is not weakened by vpc_executor=true or missing live hash', () => {

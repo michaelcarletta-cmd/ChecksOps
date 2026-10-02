@@ -44,12 +44,30 @@ export const AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS = Object.freeze({
   ]),
 });
 
+export const AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE = Object.freeze({
+  filename: 'aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql',
+  migration_id: '39_mortgage_ops_agent_accept_complete',
+  commit: '1ed46900077cf5834ba8ab5c1b30a332b6c692d6',
+  source_sha256: 'c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f',
+  intended_replacement_sha256: 'c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f',
+  function_identities: Object.freeze([
+    'public.aws_is_mortgage_ops_agent()',
+  ]),
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE,
 ]);
 
 export function resolveAuthorizedMigration(input = {}) {
+  if (
+    input.filename === AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE.filename
+    || input.migration_id === AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE.migration_id
+  ) {
+    return AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE;
+  }
   if (
     input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
     || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id
