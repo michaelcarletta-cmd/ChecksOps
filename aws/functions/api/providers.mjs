@@ -344,6 +344,12 @@ const dispatchKnownFunction = (spec, body) => {
   return denyProviderExecution(spec.provider, spec.name);
 };
 
+const isMoovSweepRead = (spec, body) => {
+  if (spec?.provider !== 'moov' || spec?.name !== 'moov-sweep-config') return false;
+  const action = String(body?.action ?? 'get').toLowerCase();
+  return action === 'get' || action === 'list' || action === 'sweeps';
+};
+
 export const handleFunctionInvoke = async (event, name, deps = {}) => {
   // Class A ordinary services are owned by app-services.mjs — never stub them here.
   try {
@@ -353,6 +359,7 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     /* app-services optional during early boot */
   }
 
+  const body = parseBody(event);
   const spec = classifyFunction(name) || (name === 'actum' ? ACTUM_BOUNDARY : null);
   if (!spec) {
     return denyProviderExecution(null, name, {
@@ -370,14 +377,19 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
+    if (isMoovSweepRead(spec, body)) {
+      // Read-only production Moov sweep snapshot is allowed while all other provider
+      // operations remain hard-blocked unless separately authorized.
+    } else {
     return denyProviderExecution(spec.provider, spec.name, {
       error: 'production_execution_blocked',
       message: 'Production provider flags stay false. Staging never uses production Moov/CheckAlt keys. Enable AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED for sandbox/UAT ports only.',
       tranche4HardBlock: true,
     });
+    }
   }
 
-  if (providerSandboxExecutionEnabled() && hasParityHandler(name)) {
+  if ((providerSandboxExecutionEnabled() || isMoovSweepRead(spec, body)) && hasParityHandler(name)) {
     return runParityHandler(name, event, deps);
   }
 
@@ -397,10 +409,10 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   if (!providerEnabled(spec.provider) || !providerExecutionEnabled()) {
-    return dispatchKnownFunction(spec, parseBody(event));
+    return dispatchKnownFunction(spec, body);
   }
 
-  return dispatchKnownFunction(spec, parseBody(event));
+  return dispatchKnownFunction(spec, body);
 };
 
 export const handleWebhookRoute = (event, provider, deps = {}) => handleProviderWebhook(event, provider, deps);

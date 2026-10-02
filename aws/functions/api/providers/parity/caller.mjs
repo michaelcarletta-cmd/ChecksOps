@@ -4,7 +4,7 @@
  * spoofed tenant headers ignored, production credentials refused on staging.
  */
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
-import { executionAllowed } from '../../provider-flags.mjs';
+import { executionAllowed, providerLiveReadsEnabled } from '../../provider-flags.mjs';
 import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 import { loadSandboxCredentials } from '../../sandbox-credentials.mjs';
 import { evaluateReadiness } from '../readiness.mjs';
@@ -153,6 +153,78 @@ export async function moovParityContext({ client, mapping, body, requireAdmin = 
     memberships,
     moovContext: ctx,
     loaded,
+  };
+}
+
+export async function moovProductionReadContext({
+  client,
+  mapping,
+  body,
+  requireAdmin = false,
+  loadProviderSecrets = null,
+} = {}) {
+  if (!executionAllowed('moov') || !providerLiveReadsEnabled()) {
+    return fail('provider_disabled', 403, {
+      provider: 'moov',
+      message: 'Production Moov read-only access is not enabled.',
+    });
+  }
+
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const tenant = await resolveTenant(client, {
+    userId: mapping.application_user_id,
+    body,
+    memberships,
+    requireAdmin,
+  });
+  if (tenant.error) return tenant;
+  if (!tenant.tenantId) return fail('tenant_id is required', 400);
+
+  const tenantEnv = await loadTenantMoovEnv(client, tenant.tenantId);
+  if (tenantEnv?.error) return fail(tenantEnv.error, tenantEnv.statusCode);
+  if (tenantEnv !== 'production') {
+    return fail('production_provider_context_unresolved', 503, {
+      message: 'Production payment provider environment could not be resolved.',
+    });
+  }
+
+  const loader = typeof loadProviderSecrets === 'function'
+    ? loadProviderSecrets
+    : (await import('../../provider-secrets.mjs')).loadProviderSecrets;
+  const secrets = await loader();
+  const productionPublicKey = secrets?.MOOV_PUBLIC_KEY ?? null;
+  const productionSecretKey = secrets?.MOOV_SECRET_KEY ?? null;
+  const productionPlatformAccountId = secrets?.MOOV_ACCOUNT_ID ?? null;
+
+  if (!productionPublicKey || !productionSecretKey) {
+    return fail('production_credentials_unavailable', 503, {
+      message: 'Production Moov credentials are not configured.',
+    });
+  }
+
+  const ctx = {
+    environment: 'production',
+    sandboxPublicKey: null,
+    sandboxSecretKey: null,
+    sandboxPlatformAccountId: null,
+    sandboxOrigin: null,
+    apiVersion: 'v2024.01.00',
+    productionPublicKey,
+    productionSecretKey,
+    productionPlatformAccountId,
+    allowedOrigin: 'https://checksops.com',
+    appUrl: 'https://checksops.com',
+  };
+  bindMoovEnvironment('production');
+
+  return {
+    tenantId: tenant.tenantId,
+    isAdmin: tenant.isAdmin,
+    environment: 'production',
+    userId: mapping.application_user_id,
+    memberships,
+    moovContext: ctx,
+    loaded: null,
   };
 }
 
