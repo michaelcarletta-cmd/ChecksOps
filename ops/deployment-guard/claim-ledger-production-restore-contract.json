@@ -1,0 +1,18 @@
+{
+  "id": "claim-ledger-production-restore",
+  "title": "Claim Ledger production restore contract",
+  "accepted": true,
+  "enabled": true,
+  "environments": ["production"],
+  "deployment_types": ["lambda-overlay"],
+  "test": "aws/tests/claim-ledger-production-restore-contract.test.mjs",
+  "notes": "Permanent contract for restoring Claim Ledger/claim-number onto current live production without replacing newer production-only members. Settlement RPC is required only when write-claim-settlement.mjs is already in the composition.",
+  "invariants": [
+    "linked claim-number save uses UPDATE on the existing claim UUID",
+    "claims remains update-only for claim_number",
+    "no claim INSERT occurs from claim-number editing",
+    "claim_ledger_link_or_create remains available",
+    "Review claim-number peel remains available",
+    "existing settlement RPC remains available when the settlement writer is already present"
+  ]
+}
