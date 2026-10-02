@@ -577,6 +577,40 @@ test('production SPA writer: missing staging acceptance fails production gate', 
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
+test('production SPA writer: missing production approval fails production gate', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root);
+  const liveBefore = { index_html_sha256: 'idx', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  const registry = loadContractRegistry(root);
+  const contract_results = passingContractResults(registry);
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    contract_results,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    fetchImpl: fetchFromDist(distDir),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+});
+
 test('production SPA writer: missing accepted_source_composition fails closed', async () => {
   const root = tmpRootWithOps();
   const distDir = writeDist(root);
