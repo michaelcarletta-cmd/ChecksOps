@@ -22,6 +22,22 @@ export const providerEnabled = (provider) => {
 export const providerLiveReadsEnabled = () => isTrue(process.env.AWS_PROVIDER_LIVE_READS_ENABLED);
 
 /**
+ * Narrow public-recipient KYC + ToS profile PATCH. Independent of money flags.
+ * Does not allow transfers, bank verification, account create, or SQL72.
+ * Default false.
+ */
+export const providerRecipientKycTosWritesEnabled = () =>
+  isTrue(process.env.AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED);
+
+/**
+ * Narrow public-recipient instant micro-deposit initiate/confirm.
+ * Independent of money/transfer flags. Does not allow transfers, SQL72,
+ * account create, or bank-add. Default false.
+ */
+export const providerRecipientBankVerifyWritesEnabled = () =>
+  isTrue(process.env.AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED);
+
+/**
  * Staging default is dry-run (unset or any value other than `false`).
  * Dry-run verifies signatures and records receipts. It never applies payment mutations.
  */
@@ -54,5 +70,7 @@ export const flagSnapshot = () => ({
   AWS_ACTUM_ENABLED: providerEnabled('actum'),
   AWS_QUICKBOOKS_ENABLED: providerEnabled('quickbooks'),
   AWS_PROVIDER_LIVE_READS_ENABLED: providerLiveReadsEnabled(),
+  AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED: providerRecipientKycTosWritesEnabled(),
+  AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED: providerRecipientBankVerifyWritesEnabled(),
   AWS_PROVIDER_WEBHOOK_DRY_RUN: providerWebhookDryRun(),
 });

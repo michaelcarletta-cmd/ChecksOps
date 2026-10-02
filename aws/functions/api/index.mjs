@@ -20,6 +20,20 @@ import {
 } from './storage.mjs';
 import { handlePublicEndorsement } from './check-endorsement.mjs';
 import { handlePublicSignatureSubmit } from './signature-submit.mjs';
+import { handlePublicMoovRecipientSession } from './public-moov-recipient-session.mjs';
+import {
+  handlePublicMoovRecipientKycUpdate,
+  handlePublicMoovRecipientTosAccept,
+  handlePublicMoovRecipientTosToken,
+} from './public-moov-recipient-kyc-tos.mjs';
+import {
+  handlePublicMoovRecipientBankVerifyConfirm,
+  handlePublicMoovRecipientBankVerifyInitiate,
+} from './public-moov-recipient-bank-verify.mjs';
+import {
+  handleBankVerifyStateProbe,
+  isBankVerifyStateProbeEvent,
+} from './providers/recipient-bank-verify-state-probe.mjs';
 import {
   handleStorageUploadUrl,
   handleStorageDelete,
@@ -74,6 +88,10 @@ const READ_ONLY_PATHS = new Set([
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
 
 export const handler = async (event) => {
+  if (isBankVerifyStateProbeEvent(event)) {
+    return handleBankVerifyStateProbe(event);
+  }
+
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
 
@@ -368,6 +386,78 @@ export const handler = async (event) => {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/moov-recipient-session') {
+    const result = await handlePublicMoovRecipientSession(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      liveProviderTransactions: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/moov-recipient-kyc-update') {
+    const result = await handlePublicMoovRecipientKycUpdate(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      liveProviderTransactions: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/moov-recipient-tos-token') {
+    const result = await handlePublicMoovRecipientTosToken(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      liveProviderTransactions: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/moov-recipient-bank-verify-initiate') {
+    const result = await handlePublicMoovRecipientBankVerifyInitiate(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      liveProviderTransactions: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/moov-recipient-bank-verify-confirm') {
+    const result = await handlePublicMoovRecipientBankVerifyConfirm(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      liveProviderTransactions: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/moov-recipient-tos-accept') {
+    const result = await handlePublicMoovRecipientTosAccept(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      liveProviderTransactions: false,
       ...result,
     });
   }
