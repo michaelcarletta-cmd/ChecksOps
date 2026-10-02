@@ -1,0 +1,36 @@
+{
+  "workstream_id": "pr601-prod-final-a2a4",
+  "branch": "cursor/pr601-prod-final-a2a4",
+  "kind": "production_sql_membership_only",
+  "applied_at": "2026-10-02T20:25:11.000Z",
+  "grant_revoke_rls": false,
+  "spa_write": false,
+  "cognito_iam_env_moov_changes": false,
+  "production_api_unchanged": {
+    "CodeSha256": "rWKOsHhlnZB+4a0SMiM0KDN0eflwVbgu9h1YPDP2KeQ=",
+    "RevisionId": "822ac283-370e-45af-aab6-58cf3e967b5c"
+  },
+  "inspect_lambda_restored": {
+    "function_name": "checksops-prod-pr601-sql-inspect-a2a4",
+    "CodeSha256": "IJMzXCA6+5bzhGOKuPBo6egcU7c1XThNUYguf0bG3A0="
+  },
+  "sql": {
+    "source_sha256": "298506c90be829222c75781dd7c546fdefc6c5b2fa5cf86442eed30d383ef22e",
+    "user_can_move_tenant_checks": {
+      "before": "6117128f04865fbd2dfd758bec1ecbc7f283e1fe047651d5f3b84521e61d3fe2",
+      "after": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "membership_only": true,
+      "has_role": false
+    },
+    "admin_override_check_status": {
+      "before": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+      "after": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+      "unchanged": true,
+      "allows_deposited": false
+    },
+    "pair_sha256": {
+      "before": "4138ead09bc27ebeeaf5e902f8685d945165d65501bd3fb90b1bcce168db2802",
+      "after": "0cd4a7b515656be4777a1f467aa7ca3e0160060031fca66b207cc9fb0854b48e"
+    }
+  }
+}
