@@ -32,6 +32,37 @@ export const AUTHORIZED_SQL44 = Object.freeze({
   expected_sql43_definition_sha256: '31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806',
 });
 
+export const AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS = Object.freeze({
+  filename: 'supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql',
+  migration_id: '20261001231500_tenant_users_same_check_permissions',
+  commit: '6b222b63c955e8c47569ef3704541303680c649e',
+  source_sha256: '573ec6a0178d04a041e053aeb724560950b504d162b6f113563bec5108a0e518',
+  intended_replacement_sha256: '573ec6a0178d04a041e053aeb724560950b504d162b6f113563bec5108a0e518',
+  function_identities: Object.freeze([
+    'public.user_can_move_tenant_checks(uuid,uuid)',
+    'public.admin_override_check_status(uuid,text,uuid)',
+  ]),
+});
+
+export const AUTHORIZED_STAGING_SQL = Object.freeze([
+  AUTHORIZED_SQL44,
+  AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+]);
+
+export function resolveAuthorizedMigration(input = {}) {
+  if (
+    input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
+    || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id
+  ) {
+    return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
+  }
+  return AUTHORIZED_SQL44;
+}
+
+export function isTenantUsersSameCheckPermissions(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
+}
+
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const ONE_USE_RE = /^[A-Za-z0-9._:-]{8,128}$/;
 const ALLOWED_ACTIONS = new Set(['authorize', 'apply', 'inspect', 'verify_data']);
@@ -60,7 +91,7 @@ function matchingAllowlistEntry(input, allowlist) {
 }
 
 export function evaluateSqlExecutorAuthorization(input = {}, opts = {}) {
-  const allowlist = opts.allowlist || [AUTHORIZED_SQL44];
+  const allowlist = opts.allowlist || AUTHORIZED_STAGING_SQL;
   const now = typeof opts.now === 'number' ? opts.now : Date.now();
   const errors = [];
 

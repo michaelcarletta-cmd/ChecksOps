@@ -16,12 +16,14 @@ import {
 import { buildManifest, validateWorkstreamIdentity } from '../../scripts/deployment-guard/lib/identity.mjs';
 import { evaluateDistFreshness, evaluatePackageProvenance } from '../../scripts/deployment-guard/lib/packages.mjs';
 import {
+  evaluateApplyFingerprintCas,
   evaluateFingerprintCas,
   evaluateLambdaOverlay,
   evaluateMembership,
   evaluatePostOverlay,
   evaluateSameFileConflict,
   planLambdaApply,
+  requireLambdaApplyFingerprint,
 } from '../../scripts/deployment-guard/lib/lambda-overlay.mjs';
 import { evaluateSourceComposition, evaluateSpaPromote } from '../../scripts/deployment-guard/lib/spa-promote.mjs';
 import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
@@ -100,6 +102,42 @@ test('C. CodeSha changed -> STOP', () => {
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
   assert.match(result.message, /CodeSha256/);
+});
+
+test('apply CAS refuses incomplete { note: "no-sha" } fingerprints', () => {
+  const result = evaluateApplyFingerprintCas({
+    preflight: { note: 'no-sha' },
+    immediatelyBefore: { codeSha256: 'live-sha', revisionId: 'rev-1' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(result.message, /CodeSha256/);
+});
+
+test('apply CAS refuses missing-only CodeSha256 and missing-only RevisionId', () => {
+  const missingSha = requireLambdaApplyFingerprint({ revisionId: 'rev-1' }, 'receipt preflight');
+  assert.equal(missingSha.ok, false);
+  assert.equal(missingSha.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(missingSha.message, /CodeSha256/);
+
+  const missingRev = requireLambdaApplyFingerprint({ codeSha256: 'live-sha' }, 'receipt preflight');
+  assert.equal(missingRev.ok, false);
+  assert.equal(missingRev.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(missingRev.message, /RevisionId/);
+
+  const emptySha = requireLambdaApplyFingerprint({ codeSha256: '   ', revisionId: 'rev-1' }, 'receipt preflight');
+  assert.equal(emptySha.ok, false);
+  const malformed = requireLambdaApplyFingerprint(['not-an-object'], 'receipt preflight');
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.code, CODES.INVALID_MANIFEST);
+});
+
+test('evaluate-only CAS remains compatible when optional fields are absent', () => {
+  const result = evaluateFingerprintCas({
+    preflight: { note: 'no-sha' },
+    immediatelyBefore: { note: 'no-sha' },
+  });
+  assert.equal(result.ok, true);
 });
 
 test('D. same owned file concurrently changed -> reconciliation required', () => {

@@ -13,12 +13,12 @@ import { parseArgs, printResult, readInput } from './lib/cli.mjs';
 import { CODES, fail } from './lib/errors.mjs';
 import { enforceScriptGuard } from './require-guard.mjs';
 import {
-  AUTHORIZED_SQL44,
   SQL_EXECUTOR_COMPONENT,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   SQL_EXECUTOR_FUNCTION,
   authorizationFingerprint,
   evaluateSqlExecutorAuthorization,
+  resolveAuthorizedMigration,
 } from './lib/sql-executor-auth.mjs';
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
@@ -35,20 +35,21 @@ function refuseFunctionName(name) {
 }
 
 export function buildExecutorPayload(input = {}, receipt = {}) {
+  const authorized = resolveAuthorizedMigration(input);
   const payload = {
     action: input.action || 'apply',
     workstream_id: input.workstream_id || receipt.workstream_id,
     branch: input.branch || receipt.branch,
-    commit: input.commit || receipt.commit || AUTHORIZED_SQL44.commit,
+    commit: input.commit || receipt.commit || authorized.commit,
     operator: input.operator || receipt.operator,
     target_environment: 'staging',
     target_component: SQL_EXECUTOR_COMPONENT,
     deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
-    owned_components: input.owned_components || [AUTHORIZED_SQL44.filename],
-    filename: input.filename || AUTHORIZED_SQL44.filename,
-    migration_id: input.migration_id || AUTHORIZED_SQL44.migration_id,
-    source_sha256: input.source_sha256 || AUTHORIZED_SQL44.source_sha256,
-    intended_replacement_sha256: input.intended_replacement_sha256 || AUTHORIZED_SQL44.intended_replacement_sha256,
+    owned_components: input.owned_components || [authorized.filename],
+    filename: input.filename || authorized.filename,
+    migration_id: input.migration_id || authorized.migration_id,
+    source_sha256: input.source_sha256 || authorized.source_sha256,
+    intended_replacement_sha256: input.intended_replacement_sha256 || authorized.intended_replacement_sha256,
     expected_live_definition_sha256: input.expected_live_definition_sha256,
     one_use_id: input.one_use_id,
     expiry: input.expiry || receipt.expiry,
@@ -69,16 +70,17 @@ export function main(argv = process.argv.slice(2), env = process.env, invokeFn =
   const refused = refuseFunctionName(functionName);
   if (refused) return printResult(refused);
 
+  const authorizedMigration = resolveAuthorizedMigration(input);
   const fingerprint = input.preflight_live_fingerprint || authorizationFingerprint({
-    ...AUTHORIZED_SQL44,
+    ...authorizedMigration,
     ...input,
-    commit: input.commit || AUTHORIZED_SQL44.commit,
+    commit: input.commit || authorizedMigration.commit,
   });
 
   const authorized = enforceScriptGuard({
     script: import.meta.url,
     workstream_id: opts['workstream-id'] || input.workstream_id,
-    commit: opts.commit || input.commit || AUTHORIZED_SQL44.commit,
+    commit: opts.commit || input.commit || authorizedMigration.commit,
     target_environment: 'staging',
     target_component: SQL_EXECUTOR_COMPONENT,
     deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,

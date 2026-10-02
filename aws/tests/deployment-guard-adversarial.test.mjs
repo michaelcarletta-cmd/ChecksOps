@@ -88,6 +88,7 @@ const DIRECT_WRITERS = [
   ['aws/cutover/scripts/hardening-batch4-apply.mjs', ['--confirm-batch4']],
   ['aws/cutover/scripts/hardening-batch5-apply.mjs', ['--confirm-batch5']],
   ['scripts/deployment-guard/spa-upload.mjs', ['--environment', 'production']],
+  ['scripts/deployment-guard/lambda-overlay-apply.mjs', ['--apply']],
   ['scripts/deployment-guard/production-spa-upload.mjs', ['--input', 'ops/deployment-guard/protected-targets.json']],
   ['scripts/deployment-guard/sql-executor-invoke.mjs', []],
   ['scripts/deployment-guard/staging-spa-upload.mjs', ['--environment', 'staging']],
@@ -103,6 +104,34 @@ for (const [script, args, extraEnv] of DIRECT_WRITERS) {
     assert.equal(result.awsLog, '');
   });
 }
+
+test('A. both #604 production SPA and #606 Lambda overlay writers stay in inventory', () => {
+  const requiredGuardedWriters = [
+    'scripts/deployment-guard/lambda-overlay-apply.mjs',
+    'scripts/deployment-guard/production-spa-upload.mjs',
+  ];
+  const directPaths = DIRECT_WRITERS.map(([script]) => script);
+  const inventory = JSON.parse(fs.readFileSync(
+    path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'),
+    'utf8',
+  ));
+  const byPath = Object.fromEntries((inventory.scripts || []).map((row) => [row.path, row]));
+  for (const writer of requiredGuardedWriters) {
+    assert.ok(directPaths.includes(writer), `DIRECT_WRITERS dropped ${writer}`);
+    assert.ok(fs.existsSync(path.join(ROOT, writer)), writer);
+    assert.equal(byPath[writer]?.classification, 'GUARDED', `${writer} classification`);
+  }
+  assert.ok(
+    (byPath['scripts/deployment-guard/lambda-overlay-apply.mjs'].capabilities || [])
+      .includes('lambda-update-function-code'),
+    'lambda-overlay-apply must retain lambda-update-function-code capability',
+  );
+  assert.ok(
+    (byPath['scripts/deployment-guard/production-spa-upload.mjs'].capabilities || [])
+      .includes('s3-put-object'),
+    'production-spa-upload must retain s3-put-object capability',
+  );
+})
 
 test('B. APPLY/BYPASS/SKIP env vars cannot authorize mutation', () => {
   const root = tmpRoot();
