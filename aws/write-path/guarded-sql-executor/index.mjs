@@ -11,12 +11,18 @@ import { CODES, fail, ok } from './lib/errors.mjs';
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
+  AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_FUNCTION,
   evaluateSqlExecutorAuthorization,
+  isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SQL_FILE = path.join(ROOT, 'sql/44_claim_ledger_link_or_create.sql');
+const TENANT_PERMISSIONS_SQL_FILE = path.join(
+  ROOT,
+  'sql/20261001231500_tenant_users_same_check_permissions.sql',
+);
 const CA_CANDIDATES = [
   path.join(ROOT, 'rds-global-bundle.pem'),
   '/var/task/rds-global-bundle.pem',
@@ -60,16 +66,55 @@ function isConsumed(id) {
   return loadConsumed().ids.includes(id);
 }
 
-function readEmbeddedSql(sqlFile = SQL_FILE) {
+export function extractPinnedFunctionSql(sqlText, name) {
+  const re = new RegExp(
+    `CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?(?:\\$function\\$[\\s\\S]*?\\$function\\$|\\$\\$[\\s\\S]*?\\$\\$);`,
+    'i',
+  );
+  const match = String(sqlText || '').match(re);
+  return match ? match[0] : null;
+}
+
+export function hashTenantPermissionLiveDefs(defs = {}) {
+  return hashSqlDefinition(JSON.stringify({
+    user_can_move_tenant_checks: defs.user_can_move_tenant_checks || null,
+    admin_override_check_status: defs.admin_override_check_status || null,
+  }));
+}
+
+export function tenantPermissionDefsAreExact(live, sourceText) {
+  const intendedMove = extractPinnedFunctionSql(sourceText, 'user_can_move_tenant_checks');
+  const intendedOverride = extractPinnedFunctionSql(sourceText, 'admin_override_check_status');
+  if (!intendedMove || !intendedOverride) return false;
+  if (!live?.user_can_move_tenant_checks || !live?.admin_override_check_status) return false;
+  return hashSqlDefinition(live.user_can_move_tenant_checks) === hashSqlDefinition(intendedMove)
+    && hashSqlDefinition(live.admin_override_check_status) === hashSqlDefinition(intendedOverride);
+}
+
+export function tenantPermissionMarkersMatch(live = {}) {
+  const move = String(live.user_can_move_tenant_checks || '');
+  const override = String(live.admin_override_check_status || '');
+  if (!move || !override) return false;
+  if (!move.includes('user_belongs_to_tenant') || !move.includes('has_role')) return false;
+  if (!override.includes('user_can_move_tenant_checks')) return false;
+  const allow = override.match(/v_allowed text\[\] := ARRAY\[([\s\S]*?)\]/);
+  if (!allow) return false;
+  if (allow[1].includes("'deposited'")) return false;
+  return true;
+}
+
+function readEmbeddedSql(sqlFile = SQL_FILE, authorizedSha = AUTHORIZED_SQL44.source_sha256) {
   if (!fs.existsSync(sqlFile)) {
-    return fail(CODES.INVALID_MANIFEST, 'embedded SQL 44 file is missing from the executor package');
+    return fail(CODES.INVALID_MANIFEST, 'embedded SQL file is missing from the executor package', {
+      sql_file: sqlFile,
+    });
   }
   const text = fs.readFileSync(sqlFile, 'utf8');
   const sourceSha = sha256File(sqlFile);
-  if (sourceSha !== AUTHORIZED_SQL44.source_sha256) {
+  if (sourceSha !== authorizedSha) {
     return fail(CODES.SQL_COLLISION, 'embedded SQL file SHA256 does not match the authorized source', {
       embedded_sha256: sourceSha,
-      authorized_sha256: AUTHORIZED_SQL44.source_sha256,
+      authorized_sha256: authorizedSha,
     });
   }
   for (const marker of FORBIDDEN_GRANT_MARKERS) {
@@ -271,10 +316,128 @@ function executionReceipt({
   };
 }
 
+async function readTenantPermissionDefs(client) {
+  const [move, override] = await Promise.all([
+    readFunctionDef(client, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.function_identities[0]),
+    readFunctionDef(client, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.function_identities[1]),
+  ]);
+  return {
+    user_can_move_tenant_checks: move || null,
+    admin_override_check_status: override || null,
+  };
+}
+
+async function handleTenantPermissions({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile601,
+}) {
+  const embedded = readEmbeddedSql(
+    sqlFile601,
+    AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256,
+  );
+  if (!embedded.ok) return embedded;
+
+  let client;
+  try {
+    client = await connect();
+    const live = await readTenantPermissionDefs(client);
+    const liveHash = hashTenantPermissionLiveDefs(live);
+    if (
+      event.expected_live_definition_sha256
+      && event.expected_live_definition_sha256 !== liveHash
+    ) {
+      return fail(CODES.SQL_COLLISION, 'live tenant-permission function definitions differ from the expected baseline', {
+        expected_live_definition_sha256: event.expected_live_definition_sha256,
+        live_definition_sha256: liveHash,
+      });
+    }
+
+    const exact = tenantPermissionDefsAreExact(live, embedded.details.text)
+      || tenantPermissionMarkersMatch(live);
+    const absent = !live.user_can_move_tenant_checks && !live.admin_override_check_status;
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: event.action,
+          executor_identity: identity,
+          live_functions: {
+            user_can_move_tenant_checks: Boolean(live.user_can_move_tenant_checks),
+            admin_override_check_status: Boolean(live.admin_override_check_status),
+          },
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported tenant-permission executor action ${event.action}`);
+    }
+
+    if (exact) {
+      consumeOneUse(event.one_use_id);
+      return ok({
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: 'idempotent',
+          executor_identity: identity,
+        },
+      });
+    }
+
+    if (!absent) {
+      return fail(CODES.SQL_COLLISION, 'live function definition conflicts with the pinned #601 migration', {
+        live_definition_sha256: liveHash,
+      });
+    }
+
+    await client.query(embedded.details.text);
+    const after = await readTenantPermissionDefs(client);
+    const afterHash = hashTenantPermissionLiveDefs(after);
+    if (!after.user_can_move_tenant_checks || !after.admin_override_check_status) {
+      return fail(CODES.SQL_COLLISION, 'apply did not create the expected #601 functions');
+    }
+    if (!tenantPermissionDefsAreExact(after, embedded.details.text) && !tenantPermissionMarkersMatch(after)) {
+      return fail(CODES.SQL_COLLISION, 'applied #601 definitions do not match the pinned migration');
+    }
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveHash,
+        after_hash: afterHash,
+        result: 'applied',
+        executor_identity: identity,
+      },
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function createHandler({
   connect = defaultConnect,
   now = () => Date.now(),
   sqlFile = SQL_FILE,
+  sqlFile601 = TENANT_PERMISSIONS_SQL_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
 } = {}) {
   return async function handler(event = {}) {
@@ -291,6 +454,16 @@ export function createHandler({
     if (isConsumed(event.one_use_id) && event.action === 'apply') {
       return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
         one_use_id: event.one_use_id,
+      });
+    }
+
+    if (isTenantUsersSameCheckPermissions(event)) {
+      return handleTenantPermissions({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile601,
       });
     }
 

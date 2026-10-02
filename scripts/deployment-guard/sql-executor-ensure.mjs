@@ -41,6 +41,7 @@ export function packExecutor(root) {
     ['aws/write-path/guarded-sql-executor/index.mjs', 'index.mjs'],
     ['aws/write-path/guarded-sql-executor/package.json', 'package.json'],
     ['aws/write-path/sql/44_claim_ledger_link_or_create.sql', 'sql/44_claim_ledger_link_or_create.sql'],
+    ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
     ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
     ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
     ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

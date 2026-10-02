@@ -12,6 +12,7 @@ import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-gu
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
 import {
   AUTHORIZED_SQL44,
+  AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   authorizationFingerprint,
   evaluateSqlExecutorAuthorization,
@@ -239,6 +240,139 @@ test('unguarded sql-executor-invoke fails before AWS', () => {
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
   assert.equal(fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '', '');
+});
+
+test('#601 exact pin is accepted and wrong hash/commit/filename are refused', () => {
+  const bytes = fs.readFileSync(path.join(ROOT, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename));
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  assert.equal(sha, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256);
+  const absentLive = '0'.repeat(64);
+  const pin = evaluateSqlExecutorAuthorization({
+    workstream_id: 'tenant-permissions',
+    branch: 'cursor/staging-guard-writers-ad6f',
+    commit: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename],
+    filename: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename,
+    migration_id: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id,
+    source_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.intended_replacement_sha256,
+    expected_live_definition_sha256: absentLive,
+    one_use_id: 'tenant-perm-0001',
+    expiry: '2026-10-02T02:00:00.000Z',
+    action: 'authorize',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-02T00:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+      expected_live_definition_sha256: absentLive,
+      one_use_id: 'tenant-perm-0001',
+    }),
+  });
+  assert.equal(pin.ok, true, pin.message);
+
+  const wrongHash = evaluateSqlExecutorAuthorization({
+    ...pin.details && {},
+    workstream_id: 'tenant-permissions',
+    branch: 'cursor/staging-guard-writers-ad6f',
+    commit: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename],
+    filename: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename,
+    migration_id: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id,
+    source_sha256: '1'.repeat(64),
+    intended_replacement_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.intended_replacement_sha256,
+    expected_live_definition_sha256: absentLive,
+    one_use_id: 'tenant-perm-0002',
+    expiry: '2026-10-02T02:00:00.000Z',
+    action: 'authorize',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-02T00:00:00.000Z',
+  });
+  assert.equal(wrongHash.ok, false);
+  assert.equal(wrongHash.code, CODES.SQL_COLLISION);
+
+  const wrongCommit = evaluateSqlExecutorAuthorization({
+    workstream_id: 'tenant-permissions',
+    branch: 'cursor/staging-guard-writers-ad6f',
+    commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename],
+    filename: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename,
+    migration_id: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id,
+    source_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.intended_replacement_sha256,
+    expected_live_definition_sha256: absentLive,
+    one_use_id: 'tenant-perm-0003',
+    expiry: '2026-10-02T02:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-02T00:00:00.000Z',
+  });
+  assert.equal(wrongCommit.ok, false);
+  assert.equal(wrongCommit.code, CODES.SQL_COLLISION);
+
+  const wrongFile = evaluateSqlExecutorAuthorization({
+    workstream_id: 'tenant-permissions',
+    branch: 'cursor/staging-guard-writers-ad6f',
+    commit: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: ['other.sql'],
+    filename: 'other.sql',
+    migration_id: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id,
+    source_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.intended_replacement_sha256,
+    expected_live_definition_sha256: absentLive,
+    one_use_id: 'tenant-perm-0004',
+    expiry: '2026-10-02T02:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-02T00:00:00.000Z',
+  });
+  assert.equal(wrongFile.ok, false);
+  assert.equal(wrongFile.code, CODES.SQL_COLLISION);
+});
+
+test('#601 arbitrary SQL and production remain refused', () => {
+  const absentLive = '0'.repeat(64);
+  const base = {
+    workstream_id: 'tenant-permissions',
+    branch: 'cursor/staging-guard-writers-ad6f',
+    commit: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename],
+    filename: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename,
+    migration_id: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id,
+    source_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.intended_replacement_sha256,
+    expected_live_definition_sha256: absentLive,
+    one_use_id: 'tenant-perm-0005',
+    expiry: '2026-10-02T02:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-02T00:00:00.000Z',
+  };
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...base,
+    sql_text: 'DROP FUNCTION public.user_can_move_tenant_checks',
+  }).code, CODES.UNRELATED_MUTATION);
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...base,
+    target_environment: 'production',
+    target_component: 'production-sql',
+  }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
 test('sql-executor-ensure refuses shared API and billing sql44 retarget before AWS', () => {

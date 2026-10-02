@@ -9,6 +9,7 @@ import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
+  AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 const EXECUTOR_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor');
@@ -17,7 +18,7 @@ fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
 for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs']) {
   fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
 }
-const { createHandler } = await import('../write-path/guarded-sql-executor/index.mjs');
+const { createHandler, extractPinnedFunctionSql, hashTenantPermissionLiveDefs } = await import('../write-path/guarded-sql-executor/index.mjs');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SQL_FILE = path.join(ROOT, AUTHORIZED_SQL44.filename);
@@ -218,4 +219,125 @@ test('create_new remains forbidden on the executor', async () => {
   const result = await handler(authEvent({ action: 'create_new' }));
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.UNRELATED_MUTATION);
+});
+
+const TENANT_SQL = path.join(ROOT, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename);
+const TENANT_SQL_TEXT = fs.readFileSync(TENANT_SQL, 'utf8');
+const PINNED_MOVE = extractPinnedFunctionSql(TENANT_SQL_TEXT, 'user_can_move_tenant_checks');
+const PINNED_OVERRIDE = extractPinnedFunctionSql(TENANT_SQL_TEXT, 'admin_override_check_status');
+
+function tenantAuthEvent(overrides = {}) {
+  const live = overrides.liveDefs || { user_can_move_tenant_checks: null, admin_override_check_status: null };
+  const expectedLive = overrides.expected_live_definition_sha256 || hashTenantPermissionLiveDefs(live);
+  const oneUse = overrides.one_use_id || `tenant-perm-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return {
+    action: 'apply',
+    workstream_id: 'tenant-permissions',
+    branch: 'cursor/staging-guard-writers-ad6f',
+    commit: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+    owned_components: [AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename],
+    filename: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename,
+    migration_id: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id,
+    source_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: oneUse,
+    expiry: '2026-10-02T02:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-02T00:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+      expected_live_definition_sha256: expectedLive,
+      one_use_id: oneUse,
+    }),
+    ...overrides,
+  };
+}
+
+function mockTenantConnect({
+  moveDef = null,
+  overrideDef = null,
+} = {}) {
+  let applied = false;
+  const client = {
+    applied() { return applied; },
+    async query(sql, params = []) {
+      const text = String(sql);
+      if (text.includes('current_database')) return { rows: [{ d: 'checksops' }] };
+      if (text.includes('CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks')) {
+        applied = true;
+        return { rows: [] };
+      }
+      if (text.includes('pg_get_functiondef')) {
+        const ident = String(params?.[0] || '');
+        if (ident.includes('user_can_move_tenant_checks')) {
+          const def = applied ? PINNED_MOVE : moveDef;
+          return { rows: def ? [{ def }] : [] };
+        }
+        if (ident.includes('admin_override_check_status')) {
+          const def = applied ? PINNED_OVERRIDE : overrideDef;
+          return { rows: def ? [{ def }] : [] };
+        }
+        return { rows: [] };
+      }
+      throw new Error(`unexpected query: ${text.slice(0, 120)}`);
+    },
+    async end() {},
+  };
+  return async () => client;
+}
+
+function tenantHandler(connect, extra = {}) {
+  const consumed = path.join(os.tmpdir(), `sql-exec-tenant-${process.pid}-${Date.now()}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = consumed;
+  process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
+  return createHandler({
+    connect,
+    now: () => Date.parse('2026-10-02T00:00:00.000Z'),
+    sqlFile601: TENANT_SQL,
+    ...extra,
+  });
+}
+
+test('#601 absent definitions are eligible to apply from the pinned file', async () => {
+  assert.ok(PINNED_MOVE && PINNED_OVERRIDE);
+  const connect = mockTenantConnect();
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'applied');
+  const client = await connect();
+  assert.equal(client.applied(), true);
+});
+
+test('#601 exact existing definition is idempotent and does not rewrite', async () => {
+  const live = {
+    user_can_move_tenant_checks: PINNED_MOVE,
+    admin_override_check_status: PINNED_OVERRIDE,
+  };
+  const connect = mockTenantConnect({ moveDef: PINNED_MOVE, overrideDef: PINNED_OVERRIDE });
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent({ liveDefs: live }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'idempotent');
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('#601 conflicting live definition fails closed with SQL_COLLISION', async () => {
+  const live = {
+    user_can_move_tenant_checks: 'CREATE FUNCTION public.user_can_move_tenant_checks() OLD',
+    admin_override_check_status: 'CREATE FUNCTION public.admin_override_check_status() OLD',
+  };
+  const handler = tenantHandler(mockTenantConnect({
+    moveDef: live.user_can_move_tenant_checks,
+    overrideDef: live.admin_override_check_status,
+  }));
+  const result = await handler(tenantAuthEvent({ liveDefs: live }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
 });
