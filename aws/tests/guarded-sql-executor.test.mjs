@@ -294,9 +294,23 @@ function tenantAuthEvent(overrides = {}) {
   };
 }
 
+const LIVE_SHAPED_MOVE = `CREATE OR REPLACE FUNCTION public.user_can_move_tenant_checks(_user_id uuid, _tenant_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT
+    public.has_role(_user_id, 'admin'::app_role)
+    OR public.user_belongs_to_tenant(_user_id, _tenant_id)
+$function$`;
+const LIVE_SHAPED_OVERRIDE = PINNED_OVERRIDE.replace(/;\s*$/, '');
+
 function mockTenantConnect({
   moveDef = null,
   overrideDef = null,
+  afterApplyMove = PINNED_MOVE,
+  afterApplyOverride = PINNED_OVERRIDE,
   lookupError = null,
   duplicateFor = null,
 } = {}) {
@@ -323,11 +337,11 @@ function mockTenantConnect({
           return { rows: [{ def: 'CREATE FUNCTION duplicate A' }, { def: 'CREATE FUNCTION duplicate B' }] };
         }
         if (name.includes('user_can_move_tenant_checks')) {
-          const def = applied ? PINNED_MOVE : moveDef;
+          const def = applied ? afterApplyMove : moveDef;
           return { rows: def ? [{ def }] : [] };
         }
         if (name.includes('admin_override_check_status')) {
-          const def = applied ? PINNED_OVERRIDE : overrideDef;
+          const def = applied ? afterApplyOverride : overrideDef;
           return { rows: def ? [{ def }] : [] };
         }
         return { rows: [] };
@@ -361,6 +375,21 @@ test('#601 absent definitions are eligible to apply from the pinned file', async
   assert.equal(result.details.receipt.result, 'applied');
   const client = await connect();
   assert.equal(client.applied(), true);
+});
+
+test('#601 apply accepts live pg_get_functiondef text that matches the pinned body', async () => {
+  assert.equal(tenantPermissionDefsAreExact({
+    user_can_move_tenant_checks: LIVE_SHAPED_MOVE,
+    admin_override_check_status: LIVE_SHAPED_OVERRIDE,
+  }, TENANT_SQL_TEXT), true);
+  const connect = mockTenantConnect({
+    afterApplyMove: LIVE_SHAPED_MOVE,
+    afterApplyOverride: LIVE_SHAPED_OVERRIDE,
+  });
+  const handler = tenantHandler(connect);
+  const result = await handler(tenantAuthEvent());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'applied');
 });
 
 test('#601 exact existing definition is idempotent and does not rewrite', async () => {
@@ -500,7 +529,8 @@ test('#601 one exact and one modified definition is SQL_COLLISION', async () => 
 test('readFunctionDef returns exists:false only for a true zero-row catalog miss', async () => {
   assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('::regprocedure'), false);
   assert.match(FUNCTION_DEF_LOOKUP_SQL, /pg_proc/);
-  assert.match(FUNCTION_DEF_LOOKUP_SQL, /p\.proargtypes::oid\[\]/);
+  assert.match(FUNCTION_DEF_LOOKUP_SQL, /unnest\(p\.proargtypes::oid\[\]\)/);
+  assert.equal(/p\.proargtypes::oid\[\]\s*=/.test(FUNCTION_DEF_LOOKUP_SQL), false);
   assert.equal(/AS\s+oidvector/i.test(FUNCTION_DEF_LOOKUP_SQL), false);
   assert.equal(FUNCTION_DEF_LOOKUP_SQL.includes('pg_get_function_identity_arguments'), false);
   const client = {
