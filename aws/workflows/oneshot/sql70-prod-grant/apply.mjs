@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceScriptGuard } from '../../../scripts/deployment-guard/require-guard.mjs';
+import { enforceScriptGuard } from '../../../../scripts/deployment-guard/require-guard.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
