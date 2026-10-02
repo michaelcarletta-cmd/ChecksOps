@@ -11,6 +11,7 @@ import {
   Gauge,
   Landmark,
   Loader2,
+  Power,
   PowerOff,
   RefreshCw,
   Sparkles,
@@ -39,7 +40,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
-import { summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
+import { automaticPayoutControl, summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
@@ -127,6 +128,7 @@ export default function WalletOps() {
     stale,
     refresh: refreshSweeps,
     disable: disableSweeps,
+    enable: enableSweeps,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   const refreshStatuses = useRefreshTransferStatuses();
@@ -157,7 +159,8 @@ export default function WalletOps() {
         ? "Pending setup"
         : "Pending sync";
 
-  const sweepsOn = config?.status === "enabled";
+  const payoutControl = automaticPayoutControl(config);
+  const sweepsOn = payoutControl.sweepsOn;
 
   const lastSweep = (history ?? []).find((row) => sweepAmountCents(row) > 0) ?? history?.[0];
   const sweepActivity = summarizeSweepActivity({
@@ -478,33 +481,51 @@ export default function WalletOps() {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {sweepsOn && (
+            {payoutControl.show && (
               <Button
                 variant="outline"
                 className="gap-2"
-                disabled={disableSweeps.isPending}
+                disabled={disableSweeps.isPending || enableSweeps.isPending || refreshSweeps.isPending}
                 onClick={async () => {
+                  const turningOff = payoutControl.action === "disable";
                   try {
-                    await disableSweeps.mutateAsync();
+                    if (turningOff) {
+                      await disableSweeps.mutateAsync();
+                    } else {
+                      await enableSweeps.mutateAsync();
+                    }
+                    try {
+                      await refreshSweeps.mutateAsync();
+                    } catch {
+                      /* mutation already invalidated the query; do not claim failure */
+                    }
                     toast({
-                      title: "Automatic payouts turned off",
-                      description: "Leftover wallet money will stay in the wallet until you move it.",
+                      title: turningOff ? "Automatic payouts turned off" : "Automatic payouts turned on",
+                      description: turningOff
+                        ? "Leftover wallet money will stay in the wallet until you move it."
+                        : "Leftover wallet money will be sent to your bank on the next daily sweep.",
                     });
                   } catch (e) {
                     toast({
-                      title: "Could not turn off automatic payouts",
+                      title: turningOff
+                        ? "Could not turn off automatic payouts"
+                        : "Could not turn on automatic payouts",
                       description: (e as Error).message,
                       variant: "destructive",
                     });
                   }
                 }}
               >
-                {disableSweeps.isPending ? (
+                {disableSweeps.isPending || enableSweeps.isPending ? (
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                ) : (
+                ) : payoutControl.action === "disable" ? (
                   <PowerOff className="h-4 w-4" />
+                ) : (
+                  <Power className="h-4 w-4" />
                 )}
-                Turn off automatic payouts
+                {payoutControl.action === "disable"
+                  ? "Turn off automatic payouts"
+                  : "Turn on automatic payouts"}
               </Button>
             )}
             <Dialog>

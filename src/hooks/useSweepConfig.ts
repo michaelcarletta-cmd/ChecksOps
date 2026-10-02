@@ -3,6 +3,7 @@ import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibi
 import {
   createSweep,
   disableSweep,
+  enableSweep,
   getSweepSnapshot,
   listRecentSweeps,
   updateSweep,
@@ -57,6 +58,15 @@ export function useSweepConfig(walletType: string = "operating") {
     onSuccess: invalidate,
   });
 
+  const enable = useMutation({
+    mutationFn: () => enableSweep(
+      tenantId!,
+      walletType,
+      query.data?.sweep_config?.provider_sweep_config_id,
+    ),
+    onSuccess: invalidate,
+  });
+
   const refresh = useMutation({
     mutationFn: () => {
       if (!tenantId) throw new Error("Organization isn't loaded yet. Try again in a moment.");
@@ -86,5 +96,6 @@ export function useSweepConfig(walletType: string = "operating") {
     refresh,
     save,
     disable,
+    enable,
   };
 }
