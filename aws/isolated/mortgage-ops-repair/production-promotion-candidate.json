@@ -1,0 +1,40 @@
+{
+  "environment": "production",
+  "approved": true,
+  "writes_aws": false,
+  "note": "Preflight candidate only. deploy=false. Do not set CHECKSOPS_PRODUCTION_DEPLOY.",
+  "components": {
+    "production-spa": {
+      "deploy": false,
+      "hash": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
+      "spa_bundle": "/assets/index-BgOCQCWm.js",
+      "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+      "s3_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd",
+      "based_on_baseline": {
+        "spa_bundle": "/assets/index-BgOCQCWm.js",
+        "spa_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+        "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+        "s3_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd"
+      },
+      "preflight_production": {
+        "spa_bundle": "/assets/index-BgOCQCWm.js",
+        "spa_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+        "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+        "s3_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd"
+      },
+      "live_production": {
+        "spa_bundle": "/assets/index-BgOCQCWm.js",
+        "spa_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+        "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+        "s3_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd"
+      },
+      "deploy_mode": "per_object_put",
+      "contains_accepted_baseline": true,
+      "reconciled_to_production_baseline": true,
+      "source_branch": "cursor/mortgage-ops-repair-ad99"
+    },
+    "database-rls": {
+      "deploy": false
+    }
+  }
+}

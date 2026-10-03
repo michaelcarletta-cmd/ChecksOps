@@ -1,0 +1,384 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "branch": "cursor/mortgage-ops-repair-ad99",
+  "pr": 631,
+  "mode": "production-promotion-preflight-only",
+  "writes_aws": false,
+  "promoted_to_production": false,
+  "gate4_b_completed": false,
+  "stop": false,
+  "stop_reason": null,
+  "captured_at": "2026-10-03T10:28:16Z",
+  "recorded_at": "2026-10-03T10:35:03Z",
+  "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "source_head_at_record": "46dfbd8c7eeee65ad599aeba6cd7775a0577092f",
+  "authorities_moved_since_gate4_recon": false,
+  "forward_compose_possible": true,
+  "current_production": {
+    "spa": {
+      "bucket": "checksops-production-frontend-806168576068",
+      "cloudfront": "E1B0ZWWO5559U5",
+      "host": "https://checksops.com",
+      "index": "/assets/index-BgOCQCWm.js",
+      "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+      "index_html_etag": "b70636253b28bbeb25af61c9e105ebf2",
+      "index_html_last_modified": "2026-10-02T21:26:09+00:00",
+      "index_html_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd",
+      "entry_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+      "queue": "MortgageOpsQueue-BD_nUT7A.js",
+      "queue_sha256": "a5a5a5b1318e09a8c53290d6e6bf2ba57f428d85c6406bd4d96c0f25fdec6288",
+      "login": "MortgageOpsLogin-Phn06bQA.js",
+      "login_sha256": "c56996bc719c0e7a4e365cf888e0197515f3f51820a58f621cfa76dbf7b31a21",
+      "css": "index-C9b4-_no.css",
+      "css_sha256": "fd80eaf5a2ed3227426e1d2e3251b3b34279b8e1afa08f1931725b89d919e049",
+      "sw_js": false,
+      "matches_last_recon": true
+    },
+    "lambda": {
+      "function": "checksops-production-prep-api",
+      "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+      "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+      "LastModified": "2026-10-02T20:26:42.000+0000",
+      "zip_sha256": "9dcd49d608d14781998a720987facd3298bf3d7777670aa0a1449cf4d465c158",
+      "member_count": 6477,
+      "workflow_rpc_sha256": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+      "mortgage_ops_usage_present": false,
+      "matches_last_recon": true,
+      "flags": {
+        "AWS_WRITES_ENABLED": "true",
+        "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": "true",
+        "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "true",
+        "AWS_PROVIDER_EXECUTION_ENABLED": "true",
+        "AWS_MOOV_ENABLED": "true",
+        "AWS_MOOV_TRANSFER_POST_ENABLED": "true",
+        "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": "false",
+        "AWS_CHECKALT_ENABLED": "true",
+        "AWS_PLAID_ENABLED": "false",
+        "note": "Production flags stay as-live. Overlay must not change environment variables."
+      }
+    },
+    "sql": {
+      "standing_production_sql_executor": null,
+      "do_not_deploy_staging_executor": true,
+      "do_not_replace_with_origin_main": true,
+      "existing_oneshots_not_sql39": [
+        "checksops-prod-pr601-sql-inspect-a2a4",
+        "checksops-prod-claim-ledger-sql-inspect-a2a4",
+        "checksops-prod-mortgage-ops-sql-2d41 (SQL 45/46 billing launch only; do not re-invoke apply)"
+      ],
+      "pr601_inspect": {
+        "inspect_only": true,
+        "mutated": false,
+        "user_can_move_tenant_checks_live_definition_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+        "admin_override_check_status_live_definition_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+        "admin_override_exact": true,
+        "matches_staging_gate3_601": true
+      },
+      "claim_ledger_inspect": {
+        "sql43": "exact",
+        "sql44": "exact",
+        "sql43_live_definition_sha256": "31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806",
+        "sql44_accepted_source_sha256": "059f10e936f27439b9fddae7030b76fe594d6538087de389ab07950fefdf8763",
+        "stop_required": false
+      },
+      "sql39_catalog_fresh_dump": "not available from existing inspect-only lambdas; authorized release must inspect first"
+    }
+  },
+  "proposed_spa": {
+    "writes_aws": false,
+    "spa_authority": "/assets/index-BgOCQCWm.js",
+    "queue_authority": "MortgageOpsQueue-BD_nUT7A.js",
+    "login_authority": "MortgageOpsLogin-Phn06bQA.js",
+    "not_staging_spa": {
+      "rejected_entries": [
+        "index-BcLmLtnF.js",
+        "index-moprRprA.js",
+        "MortgageOpsQueue-mopsRprD.js"
+      ]
+    },
+    "live": {
+      "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+      "entry_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+      "queue_sha256": "a5a5a5b1318e09a8c53290d6e6bf2ba57f428d85c6406bd4d96c0f25fdec6288",
+      "login_sha256": "c56996bc719c0e7a4e365cf888e0197515f3f51820a58f621cfa76dbf7b31a21",
+      "css_sha256": "fd80eaf5a2ed3227426e1d2e3251b3b34279b8e1afa08f1931725b89d919e049"
+    },
+    "proposed": {
+      "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+      "index_html_changed": false,
+      "entry_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
+      "queue_sha256": "092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318",
+      "login_sha256": "c56996bc719c0e7a4e365cf888e0197515f3f51820a58f621cfa76dbf7b31a21",
+      "css_sha256": "fd80eaf5a2ed3227426e1d2e3251b3b34279b8e1afa08f1931725b89d919e049",
+      "filenames_preserved": true,
+      "single_react_entry": "index-BgOCQCWm.js"
+    },
+    "exact_delta": [
+      "AppErrorBoundary ignores transient DOM NotFoundError/removeChild",
+      "Try again reloads the page instead of remounting a broken tree",
+      "MortgageOpsQueue default tab becomes mine",
+      "MortgageOpsQueue blurs the focused Accept/Complete control before refetch",
+      "MortgageOpsQueue Complete no longer invokes bill-mortgage-handling"
+    ],
+    "unchanged": [
+      "index.html still points at /assets/index-BgOCQCWm.js",
+      "MortgageOpsLogin-Phn06bQA.js",
+      "index-C9b4-_no.css",
+      "all other Branding lazy chunks and CSS",
+      "no sw.js / Workbox"
+    ],
+    "proofs": {
+      "entry_keeps_branding_filename": true,
+      "entry_has_dom_ignore": true,
+      "entry_try_again_reloads": true,
+      "entry_no_auto_reload_loop": true,
+      "queue_imports_branding_entry": true,
+      "queue_no_bill_mortgage": true,
+      "queue_default_mine": true,
+      "login_unchanged": true,
+      "html_unchanged": true
+    }
+  },
+  "proposed_lambda": {
+    "base": "current live production ZIP",
+    "not_staging_zip": true,
+    "not_origin_main": true,
+    "not_worktree_workflow_rpc_wholesale": true,
+    "writes_aws": false,
+    "overlay_reason": "savepoint_plus_isolated_usage_from_live_billing_import",
+    "workflow_rpc_changed": true,
+    "workflow_rpc_before": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "workflow_rpc_after": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
+    "usage_op": "add",
+    "usage_before": null,
+    "usage_after": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2",
+    "candidate_zip_sha256": "4b6095d23df359f61fc9f4af988ab46b13219d289bd549ed65956a3afcf105b7",
+    "candidate_member_count": 6478,
+    "added_or_changed": [
+      {
+        "member": "mortgage-ops-usage.mjs",
+        "op": "add",
+        "before": null,
+        "after": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2"
+      },
+      {
+        "member": "workflow-rpc.mjs",
+        "op": "replace",
+        "before": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+        "after": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654"
+      }
+    ],
+    "removed": [],
+    "proposed_rpc_keeps_admin_set_check_claim": true,
+    "proposed_rpc_keeps_settlement": true,
+    "proposed_rpc_has_savepoint": true,
+    "worktree_rpc_rejected_as_wholesale_replacement": true,
+    "preserved_authorities": {
+      "branding_spa_entry_filename": "/assets/index-BgOCQCWm.js",
+      "claim_ledger": {
+        "sql43": "exact in production catalog",
+        "sql44": "exact in production catalog",
+        "write_claim_settlement_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+        "executeAdminSetCheckClaim": true
+      },
+      "pr601": {
+        "user_can_move_tenant_checks": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+        "admin_override_check_status": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+      },
+      "moov_walletops_620": {
+        "providers/parity/sweep-read.mjs": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
+        "matches_origin_main_pr620": true,
+        "providers/moov.mjs": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75",
+        "providers/parity/moov-wallet.mjs": "4f6f548960cfdadd524402d953cfa903594a672448a561cc4f223d2fe56f4144"
+      },
+      "delete_check": {
+        "admin_delete_check_bridge_kept": true,
+        "write-check-workflow.mjs": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76"
+      },
+      "signatures": {
+        "signature-submit.mjs": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+        "esign.mjs": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+        "write-signature.mjs": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26"
+      },
+      "ocr": {
+        "ocr.mjs": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+        "ocr-parse.mjs": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5"
+      },
+      "checkalt": {
+        "providers/checkalt.mjs": "f65a4450f71c4f9835620bbb0205737335cabe1e238f3ad8c2c11905dcee5dca",
+        "providers/production/checkalt-submit.mjs": "3bff32b31c6810e4c7b745536a4213c41a18c39e14f65a06a12187e031d2c151"
+      },
+      "homeowner": {
+        "homeowner.mjs": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63"
+      },
+      "financial_provider_safeguards": {
+        "financial-authz.mjs": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
+        "provider-authz.mjs": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+        "provider-flags.mjs": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
+        "bill-mortgage-handling.mjs": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+        "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+        "env_vars_unchanged": true
+      }
+    },
+    "preserved_members": {
+      "tenant-billing-engine.mjs": {
+        "live": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+        "proposed": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+        "unchanged": true
+      },
+      "write-check-workflow.mjs": {
+        "live": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
+        "proposed": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
+        "unchanged": true
+      },
+      "write-allowlist.mjs": {
+        "live": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
+        "proposed": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
+        "unchanged": true
+      },
+      "write.mjs": {
+        "live": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
+        "proposed": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
+        "unchanged": true
+      },
+      "financial-authz.mjs": {
+        "live": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
+        "proposed": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
+        "unchanged": true
+      },
+      "provider-authz.mjs": {
+        "live": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+        "proposed": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+        "unchanged": true
+      },
+      "provider-flags.mjs": {
+        "live": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
+        "proposed": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
+        "unchanged": true
+      },
+      "bill-mortgage-handling.mjs": {
+        "live": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+        "proposed": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+        "unchanged": true
+      },
+      "ocr.mjs": {
+        "live": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+        "proposed": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+        "unchanged": true
+      },
+      "ocr-parse.mjs": {
+        "live": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5",
+        "proposed": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5",
+        "unchanged": true
+      },
+      "homeowner.mjs": {
+        "live": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
+        "proposed": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
+        "unchanged": true
+      },
+      "esign.mjs": {
+        "live": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+        "proposed": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+        "unchanged": true
+      },
+      "signature-submit.mjs": {
+        "live": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+        "proposed": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+        "unchanged": true
+      },
+      "documents.mjs": {
+        "live": "2f98678e4a019c604bc58821f01aa9cfc8de467ce46a0b04121c8fbdf1faba3f",
+        "proposed": "2f98678e4a019c604bc58821f01aa9cfc8de467ce46a0b04121c8fbdf1faba3f",
+        "unchanged": true
+      },
+      "data.mjs": {
+        "live": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+        "proposed": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+        "unchanged": true
+      },
+      "index.mjs": {
+        "live": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+        "proposed": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+        "unchanged": true
+      }
+    }
+  },
+  "sql39": {
+    "file": "aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql",
+    "source_sha256": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+    "bytes_must_stay_pinned": true,
+    "production_before_catalog_fresh_dump": false,
+    "expected_before": {
+      "analog": "staging Gate 3 before snapshot",
+      "snapshot_hash_if_identical_to_staging_before": "511955b6821b55225a019a0f60ccf783a285456b87f0c5987ee2174127f6da2d",
+      "historical_policy_aws_update_mortgage_handling_requests": true,
+      "has_agent_fn": false,
+      "policies_absent": [
+        "aws_select_mortgage_ops_agent_queue",
+        "aws_update_mortgage_ops_accept_complete",
+        "aws_insert_mortgage_ops_usage_events"
+      ],
+      "login_role_mhr_table_update": [],
+      "force_rls": false,
+      "membership_601": {
+        "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+        "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+        "fresh_production_inspect_matches": true
+      }
+    },
+    "expected_after": {
+      "analog": "staging Gate 3 after snapshot",
+      "snapshot_hash_if_identical_to_staging_after": "4adc182c4ed13b11b37e8412056781112ea8f2a788bc1b51e21810460d13239b",
+      "historical_policy_aws_update_mortgage_handling_requests": false,
+      "policies_added": [
+        "aws_is_mortgage_ops_agent function",
+        "aws_select_mortgage_ops_agent_queue",
+        "aws_update_mortgage_ops_accept_complete",
+        "aws_insert_mortgage_ops_usage_events"
+      ],
+      "accept_complete_column_grants": [
+        "authenticated:accepted_at",
+        "authenticated:assigned_employee_id",
+        "authenticated:completed_at",
+        "checksops:accepted_at",
+        "checksops:assigned_employee_id",
+        "checksops:completed_at"
+      ],
+      "billing_insert_grants": [
+        "checksops",
+        "authenticated"
+      ],
+      "no_table_level_update_for_login_roles": true,
+      "no_force_rls_change": true,
+      "no_601_sql_modification": true,
+      "financial_table_grants_unchanged": true
+    },
+    "apply_path": "dedicated production inspect-then-apply oneshot; never staging guarded executor; never origin/main executor"
+  },
+  "release_lock_reconciliation": {
+    "bypassed": false,
+    "disabled": false,
+    "database-rls": {
+      "recorded_before": "22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306",
+      "actual_accepted_source": "e3dfbb80a5502b331b096574b3d84fb27b864be38f86fc288b646e66f296e128",
+      "reconciled_to": "e3dfbb80a5502b331b096574b3d84fb27b864be38f86fc288b646e66f296e128",
+      "sql39_required_sql_applied": false
+    },
+    "production-spa": {
+      "recorded_before": "/assets/index-HXTuSrE0.js",
+      "live_authority": "/assets/index-BgOCQCWm.js",
+      "reconciled_to_live_branding": true,
+      "tree_hash": "a440ca786824089978329232aed5fd5cd546cb406da10195107ec1c8d14545ac",
+      "superseded": "/assets/index-HXTuSrE0.js"
+    },
+    "production-release": {
+      "recorded_before": "6a7834b842752d7c1e103bf51bba3892b09ffa512eecb6be4a63cfa2c3d62abb",
+      "reconciled_to": "9e8fc8e8c03e12b6252eed8f7b3d4a5570effa91a67d9091124fc64a3e7bc6f8"
+    },
+    "validator": "ok against trusted base 7c64dae2dee6c78dd296c946c04ea6ccaa793aef"
+  },
+  "protected_regressions": {
+    "status": "PENDING_THIS_COMMIT",
+    "note": "Run after this evidence commit. Gate 5 after-Complete baseline was 557/4/1 with four unrepaired unrelated failures."
+  }
+}
