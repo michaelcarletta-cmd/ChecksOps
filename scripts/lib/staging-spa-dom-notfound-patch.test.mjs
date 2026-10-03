@@ -3,6 +3,10 @@ import { test } from "node:test";
 import {
   NEW_BOUNDARY,
   OLD_BOUNDARY,
+  OLD_BOUNDARY_ORIGINAL,
+  OLD_TRY_AGAIN,
+  NEW_TRY_AGAIN,
+  patchOriginalStagingEntry,
   patchStagingEntry,
   patchStagingIndexHtml,
   patchStagingQueue,
@@ -27,6 +31,18 @@ test("queue keeps a single React entry", () => {
     toEntry: "index-moprRprC.js",
   });
   assert.equal(next, 'from"./index-moprRprC.js";from"./index-moprRprC.js"');
+});
+
+test("original entry keeps one React graph and ignores DOM unmount errors", () => {
+  const input = `prefix${OLD_BOUNDARY_ORIGINAL}${OLD_TRY_AGAIN}import("./MortgageOpsQueue-B0d_WpSJ.js")suffix`;
+  const next = patchOriginalStagingEntry(input, {
+    fromQueue: "MortgageOpsQueue-B0d_WpSJ.js",
+    toQueue: "MortgageOpsQueue-mopsRprD.js",
+  });
+  assert.equal(next.includes(NEW_BOUNDARY), true);
+  assert.equal(next.includes(NEW_TRY_AGAIN), true);
+  assert.equal(next.includes("MortgageOpsQueue-mopsRprD.js"), true);
+  assert.equal(next.includes("B0d_WpSJ"), false);
 });
 
 test("index.html cache-busts to the new entry", () => {
