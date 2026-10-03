@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAuth } from "@/hooks/useAuth";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { Loader2, Mail, ShieldCheck, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
+import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
+import {
+  applyEmailPreviewBranding,
+  isSafeEmailBrandColor,
+  normalizeEmailBrandColor,
+  PLATFORM_EMAIL_BRAND_COLOR,
+} from "@/lib/brandingPublicUrl";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 import {
@@ -110,7 +117,7 @@ function copyText(value: string) {
   toast.success("Copied");
 }
 
-export function EmailSenderSettings() {
+export function EmailSenderSettings({ showSendingDomain = true }: { showSendingDomain?: boolean } = {}) {
   const { tenantId } = useTenantFilter();
   const { user, userRole } = useAuth();
   const qc = useQueryClient();
@@ -168,6 +175,7 @@ export function EmailSenderSettings() {
 
   const [fromName, setFromName] = useState("");
   const [replyTo, setReplyTo] = useState("");
+  const [emailBrandColor, setEmailBrandColor] = useState(PLATFORM_EMAIL_BRAND_COLOR);
   const [domain, setDomain] = useState("");
   const [fromLocal, setFromLocal] = useState("noreply");
 
@@ -180,9 +188,14 @@ export function EmailSenderSettings() {
       const addr = settings.fromAddress || settings.from_address;
       if (addr) setFromLocal(String(addr).split("@")[0] || "noreply");
       else if (settings.fromLocalPart) setFromLocal(settings.fromLocalPart);
+      setEmailBrandColor(normalizeEmailBrandColor(
+        settings.primaryColor || tenant?.primary_color,
+        PLATFORM_EMAIL_BRAND_COLOR,
+      ));
     } else if (tenant && !isLoading) {
       setFromName(tenant.name || "");
       setReplyTo("");
+      setEmailBrandColor(normalizeEmailBrandColor(tenant.primary_color, PLATFORM_EMAIL_BRAND_COLOR));
     }
   }, [settings, tenant, isLoading]);
 
@@ -197,8 +210,17 @@ export function EmailSenderSettings() {
     const mailFrom = settings?.mailFromRecords || [];
     return [...dkim, ...mailFrom];
   }, [settings]);
-  const logoUrl = settings?.logoUrl || tenant?.logo_url || null;
-  const primaryColor = settings?.primaryColor || tenant?.primary_color || "#1a56db";
+  const logoUrl = resolvePublicBrandingUrl(settings?.logoUrl || tenant?.logo_url || null, "tenant-logos")
+    || settings?.logoUrl
+    || tenant?.logo_url
+    || null;
+  const storedBrandColor = normalizeEmailBrandColor(
+    settings?.primaryColor || tenant?.primary_color,
+    PLATFORM_EMAIL_BRAND_COLOR,
+  );
+  const previewColor = isSafeEmailBrandColor(emailBrandColor)
+    ? emailBrandColor.trim()
+    : storedBrandColor;
 
   const { data: preview } = useQuery({
     queryKey: ["tenant-email-preview", tenantId, aws, isVerified, fromName],
@@ -206,34 +228,53 @@ export function EmailSenderSettings() {
     queryFn: () => invokeFunction<EmailPreview>("tenant-email-preview", { tenantId }),
   });
 
+  const previewHtml = useMemo(() => applyEmailPreviewBranding(preview?.html || "", {
+    logoUrl,
+    primaryColor: previewColor,
+    previousColors: [settings?.primaryColor, tenant?.primary_color, storedBrandColor, PLATFORM_EMAIL_BRAND_COLOR],
+    apiBaseUrl: awsApiBaseUrl(),
+    origin: typeof window !== "undefined" ? window.location.origin : undefined,
+  }), [preview?.html, logoUrl, previewColor, settings?.primaryColor, tenant?.primary_color, storedBrandColor]);
+
   const save = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("No tenant");
       if (!canConfigure) throw new Error("Not authorized");
+      if (!isSafeEmailBrandColor(emailBrandColor)) {
+        throw new Error("Email Brand Color must be a hex value such as #13579b");
+      }
+      const nextColor = normalizeEmailBrandColor(emailBrandColor);
       if (aws) {
-        return invokeFunction<BrandingPayload>("tenant-email-branding-save", {
+        await invokeFunction<BrandingPayload>("tenant-email-branding-save", {
           tenantId,
           fromName: fromName.trim(),
           replyTo: replyTo.trim(),
           fromLocalPart: fromLocal.trim().toLowerCase(),
         });
+      } else {
+        const { error } = await supabase
+          .from("tenant_email_settings")
+          .upsert(
+            {
+              tenant_id: tenantId,
+              from_name: fromName.trim() || null,
+              reply_to: replyTo.trim() || null,
+            },
+            { onConflict: "tenant_id" },
+          );
+        if (error) throw error;
       }
-      const { error } = await supabase
-        .from("tenant_email_settings")
-        .upsert(
-          {
-            tenant_id: tenantId,
-            from_name: fromName.trim() || null,
-            reply_to: replyTo.trim() || null,
-          },
-          { onConflict: "tenant_id" },
-        );
-      if (error) throw error;
+      const { error: colorError } = await supabase
+        .from("tenants")
+        .update({ primary_color: nextColor })
+        .eq("id", tenantId);
+      if (colorError) throw colorError;
     },
     onSuccess: () => {
       toast.success("Email branding saved");
       qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
       qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
+      qc.invalidateQueries({ queryKey: ["tenant-branding-for-email", tenantId] });
     },
     onError: (err) => toast.error(errorMessage(err, "Failed to save email settings")),
   });
@@ -351,10 +392,10 @@ export function EmailSenderSettings() {
             <div className="flex items-center gap-2 text-sm">
               <span
                 className="h-6 w-6 rounded-full border"
-                style={{ backgroundColor: primaryColor }}
-                aria-label="Primary brand color"
+                style={{ backgroundColor: previewColor }}
+                aria-label="Email brand color"
               />
-              <code className="text-xs">{primaryColor}</code>
+              <code className="text-xs">{previewColor}</code>
             </div>
             <div className="text-sm font-medium">{tenantName}</div>
           </div>
@@ -386,6 +427,31 @@ export function EmailSenderSettings() {
                 Operational mailbox such as claims@yourcompany.com. This may differ from the sending subdomain.
               </p>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-color">Email Brand Color</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="email-brand-color"
+                  type="color"
+                  value={normalizeEmailBrandColor(previewColor)}
+                  onChange={(e) => setEmailBrandColor(e.target.value)}
+                  disabled={!canConfigure}
+                  className="h-9 w-10 cursor-pointer rounded border bg-transparent p-1"
+                />
+                <Input
+                  value={emailBrandColor}
+                  onChange={(e) => setEmailBrandColor(e.target.value)}
+                  className="font-mono text-xs"
+                  maxLength={7}
+                  placeholder="#13579b"
+                  disabled={!canConfigure}
+                  aria-label="Email Brand Color hex"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Accent color for tenant-branded application emails. The preview updates immediately.
+              </p>
+            </div>
           </div>
 
           <div className="flex justify-end">
@@ -396,12 +462,12 @@ export function EmailSenderSettings() {
           </div>
           {!canConfigure && (
             <p className="text-xs text-muted-foreground">
-              You can view branding. Only tenant administrators or platform administrators can change the sending domain.
+              You can view branding. Only tenant administrators or platform administrators can change email branding.
             </p>
           )}
         </SectionCard>
 
-        <SectionCard
+        {showSendingDomain && <SectionCard
           title="Sending subdomain"
           icon={<Globe className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
@@ -548,7 +614,7 @@ export function EmailSenderSettings() {
               </div>
             </div>
           )}
-        </SectionCard>
+        </SectionCard>}
 
         <SectionCard
           title="Email preview"
@@ -568,12 +634,12 @@ export function EmailSenderSettings() {
               </div>
             )}
           </div>
-          {preview?.html ? (
+          {previewHtml ? (
             <iframe
               title="ChecksOps email preview"
               className="h-[520px] w-full rounded-md border bg-white"
               sandbox=""
-              srcDoc={preview.html}
+              srcDoc={previewHtml}
             />
           ) : (
             <p className="text-xs text-muted-foreground">
