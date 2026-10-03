@@ -57,7 +57,13 @@ import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
-import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
+import {
+  assertCleanBackOriginalPath,
+  recoverCleanBackOriginalPath,
+  resolveCleanBackOriginalPath,
+  type CleanBackOriginalAudit,
+  type CleanBackOriginalRecord,
+} from "@/lib/checkImageInvariants";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
@@ -3103,88 +3109,66 @@ function CheckDetailPanel({
     isFetching: endorsementAdjusterImageUrlFetching,
     refetch: refetchEndorsementAdjusterImageUrl,
   } = useQuery({
-    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path, (check as any)?.back_image_original_path],
+    queryKey: [
+      "check-back-img-original-for-adjuster",
+      check?.id,
+      check?.back_image_path,
+      (check as any)?.back_image_original_path,
+      (check as any)?.back_image_deposit_path,
+    ],
     // Prefetch on mount so opening the adjuster is instant — resolving the
     // original back-image path can cost 1-2 round trips (audit lookup + signed
     // URL) plus a full image download to read dimensions.
-    enabled: !!check?.id && (!!check?.back_image_path || !!(check as any)?.back_image_original_path) && !isSharedView,
+    enabled: !!check?.id && (
+      !!check?.back_image_path
+      || !!(check as any)?.back_image_original_path
+      || !!(check as any)?.back_image_deposit_path
+    ) && !isSharedView,
     staleTime: 5 * 60 * 1000,
     retry: 1,
     queryFn: async () => {
-      // Prefer the explicit pristine-original pointer written by the adjuster
-      // on approve. This is the most reliable source and survives any future
-      // renames of the composited deposit artifact.
-      const looksComposited = (p: string | null) =>
-        !!p && (
-          /_endorsed(?:_\d+)?\.[^.]+$/i.test(p) ||
-          /endorsed_deposit_[^/]+\.[^.]+$/i.test(p) ||
-          /\.svg(\?|$)/i.test(p)
-        );
+      const record: CleanBackOriginalRecord = {
+        back_image_original_path: ((check as any)?.back_image_original_path as string | null) ?? null,
+        back_image_path: check!.back_image_path ?? null,
+        back_image_deposit_path: ((check as any)?.back_image_deposit_path as string | null) ?? null,
+        endorsement_render_meta: (check as any)?.endorsement_render_meta ?? null,
+      };
 
-      const currentBackPath = toStorageObjectPath(
-        check!.back_image_path ?? ((check as any)?.back_image_original_path as string | null) ?? null,
-      );
-      const explicitOriginalRaw = toStorageObjectPath(
-        ((check as any)?.back_image_original_path as string | null) ?? null,
-      );
+      const recovered = await resolveCleanBackOriginalPath({
+        record,
+        normalizePath: (value) => toStorageObjectPath(value),
+        loadAudits: async () => {
+          const { data } = await supabase
+            .from("check_audit_log")
+            .select("event_data")
+            .eq("check_id", check!.id)
+            .order("created_at", { ascending: false })
+            .limit(25);
+          return (data ?? []).map((row: { event_data?: Record<string, unknown> | null }) => {
+            const eventData = row?.event_data ?? {};
+            return {
+              original_back_image_path: eventData.original_back_image_path as string | undefined,
+              original_back_path: eventData.original_back_path as string | undefined,
+              endorsed_back_image_path: eventData.endorsed_back_image_path as string | undefined,
+              composited_path: eventData.composited_path as string | undefined,
+              composited_back_path: eventData.composited_back_path as string | undefined,
+            } satisfies CleanBackOriginalAudit;
+          });
+        },
+        loadSiblingNames: async (directory) => {
+          const { data, error } = await supabase.storage
+            .from("claim-files")
+            .list(directory, { limit: 100 });
+          if (error) return [];
+          return (data ?? []).map((entry: { name?: string | null; key?: string | null; path?: string | null }) => {
+            const raw = String(entry?.name ?? entry?.key ?? entry?.path ?? "").trim();
+            if (!raw) return "";
+            return raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw;
+          }).filter(Boolean);
+        },
+      });
 
-      // Priority: use explicit original path if it's not a composite.
-      // Do not attempt to "cache bust" a presigned URL by mutating its query
-      // params; doing so breaks S3 signatures. Reuploads use new object paths,
-      // so queryKey changes are sufficient to invalidate caches.
-      const explicitOriginal =
-        explicitOriginalRaw && !looksComposited(explicitOriginalRaw)
-          ? explicitOriginalRaw
-          : null;
-
-      if (explicitOriginal) {
-        const { data } = await supabase.storage
-          .from("claim-files")
-          .createSignedUrl(explicitOriginal, 3600);
-        if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
-      }
-
-
-      const currentPath = toStorageObjectPath(
-        check!.back_image_path ?? ((check as any)?.back_image_original_path as string | null) ?? null,
-      );
-      if (!currentPath) return null;
-
-      // Detect any known "already-composited" back artifact so we don't feed
-      // the composite back into the editor (which stacks endorsements).
-      const isComposite =
-        /_endorsed(?:_\d+)?\.[^.]+$/i.test(currentPath) ||
-        /endorsed_deposit_[^/]+\.[^.]+$/i.test(currentPath) ||
-        /\.svg(\?|$)/i.test(currentPath);
-
-      let sourcePath = currentPath;
-      if (isComposite) {
-        const { data: compositeAudits } = await supabase
-          .from("check_audit_log")
-          .select("event_data")
-          .eq("check_id", check!.id)
-          .eq("event_type", "endorsement_signatures_composited")
-          .order("created_at", { ascending: false })
-          .limit(25);
-
-        const matchingAudit = (compositeAudits ?? []).find((audit: any) => {
-          const eventData = audit?.event_data ?? {};
-          return eventData.endorsed_back_image_path === currentPath ||
-            eventData.composited_path === currentPath ||
-            eventData.composited_back_path === currentPath;
-        });
-
-        const auditData = (matchingAudit?.event_data ?? compositeAudits?.[0]?.event_data ?? null) as {
-          original_back_image_path?: string;
-          original_back_path?: string;
-        } | null;
-
-        sourcePath =
-          toStorageObjectPath(auditData?.original_back_image_path) ??
-          toStorageObjectPath(auditData?.original_back_path) ??
-          currentPath;
-      }
-
+      const sourcePath = assertCleanBackOriginalPath(recovered.path);
       const { data } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
@@ -3252,7 +3236,9 @@ function CheckDetailPanel({
       ? "The endorsement editor could not finish loading. The check image may be temporarily unavailable."
       : null) ||
     ((endorsementAdjusterImageUrlError || backImageUrlError) && !endorsementAdjusterSourceUrl
-      ? "We couldn't resolve the back-of-check image URL."
+      ? (endorsementAdjusterImageUrlError instanceof Error && endorsementAdjusterImageUrlError.message
+          ? endorsementAdjusterImageUrlError.message
+          : "We couldn't resolve the back-of-check image URL.")
       : null);
 
   const retryEndorsementPrep = useCallback(() => {
@@ -4566,10 +4552,18 @@ function CheckDetailPanel({
                           }
                           onUnapprovedDepositChange={setHasUnapprovedEndorsementDeposit}
                           onDepositImageApproved={async ({ depositPath }) => {
-                            const originalToPersist =
-                              ((check as any)?.back_image_original_path as string | null) ??
-                              endorsementAdjusterSourcePath;
-                            assertCleanBackOriginalPath(originalToPersist);
+                            const recovered = recoverCleanBackOriginalPath({
+                              record: {
+                                back_image_original_path: ((check as any)?.back_image_original_path as string | null) ?? null,
+                                back_image_path: check?.back_image_path ?? null,
+                                back_image_deposit_path: ((check as any)?.back_image_deposit_path as string | null) ?? null,
+                                endorsement_render_meta: (check as any)?.endorsement_render_meta ?? null,
+                              },
+                              normalizePath: (value) => toStorageObjectPath(value),
+                            });
+                            const originalToPersist = assertCleanBackOriginalPath(
+                              recovered.ok ? recovered.path : endorsementAdjusterSourcePath,
+                            );
                             const { error: saveErr } = await supabase
                               .from("check_intake_items")
                               .update({
