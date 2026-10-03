@@ -133,7 +133,7 @@ test('KYC fields are submitted, not merely read', () => {
   const ui = readFileSync(new URL('../../src/pages/RecipientPaymentSetup.tsx', import.meta.url), 'utf8');
   assert.match(kycSrc, /buildIndividualKycPatch/);
   assert.match(kycSrc, /method: "PATCH"/);
-  assert.match(ui, /moov-recipient-kyc-update/);
+  assert.match(ui, /submitRecipientKyc/);
   assert.match(ui, /birth_date/);
   assert.match(ui, /ssn/);
   assert.match(ui, /address_line1/);

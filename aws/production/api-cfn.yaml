@@ -71,6 +71,9 @@ Resources:
           AWS_ACTUM_ENABLED: "false"
           AWS_QUICKBOOKS_ENABLED: "false"
           AWS_PROVIDER_LIVE_READS_ENABLED: "false"
+          AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED: "false"
+          AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED: "false"
+          AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE: "checksops-recipient-bank-verify-state"
           AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
           AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"
           AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
@@ -80,6 +83,50 @@ Resources:
           Value: production-prep
         - Key: DoNotCutover
           Value: 'true'
+
+  RecipientBankVerifyStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: checksops-recipient-bank-verify-state
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      DeletionProtectionEnabled: true
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: Purpose
+          Value: recipient-bank-verify-state
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPrepApiLambda
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Ref ExistingExecutionRoleArn
+                - arn:aws:iam::806168576068:role/checksops-production-api-execution
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DescribeTable
+            Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/checksops-recipient-bank-verify-state
 
   ProductionPrepHttpApi:
     Type: AWS::ApiGatewayV2::Api
