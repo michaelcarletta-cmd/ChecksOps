@@ -1172,6 +1172,7 @@ export function ReviewDecisionPanel({
           <div className="pt-1 space-y-2">
             <SendCheckTrackingLinkButton
               claimId={check.claim_id}
+              checkIntakeItemId={check.id}
               tenantId={(check as any).tenant_id}
               className="w-full"
               label="Send tracking link to homeowner"
