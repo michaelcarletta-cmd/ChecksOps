@@ -255,7 +255,7 @@ export default function MortgageOpsQueue() {
           badge="Mortgage Ops"
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
-        <Tabs defaultValue="available">
+        <Tabs defaultValue="mine">
 
           <TabsList>
             <TabsTrigger value="available" className="gap-2">

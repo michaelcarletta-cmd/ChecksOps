@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-10-03T01:40:20.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "durableStateUnchanged": {
+    "GATE4-A": "in_progress",
+    "GATE4-B": "in_progress",
+    "billing": ["mortgage_ops_initial 1000", "mortgage_ops_additional_check 500"]
+  },
+  "whyTitlesMissingFromQueued": "Both Gate 4 requests are assigned in_progress, so they no longer appear on Queued.",
+  "whyErrorStuck": "Staging still had Oct 1 workbox sw.js precaching an old index.html. That kept the crashed error boundary on the phone.",
+  "stagingFix": {
+    "sw.js": "kill-switch unregister + cache delete + client navigate",
+    "registerSW.js": "unregister all service workers",
+    "index.html": "inline unregister plus /assets/index-moprRprB.js",
+    "queueDefaultTab": "mine",
+    "errorBoundary": "reload once, then Try again reloads",
+    "invalidationId": "I6BG3HBBYA4U6MDMI1G4QBY0IM",
+    "distribution": "E1CG52WRQZI7X1"
+  },
+  "productionFrontendUntouched": {
+    "index.htmlLastModified": "2026-10-02T21:26:09Z"
+  }
+}

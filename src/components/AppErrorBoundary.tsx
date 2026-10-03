@@ -19,6 +19,15 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("AppErrorBoundary caught:", error, info);
+    try {
+      const key = "checksops-error-boundary-reload";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   render() {
