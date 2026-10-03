@@ -121,3 +121,19 @@ production SPA writer applied queue + entry + identical `index.html`.
 
 Dedicated Mortgage Agent production acceptance is next. Mortgage Agent
 Management/Compensation is not this workstream.
+
+## Gate 5 SPA queue syntax hotfix (2026-10-03T11:40Z)
+
+Acceptance login reached `/mortgage-ops/queue` and AppErrorBoundary
+caught `Unexpected token 'const'`. The first overlay inserted
+`const el=document.activeElement…` after a comma in the Accept success
+path, so `MortgageOpsQueue-BD_nUT7A.js` `092057a7…` is unparseable.
+
+Hotfix is expression-safe blur only:
+
+`document.activeElement instanceof HTMLElement&&document.activeElement.blur()`
+
+No `const` after a comma. Complete still does not call
+`bill-mortgage-handling`. Entry `ae4ea2c9…` and `index.html` `3832fadc…`
+stay byte-identical. Proposed queue `da66439c…`. Official writer only,
+assets first, `index.html` last, fresh production SPA lease/receipt.
