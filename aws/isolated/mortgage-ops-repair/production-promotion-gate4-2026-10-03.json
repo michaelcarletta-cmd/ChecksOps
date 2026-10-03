@@ -1,0 +1,82 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "gate": 4,
+  "captured_at": "2026-10-03T11:20:00Z",
+  "sql_modified": false,
+  "writes_aws": false,
+  "promoted_to_production": false,
+  "status": "PASS",
+  "command": "node --experimental-strip-types --test --test-reporter tap <mortgage-ops + protected cross-feature contracts>",
+  "totals": {
+    "tests": 708,
+    "pass": 702,
+    "fail": 5,
+    "skipped": 1,
+    "duration_ms": 12865
+  },
+  "extra_scripts": {
+    "bun scripts/test-moov-file-rules.mjs": { "passed": 21, "failed": 0 },
+    "node scripts/test-walletops-layout.mjs": { "passed": 15, "failed": 0 }
+  },
+  "accepted_protected_result": {
+    "known_unrelated_initdb_failures": 3,
+    "extra_file_outside_accepted_suite": {
+      "file": "tests/tenant-branding.test.mjs",
+      "failures": 2,
+      "reason": "Vite import.meta.env.MODE is undefined in this Node runner; Branding production lock and settings-branding-company-restore passed"
+    },
+    "if_extra_file_excluded": {
+      "tests": 706,
+      "pass": 702,
+      "fail": 3,
+      "skipped": 1
+    }
+  },
+  "unrepaired_unrelated_or_env": [
+    {
+      "name": "disposable PostgreSQL mortgage library RLS matrix",
+      "file": "aws/tests/mortgage-ops-library-parity-pg.test.mjs",
+      "reason": "PostgreSQL 16 initdb is not available in this environment"
+    },
+    {
+      "name": "isolated PostgreSQL unique-tenant claim persist and auto-link",
+      "file": "aws/tests/ocr-claim-number-sql.test.mjs",
+      "reason": "PostgreSQL 16 initdb is not available in this environment"
+    },
+    {
+      "name": "170010 then SQL 41 still unique-links many checks to one tenant claim",
+      "file": "aws/tests/ocr-claim-number-sql.test.mjs",
+      "reason": "PostgreSQL 16 initdb is not available in this environment"
+    }
+  ],
+  "skipped": [
+    {
+      "name": "isolated PostgreSQL Claim Ledger RPC links, creates atomically, and denies cross-tenant",
+      "reason": "PostgreSQL 16 initdb is not installed in this environment"
+    }
+  ],
+  "preserved_suites_passed": [
+    "claim-ledger",
+    "#601 executor/sql39",
+    "Moov/WalletOps/#620",
+    "Delete Check",
+    "signatures",
+    "OCR (non-initdb)",
+    "CheckAlt",
+    "Homeowner/financial",
+    "mortgage-ops isolation/usage/overlay",
+    "production-spa baseline",
+    "validate-release-locks",
+    "workflow-rpc savepoint",
+    "SPA DOM ignore",
+    "settings-branding-company-restore"
+  ],
+  "proof_tests": {
+    "accept_mortgage_handling_request savepoint isolates swallowed billing RLS": "pass",
+    "SPA Complete no longer invokes bill-mortgage-handling": "pass",
+    "production-spa lock records the accepted live baseline": "pass",
+    "origin/main-based manifest validates fail-closed with production-spa PRODUCTION_LOCKED": "pass",
+    "ignores WebKit NotFoundError after a focused node unmounts": "pass",
+    "ignores Chromium removeChild NotFoundError": "pass"
+  }
+}
