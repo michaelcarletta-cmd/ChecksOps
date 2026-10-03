@@ -125,14 +125,27 @@
     }
   },
   "gate_4_mortgage_ops_acceptance": {
-    "status": "STOPPED",
-    "reason": "mortgage_agent_cognito_credentials_unavailable"
+    "status": "COMPLETE",
+    "completed_at_record": "2026-10-03T10:19:20Z",
+    "accept_a": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49 completed 2026-10-03T10:17:12.547Z",
+    "billing": ["mortgage_ops_initial 1000", "mortgage_ops_additional_check 500"],
+    "second_billing_on_complete": false,
+    "provider_execution": false,
+    "gate4_b_left_in_progress": true
   },
   "gate_5_regression": {
     "status": "RECORDED",
-    "pass": 541,
-    "fail": 4,
-    "skipped": 1,
+    "after_complete": {
+      "pass": 557,
+      "fail": 4,
+      "skipped": 1,
+      "tests": 562
+    },
+    "prior_before_complete": {
+      "pass": 541,
+      "fail": 4,
+      "skipped": 1
+    },
     "unrepaired_unrelated_or_env": [
       "PostgreSQL 16 initdb missing for mortgage-ops-library-parity-pg and ocr-claim-number-sql isolated tests",
       "ops/release-locks database-rls tree_hash drift from adding SQL 39; production lock manifest not updated"
@@ -190,8 +203,7 @@
       "Complete billing removal from MortgageOpsQueue"
     ],
     "blockers": [
-      "Gate 4 mortgage-agent Cognito acceptance matrix is STOPPED",
-      "Do not promote until authorized agent Accept/$10/$5/Complete is proven on staging"
+      "Do not promote. Staging Gate 4 Accept/$10/$5/Complete is proven; production remains unauthorized."
     ]
   }
 }
