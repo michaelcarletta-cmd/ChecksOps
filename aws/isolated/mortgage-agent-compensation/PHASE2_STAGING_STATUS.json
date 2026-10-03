@@ -1,6 +1,17 @@
 {
   "workstream": "mortgage-agent-compensation-ad99",
   "phase": 2,
+  "hold": {
+    "status": "ACCEPTED_COMPOSITION_DEPENDENCY",
+    "no_further_deployment": true,
+    "do_not_reclaim_staging": true,
+    "do_not_promote_production": true,
+    "authority_commit": "c5facdae7e88d400848ee8b009e59a22906de82d",
+    "authority_tree": "6dc79d8add4bb4526820b21e20626ee4901172fc",
+    "proof": "aws/isolated/mortgage-agent-compensation/HOLD_AUTHORITY.md",
+    "branding_may_advance_spa_from": "/assets/index-BmT-cuwB.js",
+    "deferred_platform_owner_ui": "legitimate checksopsadmin@gmail.com EMAIL_OTP only; do not manufacture access"
+  },
   "production_writes": false,
   "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
   "composed_source_commit": "c5facdae7e88d400848ee8b009e59a22906de82d",
