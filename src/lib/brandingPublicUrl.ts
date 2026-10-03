@@ -130,13 +130,30 @@ function decodeAttr(value: string): string {
     .replace(/&gt;/g, ">");
 }
 
+const SAFE_PREVIEW_DATA_IMAGE = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/]+=*$/i;
+const PREVIEW_DATA_IMAGE_MAX_CHARS = 3_500_000;
+const LIVE_BRANDING_LOGO_PATH = /\/(?:prep\/)?branding\/logo\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/)?$/i;
+
+export function isSafePreviewDataImage(value: unknown): value is string {
+  const raw = String(value || "").trim();
+  return SAFE_PREVIEW_DATA_IMAGE.test(raw) && raw.length <= PREVIEW_DATA_IMAGE_MAX_CHARS;
+}
+
 function isUnsafePreviewSrc(src: string): boolean {
+  if (isSafePreviewDataImage(src)) return false;
   return /^(javascript|data|blob|file|vbscript):/i.test(src)
     || src.startsWith("//")
     || src.includes("..");
 }
 
-/** True when preview HTML is still using a raw path, platform logo, or CloudFront /prep logo. */
+function escapePreviewSrcAttr(value: string): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** True when preview HTML is still using a raw path, platform logo, CloudFront /prep, or live /prep/branding/logo. */
 export function shouldReplacePreviewLogoSrc(src: string, resolvedLogoUrl: string): boolean {
   const raw = decodeAttr(String(src || "").trim());
   const resolved = String(resolvedLogoUrl || "").trim();
@@ -144,6 +161,7 @@ export function shouldReplacePreviewLogoSrc(src: string, resolvedLogoUrl: string
   if (isUnsafePreviewSrc(raw)) return false;
   if (raw.includes("checksops-logo")) return true;
   if (isRawBrandingObjectPath(raw)) return true;
+  if (LIVE_BRANDING_LOGO_PATH.test(raw.split("?")[0] || "")) return true;
   if (raw.includes("/storage/public") && /bucket=tenant-logos|bucket=email-assets/.test(raw)) return true;
   if (raw.includes("tenant-logos") && raw.includes("storage/public")) return true;
   return false;
@@ -154,6 +172,9 @@ export function resolvePreviewLogoUrl(
   apiBaseUrl?: string,
   origin?: string,
 ): string | null {
+  if (typeof logoUrl === "string" && isSafePreviewDataImage(logoUrl.trim())) {
+    return logoUrl.trim();
+  }
   const resolved = resolvePublicBrandingUrl(logoUrl, "tenant-logos", apiBaseUrl)
     || (typeof logoUrl === "string" && (
       logoUrl.includes("/storage/public")
@@ -188,7 +209,7 @@ export function applyEmailPreviewBranding(
   if (resolvedLogo) {
     out = out.replace(/src=(["'])([^"']*)\1/gi, (full, quote: string, src: string) => {
       if (!shouldReplacePreviewLogoSrc(src, resolvedLogo)) return full;
-      return `src=${quote}${resolvedLogo}${quote}`;
+      return `src=${quote}${escapePreviewSrcAttr(resolvedLogo)}${quote}`;
     });
   }
 

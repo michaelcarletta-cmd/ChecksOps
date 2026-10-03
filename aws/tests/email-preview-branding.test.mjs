@@ -14,9 +14,12 @@ import {
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const FREEDOM_LOGO = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1790801891632.png';
+const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const API_BASE = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
 const RESOLVED = `${API_BASE}/storage/public?bucket=tenant-logos&path=${encodeURIComponent(FREEDOM_LOGO)}`;
 const CLOUDFRONT_PREP = `https://staging.checksops.com/prep/storage/public?bucket=tenant-logos&path=${encodeURIComponent(FREEDOM_LOGO)}`;
+const LIVE_BRANDING_LOGO = `https://staging.checksops.com/prep/branding/logo/${FREEDOM_TENANT}`;
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
 
 const layout = ({ src, color = '#13579b' }) => `<!DOCTYPE html>
 <html><body>
@@ -45,11 +48,13 @@ test('preview logo resolution uses public storage and does not rewrite stored pa
   assert.equal(FREEDOM_LOGO.includes('storage/public'), false);
 });
 
-test('preview src replacement covers platform, raw, and CloudFront /prep logos', () => {
+test('preview src replacement covers platform, raw, CloudFront /prep, and live /prep/branding/logo', () => {
   assert.equal(shouldReplacePreviewLogoSrc('https://staging.checksops.com/checksops-logo.png', RESOLVED), true);
   assert.equal(shouldReplacePreviewLogoSrc('/checksops-logo.png', RESOLVED), true);
   assert.equal(shouldReplacePreviewLogoSrc(FREEDOM_LOGO, RESOLVED), true);
   assert.equal(shouldReplacePreviewLogoSrc(CLOUDFRONT_PREP, RESOLVED), true);
+  assert.equal(shouldReplacePreviewLogoSrc(LIVE_BRANDING_LOGO, RESOLVED), true);
+  assert.equal(shouldReplacePreviewLogoSrc(LIVE_BRANDING_LOGO, TINY_PNG), true);
   assert.equal(shouldReplacePreviewLogoSrc(RESOLVED, RESOLVED), false);
   assert.equal(shouldReplacePreviewLogoSrc('javascript:alert(1)', RESOLVED), false);
   assert.equal(shouldReplacePreviewLogoSrc('https://cdn.acme.test/other.png', RESOLVED), false);
@@ -88,6 +93,25 @@ test('preview HTML uses the SPA-resolved tenant logo and live brand color', () =
   });
   assert.match(prep, /execute-api\.us-east-1\.amazonaws\.com\/staging\/storage\/public/);
   assert.doesNotMatch(prep, /staging\.checksops\.com\/prep\/storage\/public/);
+
+  const live = applyEmailPreviewBranding(layout({ src: LIVE_BRANDING_LOGO, color: '#13579b' }), {
+    logoUrl: FREEDOM_LOGO,
+    primaryColor: '#13579b',
+    previousColors: ['#1a56db'],
+    apiBaseUrl: API_BASE,
+    origin: 'https://staging.checksops.com',
+  });
+  assert.match(live, /psr19uhop4\.execute-api\.us-east-1\.amazonaws\.com\/staging\/storage\/public\?bucket=tenant-logos/);
+  assert.doesNotMatch(live, /\/prep\/branding\/logo\//);
+  assert.match(live, /#13579b/);
+
+  const embedded = applyEmailPreviewBranding(layout({ src: LIVE_BRANDING_LOGO, color: '#13579b' }), {
+    logoUrl: TINY_PNG,
+    apiBaseUrl: API_BASE,
+  });
+  assert.match(embedded, /src="data:image\/png;base64,/);
+  assert.doesNotMatch(embedded, /\/prep\/branding\/logo\//);
+  assert.equal(resolvePreviewLogoUrl('data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==', API_BASE), null);
 });
 
 test('EmailSenderSettings preview and color stay on tenants.primary_color', () => {
@@ -98,6 +122,9 @@ test('EmailSenderSettings preview and color stay on tenants.primary_color', () =
   assert.match(ui, /primary_color:\s*nextColor/);
   assert.match(ui, /\.from\("tenants"\)/);
   assert.match(ui, /resolvePublicBrandingUrl\(settings\?\.logoUrl \|\| tenant\?\.logo_url/);
+  assert.match(ui, /embedAuthorizedPreviewLogo/);
+  assert.match(ui, /embeddedPreviewLogo \|\| logoUrl/);
+  assert.match(ui, /\/branding\/logo\//);
   assert.doesNotMatch(ui, /Invoice Accent Color/);
   assert.doesNotMatch(ui, /Invoice Theme/);
   assert.doesNotMatch(ui, /invoice_accent_color/);

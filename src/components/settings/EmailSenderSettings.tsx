@@ -16,6 +16,7 @@ import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 import {
   applyEmailPreviewBranding,
   isSafeEmailBrandColor,
+  isSafePreviewDataImage,
   normalizeEmailBrandColor,
   PLATFORM_EMAIL_BRAND_COLOR,
 } from "@/lib/brandingPublicUrl";
@@ -115,6 +116,42 @@ function errorMessage(err: unknown, fallback: string) {
 function copyText(value: string) {
   void navigator.clipboard.writeText(value);
   toast.success("Copied");
+}
+
+const PREVIEW_LOGO_MAX_BYTES = 2_500_000;
+
+function previewLogoCandidates(logoUrl: string | null, tenantId: string | null, apiBaseUrl: string): string[] {
+  const out: string[] = [];
+  if (logoUrl && (/^https?:\/\//i.test(logoUrl) || logoUrl.includes("/storage/public"))) {
+    out.push(logoUrl);
+  }
+  if (tenantId && apiBaseUrl) {
+    out.push(`${apiBaseUrl.replace(/\/$/, "")}/branding/logo/${tenantId}`);
+  }
+  return [...new Set(out)];
+}
+
+async function embedAuthorizedPreviewLogo(url: string, signal?: AbortSignal): Promise<string | null> {
+  const response = await fetch(url, { mode: "cors", credentials: "omit", signal });
+  if (!response.ok) return null;
+  const buffer = await response.arrayBuffer();
+  if (!buffer.byteLength || buffer.byteLength > PREVIEW_LOGO_MAX_BYTES) return null;
+  const header = new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength));
+  const declared = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  const png = header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
+  const jpeg = header[0] === 0xff && header[1] === 0xd8;
+  const gif = header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46;
+  const mime = /^image\/(png|jpe?g|gif|webp)$/.test(declared)
+    ? declared
+    : png ? "image/png" : jpeg ? "image/jpeg" : gif ? "image/gif" : null;
+  if (!mime) return null;
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("logo_read_failed"));
+    reader.readAsDataURL(new Blob([buffer], { type: mime }));
+  });
+  return isSafePreviewDataImage(dataUrl) ? dataUrl : null;
 }
 
 export function EmailSenderSettings({ showSendingDomain = true }: { showSendingDomain?: boolean } = {}) {
@@ -228,13 +265,42 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
     queryFn: () => invokeFunction<EmailPreview>("tenant-email-preview", { tenantId }),
   });
 
+  const [embeddedPreviewLogo, setEmbeddedPreviewLogo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!aws) {
+      setEmbeddedPreviewLogo(null);
+      return;
+    }
+    const candidates = previewLogoCandidates(logoUrl, tenantId, awsApiBaseUrl());
+    if (!candidates.length) {
+      setEmbeddedPreviewLogo(null);
+      return;
+    }
+    const controller = new AbortController();
+    setEmbeddedPreviewLogo(null);
+    void (async () => {
+      for (const candidate of candidates) {
+        try {
+          const embedded = await embedAuthorizedPreviewLogo(candidate, controller.signal);
+          if (embedded) {
+            setEmbeddedPreviewLogo(embedded);
+            return;
+          }
+        } catch {
+          if (controller.signal.aborted) return;
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [aws, logoUrl, tenantId]);
+
   const previewHtml = useMemo(() => applyEmailPreviewBranding(preview?.html || "", {
-    logoUrl,
+    logoUrl: embeddedPreviewLogo || logoUrl,
     primaryColor: previewColor,
     previousColors: [settings?.primaryColor, tenant?.primary_color, storedBrandColor, PLATFORM_EMAIL_BRAND_COLOR],
     apiBaseUrl: awsApiBaseUrl(),
     origin: typeof window !== "undefined" ? window.location.origin : undefined,
-  }), [preview?.html, logoUrl, previewColor, settings?.primaryColor, tenant?.primary_color, storedBrandColor]);
+  }), [preview?.html, embeddedPreviewLogo, logoUrl, previewColor, settings?.primaryColor, tenant?.primary_color, storedBrandColor]);
 
   const save = useMutation({
     mutationFn: async () => {
