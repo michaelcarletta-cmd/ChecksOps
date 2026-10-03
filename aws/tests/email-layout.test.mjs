@@ -8,6 +8,7 @@ import {
   isSafeHttpUrl,
   isVerifiedCustomSender,
   platformBranding,
+  publicTenantLogoUrl,
   resolveEmailBranding,
 } from '../functions/api/email-branding.mjs';
 import { sendViaSesOrSink } from '../functions/api/email.mjs';
@@ -104,6 +105,37 @@ test('tenant logo replaces the platform logo and missing or unsafe logos fall ba
     },
   ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
   assert.match(unsafeLogo.logoUrl, /checksops-logo\.png/);
+});
+
+test('raw tenant logo object paths become public storage URLs for sent mail', async () => {
+  const rawPath = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1790615777558.png';
+  const resolved = publicTenantLogoUrl(rawPath, 'https://staging.checksops.com');
+  assert.equal(
+    resolved,
+    `https://staging.checksops.com/prep/storage/public?bucket=tenant-logos&path=${encodeURIComponent(rawPath)}`,
+  );
+  assert.equal(publicTenantLogoUrl('https://cdn.acme.test/brand.png'), 'https://cdn.acme.test/brand.png');
+  assert.equal(publicTenantLogoUrl('/prep/storage/public?bucket=tenant-logos&path=a.png', 'https://staging.checksops.com'),
+    'https://staging.checksops.com/prep/storage/public?bucket=tenant-logos&path=a.png');
+  assert.equal(publicTenantLogoUrl('javascript:alert(1)'), null);
+  assert.equal(publicTenantLogoUrl('../etc/passwd'), null);
+
+  const withRaw = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{
+        name: 'Freedom Adjustment',
+        is_system_tenant: false,
+        logo_url: rawPath,
+      }] }),
+    },
+  ]), { tenantId: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' });
+  assert.match(withRaw.logoUrl, /\/prep\/storage\/public\?bucket=tenant-logos/);
+  assert.match(withRaw.logoUrl, /logo-1790615777558\.png/);
+  assert.doesNotMatch(withRaw.logoUrl, /checksops-logo\.png/);
+  const branded = renderChecksOpsEmail({ title: 'Hi', logoUrl: withRaw.logoUrl });
+  assert.match(branded.html, /\/prep\/storage\/public\?bucket=tenant-logos/);
+  assert.doesNotMatch(branded.html, /checksops-logo\.png/);
 });
 
 test('unsafe URL schemes are rejected or omitted from href and src', () => {
