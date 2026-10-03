@@ -1,0 +1,34 @@
+{
+  "workstream": "mortgage-agent-compensation-ad99",
+  "phase": 1,
+  "production_writes": false,
+  "exclude_from_agent_compensation_until_separate_review": [
+    {
+      "kind": "mortgage_handling_request",
+      "id": "5b20db20-13e1-4919-9528-06388d8661d2",
+      "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant": "Freedom",
+      "mortgage_company": "PROD E2E TEST LENDER",
+      "status_at_acceptance": "in_progress",
+      "completed_at": null,
+      "billing_event_id": "6c661cc3-9be0-4906-9996-210e3be005dc",
+      "event_type": "mortgage_ops_initial",
+      "unit_price_cents": 1000,
+      "reason": "Accidental Accept during production Mortgage Ops acceptance. Not completed. Do not infer agent pay. Do not delete, unassign, requeue, complete, or void in this workstream."
+    },
+    {
+      "kind": "synthetic_tenant",
+      "id": "6f2c1a90-0ad9-4c3e-9b71-2c8e6d4f1a20",
+      "name": "SYNTHETIC Mortgage Ops Acceptance 20261003",
+      "requests": [
+        "7a7ec1ce-de9a-4601-875c-4a67db635fd2",
+        "71ea6822-df95-4aa9-a04c-4a00a5f6d043"
+      ],
+      "billing_events": [
+        "3df0c417-641d-45c2-87dc-47fdd2c1d80c",
+        "e68193b5-cb9c-4754-92dd-a85884cd2f98"
+      ],
+      "reason": "Controlled production acceptance fixtures. Completed and billed $10/$5 on a synthetic tenant. Exclude from legitimate agent pay unless separately authorized as test data."
+    }
+  ]
+}
