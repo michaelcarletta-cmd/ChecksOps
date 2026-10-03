@@ -536,6 +536,21 @@ export const runHireMortgageAgent = async ({
     }
   }
 
+  try {
+    await client.query(
+      `INSERT INTO public.mortgage_agent_accounts (application_user_id, status)
+       VALUES ($1::uuid, 'active')
+       ON CONFLICT (application_user_id) DO UPDATE
+         SET status = 'active',
+             deactivated_at = NULL,
+             deactivated_by = NULL,
+             updated_at = now()`,
+      [appUserId],
+    );
+  } catch {
+    // SQL 47 may not be applied yet. Hire must still succeed.
+  }
+
   const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;
   const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
   const rendered = renderTransactionalTemplate('mortgage-agent-invite', {

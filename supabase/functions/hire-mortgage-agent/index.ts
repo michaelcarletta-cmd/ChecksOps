@@ -102,6 +102,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json(400, { error: `Failed to grant role: ${roleErr.message}` });
     }
 
+    await admin.from("mortgage_agent_accounts").upsert(
+      { application_user_id: userId, status: "active" },
+      { onConflict: "application_user_id" }
+    );
+
     return json(200, {
       success: true,
       user_id: userId,

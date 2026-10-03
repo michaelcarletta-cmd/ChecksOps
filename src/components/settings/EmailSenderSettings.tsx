@@ -110,7 +110,7 @@ function copyText(value: string) {
   toast.success("Copied");
 }
 
-export function EmailSenderSettings() {
+export function EmailSenderSettings(_props: { showSendingDomain?: boolean } = {}) {
   const { tenantId } = useTenantFilter();
   const { user, userRole } = useAuth();
   const qc = useQueryClient();

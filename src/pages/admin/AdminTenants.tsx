@@ -34,6 +34,7 @@ import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnouncementsManager";
+import { MortgageAgentsPanel } from "@/components/admin/MortgageAgentsPanel";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
@@ -94,6 +95,11 @@ export default function AdminTenants() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Tenant | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [mainTab, setMainTab] = useState(() => (
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "mortgage-agents"
+      ? "mortgage-agents"
+      : "tenants"
+  ));
 
   useEffect(() => {
     (async () => {
@@ -205,10 +211,11 @@ export default function AdminTenants() {
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
 
-        <Tabs defaultValue="tenants" className="w-full">
+        <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
           <TabsList className="mb-6 w-full justify-start overflow-x-auto flex-nowrap">
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
+            <TabsTrigger value="mortgage-agents"><Briefcase className="w-4 h-4 mr-1" /> Mortgage Agents</TabsTrigger>
             <TabsTrigger value="platform-finance"><Landmark className="w-4 h-4 mr-1" /> Platform Finance</TabsTrigger>
             <TabsTrigger value="checkalt"><Banknote className="w-4 h-4 mr-1" /> CheckAlt</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
@@ -251,6 +258,9 @@ export default function AdminTenants() {
           </TabsContent>
           <TabsContent value="announcements">
             <PlatformAnnouncementsManager />
+          </TabsContent>
+          <TabsContent value="mortgage-agents">
+            <MortgageAgentsPanel />
           </TabsContent>
 
         </Tabs>
@@ -362,7 +372,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="branding" className="mt-6 space-y-6">
             <BrandingTab tenant={tenant} onUpdated={onUpdated} />
-            <EmailSenderSettings />
+            <EmailSenderSettings showSendingDomain={true} />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             <ComplianceSettings tenantId={tenant.id} />
