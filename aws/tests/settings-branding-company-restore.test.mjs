@@ -97,6 +97,14 @@ test('Company Information payload contains only allowlisted company_branding fie
   assert.deepEqual(rejected.columns.sort(), ['logo_url', 'updated_at']);
 });
 
+test('company branding preview resolves raw object paths at display time', () => {
+  assert.match(company, /resolvePublicBrandingUrl\(logoUrl, "tenant-logos"\)/);
+  assert.match(company, /resolvePublicBrandingUrl\(invoiceLetterheadUrl, "company-branding"\)/);
+  assert.match(company, /resolvePublicBrandingUrl\(letterheadUrl, "company-branding"\)/);
+  assert.match(settings, /<TenantLogo/);
+  assert.match(emailSender, /resolvePublicBrandingUrl\(settings\?\.logoUrl \|\| tenant\?\.logo_url/);
+});
+
 test('company logo persists through tenants.logo_url, not company_branding.logo_url', () => {
   assert.match(logoUpload, /from\("tenant-logos"\)/);
   assert.match(logoUpload, /\$\{tenantId\}\/logo-\$\{Date\.now\(\)\}\./);
@@ -160,22 +168,27 @@ test('unsupported invoice fields are not submitted or shown', () => {
   assert.deepEqual(extras.columns.sort(), ['invoice_accent_color', 'invoice_theme']);
 });
 
-test('tenant Branding tab does not mount Sending Subdomain or EmailSenderSettings', () => {
+test('tenant Branding tab mounts Email Branding without Sending Subdomain', () => {
   assert.match(brandingTab, /<CompanyBrandingSettings/);
-  assert.doesNotMatch(brandingTab, /<EmailSenderSettings/);
+  assert.match(brandingTab, /<EmailSenderSettings/);
+  assert.match(brandingTab, /showSendingDomain=\{false\}/);
   assert.doesNotMatch(brandingTab, /<BrandingSettings/);
   assert.doesNotMatch(brandingTab, /Sending Subdomain/i);
-  assert.doesNotMatch(settings, /from "@\/components\/settings\/EmailSenderSettings"/);
-  assert.doesNotMatch(settings, /EmailSenderSettings/);
+  assert.doesNotMatch(brandingTab, /showSendingDomain=\{true\}/);
+  assert.match(settings, /from "@\/components\/settings\/EmailSenderSettings"/);
 
   assert.match(emailSender, /export function EmailSenderSettings/);
+  assert.match(emailSender, /showSendingDomain = true/);
+  assert.match(emailSender, /showSendingDomain && <SectionCard\s+title="Sending subdomain"/);
   assert.match(emailSender, /Sending subdomain/i);
   assert.match(adminTenants, /from "@\/components\/settings\/EmailSenderSettings"/);
-  assert.match(adminTenants, /<EmailSenderSettings/);
+  assert.match(adminTenants, /<EmailSenderSettings showSendingDomain=\{true\}/);
 
   assert.match(settings, /function BrandingSettings/);
   assert.match(settings, /secondary_color:\s*secondaryColor/);
   assert.doesNotMatch(brandingTab, /secondary_color/);
+  assert.doesNotMatch(company, /Invoice Accent Color/);
+  assert.doesNotMatch(company, /Invoice Theme/);
   assert.equal(fs.existsSync(path.join(ROOT, 'src/components/settings/TenantBrandingSettings.tsx')), false);
 });
 
