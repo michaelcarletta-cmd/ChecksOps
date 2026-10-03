@@ -143,3 +143,28 @@ unchanged entry, identical `index.html` last.
 - CloudFront: `I5T9PLB4T87BWXGN0C3I0CV9E8` on `E1B0ZWWO5559U5`
 - Lambda unchanged: `S2CV0j3z…` / `2f112f18-…`
 - SQL / Cognito / provider flags / RLS / env vars: unchanged
+
+## Production acceptance (2026-10-03T11:48Z)
+
+Dedicated Mortgage Agent `claims@freedomadj.com` logged in. After the
+queue blur hotfix, `/mortgage-ops/queue` loads.
+
+Labeled synthetic cards on isolated tenant
+`6f2c1a90-0ad9-4c3e-9b71-2c8e6d4f1a20`:
+
+- Accept `PROD-MOPS-20261003-A` → one `mortgage_ops_initial` $10
+  (`3df0c417-641d-45c2-87dc-47fdd2c1d80c`)
+- Accept `PROD-MOPS-20261003-B` → one `mortgage_ops_additional_check` $5
+  (`e68193b5-cb9c-4754-92dd-a85884cd2f98`)
+- Complete both → no additional billing events
+- No Stripe customer and no `platform_fee_line_items` on the synthetic tenant
+- `/settings`, `/admin`, `/company`, `/dashboard` → Organization Not Found
+
+Accidental first Accept self-assigned pre-existing Freedom row
+`5b20db20-13e1-4919-9528-06388d8661d2` (PROD E2E TEST LENDER) and
+recorded one Freedom `mortgage_ops_initial` $10
+(`6c661cc3-9be0-4906-9996-210e3be005dc`). That row remains
+`in_progress` and was not completed. Freedom has no Stripe customer
+and no new platform fee.
+
+Mortgage Agent Management/Compensation is not this workstream.

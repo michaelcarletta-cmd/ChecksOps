@@ -45,6 +45,28 @@
     "amount": "555.00"
   },
   "billing_events_at_seed": 0,
+  "billing_events_after_acceptance": [
+    {
+      "id": "3df0c417-641d-45c2-87dc-47fdd2c1d80c",
+      "event_type": "mortgage_ops_initial",
+      "unit_price_cents": 1000,
+      "request_id": "7a7ec1ce-de9a-4601-875c-4a67db635fd2"
+    },
+    {
+      "id": "e68193b5-cb9c-4754-92dd-a85884cd2f98",
+      "event_type": "mortgage_ops_additional_check",
+      "unit_price_cents": 500,
+      "request_id": "71ea6822-df95-4aa9-a04c-4a00a5f6d043"
+    }
+  ],
+  "accidental_freedom_usage_event": {
+    "id": "6c661cc3-9be0-4906-9996-210e3be005dc",
+    "request_id": "5b20db20-13e1-4919-9528-06388d8661d2",
+    "event_type": "mortgage_ops_initial",
+    "unit_price_cents": 1000,
+    "status": "recorded",
+    "row_left": "in_progress_not_completed"
+  },
   "seed_function": "checksops-prod-mops-accept-seed-ad99",
   "inspect_function": "checksops-prod-mops-accept-inspect-ad99"
 }
