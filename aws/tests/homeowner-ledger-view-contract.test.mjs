@@ -544,6 +544,8 @@ test('source does not rewrite historical SQL 68 or public routes', () => {
   assert.match(handler, /normalizeHomeownerLedgerView/);
   assert.match(handler, /pending_signatures: \[\]/);
   assert.match(handler, /handleHomeownerLedgerSignLink is not/);
+  assert.match(handler, /aws_public_homeowner_ledger_remint_signer/);
+  assert.match(handler, /sign_url: `\$\{origin\}\/sign\?token=\$\{raw\}`/);
   assert.doesNotMatch(handler, /allow_deductible_payment: true/);
   assert.match(app, /path="\/ledger\/:token"/);
   assert.doesNotMatch(app, /CHANGED_BY_VIEW_CONTRACT/);

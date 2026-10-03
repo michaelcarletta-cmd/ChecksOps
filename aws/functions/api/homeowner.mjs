@@ -532,6 +532,20 @@ export const handleHomeownerLedgerView = async (event) => {
   }
 };
 
+export const assembleHomeownerLedgerView = (doc, spoof) => {
+  const normalized = normalizeHomeownerLedgerView(doc);
+  if (!normalized || normalized.error) {
+    const error = normalized?.error || 'not_found';
+    const status = error === 'revoked' || error === 'expired' ? 410 : 404;
+    return { ok: false, statusCode: status, error, spoofFieldsIgnored: spoof };
+  }
+  return {
+    ...normalized,
+    statusCode: 200,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
 export const handleHomeownerClaimPortal = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -787,6 +801,15 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
   }
 };
 
+const signLinkStatus = (error) => {
+  if (error === 'revoked' || error === 'expired') return 410;
+  if (error === 'already_signed') return 409;
+  if (error === 'mismatch' || error === 'not_your_signature' || error === 'invalid_state') return 403;
+  if (error === 'invalid_hash' || error === 'missing_fields') return 400;
+  if (error === 'signer_not_found' || error === 'not_found' || error === 'no_claim') return 404;
+  return 403;
+};
+
 export const handleHomeownerLedgerSignLink = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -800,34 +823,25 @@ export const handleHomeownerLedgerSignLink = async (event) => {
     client = await publicDb(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const doc = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-      [token],
-    )).rows[0]?.doc;
-    if (!doc?.ok) {
-      await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: doc?.error || 'not_found', spoofFieldsIgnored: spoof };
-    }
     const raw = randomBytes(32).toString('hex');
     const hash = createHash('sha256').update(raw).digest('hex');
-    const updated = (await client.query(
-      `UPDATE public.signature_signers
-       SET token_hash = $2, updated_at = now()
-       WHERE id = $1::uuid
-       RETURNING id`,
-      [signerId, hash],
-    )).rows[0];
-    if (!updated) {
+    const remint = (await client.query(
+      'SELECT public.aws_public_homeowner_ledger_remint_signer($1, $2::uuid, $3) AS doc',
+      [token, signerId, hash],
+    )).rows[0]?.doc;
+    if (!remint?.ok) {
       await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: 'signer_not_found', spoofFieldsIgnored: spoof };
+      const error = remint?.error || 'not_found';
+      return { ok: false, statusCode: signLinkStatus(error), error, spoofFieldsIgnored: spoof };
     }
     await client.query('COMMIT');
-    const origin = String(body.origin || process.env.VITE_APP_URL || 'https://staging.checksops.com').replace(/\/$/, '');
+    const origin = String(body.origin || process.env.SIGN_BASE_URL || process.env.VITE_APP_URL || 'https://checksops.com').replace(/\/$/, '');
     return {
       ok: true,
       statusCode: 200,
-      url: `${origin}/sign/${raw}`,
-      token: raw,
+      sign_url: `${origin}/sign?token=${raw}`,
+      request_id: remint.request_id || null,
+      signer_id: remint.signer_id || signerId,
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {
