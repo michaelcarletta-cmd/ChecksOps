@@ -1,0 +1,752 @@
+{
+  "ok": true,
+  "writes": true,
+  "dryRun": false,
+  "connectedDatabase": "checksops",
+  "connectedAs": "checksops_admin",
+  "notes": [
+    "Skipped payment_provider_accounts update: provider/account IDs match; AWS readiness cache is equal-or-more-complete (canMoveMoney true vs SB pending). Overwriting would regress AWS provider-status cache. Immutable Moov account id 60922058\u2026 preserved.",
+    "Skipped check_intake_items 33a674e6: AWS-newer FA row not authorized by the report for overwrite.",
+    "Skipped tenant row updates and all C1C/UAT rows.",
+    "Skipped identity_accounts/profiles/tenant_users/user_roles."
+  ],
+  "identityBefore": {
+    "rowCount": 11,
+    "rows": [
+      {
+        "application_user_id": "0160a5f3-30a4-4aba-8e54-6529f1ceb0d4",
+        "status": "active",
+        "cognito_sub": "d418a4f8-80f1-70d6-36c9-fe490220bf4a",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "233c588f-dc33-4307-8c3f-3da49c9fd2b3",
+        "status": "active",
+        "cognito_sub": "84e85408-b091-7058-a111-1d9a84e78da0",
+        "linked_at": "2026-09-10T14:15:42.726Z"
+      },
+      {
+        "application_user_id": "30d0505c-bcfa-4732-81fd-869dc46da5dd",
+        "status": "active",
+        "cognito_sub": "34388468-a021-7036-c34d-2ff14a20ed40",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "3af0234c-de1b-4819-938d-fa4f9390811b",
+        "status": "active",
+        "cognito_sub": "24d874d8-80d1-7092-7f34-48b8704702f8",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+        "status": "active",
+        "cognito_sub": "a45884b8-d051-70b3-b19d-ca704964c6e8",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+        "status": "active",
+        "cognito_sub": "f468b438-4081-7004-d865-a1b86eb19beb",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+        "status": "active",
+        "cognito_sub": "34c8a478-e0d1-70f3-3c49-02225e7404b6",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "c7729c3e-d87b-46c6-973e-9c04fbdcc961",
+        "status": "active",
+        "cognito_sub": "b4d8d428-2081-706b-04b0-e4694e568059",
+        "linked_at": "2026-09-04T20:20:33.211Z"
+      },
+      {
+        "application_user_id": "dd24eea5-5d12-47d1-999e-d5930c278b7d",
+        "status": "pending",
+        "cognito_sub": null,
+        "linked_at": null
+      },
+      {
+        "application_user_id": "e2ad0849-c6b6-4f4a-a68a-8c52f563c6fd",
+        "status": "active",
+        "cognito_sub": "647894c8-2011-70d4-e874-efd4b080700e",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "fd857564-9534-4b0f-95ac-624ed1273725",
+        "status": "active",
+        "cognito_sub": "74286478-c0c1-7068-9fea-9deea6f61627",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      }
+    ]
+  },
+  "identityAfter": {
+    "rowCount": 11,
+    "rows": [
+      {
+        "application_user_id": "0160a5f3-30a4-4aba-8e54-6529f1ceb0d4",
+        "status": "active",
+        "cognito_sub": "d418a4f8-80f1-70d6-36c9-fe490220bf4a",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "233c588f-dc33-4307-8c3f-3da49c9fd2b3",
+        "status": "active",
+        "cognito_sub": "84e85408-b091-7058-a111-1d9a84e78da0",
+        "linked_at": "2026-09-10T14:15:42.726Z"
+      },
+      {
+        "application_user_id": "30d0505c-bcfa-4732-81fd-869dc46da5dd",
+        "status": "active",
+        "cognito_sub": "34388468-a021-7036-c34d-2ff14a20ed40",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "3af0234c-de1b-4819-938d-fa4f9390811b",
+        "status": "active",
+        "cognito_sub": "24d874d8-80d1-7092-7f34-48b8704702f8",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+        "status": "active",
+        "cognito_sub": "a45884b8-d051-70b3-b19d-ca704964c6e8",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+        "status": "active",
+        "cognito_sub": "f468b438-4081-7004-d865-a1b86eb19beb",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+        "status": "active",
+        "cognito_sub": "34c8a478-e0d1-70f3-3c49-02225e7404b6",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "c7729c3e-d87b-46c6-973e-9c04fbdcc961",
+        "status": "active",
+        "cognito_sub": "b4d8d428-2081-706b-04b0-e4694e568059",
+        "linked_at": "2026-09-04T20:20:33.211Z"
+      },
+      {
+        "application_user_id": "dd24eea5-5d12-47d1-999e-d5930c278b7d",
+        "status": "pending",
+        "cognito_sub": null,
+        "linked_at": null
+      },
+      {
+        "application_user_id": "e2ad0849-c6b6-4f4a-a68a-8c52f563c6fd",
+        "status": "active",
+        "cognito_sub": "647894c8-2011-70d4-e874-efd4b080700e",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      },
+      {
+        "application_user_id": "fd857564-9534-4b0f-95ac-624ed1273725",
+        "status": "active",
+        "cognito_sub": "74286478-c0c1-7068-9fea-9deea6f61627",
+        "linked_at": "2026-09-14T10:07:27.787Z"
+      }
+    ]
+  },
+  "identityUnchanged": true,
+  "membershipTenantUserCountBefore": 7,
+  "membershipTenantUserCountAfter": 7,
+  "userRoleCountBefore": 10,
+  "userRoleCountAfter": 10,
+  "tenantsBefore": [
+    {
+      "id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "name": "Freedom Adjustment",
+      "updated_at": "2026-09-02T15:41:41.948Z"
+    },
+    {
+      "id": "3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43",
+      "name": "ChecksOps Pipeline Test",
+      "updated_at": "2026-09-13T01:06:44.175Z"
+    },
+    {
+      "id": "3ea1e5eb-9f60-4905-99bb-59afbe7e1265",
+      "name": "Home Hero Pros",
+      "updated_at": "2026-08-28T21:04:16.222Z"
+    },
+    {
+      "id": "4f172140-f57a-4744-8050-95f4f07b13b4",
+      "name": "Condition One Commercial",
+      "updated_at": "2026-09-12T18:25:56.341Z"
+    },
+    {
+      "id": "7d5d40e4-f231-4072-9cf6-7486e7d34fa3",
+      "name": "Freedom Claims (freedom_crm)",
+      "updated_at": "2026-08-28T21:04:16.222Z"
+    },
+    {
+      "id": "fd77533e-6e72-4f28-a22d-cf026b392a4f",
+      "name": "Barzzini Construction Group",
+      "updated_at": "2026-08-28T21:04:16.222Z"
+    }
+  ],
+  "tenantsAfter": [
+    {
+      "id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "name": "Freedom Adjustment",
+      "updated_at": "2026-09-02T15:41:41.948Z"
+    },
+    {
+      "id": "3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43",
+      "name": "ChecksOps Pipeline Test",
+      "updated_at": "2026-09-13T01:06:44.175Z"
+    },
+    {
+      "id": "3ea1e5eb-9f60-4905-99bb-59afbe7e1265",
+      "name": "Home Hero Pros",
+      "updated_at": "2026-08-28T21:04:16.222Z"
+    },
+    {
+      "id": "4f172140-f57a-4744-8050-95f4f07b13b4",
+      "name": "Condition One Commercial",
+      "updated_at": "2026-09-12T18:25:56.341Z"
+    },
+    {
+      "id": "7d5d40e4-f231-4072-9cf6-7486e7d34fa3",
+      "name": "Freedom Claims (freedom_crm)",
+      "updated_at": "2026-08-28T21:04:16.222Z"
+    },
+    {
+      "id": "fd77533e-6e72-4f28-a22d-cf026b392a4f",
+      "name": "Barzzini Construction Group",
+      "updated_at": "2026-08-28T21:04:16.222Z"
+    }
+  ],
+  "financialBefore": {
+    "check_intake_amount": "1428955.65",
+    "check_intake_pa_fee_amount": "5393.27",
+    "deposit_items_amount": "1037630.29",
+    "deposit_batches_total_amount": "1038410.29",
+    "checkalt_deposits_amount": "453990.48",
+    "disbursement_splits_amount": "880702.79",
+    "disbursement_batches_check_amount": "888258.734",
+    "disbursement_batches_amount_reserved_cents": "0",
+    "claim_check_payments_check_amount": "0",
+    "claim_check_payments_payment_amount": "0",
+    "endorsed_check_intake_amount": "4200710.24",
+    "payment_transfers_amount_cents": "0",
+    "payment_wallet_ledger_amount_cents": "0",
+    "claim_payments_amount": "114621.50",
+    "homeowner_ledger_amount": "3169779.99"
+  },
+  "financialAfter": {
+    "check_intake_amount": "1428955.65",
+    "check_intake_pa_fee_amount": "5393.27",
+    "deposit_items_amount": "1037630.29",
+    "deposit_batches_total_amount": "1038410.29",
+    "checkalt_deposits_amount": "453990.48",
+    "disbursement_splits_amount": "880702.79",
+    "disbursement_batches_check_amount": "888258.734",
+    "disbursement_batches_amount_reserved_cents": "0",
+    "claim_check_payments_check_amount": "0",
+    "claim_check_payments_payment_amount": "0",
+    "endorsed_check_intake_amount": "4200710.24",
+    "payment_transfers_amount_cents": "0",
+    "payment_wallet_ledger_amount_cents": "0",
+    "claim_payments_amount": "114621.50",
+    "homeowner_ledger_amount": "3169779.99"
+  },
+  "uatBefore": {
+    "c1cCheckIntakeCount": 37,
+    "sampleAwsOnlyChecksPresent": 4,
+    "sampleAwsOnlyExpected": 4
+  },
+  "uatAfter": {
+    "c1cCheckIntakeCount": 37,
+    "sampleAwsOnlyChecksPresent": 4,
+    "sampleAwsOnlyExpected": 4
+  },
+  "results": [
+    {
+      "table": "check_endorsements",
+      "pk": "3d1565b9-ac95-427e-a694-2e5034030a1d",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": [
+        "token",
+        "token_expires_at"
+      ]
+    },
+    {
+      "table": "check_intake_items",
+      "pk": "7d62ea7c-2563-499d-97c1-8273f220a382",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "check_intake_items",
+      "pk": "623442f0-a408-4db5-85be-14bae231a722",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "check_intake_items",
+      "pk": "64fca2df-c57a-4f13-b7c4-9dfe52e860e4",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "check_intake_items",
+      "pk": "c7ea8b6a-2f88-4571-8798-18daab6534ad",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "check_endorsement_events",
+      "pk": "e506cafa-69fe-41e2-943e-117565e0dfb2",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "endorsement_audit_log",
+      "pk": "37110f14-bae0-40e4-8e2a-6c84a91bdb9d",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "check_audit_log",
+      "pk": "14173e86-64cd-4d6d-b51b-b8104bd9eeeb",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "check_audit_log",
+      "pk": "586fc7df-3cb5-4cb1-9ac8-140829f00288",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "homeowner_ledger_events",
+      "pk": "60bdd1e0-a043-429b-8aeb-e3b13629e02b",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "audit_logs",
+      "pk": "3783624d-7911-467e-8f3c-a2e617ea3cb8",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "audit_logs",
+      "pk": "3c36179a-9586-4982-b8de-0667efe7f4b0",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "audit_logs",
+      "pk": "d8588653-6ace-42c7-bb13-846292f87084",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "stakeholder_accounts",
+      "pk": "2ad87468-15cd-437c-ba9c-c4a896dc5365",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": [
+        "verification_token",
+        "verification_token_expires_at",
+        "homeowner_link_token_id",
+        "plaid_access_token"
+      ]
+    },
+    {
+      "table": "stakeholder_accounts",
+      "pk": "724952c9-eb56-4c52-b28e-06907198c406",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": [
+        "verification_token",
+        "verification_token_expires_at",
+        "homeowner_link_token_id",
+        "plaid_access_token"
+      ]
+    },
+    {
+      "table": "stakeholder_accounts",
+      "pk": "f4746b48-9ccc-44b6-8967-2551ee0d53a6",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": [
+        "verification_token",
+        "verification_token_expires_at",
+        "homeowner_link_token_id",
+        "plaid_access_token"
+      ]
+    },
+    {
+      "table": "external_payment_recipients",
+      "pk": "3269bd10-4504-4a8f-a4ea-e41f41d32562",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": [
+        "secure_token",
+        "token_expires_at",
+        "token_used_at"
+      ]
+    },
+    {
+      "table": "external_payment_recipients",
+      "pk": "62a858ff-ee6a-49d7-9898-1c8e4a44227b",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": [
+        "secure_token",
+        "token_expires_at",
+        "token_used_at"
+      ]
+    },
+    {
+      "table": "stakeholder_account_verification_log",
+      "pk": "a782080e-7a8a-4bdc-a6bc-b0a779d14977",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "stakeholder_account_verification_log",
+      "pk": "fb3a1726-e0aa-4ad0-9c4f-0052affd4f7c",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "email_send_log",
+      "pk": "31a6891b-f9d1-4827-bd66-7a224bf25839",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "email_send_log",
+      "pk": "351bdb25-72b4-499d-917c-083ef8069fb6",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "email_send_log",
+      "pk": "49291995-ae10-4454-9d1a-b818e7f28504",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "email_send_log",
+      "pk": "6c13f6a4-68d6-4d9f-861a-ce994db0ac9a",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "email_send_log",
+      "pk": "d04f9b35-33f7-47be-80a2-4627c25a92e5",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "email_send_log",
+      "pk": "eab2f104-3c76-4771-927a-9fbb5609fcdc",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "01a6063d-d6bf-4a5d-a387-a66e0a4cb58f",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "029e782a-c2a8-4915-b94b-b859c5f80773",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "035f983b-b546-4d91-b1fe-990e3a8acdd3",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "0651a617-48eb-442d-a55e-aafe23832953",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "25224999-e92e-4025-9fb6-95ba9812b172",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "329327ba-6e88-4a0b-89bf-42d142771ced",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "3940f7e7-b0ec-4140-9148-39d74bb5aa65",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "3e62619c-b2a7-49f8-9763-f7c01d21e8c8",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "4349e7e1-66d5-4e22-a186-5cfc93d7fcb6",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "5d70d76c-a496-4eba-a1a2-a1788821fa29",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "76520d77-cf14-4262-a9a5-7cd7cad3e49b",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "8882f3a4-f11e-46e7-886d-72ce3040d84f",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "92ad31b8-7183-48b9-b79f-a6c039d8b1f6",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "a2fd1212-41e6-4ef9-8c33-225ee7be37a8",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "a68dcf33-1476-4958-bc65-fe69839b4a09",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "a825fe49-2c83-4676-b410-e621797e1253",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "c8b54bb8-c69d-4ee5-bdea-52335e844cf2",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "d40f9fe4-032f-4c10-a19f-0a3248e9a52b",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_webhook_events",
+      "pk": "fe0d924f-0c65-4dfb-a281-36ba756a6e4c",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "0004b395-0f4c-449d-8519-11610bb69163",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "12acea0e-2461-4754-a031-c0901316cd69",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "134861d1-0711-464e-a15e-3c87078b5dd6",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "60f727fa-f453-48cf-ac06-875e8c593ab6",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "7947d0ab-e236-47b2-8365-17c2a4a47883",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "9b0597f9-30a4-4e5c-b6eb-e2bdb7496680",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "b88bbe0f-c161-41e5-8c23-572801ee9ad3",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "d5d3aba2-f6aa-49c1-ae3d-f97eaa923385",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "dea40172-8899-4d4a-8e0d-133e63488bcb",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "efaeec53-37f2-4184-948e-a918348d8958",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "payment_event_log",
+      "pk": "fd57230e-f964-47e0-ae4d-6cc896eab784",
+      "op": "insert",
+      "action": "inserted",
+      "resolvedTenant": null,
+      "skippedRedactedColumns": []
+    },
+    {
+      "table": "tenant_email_settings",
+      "pk": "20ea4b40-e457-47ec-b03a-406d188864a1",
+      "op": "update",
+      "action": "updated",
+      "resolvedTenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "skippedRedactedColumns": []
+    }
+  ]
+}

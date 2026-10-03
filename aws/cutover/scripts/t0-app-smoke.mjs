@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { EXPECTED_EIGHT, TESTER_ID, C1C_ADMIN_ID } from '../../identity/expected-mappings.mjs';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
-const API = 'https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep';
+const API = process.env.T0_API_BASE || 'https://checksops.com/prep';
 const POOL = 'us-east-1_h00WorYMT';
 const CLIENT = '3ja9fqaq2fjkv3i6up2varcqpe';
 

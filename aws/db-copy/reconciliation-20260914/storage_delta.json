@@ -1,0 +1,269 @@
+{
+  "generatedAt": "2026-09-14T10:47:53.284Z",
+  "supabaseTotalObjects": 1414,
+  "supabaseTotalBytes": 2567229125,
+  "supabaseByBucket": {
+    "claim-files": 1257,
+    "document-templates": 1,
+    "email-assets": 1,
+    "endorsement-packets": 131,
+    "homeowner-uploads": 8,
+    "loss-draft-documents": 3,
+    "tenant-documents": 8,
+    "tenant-logos": 5
+  },
+  "awsS3TotalObjectsUnderFilesPrefix": 1456,
+  "awsS3TotalBytes": 2566284372,
+  "matchedCount": 1411,
+  "sizeMismatchCount": 0,
+  "sizeMismatchSample": [],
+  "supabaseOnlyCount": 3,
+  "supabaseOnlySample": [
+    {
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1785161226836_back_IMG_0978_cropped_endorsed_1789057905238.svg",
+      "size": 791058,
+      "updatedAt": "2026-09-10T16:31:45.918Z",
+      "createdAt": "2026-09-10T16:31:45.918Z"
+    },
+    {
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1788459141955_front_IMG_1183_cropped.checkalt.jpg",
+      "size": 278787,
+      "updatedAt": "2026-09-10T18:14:52.632Z",
+      "createdAt": "2026-09-10T18:14:52.632Z"
+    },
+    {
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/endorsed_deposit_18vd.checkalt.jpg",
+      "size": 247060,
+      "updatedAt": "2026-09-10T18:14:18.965Z",
+      "createdAt": "2026-09-10T18:14:18.965Z"
+    }
+  ],
+  "awsExtraCount": 45,
+  "awsExtraSample": [
+    {
+      "key": "files/claim-files/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/65f387e4-82a7-4b1e-88e3-d89c2f8a3204/homeowner-checks/1788612866649-front.jpg",
+      "size": 153,
+      "lastModified": "2026-09-05T12:54:27+00:00"
+    },
+    {
+      "key": "files/claim-files/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/65f387e4-82a7-4b1e-88e3-d89c2f8a3204/homeowner-checks/1788613175577-front.jpg",
+      "size": 153,
+      "lastModified": "2026-09-05T12:59:36+00:00"
+    },
+    {
+      "key": "files/claim-files/check-intake/3e3541a9-73d1-418a-932e-1c25cd5612fa/files/aws-step2/1788881533655.txt",
+      "size": 30,
+      "lastModified": "2026-09-08T15:32:14+00:00"
+    },
+    {
+      "key": "files/claim-files/check-intake/dc647a1f-9c0a-4893-a09a-f8159c6a9151/files/aws-t3-test/1788386405642.txt",
+      "size": 25,
+      "lastModified": "2026-09-02T22:00:07+00:00"
+    },
+    {
+      "key": "files/claim-files/check-intake/dc647a1f-9c0a-4893-a09a-f8159c6a9151/files/aws-t3-test/1788386407704-moved.txt",
+      "size": 25,
+      "lastModified": "2026-09-02T22:00:08+00:00"
+    },
+    {
+      "key": "files/claim-files/check-intake/dc647a1f-9c0a-4893-a09a-f8159c6a9151/files/aws-t3-test/move-1788386440088.txt",
+      "size": 7,
+      "lastModified": "2026-09-02T22:00:41+00:00"
+    },
+    {
+      "key": "files/claim-files/check-intake/dc647a1f-9c0a-4893-a09a-f8159c6a9151/files/aws-t3-test/probe-1788386377190.txt",
+      "size": 8,
+      "lastModified": "2026-09-02T21:59:38+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/009eb774-cdd8-4a0b-aedf-97004f812b11/aws-t5-test-front.jpg",
+      "size": 450,
+      "lastModified": "2026-09-03T00:47:52+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/149417f0-317f-4c49-a692-3ffcc82a09a0/aws-t5-test-front.jpg",
+      "size": 450,
+      "lastModified": "2026-09-03T01:31:30+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/2355324c-992d-4613-a01c-48d35b9dd563/1789237550963_front.png",
+      "size": 4403,
+      "lastModified": "2026-09-12T18:25:52+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/36f4293b-e3b0-44be-9412-21a5fd819a11/aws-t5-test-front.jpg",
+      "size": 450,
+      "lastModified": "2026-09-02T23:38:35+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/444e31d6-e972-45b5-a74e-274c6d959c6f/aws-t5-test-front.jpg",
+      "size": 450,
+      "lastModified": "2026-09-03T00:07:59+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/6220efe6-8172-4825-bd51-62f626423204/aws-t5-test-front.jpg",
+      "size": 450,
+      "lastModified": "2026-09-02T23:38:51+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/69254974-ab10-48ba-8312-50a835f7d2cc/back-void.jpg",
+      "size": 54414,
+      "lastModified": "2026-09-05T17:53:32+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/69254974-ab10-48ba-8312-50a835f7d2cc/front-void.jpg",
+      "size": 60162,
+      "lastModified": "2026-09-05T17:53:32+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/7d74ac5b-897b-4c54-95db-1bef97aba166/aws-t5-test-front.jpg",
+      "size": 450,
+      "lastModified": "2026-09-02T23:40:00+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/aaca0a89-ee1c-4b75-975c-e4209cd8bf9a/back-void.jpg",
+      "size": 54414,
+      "lastModified": "2026-09-05T17:55:43+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/aaca0a89-ee1c-4b75-975c-e4209cd8bf9a/front-void.jpg",
+      "size": 60162,
+      "lastModified": "2026-09-05T17:55:43+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/b6d7a028-747f-45d7-8597-d0a27a7bb624/aws-t5-test-front.jpg",
+      "size": 450,
+      "lastModified": "2026-09-03T10:55:49+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/dc647a1f-9c0a-4893-a09a-f8159c6a9151/synthetic-textract-live-verify-20260904.png",
+      "size": 62851,
+      "lastModified": "2026-09-04T16:40:48+00:00"
+    },
+    {
+      "key": "files/claim-files/checks/synthetic-uat/textract-live-verify-20260904.png",
+      "size": 59529,
+      "lastModified": "2026-09-04T16:37:58+00:00"
+    },
+    {
+      "key": "files/claim-files/docs/7dbb3009-f059-4767-b5dc-1c5c72379330/65087b72-d1f2-4b64-aae3-359be1e83493/tpa-1788538312526.pdf",
+      "size": 1308,
+      "lastModified": "2026-09-04T16:11:53+00:00"
+    },
+    {
+      "key": "files/claim-files/docs/7dbb3009-f059-4767-b5dc-1c5c72379330/65087b72-d1f2-4b64-aae3-359be1e83493/tpa-1788538600375.pdf",
+      "size": 1297,
+      "lastModified": "2026-09-04T16:16:41+00:00"
+    },
+    {
+      "key": "files/claim-files/endorsement-packets/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/dc647a1f-9c0a-4893-a09a-f8159c6a9151-1788538313211.pdf",
+      "size": 1104,
+      "lastModified": "2026-09-04T16:11:54+00:00"
+    },
+    {
+      "key": "files/claim-files/endorsement-packets/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/dc647a1f-9c0a-4893-a09a-f8159c6a9151-1788538621946.pdf",
+      "size": 1104,
+      "lastModified": "2026-09-04T16:17:02+00:00"
+    },
+    {
+      "key": "files/claim-files/endorsement-packets/4f172140-f57a-4744-8050-95f4f07b13b4/6e7303ba-e62d-4811-8521-52fb0004b32d-1789222632525.pdf",
+      "size": 1101,
+      "lastModified": "2026-09-12T14:17:13+00:00"
+    },
+    {
+      "key": "files/claim-files/endorsement-packets/4f172140-f57a-4744-8050-95f4f07b13b4/891dc6b3-10bc-4fdf-81cf-16697467804a-1789216726224.pdf",
+      "size": 1104,
+      "lastModified": "2026-09-12T12:38:47+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/7dbb3009-f059-4767-b5dc-1c5c72379330/49b09805-ef65-4cc3-8f71-2ce0bd8674cb/025349d5-0da5-4aec-838e-e386daef2f72.jpg",
+      "size": 241,
+      "lastModified": "2026-09-04T15:50:38+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/7dbb3009-f059-4767-b5dc-1c5c72379330/49b09805-ef65-4cc3-8f71-2ce0bd8674cb/187f6457-fb3c-4c26-86d2-07f3cbfcc99f.jpg",
+      "size": 241,
+      "lastModified": "2026-09-04T15:47:37+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/7dbb3009-f059-4767-b5dc-1c5c72379330/49b09805-ef65-4cc3-8f71-2ce0bd8674cb/5334a3e1-51d6-4a94-a584-ace51bdd39c2.jpg",
+      "size": 241,
+      "lastModified": "2026-09-04T16:10:18+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/7dbb3009-f059-4767-b5dc-1c5c72379330/49b09805-ef65-4cc3-8f71-2ce0bd8674cb/b9a7ffe7-be0e-45b9-a9b5-45505b0efc3b.jpg",
+      "size": 2800,
+      "lastModified": "2026-09-04T16:16:43+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/homeowner/05360374-b28a-481b-954e-59a15f99d1ad/1789298116871_phase2-synthetic-check.png",
+      "size": 460,
+      "lastModified": "2026-09-13T11:15:17+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789146338058_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T17:05:39+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789146363087_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T17:06:04+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789146487327_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T17:08:08+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789153475386_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T19:04:36+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789153667960_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T19:07:48+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789153864841_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T19:11:05+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789154153748_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T19:15:54+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789155145046_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-11T19:32:26+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789265681772_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-13T02:14:42+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789266032463_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-13T02:20:33+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789266227874_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-13T02:23:48+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/ledger/4f172140-f57a-4744-8050-95f4f07b13b4/5d02878b-2560-4e46-a3aa-460c51e19885/1789266383245_front.jpg",
+      "size": 126,
+      "lastModified": "2026-09-13T02:26:24+00:00"
+    },
+    {
+      "key": "files/homeowner-uploads/pr129-staging-validation/front.jpg",
+      "size": 153,
+      "lastModified": "2026-09-05T12:58:45+00:00"
+    }
+  ]
+}

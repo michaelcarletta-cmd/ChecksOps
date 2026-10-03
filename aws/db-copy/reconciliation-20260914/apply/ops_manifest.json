@@ -1,0 +1,356 @@
+{
+  "generatedAt": "2026-09-14T11:12:09.041Z",
+  "dryRun": true,
+  "opCount": 57,
+  "byTable": {
+    "check_endorsements": {
+      "insert": 0,
+      "update": 1
+    },
+    "check_intake_items": {
+      "insert": 0,
+      "update": 4
+    },
+    "check_endorsement_events": {
+      "insert": 1,
+      "update": 0
+    },
+    "endorsement_audit_log": {
+      "insert": 1,
+      "update": 0
+    },
+    "check_audit_log": {
+      "insert": 2,
+      "update": 0
+    },
+    "homeowner_ledger_events": {
+      "insert": 1,
+      "update": 0
+    },
+    "audit_logs": {
+      "insert": 3,
+      "update": 0
+    },
+    "stakeholder_accounts": {
+      "insert": 0,
+      "update": 3
+    },
+    "external_payment_recipients": {
+      "insert": 0,
+      "update": 2
+    },
+    "stakeholder_account_verification_log": {
+      "insert": 2,
+      "update": 0
+    },
+    "email_send_log": {
+      "insert": 6,
+      "update": 0
+    },
+    "payment_webhook_events": {
+      "insert": 19,
+      "update": 0
+    },
+    "payment_event_log": {
+      "insert": 11,
+      "update": 0
+    },
+    "tenant_email_settings": {
+      "insert": 0,
+      "update": 1
+    }
+  },
+  "notes": [
+    "Skipped payment_provider_accounts update: provider/account IDs match; AWS readiness cache is equal-or-more-complete (canMoveMoney true vs SB pending). Overwriting would regress AWS provider-status cache. Immutable Moov account id 60922058\u2026 preserved.",
+    "Skipped check_intake_items 33a674e6: AWS-newer FA row not authorized by the report for overwrite.",
+    "Skipped tenant row updates and all C1C/UAT rows.",
+    "Skipped identity_accounts/profiles/tenant_users/user_roles."
+  ],
+  "pks": [
+    {
+      "table": "check_endorsements",
+      "op": "update",
+      "pk": "3d1565b9-ac95-427e-a694-2e5034030a1d"
+    },
+    {
+      "table": "check_intake_items",
+      "op": "update",
+      "pk": "7d62ea7c-2563-499d-97c1-8273f220a382"
+    },
+    {
+      "table": "check_intake_items",
+      "op": "update",
+      "pk": "623442f0-a408-4db5-85be-14bae231a722"
+    },
+    {
+      "table": "check_intake_items",
+      "op": "update",
+      "pk": "64fca2df-c57a-4f13-b7c4-9dfe52e860e4"
+    },
+    {
+      "table": "check_intake_items",
+      "op": "update",
+      "pk": "c7ea8b6a-2f88-4571-8798-18daab6534ad"
+    },
+    {
+      "table": "check_endorsement_events",
+      "op": "insert",
+      "pk": "e506cafa-69fe-41e2-943e-117565e0dfb2"
+    },
+    {
+      "table": "endorsement_audit_log",
+      "op": "insert",
+      "pk": "37110f14-bae0-40e4-8e2a-6c84a91bdb9d"
+    },
+    {
+      "table": "check_audit_log",
+      "op": "insert",
+      "pk": "14173e86-64cd-4d6d-b51b-b8104bd9eeeb"
+    },
+    {
+      "table": "check_audit_log",
+      "op": "insert",
+      "pk": "586fc7df-3cb5-4cb1-9ac8-140829f00288"
+    },
+    {
+      "table": "homeowner_ledger_events",
+      "op": "insert",
+      "pk": "60bdd1e0-a043-429b-8aeb-e3b13629e02b"
+    },
+    {
+      "table": "audit_logs",
+      "op": "insert",
+      "pk": "3783624d-7911-467e-8f3c-a2e617ea3cb8"
+    },
+    {
+      "table": "audit_logs",
+      "op": "insert",
+      "pk": "3c36179a-9586-4982-b8de-0667efe7f4b0"
+    },
+    {
+      "table": "audit_logs",
+      "op": "insert",
+      "pk": "d8588653-6ace-42c7-bb13-846292f87084"
+    },
+    {
+      "table": "stakeholder_accounts",
+      "op": "update",
+      "pk": "2ad87468-15cd-437c-ba9c-c4a896dc5365"
+    },
+    {
+      "table": "stakeholder_accounts",
+      "op": "update",
+      "pk": "724952c9-eb56-4c52-b28e-06907198c406"
+    },
+    {
+      "table": "stakeholder_accounts",
+      "op": "update",
+      "pk": "f4746b48-9ccc-44b6-8967-2551ee0d53a6"
+    },
+    {
+      "table": "external_payment_recipients",
+      "op": "update",
+      "pk": "3269bd10-4504-4a8f-a4ea-e41f41d32562"
+    },
+    {
+      "table": "external_payment_recipients",
+      "op": "update",
+      "pk": "62a858ff-ee6a-49d7-9898-1c8e4a44227b"
+    },
+    {
+      "table": "stakeholder_account_verification_log",
+      "op": "insert",
+      "pk": "a782080e-7a8a-4bdc-a6bc-b0a779d14977"
+    },
+    {
+      "table": "stakeholder_account_verification_log",
+      "op": "insert",
+      "pk": "fb3a1726-e0aa-4ad0-9c4f-0052affd4f7c"
+    },
+    {
+      "table": "email_send_log",
+      "op": "insert",
+      "pk": "31a6891b-f9d1-4827-bd66-7a224bf25839"
+    },
+    {
+      "table": "email_send_log",
+      "op": "insert",
+      "pk": "351bdb25-72b4-499d-917c-083ef8069fb6"
+    },
+    {
+      "table": "email_send_log",
+      "op": "insert",
+      "pk": "49291995-ae10-4454-9d1a-b818e7f28504"
+    },
+    {
+      "table": "email_send_log",
+      "op": "insert",
+      "pk": "6c13f6a4-68d6-4d9f-861a-ce994db0ac9a"
+    },
+    {
+      "table": "email_send_log",
+      "op": "insert",
+      "pk": "d04f9b35-33f7-47be-80a2-4627c25a92e5"
+    },
+    {
+      "table": "email_send_log",
+      "op": "insert",
+      "pk": "eab2f104-3c76-4771-927a-9fbb5609fcdc"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "01a6063d-d6bf-4a5d-a387-a66e0a4cb58f"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "029e782a-c2a8-4915-b94b-b859c5f80773"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "035f983b-b546-4d91-b1fe-990e3a8acdd3"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "0651a617-48eb-442d-a55e-aafe23832953"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "25224999-e92e-4025-9fb6-95ba9812b172"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "329327ba-6e88-4a0b-89bf-42d142771ced"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "3940f7e7-b0ec-4140-9148-39d74bb5aa65"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "3e62619c-b2a7-49f8-9763-f7c01d21e8c8"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "4349e7e1-66d5-4e22-a186-5cfc93d7fcb6"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "5d70d76c-a496-4eba-a1a2-a1788821fa29"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "76520d77-cf14-4262-a9a5-7cd7cad3e49b"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "8882f3a4-f11e-46e7-886d-72ce3040d84f"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "92ad31b8-7183-48b9-b79f-a6c039d8b1f6"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "a2fd1212-41e6-4ef9-8c33-225ee7be37a8"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "a68dcf33-1476-4958-bc65-fe69839b4a09"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "a825fe49-2c83-4676-b410-e621797e1253"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "c8b54bb8-c69d-4ee5-bdea-52335e844cf2"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "d40f9fe4-032f-4c10-a19f-0a3248e9a52b"
+    },
+    {
+      "table": "payment_webhook_events",
+      "op": "insert",
+      "pk": "fe0d924f-0c65-4dfb-a281-36ba756a6e4c"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "0004b395-0f4c-449d-8519-11610bb69163"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "12acea0e-2461-4754-a031-c0901316cd69"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "134861d1-0711-464e-a15e-3c87078b5dd6"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "60f727fa-f453-48cf-ac06-875e8c593ab6"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "7947d0ab-e236-47b2-8365-17c2a4a47883"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "9b0597f9-30a4-4e5c-b6eb-e2bdb7496680"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "b88bbe0f-c161-41e5-8c23-572801ee9ad3"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "d5d3aba2-f6aa-49c1-ae3d-f97eaa923385"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "dea40172-8899-4d4a-8e0d-133e63488bcb"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "efaeec53-37f2-4184-948e-a918348d8958"
+    },
+    {
+      "table": "payment_event_log",
+      "op": "insert",
+      "pk": "fd57230e-f964-47e0-ae4d-6cc896eab784"
+    },
+    {
+      "table": "tenant_email_settings",
+      "op": "update",
+      "pk": "20ea4b40-e457-47ec-b03a-406d188864a1"
+    }
+  ]
+}
