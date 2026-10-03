@@ -76,15 +76,32 @@ export const AUTHORIZED_SQL71 = Object.freeze({
   function_identity: 'public.aws_public_homeowner_ledger_by_token(text)',
 });
 
+export const AUTHORIZED_SQL72 = Object.freeze({
+  filename: 'aws/workflows/sql/72_homeowner_ledger_view_claim_ok.sql',
+  migration_id: '72_homeowner_ledger_view_claim_ok',
+  commit: 'dc9863aa8305fbe225c544ed226fbff729051df8',
+  source_sha256: '8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f',
+  intended_replacement_sha256: '8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f',
+  function_identity: 'public.aws_public_homeowner_ledger_by_token(text)',
+  expected_live_definition_sha256: '5918ebec1b3338dd4e34a4420c5f2a654f0b2d3311527923f7fd962c891fbcfa',
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   AUTHORIZED_MEMBERSHIP_ONLY,
   AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE,
   AUTHORIZED_SQL71,
+  AUTHORIZED_SQL72,
 ]);
 
 export function resolveAuthorizedMigration(input = {}) {
+  if (
+    input.filename === AUTHORIZED_SQL72.filename
+    || input.migration_id === AUTHORIZED_SQL72.migration_id
+  ) {
+    return AUTHORIZED_SQL72;
+  }
   if (
     input.filename === AUTHORIZED_SQL71.filename
     || input.migration_id === AUTHORIZED_SQL71.migration_id
@@ -126,6 +143,10 @@ export function isMortgageOpsAcceptComplete(input = {}) {
 
 export function isHomeownerLedgerViewContract(input = {}) {
   return resolveAuthorizedMigration(input) === AUTHORIZED_SQL71;
+}
+
+export function isHomeownerLedgerViewClaimOk(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_SQL72;
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
@@ -238,6 +259,20 @@ export function evaluateSqlExecutorAuthorization(input = {}, opts = {}) {
   }
 
   const allowed = matchingAllowlistEntry(input, allowlist);
+  if (
+    allowed
+    && allowed === AUTHORIZED_SQL72
+    && input.expected_live_definition_sha256 !== AUTHORIZED_SQL72.expected_live_definition_sha256
+  ) {
+    errors.push(errorEntry(
+      CODES.SQL_COLLISION,
+      'SQL 72 authority requires the current live SQL 71 definition hash',
+      {
+        expected_live_definition_sha256: input.expected_live_definition_sha256 || null,
+        required_live_definition_sha256: AUTHORIZED_SQL72.expected_live_definition_sha256,
+      },
+    ));
+  }
   if (!allowed) {
     errors.push(errorEntry(
       CODES.SQL_COLLISION,

@@ -96,8 +96,9 @@ test('SQL 72 is a forward claim_ok repair and does not rewrite 71 or 68', () => 
   );
   assert.match(executorAuth, /21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5/);
   assert.match(executorAuth, /71_homeowner_ledger_view_contract/);
-  assert.doesNotMatch(executorAuth, /72_homeowner_ledger_view_claim_ok/);
-  assert.doesNotMatch(executorAuth, /8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f/);
+  assert.match(executorAuth, /72_homeowner_ledger_view_claim_ok/);
+  assert.match(executorAuth, /8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f/);
+  assert.match(executorAuth, /5918ebec1b3338dd4e34a4420c5f2a654f0b2d3311527923f7fd962c891fbcfa/);
 });
 
 test('SQL 71 replaces the RPC in a new file and keeps historical 68 intact', () => {
