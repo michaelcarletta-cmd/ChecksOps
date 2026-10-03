@@ -17,6 +17,7 @@ import {
 import { overlapHits } from '../../../scripts/check-pr-path-overlap.mjs';
 import { compareCandidate, liveCompareErrors, productionIntentErrors } from '../../../scripts/production-deploy-guard.mjs';
 import { main as validateMain, loadReleaseLockInputs } from '../../../scripts/validate-release-locks.mjs';
+import { ACCEPTED_PRODUCTION_SPA } from '../../../scripts/lib/production-spa-baseline.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -42,7 +43,7 @@ test('origin/main-based manifest validates fail-closed with production-spa PRODU
   assert.equal(locked.length, 1);
   assert.equal(locked[0].id, 'production-spa');
   assert.equal(locked[0].production_active, true);
-  assert.equal(locked[0].artifact.name, '/assets/index-HXTuSrE0.js');
+  assert.equal(locked[0].artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
   assert.equal(inputs.manifest.fail_closed, true);
   assert.equal(validateMain([], ROOT), 0);
 });

@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-02T15:03:04Z (index-HXTuSrE0.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-03T11:41:40Z (index-BgOCQCWm.js). Historical HXTuSrE0 is superseded lineage only. origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "delete-check-contract": {
       "id": "delete-check-contract",
@@ -704,20 +704,20 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "2277ab9ead9ab8270446468421f9dd8cc3e1a401",
-        "tree_hash": "246646f329218c5be81392dd75142830ca947951551ef76be319f29508f5255b",
+        "git_sha": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+        "tree_hash": "8d5818b5d4734ad78ce5b684105bae2811692110fa2d73881fe67414c56772b8",
         "merged": false,
         "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-HXTuSrE0.js",
-        "version": "PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX",
-        "hash": "d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d",
+        "name": "/assets/index-BgOCQCWm.js",
+        "version": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
+        "hash": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "9f673420-a5a1-43df-a798-cc7022a4fb8d",
+        "lambda_version": "16327bba-cc0a-4a17-b2a8-55b7b2d1b069",
         "lambda_alias": null
       },
       "production_validation": {
@@ -725,33 +725,33 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-10-02T15:03:04Z",
+        "recorded_at": "2026-10-03T11:41:40Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "2277ab9ead9ab8270446468421f9dd8cc3e1a401",
-        "artifact_identity": "/assets/index-HXTuSrE0.js",
-        "evidence_producer": "read-only live HTTPS verification of checksops.com",
+        "git_sha": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+        "artifact_identity": "/assets/index-BgOCQCWm.js",
+        "evidence_producer": "read-only live HTTPS and S3 verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-HXTuSrE0.js",
-        "spa_sha256": "d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d",
+        "spa_bundle": "/assets/index-BgOCQCWm.js",
+        "spa_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX",
+        "cloudfront_deployment_fingerprint": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "9f673420-a5a1-43df-a798-cc7022a4fb8d",
+        "lambda_version": "16327bba-cc0a-4a17-b2a8-55b7b2d1b069",
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52",
-        "notes": "Accepted live production SPA 2026-10-02T15:03:04Z. Host checksops.com. Entry /assets/index-HXTuSrE0.js. index.html sha256 a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52. S3 version PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX. Previous gYa_BW8r baseline is superseded lineage only. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved."
+        "config_hash": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+        "notes": "Accepted live production SPA 2026-10-03T11:41:40Z. Host checksops.com. Entry /assets/index-BgOCQCWm.js. index.html sha256 3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df. S3 version QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd. Previous HXTuSrE0 baseline is superseded lineage only and must not be restored. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. Continuity API CodeSha256 CWB8lxnHoqANyVcaNpKL7h4MtDSPMlHZ6wliFuGE6yA= / RevisionId 16327bba-cc0a-4a17-b2a8-55b7b2d1b069 was not modified."
       },
       "rollback": {
-        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
-        "artifact": "/assets/index-gYa_BW8r.js",
-        "notes": "Immediate previous accepted baseline is /assets/index-gYa_BW8r.js (2026-10-02T01:51:18Z, s3 TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ, sha256 71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280). Do not restore gYa_BW8r over the current live identity unless a separately authorized guarded rollback names that exact artifact."
+        "git_sha": "2277ab9ead9ab8270446468421f9dd8cc3e1a401",
+        "artifact": "/assets/index-HXTuSrE0.js",
+        "notes": "Immediate previous accepted baseline is /assets/index-HXTuSrE0.js (2026-10-02T15:03:04Z, s3 PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX, sha256 d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d). HXTuSrE0 is superseded. Do not restore it over the current live identity unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
@@ -765,7 +765,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "6a7834b842752d7c1e103bf51bba3892b09ffa512eecb6be4a63cfa2c3d62abb",
+        "tree_hash": "e9833b344fbee077f524f50e502e64e3d3be099f976f62a05336b99a1bbf430f",
         "merged": true,
         "merged_pr": null
       },

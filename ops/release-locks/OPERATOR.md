@@ -107,7 +107,7 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 ## Production SPA baseline
 
 `production-spa` is the authoritative live frontend at `checksops.com`
-(`/assets/index-BPbQUNFr.js`). Proof:
+(`/assets/index-BgOCQCWm.js`). Proof:
 `ops/release-locks/proof/production-spa-baseline.md`.
 
 `origin/main` is not that SPA. Do not promote main, another branch, or a
