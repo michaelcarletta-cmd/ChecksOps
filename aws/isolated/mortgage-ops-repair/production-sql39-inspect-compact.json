@@ -1,0 +1,56 @@
+{
+  "ok": true,
+  "inspect_only": true,
+  "mutated": false,
+  "read_only": "on",
+  "identity": {
+    "database": "checksops",
+    "db_user": "checksops_admin",
+    "read_only": "on",
+    "server_version": "18.3"
+  },
+  "pinned_sql39": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+  "hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+  "matches_historical_staging_before": false,
+  "matches_staging_after": false,
+  "historical_policy_aws_update_mortgage_handling_requests": true,
+  "has_agent_fn": false,
+  "policies_present": [
+    "aws_delete_mortgage_handling_requests",
+    "aws_insert_mortgage_handling_requests",
+    "aws_select_check_billing_events",
+    "aws_select_mortgage_handling_requests",
+    "aws_update_mortgage_handling_requests",
+    "aws_write_check_billing_events",
+    "aws_write_check_billing_events_monthly_job",
+    "aws_write_check_billing_events_monthly_job_role"
+  ],
+  "policies_absent_expected_before": [
+    "aws_select_mortgage_ops_agent_queue",
+    "aws_update_mortgage_ops_accept_complete",
+    "aws_insert_mortgage_ops_usage_events"
+  ],
+  "login_role_mhr_table_update": [
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    }
+  ],
+  "force_rls": [
+    {
+      "table_name": "check_billing_events",
+      "rls": true,
+      "force_rls": false
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "rls": true,
+      "force_rls": false
+    }
+  ],
+  "membership_601": {
+    "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+    "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+  }
+}
