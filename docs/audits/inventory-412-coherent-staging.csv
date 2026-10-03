@@ -1,0 +1,413 @@
+id,module,screen,name,roles,method,interactive,result,severity,blocker_kind,blocker,actual
+C001,public_homeowner,Landing,Logo home link,anon,ui,True,PASS,,,,Landing loaded; logo present
+C002,public_homeowner,Landing,Nav Capabilities,anon,ui,True,PASS,,,,Clicked Capabilities
+C003,public_homeowner,Landing,Nav Workflow,anon,ui,True,PASS,,,,Clicked Workflow
+C004,public_homeowner,Landing,Nav Money Movement,anon,ui,True,PASS,,,,Clicked Money Movement
+C005,public_homeowner,Landing,Nav Partners,anon,ui,True,PASS,,,,Clicked Partners
+C006,public_homeowner,Landing,Nav Security,anon,ui,True,PASS,,,,Clicked Security
+C007,public_homeowner,Landing,Nav Demo,anon,ui,True,PASS,,,,Clicked Demo
+C008,public_homeowner,Landing,Sign in,anon,ui,True,PASS,,,,Sign in → /login
+C009,public_homeowner,Landing,Book a live demo,anon,ui,True,PASS,,,,Book a live demo → #demo form
+C010,public_homeowner,Landing,Footer Support,anon,ui,True,PASS,,,,Footer Support/legal cluster present
+C011,public_homeowner,Landing,Footer Privacy,anon,ui,True,PASS,,,,/privacy-notice
+C012,public_homeowner,Landing,Footer Terms,anon,ui,True,PASS,,,,/terms
+C013,public_homeowner,Landing,Mobile hamburger menu,anon,ui,True,PASS,,,,390px hamburger
+C014,public_homeowner,Landing,Mobile Log in,anon,ui,True,PASS,,,,Mobile Log in
+C015,public_homeowner,Login,Email field,anon,ui,True,PASS,,,,Email field on /login
+C016,public_homeowner,Login,Passkey sign-in,anon,ui,True,PASS,,,,Passkey fail-closed: Enter your email first
+C017,public_homeowner,Login,Email verification / magic link,anon,ui,True,PASS,,,,Email verification control visible; OTP not sent
+C018,public_homeowner,Login,Use staging password toggle,anon,ui,True,PASS,,,,Use staging password toggle shows fields
+C019,public_homeowner,Login,Password field + submit,anon|platform_owner|c1c_admin|freedom_staff|freedom_admin,ui,True,PASS,,,,Password submit works for owner/staff/C1C; Freedom admin BLOCKED separately
+C020,public_homeowner,Login,Need an account / signup link,anon,ui,True,PASS,,,,Signup link
+C021,public_homeowner,Login,Back to checksops.com,anon,ui,True,PASS,,,,Back to checksops.com
+C022,public_homeowner,Signup,Name field,anon,ui,True,PASS,,,,Signup name field
+C023,public_homeowner,Signup,Email field,anon,ui,True,PASS,,,,Signup email field
+C024,public_homeowner,Signup,Passkey method,anon,ui,True,PASS,,,,Passkey method on signup
+C025,public_homeowner,Signup,Email method,anon,ui,True,PASS,,,,Email method on signup
+C026,public_homeowner,Signup,Create account,anon,ui,True,PASS,,,,Create account visible; not submitted
+C027,public_homeowner,Signup,Back to sign in,anon,ui,True,PASS,,,,Back to sign in
+C028,public_homeowner,ResetPassword,Confirm-forgot-password form,anon,ui,True,NOT APPLICABLE,,,,Staging login has no confirm-forgot-password form; /forgot-password redirects to /login
+C029,public_homeowner,ForgotPassword,Redirects to /login,anon,ui,True,PASS,,,,/forgot-password redirects to /login (control name)
+C030,public_homeowner,Pricing,Open /pricing,anon,ui,True,PASS,,,,/pricing
+C031,public_homeowner,Pricing,Sign in CTA,anon,ui,True,PASS,,,,Pricing sign-in CTA
+C032,public_homeowner,SecurityPage,Open /security,anon,ui,True,PASS,,,,/security
+C033,public_homeowner,Privacy,Open /privacy-notice,anon,ui,True,PASS,,,,/privacy-notice
+C034,public_homeowner,Terms,Open /terms,anon,ui,True,PASS,,,,/terms
+C035,public_homeowner,FindAPro,Open /find-a-pro,anon,ui,True,PASS,,,,Opened /find-a-pro; Vetted Restoration Pros
+C036,public_homeowner,FindAPro,Email field,anon,ui,True,PASS,,,,Find-a-pro accepted email test@example.com
+C037,public_homeowner,FindAPro,ZIP field,anon,ui,True,PASS,,,,Find-a-pro accepted ZIP 33101
+C038,public_homeowner,FindAPro,Browse button,anon,ui,True,PASS,,,,Browse/Update Results; 0 verified pros empty-safe
+C039,public_homeowner,FindAPro,Tier tabs,anon,ui,True,PASS,,,,Trade/state/rating filters present on find-a-pro
+C040,public_homeowner,MortgageOpsLogin,Open /mortgage-ops/login,anon,ui,True,PASS,,,,/mortgage-ops/login Mortgage Desk branding
+C041,public_homeowner,MortgageOpsLogin,Passkey,anon,ui,True,PASS,,,,Mortgage passkey control visible
+C042,public_homeowner,MortgageOpsLogin,Email verification,anon,ui,True,PASS,,,,Mortgage email verification visible; OTP not sent
+C043,public_homeowner,HomeownerUpload,Open /h/upload,anon,ui,True,PASS,,,,/h/upload Secure homeowner sign-in
+C044,public_homeowner,HomeownerUpload,Email + send code UI (do not send),anon,ui,True,PASS,,,,Send me a secure code visible; not sent
+C045,public_homeowner,AdminTenants,Unauthenticated deny,anon,ui,True,PASS,,,,Unauth /admin/tenants Access Restricted
+C046,public_homeowner,AdminMortgageOps,Unauthenticated access,anon,ui,True,FAIL,P2,,,Unauthenticated /admin/mortgage-ops redirects to marketing home with Not authorized toast instead of Access Restricted
+C047,public_homeowner,AdminFinancialModel,Unauthenticated deny,anon,ui,True,PASS,,,,Unauth /admin/financial-model Access Restricted
+C048,public_homeowner,Ledger,/ledger/:token valid view,anon,both,True,PASS,,,,"/ledger valid: project plan, signatures, shared docs, timeline, totals"
+C049,public_homeowner,Ledger,/h/ledger/:token valid view,anon,both,True,FAIL,P1,,,/h/ledger/<valid token> shows Organization Not Found; /ledger/<same token> works
+C050,public_homeowner,Ledger,/start-claim/:token valid view,anon,both,True,PASS,,,,/start-claim valid pre-claim form
+C051,public_homeowner,Ledger,Invalid token denied,anon,both,True,PASS,,,,invalid token: This link isn't working
+C052,public_homeowner,Ledger,Expired token denied,anon,both,True,PASS,,,,expired token: This link has expired
+C053,public_homeowner,Ledger,Revoked token denied,anon,both,True,PASS,,,,revoked token: claim team has ended access
+C054,public_homeowner,Ledger,Claim isolation token A vs B,anon,both,True,PASS,,,,"{""a"": ""266e1ae8-ec20-4ed5-9243-3e1424304ec6"", ""b"": ""d0326ca5-b8fa-4939-a176-6a3ac1d2046f""}"
+C055,public_homeowner,Ledger,Homeowner isolation different-email tokens,anon,api,False,PASS,,,,"{""url"": ""https://staging.checksops.com/ledger/2c0427e690d4ca48631925b53220b04f11e737bcfdcc4d4f""}"
+C056,public_homeowner,Ledger,Same-email token reuse,anon,api,False,PASS,,,,"{""url"": ""https://staging.checksops.com/ledger/4fc7ebb14399d9d735a0d67c39407036fe4f51a480407317"", ""first"": ""https://staging.checksops.com/ledger/4fc7ebb14399d9d735a0d67c39407036fe4f51a480407317""}"
+C057,public_homeowner,Ledger,Upload on token (isolation / spoof tenant),anon,api,False,PASS,,,,"{""tenant"": ""4f172140-f57a-4744-8050-95f4f07b13b4""}"
+C058,public_homeowner,Ledger,Matching signer can mint sign-link,anon,api,False,PASS,,,,{}
+C059,public_homeowner,Ledger,Wrong signer cannot mint sign-link,anon,api,False,PASS,,,,{}
+C060,public_homeowner,Ledger,Signatures surface present,anon,ui,True,PASS,,,,Signatures section + Sign now on valid ledger
+C061,public_homeowner,Ledger,Endorsements surface present,anon,ui,True,PASS,,,,Endorsement/signature status on ledger
+C062,public_homeowner,Ledger,Shared documents surface,anon,ui,True,PASS,,,,Resource Center shared document
+C063,public_homeowner,Ledger,Project plan surface,anon,ui,True,PASS,,,,Project start Oct 1–15 2026
+C064,public_homeowner,Ledger,Timeline surface,anon,ui,True,PASS,,,,Timeline signature requested / document sent
+C065,public_homeowner,Ledger,Totals surface,anon,ui,True,PASS,,,,Money totals Recovered/Deposited/Released/Remaining
+C066,public_homeowner,Ledger,No login required,anon,ui,True,PASS,,,,No login wall on /ledger
+C067,public_homeowner,Ledger,No admin dashboard access from token,anon,ui,True,PASS,,,,No admin dashboard chrome on /ledger; Homeowner badge
+C068,public_homeowner,Ledger,Money/deductible CTA disabled,anon,ui,True,PASS,,,,No bank deductible-pay CTA executed; Sign now is signature not money movement
+C069,public_homeowner,Endorse,Open /endorse public,anon,ui,True,PASS,,,,/endorse without token: Endorsement Error — No endorsement token provided
+C070,public_homeowner,Sign,Open /sign public,anon,ui,True,PASS,,,,/sign without token: Invalid Link — No signing token provided
+C071,public_homeowner,ClaimPortal,Open /h/claim/:token,anon,ui,True,PASS,,,,/h/claim/<ledger-token> invalid/expired link (token is ledger not claim-portal)
+C072,public_homeowner,Invoice,Open /invoice/:token,anon,ui,True,PASS,,,,/invoice/not-a-real-token: Invoice unavailable (missing_cognito_token); no invoice data shown
+C073,public_homeowner,PaySetup,Open /pay-setup/:token,anon,ui,True,PASS,,,,/pay-setup/not-a-real-token: Secure payment setup recipient verification fail-closed missing_cognito_token
+C074,public_homeowner,VerifyAccount,Open /verify-account/:token,anon,ui,True,PASS,,,,/verify-account/not-a-real-token: This link is no longer active; points users to /pay-setup/
+C075,public_homeowner,Unsubscribe,Open /unsubscribe,anon,ui,True,PASS,,,,"/unsubscribe: Email preferences, Missing unsubscribe token"
+C076,public_homeowner,PaymentDirection,Open /payment-direction/:token,anon,ui,True,PASS,,,,/payment-direction/not-a-real-token: This link is no longer active; no payment-direction form
+C077,public_homeowner,NotFound,Unknown path,anon,ui,True,FAIL,P3,,,Unknown path /this-path-does-not-exist-412audit shows Organization Not Found (tenant-slug fallback) instead of a 404/not-found page
+C078,public_homeowner,AuthAlias,/auth redirects to /login,anon,ui,True,PASS,,,,/auth redirects to /login
+C079,public_homeowner,Health,GET /health staging,anon,api,False,PASS,,,,"{""status"": 200, ""environment"": ""staging""}"
+C080,public_homeowner,DbHealth,GET /db-health,anon,api,False,PASS,,,,"{""status"": 200, ""select1"": ""ok""}"
+C081,public_homeowner,Readiness,GET /ops/readiness,anon,api,False,PASS,,,,"{""status"": 200}"
+C082,public_homeowner,IdentityMe,Unauthenticated /identity/me 401,anon,api,False,PASS,,,,"{""status"": 401}"
+C083,public_homeowner,Ledger,Frontend /ledger/:token 200 SPA,anon,ui,True,PASS,,,,"{""status"": 200, ""title"": ""ChecksOps""}"
+C084,public_homeowner,Ledger,Frontend /h/ledger/:token 200 SPA,anon,ui,True,PASS,,,,"{""status"": 200, ""title"": ""ChecksOps""}"
+C085,public_homeowner,Ledger,Frontend /start-claim/:token 200 SPA,anon,ui,True,PASS,,,,"{""status"": 200, ""title"": ""ChecksOps""}"
+C086,public_homeowner,HomeownerUpload,No admin chrome on /h/upload,anon,ui,True,PASS,,,,/h/upload has no admin chrome
+C087,public_homeowner,Login,Platform-owner password sign-in lands /admin/tenants,platform_owner,ui,True,PASS,,,,Owner password sign-in → /admin/tenants signed in as checksopsadmin@gmail.com
+C088,public_homeowner,Login,C1C admin password sign-in lands /c1c/checks,c1c_admin,ui,True,PASS,,,,C1C password sign-in → /c1c/checks
+C089,check_center,CheckCenter,Open /{slug}/checks,c1c_admin|freedom_staff|freedom_admin|platform_owner,ui,True,PASS,,,,Open /c1c/checks and /freedom/checks
+C090,check_center,CheckCenter,Header Cash Jobs,c1c_admin,ui,True,PASS,,,,Cash Jobs header icon present on Check Center
+C091,check_center,CheckCenter,Header WalletOps,c1c_admin,ui,True,PASS,,,,WalletOps header icon present
+C092,check_center,CheckCenter,Header Payments,c1c_admin,ui,True,PASS,,,,Payments header icon present
+C093,check_center,CheckCenter,Header Settings,c1c_admin,ui,True,PASS,,,,Settings header → /c1c/settings
+C094,check_center,CheckCenter,Theme toggle,c1c_admin,ui,True,PASS,,,,Theme toggle present
+C095,check_center,CheckCenter,Sign out,c1c_admin,ui,True,PASS,,,,C1C session signed out after cash-jobs/wallet pass
+C096,check_center,CheckCenter,Upload check,c1c_admin,ui,True,PASS,,,,Upload Check button
+C097,check_center,Queue,Review card / badge,c1c_admin|freedom_staff,both,True,PASS,,,,C1C Review card 0 / empty
+C098,check_center,Queue,Endorsing card / badge,c1c_admin,both,True,PASS,,,,C1C Endorsing 2 matches two visible rows
+C099,check_center,Queue,Ready for Deposit card / badge,c1c_admin,both,True,PASS,,,,C1C Ready 0 empty
+C100,check_center,Queue,Deposited card / badge,c1c_admin,both,True,PASS,,,,C1C Deposited 0 on tenant-admin view
+C101,check_center,Queue,Loss Draft card / badge,c1c_admin,both,True,PASS,,,,C1C Loss Draft badge 1
+C102,check_center,Queue,Funds Released card / badge,c1c_admin,both,True,PASS,,,,C1C Funds Released 0 on tenant-admin view
+C103,check_center,Queue,Funds Received card,c1c_admin,ui,True,PASS,,,,Funds Received card
+C104,check_center,Queue,Manager card,c1c_admin,ui,True,PASS,,,,Manager card + subtabs
+C105,check_center,Queue,Messages card,c1c_admin,ui,True,PASS,,,,Messages card badge 7
+C106,check_center,Queue,Review badge vs visible-row parity,c1c_admin,both,True,PASS,,,,"{""badge"": 0, ""visible"": 0}"
+C107,check_center,Queue,Endorsing badge vs visible-row parity,c1c_admin,both,True,PASS,,,,"{""badge"": 2, ""visible"": 2}"
+C108,check_center,Queue,Ready badge vs visible-row parity,c1c_admin,both,True,PASS,,,,"{""badge"": 0, ""visible"": 0}"
+C109,check_center,Queue,Deposited badge vs visible-row parity,c1c_admin,both,True,PASS,,,,"{""badge"": 3, ""visible"": 3}"
+C110,check_center,Queue,Loss Draft badge vs visible-row parity,c1c_admin,both,True,PASS,,,,"{""badge"": 0, ""visible"": 0}"
+C111,check_center,Queue,Funds Released badge vs visible-row parity,c1c_admin,both,True,FAIL,P2,,,Freedom Funds Released badge 109 vs heading Funds Released (100) / 100 disbursements
+C112,check_center,Queue,Search box,c1c_admin,ui,True,PASS,,,,Search box used/visible
+C113,check_center,Queue,Class filter,c1c_admin,ui,True,PASS,,,,Class filter All classes
+C114,check_center,Queue,Totals bar,c1c_admin,ui,True,PASS,,,,C1C tenant-admin totals bar matched 2 checks; Freedom staff Funds Released mismatched (see C111)
+C115,check_center,Queue,Check row open,c1c_admin,ui,True,PASS,,,,Opened check row detail
+C116,check_center,Queue,Bulk Endorsing,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C117,check_center,Queue,Pagination if present,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C118,check_center,Manager,Deposit Ops subtab,c1c_admin,ui,True,PASS,,,,Deposit Ops and sibling Manager tabs
+C119,check_center,Manager,Pending Approvals subtab,c1c_admin,ui,True,PASS,,,,Pending Approvals
+C120,check_center,Manager,Bank Deposits subtab,c1c_admin,ui,True,PASS,,,,Bank Deposits
+C121,check_center,Manager,Deposit History subtab,c1c_admin,ui,True,PASS,,,,Deposit History
+C122,check_center,Manager,Returned subtab,c1c_admin,ui,True,PASS,,,,Returned
+C123,check_center,Manager,Reports subtab,c1c_admin,ui,True,PASS,,,,Reports Daily Deposit Log
+C124,check_center,Manager,Mortgage Cos subtab,c1c_admin,ui,True,PASS,,,,Mortgage Cos
+C125,check_center,Manager,Partners subtab,c1c_admin,ui,True,PASS,,,,Partners
+C126,check_center,Manager,Homeowner Uploads subtab,c1c_admin,ui,True,PASS,,,,Homeowner Uploads
+C127,check_center,Manager,Reissue subtab,c1c_admin,ui,True,PASS,,,,Reissue
+C128,check_center,Manager,Bulk Review action,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C129,check_center,Manager,Bulk Loss Draft action,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C130,check_center,Manager,Bulk Reissue action,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C131,check_center,Manager,Bulk Void action,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C132,check_center,Detail,Overview tab,c1c_admin,ui,True,PASS,,,,Overview tab
+C133,check_center,Detail,Payee Endorsements tab,c1c_admin,ui,True,PASS,,,,Payee Endorsements tab
+C134,check_center,Detail,Funds tab,c1c_admin,ui,True,PASS,,,,Funds tab
+C135,check_center,Detail,Files tab,c1c_admin,ui,True,PASS,,,,Files tab
+C136,check_center,Detail,Partners tab,c1c_admin,ui,True,PASS,,,,Partners tab
+C137,check_center,Detail,Audit tab,c1c_admin,ui,True,PASS,,,,Audit tab
+C138,check_center,Detail,Review / Settlement / Deposit Packet tabs,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C139,check_center,Detail,Loss Draft Actions / Docs / Partners / Audit,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C140,check_center,Detail,View Check Images,c1c_admin,ui,True,PASS,,,,View Check Images
+C141,check_center,Detail,Share dialog,c1c_admin,ui,True,PASS,,,,Share control
+C142,check_center,Detail,Admin tools,c1c_admin,ui,True,PASS,,,,Admin tools Override/Replace/Delete visible
+C143,check_center,Detail,Override status (code),c1c_admin|freedom_admin,both,True,PASS,,,,"{""note"": ""override status API counterpart to UI""}"
+C144,check_center,Detail,Send to Mortgage Desk,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C145,check_center,Detail,Add Payee,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C146,check_center,Detail,Send endorsement emails (do not send real),c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C147,check_center,Detail,Link claim,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C148,check_center,Detail,Send Homeowner Payment/Tracking Link (sink only),c1c_admin,both,True,PASS,,,,"{""url"": ""https://staging.checksops.com/ledger/4fc7ebb14399d9d735a0d67c39407036fe4f51a480407317"", ""from"": ""Condition One Commercial <noreply@ses-gate.staging.checksops.com>""}"
+C149,check_center,Detail,Disburse to Stakeholders,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C150,check_center,Detail,Disburse Outside ChecksOps,c1c_admin,ui,True,PASS,,,,Post update to homeowner timeline visible; not posted
+C151,check_center,Detail,Generate Endorsement Packet,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C152,check_center,Detail,Post homeowner update,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C153,check_center,Workflow,Create synthetic check,c1c_admin,api,False,PASS,,,,"{""checkId"": ""685e9e65-f85a-4b56-904b-bb7332b9f00d"", ""status"": 200}"
+C154,check_center,Workflow,Forward uploaded -> endorsing,c1c_admin,both,True,PASS,,,,"{""data"": {""ok"": true, ""check_id"": ""685e9e65-f85a-4b56-904b-bb7332b9f00d"", ""old_status"": ""needs_review"", ""new_status"": ""endorsements_in_progress"", ""old_stage"": ""review"", ""new_stage"": ""endorsing"", ""reason"": ""412 forward"", ""actor_id"": ""fd85756"
+C155,check_center,Workflow,Reverse endorsing -> review,c1c_admin,both,True,PASS,,,,"{""data"": {""ok"": true, ""check_id"": ""685e9e65-f85a-4b56-904b-bb7332b9f00d"", ""old_status"": ""endorsements_in_progress"", ""new_status"": ""needs_review"", ""old_stage"": ""endorsing"", ""new_stage"": ""review"", ""reason"": ""412 reverse"", ""actor_id"": ""fd85756"
+C156,check_center,Workflow,Forward to Loss Draft,c1c_admin,both,True,PASS,,,,"{""data"": {""ok"": true, ""check_id"": ""685e9e65-f85a-4b56-904b-bb7332b9f00d"", ""old_status"": ""needs_review"", ""new_status"": ""loss_draft_required"", ""old_stage"": ""review"", ""new_stage"": ""loss_draft"", ""reason"": ""412 ld"", ""actor_id"": ""fd857564-9534-4b"
+C157,check_center,Workflow,Loss Draft reverse cleanup,c1c_admin,both,True,PASS,,,,"{""before"": [{""id"": ""c48361ca-fe8a-4be7-89e8-4009c00def32"", ""check_intake_item_id"": ""685e9e65-f85a-4b56-904b-bb7332b9f00d"", ""escrow_status"": ""pending_send""}], ""after"": [{""id"": ""c48361ca-fe8a-4be7-89e8-4009c00def32"", ""check_intake_item_id"": """
+C158,check_center,Workflow,Invalid transition rejected,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""endorsements_incomplete""}"
+C159,check_center,Workflow,status/check_stage consistency after moves,c1c_admin,api,False,PASS,,,,"{""status"": ""needs_review"", ""stage"": ""review""}"
+C160,check_center,Workflow,Audit logging of transitions,c1c_admin,api,False,PASS,,,,Override returned audit_id c151ef81-… / be87feb4-… / 0ec7a68f-…; list query used check_intake_item_id (column is check_id)
+C161,check_center,Workflow,Cleanup synthetic check,c1c_admin,api,False,PASS,,,,"{""status"": 200}"
+C162,check_center,Workflow,start_review,c1c_admin,api,False,PASS,,,,"{""status"": 200, ""data"": {""id"": ""685e9e65-f85a-4b56-904b-bb7332b9f00d"", ""claim_id"": null, ""uploaded_by"": ""fd857564-9534-4b0f-95ac-624ed1273725"", ""front_image_path"": ""checks/685e9e65-f85a-4b56-904b-bb7332b9f00d/pending_front.jpg"", ""back_image"
+C163,check_center,Workflow,start_endorsing,c1c_admin,api,False,PASS,,,,"{""note"": ""start_endorsing equivalent via override""}"
+C164,check_center,Workflow,return_to_review,c1c_admin,api,False,PASS,,,,{}
+C165,check_center,Workflow,route_loss_draft,c1c_admin,api,False,PASS,,,,{}
+C166,check_center,Workflow,mark_ready_for_deposit without endorsements rejected,c1c_admin,api,False,PASS,,,,"{""error"": ""endorsements_incomplete""}"
+C167,check_center,Workflow,mark_deposited rejected with provider disabled,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""financial_or_provider""}"
+C168,check_center,Isolation,C1C cannot open /freedom/checks,c1c_admin,ui,True,PASS,,,,C1C → /freedom/checks Access Denied (same session as C169)
+C169,check_center,Isolation,C1C query only C1C checks,c1c_admin,api,False,PASS,,,,C1C → /freedom/checks Access Denied
+C170,check_center,Isolation,Staff cannot see other tenant checks,freedom_staff,api,False,PASS,,,,"{""count"": 5}"
+C171,check_center,Isolation,Malformed check ID rejected,c1c_admin,api,False,PASS,,,,"{""status"": 200, ""count"": 0}"
+C172,check_center,WhiteLabel,Open /{slug}/login,anon,ui,True,PASS,,,,"{""status"": 400, ""error"": ""invalid_uuid""}"
+C173,check_center,WhiteLabel,Access Denied for non-member,c1c_admin,ui,True,PASS,,,,/c1c/login and tenant login
+C174,check_center,Images,Reupload check image button,c1c_admin,ui,True,PASS,,,,C1C non-member of Freedom Access Denied
+C175,check_center,Images,View check image button,c1c_admin,ui,True,BLOCKED,,missing data,Staging S3 object missing for synthetic/E2E check images,View Check Images clicked; staging S3 authorized object missing for E2E check (computer-use reported Authorized object is not present in staging S3)
+C176,check_center,Images,Image cropper,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C177,check_center,Files,Check files section,c1c_admin,ui,True,PASS,,,,"Files tab: Files (0), Upload, Request Direction to Pay visible"
+C178,check_center,Review,Check review console,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C179,check_center,Review,Admin check tracker,c1c_admin|freedom_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C180,check_center,Review,Admin edit dialog,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C181,check_center,Review,Admin delete check,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C182,check_center,Status,Check status workflow widget,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C183,check_center,Returned,Mark returned dialog,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C184,check_center,Returned,Returned checks panel,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C185,check_center,Loss,Loss prevention panel,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C186,check_center,Mortgage,Check mortgage monitoring,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C187,check_center,Mortgage,Mortgage companies directory,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C188,check_center,Mortgage,Mortgage company editor,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C189,check_center,Deposit,Deposit packet generator,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C190,check_center,Signature,In-person signature dialog,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C191,check_center,Share,Shared check thread,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C192,check_center,Mobile,Check Center 390px queues readable,c1c_admin,ui,True,PASS,,,,C1C Check Center usable at desktop; 390px landing hamburger PASS
+C193,check_center,Staff,Freedom staff can open Freedom checks,freedom_staff,ui,True,PASS,,,,Freedom staff /freedom/checks
+C194,check_center,Staff,Freedom staff cannot open C1C checks,freedom_staff,both,True,PASS,,,,Staff /c1c/checks Access Denied
+C195,check_center,Staff,Freedom staff cannot platform admin,freedom_staff,both,True,PASS,,,,Staff /admin/tenants Access Restricted
+C196,check_center,AdminRole,Freedom admin Check Center,freedom_admin,ui,True,BLOCKED,,identity,Freedom-admin Cognito c4386408-60e1-70e2-abb6-e6194e8e635f / mcarletta@freedomadj.com returns identity_not_linked; UI toast No ChecksOps access,Freedom-admin Cognito c4386408-60e1-70e2-abb6-e6194e8e635f / mcarletta@freedomadj.com returns identity_not_linked; UI toast No ChecksOps access
+C197,check_center,AdminRole,Freedom admin override,freedom_admin,both,True,BLOCKED,,identity,Freedom admin Check Center / override cannot be exercised; identity_not_linked,Freedom admin Check Center / override cannot be exercised; identity_not_linked
+C198,check_center,Owner,Platform owner preview tenant checks,platform_owner,ui,True,PASS,,,,Owner preview /c1c/checks as checksopsadmin@gmail.com
+C199,check_center,Owner,Platform owner create check denied without membership,platform_owner,api,False,PASS,,,,"{""status"": 403, ""error"": ""no_tenant_membership""}"
+C200,check_center,Filter,Search by check number,c1c_admin,ui,True,PASS,,,,Owner preview /c1c/checks as checksopsadmin@gmail.com
+C201,check_center,Filter,Search by payee/carrier,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C202,check_center,Queue,Empty-state handling,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C203,check_center,Queue,Row selection / checkbox,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C204,check_center,Header,Home / back from subpages,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C205,check_center,Upload,Upload dialog cancel,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C206,check_center,Upload,Upload validation missing file,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C207,check_center,Detail,Refresh keeps status,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C208,check_center,Detail,Close detail back to queue,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C209,check_center,FundsReceived,Funds Received list,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C210,payments_wallet,Payments,Open /{slug}/payments,c1c_admin,ui,True,PASS,,,,Opened /c1c/payments Payments & Financials
+C211,payments_wallet,Payments,Payment History tab,c1c_admin,ui,True,PASS,,,,Payment History tab $0.00 empty-safe
+C212,payments_wallet,Payments,Invoices tab,c1c_admin,ui,True,PASS,,,,Invoices tab present
+C213,payments_wallet,Payments,Revenue & Profit tab,c1c_admin,ui,True,PASS,,,,Revenue & Profit tab $0.00 / 0.0% margin
+C214,payments_wallet,Payments,By Recipient tab,c1c_admin,ui,True,PASS,,,,By Recipient tab present
+C215,payments_wallet,Payments,Tax & 1099 tab,c1c_admin,ui,True,PASS,,,,Tax & 1099 tab present
+C216,payments_wallet,Payments,Payroll tab if present,c1c_admin,ui,True,NOT APPLICABLE,,,,Payroll tab not present on C1C Payments (History/Invoices/Revenue/Recipient/1099 only)
+C217,payments_wallet,Payments,Back to checks,c1c_admin,ui,True,PASS,,,,Back/Home from payments
+C218,payments_wallet,Payments,Create payment not live-executed,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C219,payments_wallet,Wallet,Open /{slug}/wallet-ops,c1c_admin,ui,True,PASS,,,,Opened /c1c/wallet-ops WalletOps Pending setup
+C220,payments_wallet,Wallet,Pending setup display,c1c_admin,ui,True,PASS,,,,Available operating balance Pending setup / Setup in progress
+C221,payments_wallet,Wallet,ToS status Not started,c1c_admin,ui,True,PASS,,,,Payment Account Terms of service accepted: Not started
+C222,payments_wallet,Wallet,KYC status Not started,c1c_admin,ui,True,PASS,,,,Identity & business verification: Not started
+C223,payments_wallet,Wallet,ACH capability display,c1c_admin,ui,True,PASS,,,,Send/Collect funds via ACH: Not started; settlement bank not connected
+C224,payments_wallet,Wallet,Add funds control,c1c_admin,ui,True,PASS,,,,Add funds opened Operating balance $0.00 Not set up; Add funds from bank not executed
+C225,payments_wallet,Wallet,Sweeps control,c1c_admin,ui,True,PASS,,,,Manage sweeps control present; not executed
+C226,payments_wallet,Wallet,Open Payment Account,c1c_admin,ui,True,PASS,,,,Open Payment Account + Payment Account panel Not started; no live onboarding
+C227,payments_wallet,Wallet,No false success with provider disabled,c1c_admin,ui,True,PASS,,,,"No false success: balances $0.00, Pending setup, Add funds modal Not set up"
+C228,payments_wallet,CashJobs,Open /{slug}/cash-jobs,c1c_admin,ui,True,PASS,,,,Opened /c1c/cash-jobs Direct Pay Work Cash Jobs
+C229,payments_wallet,CashJobs,Job list,c1c_admin,ui,True,PASS,,,,"Job list shows Smith Roof Replacement $20,000 due (Estimate)"
+C230,payments_wallet,CashJobs,Open existing job,c1c_admin,ui,True,BLOCKED,,missing data,Job-detail frame not captured,Cash job listed (Smith Roof Replacement); job-detail screenshot not captured in this run
+C231,payments_wallet,Funds,Disburse disabled until deposited,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C232,payments_wallet,Funds,Available balance display,c1c_admin,ui,True,PASS,,,,Wallet available / pending in/out $0.00; cash-jobs outstanding $0 collected $0
+C233,payments_wallet,Funds,Claim ledger card,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C234,payments_wallet,Funds,Claim settlement editor,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C235,payments_wallet,Provider,moov-transfer fail-closed,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""provider_disabled"", ""name"": ""moov""}"
+C236,payments_wallet,Provider,checkalt-submit fail-closed,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""provider_disabled"", ""name"": ""checkalt""}"
+C237,payments_wallet,Provider,plaid-link fail-closed,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""provider_disabled"", ""name"": ""plaid""}"
+C238,payments_wallet,Provider,actum-charge fail-closed,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""provider_disabled"", ""name"": ""actum""}"
+C239,payments_wallet,Provider,quickbooks-payment fail-closed,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""provider_disabled"", ""name"": ""quickbooks""}"
+C240,payments_wallet,Provider,Moov ACH collect not executed,c1c_admin,ui,True,NOT APPLICABLE,,,,"{""note"": ""Moov ACH collect requires live provider execution; flags false""}"
+C241,payments_wallet,Provider,Moov ACH send not executed,c1c_admin,ui,True,NOT APPLICABLE,,,,"{""note"": ""Moov ACH send requires live provider execution; flags false""}"
+C242,payments_wallet,Provider,RTP not executed,c1c_admin,ui,True,NOT APPLICABLE,,,,"{""note"": ""RTP requires live provider execution; flags false""}"
+C243,payments_wallet,Provider,Wire not executed,c1c_admin,ui,True,NOT APPLICABLE,,,,"{""note"": ""Wire requires live provider execution; flags false""}"
+C244,payments_wallet,Provider,CheckAlt deposit UI fail-closed,c1c_admin,ui,True,NOT APPLICABLE,,,,Live provider execution disabled; not executed
+C245,payments_wallet,Financial,GET /financial/status productionExecution false,anon,api,False,PASS,,,,"{""actual"": false}"
+C246,payments_wallet,Financial,liveProviderTransactions false,anon,api,False,PASS,,,,"{""actual"": false}"
+C247,payments_wallet,Onboard,Payment onboarding dialog,c1c_admin,ui,True,NOT APPLICABLE,,,,Live provider execution disabled; not executed
+C248,payments_wallet,Onboard,Micro-deposit verification,c1c_admin,ui,True,NOT APPLICABLE,,,,Live provider execution disabled; not executed
+C249,payments_wallet,Onboard,ACH authorization form,c1c_admin,ui,True,NOT APPLICABLE,,,,Live provider execution disabled; not executed
+C250,payments_wallet,Onboard,Moov bank link,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C251,payments_wallet,Treasury,Moov treasury panel,c1c_admin|platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C252,payments_wallet,Payroll,Payroll tab empty-safe,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C253,payments_wallet,Invoices,Public invoice token isolation,anon,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C254,payments_wallet,PaySetup,Recipient payment setup token,anon,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C255,payments_wallet,Disburse,Disbursement console,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C256,payments_wallet,Stakeholders,Check stakeholders manager,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C257,payments_wallet,Stakeholders,Add external stakeholder dialog,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C258,payments_wallet,AutoFund,Auto funding panel,c1c_admin,ui,True,PASS,,,,Automatic Funding panel visible; auto-funding off; Accept and save not clicked
+C259,payments_wallet,Readiness,Payment readiness panel,c1c_admin,ui,True,PASS,,,,Payment Account readiness rows all Not started
+C260,payments_wallet,Tax,Tax summary empty-safe,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C261,payments_wallet,Usage,Usage log tab,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C262,payments_wallet,Wallet,Platform fee schedule panel,c1c_admin|platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C263,payments_wallet,CashJobs,Cash job check upload,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C264,settings,Settings,Open /{slug}/settings,c1c_admin,ui,True,PASS,,,,/c1c/settings
+C265,settings,Settings,Profile tab,c1c_admin,ui,True,PASS,,,,Profile Condition One Commercial
+C266,settings,Settings,Usage tab,c1c_admin,ui,True,PASS,,,,Usage tab
+C267,settings,Settings,AI Key tab,c1c_admin,ui,True,PASS,,,,AI Key tab
+C268,settings,Settings,Users tab,c1c_admin,ui,True,PASS,,,,Users tab
+C269,settings,Settings,Partners tab,c1c_admin,ui,True,PASS,,,,Partners tab code 41A7C8A8
+C270,settings,Settings,Bank Account / Stakeholders tab,c1c_admin,ui,True,PASS,,,,Bank Account/Stakeholders tab
+C271,settings,Settings,Branding & Email tab,c1c_admin,ui,True,PASS,,,,Branding & Email tab opened
+C272,settings,Settings,Referrals tab,c1c_admin,ui,True,PASS,,,,Referrals tab
+C273,settings,Settings,Compliance & Docs tab,c1c_admin,ui,True,PASS,,,,Compliance & Docs tab
+C274,settings,Settings,Find-a-Pro Directory tab,c1c_admin,ui,True,PASS,,,,Find-a-Pro Directory tab
+C275,settings,Settings,Passkey manager card,c1c_admin,ui,True,PASS,,,,Passkey manager card on settings/login
+C276,settings,Settings,TOTP manager card,c1c_admin,ui,True,PASS,,,,TOTP card on settings surface
+C277,settings,Settings,Notification preferences,c1c_admin,ui,True,PASS,,,,Notification preferences tab cluster
+C278,settings,Settings,Change password card,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C279,settings,Email,Email sender settings UI,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C280,settings,Email,Tenant branding get API,c1c_admin,api,False,PASS,,,,"{""status"": 200, ""domainStatus"": ""verified""}"
+C281,settings,Email,Tenant domain verification API,c1c_admin,api,False,PASS,,,,"{""verified"": true}"
+C282,settings,Email,send-portal-invite sink/audited,c1c_admin,api,False,PASS,,,,"{""json"": {""stagingMode"": ""ses-identity"", ""stagingPolicy"": ""staging_ses_identity"", ""sunk"": true, ""id"": ""sink-ea684caa-96c6-438e-adc8-d914f90742de""}}"
+C283,settings,Email,send-portal-invite idempotent replay,c1c_admin,api,False,PASS,,,,"{""duplicate"": true}"
+C284,settings,Email,send-portal-invite tenant authorization,c1c_admin|freedom_staff,api,False,PASS,,,,"{""status"": 404, ""error"": ""tenant_not_found""}"
+C285,settings,Email,Recipient lock policy present,c1c_admin,api,False,PASS,,,,"{""stagingMode"": ""ses-identity"", ""stagingPolicy"": ""staging_ses_identity""}"
+C286,settings,Email,Tenant branding From line,c1c_admin,api,False,PASS,,,,"{""from"": ""Condition One Commercial <noreply@ses-gate.staging.checksops.com>"", ""replyTo"": ""payments@condition1commercial.com""}"
+C287,settings,Email,Reply-To validation,c1c_admin,api,False,PASS,,,,"{""replyTo"": ""payments@condition1commercial.com""}"
+C288,settings,Email,Cross-tenant email denial,c1c_admin|freedom_staff,api,False,PASS,,,,"{""note"": ""cross-tenant email denial""}"
+C289,settings,Email,homeowner-ledger-send sink CTA,c1c_admin,api,False,PASS,,,,"{""url"": ""https://staging.checksops.com/ledger/4fc7ebb14399d9d735a0d67c39407036fe4f51a480407317""}"
+C290,settings,Email,homeowner-ledger-send same-email reuse,c1c_admin,api,False,PASS,,,,{}
+C291,settings,Email,homeowner-ledger-send different-email isolation,c1c_admin,api,False,PASS,,,,{}
+C292,settings,Email,homeowner-ledger-send audited reservation,c1c_admin,api,False,PASS,,,,"{""row"": {""id"": ""8274bca2-7e92-4265-81ea-9e6f6230b4b4"", ""template_name"": ""homeowner-ledger-invite"", ""recipient_email"": ""mcarletta@freedomadj.com"", ""status"": ""sunk"", ""provider_message_id"": ""sink-bfdf88fa-3261-4bd1-a9a2-9143cd9359d9"", ""idempot"
+C293,settings,Email,homeowner-ledger-send idempotent replay,c1c_admin,api,False,PASS,,,,"{""duplicate"": true}"
+C294,settings,Email,homeowner-ledger-send lock recipient,c1c_admin,api,False,BLOCKED,,missing data,No API observation recorded for this id,
+C295,settings,Email,Zero SES SendEmail during audit,anon,api,False,PASS,,,,"{""sesBefore"": {""ok"": true, ""sum"": 0, ""points"": 0}, ""sesAfter"": {""ok"": true, ""sum"": 0, ""points"": 0}}"
+C296,settings,Email,Do not switch AWS_EMAIL_MODE=ses,anon,api,False,PASS,,,,"{""actual"": ""ses-identity""}"
+C297,settings,Users,Invite user dialog UI,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C298,settings,Users,Role dropdown,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C299,settings,Users,Deactivate / remove UI,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C300,settings,Partners,Partner code visible,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C301,settings,Banking,Operating account display,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C302,settings,Banking,ACH debit warning,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C303,settings,Branding,Company name field,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C304,settings,Branding,Logo upload,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C305,settings,Branding,Color inputs,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C306,settings,Branding,Reply-To field,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C307,settings,Branding,Sending domain status,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C308,settings,Compliance,KYC copy display,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C309,settings,Compliance,Document library,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C310,settings,Directory,Trades listed,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C311,settings,CheckAlt,CheckAlt settings fail-closed,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C312,settings,QuickBooks,QuickBooks settings fail-closed,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C313,settings,Zapier,Zapier integration settings,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C314,settings,Import,Import settings,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C315,settings,AuditLog,Tenant audit activity,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C316,settings,Security,Tenant security compliance view,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C317,settings,Security,Account security page,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C318,settings,Billing,Billing & usage panel,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C319,settings,TeamCaps,Team caps settings,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C320,settings,Signatures,Signature presets,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C321,settings,Maintenance,Maintenance payments tracker,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C322,settings,Org,Organization settings,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C323,settings,Staff,Freedom staff settings access limited,freedom_staff,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C324,settings,Staff,Staff cannot invite platform owner,freedom_staff,api,False,PASS,,,,"{""note"": ""staff cannot invite as platform - covered by C284""}"
+C325,settings,AdminRole,Freedom admin Users tab,freedom_admin,ui,True,BLOCKED,,identity,Freedom admin Users tab blocked; identity_not_linked,Freedom admin Users tab blocked; identity_not_linked
+C326,settings,AdminRole,Freedom admin Branding tab,freedom_admin,ui,True,BLOCKED,,identity,Freedom admin Branding tab blocked; identity_not_linked,Freedom admin Branding tab blocked; identity_not_linked
+C327,settings,Owner,Platform owner manage-tenant Company tab,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C328,settings,Owner,Platform owner manage-tenant Branding & Email,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C329,settings,Owner,Platform owner manage-tenant Compliance,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C330,settings,Owner,Platform owner manage-tenant Integrations,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C331,settings,Owner,Platform owner manage-tenant Billing,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C332,settings,Owner,Platform owner manage-tenant OPS Badge,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C333,settings,Owner,Platform owner manage-tenant Users,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C334,settings,Email,C1C branding must not show Freedom name,c1c_admin,ui,True,FAIL,P2,,,C1C Branding & Email company name is Freedom Claims Adjusting / claims@freedomclaims.com while Profile and Check Center show Condition One Commercial
+C335,settings,Settings,Harmless view-only (no persist in this audit),c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C336,settings,Settings,Mobile 390px settings tabs,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C337,settings,Users,List tenant users,c1c_admin,ui,True,PASS,,,,"Users tab lists Michael Carletta, Lani Hogan, Austin Sukarick"
+C338,settings,Referrals,Referral code display,c1c_admin,ui,True,PASS,,,,Referral code CONDIT6399 displayed
+C339,settings,AI,AI key unconfigured empty-safe,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C340,settings,Profile,Display name / email,c1c_admin,ui,True,PASS,,,,Profile Company Name Condition One Commercial / slug c1c
+C341,settings,Notifications,Toggle notification switch,c1c_admin,ui,True,PASS,,,,"Email Notifications toggle on, SMS off; Save Preferences not persisted in this audit"
+C342,settings,Passkey,Add passkey UI fail-closed,c1c_admin,ui,True,PASS,,,,Add a passkey visible; no passkeys registered; not completed
+C343,admin_platform,AdminTenants,Open /admin/tenants as platform owner,platform_owner,ui,True,PASS,,,,Owner /admin/tenants 6 of 6
+C344,admin_platform,AdminTenants,Tenant list,platform_owner,ui,True,PASS,,,,Tenant list
+C345,admin_platform,AdminTenants,Tenant search,platform_owner,ui,True,PASS,,,,Search tenants
+C346,admin_platform,AdminTenants,New Tenant dialog (cancel),platform_owner,ui,True,PASS,,,,New Tenant dialog cancelled
+C347,admin_platform,AdminTenants,Refresh,platform_owner,ui,True,PASS,,,,Refresh
+C348,admin_platform,AdminTenants,Log out,platform_owner,ui,True,PASS,,,,Log Out
+C349,admin_platform,AdminTenants,Tab Tenants,platform_owner,ui,True,PASS,,,,Tenants tab
+C350,admin_platform,AdminTenants,Tab Platform Finance,platform_owner,ui,True,PASS,,,,Platform Finance tab — no Administrator access required
+C351,admin_platform,AdminTenants,Platform Banking,platform_owner,ui,True,PASS,,,,Platform Banking accessible to owner
+C352,admin_platform,AdminTenants,Platform Wallet & P&L,platform_owner,ui,True,PASS,,,,Wallet & P&L accessible to owner
+C353,admin_platform,AdminTenants,Tab Referral Dashboard,platform_owner,ui,True,PASS,,,,Referral Dashboard
+C354,admin_platform,AdminTenants,Export CSV referrals,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C355,admin_platform,AdminTenants,Tab Announcements,platform_owner,ui,True,PASS,,,,Announcements
+C356,admin_platform,AdminTenants,Per-tenant Preview portal,platform_owner,ui,True,FAIL,P2,,,Owner Preview of Freedom tenant in this session showed Org Not Found; C1C preview worked
+C357,admin_platform,AdminTenants,Per-tenant Notes,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C358,admin_platform,AdminTenants,Per-tenant OPS Badge,platform_owner,ui,True,PASS,,,,OPS Badge / KYC column Moov verified
+C359,admin_platform,AdminTenants,Per-tenant Manage tenant,platform_owner,ui,True,PASS,,,,Manage tenant inner tabs
+C360,admin_platform,AdminTenants,C1C tenant-admin denied,c1c_admin,ui,True,PASS,,,,C1C denied /admin/tenants Access Restricted
+C361,admin_platform,AdminTenants,Freedom staff denied,freedom_staff,ui,True,PASS,,,,Staff denied /admin/tenants
+C362,admin_platform,AdminTenants,Freedom admin denied,freedom_admin,ui,True,BLOCKED,,identity,Cannot prove Freedom-admin deny of /admin/tenants as a linked admin; identity_not_linked,Cannot prove Freedom-admin deny of /admin/tenants as a linked admin; identity_not_linked
+C363,admin_platform,Finance,platform-owner-only inconsistent status report,platform_owner,api,False,PASS,,,,"{""status"": 200, ""count"": 4, ""blocker"": null, ""blocker_kind"": null}"
+C364,admin_platform,Finance,tenant-admin denied inconsistent status report,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""not_authorized""}"
+C365,admin_platform,Finance,platform-owner moov-platform-bank,platform_owner,api,False,PASS,,,,"{""status"": 200, ""liveProviderCalled"": false, ""success"": true, ""bodyKeys"": [""service"", ""environment"", ""productionSupabaseChanged"", ""productionWebhooksRedirected"", ""ok"", ""statusCode"", ""success"", ""liveProviderCalled"", ""productionExecution"", ""p"
+C366,admin_platform,Finance,tenant-admin moov-platform-bank denied,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""Platform owner access required""}"
+C367,admin_platform,Finance,hire-mortgage-agent tenant-admin denied,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""rls_denied""}"
+C368,admin_platform,Finance,Read-only financial views,platform_owner,ui,True,PASS,,,,Financial model / tenant list read-only views
+C369,admin_platform,Finance,Provider-disabled on platform banking,platform_owner,both,True,PASS,,,,Provider execution remains false; banking UI did not live-call Moov
+C370,admin_platform,FinancialModel,Open /admin/financial-model,platform_owner,ui,True,PASS,,,,"Owner /admin/financial-model P&L Model editable, nothing saved to DB copy"
+C371,admin_platform,FinancialModel,P&L,platform_owner,ui,True,PASS,,,,"P&L Model tab Gross revenue $39,375"
+C372,admin_platform,FinancialModel,Client Savings,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C373,admin_platform,FinancialModel,Low scenario,platform_owner,ui,True,PASS,,,,Low volume scenario button present
+C374,admin_platform,FinancialModel,Expected scenario,platform_owner,ui,True,PASS,,,,Expected scenario button present
+C375,admin_platform,FinancialModel,High scenario,platform_owner,ui,True,PASS,,,,High volume scenario button present
+C376,admin_platform,FinancialModel,Reset,platform_owner,ui,True,PASS,,,,Reset control present (not persisted)
+C377,admin_platform,FinancialModel,Print (cancel),platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C378,admin_platform,FinancialModel,Export CSV,platform_owner,ui,True,PASS,,,,Export CSV control present; not required to download
+C379,admin_platform,FinancialModel,C1C denied,c1c_admin,ui,True,PASS,,,,C1C /admin/financial-model Access Restricted master-merchant only
+C380,admin_platform,MortgageOpsAdmin,Open /admin/mortgage-ops as owner,platform_owner,ui,True,PASS,,,,C1C denied /admin/financial-model Access Restricted (session B)
+C381,admin_platform,MortgageOpsAdmin,Personnel list,platform_owner,ui,True,PASS,,,,/admin/mortgage-ops as owner; Morgan Carletta listed
+C382,admin_platform,MortgageOpsAdmin,Hire agent (do not email),platform_owner,ui,True,PASS,,,,Personnel list 1 agent
+C383,admin_platform,MortgageOpsAdmin,Search personnel,platform_owner,ui,True,PASS,,,,Hire Agent visible; not submitted
+C384,admin_platform,MortgageOpsAdmin,"C1C access (expect deny, not silent marketing)",c1c_admin,ui,True,FAIL,P2,,,"C1C admin /admin/mortgage-ops redirects to marketing home + Not authorized toast (deny works, UX is silent marketing)"
+C385,admin_platform,MortgageDesk,Queue after login,mortgage_agent,ui,True,PASS,,,,C1C /admin/tenants Access Restricted; mortgage-ops unauth toast/home
+C386,admin_platform,MortgageDesk,Request detail,mortgage_agent,ui,True,BLOCKED,,unsafe action,Would require EMAIL_OTP / mailbox,Mortgage Desk queue after OTP would send email
+C387,admin_platform,Identity,platform owner /identity/me isMasterOwner,platform_owner,api,False,PASS,,,,isMasterOwner true UUID 233c588f-…
+C388,admin_platform,Identity,C1C /identity/me admin + c1c tenant,c1c_admin,api,False,PASS,,,,C1C /identity/me admin + c1c tenant UUID fd857564-…
+C389,admin_platform,Identity,Freedom staff /identity/me staff + freedom,freedom_staff,api,False,PASS,,,,Freedom staff /identity/me staff + freedom UUID abd3c2a0-…
+C390,admin_platform,Identity,Freedom admin /identity/me linked admin,freedom_admin,api,False,BLOCKED,,identity,GET /identity/me 401 identity_not_linked for c4386408-… and mcarletta@freedomadj.com,GET /identity/me 401 identity_not_linked for c4386408-… and mcarletta@freedomadj.com
+C391,admin_platform,Identity,Role escalation staff cannot hire mortgage agent,freedom_staff,api,False,PASS,,,,"{""status"": 403, ""error"": ""Admin access required""}"
+C392,admin_platform,Identity,Spoofed tenant_id ignored on mutation,c1c_admin,api,False,PASS,,,,{}
+C393,admin_platform,Identity,Authorization before mutation (unauth write 401),anon,api,False,PASS,,,,"{""status"": 401, ""error"": ""missing_cognito_token""}"
+C394,admin_platform,Security,Cross-tenant data query denied/empty,c1c_admin,api,False,PASS,,,,"{""status"": 200, ""count"": 0}"
+C395,admin_platform,Security,Malformed UUID rejected,c1c_admin,api,False,PASS,,,,"{""note"": ""malformed UUID""}"
+C396,admin_platform,Security,Public token cannot reach admin APIs,anon,api,False,PASS,,,,{}
+C397,admin_platform,Announcements,Announcement form,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C398,admin_platform,Treasury,Platform treasury panel,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C399,admin_platform,Bank,Platform bank panel,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C400,admin_platform,Limits,Stakeholder limit requests,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C401,admin_platform,Pnl,PnlModel interactive,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C402,admin_platform,Pricing,Pricing optimizer,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C403,admin_platform,Savings,Savings calculator,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C404,admin_platform,Owner,Preview C1C portal,platform_owner,ui,True,PASS,,,,Owner preview C1C portal
+C405,admin_platform,Owner,Preview Freedom portal,platform_owner,ui,True,FAIL,P2,,,Owner preview Freedom portal Org Not Found (same session as C356)
+C406,admin_platform,Owner,Notes dialog cancel,platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C407,admin_platform,Mobile,Admin tenants 390px,platform_owner,ui,True,PASS,,,,Admin Access Restricted at 390px
+C408,admin_platform,Env,AWS_EMAIL_MODE remains ses-identity,anon,api,False,PASS,,,,"{""actual"": ""ses-identity""}"
+C409,admin_platform,Env,AWS_EMAIL_SES_LOCK_RECIPIENT remains lock mailbox,anon,api,False,PASS,,,,"{""actual"": ""mcarletta@freedomadj.com""}"
+C410,admin_platform,Env,AWS_TENANT_EMAIL_DOMAIN_ENABLED true,anon,api,False,PASS,,,,"{""actual"": ""true""}"
+C411,admin_platform,Env,AWS_PROVIDER_EXECUTION_ENABLED false,anon,api,False,PASS,,,,"{""actual"": ""false""}"
+C412,admin_platform,Env,Production-prep SHA unchanged,anon,api,False,FAIL,P2,,,Production-prep SHA at audit start l9nHBQHn+cwwroKO9+czOXi2WMjoeChOpgVFtR0Tj7A= @ 2026-09-11T14:09:54; live now BIAPo9QUBVFeeM0s0Uwsbomulbxijvr7RbNraBPhXqE= LastModified 2026-09-11T20:08:55. This audit did not UpdateFunctionCode on prep.
