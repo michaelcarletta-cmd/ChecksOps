@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { Loader2, Mail, ShieldCheck, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
+import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 import {
@@ -110,7 +111,7 @@ function copyText(value: string) {
   toast.success("Copied");
 }
 
-export function EmailSenderSettings(_props: { showSendingDomain?: boolean } = {}) {
+export function EmailSenderSettings({ showSendingDomain = true }: { showSendingDomain?: boolean } = {}) {
   const { tenantId } = useTenantFilter();
   const { user, userRole } = useAuth();
   const qc = useQueryClient();
@@ -197,7 +198,10 @@ export function EmailSenderSettings(_props: { showSendingDomain?: boolean } = {}
     const mailFrom = settings?.mailFromRecords || [];
     return [...dkim, ...mailFrom];
   }, [settings]);
-  const logoUrl = settings?.logoUrl || tenant?.logo_url || null;
+  const logoUrl = resolvePublicBrandingUrl(settings?.logoUrl || tenant?.logo_url || null, "tenant-logos")
+    || settings?.logoUrl
+    || tenant?.logo_url
+    || null;
   const primaryColor = settings?.primaryColor || tenant?.primary_color || "#1a56db";
 
   const { data: preview } = useQuery({
@@ -396,12 +400,12 @@ export function EmailSenderSettings(_props: { showSendingDomain?: boolean } = {}
           </div>
           {!canConfigure && (
             <p className="text-xs text-muted-foreground">
-              You can view branding. Only tenant administrators or platform administrators can change the sending domain.
+              You can view branding. Only tenant administrators or platform administrators can change email branding.
             </p>
           )}
         </SectionCard>
 
-        <SectionCard
+        {showSendingDomain && <SectionCard
           title="Sending subdomain"
           icon={<Globe className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
@@ -548,7 +552,7 @@ export function EmailSenderSettings(_props: { showSendingDomain?: boolean } = {}
               </div>
             </div>
           )}
-        </SectionCard>
+        </SectionCard>}
 
         <SectionCard
           title="Email preview"
@@ -573,7 +577,13 @@ export function EmailSenderSettings(_props: { showSendingDomain?: boolean } = {}
               title="ChecksOps email preview"
               className="h-[520px] w-full rounded-md border bg-white"
               sandbox=""
-              srcDoc={preview.html}
+              srcDoc={
+                logoUrl && logoUrl.includes("/storage/public")
+                  ? preview.html
+                    .replace(/https?:\/\/[^"' \s]+checksops-logo\.png/g, logoUrl)
+                    .replace(/(["'])\/checksops-logo\.png\1/g, `$1${logoUrl}$1`)
+                  : preview.html
+              }
             />
           ) : (
             <p className="text-xs text-muted-foreground">
