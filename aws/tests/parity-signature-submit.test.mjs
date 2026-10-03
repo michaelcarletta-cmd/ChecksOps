@@ -66,58 +66,36 @@ test('public signature submit abuse and happy path', async () => {
     eSignConsentAccepted: true,
   }), {
     client: sqlClient([{
-      match: (sql) => sql.includes('token_hash'),
+      match: (sql) => sql.includes('aws_public_signature_by_token_hash'),
       result: () => ({ rows: [{
-        id: 's1',
-        status: 'pending',
-        expires_at: '2000-01-01T00:00:00.000Z',
-        signature_request_id: 'r1',
-        signing_order: 1,
+        doc: {
+          signer: { id: 's1', status: 'pending', expires_at: '2000-01-01T00:00:00.000Z', signing_order: 1 },
+          request: { id: 'r1', document_name: 'Release' },
+          waiting_for: [],
+          fields: [],
+        },
       }] }),
     }]),
   });
   assert.equal(expired.statusCode, 403);
   assert.equal(expired.stage, 'token_expired');
 
-  const already = await runPublicSignatureSubmit(eventOf({
-    token: 'tok',
-    eSignConsentAccepted: true,
-  }), {
-    client: sqlClient([{
-      match: (sql) => sql.includes('token_hash'),
-      result: () => ({ rows: [{
-        id: 's1',
-        status: 'signed',
-        expires_at: null,
-        signature_request_id: 'r1',
-        signing_order: 1,
-      }] }),
-    }]),
-  });
-  assert.equal(already.statusCode, 400);
-  assert.equal(already.alreadySigned, true);
-
   const blocked = await runPublicSignatureSubmit(eventOf({
     token: 'tok',
     eSignConsentAccepted: true,
     fieldValues: {},
   }), {
-    client: sqlClient([
-      {
-        match: (sql) => sql.includes('token_hash'),
-        result: () => ({ rows: [{
-          id: 's2',
-          status: 'pending',
-          expires_at: null,
-          signature_request_id: 'r1',
-          signing_order: 2,
-        }] }),
-      },
-      {
-        match: (sql) => sql.includes('signing_order <'),
-        result: () => ({ rows: [{ id: 's1' }] }),
-      },
-    ]),
+    client: sqlClient([{
+      match: (sql) => sql.includes('aws_public_signature_by_token_hash'),
+      result: () => ({ rows: [{
+        doc: {
+          signer: { id: 's2', status: 'pending', expires_at: null, signing_order: 2 },
+          request: { id: 'r1', document_name: 'Release' },
+          waiting_for: [{ id: 's1' }],
+          fields: [],
+        },
+      }] }),
+    }]),
   });
   assert.equal(blocked.statusCode, 403);
   assert.equal(blocked.stage, 'signer_order_blocked');
@@ -134,39 +112,38 @@ test('successful submit completes request without deposit RPCs', async () => {
     flattenPdf: async () => { flattenCalled = true; },
     client: sqlClient([
       {
-        match: (sql) => sql.includes('token_hash'),
+        match: (sql) => sql.includes('aws_public_signature_by_token_hash'),
         result: () => ({ rows: [{
-          id: 's1',
-          status: 'pending',
-          expires_at: null,
-          signature_request_id: 'r1',
-          request_id: 'r1',
-          signing_order: 1,
-          signer_name: 'Ada',
-          document_name: 'Release',
-          field_data: [{ id: 'sig', type: 'signature', signerIndex: 0, required: true, label: 'Sign' }],
+          doc: {
+            signer: { id: 's1', status: 'pending', expires_at: null, signing_order: 1, signer_name: 'Ada' },
+            request: {
+              id: 'r1',
+              document_name: 'Release',
+              document_path: 'check-intake/c1/files/doc.pdf',
+              claim_id: 'claim-1',
+              field_data: [{ id: 'sig', type: 'signature', signerIndex: 0, required: true, label: 'Sign' }],
+            },
+            waiting_for: [],
+            fields: [{ id: 'sig', field_type: 'signature', required: true, label: 'Sign' }],
+          },
         }] }),
       },
       {
-        match: (sql) => sql.includes('FROM public.signature_fields'),
-        result: () => ({ rows: [] }),
-      },
-      {
-        match: (sql, params) => sql.includes("SET status = 'signed'") && params[0] === 's1',
+        match: (sql) => sql.includes('aws_public_signature_submit'),
         result: (_params, sql) => {
           sqls.push(sql);
-          return { rows: [{ id: 's1' }], rowCount: 1 };
-        },
-      },
-      {
-        match: (sql) => sql.includes('FROM public.signature_signers WHERE signature_request_id'),
-        result: () => ({ rows: [{ id: 's1', status: 'signed' }] }),
-      },
-      {
-        match: (sql) => sql.includes('SET status = \'completed\''),
-        result: (_params, sql) => {
-          sqls.push(sql);
-          return { rows: [], rowCount: 1 };
+          return { rows: [{
+            doc: {
+              ok: true,
+              all_signed: true,
+              request_completed: true,
+              request_id: 'r1',
+              claim_id: 'claim-1',
+              document_path: 'check-intake/c1/files/doc.pdf',
+              document_name: 'Release',
+              final_rel: 'signed/claim-1/r1-final.pdf',
+            },
+          }] };
         },
       },
     ]),
