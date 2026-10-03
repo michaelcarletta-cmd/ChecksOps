@@ -44,12 +44,65 @@ export const AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS = Object.freeze({
   ]),
 });
 
+export const AUTHORIZED_MEMBERSHIP_ONLY = Object.freeze({
+  filename: 'supabase/migrations/20261002200000_user_can_move_tenant_checks_membership_only.sql',
+  migration_id: '20261002200000_user_can_move_tenant_checks_membership_only',
+  commit: 'e97e2c7c3f873e564a9d0e5af6d1a921ff2c29b0',
+  source_sha256: '298506c90be829222c75781dd7c546fdefc6c5b2fa5cf86442eed30d383ef22e',
+  intended_replacement_sha256: '298506c90be829222c75781dd7c546fdefc6c5b2fa5cf86442eed30d383ef22e',
+  function_identities: Object.freeze([
+    'public.user_can_move_tenant_checks(uuid,uuid)',
+    'public.admin_override_check_status(uuid,text,uuid)',
+  ]),
+});
+
+export const AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE = Object.freeze({
+  filename: 'aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql',
+  migration_id: '39_mortgage_ops_agent_accept_complete',
+  commit: '1ed46900077cf5834ba8ab5c1b30a332b6c692d6',
+  source_sha256: 'c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f',
+  intended_replacement_sha256: 'c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f',
+  function_identities: Object.freeze([
+    'public.aws_is_mortgage_ops_agent()',
+  ]),
+});
+
+export const AUTHORIZED_SQL71 = Object.freeze({
+  filename: 'aws/workflows/sql/71_homeowner_ledger_view_contract.sql',
+  migration_id: '71_homeowner_ledger_view_contract',
+  commit: '1d945f76bead581459019e0109510365618485a5',
+  source_sha256: '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5',
+  intended_replacement_sha256: '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5',
+  function_identity: 'public.aws_public_homeowner_ledger_by_token(text)',
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  AUTHORIZED_MEMBERSHIP_ONLY,
+  AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE,
+  AUTHORIZED_SQL71,
 ]);
 
 export function resolveAuthorizedMigration(input = {}) {
+  if (
+    input.filename === AUTHORIZED_SQL71.filename
+    || input.migration_id === AUTHORIZED_SQL71.migration_id
+  ) {
+    return AUTHORIZED_SQL71;
+  }
+  if (
+    input.filename === AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE.filename
+    || input.migration_id === AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE.migration_id
+  ) {
+    return AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE;
+  }
+  if (
+    input.filename === AUTHORIZED_MEMBERSHIP_ONLY.filename
+    || input.migration_id === AUTHORIZED_MEMBERSHIP_ONLY.migration_id
+  ) {
+    return AUTHORIZED_MEMBERSHIP_ONLY;
+  }
   if (
     input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
     || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id
@@ -61,6 +114,18 @@ export function resolveAuthorizedMigration(input = {}) {
 
 export function isTenantUsersSameCheckPermissions(input = {}) {
   return resolveAuthorizedMigration(input) === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
+}
+
+export function isMembershipOnlyHelper(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_MEMBERSHIP_ONLY;
+}
+
+export function isMortgageOpsAcceptComplete(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE;
+}
+
+export function isHomeownerLedgerViewContract(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_SQL71;
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/;

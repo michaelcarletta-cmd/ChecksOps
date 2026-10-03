@@ -10,6 +10,7 @@ import { FUNCTION_DEF_LOOKUP_SQL } from '../../scripts/deployment-guard/lib/func
 import { hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
+  AUTHORIZED_SQL71,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
@@ -594,4 +595,185 @@ test('readFunctionDef fails closed on unexpected duplicate/ambiguous catalog row
   assert.equal(applied.code, CODES.SQL_COLLISION);
   const live = await connect();
   assert.equal(live.applied(), false);
+});
+
+const SQL71_FILE = path.join(ROOT, AUTHORIZED_SQL71.filename);
+const SQL71_BEFORE = `CREATE OR REPLACE FUNCTION public.aws_public_homeowner_ledger_by_token(p_token text)
+ RETURNS jsonb
+ LANGUAGE sql
+AS $function$
+  SELECT jsonb_build_object('ok', true);
+$function$`;
+const SQL71_AFTER = `CREATE OR REPLACE FUNCTION public.aws_public_homeowner_ledger_by_token(p_token text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT jsonb_build_object(
+    'mode', 'claim',
+    'mode', 'pre_claim',
+    'pending_signatures', '[]'::jsonb,
+    'money', NULL
+  ) WHERE payee_type IN ('insured', 'mortgage_company');
+$function$`;
+const SQL71_SQL44_DEF = 'CREATE FUNCTION public.claim_ledger_link_or_create() UNCHANGED_BY_SQL71';
+
+function sql71AuthEvent(overrides = {}) {
+  const beforeDef = overrides.beforeDef || SQL71_BEFORE;
+  const expectedLive = overrides.expected_live_definition_sha256 || hashSqlDefinition(beforeDef);
+  const oneUse = overrides.one_use_id || `sql71-exec-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return {
+    action: 'apply',
+    workstream_id: 'homeowner-ledger-view-contract-6f10',
+    branch: 'cursor/homeowner-ledger-view-contract-6f10',
+    commit: AUTHORIZED_SQL71.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+    owned_components: [AUTHORIZED_SQL71.filename],
+    filename: AUTHORIZED_SQL71.filename,
+    migration_id: AUTHORIZED_SQL71.migration_id,
+    source_sha256: AUTHORIZED_SQL71.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL71.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: oneUse,
+    expiry: '2026-10-03T23:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-03T21:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL71,
+      expected_live_definition_sha256: expectedLive,
+      one_use_id: oneUse,
+    }),
+    ...overrides,
+  };
+}
+
+function mockSql71Connect({
+  beforeDef = SQL71_BEFORE,
+  afterDef = SQL71_AFTER,
+  sql44Def = SQL71_SQL44_DEF,
+  grants = [{ grantee: 'checksops', privilege_type: 'EXECUTE' }],
+} = {}) {
+  let applied71 = false;
+  let applied44 = false;
+  let invoked71 = false;
+  const client = {
+    applied71() { return applied71; },
+    applied44() { return applied44; },
+    invoked71() { return invoked71; },
+    async query(sql, params = []) {
+      const text = String(sql);
+      if (text.includes('CREATE OR REPLACE FUNCTION public.aws_public_homeowner_ledger_by_token')) {
+        applied71 = true;
+        return { rows: [] };
+      }
+      if (text.includes('CREATE OR REPLACE FUNCTION public.claim_ledger_link_or_create')) {
+        applied44 = true;
+        return { rows: [] };
+      }
+      if (text.includes('aws_public_homeowner_ledger_by_token($1') || text.includes('SELECT public.aws_public_homeowner_ledger_by_token')) {
+        invoked71 = true;
+        return { rows: [{ doc: { mode: 'claim' } }] };
+      }
+      if (text.includes('FROM pg_proc') || text.includes('pg_get_functiondef')) {
+        const name = String(params?.[1] || params?.[0] || '');
+        if (name.includes('aws_public_homeowner_ledger_by_token')) {
+          return { rows: [{ def: applied71 ? afterDef : beforeDef }] };
+        }
+        if (name.includes('claim_ledger')) {
+          return { rows: [{ def: sql44Def }] };
+        }
+        return { rows: [] };
+      }
+      if (text.includes('routine_privileges') && text.includes('aws_public_homeowner_ledger_by_token')) {
+        return { rows: grants };
+      }
+      if (text.includes('routine_privileges')) {
+        return { rows: grants };
+      }
+      throw new Error(`unexpected query: ${text.slice(0, 140)}`);
+    },
+    async end() {},
+  };
+  return async () => client;
+}
+
+function sql71Handler(connect, extra = {}) {
+  const consumed = path.join(os.tmpdir(), `sql71-exec-consumed-${process.pid}-${Date.now()}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = consumed;
+  process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
+  return createHandler({
+    connect,
+    now: () => Date.parse('2026-10-03T21:00:00.000Z'),
+    sqlFile71: SQL71_FILE,
+    ...extra,
+  });
+}
+
+test('SQL 71 apply uses the pinned artifact and does not invoke the RPC or SQL 44', async () => {
+  const connect = mockSql71Connect();
+  const handler = sql71Handler(connect);
+  const event = sql71AuthEvent();
+  const result = await handler(event);
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'applied');
+  assert.equal(result.details.receipt.sql_file, AUTHORIZED_SQL71.filename);
+  assert.equal(result.details.receipt.before_hash, hashSqlDefinition(SQL71_BEFORE));
+  assert.equal(result.details.receipt.after_hash, hashSqlDefinition(SQL71_AFTER));
+  assert.equal(result.details.receipt.sql44_hash, hashSqlDefinition(SQL71_SQL44_DEF));
+  const client = await connect();
+  assert.equal(client.applied71(), true);
+  assert.equal(client.applied44(), false);
+  assert.equal(client.invoked71(), false);
+});
+
+test('SQL 71 live-hash drift and altered embedded artifact fail closed', async () => {
+  const wrongLive = '2'.repeat(64);
+  const driftedEvent = sql71AuthEvent({
+    expected_live_definition_sha256: wrongLive,
+    one_use_id: 'sql71-drift-0001',
+  });
+  driftedEvent.preflight_live_fingerprint = authorizationFingerprint({
+    ...AUTHORIZED_SQL71,
+    expected_live_definition_sha256: wrongLive,
+    one_use_id: driftedEvent.one_use_id,
+  });
+  const drifted = await sql71Handler(mockSql71Connect())(driftedEvent);
+  assert.equal(drifted.ok, false);
+  assert.equal(drifted.code, CODES.SQL_COLLISION);
+
+  const tampered = path.join(os.tmpdir(), `sql71-tampered-${process.pid}.sql`);
+  fs.writeFileSync(tampered, `${fs.readFileSync(SQL71_FILE, 'utf8')}\n-- altered\n`);
+  const altered = await sql71Handler(mockSql71Connect(), { sqlFile71: tampered })(sql71AuthEvent());
+  assert.equal(altered.ok, false);
+  assert.equal(altered.code, CODES.SQL_COLLISION);
+  assert.match(altered.message, /embedded SQL file SHA256 does not match/);
+});
+
+test('SQL 71 inspect/verify must not invoke the public token RPC', async () => {
+  const connect = mockSql71Connect();
+  const handler = sql71Handler(connect);
+  const result = await handler(sql71AuthEvent({
+    action: 'inspect',
+    inspect: { token: 'do-not-use' },
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  const client = await connect();
+  assert.equal(client.applied71(), false);
+  assert.equal(client.invoked71(), false);
+});
+
+test('SQL 71 authorize does not apply and preserves SQL 44', async () => {
+  const connect = mockSql71Connect();
+  const handler = sql71Handler(connect);
+  const result = await handler(sql71AuthEvent({ action: 'authorize' }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'authorize');
+  const client = await connect();
+  assert.equal(client.applied71(), false);
+  assert.equal(client.applied44(), false);
 });
