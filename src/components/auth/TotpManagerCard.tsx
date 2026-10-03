@@ -87,8 +87,8 @@ export function TotpManagerCard() {
     const confirmAws = async () => {
       setBusy(true);
       try {
-        const ok = await verifyAwsTotp(awsCode.trim());
-        if (!ok) throw new Error("verify_failed");
+        const verified = await verifyAwsTotp(awsCode.trim());
+        if (!verified.ok) throw new Error("verify_failed");
         setAwsSecret(null);
         setAwsQr(null);
         setAwsCode("");

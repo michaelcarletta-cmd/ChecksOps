@@ -17,6 +17,7 @@ import {
   invokeAwsCheckAltProviderFunction,
   requireAwsCheckAltProviderPath,
 } from "@/lib/awsCheckAltMoneyPath";
+import { FinancialStepUpDeniedError } from "@/lib/financialStepUp";
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 
@@ -453,7 +454,7 @@ export function PendingApprovalDeposits() {
     refetchInterval: 30_000,
   });
 
-  const guardFinancial = useFinancialGuard();
+  const { runAuthorized } = useFinancialGuard();
 
   const decide = useMutation({
     mutationFn: async (args: {
@@ -462,21 +463,33 @@ export function PendingApprovalDeposits() {
       reject_notes?: string;
       check_intake_item_id?: string | null;
     }) => {
+      const invokeApprove = async () => {
+        requireAwsCheckAltProviderPath({
+          apiBaseUrl: awsApiBaseUrl(),
+          functionName: "checkalt-approve-deposit",
+        });
+        const { data, error } = await invokeAwsCheckAltProviderFunction(
+          "checkalt-approve-deposit",
+          { body: args },
+          { apiBaseUrl: awsApiBaseUrl() },
+        );
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error(String((data as any).error));
+        return data;
+      };
       if (args.action === "approve") {
-        await guardFinancial("deposit.approve", { checkId: args.check_intake_item_id });
+        try {
+          return await runAuthorized("deposit.approve", { checkId: args.check_intake_item_id }, invokeApprove);
+        } catch (error) {
+          if (error instanceof FinancialStepUpDeniedError) throw error;
+          throw new Error(checkAltProviderUserMessage(error));
+        }
       }
-      requireAwsCheckAltProviderPath({
-        apiBaseUrl: awsApiBaseUrl(),
-        functionName: "checkalt-approve-deposit",
-      });
-      const { data, error } = await invokeAwsCheckAltProviderFunction(
-        "checkalt-approve-deposit",
-        { body: args },
-        { apiBaseUrl: awsApiBaseUrl() },
-      );
-      if (error) throw new Error(checkAltProviderUserMessage(error));
-      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
-      return data;
+      try {
+        return await invokeApprove();
+      } catch (error) {
+        throw new Error(checkAltProviderUserMessage(error));
+      }
     },
     onSuccess: (data: any) => {
       if (data?.already_resolved || data?.action_taken === false) {
@@ -507,8 +520,9 @@ export function PendingApprovalDeposits() {
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
     },
     onError: (e: unknown) => {
+      const cancelled = e instanceof FinancialStepUpDeniedError;
       toast({
-        title: "Approval call failed",
+        title: cancelled ? "Authenticator required" : "Approval call failed",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });

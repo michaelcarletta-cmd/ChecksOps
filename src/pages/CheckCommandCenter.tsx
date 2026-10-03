@@ -2927,7 +2927,7 @@ function CheckDetailPanel({
   checkId: string;
   onRefresh: () => void;
 }) {
-  const { requireStepUp } = useStepUp();
+  const { requireStepUp, invalidateStepUp } = useStepUp();
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [reuploadingBack, setReuploadingBack] = useState(false);
@@ -3621,6 +3621,7 @@ function CheckDetailPanel({
       const result = await runCheckAltDepositClick(checkId, {
         apiBaseUrl: awsApiBaseUrl(),
         requireStepUp,
+        invalidateStepUp,
         onPhase: setDepositPhase,
       });
       if (!result.ok) {

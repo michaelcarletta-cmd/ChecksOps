@@ -27,7 +27,7 @@ import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
 
 interface Props {
   request: StepUpRequest | null;
-  onResolved: (ok: boolean) => void;
+  onResolved: (ok: boolean, meta?: { authorizedAt?: number | string | null }) => void;
   onFactorsChanged: () => Promise<void> | void;
 }
 
@@ -167,22 +167,28 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             tenantId: request?.tenantId,
             checkId: request?.checkId,
           });
-          if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
-        } else {
-          const stepped = await stepUpAwsTotp({
-            code: normalized.code,
-            actionKey: request?.actionKey,
-            tenantId: request?.tenantId,
-            checkId: request?.checkId,
+          if (!enrolled.ok) throw new Error(TOTP_BOUNDARY_MESSAGE);
+          await onFactorsChanged();
+          toast({
+            title: "Verified",
+            description: "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
           });
-          if (!stepped) throw new Error(TOTP_BOUNDARY_MESSAGE);
+          onResolved(true, { authorizedAt: enrolled.authorizedAt });
+          return;
         }
+        const stepped = await stepUpAwsTotp({
+          code: normalized.code,
+          actionKey: request?.actionKey,
+          tenantId: request?.tenantId,
+          checkId: request?.checkId,
+        });
+        if (!stepped.ok) throw new Error(TOTP_BOUNDARY_MESSAGE);
         await onFactorsChanged();
         toast({
           title: "Verified",
           description: "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
         });
-        onResolved(true);
+        onResolved(true, { authorizedAt: stepped.authorizedAt });
         return;
       }
 

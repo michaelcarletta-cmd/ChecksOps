@@ -1,14 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  FINANCIAL_STEPUP_CLIENT_CLOCK_SKEW_MS,
+  FINANCIAL_STEPUP_TTL_MS,
   awsStepUpBody,
   buildFinancialStepUpRequest,
   cacheAllowsReuse,
   changingCheckRequiresNewAuth,
+  isAmbiguousFinancialProviderOutcome,
   isCheckBoundAction,
+  isFinancialStepUpRequiredError,
+  parseStepUpCacheEntry,
+  resolveStepUpAuthorizedAt,
+  runFinancialActionWithStepUp,
+  stepUpCacheAllowsReuse,
   stepUpCacheKey,
+  stepUpCacheRemainingMs,
 } from '../../src/lib/financialStepUp.ts';
-import { stepUpMatchesCheck } from '../functions/api/providers/production/checkalt-authz.mjs';
+import { FINANCIAL_STEPUP_TTL_MS as SERVER_FINANCIAL_TTL_MS } from '../functions/api/financial-totp.mjs';
+import { TOTP_STEPUP_TTL_MS, stepUpMatchesCheck } from '../functions/api/providers/production/checkalt-authz.mjs';
 
 const USER = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 const CHECK_A = 'a3a4a153-46e1-4c28-a273-79a9bd04f3a6';
@@ -58,6 +68,158 @@ test('changing check requires new authorization; stale cache cannot authorize an
   assert.equal(cacheAllowsReuse(keyA, keyB), false);
   assert.equal(cacheAllowsReuse(stepUpCacheKey(USER, 'deposit.submit', null), keyA), false);
   assert.equal(cacheAllowsReuse(`${USER}|unbound|session`, keyA), false);
+});
+
+test('browser cache TTL matches server authorization window and cannot outlive it', () => {
+  assert.equal(FINANCIAL_STEPUP_TTL_MS, TOTP_STEPUP_TTL_MS);
+  assert.equal(FINANCIAL_STEPUP_TTL_MS, SERVER_FINANCIAL_TTL_MS);
+  const now = Date.parse('2026-09-23T09:40:00.000Z');
+  const serverAt = now - (5 * 60 * 1000);
+  const resolved = resolveStepUpAuthorizedAt({
+    serverCreatedAt: new Date(serverAt).toISOString(),
+    clientNowMs: now,
+  });
+  assert.equal(resolved.source, 'server');
+  assert.equal(resolved.authorizedAt, serverAt);
+  assert.equal(stepUpCacheRemainingMs({ authorizedAt: serverAt, source: 'server' }, now), FINANCIAL_STEPUP_TTL_MS - (5 * 60 * 1000));
+  assert.equal(stepUpCacheRemainingMs({
+    authorizedAt: now - FINANCIAL_STEPUP_TTL_MS,
+    source: 'server',
+  }, now), 0);
+  assert.ok(stepUpCacheRemainingMs({
+    authorizedAt: now,
+    source: 'client',
+  }, now) <= FINANCIAL_STEPUP_TTL_MS - FINANCIAL_STEPUP_CLIENT_CLOCK_SKEW_MS);
+});
+
+test('valid unexpired step-up works; expired or legacy client cache requires fresh TOTP', () => {
+  const now = Date.parse('2026-09-23T09:40:00.000Z');
+  const approveKey = stepUpCacheKey(USER, 'deposit.approve', CHECK_A);
+  const fresh = {
+    userId: USER,
+    key: approveKey,
+    authorizedAt: now - (10 * 60 * 1000),
+    source: 'server',
+  };
+  assert.equal(stepUpCacheAllowsReuse(fresh, approveKey, now), true);
+  assert.equal(parseStepUpCacheEntry(fresh, USER, now)?.key, approveKey);
+
+  const expired = {
+    userId: USER,
+    key: approveKey,
+    authorizedAt: now - FINANCIAL_STEPUP_TTL_MS - 1,
+    source: 'server',
+  };
+  assert.equal(stepUpCacheAllowsReuse(expired, approveKey, now), false);
+  assert.equal(parseStepUpCacheEntry(expired, USER, now), null);
+
+  const legacyNoTimestamp = { userId: USER, key: approveKey };
+  assert.equal(parseStepUpCacheEntry(legacyNoTimestamp, USER, now), null);
+  assert.equal(stepUpCacheAllowsReuse({ key: approveKey }, approveKey, now), false);
+});
+
+test('deposit.submit authorization cannot satisfy deposit.approve', () => {
+  const now = Date.parse('2026-09-23T09:40:00.000Z');
+  const submitKey = stepUpCacheKey(USER, 'deposit.submit', CHECK_A);
+  const approveKey = stepUpCacheKey(USER, 'deposit.approve', CHECK_A);
+  assert.notEqual(submitKey, approveKey);
+  assert.equal(stepUpCacheAllowsReuse({
+    key: submitKey,
+    authorizedAt: now,
+    source: 'server',
+  }, approveKey, now), false);
+  assert.equal(stepUpMatchesCheck({
+    tenant_id: TENANT_A,
+    action_key: 'deposit.submit',
+    succeeded: true,
+    metadata: { check_id: CHECK_A, amount_cents: 500 },
+  }, {
+    tenantId: TENANT_A,
+    checkId: CHECK_A,
+    amountCents: 500,
+    actionKey: 'deposit.approve',
+  }), false);
+});
+
+test('stale client cache plus server step_up_required invalidates and challenges again', async () => {
+  const approveKey = stepUpCacheKey(USER, 'deposit.approve', CHECK_A);
+  const challenges = [];
+  let cacheValid = true;
+  const requireStepUp = async (request, options) => {
+    challenges.push({ actionKey: request.actionKey, force: options?.force === true });
+    if (cacheValid && !options?.force) return true;
+    return true;
+  };
+  let calls = 0;
+  const result = await runFinancialActionWithStepUp({
+    requireStepUp,
+    invalidateStepUp: () => { cacheValid = false; },
+    request: { actionKey: 'deposit.approve', checkId: CHECK_A },
+    action: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('step_up_required');
+      return { ok: true, approved: true };
+    },
+  });
+  assert.equal(result.approved, true);
+  assert.equal(calls, 2);
+  assert.equal(challenges.length, 2);
+  assert.equal(challenges[1].force, true);
+  assert.equal(cacheValid, false);
+  assert.equal(isFinancialStepUpRequiredError(new Error('step_up_required')), true);
+  assert.equal(stepUpCacheAllowsReuse({
+    key: approveKey,
+    authorizedAt: Date.parse('2026-09-23T02:07:08.000Z'),
+    source: 'server',
+  }, approveKey, Date.parse('2026-09-23T09:38:46.000Z')), false);
+});
+
+test('successful fresh deposit.approve step-up allows the action; invalid TOTP never calls approval', async () => {
+  const allowed = await runFinancialActionWithStepUp({
+    requireStepUp: async () => true,
+    request: { actionKey: 'deposit.approve', checkId: CHECK_A },
+    action: async () => ({ ok: true, action: 'approve' }),
+  });
+  assert.equal(allowed.action, 'approve');
+
+  let approveCalls = 0;
+  await assert.rejects(
+    () => runFinancialActionWithStepUp({
+      requireStepUp: async () => false,
+      request: { actionKey: 'deposit.approve', checkId: CHECK_A },
+      action: async () => {
+        approveCalls += 1;
+        return { ok: true };
+      },
+    }),
+    { error: 'totp_required' },
+  );
+  assert.equal(approveCalls, 0);
+});
+
+test('ambiguous provider outcomes are never automatically retried', async () => {
+  for (const code of ['checkalt_approve_failed', 'provider_timeout', 'reconciliation_required']) {
+    let calls = 0;
+    let challenged = 0;
+    await assert.rejects(
+      () => runFinancialActionWithStepUp({
+        requireStepUp: async () => {
+          challenged += 1;
+          return true;
+        },
+        invalidateStepUp: () => {},
+        request: { actionKey: 'deposit.approve', checkId: CHECK_A },
+        action: async () => {
+          calls += 1;
+          throw new Error(code);
+        },
+      }),
+      { message: code },
+    );
+    assert.equal(calls, 1, code);
+    assert.equal(challenged, 1, code);
+    assert.equal(isAmbiguousFinancialProviderOutcome(new Error(code)), true);
+  }
 });
 
 test('browser amount cannot alter authorization amount', () => {
