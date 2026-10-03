@@ -121,6 +121,11 @@ export default function MortgageOpsQueue() {
 
   useAwsPollingFallback(!!user, fetchQueues, 15_000);
 
+  const blurActive = () => {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement) el.blur();
+  };
+
   const handleAccept = async (id: string) => {
     setBusyId(id);
     const { error } = await supabase.rpc("accept_mortgage_handling_request", { _request_id: id });
@@ -133,10 +138,12 @@ export default function MortgageOpsQueue() {
       } else {
         toast.error(error.message);
       }
+      blurActive();
       void fetchQueues();
       return;
     }
     toast.success("Task accepted");
+    blurActive();
     void fetchQueues();
   };
 
@@ -182,6 +189,7 @@ export default function MortgageOpsQueue() {
       setBusyId(null);
       toast.success("Cancelled");
     }
+    blurActive();
     void fetchQueues();
   };
 

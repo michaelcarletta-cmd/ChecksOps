@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-10-03T01:30:00.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "permissionsUnchanged": true,
+  "cognitoUnchanged": true,
+  "durableStateUnchanged": {
+    "acceptA": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49 in_progress accepted_at 2026-10-03T01:16:00.559Z",
+    "acceptB": "ab84a6ce-b375-4353-8126-4ad37646bc70 in_progress accepted_at 2026-10-03T01:23:55.080Z",
+    "billing": [
+      "fb20e909-… mortgage_ops_initial 1000",
+      "44426bcd-… mortgage_ops_additional_check 500"
+    ]
+  },
+  "uiError": {
+    "first": "The object can not be found here.",
+    "afterTryAgain": "Minified React error #321",
+    "meaning": "Invalid hook call. Hooks ran against a second React copy after ErrorBoundary remount.",
+    "rootCause": "Composed staging entry index-moprRprA.js lazy-loads MortgageOpsQueue-mopsRprA.js, but that chunk still imports shared React bindings from index-BcLmLtnF.js."
+  },
+  "fix": {
+    "entry": "assets/index-moprRprB.js",
+    "queue": "assets/MortgageOpsQueue-mopsRprB.js",
+    "indexHtml": "/assets/index-moprRprB.js",
+    "errorBoundary": "Try again calls window.location.reload()",
+    "queueBlur": "blur active element before Accept/Complete refetch",
+    "stagingBucket": "checksops-staging-frontend-c48b",
+    "stagingDistribution": "E1CG52WRQZI7X1",
+    "productionUntouched": true
+  }
+}

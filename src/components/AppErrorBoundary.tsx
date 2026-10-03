@@ -35,7 +35,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <Button
             type="button"
             className="mt-6"
-            onClick={() => this.setState({ hasError: false, error: null })}
+            onClick={() => window.location.reload()}
           >
             Try again
           </Button>
