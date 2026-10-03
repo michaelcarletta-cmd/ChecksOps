@@ -15,9 +15,10 @@ import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
- * Shows TOTP status and enrolls Cognito SOFTWARE_TOKEN_MFA on AWS builds.
- * QR is generated in-browser from the associate otpauth URI. Preferred MFA
- * stays unset. Financial step-up still uses StepUpDialog after enrollment.
+ * Shows ChecksOps Financial authenticator status and enrolls app-level TOTP
+ * on AWS builds. QR is generated in-browser from the associate otpauth URI.
+ * Login MFA stays EMAIL_OTP / passkey. Financial step-up uses StepUpDialog
+ * after enrollment.
  */
 export function TotpManagerCard() {
   const { toast } = useToast();
@@ -74,7 +75,7 @@ export function TotpManagerCard() {
         setAwsQr(qr);
         toast({
           title: "Scan the QR code",
-          description: "Add ChecksOps in your authenticator app, then enter the current 6-digit code.",
+          description: "Add ChecksOps Financial to your authenticator app, then enter the current 6-digit code.",
         });
       } catch (error) {
         setAwsSecret(null);
@@ -97,9 +98,9 @@ export function TotpManagerCard() {
         setStatusError(null);
         setEnrolled(nowEnrolled);
         if (!nowEnrolled) {
-          throw new Error("Authenticator code was accepted but Cognito did not retain SOFTWARE_TOKEN_MFA. Preferred MFA was not set.");
+          throw new Error("Authenticator code was accepted but ChecksOps Financial authenticator enrollment was not saved.");
         }
-        toast({ title: "Authenticator enrolled", description: "Login still uses email OTP, password, or passkey. This code is for privileged and future financial step-up." });
+        toast({ title: "ChecksOps Financial authenticator enrolled", description: "Login still uses email OTP or passkey. This authenticator is for financial step-up only." });
       } catch (error) {
         toast({ title: "Could not verify code", description: String((error as Error).message || error), variant: "destructive" });
       } finally {
@@ -111,33 +112,33 @@ export function TotpManagerCard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             {enrolled ? <ShieldCheck className="h-4 w-4 text-primary" /> : <ShieldAlert className="h-4 w-4 text-amber-500" />}
-            Authenticator (TOTP)
+            ChecksOps Financial authenticator
             <Badge variant={enrolled ? "secondary" : "outline"} className="ml-1">
-              {enrolled === null ? (statusError ? "Status unavailable" : "Checking") : enrolled ? "Enrolled" : "Optional at login"}
+              {enrolled === null ? (statusError ? "Status unavailable" : "Checking") : enrolled ? "Enrolled" : "Not enrolled"}
             </Badge>
           </CardTitle>
           <CardDescription>
-            Sign-in still uses email OTP, password, or a passkey. Admin/staff should enroll TOTP or a passkey before privileged or financial actions. Money movement stays off.
+            Required for financial step-up such as sending funds. Login still uses email OTP or a passkey. Money movement stays off.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {statusError && enrolled !== true && (
             <Alert>
               <AlertDescription className="text-xs">
-                Could not read authenticator enrollment from Cognito. Refresh to try again. This is not treated as unenrolled.
+                Could not read ChecksOps Financial authenticator enrollment. Refresh to try again. This is not treated as unenrolled.
               </AlertDescription>
             </Alert>
           )}
           {enrolled === false && !awsQr && !awsSecret && (
             <Button onClick={() => void startAws()} disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Set up authenticator
+              Set up ChecksOps Financial authenticator
             </Button>
           )}
           {(awsQr || awsSecret) && (
             <div className="space-y-3 text-xs">
               <p className="text-muted-foreground">
-                Scan the QR code with Google Authenticator, Microsoft Authenticator, Authy, 1Password, or iPhone Passwords.
+                Scan the ChecksOps Financial QR code with Google Authenticator, Microsoft Authenticator, Authy, 1Password, or iPhone Passwords.
               </p>
               <TotpQrDisplay qr={awsQr} secret={awsSecret} />
               <Input
@@ -163,10 +164,10 @@ export function TotpManagerCard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldAlert className="h-4 w-4 text-amber-500" />
-            Authenticator (TOTP)
+            ChecksOps Financial authenticator
           </CardTitle>
           <CardDescription>
-            AWS Cognito TOTP enrollment is available when the API URL is configured. Login remains email OTP, password, or passkey.
+            ChecksOps Financial authenticator setup is available when the API URL is configured. Login remains email OTP or passkey.
           </CardDescription>
         </CardHeader>
       </Card>

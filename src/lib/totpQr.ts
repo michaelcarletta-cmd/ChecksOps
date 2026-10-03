@@ -4,7 +4,7 @@
  * Never log, persist, or send the secret or otpauth URI to analytics.
  */
 
-const ISSUER = "ChecksOps";
+const ISSUER = "ChecksOps-Financial";
 
 export const buildTotpOtpauthUri = (secret: string, email?: string | null): string => {
   const key = String(secret || "").replace(/\s+/g, "");

@@ -146,11 +146,17 @@ test('financial TOTP verify is rate limited', () => {
   assert.equal(denied.error, 'rate_limited');
 });
 
-test('otpauth URI uses ChecksOps Financial issuer and is only for enroll-start', () => {
+test('otpauth URI uses ChecksOps-Financial issuer and is only for enroll-start', () => {
   const secret = generateTotpSecret();
   const uri = otpauthUri(secret, 'mcarletta@freedomadj.com');
   assert.match(uri, /^otpauth:\/\/totp\//);
-  assert.match(uri, /ChecksOps%20Financial/);
+  assert.equal(FINANCIAL_TOTP_ISSUER, 'ChecksOps-Financial');
+  assert.equal(/\s/.test(FINANCIAL_TOTP_ISSUER), false);
+  assert.doesNotMatch(FINANCIAL_TOTP_ISSUER, /%20/);
+  assert.match(uri, /otpauth:\/\/totp\/ChecksOps-Financial:/);
+  assert.match(uri, /issuer=ChecksOps-Financial/);
+  assert.doesNotMatch(uri, /ChecksOps%20Financial/);
+  assert.doesNotMatch(uri, /ChecksOps Financial/);
   assert.match(uri, new RegExp(secret));
 });
 

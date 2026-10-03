@@ -192,7 +192,9 @@ test('tester can enroll app-level financial TOTP without Cognito MFA APIs', asyn
   };
   try {
     const { secret, started, verified } = await enrollTester(store);
-    assert.match(started.totp.otpauth_uri, /ChecksOps%20Financial/);
+    assert.match(started.totp.otpauth_uri, /otpauth:\/\/totp\/ChecksOps-Financial:/);
+    assert.match(started.totp.otpauth_uri, /issuer=ChecksOps-Financial/);
+    assert.doesNotMatch(started.totp.otpauth_uri, /ChecksOps%20Financial/);
     assert.equal(started.totp.qr_code, null);
     assert.equal(verified.enrollment, true);
     assert.equal(verified.recorded, false);
