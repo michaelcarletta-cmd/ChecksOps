@@ -48,6 +48,30 @@ export const safeHttpUrl = (value, fallback = null) => (
   isSafeHttpUrl(value) ? String(value).trim() : fallback
 );
 
+const RAW_BRANDING_PATH = /^(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+$|^[A-Za-z0-9._-]+\.(?:png|jpe?g|gif|webp|svg)$/i;
+
+/** Display/delivery URL for a stored tenant logo. Does not persist. */
+export const publicTenantLogoUrl = (value, origin = emailAssetOrigin()) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (isSafeHttpUrl(raw)) return raw;
+  if (/^(javascript|data|blob|file):/i.test(raw) || raw.includes('..') || raw.includes('://') || raw.startsWith('//')) {
+    return null;
+  }
+  const base = String(origin || '').replace(/\/$/, '');
+  if (raw.includes('/storage/public')) {
+    if (raw.startsWith('http')) return isSafeHttpUrl(raw) ? raw : null;
+    const rel = raw.startsWith('/') ? raw : `/${raw}`;
+    const abs = `${base}${rel}`;
+    return isSafeHttpUrl(abs) ? abs : null;
+  }
+  if (/\s/.test(raw) || raw.startsWith('/') || raw.includes('?') || raw.includes('#')) return null;
+  if (!RAW_BRANDING_PATH.test(raw)) return null;
+  const path = raw.replace(/^tenant-logos\//, '');
+  const url = `${base}/prep/storage/public?bucket=tenant-logos&path=${encodeURIComponent(path)}`;
+  return isSafeHttpUrl(url) ? url : null;
+};
+
 export { defaultReplyTo };
 
 export const parseFromHeader = (from) => {
@@ -199,7 +223,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   const primaryColor = isSafeHexColor(tenant.primary_color)
     ? String(tenant.primary_color).trim()
     : platform.primaryColor;
-  const logoUrl = safeHttpUrl(tenant.logo_url, platform.logoUrl);
+  const logoUrl = publicTenantLogoUrl(tenant.logo_url) || platform.logoUrl;
 
   if (verified) {
     return {

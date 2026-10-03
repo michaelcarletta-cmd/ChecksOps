@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
 
+import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
@@ -226,6 +227,10 @@ export function CompanyBrandingSettings() {
     }
   };
 
+  const logoSrc = resolvePublicBrandingUrl(logoUrl, "tenant-logos") || logoUrl;
+  const letterheadSrc = resolvePublicBrandingUrl(letterheadUrl, "company-branding") || letterheadUrl;
+  const invoiceLetterheadSrc = resolvePublicBrandingUrl(invoiceLetterheadUrl, "company-branding") || invoiceLetterheadUrl;
+
   return (
     <div className="space-y-6">
       {/* Hero Section */}
@@ -297,9 +302,9 @@ export function CompanyBrandingSettings() {
               <Label className="text-sm font-medium">Application Sidebar Logo</Label>
               <p className="text-xs text-muted-foreground">This logo appears in the top-left corner of the dashboard sidebar.</p>
               
-              {logoUrl && (
+              {logoSrc && (
                 <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
-                  <img src={logoUrl} alt="Company logo" className="h-12 w-auto object-contain" />
+                  <img src={logoSrc} alt="Company logo" className="h-12 w-auto object-contain" />
                 </div>
               )}
               
@@ -332,9 +337,9 @@ export function CompanyBrandingSettings() {
               <Label className="text-sm font-medium">Document Letterhead</Label>
               <p className="text-xs text-muted-foreground">Used at the top of generated reports, demand letters, and claim documents.</p>
               
-              {letterheadUrl && (
+              {letterheadSrc && (
                 <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
-                  <img src={letterheadUrl} alt="Company letterhead" className="h-12 w-auto object-contain" />
+                  <img src={letterheadSrc} alt="Company letterhead" className="h-12 w-auto object-contain" />
                 </div>
               )}
               
@@ -380,8 +385,8 @@ export function CompanyBrandingSettings() {
                   className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    {invoiceLetterheadUrl ? (
-                      <img src={invoiceLetterheadUrl} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
+                    {invoiceLetterheadSrc ? (
+                      <img src={invoiceLetterheadSrc} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
                     ) : (
                       <Upload className="h-8 w-8 text-muted-foreground mb-2" />
                     )}
