@@ -260,6 +260,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
         <div className="flex items-center gap-1 flex-wrap justify-end">
           <SendCheckTrackingLinkButton
             claimId={(checkMeta?.claim_id as string | null) ?? null}
+            checkIntakeItemId={checkIntakeItemId}
             tenantId={tenant?.id ?? null}
             size="sm"
             variant="outline"

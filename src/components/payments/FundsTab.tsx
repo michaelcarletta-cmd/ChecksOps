@@ -453,6 +453,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           )}
           <SendCheckTrackingLinkButton
             claimId={claimId ?? null}
+            checkIntakeItemId={checkIntakeItemId}
             tenantId={tenant?.id ?? null}
             size="sm"
             variant="outline"
@@ -466,7 +467,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           </p>
         )}
         <p className="text-[10px] text-muted-foreground">
-          Payment link: homeowner verifies their bank account. Tracking link: homeowner sees the full timeline for every check on this claim.
+          Payment link: homeowner verifies their bank account. Tracking link: homeowner sees the full timeline for every check on this claim. Tracking is available before deposit and does not require bank verification; it stays disabled only until this check is linked to a claim.
         </p>
       </div>}
 
