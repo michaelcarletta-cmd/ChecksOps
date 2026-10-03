@@ -4,7 +4,8 @@ import { PLATFORM_OWNER_EMAIL, isPlatformOwner } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { resolveAdminTenantTab } from "@/lib/adminTenantTab";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,6 +91,8 @@ const TENANT_ROLES = ["admin", "operator", "viewer"];
 
 export default function AdminTenants() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = resolveAdminTenantTab(searchParams.get("tab"));
   const [authChecked, setAuthChecked] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -207,7 +210,16 @@ export default function AdminTenants() {
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
 
-        <Tabs defaultValue="tenants" className="w-full">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            const next = new URLSearchParams(searchParams);
+            if (value === "tenants") next.delete("tab");
+            else next.set("tab", value);
+            setSearchParams(next, { replace: true });
+          }}
+          className="w-full"
+        >
           <TabsList className="mb-6 w-full justify-start overflow-x-auto flex-nowrap">
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>

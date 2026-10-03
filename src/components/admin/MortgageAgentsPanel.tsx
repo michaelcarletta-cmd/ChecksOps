@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, RefreshCw, ShieldAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Plus, RefreshCw, ShieldAlert } from "lucide-react";
 import { isAwsStaging } from "@/lib/awsStaging";
 
 const invokeCompensation = async (body: Record<string, unknown>) => {
@@ -62,6 +62,8 @@ type EntryRow = {
   check_intake_item_id: string | null;
   claim_id: string | null;
   tenant_name: string | null;
+  homeowner_name: string | null;
+  claim_number: string | null;
   mortgage_company: string | null;
   loan_number: string | null;
   classification: string;
@@ -106,6 +108,7 @@ export function MortgageAgentsPanel() {
   const [agentFilter, setAgentFilter] = useState("all");
   const [selected, setSelected] = useState<string[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyRow[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [payRef, setPayRef] = useState("");
@@ -322,10 +325,10 @@ export function MortgageAgentsPanel() {
 
         <TabsContent value="monthly" className="mt-4 space-y-4">
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Summary label="Initial ($10)" value={String(totals.initial_count)} />
-            <Summary label="Additional ($5)" value={String(totals.additional_count)} />
-            <Summary label="Files worked" value={String(totals.files_worked)} />
-            <Summary label="Gross owed" value={dollars(totals.gross_owed_cents)} />
+            <Summary label="Initial $10" value={String(totals.initial_count)} />
+            <Summary label="Additional $5" value={String(totals.additional_count)} />
+            <Summary label="Files Worked" value={String(totals.files_worked)} />
+            <Summary label="Gross Owed" value={dollars(totals.gross_owed_cents)} />
             <Summary label="Paid" value={dollars(totals.paid_cents)} />
             <Summary label="Balance" value={dollars(totals.balance_cents)} />
           </div>
@@ -339,8 +342,8 @@ export function MortgageAgentsPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Agent</TableHead>
-                    <TableHead className="text-right">Initial ($10)</TableHead>
-                    <TableHead className="text-right">Additional ($5)</TableHead>
+                    <TableHead className="text-right">Initial $10</TableHead>
+                    <TableHead className="text-right">Additional $5</TableHead>
                     <TableHead className="text-right">Files Worked</TableHead>
                     <TableHead className="text-right">Gross Owed</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
@@ -386,36 +389,50 @@ export function MortgageAgentsPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead />
-                    <TableHead>Agent</TableHead>
-                    <TableHead>Tenant</TableHead>
-                    <TableHead>Loan / company</TableHead>
+                    <TableHead />
+                    <TableHead>Homeowner</TableHead>
+                    <TableHead>Claim</TableHead>
                     <TableHead>Class</TableHead>
-                    <TableHead className="text-right">Agent $</TableHead>
-                    <TableHead>Tenant event</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Completed</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>
-                        <input type="checkbox" checked={selected.includes(entry.id)} onChange={() => toggle(entry.id)} />
-                      </TableCell>
-                      <TableCell>{entry.full_name || entry.email}</TableCell>
-                      <TableCell>{entry.tenant_name || "—"}</TableCell>
-                      <TableCell>{entry.loan_number || "—"} / {entry.mortgage_company || "—"}</TableCell>
-                      <TableCell>{entry.classification}</TableCell>
-                      <TableCell className="text-right">{dollars(entry.amount_cents)}</TableCell>
-                      <TableCell className="text-xs">
-                        {entry.tenant_billing_event_id
-                          ? `${entry.tenant_billing_event_type || "event"} ${entry.tenant_billing_amount_cents === 0 ? "$0 promo" : dollars(entry.tenant_billing_amount_cents || 0)}`
-                          : "none"}
-                      </TableCell>
-                      <TableCell><Badge variant="outline">{entry.status}</Badge></TableCell>
-                      <TableCell className="text-xs">{entry.completed_at ? new Date(entry.completed_at).toLocaleString() : "—"}</TableCell>
-                    </TableRow>
-                  ))}
+                  {entries.map((entry) => {
+                    const open = expandedId === entry.id;
+                    return (
+                      <Fragment key={entry.id}>
+                        <TableRow
+                          className="cursor-pointer"
+                          onClick={() => setExpandedId(open ? null : entry.id)}
+                        >
+                          <TableCell onClick={(event) => event.stopPropagation()}>
+                            <input type="checkbox" checked={selected.includes(entry.id)} onChange={() => toggle(entry.id)} />
+                          </TableCell>
+                          <TableCell className="w-8 text-muted-foreground">
+                            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </TableCell>
+                          <TableCell className="font-medium">{entry.homeowner_name || "—"}</TableCell>
+                          <TableCell>
+                            <div>{entry.claim_number || "—"}</div>
+                            <div className="font-mono text-xs text-muted-foreground">{entry.claim_id || "—"}</div>
+                          </TableCell>
+                          <TableCell>{formatClassification(entry.classification)}</TableCell>
+                          <TableCell className="text-right">{dollars(entry.amount_cents)}</TableCell>
+                          <TableCell><Badge variant="outline">{entry.status}</Badge></TableCell>
+                          <TableCell className="text-xs">{formatWhen(entry.completed_at)}</TableCell>
+                        </TableRow>
+                        {open ? (
+                          <TableRow>
+                            <TableCell colSpan={8}>
+                              <EntryDrilldown entry={entry} />
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -492,7 +509,57 @@ function Summary({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatWhen(value: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+function formatClassification(value: string) {
+  if (value === "initial") return "Initial";
+  if (value === "additional") return "Additional";
+  return value || "—";
+}
+
+function DrillField({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="break-all text-sm">{value || "—"}</div>
+    </div>
+  );
+}
+
+function EntryDrilldown({ entry }: { entry: EntryRow }) {
+  return (
+    <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="compensation-entry-drilldown">
+      <DrillField label="Homeowner" value={entry.homeowner_name} />
+      <DrillField label="Claim number" value={entry.claim_number} />
+      <DrillField label="Claim ID" value={entry.claim_id} />
+      <DrillField label="Check ID" value={entry.check_intake_item_id} />
+      <DrillField label="Mortgage company" value={entry.mortgage_company} />
+      <DrillField label="Accepted date" value={formatWhen(entry.accepted_at)} />
+      <DrillField label="Completed date" value={formatWhen(entry.completed_at)} />
+      <DrillField label="Classification" value={formatClassification(entry.classification)} />
+      <DrillField label="Compensation amount" value={dollars(entry.amount_cents)} />
+      <DrillField label="Compensation status" value={entry.status} />
+      <DrillField label="Payment date" value={entry.payment_date ? formatWhen(entry.payment_date) : "—"} />
+      <DrillField label="Payment reference" value={entry.payment_reference} />
+      <DrillField label="Bookkeeping / payment note" value={entry.payment_note} />
+      <DrillField label="Agent" value={entry.full_name || entry.email} />
+      <DrillField label="Tenant" value={entry.tenant_name} />
+      <DrillField
+        label="Tenant event"
+        value={entry.tenant_billing_event_id
+          ? `${entry.tenant_billing_event_type || "event"} ${entry.tenant_billing_amount_cents === 0 ? "$0 promo" : dollars(entry.tenant_billing_amount_cents || 0)}`
+          : "none"}
+      />
+    </div>
+  );
+}
+
 function HireAgentDialog({ onDone }: { onDone: () => void }) {
+  const passwordlessHire = isAwsStaging();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -507,14 +574,16 @@ function HireAgentDialog({ onDone }: { onDone: () => void }) {
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke("hire-mortgage-agent", {
-        body: { full_name: cleanName, email: cleanEmail, password: password || undefined },
+        body: passwordlessHire
+          ? { full_name: cleanName, email: cleanEmail }
+          : { full_name: cleanName, email: cleanEmail, password: password || undefined },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const d = data as { email: string; temp_password: string | null; created: boolean };
       toast.success(d.created ? `Hired ${d.email}` : `Granted mortgage ops access to ${d.email}`);
-      setResult({ email: d.email, tempPassword: d.temp_password });
-      if (!d.temp_password) onDone();
+      setResult({ email: d.email, tempPassword: passwordlessHire ? null : d.temp_password });
+      if (passwordlessHire || !d.temp_password) onDone();
     } catch (e: any) {
       toast.error(e.message || "Failed to hire agent");
     } finally {
@@ -528,7 +597,7 @@ function HireAgentDialog({ onDone }: { onDone: () => void }) {
         <DialogTitle>Hire Mortgage Agent</DialogTitle>
         <DialogDescription>
           Creates dedicated Mortgage Ops identity only. No tenant_users membership.
-          {isAwsStaging() ? " AWS staging uses Cognito + identity_accounts." : ""}
+          {passwordlessHire ? " AWS staging hire is passwordless Cognito EMAIL_OTP. No password is set or returned." : ""}
         </DialogDescription>
       </DialogHeader>
       {result ? (
@@ -540,7 +609,9 @@ function HireAgentDialog({ onDone }: { onDone: () => void }) {
         <div className="space-y-3">
           <div><Label>Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
           <div><Label>Email</Label><Input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-          <div><Label>Optional password</Label><Input value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+          {passwordlessHire ? null : (
+            <div><Label>Optional password</Label><Input value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+          )}
         </div>
       )}
       <DialogFooter>

@@ -16,6 +16,11 @@ test('Mortgage Agents tab is composed onto AdminTenants without reverting Brandi
   assert.match(tenants, /<EmailSenderSettings showSendingDomain=\{true\} \/>/);
   assert.match(tenants, /Branding & Email/);
   assert.match(tenants, /value="branding"/);
+  assert.match(tenants, /useSearchParams/);
+  assert.match(tenants, /resolveAdminTenantTab\(searchParams\.get\("tab"\)\)/);
+  assert.match(tenants, /value=\{activeTab\}/);
+  assert.match(tenants, /isPlatformOwner\(email, userId\)/);
+  assert.match(tenants, /Email Brand Color|showSendingDomain=\{true\}/);
 });
 
 test('SQL 47 does not collide with SQL 39, queue, or money rails', () => {
