@@ -712,8 +712,8 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "1d25f62c01928d8137a89e7ecf998b0610a7da3e",
-        "tree_hash": "f8c2b8c1ffbb41bf99b5aba4f5d9f5c356103e13cbcc7d1254a7369f37982cea",
+        "git_sha": "b8a6fa5e5f015cece599e013005ddf5c5a82c031",
+        "tree_hash": "abe7da8c71197e4f4a87ac34fb639d94fe4f519421bdbb6ccdcf562929cc9177",
         "merged": false,
         "merged_pr": null
       },
@@ -721,7 +721,7 @@
       "artifact": {
         "type": "spa",
         "name": "/assets/index-BgOCQCWm.js",
-        "version": ".Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P",
+        "version": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
         "hash": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
@@ -733,13 +733,13 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-10-03T11:23:02Z",
+        "recorded_at": "2026-10-03T11:41:43Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "1d25f62c01928d8137a89e7ecf998b0610a7da3e",
+        "git_sha": "b8a6fa5e5f015cece599e013005ddf5c5a82c031",
         "artifact_identity": "/assets/index-BgOCQCWm.js",
-        "evidence_producer": "official production-spa-upload per_object_put after Mortgage Ops overlay",
-        "evidence_type": "production SPA Mortgage Ops overlay on live Branding"
+        "evidence_producer": "official production-spa-upload per_object_put after Mortgage Ops queue blur hotfix",
+        "evidence_type": "production SPA Mortgage Ops overlay on live Branding plus expression-safe queue blur"
       },
       "deployment_fingerprint": {
         "recorded": true,
@@ -747,14 +747,14 @@
         "spa_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": ".Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P",
+        "cloudfront_deployment_fingerprint": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": "2f112f18-9055-4760-859d-62be8899b91f",
         "lambda_code_hash": "4b6095d23df359f61fc9f4af988ab46b13219d289bd549ed65956a3afcf105b7",
         "applied_sql_hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
         "database_evidence_record": "aws/isolated/mortgage-ops-repair/production-sql-transition-2026-10-03.json",
         "config_hash": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
-        "notes": "Mortgage Ops overlay on live Branding 2026-10-03T11:23:02Z. Host checksops.com. Entry filename unchanged /assets/index-BgOCQCWm.js. Entry sha256 ae4ea2c9\u2026. Queue 092057a7\u2026. index.html sha256 3832fadc\u2026 unchanged. New index VersionId .Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P. CloudFront I5XLBBM5QYJF5P3G3JKGGO1GPP. Branding repair and Homeowner /h/ledger routing were not included."
+        "notes": "Mortgage Ops overlay plus expression-safe queue blur hotfix 2026-10-03T11:41:43Z. Host checksops.com. Entry filename unchanged /assets/index-BgOCQCWm.js. Entry sha256 ae4ea2c9\u2026. Queue da66439c\u2026. index.html sha256 3832fadc\u2026 unchanged. New index VersionId QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd. CloudFront I5T9PLB4T87BWXGN0C3I0CV9E8. Branding repair and Homeowner /h/ledger routing were not included."
       },
       "rollback": {
         "git_sha": "2277ab9ead9ab8270446468421f9dd8cc3e1a401",
@@ -773,7 +773,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "46dfbd8c7eeee65ad599aeba6cd7775a0577092f",
-        "tree_hash": "11292a72651a95df62d29e470b7a358297b321d7d21dd1a3cb92590f60fe63af",
+        "tree_hash": "2d356051ce740327c4379371062b45901b2e229ec251a75587870a221b66996f",
         "merged": true,
         "merged_pr": null
       },

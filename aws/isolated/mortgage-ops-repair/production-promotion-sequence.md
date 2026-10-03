@@ -135,5 +135,11 @@ Hotfix is expression-safe blur only:
 
 No `const` after a comma. Complete still does not call
 `bill-mortgage-handling`. Entry `ae4ea2c9…` and `index.html` `3832fadc…`
-stay byte-identical. Proposed queue `da66439c…`. Official writer only,
-assets first, `index.html` last, fresh production SPA lease/receipt.
+stay byte-identical. Official writer applied queue `da66439c…` first,
+unchanged entry, identical `index.html` last.
+
+- Queue after: `da66439ccf2f2f8c70435091a7f6cb8255cfb34351b2db4bac719dddd6a2dfe2`
+- index VersionId after: `QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd`
+- CloudFront: `I5T9PLB4T87BWXGN0C3I0CV9E8` on `E1B0ZWWO5559U5`
+- Lambda unchanged: `S2CV0j3z…` / `2f112f18-…`
+- SQL / Cognito / provider flags / RLS / env vars: unchanged

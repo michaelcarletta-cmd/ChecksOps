@@ -3,9 +3,9 @@
 This file is repository evidence for the already-live production frontend.
 It does **not** deploy, upload, invalidate, or modify AWS.
 
-Live verification on 2026-10-03T11:23:02Z records the accepted Mortgage
-Ops overlay on the Branding production SPA. Branding repair and Homeowner
-`/h/ledger` routing were not included.
+Live verification on 2026-10-03T11:41:43Z records the accepted Mortgage
+Ops overlay plus the expression-safe queue blur hotfix. Branding repair
+and Homeowner `/h/ledger` routing were not included.
 
 ## Accepted live production SPA
 
@@ -16,12 +16,12 @@ Ops overlay on the Branding production SPA. Branding repair and Homeowner
 | S3 bucket | `checksops-production-frontend-806168576068` |
 | Entry | `/assets/index-BgOCQCWm.js` |
 | Entry JS SHA256 | `ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190` |
-| Queue SHA256 | `092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318` |
+| Queue SHA256 | `da66439ccf2f2f8c70435091a7f6cb8255cfb34351b2db4bac719dddd6a2dfe2` |
 | index.html SHA256 | `3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df` |
-| index.html S3 version | `.Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P` |
-| CloudFront invalidation | `I5XLBBM5QYJF5P3G3JKGGO1GPP` |
-| Last-Modified | `Sat, 03 Oct 2026 11:23:00 GMT` |
-| Previous accepted baseline | Branding `/assets/index-BgOCQCWm.js` `7d65f3c1…` / `w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd` |
+| index.html S3 version | `QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd` |
+| CloudFront invalidation | `I5T9PLB4T87BWXGN0C3I0CV9E8` |
+| Last-Modified | `Sat, 03 Oct 2026 11:41:40 GMT` |
+| Previous accepted baseline | Mortgage Ops overlay `/assets/index-BgOCQCWm.js` `ae4ea2c9…` / `.Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P` / queue `092057a7…` |
 
 ## Accepted behavior
 
@@ -29,6 +29,7 @@ Ops overlay on the Branding production SPA. Branding repair and Homeowner
 - STAGING (`staging.checksops.com`): yellow Staging banner remains visible
 - WalletOps: Manage sweeps / Turn off automatic payouts present
 - Mortgage Ops queue overlay is live on the Branding entry filename
+- Queue module is parseable (expression-safe blur; no `const` after a comma)
 - Complete does not call `bill-mortgage-handling`
 - Branding and Claim Ledger production functionality remain the host authority
 - Other current production functionality: preserved
@@ -64,18 +65,19 @@ HTTPS `GET https://checksops.com/index.html` after the official
 `production-spa-upload` writer (`per_object_put`, assets first,
 `index.html` last) returned:
 
-- `last-modified: Sat, 03 Oct 2026 11:23:00 GMT`
-- `x-amz-version-id: .Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P`
+- `last-modified: Sat, 03 Oct 2026 11:41:40 GMT`
+- `x-amz-version-id: QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd`
 - index.html SHA256 `3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df` (bytes unchanged)
 - entry `/assets/index-BgOCQCWm.js`
 - entry SHA256 `ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190`
 - queue `/assets/MortgageOpsQueue-BD_nUT7A.js`
-- queue SHA256 `092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318`
+- queue SHA256 `da66439ccf2f2f8c70435091a7f6cb8255cfb34351b2db4bac719dddd6a2dfe2`
 
-CloudFront invalidation `I5XLBBM5QYJF5P3G3JKGGO1GPP` on `E1B0ZWWO5559U5`.
+CloudFront invalidation `I5T9PLB4T87BWXGN0C3I0CV9E8` on `E1B0ZWWO5559U5`.
 No `sw.js` was uploaded.
 
-Lambda `checksops-production-prep-api` after the guarded overlay:
+Lambda `checksops-production-prep-api` after the guarded overlay (unchanged
+by this hotfix):
 
 - CodeSha256 `S2CV0j3zWfYfyfSvmIq0axMhnSib1UntZZVqOvzxBbc=`
 - RevisionId `2f112f18-9055-4760-859d-62be8899b91f`
