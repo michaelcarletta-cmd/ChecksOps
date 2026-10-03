@@ -92,3 +92,47 @@ test('platform owner monthly totals stay bookkeeping-only', async () => {
   assert.equal(result.totals.gross_owed_cents, 1500);
   assert.equal(result.totals.balance_cents, 1500);
 });
+
+test('platform owner entries include homeowner, claim number, and payment bookkeeping', async () => {
+  const client = sqlClient([
+    {
+      match: (sql) => sql.includes('is_master_owner') || sql.includes('is_platform_owner'),
+      result: () => ({ rows: [{ is_master: true, is_platform: true }] }),
+    },
+    {
+      match: (sql) => sql.includes('FROM public.user_roles'),
+      result: () => ({ rows: [{ role: 'admin' }] }),
+    },
+    {
+      match: (sql) => sql.includes('r.homeowner_name') && sql.includes('c.claim_number'),
+      result: () => ({
+        rows: [{
+          id: '00000000-0000-4000-8000-0000000000e1',
+          agent_user_id: AGENT,
+          full_name: 'Agent A',
+          email: 'a@example.com',
+          homeowner_name: 'Ada Lovelace',
+          claim_id: '00000000-0000-4000-8000-0000000000c1',
+          claim_number: 'CL-100',
+          check_intake_item_id: '00000000-0000-4000-8000-000000000011',
+          accepted_at: '2026-10-01T12:00:00.000Z',
+          completed_at: '2026-10-02T12:00:00.000Z',
+          payment_date: '2026-10-03',
+          payment_reference: 'CHK-9',
+          payment_note: 'bookkeeping only',
+          status: 'paid',
+        }],
+      }),
+    },
+  ]);
+  const result = await runMortgageAgentCompensation({
+    client,
+    mapping: { application_user_id: OWNER },
+    body: { action: 'entries', period: '2026-10' },
+    spoof: {},
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.entries[0].homeowner_name, 'Ada Lovelace');
+  assert.equal(result.entries[0].claim_number, 'CL-100');
+  assert.equal(result.entries[0].payment_reference, 'CHK-9');
+});

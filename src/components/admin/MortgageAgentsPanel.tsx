@@ -62,8 +62,10 @@ type EntryRow = {
   check_intake_item_id: string | null;
   claim_id: string | null;
   tenant_name: string | null;
+  homeowner_name: string | null;
   mortgage_company: string | null;
   loan_number: string | null;
+  claim_number: string | null;
   classification: string;
   amount_cents: number;
   tenant_billing_event_id: string | null;
@@ -388,12 +390,19 @@ export function MortgageAgentsPanel() {
                     <TableHead />
                     <TableHead>Agent</TableHead>
                     <TableHead>Tenant</TableHead>
+                    <TableHead>Homeowner</TableHead>
+                    <TableHead>Claim</TableHead>
+                    <TableHead>Check</TableHead>
                     <TableHead>Loan / company</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead className="text-right">Agent $</TableHead>
                     <TableHead>Tenant event</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Accepted</TableHead>
                     <TableHead>Completed</TableHead>
+                    <TableHead>Paid</TableHead>
+                    <TableHead>Payment ref</TableHead>
+                    <TableHead>Payment note</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -404,6 +413,9 @@ export function MortgageAgentsPanel() {
                       </TableCell>
                       <TableCell>{entry.full_name || entry.email}</TableCell>
                       <TableCell>{entry.tenant_name || "—"}</TableCell>
+                      <TableCell>{entry.homeowner_name || "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{entry.claim_number || entry.claim_id || "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{entry.check_intake_item_id || "—"}</TableCell>
                       <TableCell>{entry.loan_number || "—"} / {entry.mortgage_company || "—"}</TableCell>
                       <TableCell>{entry.classification}</TableCell>
                       <TableCell className="text-right">{dollars(entry.amount_cents)}</TableCell>
@@ -413,7 +425,11 @@ export function MortgageAgentsPanel() {
                           : "none"}
                       </TableCell>
                       <TableCell><Badge variant="outline">{entry.status}</Badge></TableCell>
+                      <TableCell className="text-xs">{entry.accepted_at ? new Date(entry.accepted_at).toLocaleString() : "—"}</TableCell>
                       <TableCell className="text-xs">{entry.completed_at ? new Date(entry.completed_at).toLocaleString() : "—"}</TableCell>
+                      <TableCell className="text-xs">{entry.payment_date || "—"}</TableCell>
+                      <TableCell className="text-xs">{entry.payment_reference || "—"}</TableCell>
+                      <TableCell className="text-xs">{entry.payment_note || "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -507,7 +523,11 @@ function HireAgentDialog({ onDone }: { onDone: () => void }) {
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke("hire-mortgage-agent", {
-        body: { full_name: cleanName, email: cleanEmail, password: password || undefined },
+        body: {
+          full_name: cleanName,
+          email: cleanEmail,
+          ...(isAwsStaging() || !password ? {} : { password }),
+        },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -534,13 +554,15 @@ function HireAgentDialog({ onDone }: { onDone: () => void }) {
       {result ? (
         <div className="space-y-2 text-sm">
           <p>Hired {result.email}.</p>
-          {result.tempPassword ? <p>Temporary password: <code>{result.tempPassword}</code></p> : null}
+          {result.tempPassword && !isAwsStaging() ? <p>Temporary password: <code>{result.tempPassword}</code></p> : null}
         </div>
       ) : (
         <div className="space-y-3">
           <div><Label>Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
           <div><Label>Email</Label><Input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-          <div><Label>Optional password</Label><Input value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+          {!isAwsStaging() && (
+            <div><Label>Optional password</Label><Input value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+          )}
         </div>
       )}
       <DialogFooter>

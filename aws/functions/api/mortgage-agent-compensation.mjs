@@ -132,8 +132,10 @@ async function handleEntries(client, body) {
         e.claim_id::text AS claim_id,
         e.tenant_id::text AS tenant_id,
         t.name AS tenant_name,
+        r.homeowner_name,
         r.mortgage_company,
         r.loan_number,
+        c.claim_number,
         e.classification,
         e.amount_cents,
         e.tenant_billing_event_id::text AS tenant_billing_event_id,
@@ -155,6 +157,7 @@ async function handleEntries(client, body) {
      LEFT JOIN public.profiles p ON p.id = e.agent_user_id
      LEFT JOIN public.tenants t ON t.id = e.tenant_id
      LEFT JOIN public.mortgage_handling_requests r ON r.id = e.mortgage_request_id
+     LEFT JOIN public.claims c ON c.id = e.claim_id
      WHERE e.parent_entry_id IS NULL
        AND e.status NOT IN ('voided', 'excluded')
        AND ($1::text IS NULL OR e.pay_period = $1)

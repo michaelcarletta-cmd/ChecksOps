@@ -18,6 +18,37 @@ test('Mortgage Agents tab is composed onto AdminTenants without reverting Brandi
   assert.match(tenants, /value="branding"/);
 });
 
+test('Files drilldown shows homeowner, claim, check, accepted, and payment columns', () => {
+  const panel = read('src/components/admin/MortgageAgentsPanel.tsx');
+  assert.match(panel, /<TableHead>Homeowner<\/TableHead>/);
+  assert.match(panel, /<TableHead>Claim<\/TableHead>/);
+  assert.match(panel, /<TableHead>Check<\/TableHead>/);
+  assert.match(panel, /<TableHead>Accepted<\/TableHead>/);
+  assert.match(panel, /<TableHead>Paid<\/TableHead>/);
+  assert.match(panel, /<TableHead>Payment ref<\/TableHead>/);
+  assert.match(panel, /<TableHead>Payment note<\/TableHead>/);
+  assert.match(panel, /entry\.homeowner_name/);
+  assert.match(panel, /entry\.claim_number \|\| entry\.claim_id/);
+  assert.match(panel, /entry\.check_intake_item_id/);
+  assert.match(panel, /entry\.accepted_at/);
+  assert.match(panel, /entry\.payment_date/);
+  assert.match(panel, /entry\.payment_reference/);
+  assert.match(panel, /entry\.payment_note/);
+  assert.match(panel, /!isAwsStaging\(\)/);
+  assert.match(panel, /Optional password/);
+  assert.doesNotMatch(panel, /AdminTenants/);
+});
+
+test('compensation entries SELECT adds homeowner_name without rewriting SQL 47', () => {
+  const api = read('aws/functions/api/mortgage-agent-compensation.mjs');
+  const sql47 = read('aws/isolated/mortgage-agent-compensation/sql/47_mortgage_agent_compensation.sql');
+  assert.match(api, /r\.homeowner_name/);
+  assert.match(api, /c\.claim_number/);
+  assert.match(api, /LEFT JOIN public\.claims c ON c\.id = e\.claim_id/);
+  assert.doesNotMatch(api, /ALTER TABLE/);
+  assert.doesNotMatch(sql47, /CREATE OR REPLACE FUNCTION public\.list_mortgage_agent_compensation_entries/);
+});
+
 test('SQL 47 does not collide with SQL 39, queue, or money rails', () => {
   const sql = read('aws/isolated/mortgage-agent-compensation/sql/47_mortgage_agent_compensation.sql');
   assert.equal(fs.existsSync(path.join(REPO, 'aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql')), false);
