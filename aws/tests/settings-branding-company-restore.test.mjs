@@ -97,6 +97,14 @@ test('Company Information payload contains only allowlisted company_branding fie
   assert.deepEqual(rejected.columns.sort(), ['logo_url', 'updated_at']);
 });
 
+test('company branding preview resolves raw object paths at display time', () => {
+  assert.match(company, /resolvePublicBrandingUrl\(logoUrl, "tenant-logos"\)/);
+  assert.match(company, /resolvePublicBrandingUrl\(invoiceLetterheadUrl, "company-branding"\)/);
+  assert.match(company, /resolvePublicBrandingUrl\(letterheadUrl, "company-branding"\)/);
+  assert.match(settings, /<TenantLogo/);
+  assert.match(emailSender, /resolvePublicBrandingUrl\(settings\?\.logoUrl \|\| tenant\?\.logo_url/);
+});
+
 test('company logo persists through tenants.logo_url, not company_branding.logo_url', () => {
   assert.match(logoUpload, /from\("tenant-logos"\)/);
   assert.match(logoUpload, /\$\{tenantId\}\/logo-\$\{Date\.now\(\)\}\./);
@@ -160,22 +168,27 @@ test('unsupported invoice fields are not submitted or shown', () => {
   assert.deepEqual(extras.columns.sort(), ['invoice_accent_color', 'invoice_theme']);
 });
 
-test('tenant Branding tab does not mount Sending Subdomain or EmailSenderSettings', () => {
+test('tenant Branding tab mounts Email Branding without Sending Subdomain', () => {
   assert.match(brandingTab, /<CompanyBrandingSettings/);
-  assert.doesNotMatch(brandingTab, /<EmailSenderSettings/);
+  assert.match(brandingTab, /<EmailSenderSettings/);
+  assert.match(brandingTab, /showSendingDomain=\{false\}/);
   assert.doesNotMatch(brandingTab, /<BrandingSettings/);
   assert.doesNotMatch(brandingTab, /Sending Subdomain/i);
-  assert.doesNotMatch(settings, /from "@\/components\/settings\/EmailSenderSettings"/);
-  assert.doesNotMatch(settings, /EmailSenderSettings/);
+  assert.doesNotMatch(brandingTab, /showSendingDomain=\{true\}/);
+  assert.match(settings, /from "@\/components\/settings\/EmailSenderSettings"/);
 
   assert.match(emailSender, /export function EmailSenderSettings/);
+  assert.match(emailSender, /showSendingDomain = true/);
+  assert.match(emailSender, /showSendingDomain && <SectionCard\s+title="Sending subdomain"/);
   assert.match(emailSender, /Sending subdomain/i);
   assert.match(adminTenants, /from "@\/components\/settings\/EmailSenderSettings"/);
-  assert.match(adminTenants, /<EmailSenderSettings/);
+  assert.match(adminTenants, /<EmailSenderSettings showSendingDomain=\{true\}/);
 
   assert.match(settings, /function BrandingSettings/);
   assert.match(settings, /secondary_color:\s*secondaryColor/);
   assert.doesNotMatch(brandingTab, /secondary_color/);
+  assert.doesNotMatch(company, /Invoice Accent Color/);
+  assert.doesNotMatch(company, /Invoice Theme/);
   assert.equal(fs.existsSync(path.join(ROOT, 'src/components/settings/TenantBrandingSettings.tsx')), false);
 });
 
@@ -185,21 +198,51 @@ test('failed AWS writes cannot produce a false success toast', () => {
   const tenantThrowIdx = saveSettings.indexOf('if (tenantError) throw tenantError');
   const catchIdx = saveSettings.indexOf('} catch');
   const refreshIdx = saveSettings.indexOf('await refreshTenant()');
+  const brandingGateIdx = saveSettings.indexOf('if (canWriteCompanyBranding)');
 
   assert.ok(successIdx >= 0, 'expected success toast after a clean save');
   assert.ok(brandingThrowIdx >= 0, 'expected company_branding write errors to throw');
   assert.ok(tenantThrowIdx >= 0, 'expected tenants write errors to throw');
   assert.ok(catchIdx >= 0, 'expected save catch');
+  assert.ok(brandingGateIdx >= 0, 'expected platform-owner gate around company_branding writes');
   assert.ok(successIdx > brandingThrowIdx);
   assert.ok(successIdx > tenantThrowIdx);
   assert.ok(successIdx < catchIdx);
   assert.ok(refreshIdx > tenantThrowIdx && refreshIdx < successIdx);
+  assert.ok(brandingThrowIdx > brandingGateIdx);
   assert.match(saveSettings, /if \(logoUrl\) throw new Error\("Unable to persist company logo without a tenant\."\)/);
 
   const catchBlock = saveSettings.slice(catchIdx);
   assert.doesNotMatch(catchBlock, /Company settings saved/);
   assert.match(catchBlock, /title: "Error saving settings"/);
   assert.match(catchBlock, /variant: "destructive"/);
+});
+
+test('tenant-facing Save persists tenants.logo_url without writing company_branding', () => {
+  assert.match(company, /const canWriteCompanyBranding = isPlatformOwner\(/);
+  assert.match(company, /from "@\/lib\/masterMerchant"/);
+  assert.match(saveSettings, /if \(canWriteCompanyBranding\)/);
+
+  const tenantWriteIdx = saveSettings.indexOf('.from("tenants")');
+  const brandingGateIdx = saveSettings.indexOf('if (canWriteCompanyBranding)');
+  const brandingWriteIdx = saveSettings.indexOf('.from("company_branding"');
+  assert.ok(tenantWriteIdx >= 0);
+  assert.ok(brandingGateIdx >= 0);
+  assert.ok(brandingWriteIdx > brandingGateIdx, 'company_branding writes must stay inside the platform-owner gate');
+  assert.ok(tenantWriteIdx < brandingGateIdx, 'tenant logo/invoice persist must not wait on company_branding');
+
+  const unguarded = saveSettings.slice(0, brandingGateIdx);
+  assert.doesNotMatch(unguarded, /\.from\("company_branding"/);
+});
+
+test('logo tenant id comes from route-scoped useTenant, not tenant_users.maybeSingle', () => {
+  assert.match(company, /const \{ tenant, refreshTenant \} = useTenant\(\)/);
+  assert.match(company, /const tenantId = tenant\?\.id \?\? null/);
+  assert.match(logoUpload, /\$\{tenantId\}\/logo-\$\{Date\.now\(\)\}\./);
+  assert.doesNotMatch(company, /from\("tenant_users"\)/);
+  assert.doesNotMatch(loadSettings, /maybeSingle\(\);\s*\n\s*\n\s*if \(tenantUser\)/);
+  assert.match(loadSettings, /\.eq\("id", tenantId\)/);
+  assert.match(company, /\{canWriteCompanyBranding && \(/);
 });
 
 test('write allowlist was not broadened for branding restoration', () => {

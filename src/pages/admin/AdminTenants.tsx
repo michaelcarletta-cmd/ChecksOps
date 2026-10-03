@@ -31,6 +31,7 @@ import { useRef } from "react";
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { CheckAltTenantAccountCard } from "@/components/settings/CheckAltTenantAccountCard";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
+import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnouncementsManager";
@@ -362,7 +363,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="branding" className="mt-6 space-y-6">
             <BrandingTab tenant={tenant} onUpdated={onUpdated} />
-            <EmailSenderSettings />
+            <EmailSenderSettings showSendingDomain={true} />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             <ComplianceSettings tenantId={tenant.id} />
@@ -558,7 +559,7 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
           />
           {logoUrl ? (
             <div className="flex items-center gap-3 rounded border border-border bg-muted/30 p-2">
-              <img src={logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
+              <img src={resolvePublicBrandingUrl(logoUrl, "tenant-logos") || logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
               <div className="flex gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
                   {uploading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Upload className="w-3 h-3 mr-1" />} Replace
