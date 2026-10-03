@@ -100,6 +100,9 @@ const mockClient = ({ roles = [{ role: 'mortgage_agent' }], mortgageRow = null, 
       if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
         return { rows: [] };
       }
+      if (/^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)\b/.test(sql)) {
+        return { rows: [], command: sql.split(/\s+/)[0] };
+      }
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return {
@@ -204,6 +207,52 @@ test('accept_mortgage_handling_request assigns caller', async () => {
     true,
   );
   assert.equal(client.queries.some((q) => /bill-mortgage-handling|moov|stripe/i.test(q.sql)), false);
+});
+
+test('accept_mortgage_handling_request savepoint isolates swallowed billing RLS', async () => {
+  const client = mockClient();
+  const original = client.query;
+  let insertFailed = false;
+  client.query = async (sql, params) => {
+    if (/FROM public\.mortgage_ops_billing_launch/.test(sql)) {
+      return { rows: [{ launched_at: '2026-09-01T00:00:00.000Z' }] };
+    }
+    if (/FROM public\.tenants WHERE id/.test(sql)) {
+      return {
+        rows: [{
+          id: FREEDOM,
+          name: 'Freedom',
+          slug: 'freedom',
+          mortgage_ops_initial_rate_cents: 1000,
+          mortgage_ops_additional_rate_cents: 500,
+        }],
+      };
+    }
+    if (/INSERT INTO public\.check_billing_events/.test(sql)) {
+      insertFailed = true;
+      const error = new Error('new row violates row-level security policy for table "check_billing_events"');
+      error.code = '42501';
+      throw error;
+    }
+    if (sql === 'RELEASE SAVEPOINT mortgage_ops_accrue' && insertFailed) {
+      const error = new Error('current transaction is aborted, commands ignored until end of transaction block');
+      error.code = '25P02';
+      throw error;
+    }
+    return original(sql, params);
+  };
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'accept_mortgage_handling_request',
+    args: { _request_id: REQUEST_ID },
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.data.status, 'in_progress');
+  assert.equal(result.data.assigned_employee_id, APP_ID);
+  assert.equal(insertFailed, true);
+  assert.equal(client.queries.some((q) => q.sql === 'SAVEPOINT mortgage_ops_accrue'), true);
+  assert.equal(client.queries.some((q) => q.sql === 'ROLLBACK TO SAVEPOINT mortgage_ops_accrue'), true);
 });
 
 test('update_mortgage_handling_request_status complete does not accrue usage', async () => {
