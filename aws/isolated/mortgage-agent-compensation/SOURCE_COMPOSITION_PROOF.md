@@ -105,6 +105,21 @@ Unrelated live members remain byte-identical after overlay. The entire Lambda pa
 - Shared SQL executor allowlist is not mutated.
 - AdminTenants / `app-services.mjs` remain shared; composition is additive only.
 
+## After guarded staging writes
+
+TOCTOU matched this proof. Overlay and SPA promote used official guarded scripts + receipts. SQL 47 was not reapplied. Staging was not reclaimed.
+
+| Target | Before | After |
+| --- | --- | --- |
+| `checksops-staging-api` | `HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU=` Rev `7ce5717c-f8f5-4d1f-a20a-2712cfe957c7` (6478 members) | `I+u0Z80Fov6w81Ho6DZETeRDgHMdHlQp/SUsd6ofzYw=` Rev `8ae6edfd-89fa-4685-95b1-cd90a648794d` (6479 members) |
+| Staging SPA | `/assets/index-DkLMXa2q.js` index sha `13255a4e…` | `/assets/index-BmT-cuwB.js` index sha `d2900734…` |
+| Shared executor | `JTTXtiCukqvKyJCBwJvQ6ayat3ErrqyItuThOx+3xDI=` | unchanged |
+| Production prep-api / SQL47 apply / SPA | unchanged | unchanged |
+
+Overlay unexpectedChanged / unexpectedAdded / unexpectedDeleted: empty.
+
+Acceptance: `STAGING_UI_API_ACCEPTANCE.md`.
+
 ## Stop rule
 
 If either live staging SPA or live staging API fingerprint changes after this proof and before TOCTOU, STOP and recompute. Do not reclaim staging.

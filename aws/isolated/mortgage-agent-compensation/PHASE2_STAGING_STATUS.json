@@ -3,6 +3,8 @@
   "phase": 2,
   "production_writes": false,
   "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "composed_source_commit": "c5facdae7e88d400848ee8b009e59a22906de82d",
+  "composed_source_tree": "6dc79d8add4bb4526820b21e20626ee4901172fc",
   "branding_homeowner_authority": "fd4fa1954bfe4ad45288ac69d407fb69e2e52156",
   "branding_homeowner_tree": "dd3e2c6cb5cecf7047ab358dee020121dab95852",
   "sql_file": "aws/isolated/mortgage-agent-compensation/sql/47_mortgage_agent_compensation.sql",
@@ -34,18 +36,80 @@
     ]
   },
   "lambda_overlay": {
-    "status": "PENDING_GUARDED_STAGING",
+    "status": "STAGING_APPLIED",
+    "function": "checksops-staging-api",
     "owned_members": [
       "app-services.mjs",
       "tenant-admin.mjs",
       "identity.mjs",
       "mortgage-agent-compensation.mjs"
-    ]
+    ],
+    "before": {
+      "codeSha256": "HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU=",
+      "revisionId": "7ce5717c-f8f5-4d1f-a20a-2712cfe957c7",
+      "lastModified": "2026-10-03T01:12:35Z",
+      "member_count": 6478
+    },
+    "after": {
+      "codeSha256": "I+u0Z80Fov6w81Ho6DZETeRDgHMdHlQp/SUsd6ofzYw=",
+      "revisionId": "8ae6edfd-89fa-4685-95b1-cd90a648794d",
+      "lastModified": "2026-10-03T17:14:04Z",
+      "lastUpdateStatus": "Successful",
+      "member_count": 6479
+    },
+    "changed_members": [
+      "app-services.mjs",
+      "tenant-admin.mjs",
+      "identity.mjs"
+    ],
+    "added_members": [
+      "mortgage-agent-compensation.mjs"
+    ],
+    "unexpectedChanged": [],
+    "unexpectedAdded": [],
+    "unexpectedDeleted": []
   },
   "spa_deploy": {
-    "status": "PENDING_GUARDED_STAGING",
-    "base_live_candidate": "/assets/index-DkLMXa2q.js",
+    "status": "STAGING_APPLIED",
+    "host": "https://staging.checksops.com",
+    "bucket": "checksops-staging-frontend-c48b",
+    "distribution": "E1CG52WRQZI7X1",
+    "before": {
+      "entry": "/assets/index-DkLMXa2q.js",
+      "index_html_sha256": "13255a4e8e8bd6ff5628f6afcabadccec4dcdc60f0173d82247fd1b48017c232",
+      "etag": "e7373054047f2a61bc897b057b7042e9",
+      "lastModified": "2026-10-03T16:29:24Z"
+    },
+    "after": {
+      "entry": "/assets/index-BmT-cuwB.js",
+      "index_html_sha256": "d2900734d11423b106ac955ee2ade19c27048a1ce8a6c3ee50c19ed2130dcc88",
+      "etag": "524940f3aedac1518d679929c1c91dc6",
+      "lastModified": "2026-10-03T17:16:17Z",
+      "chunks": [
+        "AdminTenants-E1rZct36.js",
+        "MortgageAgentsPanel-ByV4SdoP.js",
+        "HomeownerLedger-CJAlV68d.js",
+        "MortgageOpsQueue-CCx30Mcp.js"
+      ],
+      "invalidation_id": "IBGNHVYVINRE3WZ1TBDVX1FTV3"
+    },
     "forbidden_historical": ["CR3qA2Sz", "Cb3o0qxI"]
   },
-  "production": "unauthorized"
+  "ui_api_acceptance": {
+    "status": "STAGING_ACCEPTED",
+    "proof": "aws/isolated/mortgage-agent-compensation/STAGING_UI_API_ACCEPTANCE.md",
+    "platform_owner_interactive_tab": "API + live chunk; Gmail OTP mailbox not available in this agent",
+    "agent_interactive": "EMAIL_OTP as claims@freedomadj.com; admin denied; queue intact; no Accept/Complete click"
+  },
+  "production": {
+    "unauthorized": true,
+    "spa_entry": "/assets/index-BgOCQCWm.js",
+    "spa_index_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+    "spa_lastModified": "2026-10-03T11:41:40Z",
+    "prep_api_sha256": "S2CV0j3zWfYfyfSvmIq0axMhnSib1UntZZVqOvzxBbc=",
+    "prep_api_revision": "2f112f18-9055-4760-859d-62be8899b91f",
+    "sql47_apply_sha256": "B8q1Z7a2doe6dfpqjdHfT1wv/VkEwWOmLOekxjLLsVQ=",
+    "sql47_apply_modified": "2026-09-25T19:46:16.385Z",
+    "freedom_request_untouched": "5b20db20-13e1-4919-9528-06388d8661d2"
+  }
 }
