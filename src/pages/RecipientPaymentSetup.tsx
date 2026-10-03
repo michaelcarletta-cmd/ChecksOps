@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { applyMoovTheme } from "@/lib/payments/moovTheme";
+import { loadRecipientSession } from "@/lib/recipientSessionApi";
 import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2, UserRound, Clock } from "lucide-react";
 
 interface SessionData {
@@ -104,7 +105,7 @@ export default function RecipientPaymentSetup() {
 
   async function load() {
     setLoading(true); setError(null);
-    try { setSession(await invoke("moov-recipient-session", { token })); }
+    try { setSession(await loadRecipientSession(token || "")); }
     catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }
