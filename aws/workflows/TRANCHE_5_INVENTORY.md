@@ -70,7 +70,7 @@ Production review RPC `submit_check_review_decision` maps `p_deposit_path` → s
 
 Allow: `mortgage_monitoring_type`, `mortgage_sent_at`, `mortgage_tracking_number`, `mortgage_received_at` on intake; `mortgage_handling_requests` insert/update of company/loan/notes/`requested` status.
 
-Deny: `mortgage_final_released_at` (`trg_return_to_review_on_release`), billing/stripe/invoice columns, `notify-mortgage-handling-request`, `bill-mortgage-handling`.
+Deny: `mortgage_final_released_at` (`trg_return_to_review_on_release`), billing/stripe/invoice money-movement columns, `notify-mortgage-handling-request`. `bill-mortgage-handling` is fail-closed and non-collectible: Complete-time invocation must not write `platform_fee_line_items` or `check_billing_events`, and must not call Stripe or Moov. The AWS billing milestone is Accept (`check_billing_events` `mortgage_ops_initial` / `mortgage_ops_additional_check`). Collection is the monthly consolidated invoice → Collection V2.
 
 ### 4. Loss-draft workflow — **T5 internal metadata**
 

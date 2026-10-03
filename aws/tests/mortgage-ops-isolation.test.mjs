@@ -16,6 +16,7 @@ const TENANT_B = '22222222-2222-4222-8222-222222222222';
 const OWNER_A = 'a1000000-0000-4000-8000-000000000001';
 const MEMBER_A = 'a1000000-0000-4000-8000-000000000002';
 const AGENT = 'a1000000-0000-4000-8000-000000000004';
+const OTHER_AGENT = 'a1000000-0000-4000-8000-000000000005';
 const ADMIN_A = 'a1000000-0000-4000-8000-000000000009';
 const DOC_A = 'b1000000-0000-4000-8000-000000000001';
 const REQUEST_A = 'c1000000-0000-4000-8000-000000000001';
@@ -74,7 +75,7 @@ const sqlClient = ({ memberships = {}, roles = {}, documents = {}, drafts = {}, 
       return { rows: requestsByCheck[params[0]] || [] };
     }
     if (/FROM public\.mortgage_handling_requests/.test(sql)) {
-      return { rows: params[0] === REQUEST_A ? [{ id: REQUEST_A, tenant_id: TENANT_A, billing_status: 'unbilled' }] : [] };
+      return { rows: params[0] === REQUEST_A ? [{ id: REQUEST_A, tenant_id: TENANT_A, claim_id: CLAIM_A, assigned_employee_id: AGENT, billing_status: 'unbilled' }] : [] };
     }
     return { rows: [] };
   },
@@ -89,7 +90,7 @@ test('tenant admins are not Mortgage Desk billing staff', () => {
   assert.equal(authorizedForMortgageBilling(['admin'], { is_platform: true }), true);
 });
 
-test('tenant admin cannot bill mortgage handling; agent and owner fail closed', async () => {
+test('tenant admin cannot bill mortgage handling; assigned agent and owner fail closed', async () => {
   const tenantAdmin = await runBillMortgageHandling({
     mapping: { application_user_id: ADMIN_A },
     body: { request_id: REQUEST_A },
@@ -99,6 +100,8 @@ test('tenant admin cannot bill mortgage handling; agent and owner fail closed', 
   assert.equal(tenantAdmin.statusCode, 403);
   assert.equal(tenantAdmin.error, 'not_authorized');
   assert.equal(tenantAdmin.billed, false);
+  assert.equal(tenantAdmin.platformFeeLineItemsWritten, false);
+  assert.equal(tenantAdmin.checkBillingEventsWritten, false);
 
   const agent = await runBillMortgageHandling({
     mapping: { application_user_id: AGENT },
@@ -108,8 +111,27 @@ test('tenant admin cannot bill mortgage handling; agent and owner fail closed', 
   });
   assert.equal(agent.statusCode, 403);
   assert.equal(agent.error, 'production_execution_blocked');
-  assert.equal(agent.liveStripeCalled, false);
   assert.equal(agent.billed, false);
+  assert.equal(agent.platformFeeLineItemsWritten, false);
+  assert.equal(agent.checkBillingEventsWritten, false);
+  assert.equal(agent.liveStripeCalled, false);
+  assert.equal(agent.liveMoovCalled, false);
+  assert.equal(agent.providerExecution, false);
+
+  const unrelated = await runBillMortgageHandling({
+    mapping: { application_user_id: OTHER_AGENT },
+    body: { request_id: REQUEST_A },
+    spoof: {},
+    client: sqlClient({ roles: { [OTHER_AGENT]: ['mortgage_agent'] } }),
+  });
+  assert.equal(unrelated.statusCode, 403);
+  assert.equal(unrelated.error, 'not_assigned_to_you');
+  assert.equal(unrelated.billed, false);
+  assert.equal(unrelated.platformFeeLineItemsWritten, false);
+  assert.equal(unrelated.checkBillingEventsWritten, false);
+  assert.equal(unrelated.liveStripeCalled, false);
+  assert.equal(unrelated.liveMoovCalled, false);
+  assert.equal(unrelated.providerExecution, false);
 
   const ownerClient = sqlClient({ roles: { [OWNER_A]: [] } });
   ownerClient.query = async (sql, params = []) => {
@@ -124,7 +146,14 @@ test('tenant admin cannot bill mortgage handling; agent and owner fail closed', 
     spoof: {},
     client: ownerClient,
   });
+  assert.equal(owner.statusCode, 403);
   assert.equal(owner.error, 'production_execution_blocked');
+  assert.equal(owner.billed, false);
+  assert.equal(owner.platformFeeLineItemsWritten, false);
+  assert.equal(owner.checkBillingEventsWritten, false);
+  assert.equal(owner.liveStripeCalled, false);
+  assert.equal(owner.liveMoovCalled, false);
+  assert.equal(owner.providerExecution, false);
 });
 
 test('library manage requires tenant owner/admin membership; agents and other tenants are denied', async () => {
