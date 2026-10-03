@@ -281,6 +281,61 @@ export const interpretRecipientBankVerification = ({ bank = null, verification =
   };
 };
 
+export const recipientBankVerifyWriteScopes = (accountId) => {
+  const id = String(accountId || '').trim();
+  return [
+    `/accounts/${id}/bank-accounts.write`,
+    `/accounts/${id}/bank-accounts.read`,
+    `/accounts/${id}/profile.read`,
+    `/accounts/${id}/capabilities.read`,
+  ];
+};
+
+const bankIdOf = (bank) => String(bank?.bankAccountID ?? bank?.bankAccountId ?? '').trim();
+const bankLast4Of = (bank) => String(bank?.lastFourAccountNumber ?? bank?.lastFour ?? '').trim();
+
+export const bindLiveRecipientBank = ({
+  banks = [],
+  recipientLastFour = null,
+  requestedBankAccountId = null,
+} = {}) => {
+  const list = Array.isArray(banks) ? banks : [];
+  if (!list.length) {
+    return { ok: false, error: 'bank_required', statusCode: 409, message: 'Connect a bank account before verification.' };
+  }
+  const requested = requestedBankAccountId == null || requestedBankAccountId === ''
+    ? null
+    : String(requestedBankAccountId).trim();
+  if (requested) {
+    const match = list.find((bank) => bankIdOf(bank) === requested);
+    if (!match) {
+      return { ok: false, error: 'bank_account_mismatch', statusCode: 400, message: 'Bank ids are server-derived. Browser values are rejected.' };
+    }
+  }
+  const last4 = recipientLastFour == null || recipientLastFour === '' ? null : String(recipientLastFour).trim();
+  const matching = last4 ? list.filter((bank) => bankLast4Of(bank) === last4) : list;
+  if (matching.length !== 1) {
+    return {
+      ok: false,
+      error: matching.length > 1 ? 'duplicate_bank' : 'bank_required',
+      statusCode: 409,
+      message: matching.length > 1
+        ? 'Multiple banks matched this recipient. Verification was not started.'
+        : 'Connect a bank account before verification.',
+    };
+  }
+  const bank = matching[0];
+  const bankId = bankIdOf(bank);
+  if (!bankId) {
+    return { ok: false, error: 'moov_bank_list_failed', statusCode: 502, message: 'Could not identify the existing bank account.' };
+  }
+  return { ok: true, bank, bankId };
+};
+
+export const recipientBankVerifyIdempotencyKey = ({ recipientId, bankId } = {}) => (
+  `checksops-recipient-bank-verify:${String(recipientId || '').trim()}:${String(bankId || '').trim()}`
+);
+
 export const rejectBrowserBankSubstitution = ({
   recipientAccountId,
   liveBankAccountId,
