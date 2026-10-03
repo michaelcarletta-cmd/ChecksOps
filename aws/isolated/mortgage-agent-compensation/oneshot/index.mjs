@@ -512,14 +512,20 @@ async function runDemo(client) {
   `, [agent.user_id, DEMO.req1, DEMO.req2]);
   note(`6 monthly: ${JSON.stringify(monthly.rows[0])}`);
 
-  await client.query(`
-    SELECT set_config('request.app_user_id', $1, true),
-           set_config('request.is_platform_owner', 'true', true)
-  `, [owner.user_id]);
-  const approved = await scalar(`
-    SELECT public.approve_mortgage_agent_compensation(
+  const asUser = async (userId, sql, params = []) => {
+    const { rows } = await client.query(`
+      SELECT (${sql})
+      FROM (
+        SELECT set_config('request.app_user_id', $1, true) AS uid
+      ) cfg
+    `, [userId, ...params]);
+    const first = rows[0] || {};
+    return first[Object.keys(first)[0]];
+  };
+  const approved = await asUser(owner.user_id, `
+    public.approve_mortgage_agent_compensation(
       ARRAY(SELECT id FROM public.mortgage_agent_compensation_entries
-            WHERE mortgage_request_id IN ($1, $2)),
+            WHERE mortgage_request_id IN ($2, $3)),
       'macomp staging demo approve'
     )
   `, [DEMO.req1, DEMO.req2]);
@@ -529,10 +535,10 @@ async function runDemo(client) {
   `, [DEMO.req1, DEMO.req2]);
   note(`7 approve count=${approved} rows=${JSON.stringify(afterApprove.rows)}`);
 
-  const paid = await scalar(`
-    SELECT public.mark_mortgage_agent_compensation_paid(
+  const paid = await asUser(owner.user_id, `
+    public.mark_mortgage_agent_compensation_paid(
       ARRAY(SELECT id FROM public.mortgage_agent_compensation_entries
-            WHERE mortgage_request_id IN ($1, $2)),
+            WHERE mortgage_request_id IN ($2, $3)),
       CURRENT_DATE, 'MACOMP-STAGING-15', 'bookkeeping only'
     )
   `, [DEMO.req1, DEMO.req2]);
@@ -549,11 +555,10 @@ async function runDemo(client) {
   `, [agent.user_id, DEMO.req1, DEMO.req2]));
   note(`9 drilldown files=${drill}`);
 
-  await client.query(`SELECT set_config('request.app_user_id', $1, true), set_config('request.is_platform_owner', 'false', true)`, [agent.user_id]);
-  const agentAdmin = await scalar(`SELECT public.aws_can_admin_mortgage_agent_compensation()`);
+  const agentAdmin = await asUser(agent.user_id, `public.aws_can_admin_mortgage_agent_compensation()`);
   let agentDenied = false;
   try {
-    await scalar(`SELECT public.approve_mortgage_agent_compensation(ARRAY[]::uuid[], 'nope')`);
+    await asUser(agent.user_id, `public.approve_mortgage_agent_compensation(ARRAY[]::uuid[], 'nope')`);
   } catch {
     agentDenied = true;
   }
