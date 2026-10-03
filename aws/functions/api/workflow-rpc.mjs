@@ -6,7 +6,7 @@
  *
  * Classification for every rpc_disabled name lives in SAFE_WRITE_RPC_CLASSIFICATION.
  */
-import { ignoredSpoof, IS_PLATFORM_OWNER_SQL, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
+import { ignoredSpoof, IS_PLATFORM_OWNER_SQL, parseBody, withIdentityWrite } from './data.mjs';
 import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { writesEnabled } from './write-allowlist.mjs';
@@ -111,6 +111,35 @@ export const SAFE_WRITE_RPCS = new Set([
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
+
+/** Auto-Deposit / CheckAlt Settings persist. Gated by AWS_WRITES_ENABLED, not the T5 workflow flag.
+ *  Isolated production has endorsement writes on (AWS_WRITES_ENABLED) while
+ *  AWS_APPLICATION_WORKFLOW_WRITES_ENABLED stays false. The Freedom $2,000
+ *  ceiling save never reached RDS because this RPC was behind the T5 flag.
+ */
+export const CHECKALT_SETTINGS_RPCS = new Set([
+  'save_checkalt_settings',
+  'save_checkalt_tenant_auto_deposit',
+]);
+
+export const safeWriteRpcGate = (name, deps = {}) => {
+  if (!SAFE_WRITE_RPCS.has(name)) {
+    return { allowed: false, error: 'rpc_disabled', useWritesFlag: false };
+  }
+  const sessionLike = SESSION_RPCS.has(name);
+  const checkaltSettings = CHECKALT_SETTINGS_RPCS.has(name);
+  const useWritesFlag = sessionLike || checkaltSettings;
+  const enabled = deps.forceEnabled === true
+    || (useWritesFlag ? writesEnabled() : applicationWorkflowWritesEnabled());
+  if (!enabled) {
+    return {
+      allowed: false,
+      error: useWritesFlag ? 'writes_disabled' : 'application_workflow_writes_disabled',
+      useWritesFlag,
+    };
+  }
+  return { allowed: true, useWritesFlag };
+};
 
 /** Deposit Ops actions that do not move money or call a provider. */
 export const SAFE_DEPOSIT_ACTIONS = new Set([
@@ -1225,21 +1254,17 @@ export const handleSafeWriteRpc = async (event, deps = {}) => {
   } catch {
     return denied(spoof, { statusCode: 400, error: 'invalid_rpc' });
   }
-  if (!SAFE_WRITE_RPCS.has(name)) {
-    return denied(spoof, { error: 'rpc_disabled', name });
-  }
-
-  const sessionLike = SESSION_RPCS.has(name);
-  const enabled = deps.forceEnabled === true
-    || (sessionLike ? writesEnabled() : applicationWorkflowWritesEnabled());
-  if (!enabled) {
-    return withIdentity(event, async () => denied(spoof, {
-      error: sessionLike ? 'writes_disabled' : 'application_workflow_writes_disabled',
-      message: sessionLike
-        ? 'AWS writes are disabled by AWS_WRITES_ENABLED'
-        : 'Application-workflow writes are disabled by AWS_APPLICATION_WORKFLOW_WRITES_ENABLED',
+  const gate = safeWriteRpcGate(name, deps);
+  if (!gate.allowed) {
+    return denied(spoof, {
+      error: gate.error,
+      message: gate.error === 'rpc_disabled'
+        ? undefined
+        : (gate.useWritesFlag
+          ? 'AWS writes are disabled by AWS_WRITES_ENABLED'
+          : 'Application-workflow writes are disabled by AWS_APPLICATION_WORKFLOW_WRITES_ENABLED'),
       name,
-    }), deps);
+    });
   }
 
   return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {

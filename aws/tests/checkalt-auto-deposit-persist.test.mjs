@@ -9,9 +9,13 @@ import { denyTableReason, WRITE_ALLOWLIST } from '../functions/api/write-allowli
 import { executeAllowlistedWrite } from '../functions/api/write.mjs';
 import {
   AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL,
+  CHECKALT_SETTINGS_RPCS,
   SAFE_WRITE_RPCS,
   executeSafeWriteRpc,
+  handleSafeWriteRpc,
+  safeWriteRpcGate,
 } from '../functions/api/workflow-rpc.mjs';
+import { dollarsToAutoApproveCents, echoAutoDepositSave } from '../../src/lib/autoDepositUiState.ts';
 import {
   buildDepositProcessBody,
   buildRegisterPayload,
@@ -24,6 +28,8 @@ const C1C = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const sql38 = fs.readFileSync(path.join(ROOT, 'rls/sql/38_checkalt_auto_deposit_persist.sql'), 'utf8');
 
 const identityClient = ({ platformOwner = false, tenantAdminFor = FREEDOM } = {}, handler = () => ({ rows: [] })) => ({
+  connect: async () => {},
+  end: async () => {},
   query: async (sql, params) => {
     if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
       return { rows: [] };
@@ -220,4 +226,125 @@ test('CheckAlt provider request builders remain unchanged', () => {
   const rpc = fs.readFileSync(path.join(ROOT, 'functions/api/workflow-rpc.mjs'), 'utf8');
   assert.match(rpc, /aws_save_checkalt_tenant_auto_deposit/);
   assert.equal(/UPDATE public\.checkalt_tenant_accounts/.test(rpc), false);
+});
+
+const jwtPersistEvent = (body) => ({
+  rawPath: '/data/rpc',
+  headers: { authorization: 'Bearer test-id-token' },
+  body: JSON.stringify(body),
+  requestContext: {
+    stage: 'staging',
+    http: { method: 'POST', path: '/data/rpc' },
+    authorizer: {
+      jwt: {
+        claims: {
+          sub: 'c4386408-60e1-70e2-abb6-e6194e8e635f',
+          email: 'mcarletta@freedomadj.com',
+          token_use: 'id',
+        },
+      },
+    },
+  },
+});
+
+test('Settings $2,000 save persists 200000 cents when writes are on and T5 workflow writes stay off', async () => {
+  assert.equal(CHECKALT_SETTINGS_RPCS.has('save_checkalt_tenant_auto_deposit'), true);
+  assert.equal(CHECKALT_SETTINGS_RPCS.has('save_checkalt_settings'), true);
+  assert.equal(dollarsToAutoApproveCents('2000'), 200000);
+
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflow = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  const previousEnv = process.env.CHECKSOPS_ENV;
+  const persisted = [];
+  const client = identityClient({ platformOwner: false }, (sql, params) => {
+    if (sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL) {
+      persisted.push(params);
+      return {
+        rows: [{
+          result: {
+            tenant_id: params[0],
+            auto_approve_enabled: params[1].auto_approve_enabled,
+            auto_approve_max_cents: params[1].auto_approve_max_cents ?? null,
+          },
+        }],
+      };
+    }
+    return { rows: [] };
+  });
+  try {
+    process.env.AWS_WRITES_ENABLED = 'true';
+    process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'false';
+    process.env.CHECKSOPS_ENV = 'staging';
+    assert.equal(safeWriteRpcGate('save_checkalt_tenant_auto_deposit').allowed, true);
+    assert.equal(safeWriteRpcGate('save_checkalt_settings').allowed, true);
+    assert.equal(safeWriteRpcGate('deposit_action').allowed, false);
+    assert.equal(safeWriteRpcGate('deposit_action').error, 'application_workflow_writes_disabled');
+    const cents = dollarsToAutoApproveCents('2000.00');
+    const saved = await handleSafeWriteRpc(
+      jwtPersistEvent({
+        name: 'save_checkalt_tenant_auto_deposit',
+        args: { tenant_id: FREEDOM, auto_approve_enabled: true, auto_approve_max_cents: cents },
+      }),
+      {
+        loadDatabaseCredentials: async () => ({
+          host: 'x', username: 'checksops', password: 'x', database: 'checksops',
+        }),
+        createClient: () => client,
+      },
+    );
+    assert.equal(saved.ok, true, JSON.stringify(saved));
+    assert.equal(saved.data.auto_approve_enabled, true);
+    assert.equal(saved.data.auto_approve_max_cents, 200000);
+    assert.deepEqual(persisted[0][1], { auto_approve_enabled: true, auto_approve_max_cents: 200000 });
+    const echo = echoAutoDepositSave(saved.data, { enabled: true, cents: 200000 });
+    assert.equal(echo.ok, true);
+
+    const blockedWorkflow = await handleSafeWriteRpc(
+      jwtPersistEvent({
+        name: 'deposit_action',
+        args: { p_action: 'prepare_deposit', p_check_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      }),
+      {
+        loadDatabaseCredentials: async () => ({
+          host: 'x', username: 'checksops', password: 'x', database: 'checksops',
+        }),
+        createClient: () => client,
+      },
+    );
+    assert.equal(blockedWorkflow.error, 'application_workflow_writes_disabled');
+  } finally {
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflow === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflow;
+    if (previousEnv === undefined) delete process.env.CHECKSOPS_ENV;
+    else process.env.CHECKSOPS_ENV = previousEnv;
+  }
+});
+
+test('Auto-Deposit Settings stay disabled when AWS_WRITES_ENABLED is not true', async () => {
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflow = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  try {
+    process.env.AWS_WRITES_ENABLED = 'false';
+    process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
+    const denied = await handleSafeWriteRpc(
+      jwtPersistEvent({
+        name: 'save_checkalt_tenant_auto_deposit',
+        args: { tenant_id: FREEDOM, auto_approve_enabled: true, auto_approve_max_cents: 200000 },
+      }),
+      {
+        loadDatabaseCredentials: async () => ({
+          host: 'x', username: 'checksops', password: 'x', database: 'checksops',
+        }),
+        createClient: () => identityClient(),
+      },
+    );
+    assert.equal(denied.error, 'writes_disabled');
+  } finally {
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflow === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflow;
+  }
 });
