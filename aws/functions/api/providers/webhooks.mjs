@@ -5,7 +5,13 @@ import { buildWriteClientConfig } from '../db-health.mjs';
 import { loadProviderSecrets, webhookSecret } from '../provider-secrets.mjs';
 import { providerWebhookDryRun } from '../provider-flags.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './hmac.mjs';
-import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
+import {
+  applyCheckAltWebhook,
+  applyMoovWebhook,
+  applyProductionCheckAltWebhook,
+  productionCheckAltWebhookApplyEnabled,
+  sandboxWebhookApplyEnabled,
+} from './webhook-apply.mjs';
 
 const { Client } = pg;
 
@@ -192,9 +198,22 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
     let applyResult = {
       applied: false,
       financialTablesMutated: false,
-      skipped: 'sandbox_apply_disabled',
+      productionRecordsMutated: false,
+      skipped: dryRun ? 'webhook_dry_run' : 'apply_disabled',
     };
-    if (!stored.duplicate && sandboxWebhookApplyEnabled()) {
+    if (stored.duplicate) {
+      applyResult = {
+        applied: false,
+        skipped: 'duplicate',
+        financialTablesMutated: false,
+        productionRecordsMutated: false,
+      };
+    } else if (provider === 'checkalt' && productionCheckAltWebhookApplyEnabled()) {
+      applyResult = await applyProductionCheckAltWebhook(client, parsed.payload, {
+        mappedTenantId: mapped.mapped_tenant_id,
+        mappedInternalId: mapped.mapped_internal_id,
+      });
+    } else if (sandboxWebhookApplyEnabled()) {
       if (provider === 'moov') {
         applyResult = await applyMoovWebhook(client, parsed.payload, {
           mappedTenantId: mapped.mapped_tenant_id,
@@ -202,8 +221,6 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       } else if (provider === 'checkalt') {
         applyResult = await applyCheckAltWebhook(client, parsed.payload);
       }
-    } else if (stored.duplicate) {
-      applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
     }
 
     await client.query('COMMIT');
@@ -225,8 +242,8 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       mapped_tenant_id: mapped.mapped_tenant_id,
       lookup: mapped.lookup,
       payload: sanitized,
-      financialTablesMutated: Boolean(applyResult.financialTablesMutated),
-      productionRecordsMutated: false,
+      financialTablesMutated: Boolean(applyResult.financialTablesMutated) && !dryRun,
+      productionRecordsMutated: Boolean(applyResult.productionRecordsMutated) && !dryRun,
       liveProviderCalled: false,
     };
   } catch (error) {

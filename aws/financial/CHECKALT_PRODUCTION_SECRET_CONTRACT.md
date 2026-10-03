@@ -1,8 +1,9 @@
 # Production CheckAlt secret contract
 
-**DO NOT CREATE this secret in this phase.**
-**DO NOT load credential values.**
-**DO NOT copy UAT credentials into production names.**
+**E13 may add `CHECKALT_WEBHOOK_SECRET` only to the live production provider secret.**
+**DO NOT create a second production secret document.**
+**DO NOT load credential values into logs or git.**
+**DO NOT copy UAT/staging credentials or webhook secrets into production names.**
 **DO NOT print secret values.**
 
 ## Location
