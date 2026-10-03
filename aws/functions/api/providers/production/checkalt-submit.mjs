@@ -12,11 +12,13 @@ import {
   loadDepositByIdempotency,
   loadDepositsForCheck,
   markHttpAttempted,
+  persistAutoApproveOutcome,
   persistProviderOutcome,
   pickBlockingDeposit,
   replayDepositResponse,
   shouldReconcileInsteadOfPost,
 } from './checkalt-idempotency.mjs';
+import { maybeAutoApproveAfterProcess } from './checkalt-auto-approve.mjs';
 import {
   CHECK_ELIGIBILITY_SELECT,
   evaluateProductionDepositEligibility,
@@ -420,6 +422,27 @@ export async function handleProductionCheckAltSubmit({
         applicationUserId: mapping.application_user_id,
       };
     }
+    let autoApprove = null;
+    if (saved.status === 'pending_approval' && saved.checkalt_reference) {
+      autoApprove = await maybeAutoApproveAfterProcess({
+        client,
+        rowId: saved.id,
+        tenantId: check.tenant_id,
+        amountCents: userAmount,
+        processStatus: saved.status,
+        reference: saved.checkalt_reference,
+        providerJson: json,
+        checkAltFetch,
+        cfg: loadedCfg.cfg,
+        credentials: loadedCfg.credentials,
+        fetchImpl,
+        jwtCache,
+        parseProviderJson,
+        persistAutoApproveOutcome,
+        sleepFn: deps.sleepFn,
+      });
+      if (autoApprove?.saved) saved = autoApprove.saved;
+    }
     return {
       ok: resp.ok && !isRejected,
       statusCode: resp.ok ? 200 : 502,
@@ -430,6 +453,15 @@ export async function handleProductionCheckAltSubmit({
       deposit_id: saved.id,
       checkalt_reference: saved.checkalt_reference,
       status: saved.status,
+      auto_approve: autoApprove
+        ? {
+          attempted: autoApprove.attempted === true,
+          approved: autoApprove.approved === true,
+          skipReason: autoApprove.skipReason || null,
+          approvePosted: autoApprove.approvePosted === true,
+          maxCents: autoApprove.policy?.maxCents ?? null,
+        }
+        : null,
       userAmount,
       scale: 'integer_cents',
       imagePipeline: images.imagePipeline,

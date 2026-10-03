@@ -125,6 +125,9 @@ export async function loadProductionTenantAccount(client, tenantId) {
     deposit_account_number: row.deposit_account_number || null,
     sso_key: ssoFromPayload || row.sso_user_id || null,
     auto_approve_enabled: Boolean(row.auto_approve_enabled),
+    auto_approve_max_cents: Number.isInteger(Number(row.auto_approve_max_cents))
+      ? Number(row.auto_approve_max_cents)
+      : null,
     source: 'checkalt_tenant_accounts',
   };
 }
