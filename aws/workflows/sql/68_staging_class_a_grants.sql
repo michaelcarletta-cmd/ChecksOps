@@ -5,6 +5,7 @@
 GRANT SELECT, INSERT, UPDATE ON TABLE public.email_send_log TO checksops;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.suppressed_emails TO checksops;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.email_unsubscribe_tokens TO checksops;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.tenant_email_settings TO checksops;
 
 -- HomeownerOps token / upload metadata
 GRANT SELECT, INSERT, UPDATE ON TABLE public.homeowner_ledger_tokens TO checksops;

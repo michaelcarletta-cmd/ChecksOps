@@ -10,7 +10,7 @@ import { withIdentity, withIdentityWrite, parseBody, ignoredSpoof } from './data
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { emailSendLogStatusFromMailer, sendViaSesOrSink, withEmailLogSavepoint } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
@@ -710,18 +710,18 @@ export const runSendPortalInvite = async ({
     from: branding.from,
     replyTo: branding.replyTo,
   });
-  await client.query(
+  await withEmailLogSavepoint(client, () => client.query(
     `INSERT INTO public.email_send_log (
        id, template_name, recipient_email, status, provider, provider_message_id, metadata, created_at
      ) VALUES ($1::uuid, 'send-portal-invite', $2, $3, 'aws_staging', $4, $5::jsonb, now())`,
     [
       randomUUID(),
       email,
-      sendResult.results?.[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+      emailSendLogStatusFromMailer(sendResult.results?.[0]),
       sendResult.results?.[0]?.messageId || null,
       JSON.stringify({ application_user_id: mapping.application_user_id, userType: body.userType || null }),
     ],
-  ).catch(() => {});
+  )).catch(() => {});
   return {
     ok: true,
     statusCode: 200,

@@ -1,0 +1,43 @@
+{
+  "comment": "Least-privilege replacement for live Sid StagingSesSend on checksops-staging-ApiFunctionRole-7E7XRyLe3nyi. Staging attached 2026-09-11 as Sid StagingSesSendLockedIdentity (ses:SendEmail on the ses-gate identity only). SendRawEmail and unused quota/status reads were omitted. Do not attach to production. Identity lifecycle remains on ApiFunctionRolePolicySesIdentity.",
+  "current": {
+    "Sid": "StagingSesSend",
+    "Effect": "Allow",
+    "Action": [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+      "ses:GetSendQuota",
+      "ses:GetAccountSendingEnabled"
+    ],
+    "Resource": "*"
+  },
+  "proposed": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "StagingSesSendLockedIdentity",
+        "Effect": "Allow",
+        "Action": ["ses:SendEmail"],
+        "Resource": [
+          "arn:aws:ses:us-east-1:806168576068:identity/ses-gate.staging.checksops.com"
+        ]
+      },
+      {
+        "Sid": "StagingSesSendAccountReads",
+        "Effect": "Allow",
+        "Action": [
+          "ses:GetSendQuota",
+          "ses:GetAccountSendingEnabled"
+        ],
+        "Resource": "*"
+      }
+    ]
+  },
+  "notes": [
+    "ses:SendRawEmail is omitted because sendViaSesOrSink uses SendEmailCommand only and does not attach files.",
+    "Identity-scoped ses:SendEmail is valid for SES v1 when Source belongs to that verified identity.",
+    "Platform From noreply@checksops.com would then IAM-fail, which is intended while the staging send test is locked to the C1C ses-gate identity.",
+    "Do not attach this policy until AWS_EMAIL_MODE=ses is separately approved, AWS_EMAIL_SES_LOCK_RECIPIENT is set to exactly one address, and queued mail is confirmed empty.",
+    "Keep existing ses:CreateEmailIdentity / ses:GetEmailIdentity identity APIs unchanged for ses-identity mode."
+  ]
+}

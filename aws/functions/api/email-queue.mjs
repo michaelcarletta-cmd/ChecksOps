@@ -4,7 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { emailSendLogStatusFromMailer, sendViaSesOrSink, withEmailLogSavepoint } from './email.mjs';
 import { emailMode, normalizeEmail } from './email-policy.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
@@ -109,8 +109,8 @@ const processBatch = async (client, batchSize, spoof) => {
       replyTo: branding?.replyTo,
     });
     const primary = send.results[0] || {};
-    const status = primary.delivery === 'ses' ? 'sent' : 'sunk';
-    if (status === 'sunk') sunk += 1;
+    const status = emailSendLogStatusFromMailer(primary);
+    if (status === 'sunk' || status === 'failed') sunk += 1;
     else sent += 1;
     await client.query(
       `UPDATE public.email_outbox SET status = $2, updated_at = now() WHERE id = $1`,
@@ -121,7 +121,7 @@ const processBatch = async (client, batchSize, spoof) => {
         [row.id, status],
       ).catch(() => {});
     });
-    await client.query(
+    await withEmailLogSavepoint(client, () => client.query(
       `INSERT INTO public.email_send_log (
          id, template_name, recipient_email, tenant_id, status, provider, provider_message_id, metadata, created_at
        ) VALUES ($1::uuid, $2, $3, $4::uuid, $5, 'aws_staging_queue', $6, $7::jsonb, now())`,
@@ -134,7 +134,7 @@ const processBatch = async (client, batchSize, spoof) => {
         primary.messageId || null,
         JSON.stringify({ queueId: row.id, mode: emailMode() }),
       ],
-    ).catch(() => {});
+    )).catch(() => {});
   }
 
   return {
