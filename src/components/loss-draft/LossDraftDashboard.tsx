@@ -18,6 +18,8 @@ import { LossDraftDashboardCards, type LossDraftFilter } from "./LossDraftDashbo
 import { NewLossDraftDialog } from "./NewLossDraftDialog";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { matchesAmountQuery } from "@/features/check-command/status";
+import { useMortgageDeskReturnAlerts } from "@/hooks/useMortgageDeskReturnAlert";
+import { compareLossDraftReturnPriority } from "@/lib/mortgageDeskReturn";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -129,6 +131,15 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     if (filter === "non_monitored") return !isMonitored(d);
     return true;
   });
+  const returnAlerts = useMortgageDeskReturnAlerts(
+    filtered.map((d) => d.check_intake_item_id).filter((id): id is string => !!id),
+  ).data;
+  const prioritized = filtered.slice().sort((a, b) =>
+    compareLossDraftReturnPriority(
+      Boolean(a.check_intake_item_id && returnAlerts?.[a.check_intake_item_id]?.actionRequired),
+      Boolean(b.check_intake_item_id && returnAlerts?.[b.check_intake_item_id]?.actionRequired),
+    ),
+  );
 
   const activeDrafts = visibleDrafts.filter(isActiveDraft);
   const totalUnreleased = activeDrafts.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
@@ -180,7 +191,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
               <ScrollArea className="h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
                 {isLoading ? (
                   <div className="p-8 text-center text-muted-foreground">Loading loss drafts...</div>
-                ) : filtered.length === 0 ? (
+                ) : prioritized.length === 0 ? (
                   <div className="p-8 text-center text-muted-foreground">
                     <Landmark className="h-10 w-10 mx-auto mb-2 opacity-30" />
                     No loss drafts in this view
@@ -198,13 +209,18 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filtered.map(d => {
+                      {prioritized.map(d => {
                         const sc = escrowStatusConfig[d.escrow_status] ?? { label: d.escrow_status, color: "" };
                         const overdue = d.follow_up_date && new Date(d.follow_up_date) < new Date();
+                        const returned = Boolean(
+                          d.check_intake_item_id && returnAlerts?.[d.check_intake_item_id]?.actionRequired,
+                        );
                         return (
                           <TableRow
                             key={d.id}
-                            className={`cursor-pointer transition-colors ${selectedId === d.id ? "bg-accent/50" : ""}`}
+                            className={`cursor-pointer transition-colors ${
+                              selectedId === d.id ? "bg-accent/50" : returned ? "bg-amber-500/10" : ""
+                            }`}
                             onClick={() => setSelectedId(d.id)}
                           >
                             <TableCell>
@@ -233,6 +249,11 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
+                                {returned && (
+                                  <Badge className="text-[9px] bg-amber-500/20 text-amber-200 border-amber-400/30">
+                                    Returned from Mortgage Desk · Action Required
+                                  </Badge>
+                                )}
                                 {d.is_stale && <span title="Stale — no contact 14+ days"><AlertTriangle className="h-3.5 w-3.5 text-red-400" /></span>}
                                 {d.missing_docs_count > 0 && <span title={`${d.missing_docs_count} missing docs`}><FileWarning className="h-3.5 w-3.5 text-amber-400" /></span>}
                                 {overdue && <span title="Overdue follow-up"><Clock className="h-3.5 w-3.5 text-orange-400" /></span>}
