@@ -78,7 +78,9 @@ test('approval persist never stamps cleared_at', async () => {
     assert.equal(calls[0].params[1], 'submitted');
     assert.equal(calls[0].params[4], null);
     assert.match(calls[0].sql, /\$2 = 'cleared' AND \$5::timestamptz IS NOT NULL/);
+    assert.doesNotMatch(calls[0].sql, /approved_at/);
   }
+  assert.doesNotMatch(persistPollOutcome.toString(), /approved_at/);
 });
 
 test('200 + depositDate → cleared + cleared_at; 200 without date stays submitted', async () => {
