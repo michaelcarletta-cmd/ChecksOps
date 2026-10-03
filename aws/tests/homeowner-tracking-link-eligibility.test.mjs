@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'path';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
@@ -61,8 +61,9 @@ test('Funds tracking CTA is not gated on deposit or payoutEnabled', () => {
     trackingMount < payoutBtn,
     'tracking button mounts before the deposit-gated Disburse control',
   );
+  const trackingBlock = tab.slice(trackingMount, tab.indexOf('/>', trackingMount) + 2);
   assert.doesNotMatch(
-    tab.slice(trackingMount, trackingMount + 400),
+    trackingBlock,
     /payoutEnabled|isDeposited|bankVerified|existingHomeownerLink/,
   );
 });
