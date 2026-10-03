@@ -53,6 +53,19 @@ type MonthlyRow = {
   balance_cents: number;
 };
 
+type AdjustmentRow = {
+  id: string;
+  agent_user_id: string;
+  amount_cents: number;
+  adjustment_reason: string | null;
+  status: string;
+  pay_period: string;
+  earned_at: string;
+  created_at?: string;
+  kind?: string;
+  actor_id?: string | null;
+};
+
 type EntryRow = {
   id: string;
   agent_user_id: string;
@@ -79,6 +92,27 @@ type EntryRow = {
   payment_date: string | null;
   payment_reference: string | null;
   payment_note: string | null;
+  parent_entry_id?: string | null;
+  adjustments?: AdjustmentRow[];
+};
+
+type InProgressRow = {
+  id: string;
+  status: string;
+  assigned_employee_id: string;
+  agent_name: string | null;
+  agent_email: string | null;
+  accepted_at: string | null;
+  homeowner_name: string | null;
+  claim_number: string | null;
+  claim_id: string | null;
+  check_intake_item_id: string | null;
+  tenant_name: string | null;
+  mortgage_company: string | null;
+  loan_number: string | null;
+  tenant_billing_event_id: string | null;
+  tenant_billing_event_type: string | null;
+  tenant_billing_amount_cents: number | null;
 };
 
 type AnomalyRow = {
@@ -114,11 +148,18 @@ export function MortgageAgentsPanel() {
   const [payRef, setPayRef] = useState("");
   const [payNote, setPayNote] = useState("");
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [inProgress, setInProgress] = useState<InProgressRow[]>([]);
+  const [returnTarget, setReturnTarget] = useState<InProgressRow | null>(null);
+  const [returnReason, setReturnReason] = useState("");
+  const [adjustTarget, setAdjustTarget] = useState<EntryRow | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [adjustCounterparty, setAdjustCounterparty] = useState("none");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [roster, month, files, recon] = await Promise.all([
+      const [roster, month, files, recon, work] = await Promise.all([
         invokeCompensation({ action: "roster" }),
         invokeCompensation({ action: "monthly", period }),
         invokeCompensation({
@@ -129,12 +170,14 @@ export function MortgageAgentsPanel() {
           unpaid: statusFilter === "unpaid",
         }),
         invokeCompensation({ action: "reconciliation", period }),
+        invokeCompensation({ action: "in_progress" }),
       ]);
       setAgents(roster.agents || []);
       setMonthly(month.rows || []);
       setTotals(month.totals || totals);
       setEntries(files.entries || []);
       setAnomalies(recon.anomalies || []);
+      setInProgress(work.requests || []);
     } catch (error: any) {
       toast.error(error.message || "Failed to load Mortgage Agent compensation");
     } finally {
@@ -195,6 +238,50 @@ export function MortgageAgentsPanel() {
       await load();
     } catch (error: any) {
       toast.error(error.message || "Status update failed");
+    }
+  };
+
+  const returnToQueue = async () => {
+    if (!returnTarget) return;
+    const reason = returnReason.trim();
+    if (!reason) return toast.error("A return reason is required");
+    try {
+      await invokeCompensation({
+        action: "return_to_queue",
+        request_id: returnTarget.id,
+        reason,
+      });
+      toast.success("Request returned to queue. Tenant billing event retained.");
+      setReturnTarget(null);
+      setReturnReason("");
+      await load();
+    } catch (error: any) {
+      toast.error(error.message || "Return to Queue failed");
+    }
+  };
+
+  const submitAdjust = async () => {
+    if (!adjustTarget) return;
+    const reason = adjustReason.trim();
+    const amount = Math.round(Number(adjustAmount) * 100);
+    if (!reason) return toast.error("An adjustment reason is required");
+    if (!Number.isInteger(amount) || amount === 0) return toast.error("Enter a nonzero dollar amount");
+    try {
+      await invokeCompensation({
+        action: "adjust",
+        parent_entry_id: adjustTarget.id,
+        amount_cents: amount,
+        reason,
+        counterparty_agent_id: adjustCounterparty === "none" ? null : adjustCounterparty,
+      });
+      toast.success("Adjustment recorded. Parent compensation facts were not rewritten.");
+      setAdjustTarget(null);
+      setAdjustAmount("");
+      setAdjustReason("");
+      setAdjustCounterparty("none");
+      await load();
+    } catch (error: any) {
+      toast.error(error.message || "Adjust failed");
     }
   };
 
@@ -265,6 +352,7 @@ export function MortgageAgentsPanel() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="roster">Roster</TabsTrigger>
+          <TabsTrigger value="in-progress">In progress</TabsTrigger>
           <TabsTrigger value="monthly">Monthly</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
@@ -313,6 +401,63 @@ export function MortgageAgentsPanel() {
                           ) : (
                             <Button size="sm" variant="ghost" onClick={() => setStatus(agent, "active")}>Reactivate</Button>
                           )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="in-progress" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">In-progress Mortgage Ops work</CardTitle>
+              <CardDescription>
+                Return unfinished assigned work to the queue. The original tenant $10/$5 billing event is retained.
+                The next agent must Accept normally. Return is not available in the Mortgage Agent queue.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin" /></div> : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Homeowner</TableHead>
+                      <TableHead>Claim</TableHead>
+                      <TableHead>Agent</TableHead>
+                      <TableHead>Accepted</TableHead>
+                      <TableHead>Tenant event</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {inProgress.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-sm text-muted-foreground">
+                          No unfinished assigned requests.
+                        </TableCell>
+                      </TableRow>
+                    ) : inProgress.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="font-medium">{row.homeowner_name || "—"}</TableCell>
+                        <TableCell>
+                          <div>{row.claim_number || "—"}</div>
+                          <div className="font-mono text-xs text-muted-foreground">{row.claim_id || "—"}</div>
+                        </TableCell>
+                        <TableCell>{row.agent_name || row.agent_email || row.assigned_employee_id}</TableCell>
+                        <TableCell className="text-xs">{formatWhen(row.accepted_at)}</TableCell>
+                        <TableCell className="text-xs">
+                          {row.tenant_billing_event_id
+                            ? `${row.tenant_billing_event_type || "event"} ${row.tenant_billing_amount_cents === 0 ? "$0 promo" : dollars(row.tenant_billing_amount_cents || 0)}`
+                            : "none"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="outline" onClick={() => { setReturnTarget(row); setReturnReason(""); }}>
+                            Return to Queue
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -426,7 +571,15 @@ export function MortgageAgentsPanel() {
                         {open ? (
                           <TableRow>
                             <TableCell colSpan={8}>
-                              <EntryDrilldown entry={entry} />
+                              <EntryDrilldown
+                                entry={entry}
+                                onAdjust={() => {
+                                  setAdjustTarget(entry);
+                                  setAdjustAmount("");
+                                  setAdjustReason("");
+                                  setAdjustCounterparty("none");
+                                }}
+                              />
                             </TableCell>
                           </TableRow>
                         ) : null}
@@ -476,6 +629,73 @@ export function MortgageAgentsPanel() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!returnTarget} onOpenChange={(open) => { if (!open) { setReturnTarget(null); setReturnReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Return to Queue</DialogTitle>
+            <DialogDescription>
+              This clears the current assignee and sets the request back to requested.
+              accepted_at is preserved. The original tenant $10/$5 billing event is retained.
+              Returning does not create a second tenant charge and does not assign the next agent.
+              The next agent must Accept normally.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Reason (required)</Label>
+              <Input value={returnReason} onChange={(e) => setReturnReason(e.target.value)} placeholder="Why is this returning to the queue?" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setReturnTarget(null); setReturnReason(""); }}>Cancel</Button>
+            <Button onClick={() => void returnToQueue()} disabled={!returnReason.trim()}>
+              Confirm return
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!adjustTarget} onOpenChange={(open) => { if (!open) { setAdjustTarget(null); setAdjustReason(""); setAdjustAmount(""); setAdjustCounterparty("none"); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adjust compensation</DialogTitle>
+            <DialogDescription>
+              Append-only bookkeeping. The original compensation entry stays unchanged.
+              Wrong-agent correction creates a paired negative child for the original agent and a positive child for the replacement agent in one transaction.
+              ChecksOps will not move money.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Signed amount (dollars)</Label>
+              <Input value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="10.00 or -5.00" />
+            </div>
+            <div>
+              <Label>Reason (required)</Label>
+              <Input value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Why is this adjustment needed?" />
+            </div>
+            <div>
+              <Label>Wrong-agent counterparty (optional)</Label>
+              <Select value={adjustCounterparty} onValueChange={setAdjustCounterparty}>
+                <SelectTrigger><SelectValue placeholder="Same agent" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Same agent (single signed child)</SelectItem>
+                  {agents.filter((agent) => agent.application_user_id !== adjustTarget?.agent_user_id).map((agent) => (
+                    <SelectItem key={agent.application_user_id} value={agent.application_user_id}>
+                      {agent.full_name || agent.email || agent.application_user_id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setAdjustTarget(null); setAdjustReason(""); setAdjustAmount(""); setAdjustCounterparty("none"); }}>Cancel</Button>
+            <Button onClick={() => void submitAdjust()} disabled={!adjustReason.trim()}>Record adjustment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent>
@@ -530,30 +750,71 @@ function DrillField({ label, value }: { label: string; value: string | null | un
   );
 }
 
-function EntryDrilldown({ entry }: { entry: EntryRow }) {
+function EntryDrilldown({
+  entry,
+  onAdjust,
+}: {
+  entry: EntryRow;
+  onAdjust: () => void;
+}) {
+  const adjustments = entry.adjustments || [];
   return (
-    <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="compensation-entry-drilldown">
-      <DrillField label="Homeowner" value={entry.homeowner_name} />
-      <DrillField label="Claim number" value={entry.claim_number} />
-      <DrillField label="Claim ID" value={entry.claim_id} />
-      <DrillField label="Check ID" value={entry.check_intake_item_id} />
-      <DrillField label="Mortgage company" value={entry.mortgage_company} />
-      <DrillField label="Accepted date" value={formatWhen(entry.accepted_at)} />
-      <DrillField label="Completed date" value={formatWhen(entry.completed_at)} />
-      <DrillField label="Classification" value={formatClassification(entry.classification)} />
-      <DrillField label="Compensation amount" value={dollars(entry.amount_cents)} />
-      <DrillField label="Compensation status" value={entry.status} />
-      <DrillField label="Payment date" value={entry.payment_date ? formatWhen(entry.payment_date) : "—"} />
-      <DrillField label="Payment reference" value={entry.payment_reference} />
-      <DrillField label="Bookkeeping / payment note" value={entry.payment_note} />
-      <DrillField label="Agent" value={entry.full_name || entry.email} />
-      <DrillField label="Tenant" value={entry.tenant_name} />
-      <DrillField
-        label="Tenant event"
-        value={entry.tenant_billing_event_id
-          ? `${entry.tenant_billing_event_type || "event"} ${entry.tenant_billing_amount_cents === 0 ? "$0 promo" : dollars(entry.tenant_billing_amount_cents || 0)}`
-          : "none"}
-      />
+    <div className="space-y-4" data-testid="compensation-entry-drilldown">
+      <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+        <DrillField label="Homeowner" value={entry.homeowner_name} />
+        <DrillField label="Claim number" value={entry.claim_number} />
+        <DrillField label="Claim ID" value={entry.claim_id} />
+        <DrillField label="Check ID" value={entry.check_intake_item_id} />
+        <DrillField label="Mortgage company" value={entry.mortgage_company} />
+        <DrillField label="Accepted date" value={formatWhen(entry.accepted_at)} />
+        <DrillField label="Completed date" value={formatWhen(entry.completed_at)} />
+        <DrillField label="Classification" value={formatClassification(entry.classification)} />
+        <DrillField label="Compensation amount" value={dollars(entry.amount_cents)} />
+        <DrillField label="Compensation status" value={entry.status} />
+        <DrillField label="Payment date" value={entry.payment_date ? formatWhen(entry.payment_date) : "—"} />
+        <DrillField label="Payment reference" value={entry.payment_reference} />
+        <DrillField label="Bookkeeping / payment note" value={entry.payment_note} />
+        <DrillField label="Agent" value={entry.full_name || entry.email} />
+        <DrillField label="Tenant" value={entry.tenant_name} />
+        <DrillField
+          label="Tenant event"
+          value={entry.tenant_billing_event_id
+            ? `${entry.tenant_billing_event_type || "event"} ${entry.tenant_billing_amount_cents === 0 ? "$0 promo" : dollars(entry.tenant_billing_amount_cents || 0)}`
+            : "none"}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium">Adjustment history</div>
+        <Button size="sm" variant="outline" onClick={onAdjust}>Adjust</Button>
+      </div>
+      {adjustments.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No adjustments. This is the original compensation entry.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Kind</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Reason</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Booked</TableHead>
+              <TableHead>Actor</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {adjustments.map((row) => (
+              <TableRow key={row.id} data-testid="compensation-adjustment-row">
+                <TableCell><Badge variant="secondary">Adjustment</Badge></TableCell>
+                <TableCell className="text-right">{dollars(row.amount_cents)}</TableCell>
+                <TableCell>{row.adjustment_reason || "—"}</TableCell>
+                <TableCell>{row.status}</TableCell>
+                <TableCell className="text-xs">{formatWhen(row.earned_at || row.created_at || null)}</TableCell>
+                <TableCell className="font-mono text-xs">{row.actor_id || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </div>
   );
 }
