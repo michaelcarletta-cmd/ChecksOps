@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { isTransientDomNodeError } from "@/lib/transientDomNodeError";
 
 interface Props {
   children: ReactNode;
@@ -14,20 +15,14 @@ export class AppErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): State {
+    if (isTransientDomNodeError(error)) {
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("AppErrorBoundary caught:", error, info);
-    try {
-      const key = "checksops-error-boundary-reload";
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, "1");
-        window.location.reload();
-      }
-    } catch {
-      /* ignore */
-    }
   }
 
   render() {

@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-10-03T02:08:00.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "permissionsUnchanged": true,
+  "cognitoUnchanged": true,
+  "whyDifferentBrowserStillShowsError": "AppErrorBoundary treated a transient Chromium/WebKit removeChild NotFoundError as fatal, auto-reloaded once, then stuck on the error page. A new browser repeats crash → reload → crash → sticky error.",
+  "liveFirstLoadError": "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+  "equivalentMobileError": "The object can not be found here.",
+  "whyTitlesMissingFromQueued": "GATE4-A and GATE4-B are assigned in_progress, so they correctly left Queued.",
+  "sourceFix": {
+    "isTransientDomNodeError": "src/lib/transientDomNodeError.ts",
+    "errorBoundary": "ignore NotFoundError/removeChild; do not auto-reload"
+  },
+  "stagingOverlayPlanned": {
+    "entry": "assets/index-moprRprC.js",
+    "queue": "assets/MortgageOpsQueue-mopsRprC.js",
+    "indexHtml": "/assets/index-moprRprC.js",
+    "singleReact": true,
+    "stagingBucket": "checksops-staging-frontend-c48b",
+    "stagingDistribution": "E1CG52WRQZI7X1"
+  },
+  "completeOnly": {
+    "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "title": "GATE4 ACCEPT THIS — MOPS REPAIR",
+    "loan": "GATE4-20261003-A",
+    "tab": "In progress"
+  },
+  "doNotComplete": [
+    "ab84a6ce-b375-4353-8126-4ad37646bc70 GATE4-B",
+    "815a0702 leftover queued synthetic",
+    "0151f4b2 leftover queued synthetic"
+  ]
+}
