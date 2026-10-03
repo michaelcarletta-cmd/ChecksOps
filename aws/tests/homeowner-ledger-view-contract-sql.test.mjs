@@ -146,6 +146,14 @@ const mustRun = (bin, args, opts = {}) => {
 };
 
 const SCHEMA = `
+DO $$ BEGIN
+  CREATE ROLE authenticated NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE ROLE checksops NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 CREATE TABLE public.homeowner_ledger_tokens (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL,
