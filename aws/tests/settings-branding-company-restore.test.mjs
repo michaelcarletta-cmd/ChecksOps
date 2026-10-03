@@ -103,6 +103,11 @@ test('company branding preview resolves raw object paths at display time', () =>
   assert.match(company, /resolvePublicBrandingUrl\(letterheadUrl, "company-branding"\)/);
   assert.match(settings, /<TenantLogo/);
   assert.match(emailSender, /resolvePublicBrandingUrl\(settings\?\.logoUrl \|\| tenant\?\.logo_url/);
+  assert.match(emailSender, /applyEmailPreviewBranding/);
+  assert.match(emailSender, /Email Brand Color/);
+  assert.match(emailSender, /primary_color:\s*nextColor/);
+  assert.doesNotMatch(emailSender, /Invoice Accent Color/);
+  assert.doesNotMatch(emailSender, /invoice_accent_color/);
 });
 
 test('company logo persists through tenants.logo_url, not company_branding.logo_url', () => {
