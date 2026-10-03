@@ -87,3 +87,22 @@ release workstream may execute these writes.
 
 STOPPED after dedicated production inspect. SQL 39 / Lambda / SPA were
 not written. See `production-promotion-stop-2026-10-03.json`.
+
+## 2026-10-03T11:14Z Lambda+SPA promotion Gates 1-3
+
+SQL remains the accepted post-transition catalog
+`0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126`.
+No further SQL is authorized.
+
+Fresh live Lambda still `nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=` /
+`c8483271-f94e-4c76-aec4-05ac8707cc8a`. Candidate reconstructed from the
+fresh live ZIP only: add `mortgage-ops-usage.mjs` `9856f51f…`, replace
+`workflow-rpc.mjs` `afd8ac23…` → `635da37e…`. Candidate ZIP
+`4b6095d23df359f61fc9f4af988ab46b13219d289bd549ed65956a3afcf105b7`.
+
+Fresh live SPA still `/assets/index-BgOCQCWm.js` `7d65f3c1…` /
+index VersionId `w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd`. Forward-composed
+queue `092057a7…` and entry `ae4ea2c9…`. `index.html` unchanged.
+Branding repair and Homeowner `/h/ledger` routing are excluded.
+
+Gate 4 contracts are next. No Lambda/SPA write until they pass.
