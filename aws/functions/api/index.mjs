@@ -74,6 +74,17 @@ const READ_ONLY_PATHS = new Set([
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
 
 export const handler = async (event) => {
+  if (event?.phase3aInventory === true && !event?.requestContext && !event?.rawPath && !event?.httpMethod) {
+    const { runPhase3aInventory } = await import('./checkalt-phase3a-inventory.mjs');
+    const inventory = await runPhase3aInventory();
+    return json(inventory.ok ? 200 : 503, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      phase: '3A',
+      ...inventory,
+    });
+  }
+
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
 
