@@ -106,3 +106,18 @@ queue `092057a7…` and entry `ae4ea2c9…`. `index.html` unchanged.
 Branding repair and Homeowner `/h/ledger` routing are excluded.
 
 Gate 4 contracts are next. No Lambda/SPA write until they pass.
+
+## Gate 5 applied (2026-10-03T11:23:02Z)
+
+Gates 1–4 passed. Guarded CAS/overlay applied Lambda, then official
+production SPA writer applied queue + entry + identical `index.html`.
+
+- Lambda after: `S2CV0j3zWfYfyfSvmIq0axMhnSib1UntZZVqOvzxBbc=` /
+  `2f112f18-9055-4760-859d-62be8899b91f`
+- SPA after: entry `ae4ea2c9…`, queue `092057a7…`, index VersionId
+  `.Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P`
+- CloudFront: `I5XLBBM5QYJF5P3G3JKGGO1GPP` on `E1B0ZWWO5559U5`
+- SQL / Cognito / provider flags / RLS / env vars: unchanged
+
+Dedicated Mortgage Agent production acceptance is next. Mortgage Agent
+Management/Compensation is not this workstream.

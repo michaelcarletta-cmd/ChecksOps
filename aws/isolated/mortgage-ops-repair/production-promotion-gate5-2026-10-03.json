@@ -1,0 +1,54 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "gate": 5,
+  "captured_at": "2026-10-03T11:23:02Z",
+  "sql_modified": false,
+  "cognito_modified": false,
+  "provider_flags_modified": false,
+  "env_vars_modified": false,
+  "promoted_to_production": true,
+  "status": "APPLIED",
+  "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "commit_at_apply": "1d25f62c01928d8137a89e7ecf998b0610a7da3e",
+  "lambda": {
+    "function": "checksops-production-prep-api",
+    "writer": "scripts/deployment-guard/lambda-overlay-apply.mjs",
+    "before": {
+      "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+      "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a"
+    },
+    "after": {
+      "CodeSha256": "S2CV0j3zWfYfyfSvmIq0axMhnSib1UntZZVqOvzxBbc=",
+      "RevisionId": "2f112f18-9055-4760-859d-62be8899b91f",
+      "LastModified": "2026-10-03T11:21:01.000+0000",
+      "LastUpdateStatus": "Successful"
+    },
+    "replaced": ["workflow-rpc.mjs"],
+    "added": ["mortgage-ops-usage.mjs"],
+    "workflow_rpc_after": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
+    "usage_after": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2",
+    "environment_unchanged": true
+  },
+  "spa": {
+    "writer": "scripts/deployment-guard/production-spa-upload.mjs",
+    "deploy_mode": "per_object_put",
+    "role": "ChecksOpsProductionSpaDeploy",
+    "uploads_order": [
+      "assets/MortgageOpsQueue-BD_nUT7A.js",
+      "assets/index-BgOCQCWm.js",
+      "index.html"
+    ],
+    "queue_sha256": "092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318",
+    "entry_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
+    "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+    "index_html_version_before": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd",
+    "index_html_version_after": ".Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P",
+    "host_verified": true,
+    "cloudfront_invalidation": {
+      "distribution_id": "E1B0ZWWO5559U5",
+      "invalidation_id": "I5XLBBM5QYJF5P3G3JKGGO1GPP"
+    },
+    "excluded": ["branding repair", "homeowner /h/ledger routing", "sw.js"]
+  },
+  "acceptance": "pending dedicated Mortgage Agent login"
+}
