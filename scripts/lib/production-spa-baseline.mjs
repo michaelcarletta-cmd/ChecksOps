@@ -10,15 +10,15 @@ export const PRODUCTION_SPA_ID = 'production-spa';
 
 export const ACCEPTED_PRODUCTION_SPA = Object.freeze({
   host: 'https://checksops.com',
-  spa_bundle: '/assets/index-HXTuSrE0.js',
-  spa_sha256: 'd584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d',
-  index_html_sha256: 'a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52',
-  s3_version: 'PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX',
+  spa_bundle: '/assets/index-BgOCQCWm.js',
+  spa_sha256: 'ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190',
+  index_html_sha256: '3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df',
+  s3_version: 'QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd',
   cloudfront_id: 'E1B0ZWWO5559U5',
-  last_modified: 'Fri, 02 Oct 2026 15:03:04 GMT',
-  accepted_at: '2026-10-02T15:03:04Z',
-  source_lineage: 'b39738cab7c1afd68e97c88781766b6cabe04896',
-  banner_overlay: '2277ab9ead9ab8270446468421f9dd8cc3e1a401',
+  last_modified: 'Sat, 03 Oct 2026 11:41:40 GMT',
+  accepted_at: '2026-10-03T11:41:40Z',
+  source_lineage: '2277ab9ead9ab8270446468421f9dd8cc3e1a401',
+  banner_overlay: '7c64dae2dee6c78dd296c946c04ea6ccaa793aef',
   s3_bucket: 'checksops-production-frontend-806168576068',
 });
 
@@ -33,6 +33,7 @@ export const SUPERSEDED_PRODUCTION_SPA_BUNDLES = Object.freeze([
   '/assets/index-reP2FWHf.js',
   '/assets/index-CiOVNYWh.js',
   '/assets/index-DyoF7zdg.js',
+  '/assets/index-HXTuSrE0.js',
 ]);
 
 export const SAFE_SPA_DEPLOY_MODE = 'per_object_put';

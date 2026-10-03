@@ -3,9 +3,9 @@
 This file is repository evidence for the already-live production frontend.
 It does **not** deploy, upload, invalidate, or modify AWS.
 
-Read-only live verification on 2026-10-02 confirmed that production now
+Read-only live verification on 2026-10-03 confirmed that production now
 serves the baseline recorded here. Metadata in this change only records and
-protects it.
+protects it. Historical `index-HXTuSrE0.js` is superseded lineage only.
 
 ## Accepted live production SPA
 
@@ -14,12 +14,12 @@ protects it.
 | Host | `https://checksops.com` |
 | CloudFront | `E1B0ZWWO5559U5` |
 | S3 bucket | `checksops-production-frontend-806168576068` |
-| Entry | `/assets/index-HXTuSrE0.js` |
-| Entry JS SHA256 | `d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d` |
-| index.html SHA256 | `a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52` |
-| index.html S3 version | `PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX` |
-| Last-Modified | `Fri, 02 Oct 2026 15:03:04 GMT` |
-| Previous accepted baseline | `/assets/index-gYa_BW8r.js` |
+| Entry | `/assets/index-BgOCQCWm.js` |
+| Entry JS SHA256 | `ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190` |
+| index.html SHA256 | `3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df` |
+| index.html S3 version | `QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd` |
+| Last-Modified | `Sat, 03 Oct 2026 11:41:40 GMT` |
+| Previous accepted baseline | `/assets/index-HXTuSrE0.js` |
 
 ## Accepted behavior
 
@@ -34,10 +34,11 @@ protects it.
 branch, or another worktree must demonstrate that it contains or reconciles
 this accepted production SPA. If it cannot, deployment must be refused.
 
-Do not restore a superseded entry (`index-CTqMys28.js`, `index-BPbQUNFr.js`,
-`index-DSbVZXu8.js`, `index-BtDKt23D.js`, `index-gYa_BW8r.js`, `index-BAD1KYoF.js`,
-`index-DyoF7zdg.js`, or earlier conflicting bundle names) over this baseline.
-`index-gYa_BW8r.js` is superseded lineage only after this successful acceptance.
+Do not restore a superseded entry (`index-HXTuSrE0.js`, `index-CTqMys28.js`,
+`index-BPbQUNFr.js`, `index-DSbVZXu8.js`, `index-BtDKt23D.js`,
+`index-gYa_BW8r.js`, `index-BAD1KYoF.js`, `index-DyoF7zdg.js`, or earlier
+conflicting bundle names) over this baseline. `index-HXTuSrE0.js` is
+superseded lineage only after this successful acceptance.
 
 ## Fail-closed promotion rules
 
@@ -53,21 +54,22 @@ write.
 
 ## Read-only verification (this freeze)
 
-HTTPS `GET https://checksops.com/index.html` returned:
+HTTPS `GET https://checksops.com/index.html` and matching S3 `get-object`
+returned:
 
-- `last-modified: Fri, 02 Oct 2026 15:03:04 GMT`
-- `x-amz-version-id: PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX`
-- `x-cache: RefreshHit from cloudfront`
-- index.html SHA256 `a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52`
-- entry `/assets/index-HXTuSrE0.js`
-- entry SHA256 `d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d`
+- `last-modified: Sat, 03 Oct 2026 11:41:40 GMT`
+- `x-amz-version-id: QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd`
+- CloudFront `x-cache: RefreshHit from cloudfront` (apex) / `Hit from cloudfront` (www)
+- index.html SHA256 `3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df`
+- entry `/assets/index-BgOCQCWm.js`
+- entry SHA256 `ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190`
 
-Exact match to the accepted baseline. Freeze proceeded.
+S3 and CloudFront matched exactly. Freeze proceeded.
 
 Lambda `checksops-production-prep-api` identity is recorded for continuity only and was not modified.
 Live fingerprint during verification:
 
-- CodeSha256 `S8ma0PVG3pzjuJSD17eznstHuB+AgD7M3/35OcKSoPY=`
-- RevisionId `9f673420-a5a1-43df-a798-cc7022a4fb8d`
+- CodeSha256 `CWB8lxnHoqANyVcaNpKL7h4MtDSPMlHZ6wliFuGE6yA=`
+- RevisionId `16327bba-cc0a-4a17-b2a8-55b7b2d1b069`
 
 This task performed **zero** production writes.
