@@ -29,6 +29,13 @@ import {
   invalidateOfficialRearImage,
   requireDrawnSignature,
 } from './endorsement-composite.mjs';
+import { isCheckAltArtifactPath } from './providers/production/checkalt-image-compliance.mjs';
+import { downloadClaimFileBytes } from './providers/production/checkalt-images.mjs';
+import {
+  evaluateRearImageFreshness,
+  loadCheckEndorsements,
+  loadCheckPayees,
+} from './providers/production/checkalt-eligibility.mjs';
 import {
   decideReadyTransition,
   evaluateEndorsementMath,
@@ -51,6 +58,7 @@ export const AUTH_ENDORSEMENT_ACTIONS = new Set([
   'mark_internal_signed',
   'waive_endorsement',
   'force_complete_endorsements',
+  'finalize_existing_endorsements',
 ]);
 
 export const DEFAULT_CONSENT_TEXT = 'I agree to use electronic records and electronic signatures for this endorsement. I confirm my identity as the named payee, intend my electronic signature to be legally binding, and authorize the electronic endorsement of this insurance check payment. I understand I may decline to sign electronically and request another process.';
@@ -123,6 +131,63 @@ const safeQuery = async (client, sql, params = []) => {
   }
 };
 
+export const classifyPersistFailure = (error, meta = {}) => ({
+  statement: meta.statement || null,
+  table: meta.table || error?.table || null,
+  column: error?.column || null,
+  constraint: error?.constraint || null,
+  schema: error?.schema || null,
+  code: error?.code || null,
+  message: sanitizePublicError(error).slice(0, 300),
+  transactionState: 'aborted',
+});
+
+export const persistAutoAdvanceWrite = async (client, sql, params, meta) => {
+  try {
+    return await client.query(sql, params);
+  } catch (error) {
+    const persistError = classifyPersistFailure(error, meta);
+    const wrapped = new Error(persistError.message);
+    wrapped.code = persistError.code;
+    wrapped.persistError = persistError;
+    throw wrapped;
+  }
+};
+
+const persistFailed = (check, result, persistError) => ({
+  ...result,
+  ok: false,
+  statusCode: 503,
+  success: false,
+  error: 'auto_advance_persist_failed',
+  persistError,
+  depositAdvanceDenied: true,
+  advance_check_on_endorsement_complete: 'persist_failed',
+  newStatus: check?.status || null,
+  readyForDeposit: false,
+  approvedForDeposit: false,
+});
+
+export const updateOptionalClaimCheckStage = async (client, checkId) => {
+  const linked = await persistAutoAdvanceWrite(
+    client,
+    `SELECT id FROM public.claim_checks WHERE check_intake_item_id = $1::uuid LIMIT 1`,
+    [checkId],
+    { statement: 'SELECT claim_checks', table: 'claim_checks' },
+  );
+  if (!linked.rowCount) {
+    return { skipped: true, rowCount: 0 };
+  }
+  return persistAutoAdvanceWrite(
+    client,
+    `UPDATE public.claim_checks
+     SET check_stage = 'ready_for_deposit', updated_at = now()
+     WHERE check_intake_item_id = $1::uuid`,
+    [checkId],
+    { statement: 'UPDATE claim_checks', table: 'claim_checks' },
+  );
+};
+
 const canWriteTenant = async (client, tenantId) => {
   if (!tenantId) return false;
   const ok = (await safeQuery(
@@ -138,7 +203,9 @@ const loadCheckForEndorsement = async (client, endorsement) => {
   return (await safeQuery(
     client,
     `SELECT id, tenant_id, claim_id, carrier_name, check_number, amount, status,
-            deposit_recommendation, check_stage, deposited_at, back_image_deposit_path
+            deposit_recommendation, check_stage, deposited_at,
+            back_image_path, back_image_original_path, back_image_deposit_path,
+            endorsement_render_meta
      FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [endorsement.check_id],
   )).rows[0] || {};
@@ -345,26 +412,35 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
         advance_check_on_endorsement_complete: 'already_ready',
       };
     }
-    await safeQuery(
-      client,
-      `UPDATE public.check_intake_items
-       SET status = 'branch_deposit_required', updated_at = now()
-       WHERE id = $1::uuid
-         AND deposited_at IS NULL
-         AND status IS DISTINCT FROM 'deposited'`,
-      [checkId],
-    );
-    await safeQuery(
-      client,
-      `INSERT INTO public.check_audit_log (
-         check_id, event_type, event_description, event_data, tenant_id
-       ) VALUES (
-         $1::uuid, 'all_endorsements_complete',
-         'All endorsements complete — routed to branch deposit workflow',
-         $2::jsonb, $3::uuid
-       )`,
-      [checkId, JSON.stringify({ deposit_path: 'branch_deposit_required' }), check.tenant_id || null],
-    );
+    try {
+      await persistAutoAdvanceWrite(
+        client,
+        `UPDATE public.check_intake_items
+         SET status = 'branch_deposit_required', updated_at = now()
+         WHERE id = $1::uuid
+           AND deposited_at IS NULL
+           AND status IS DISTINCT FROM 'deposited'`,
+        [checkId],
+        { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+      );
+      await persistAutoAdvanceWrite(
+        client,
+        `INSERT INTO public.check_audit_log (
+           check_id, event_type, event_description, event_data, tenant_id
+         ) VALUES (
+           $1::uuid, 'all_endorsements_complete',
+           'All endorsements complete — routed to branch deposit workflow',
+           $2::jsonb, $3::uuid
+         )`,
+        [checkId, JSON.stringify({ deposit_path: 'branch_deposit_required' }), check.tenant_id || null],
+        { statement: 'INSERT check_audit_log', table: 'check_audit_log' },
+      );
+    } catch (error) {
+      return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
+        statement: 'UPDATE check_intake_items',
+        table: 'check_intake_items',
+      }));
+    }
     return { ...result, ...allowDepositAdvance('branch_deposit_required') };
   }
 
@@ -372,24 +448,26 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
     && String(check.deposit_recommendation || '') === 'ready_for_deposit';
   if (alreadyReady) {
     if (String(check.check_stage || '') !== 'ready_for_deposit') {
-      await safeQuery(
-        client,
-        `UPDATE public.check_intake_items
-         SET check_stage = 'ready_for_deposit', updated_at = now()
-         WHERE id = $1::uuid
-           AND deposited_at IS NULL
-           AND status IS DISTINCT FROM 'deposited'
-           AND status IS DISTINCT FROM 'voided'
-           AND status IS DISTINCT FROM 'loss_draft_required'`,
-        [checkId],
-      );
-      await safeQuery(
-        client,
-        `UPDATE public.claim_checks
-         SET check_stage = 'ready_for_deposit', updated_at = now()
-         WHERE check_intake_item_id = $1::uuid`,
-        [checkId],
-      );
+      try {
+        await persistAutoAdvanceWrite(
+          client,
+          `UPDATE public.check_intake_items
+           SET check_stage = 'ready_for_deposit', updated_at = now()
+           WHERE id = $1::uuid
+             AND deposited_at IS NULL
+             AND status IS DISTINCT FROM 'deposited'
+             AND status IS DISTINCT FROM 'voided'
+             AND status IS DISTINCT FROM 'loss_draft_required'`,
+          [checkId],
+          { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+        );
+        await updateOptionalClaimCheckStage(client, checkId);
+      } catch (error) {
+        return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
+          statement: 'UPDATE check_intake_items',
+          table: 'check_intake_items',
+        }));
+      }
     }
     return {
       ...result,
@@ -398,48 +476,100 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
     };
   }
 
-  await safeQuery(
-    client,
-    `UPDATE public.check_intake_items
-     SET status = 'approved_for_deposit',
-         deposit_recommendation = 'ready_for_deposit',
-         check_stage = 'ready_for_deposit',
-         updated_at = now()
-     WHERE id = $1::uuid
-       AND deposited_at IS NULL
-       AND status IS DISTINCT FROM 'deposited'
-       AND status IS DISTINCT FROM 'voided'
-       AND status IS DISTINCT FROM 'loss_draft_required'
-       AND check_stage IS DISTINCT FROM 'loss_draft'`,
-    [checkId],
-  );
-  await safeQuery(
-    client,
-    `UPDATE public.claim_checks
-     SET check_stage = 'ready_for_deposit', updated_at = now()
-     WHERE check_intake_item_id = $1::uuid`,
-    [checkId],
-  );
-  await safeQuery(
-    client,
-    `INSERT INTO public.check_audit_log (
-       check_id, event_type, event_description, event_data, tenant_id
-     ) VALUES (
-       $1::uuid, 'all_endorsements_complete',
-       'All endorsements complete — ready for deposit',
-       $2::jsonb, $3::uuid
-     )`,
-    [
-      checkId,
-      JSON.stringify({
-        status: 'approved_for_deposit',
-        deposit_recommendation: 'ready_for_deposit',
-        check_stage: 'ready_for_deposit',
-      }),
-      check.tenant_id || null,
-    ],
-  );
+  try {
+    await persistAutoAdvanceWrite(
+      client,
+      `UPDATE public.check_intake_items
+       SET status = 'approved_for_deposit',
+           deposit_recommendation = 'ready_for_deposit',
+           check_stage = 'ready_for_deposit',
+           updated_at = now()
+       WHERE id = $1::uuid
+         AND deposited_at IS NULL
+         AND status IS DISTINCT FROM 'deposited'
+         AND status IS DISTINCT FROM 'voided'
+         AND status IS DISTINCT FROM 'loss_draft_required'
+         AND check_stage IS DISTINCT FROM 'loss_draft'`,
+      [checkId],
+      { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+    );
+    await updateOptionalClaimCheckStage(client, checkId);
+    await persistAutoAdvanceWrite(
+      client,
+      `INSERT INTO public.check_audit_log (
+         check_id, event_type, event_description, event_data, tenant_id
+       ) VALUES (
+         $1::uuid, 'all_endorsements_complete',
+         'All endorsements complete — ready for deposit',
+         $2::jsonb, $3::uuid
+       )`,
+      [
+        checkId,
+        JSON.stringify({
+          status: 'approved_for_deposit',
+          deposit_recommendation: 'ready_for_deposit',
+          check_stage: 'ready_for_deposit',
+        }),
+        check.tenant_id || null,
+      ],
+      { statement: 'INSERT check_audit_log', table: 'check_audit_log' },
+    );
+  } catch (error) {
+    return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
+      statement: 'UPDATE check_intake_items',
+      table: 'check_intake_items',
+    }));
+  }
   return { ...result, ...allowDepositAdvance('approved_for_deposit') };
+};
+
+const officialRearObjectExists = async (rel, deps = {}) => {
+  if (!rel) return false;
+  if (typeof deps.objectExists === 'function') {
+    return Boolean(await deps.objectExists(rel));
+  }
+  const download = deps.downloadClaimFile || downloadClaimFileBytes;
+  try {
+    const bytes = await download(rel, deps);
+    return Boolean(bytes?.length);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Reuse a current official rear instead of regenerating.
+ * Does not mutate endorsements or payees. Fail-closed when the deposit path
+ * is missing, not a CheckAlt artifact, stale vs endorsement fingerprint, or
+ * the object does not exist.
+ */
+export const reuseExistingOfficialRear = async (client, check, deps = {}) => {
+  const deposit = check?.back_image_deposit_path;
+  if (!deposit || !isCheckAltArtifactPath(deposit)) {
+    return { ok: false, error: 'official_rear_missing', reused: false };
+  }
+  if (!check?.id || !check?.tenant_id) {
+    return { ok: false, error: 'official_rear_missing', reused: false };
+  }
+  const payees = await (deps.loadCheckPayees
+    ? deps.loadCheckPayees(check.id, check.tenant_id)
+    : loadCheckPayees(client, check.id, check.tenant_id));
+  const endorsements = await (deps.loadCheckEndorsements
+    ? deps.loadCheckEndorsements(check.id, check.tenant_id)
+    : loadCheckEndorsements(client, check.id, check.tenant_id));
+  const freshness = evaluateRearImageFreshness(check, payees, endorsements);
+  if (!freshness.ok) {
+    return { ok: false, error: freshness.error || 'official_rear_stale', reused: false };
+  }
+  if (!await officialRearObjectExists(deposit, deps)) {
+    return { ok: false, error: 'official_rear_missing', reused: false };
+  }
+  return {
+    ok: true,
+    reused: true,
+    back_image_deposit_path: deposit,
+    endorsed_back_image_path: deposit,
+  };
 };
 
 export const finalizeEndorsementState = async (client, checkId, {
@@ -479,11 +609,16 @@ export const finalizeEndorsementState = async (client, checkId, {
     });
     composited = signed.composited;
   } else if (evaluation.allSigned) {
-    composited = await compositeEndorsementSignatures({
-      client,
-      checkId,
-      deps: compositeDeps,
-    });
+    const existing = await reuseExistingOfficialRear(client, check, compositeDeps);
+    if (existing.ok) {
+      composited = existing;
+    } else {
+      composited = await compositeEndorsementSignatures({
+        client,
+        checkId,
+        deps: compositeDeps,
+      });
+    }
   }
 
   const officialRearReady = Boolean(
@@ -792,6 +927,54 @@ export const runAuthenticatedEndorsement = async ({
   const action = body.action;
   if (!AUTH_ENDORSEMENT_ACTIONS.has(action)) {
     return { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
+  }
+
+  if (action === 'finalize_existing_endorsements') {
+    const checkId = body.checkId || body.check_id;
+    if (!checkId) {
+      return { ok: false, statusCode: 400, error: 'checkId required', spoofFieldsIgnored: spoof };
+    }
+    const check = await loadCheckForEndorsement(client, { check_id: checkId });
+    if (!check?.id) {
+      return { ok: false, statusCode: 404, error: 'Check not found', spoofFieldsIgnored: spoof };
+    }
+    if (!await canWriteTenant(client, check.tenant_id)) {
+      return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+    }
+    const completion = await finalizeEndorsementState(client, checkId, {
+      refreshOfficialRear: false,
+      compositeDeps,
+    });
+    if (completion?.ok === false || completion?.error === 'auto_advance_persist_failed') {
+      return {
+        ok: false,
+        statusCode: Number(completion.statusCode || 503),
+        success: false,
+        action: 'finalize_existing_endorsements',
+        endorsementRowsMutated: false,
+        payeeRowsMutated: false,
+        providerSubmitted: false,
+        liveProviderCalled: false,
+        productionExecution: false,
+        ...completion,
+        ok: false,
+        success: false,
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    return {
+      ok: true,
+      statusCode: 200,
+      success: true,
+      action: 'finalize_existing_endorsements',
+      endorsementRowsMutated: false,
+      payeeRowsMutated: false,
+      providerSubmitted: false,
+      liveProviderCalled: false,
+      productionExecution: false,
+      ...completion,
+      spoofFieldsIgnored: spoof,
+    };
   }
 
   if (action === 'force_complete_endorsements') {

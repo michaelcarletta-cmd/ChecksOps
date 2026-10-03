@@ -77,11 +77,206 @@ export const requireDrawnSignature = (signatureData) => {
   return { ok: true };
 };
 
+export const CLEAN_ORIGINAL_RASTER_EXTS = Object.freeze(['jpg', 'jpeg', 'png']);
+const ENDORSED_STEM_RE = /^(.*)_endorsed(?:_\d+)?\.(?:svg|jpe?g|png)$/i;
+
+const claimRel = (path) => {
+  const rel = normalizePath(String(path || '').split('?')[0], 'claim-files');
+  return rel || null;
+};
+
+const pathDirectory = (rel) => {
+  const value = String(rel || '');
+  const idx = value.lastIndexOf('/');
+  return idx >= 0 ? value.slice(0, idx) : '';
+};
+
+const pathFileName = (rel) => {
+  const value = String(rel || '');
+  const idx = value.lastIndexOf('/');
+  return idx >= 0 ? value.slice(idx + 1) : value;
+};
+
 export const isEndorsedArtifactPath = (path) => {
   const rel = String(path || '').split('?')[0];
   return /endorsed_deposit_[^/]+\.[^.]+$/i.test(rel)
     || /_endorsed(?:_\d+)?\.(?:svg|jpe?g|png)$/i.test(rel)
-    || isCheckAltArtifactPath(rel);
+    || isCheckAltArtifactPath(rel)
+    || /\.svg(\?|$)/i.test(rel);
+};
+
+export const isCleanRasterOriginalPath = (path) => {
+  const rel = claimRel(path);
+  if (!rel || isEndorsedArtifactPath(rel)) return false;
+  return /\.(jpe?g|png)$/i.test(rel);
+};
+
+export const reconstructSiblingCandidates = (artifactPath) => {
+  const rel = claimRel(artifactPath);
+  if (!rel || !isEndorsedArtifactPath(rel)) return [];
+  const fileName = pathFileName(rel);
+  const match = fileName.match(ENDORSED_STEM_RE);
+  if (!match?.[1]) return [];
+  const directory = pathDirectory(rel);
+  return CLEAN_ORIGINAL_RASTER_EXTS.map((ext) => (
+    directory ? `${directory}/${match[1]}.${ext}` : `${match[1]}.${ext}`
+  ));
+};
+
+const sameRecoveryDirectory = (candidate, anchor) => {
+  if (!anchor) return true;
+  return pathDirectory(claimRel(candidate) || '') === pathDirectory(claimRel(anchor) || '');
+};
+
+const asTrustedCleanOriginal = (path, { requireSameDirAs } = {}) => {
+  const rel = claimRel(path);
+  if (!rel || !isCleanRasterOriginalPath(rel)) return null;
+  if (requireSameDirAs && !sameRecoveryDirectory(rel, requireSameDirAs)) return null;
+  return rel;
+};
+
+const parseMetaObject = (value) => {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) || {}; } catch { return {}; }
+  }
+  return typeof value === 'object' && !Array.isArray(value) ? value : {};
+};
+
+const metaOriginalPath = (meta) => {
+  const data = parseMetaObject(meta);
+  return data.original_back_image_path || data.original_back_path || null;
+};
+
+const auditOriginalPath = (eventData) => {
+  const data = parseMetaObject(eventData);
+  return data.original_back_image_path || data.original_back_path || null;
+};
+
+const auditEndorsedPath = (eventData) => {
+  const data = parseMetaObject(eventData);
+  return data.endorsed_back_image_path || data.composited_back_path || data.composited_path || null;
+};
+
+const objectExists = async (rel, deps = {}) => {
+  if (!rel) return false;
+  if (typeof deps.objectExists === 'function') {
+    return Boolean(await deps.objectExists(rel));
+  }
+  const download = deps.downloadClaimFile || downloadClaimFileBytes;
+  try {
+    const bytes = await download(rel, deps);
+    return Boolean(bytes?.length);
+  } catch {
+    return false;
+  }
+};
+
+const loadCompositeAudits = async (client, checkId, deps = {}) => {
+  if (typeof deps.loadCompositeAudits === 'function') {
+    return (await deps.loadCompositeAudits(checkId)) || [];
+  }
+  if (!client || !checkId) return [];
+  try {
+    return (await client.query(
+      `SELECT event_data, created_at
+         FROM public.check_audit_log
+        WHERE check_id = $1::uuid
+          AND event_type = 'endorsement_signatures_composited'
+        ORDER BY created_at DESC NULLS LAST
+        LIMIT 25`,
+      [checkId],
+    )).rows || [];
+  } catch {
+    return [];
+  }
+};
+
+const dirtyArtifactAnchor = (check = {}) => {
+  const original = check.back_image_original_path;
+  if (original && isEndorsedArtifactPath(original)) return claimRel(original);
+  const current = check.back_image_path;
+  if (current && isEndorsedArtifactPath(current)) return claimRel(current);
+  return null;
+};
+
+const recoverSiblingOriginal = async (artifactPath, deps = {}) => {
+  const candidates = reconstructSiblingCandidates(artifactPath);
+  if (!candidates.length) return { ok: false, error: 'original_back_missing', path: null };
+  const existing = [];
+  for (const candidate of candidates) {
+    if (isEndorsedArtifactPath(candidate)) continue;
+    if (!isCleanRasterOriginalPath(candidate)) continue;
+    if (await objectExists(candidate, deps)) existing.push(candidate);
+  }
+  if (existing.length === 1) {
+    return { ok: true, path: existing[0], source: 'sibling' };
+  }
+  if (existing.length > 1) {
+    return { ok: false, error: 'original_back_ambiguous', path: null, candidates: existing };
+  }
+  return { ok: false, error: 'original_back_missing', path: null };
+};
+
+/**
+ * Trusted original-back recovery for the official-rear compositor only.
+ * Never used by generic /data/write path authorization.
+ *
+ * Precedence:
+ * 1. valid clean back_image_original_path
+ * 2. trusted endorsement_render_meta original
+ * 3. trusted check_audit_log original_back_image_path
+ * 4. valid clean back_image_path
+ * 5. deterministic same-directory sibling reconstruction
+ * 6. fail closed — never return a generated artifact
+ */
+export const recoverTrustedOriginalBackPath = async (check = {}, deps = {}) => {
+  const original = check.back_image_original_path;
+  const current = check.back_image_path;
+  const anchor = dirtyArtifactAnchor(check);
+  const acceptEvidence = (path) => asTrustedCleanOriginal(path, { requireSameDirAs: anchor });
+
+  if (isCleanRasterOriginalPath(original)) {
+    return { ok: true, path: claimRel(original), source: 'back_image_original_path' };
+  }
+
+  const fromMeta = acceptEvidence(metaOriginalPath(check.endorsement_render_meta));
+  if (fromMeta && await objectExists(fromMeta, deps)) {
+    return { ok: true, path: fromMeta, source: 'endorsement_render_meta' };
+  }
+
+  const audits = await loadCompositeAudits(deps.client || null, check.id, deps);
+  const matching = audits.find((row) => {
+    const endorsed = claimRel(auditEndorsedPath(row?.event_data));
+    return Boolean(anchor && endorsed && endorsed === anchor);
+  });
+  const ordered = matching ? [matching, ...audits.filter((row) => row !== matching)] : audits;
+  for (const row of ordered) {
+    const recovered = acceptEvidence(auditOriginalPath(row?.event_data));
+    if (!recovered) continue;
+    if (await objectExists(recovered, deps)) {
+      return { ok: true, path: recovered, source: 'check_audit_log' };
+    }
+  }
+
+  if (isCleanRasterOriginalPath(current)) {
+    return { ok: true, path: claimRel(current), source: 'back_image_path' };
+  }
+
+  if (anchor) {
+    return recoverSiblingOriginal(anchor, deps);
+  }
+
+  return { ok: false, error: 'original_back_missing', path: null };
+};
+
+/** Sync subset used only when no I/O is available. Never returns generated artifacts. */
+export const recoverOriginalPath = (check = {}) => {
+  const original = check.back_image_original_path;
+  if (isCleanRasterOriginalPath(original)) return claimRel(original);
+  const current = check.back_image_path;
+  if (isCleanRasterOriginalPath(current)) return claimRel(current);
+  return null;
 };
 
 const measurePreset = (signerCount, preset) => {
@@ -496,14 +691,6 @@ export const makeInkSignatureDataUrl = ({ width = 240, height = 70, mark = 'SIG'
   return `data:image/png;base64,${bytes.toString('base64')}`;
 };
 
-const recoverOriginalPath = (check) => {
-  const original = check.back_image_original_path;
-  if (original && !isEndorsedArtifactPath(original)) return original;
-  const current = check.back_image_path;
-  if (current && !isEndorsedArtifactPath(current)) return current;
-  return original || current || null;
-};
-
 export const isHistoricalCheckLocked = (check = {}, deposits = []) => {
   if (HISTORICAL_CHECK_STATUSES.has(String(check.status || ''))) return true;
   if (check.deposited_at) return true;
@@ -538,7 +725,8 @@ export const invalidateOfficialRearImage = async (client, checkId, deps = {}) =>
     [checkId],
   )).rows[0];
   if (!row) return { ok: false, error: 'check_not_found' };
-  const restore = recoverOriginalPath(row);
+  const recovered = await recoverTrustedOriginalBackPath(row, { ...deps, client });
+  const restore = recovered.ok ? recovered.path : null;
   await client.query(
     `UPDATE public.check_intake_items
         SET back_image_deposit_path = NULL,
@@ -638,8 +826,18 @@ export const compositeEndorsementSignatures = async ({
     };
   }
 
-  const originalPath = recoverOriginalPath(check);
-  if (!originalPath) return { ok: false, statusCode: 400, error: 'original_back_missing' };
+  const recovered = await recoverTrustedOriginalBackPath(check, { ...deps, client });
+  if (!recovered.ok || !recovered.path) {
+    return {
+      ok: false,
+      statusCode: recovered.error === 'original_back_ambiguous' ? 409 : 400,
+      error: recovered.error || 'original_back_missing',
+      message: recovered.error === 'original_back_ambiguous'
+        ? 'Multiple clean original-back candidates were found; refusing to guess.'
+        : 'A trusted clean original rear image could not be recovered.',
+    };
+  }
+  const originalPath = recovered.path;
 
   const endorsementRows = (await client.query(
     `SELECT e.id, e.payee_name, e.payee_type, e.status, e.signed_at, e.signature_image_url,
@@ -712,10 +910,16 @@ export const compositeEndorsementSignatures = async ({
     endorsed_back_image_path: depositPath,
   };
 
+  const replaceDirtyOriginal = Boolean(
+    check.back_image_original_path && isEndorsedArtifactPath(check.back_image_original_path),
+  );
   await client.query(
     `UPDATE public.check_intake_items
         SET back_image_deposit_path = $2,
-            back_image_original_path = COALESCE(back_image_original_path, $3),
+            back_image_original_path = CASE
+              WHEN $5::boolean THEN $3
+              ELSE COALESCE(back_image_original_path, $3)
+            END,
             back_image_path = CASE
               WHEN back_image_path IS NULL OR back_image_path = '' THEN $3
               ELSE back_image_path
@@ -725,7 +929,7 @@ export const compositeEndorsementSignatures = async ({
             endorsement_render_version = COALESCE(endorsement_render_version, 0) + 1,
             updated_at = now()
       WHERE id = $1::uuid`,
-    [checkId, depositPath, originalPath, JSON.stringify(meta)],
+    [checkId, depositPath, originalPath, JSON.stringify(meta), replaceDirtyOriginal],
   );
 
   if (check.tenant_id && deps.stampFingerprint !== false) {
