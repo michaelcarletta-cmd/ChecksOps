@@ -121,9 +121,12 @@ export const CHECKALT_STATUS_MAP = {
 
 export const mapCheckAltStatus = (payload = {}) => {
   const rawStatus = String(payload.status ?? '').toLowerCase();
+  const rawDescription = String(payload.statusDescription ?? '').toLowerCase().trim();
   const numericStatus = Number(payload.statusCode ?? payload.status);
   const mapped = CHECKALT_STATUS_MAP.numeric[numericStatus]
     || CHECKALT_STATUS_MAP.string[rawStatus]
+    || CHECKALT_STATUS_MAP.string[rawDescription]
+    || CHECKALT_STATUS_MAP.string[rawDescription.replace(/\s+/g, '_')]
     || null;
   return applyCheckAltSettlementInvariant(mapped, payload);
 };

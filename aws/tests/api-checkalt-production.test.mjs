@@ -31,7 +31,10 @@ import {
   historyListOf,
   matchHistoryByReference,
   reconcileProductionCheckAltDeposit,
+  buildCheckAltHistoryBody,
+  historyWindowsForDeposit,
 } from '../functions/api/providers/production/checkalt-poll.mjs';
+import { resolveCheckAltProviderStatus } from '../functions/api/providers/amounts.mjs';
 import { runCheckAltStatusReconcile } from '../functions/api/providers/production/checkalt-status-reconcile.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 import { syntheticCompliantCheckAltJpeg } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
@@ -159,6 +162,7 @@ const createStore = ({
     itemPosts: 0,
     itemPayload: null,
     historyPayload: null,
+    historyBodies: [],
     persistOutcomeFails: 0,
     role,
     rolesByUser: {},
@@ -404,6 +408,28 @@ const fetchImpl = (store) => async (url, options = {}) => {
   }
   if (target.includes('/fincapture/deposit/history')) {
     store.historyPosts += 1;
+    let body = {};
+    try { body = JSON.parse(options.body || '{}'); } catch { body = {}; }
+    store.historyBodies = store.historyBodies || [];
+    store.historyBodies.push(body);
+    if (!body.userId) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({
+          httpCode: 400,
+          message: '[userId] must not be null; [userId] must not be blank',
+        }),
+      };
+    }
+    if (typeof store.historyForBody === 'function') {
+      const payload = store.historyForBody(body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(payload),
+      };
+    }
     return {
       ok: true,
       status: 200,
@@ -467,6 +493,7 @@ const pushLegacyDeposit = (store, extra = {}) => {
     checkalt_reference: extra.checkalt_reference === undefined ? null : extra.checkalt_reference,
     provider_http_attempted_at: extra.provider_http_attempted_at || null,
     last_status_payload: extra.last_status_payload || {},
+    submitted_at: extra.submitted_at || null,
     created_at: extra.created_at || '2024-01-01T00:00:00.000Z',
   };
   store.deposits.push(row);
@@ -1256,6 +1283,288 @@ test('status reconcile job is read/status only and never submits or approves', a
   assert.equal(store.approvePosts, 0);
   assert.equal(store.itemPosts, 1);
   assert.equal(store.deposits[0].status, 'submitted');
+});
+
+test('history request includes production userId and date windows', () => {
+  const body = buildCheckAltHistoryBody({
+    fiKey: 'prod-fi-key',
+    userId: 'depositor-prod',
+    ssoKey: 'sso-prod',
+    accountNumber: '1234567890',
+    startDate: '2026-09-22',
+    endDate: '2026-09-23',
+  });
+  assert.equal(body.userId, 'depositor-prod');
+  assert.equal(body.ssoKey, 'sso-prod');
+  assert.equal(body.startDate, '2026-09-22');
+  assert.equal(body.endDate, '2026-09-23');
+  assert.equal(body.fiKey, 'prod-fi-key');
+  const windows = historyWindowsForDeposit({
+    submitted_at: '2026-09-23T01:01:04.223Z',
+  }, new Date('2026-09-23T02:00:00.000Z'));
+  assert.ok(windows.length >= 2);
+  assert.equal(windows[0].endDate, '2026-09-23');
+  assert.ok(windows[0].startDate <= '2026-09-22');
+  assert.ok(windows.some((window) => window.startDate <= '2026-08-24'));
+});
+
+test('item without status fields uses history userId; missing userId is fail-closed', async () => {
+  const store = createStore();
+  store.itemPayload = {
+    processDate: '2026-09-22T20:01:05.474-05',
+    ruleDetails: { itemRules: [{ ruleType: 'IQA', ruleDescription: 'ok' }] },
+    depositId: 123733567,
+    referenceNumber: '123733567',
+  };
+  store.historyPayload = {
+    depositHistoryList: [{
+      referenceNumber: '123733567',
+      status: '40',
+      statusDescription: 'Pending Approval',
+      dateSubmitted: '2026-09-22T20:01:05.474-05',
+    }],
+  };
+  const row = pushLegacyDeposit(store, {
+    checkalt_reference: '123733567',
+    status: 'pending_approval',
+    submitted_at: '2026-09-23T01:01:04.223Z',
+    idempotency_key: 'key-ref',
+  });
+  const mapped = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row,
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod', sso_key: 'sso-prod', deposit_account_number: '1234567890' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(mapped.reconciled, true);
+  assert.equal(mapped.status, 'pending_approval');
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+  assert.ok(store.historyBodies.length >= 1);
+  assert.equal(store.historyBodies[0].userId, 'depositor-prod');
+  assert.equal(store.historyBodies[0].fiKey, 'prod-fi-key');
+  assert.ok(store.historyBodies[0].startDate);
+  assert.ok(store.historyBodies[0].endDate);
+  assert.equal(resolveCheckAltProviderStatus({ status: '40', statusDescription: 'Pending Approval' }), 'pending_approval');
+
+  const missingUser = createStore();
+  missingUser.itemPayload = { referenceNumber: '123733567', ruleDetails: {} };
+  const missing = await reconcileProductionCheckAltDeposit({
+    client: identityClient(missingUser),
+    mapping,
+    row: pushLegacyDeposit(missingUser, {
+      checkalt_reference: '123733567',
+      status: 'pending_approval',
+      submitted_at: '2026-09-23T01:01:04.223Z',
+    }),
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_key: 'sso-only', deposit_account_number: '1234567890' },
+    fetchImpl: fetchImpl(missingUser),
+  });
+  assert.equal(missing.error, 'reconciliation_required');
+  assert.equal(missing.reconciled, false);
+  assert.equal(missingUser.historyPosts, 0);
+  assert.equal(missingUser.processPosts, 0);
+  assert.equal(missingUser.approvePosts, 0);
+  assert.equal(missingUser.deposits[0].last_polled_at, undefined);
+});
+
+test('history date window locates a reference missing from the default page', async () => {
+  const store = createStore();
+  store.itemPayload = { referenceNumber: '123733567', ruleDetails: {} };
+  store.historyForBody = (body) => {
+    const defaultPage = [
+      { referenceNumber: '115497665', status: '120', statusDescription: 'Rejected', dateSubmitted: '2026-07-17T12:00:00.000-05' },
+      { referenceNumber: '122678838', status: '127', statusDescription: 'Approved', dateSubmitted: '2026-09-14T12:00:00.000-05' },
+    ];
+    if (body.startDate && body.startDate >= '2026-09-22') {
+      return {
+        depositHistoryList: [
+          ...defaultPage,
+          { referenceNumber: '123733567', status: '40', statusDescription: 'Pending Approval', dateSubmitted: '2026-09-22T20:01:05.474-05' },
+        ],
+      };
+    }
+    return { depositHistoryList: defaultPage };
+  };
+  const result = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row: pushLegacyDeposit(store, {
+      checkalt_reference: '123733567',
+      status: 'pending_approval',
+      submitted_at: '2026-09-23T01:01:04.223Z',
+      idempotency_key: 'key-window',
+    }),
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod', deposit_account_number: '1234567890' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(result.reconciled, true);
+  assert.equal(result.status, 'pending_approval');
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.ok(store.historyBodies.every((body) => body.userId === 'depositor-prod'));
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+});
+
+test('identical capped history pages without the target stay fail-closed', async () => {
+  const store = createStore();
+  store.itemPayload = {
+    processDate: '2026-09-22T20:01:05.474-05',
+    ruleDetails: { itemRules: [{ ruleType: 'IQA' }] },
+    depositId: 123733567,
+    referenceNumber: '123733567',
+  };
+  const defaultPage = [
+    { referenceNumber: '115497665', status: '120', statusDescription: 'Rejected', dateSubmitted: '2026-07-17T12:00:00.000-05' },
+    { referenceNumber: '122678838', status: '127', statusDescription: 'Approved', dateSubmitted: '2026-09-14T12:00:00.000-05' },
+  ];
+  store.historyForBody = () => defaultPage;
+  const result = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row: pushLegacyDeposit(store, {
+      checkalt_reference: '123733567',
+      status: 'pending_approval',
+      submitted_at: '2026-09-23T01:01:04.223Z',
+      idempotency_key: 'key-capped',
+    }),
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod', deposit_account_number: '1234567890' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.reconciled, false);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.deposits[0].last_polled_at, undefined);
+  assert.equal(store.historyBodies[0].userId, 'depositor-prod');
+  assert.ok(store.historyPosts >= 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+});
+
+test('history 40 stays pending_approval and already-approved 127 does not POST approve', async () => {
+  const pending = createStore();
+  pending.itemPayload = { referenceNumber: '9001', ruleDetails: {} };
+  pending.historyPayload = {
+    depositHistoryList: [{ referenceNumber: '9001', status: '40', statusDescription: 'Pending Approval' }],
+  };
+  pending.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    submitted_at: '2026-09-23T01:01:04.223Z',
+  });
+  const stillPending = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(pending),
+  ));
+  assert.equal(stillPending.approvePosted, true);
+  assert.equal(pending.approvePosts, 1);
+  assert.equal(pending.processPosts, 0);
+  assert.ok(pending.historyBodies[0].userId);
+
+  const resolved = createStore();
+  resolved.itemPayload = { referenceNumber: '9001', ruleDetails: {} };
+  resolved.historyPayload = {
+    depositHistoryList: [{ referenceNumber: '9001', status: '127', statusDescription: 'Approved' }],
+  };
+  resolved.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    submitted_at: '2026-09-23T01:01:04.223Z',
+  });
+  const already = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(resolved),
+  ));
+  assert.equal(already.already_resolved, true);
+  assert.equal(already.approvePosted, false);
+  assert.equal(already.status, 'submitted');
+  assert.equal(resolved.approvePosts, 0);
+  assert.equal(resolved.processPosts, 0);
+});
+
+test('unknown history status stays reconciliation_required and does not persist or POST', async () => {
+  const store = createStore();
+  store.itemPayload = { referenceNumber: 'Z', ruleDetails: {} };
+  store.historyPayload = {
+    depositHistoryList: [{ referenceNumber: 'Z', note: 'no status fields' }],
+  };
+  const row = pushLegacyDeposit(store, {
+    checkalt_reference: 'Z',
+    status: 'pending_approval',
+    submitted_at: '2026-09-23T01:01:04.223Z',
+    idempotency_key: 'key-unknown',
+  });
+  const result = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row,
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.reconciled, false);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.deposits[0].last_polled_at, undefined);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+});
+
+test('reconciliation itself never calls process or approve', async () => {
+  const store = createStore();
+  store.itemPayload = { referenceNumber: '9001', ruleDetails: {} };
+  store.historyPayload = {
+    depositHistoryList: [{ referenceNumber: '9001', status: 127, statusDescription: 'Approved' }],
+  };
+  const result = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row: pushLegacyDeposit(store, {
+      checkalt_reference: '9001',
+      status: 'pending_approval',
+      submitted_at: '2026-09-23T01:01:04.223Z',
+    }),
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(result.reconciled, true);
+  assert.equal(result.status, 'submitted');
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.itemPosts, 1);
+  assert.ok(store.historyPosts >= 1);
 });
 
 test('production approve helper refuses a locator-less body', async () => {
