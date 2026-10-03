@@ -16,6 +16,7 @@ import {
   emailMode,
   mortgageOpsEmail,
   normalizeEmail,
+  sesOutboundSendEnabled,
   sinkAddress,
 } from './email-policy.mjs';
 import { parseFromHeader, resolveEmailBranding } from './email-branding.mjs';
@@ -57,7 +58,7 @@ export const sendViaSesOrSink = async ({
       blocked: recipient.blocked,
       subject,
     };
-    if (recipient.delivery === 'ses' && mode === 'ses') {
+    if (recipient.delivery === 'ses' && sesOutboundSendEnabled()) {
       try {
         const cmd = new SendEmailCommand({
           Source: parsedFrom.name ? `${parsedFrom.name} <${parsedFrom.address}>` : parsedFrom.address,
