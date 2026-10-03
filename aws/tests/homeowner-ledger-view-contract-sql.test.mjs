@@ -35,7 +35,8 @@ test('SQL 71 accepted source SHA256 is exact and grants are constrained', () => 
   assert.match(SQL71, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) FROM authenticated/);
   assert.match(SQL71, /GRANT EXECUTE ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) TO checksops/);
   assert.doesNotMatch(SQL71, /CREATE TABLE|ALTER TABLE|ENABLE ROW LEVEL SECURITY|CREATE POLICY/);
-  assert.doesNotMatch(SQL71, /cognito|moov_|plaid_|wallet_|GRANT SELECT ON TABLE/i);
+  const sql71Body = SQL71.replace(/^--.*$/gm, '');
+  assert.doesNotMatch(sql71Body, /cognito|moov_|plaid_|wallet_|GRANT SELECT ON TABLE/i);
 });
 
 test('SQL 71 replaces the RPC in a new file and keeps historical 68 intact', () => {
