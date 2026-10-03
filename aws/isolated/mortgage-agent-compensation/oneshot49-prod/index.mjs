@@ -655,7 +655,7 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
         adjust_called: false,
       });
     }
-    if (stops.length) {
+    if (action === 'apply' && stops.length) {
       return fail('SQL_COLLISION', 'pre-apply production invariants failed', { prewrite_stops: stops });
     }
     if (action === 'apply') {
