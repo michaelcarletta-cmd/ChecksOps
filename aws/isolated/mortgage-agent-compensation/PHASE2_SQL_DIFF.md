@@ -1,6 +1,6 @@
 # Phase 2 proposed staging SQL / RLS diff
 
-**Not applied yet.** Staging apply requires a fresh live catalog read, no concurrent SQL collision, and the official guarded executor.
+**Applied to staging** via dedicated oneshot `checksops-staging-macomp47-oneshot` after TOCTOU inspect `62f4d94afd3f2cb403f25a5eb5945d4ff8af52fd26c5032fffa11691260af11d`. The shared `checksops-staging-guarded-sql-executor` was not mutated. Production was not applied.
 
 ## File
 

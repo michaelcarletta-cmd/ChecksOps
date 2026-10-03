@@ -334,12 +334,14 @@ async function runDemo(client) {
   };
 
   const owner = (await client.query(`
-    SELECT ur.user_id
+    SELECT p.id AS user_id, p.email
+    FROM public.profiles p
+    WHERE lower(p.email) = 'checksopsadmin@gmail.com'
+    UNION ALL
+    SELECT ur.user_id, p.email
     FROM public.user_roles ur
     JOIN public.profiles p ON p.id = ur.user_id
     WHERE ur.role = 'admin'
-       OR p.email IN ('checksopsadmin@gmail.com', 'michaelcarletta@gmail.com')
-    ORDER BY CASE WHEN p.email = 'checksopsadmin@gmail.com' THEN 0 ELSE 1 END
     LIMIT 1
   `)).rows[0];
   const agent = (await client.query(`

@@ -3,26 +3,48 @@
   "phase": 2,
   "production_writes": false,
   "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "source_commit_at_apply": "186eeaacd",
   "sql_file": "aws/isolated/mortgage-agent-compensation/sql/47_mortgage_agent_compensation.sql",
   "sql47_sha256": "bdbdccbc44ca70ae86c7212f16fb1a2d2786071b61acb6b62c98e7863b2cc99c",
-  "object_collision": {
-    "sql_39": false,
-    "sql_44": false,
-    "sql_45_46_cbe_alter": false,
-    "mhr_table_update_grant": false
+  "staging_sql_apply": {
+    "status": "APPLIED",
+    "path": "dedicated oneshot checksops-staging-macomp47-oneshot",
+    "shared_executor_untouched": "JTTXtiCukqvKyJCBwJvQ6ayat3ErrqyItuThOx+3xDI=",
+    "staging_api_untouched": "HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU=",
+    "production_sql47_untouched": "B8q1Z7a2doe6dfpqjdHfT1wv/VkEwWOmLOekxjLLsVQ=",
+    "before_hash": "62f4d94afd3f2cb403f25a5eb5945d4ff8af52fd26c5032fffa11691260af11d",
+    "after_hash": "9df8419dfc236cf3f1cf55f42412179de390a3aadbde74042d0690dc19de18e0",
+    "mhr_table_update_count": 0,
+    "mhr_column_update_count": 34,
+    "pr601_user_can_move_tenant_checks": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d"
   },
-  "shared_executor": {
-    "name": "checksops-staging-guarded-sql-executor",
-    "mutation": "forbidden",
-    "reason": "Allowlists only SQL 44 and #601. Teaching it SQL 47 would mutate Claim Ledger/#601."
+  "staging_demo": {
+    "status": "PASSED",
+    "artifact": "/opt/cursor/artifacts/macomp47_demo.json",
+    "scenarios": [
+      "accept initial: tenant event, no payable",
+      "complete: one $10 payable",
+      "duplicate complete: still one",
+      "additional accept: tenant $5 event, no payable",
+      "complete additional: one $5 payable",
+      "monthly 2 files / $15",
+      "approve keeps $15 payable",
+      "mark paid $15 / $0 balance",
+      "drilldown both files",
+      "agent cannot administer",
+      "other agent cannot take credit",
+      "cancel creates no payable"
+    ]
   },
-  "dedicated_oneshot": {
-    "name": "checksops-staging-macomp47-oneshot",
-    "actions": ["inspect", "apply", "verify", "demo"],
-    "production_sql47_lambdas_untouched": true
+  "lambda_overlay": {
+    "status": "STOPPED",
+    "code": "SOURCE_COMPOSITION_REQUIRED",
+    "reason": "Live checksops-staging-api app-services already contains Branding/billing Class A routes. Source was forward-composed onto that live member. Live overlay was not applied in this phase."
   },
   "spa_deploy": {
-    "status": "STOPPED_PENDING_BRANDING_COMPOSE",
-    "reason": "AdminTenants overlaps Branding PRs 634/635/636. Live staging SPA will not be overwritten."
-  }
+    "status": "STOPPED",
+    "code": "SOURCE_COMPOSITION_REQUIRED",
+    "reason": "AdminTenants overlaps Branding PRs 634/635/636. Live staging SPA was not overwritten."
+  },
+  "production": "unauthorized"
 }
