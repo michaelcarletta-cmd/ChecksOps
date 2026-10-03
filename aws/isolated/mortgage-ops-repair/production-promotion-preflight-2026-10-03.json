@@ -378,7 +378,44 @@
     "validator": "ok against trusted base 7c64dae2dee6c78dd296c946c04ea6ccaa793aef"
   },
   "protected_regressions": {
-    "status": "PENDING_THIS_COMMIT",
-    "note": "Run after this evidence commit. Gate 5 after-Complete baseline was 557/4/1 with four unrepaired unrelated failures."
+    "status": "RECORDED",
+    "captured_at": "2026-10-03T10:36:33Z",
+    "command": "node --experimental-strip-types --test --test-reporter tap <gate5 suites + lock + spa + savepoint + financial>",
+    "totals": {
+      "tests": 585,
+      "pass": 581,
+      "fail": 3,
+      "skipped": 1,
+      "duration_ms": 12025
+    },
+    "extra_scripts": {
+      "bun scripts/test-moov-file-rules.mjs": {
+        "passed": 21,
+        "failed": 0
+      },
+      "node scripts/test-walletops-layout.mjs": {
+        "passed": 15,
+        "failed": 0
+      }
+    },
+    "lock_tree_hash_failure_resolved": true,
+    "unrepaired_unrelated_or_env": [
+      "PostgreSQL 16 initdb missing for mortgage-ops-library-parity-pg and ocr-claim-number-sql isolated tests (3 failures, same as Gate 5)"
+    ],
+    "preserved_suites_passed": [
+      "claim-ledger",
+      "#601 executor/sql39",
+      "Moov/WalletOps/#620",
+      "Delete Check",
+      "signatures",
+      "OCR (non-initdb)",
+      "CheckAlt",
+      "Homeowner/financial",
+      "mortgage-ops isolation/usage/overlay",
+      "production-spa baseline",
+      "validate-release-locks",
+      "workflow-rpc savepoint",
+      "SPA DOM ignore"
+    ]
   }
 }
