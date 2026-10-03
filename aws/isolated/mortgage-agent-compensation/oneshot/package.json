@@ -1,0 +1,11 @@
+{
+  "name": "checksops-staging-macomp47-oneshot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1124.0",
+    "pg": "8.23.0"
+  }
+}

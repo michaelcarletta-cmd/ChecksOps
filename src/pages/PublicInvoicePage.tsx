@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertCircle, CheckCircle2, Clock, FileText, Lock, ExternalLink, Ban, Calendar } from "lucide-react";
+import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 
 interface InvoiceLineItem {
   name: string;
@@ -150,13 +151,13 @@ export default function PublicInvoicePage() {
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           {tenant.invoice_letterhead_url ? (
             <img
-              src={tenant.invoice_letterhead_url}
+              src={resolvePublicBrandingUrl(tenant.invoice_letterhead_url, "company-branding") || tenant.invoice_letterhead_url}
               alt={tenant.name}
               className="max-h-20 object-contain"
             />
           ) : tenant.logo_url ? (
             <img
-              src={tenant.logo_url}
+              src={resolvePublicBrandingUrl(tenant.logo_url, "tenant-logos") || tenant.logo_url}
               alt={tenant.name}
               className="max-h-14 object-contain"
             />
