@@ -11,12 +11,20 @@ import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
 import {
+  AUTHORIZED_MEMBERSHIP_ONLY,
+  AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE,
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL71,
+  AUTHORIZED_STAGING_SQL,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   authorizationFingerprint,
   evaluateSqlExecutorAuthorization,
+  isHomeownerLedgerViewContract,
+  isMembershipOnlyHelper,
+  isMortgageOpsAcceptComplete,
+  isTenantUsersSameCheckPermissions,
+  resolveAuthorizedMigration,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
@@ -469,10 +477,32 @@ test('SQL 44 and tenant-permission pins remain independently accepted', () => {
   assert.equal(sql44.details.allowlist_entry.filename, AUTHORIZED_SQL44.filename);
 });
 
+test('composed allowlist keeps live families and adds exact SQL 71', () => {
+  assert.deepEqual(AUTHORIZED_STAGING_SQL.map((row) => row.migration_id), [
+    '44_claim_ledger_link_or_create',
+    '20261001231500_tenant_users_same_check_permissions',
+    '20261002200000_user_can_move_tenant_checks_membership_only',
+    '39_mortgage_ops_agent_accept_complete',
+    '71_homeowner_ledger_view_contract',
+  ]);
+  assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL44).migration_id, AUTHORIZED_SQL44.migration_id);
+  assert.equal(isTenantUsersSameCheckPermissions(AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS), true);
+  assert.equal(isMembershipOnlyHelper(AUTHORIZED_MEMBERSHIP_ONLY), true);
+  assert.equal(isMortgageOpsAcceptComplete(AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE), true);
+  assert.equal(isHomeownerLedgerViewContract(AUTHORIZED_SQL71), true);
+  assert.equal(isHomeownerLedgerViewContract(AUTHORIZED_SQL44), false);
+  assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL71).function_identity, AUTHORIZED_SQL71.function_identity);
+  assert.notEqual(resolveAuthorizedMigration(AUTHORIZED_SQL71).filename, AUTHORIZED_SQL44.filename);
+});
+
 test('sql-executor-ensure packs the non-throwing function-def lookup', () => {
   const src = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/sql-executor-ensure.mjs'), 'utf8');
   assert.match(src, /function-def-lookup\.mjs/);
   assert.match(src, /71_homeowner_ledger_view_contract\.sql/);
+  assert.match(src, /39_mortgage_ops_agent_accept_complete\.sql/);
+  assert.match(src, /20261002200000_user_can_move_tenant_checks_membership_only\.sql/);
+  assert.match(src, /mortgage-ops-sql39\.mjs/);
+  assert.match(src, /composed-zip/);
   assert.equal(src.includes('::regprocedure'), false);
 });
 
