@@ -29,6 +29,13 @@ import {
   invalidateOfficialRearImage,
   requireDrawnSignature,
 } from './endorsement-composite.mjs';
+import { isCheckAltArtifactPath } from './providers/production/checkalt-image-compliance.mjs';
+import { downloadClaimFileBytes } from './providers/production/checkalt-images.mjs';
+import {
+  evaluateRearImageFreshness,
+  loadCheckEndorsements,
+  loadCheckPayees,
+} from './providers/production/checkalt-eligibility.mjs';
 import {
   decideReadyTransition,
   evaluateEndorsementMath,
@@ -51,6 +58,7 @@ export const AUTH_ENDORSEMENT_ACTIONS = new Set([
   'mark_internal_signed',
   'waive_endorsement',
   'force_complete_endorsements',
+  'finalize_existing_endorsements',
 ]);
 
 export const DEFAULT_CONSENT_TEXT = 'I agree to use electronic records and electronic signatures for this endorsement. I confirm my identity as the named payee, intend my electronic signature to be legally binding, and authorize the electronic endorsement of this insurance check payment. I understand I may decline to sign electronically and request another process.';
@@ -138,7 +146,9 @@ const loadCheckForEndorsement = async (client, endorsement) => {
   return (await safeQuery(
     client,
     `SELECT id, tenant_id, claim_id, carrier_name, check_number, amount, status,
-            deposit_recommendation, check_stage, deposited_at, back_image_deposit_path
+            deposit_recommendation, check_stage, deposited_at,
+            back_image_path, back_image_original_path, back_image_deposit_path,
+            endorsement_render_meta
      FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [endorsement.check_id],
   )).rows[0] || {};
@@ -442,6 +452,55 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
   return { ...result, ...allowDepositAdvance('approved_for_deposit') };
 };
 
+const officialRearObjectExists = async (rel, deps = {}) => {
+  if (!rel) return false;
+  if (typeof deps.objectExists === 'function') {
+    return Boolean(await deps.objectExists(rel));
+  }
+  const download = deps.downloadClaimFile || downloadClaimFileBytes;
+  try {
+    const bytes = await download(rel, deps);
+    return Boolean(bytes?.length);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Reuse a current official rear instead of regenerating.
+ * Does not mutate endorsements or payees. Fail-closed when the deposit path
+ * is missing, not a CheckAlt artifact, stale vs endorsement fingerprint, or
+ * the object does not exist.
+ */
+export const reuseExistingOfficialRear = async (client, check, deps = {}) => {
+  const deposit = check?.back_image_deposit_path;
+  if (!deposit || !isCheckAltArtifactPath(deposit)) {
+    return { ok: false, error: 'official_rear_missing', reused: false };
+  }
+  if (!check?.id || !check?.tenant_id) {
+    return { ok: false, error: 'official_rear_missing', reused: false };
+  }
+  const payees = await (deps.loadCheckPayees
+    ? deps.loadCheckPayees(check.id, check.tenant_id)
+    : loadCheckPayees(client, check.id, check.tenant_id));
+  const endorsements = await (deps.loadCheckEndorsements
+    ? deps.loadCheckEndorsements(check.id, check.tenant_id)
+    : loadCheckEndorsements(client, check.id, check.tenant_id));
+  const freshness = evaluateRearImageFreshness(check, payees, endorsements);
+  if (!freshness.ok) {
+    return { ok: false, error: freshness.error || 'official_rear_stale', reused: false };
+  }
+  if (!await officialRearObjectExists(deposit, deps)) {
+    return { ok: false, error: 'official_rear_missing', reused: false };
+  }
+  return {
+    ok: true,
+    reused: true,
+    back_image_deposit_path: deposit,
+    endorsed_back_image_path: deposit,
+  };
+};
+
 export const finalizeEndorsementState = async (client, checkId, {
   refreshOfficialRear = false,
   compositeDeps = {},
@@ -479,11 +538,16 @@ export const finalizeEndorsementState = async (client, checkId, {
     });
     composited = signed.composited;
   } else if (evaluation.allSigned) {
-    composited = await compositeEndorsementSignatures({
-      client,
-      checkId,
-      deps: compositeDeps,
-    });
+    const existing = await reuseExistingOfficialRear(client, check, compositeDeps);
+    if (existing.ok) {
+      composited = existing;
+    } else {
+      composited = await compositeEndorsementSignatures({
+        client,
+        checkId,
+        deps: compositeDeps,
+      });
+    }
   }
 
   const officialRearReady = Boolean(
@@ -792,6 +856,37 @@ export const runAuthenticatedEndorsement = async ({
   const action = body.action;
   if (!AUTH_ENDORSEMENT_ACTIONS.has(action)) {
     return { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
+  }
+
+  if (action === 'finalize_existing_endorsements') {
+    const checkId = body.checkId || body.check_id;
+    if (!checkId) {
+      return { ok: false, statusCode: 400, error: 'checkId required', spoofFieldsIgnored: spoof };
+    }
+    const check = await loadCheckForEndorsement(client, { check_id: checkId });
+    if (!check?.id) {
+      return { ok: false, statusCode: 404, error: 'Check not found', spoofFieldsIgnored: spoof };
+    }
+    if (!await canWriteTenant(client, check.tenant_id)) {
+      return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+    }
+    const completion = await finalizeEndorsementState(client, checkId, {
+      refreshOfficialRear: false,
+      compositeDeps,
+    });
+    return {
+      ok: true,
+      statusCode: 200,
+      success: true,
+      action: 'finalize_existing_endorsements',
+      endorsementRowsMutated: false,
+      payeeRowsMutated: false,
+      providerSubmitted: false,
+      liveProviderCalled: false,
+      productionExecution: false,
+      ...completion,
+      spoofFieldsIgnored: spoof,
+    };
   }
 
   if (action === 'force_complete_endorsements') {
