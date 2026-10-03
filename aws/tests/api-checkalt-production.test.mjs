@@ -203,6 +203,15 @@ const identityClient = (store) => ({
     if (text.includes('FROM public.check_intake_items')) {
       return { rows: params[0] === store.check.id ? [store.check] : [] };
     }
+    if (text.includes('aws_checkalt_status_read_config')) {
+      return {
+        rows: [{
+          merchant: 'prod-merchant',
+          default_enabled: true,
+          base_url: 'https://api2.checkalt.com',
+        }],
+      };
+    }
     if (text.includes('aws_checkalt_production_config') || (text.includes('FROM public.checkalt_config') && text.includes('singleton'))) {
       return {
         rows: [{
@@ -326,6 +335,14 @@ const identityClient = (store) => ({
       const found = store.deposits.find((row) => row.id === params[0] || row.checkalt_reference === params[0]
         || (params[1] && row.checkalt_reference === params[1]));
       return { rows: found ? [found] : [] };
+    }
+    if (text.includes('aws_checkalt_status_read_persist')) {
+      const row = store.deposits.find((item) => item.id === params[0]);
+      if (!row) return { rows: [] };
+      if (params[1]) row.status = params[1];
+      row.last_polled_at = new Date().toISOString();
+      if (params[1] === 'cleared' && params[3]) row.cleared_at = params[3];
+      return { rows: [row] };
     }
     if (text.includes('UPDATE public.checkalt_deposits') && text.includes('provider_http_attempted_at = now()')) {
       const row = store.deposits.find((item) => item.id === params[0]);

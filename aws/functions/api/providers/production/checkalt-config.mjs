@@ -24,35 +24,7 @@ export const publicProductionCheckAltConfig = (cfg) => {
   };
 };
 
-export async function loadProductionCheckAltConfig(client, { credentials } = {}) {
-  if (!credentials?.baseUrl || !credentials?.fiKey || !credentials?.username || !credentials?.password) {
-    return failConfig('production_secret_missing', { reason: 'credentials_incomplete' });
-  }
-
-  let row;
-  try {
-    row = (await client.query('SELECT * FROM public.aws_checkalt_production_config()')).rows[0];
-  } catch (error) {
-    const msg = String(error?.message || '');
-    if (error?.code === '42501' || /financial execution/i.test(msg) || /does not exist/i.test(msg)) {
-      try {
-        row = (await client.query(
-          `SELECT merchant, fi_key, base_url, default_enabled, depositor_account_id, business_unit
-           FROM public.checkalt_config
-           WHERE singleton IS TRUE
-           LIMIT 1`,
-        )).rows[0];
-      } catch {
-        return failConfig('checkalt_config_unreadable', {
-          statusCode: 503,
-          message: 'checkalt_config could not be read. Apply SQL 65 before activation. Fail closed.',
-        });
-      }
-    } else {
-      return failConfig('checkalt_config_unreadable', { statusCode: 503 });
-    }
-  }
-
+const applyLoadedCheckAltConfig = (row, credentials) => {
   if (!row) {
     return failConfig('checkalt_config_missing', {
       message: 'checkalt_config singleton is missing. Fail closed.',
@@ -104,6 +76,64 @@ export async function loadProductionCheckAltConfig(client, { credentials } = {})
       fi_key: credentials.fiKey,
     }),
   };
+};
+
+export async function loadProductionCheckAltConfig(client, { credentials } = {}) {
+  if (!credentials?.baseUrl || !credentials?.fiKey || !credentials?.username || !credentials?.password) {
+    return failConfig('production_secret_missing', { reason: 'credentials_incomplete' });
+  }
+
+  let row;
+  try {
+    row = (await client.query('SELECT * FROM public.aws_checkalt_production_config()')).rows[0];
+  } catch (error) {
+    const msg = String(error?.message || '');
+    if (error?.code === '42501' || /financial execution/i.test(msg) || /does not exist/i.test(msg)) {
+      try {
+        row = (await client.query(
+          `SELECT merchant, fi_key, base_url, default_enabled, depositor_account_id, business_unit
+           FROM public.checkalt_config
+           WHERE singleton IS TRUE
+           LIMIT 1`,
+        )).rows[0];
+      } catch {
+        return failConfig('checkalt_config_unreadable', {
+          statusCode: 503,
+          message: 'checkalt_config could not be read. Apply SQL 65 before activation. Fail closed.',
+        });
+      }
+    } else {
+      return failConfig('checkalt_config_unreadable', { statusCode: 503 });
+    }
+  }
+
+  return applyLoadedCheckAltConfig(row, credentials);
+}
+
+/**
+ * Status-read config. Uses aws_checkalt_status_read_config() only.
+ * Does not call aws_checkalt_production_config() or SELECT checkalt_config.
+ * FI key / base URL / username / password come from Secrets Manager.
+ */
+export async function loadStatusReadCheckAltConfig(client, { credentials } = {}) {
+  if (!credentials?.baseUrl || !credentials?.fiKey || !credentials?.username || !credentials?.password) {
+    return failConfig('production_secret_missing', { reason: 'credentials_incomplete' });
+  }
+
+  let row;
+  try {
+    row = (await client.query('SELECT * FROM public.aws_checkalt_status_read_config()')).rows[0];
+  } catch (error) {
+    const msg = String(error?.message || '');
+    return failConfig('checkalt_status_read_config_unreadable', {
+      statusCode: 503,
+      message: /request\.checkalt_status_read/i.test(msg)
+        ? 'CheckAlt status-read config requires request.checkalt_status_read=1. Fail closed.'
+        : 'aws_checkalt_status_read_config() could not be read. Apply SQL 66 before status-read. Fail closed.',
+    });
+  }
+
+  return applyLoadedCheckAltConfig(row, credentials);
 }
 
 export async function loadProductionTenantAccount(client, tenantId) {

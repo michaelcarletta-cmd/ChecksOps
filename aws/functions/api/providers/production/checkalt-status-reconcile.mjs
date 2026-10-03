@@ -2,7 +2,8 @@ import pg from 'pg';
 import { parseBody, ignoredSpoof } from '../../data.mjs';
 import { loadDatabaseCredentials } from '../../secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from '../../db-health.mjs';
-import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
+import { loadStatusReadCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
+import { bindCheckAltStatusReadGucs } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
 import { checkaltStatusReconcileEnabled } from './checkalt-holds.mjs';
 import { statusReadOnlyFetch } from './checkalt-status-read.mjs';
@@ -62,7 +63,7 @@ export async function runCheckAltStatusReconcile({
       moneyMoved: false,
     };
   }
-  const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
+  const loadedCfg = await loadStatusReadCheckAltConfig(client, { credentials: secrets.credentials });
   if (!loadedCfg.ok) {
     return {
       ...loadedCfg,
@@ -138,6 +139,7 @@ export async function handleCheckAltStatusReconcileJob(event, deps = {}) {
       try {
         await client.query('BEGIN');
         await client.query('SET TRANSACTION READ WRITE');
+        await bindCheckAltStatusReadGucs(client, { application_user_id: '', email: '' }, {});
       } catch { /* mock clients may ignore */ }
     }
     const result = await runCheckAltStatusReconcile({
