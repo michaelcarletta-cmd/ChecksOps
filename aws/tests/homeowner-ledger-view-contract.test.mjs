@@ -534,6 +534,7 @@ test('invalid token length is rejected before the RPC', async () => {
 test('source does not rewrite historical SQL 68 or public routes', () => {
   const sql68 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/68_staging_class_a_grants.sql'), 'utf8');
   const sql71 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/71_homeowner_ledger_view_contract.sql'), 'utf8');
+  const sql72 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/72_homeowner_ledger_view_claim_ok.sql'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf8');
   const handler = fs.readFileSync(path.join(ROOT, 'aws/functions/api/homeowner.mjs'), 'utf8');
 
@@ -541,6 +542,12 @@ test('source does not rewrite historical SQL 68 or public routes', () => {
   assert.match(sql71, /Does NOT rewrite historical/);
   assert.match(sql71, /mode', 'claim'/);
   assert.match(sql71, /mode', 'pre_claim'/);
+  assert.match(sql71, /c\.org_id IS NULL\s+AND \(/);
+  assert.match(sql72, /Does NOT rewrite historical aws\/workflows\/sql\/71_homeowner_ledger_view_contract\.sql/);
+  assert.match(sql72, /CREATE OR REPLACE FUNCTION public\.aws_public_homeowner_ledger_by_token\(p_token text\)/);
+  assert.match(sql72, /SECURITY DEFINER/);
+  assert.match(sql72, /SET search_path = public/);
+  assert.doesNotMatch(sql72, /c\.org_id IS NULL\s+AND \(/);
   assert.match(handler, /normalizeHomeownerLedgerView/);
   assert.match(handler, /pending_signatures: \[\]/);
   assert.match(handler, /handleHomeownerLedgerSignLink is not/);
@@ -549,4 +556,5 @@ test('source does not rewrite historical SQL 68 or public routes', () => {
   assert.doesNotMatch(handler, /allow_deductible_payment: true/);
   assert.match(app, /path="\/ledger\/:token"/);
   assert.doesNotMatch(app, /CHANGED_BY_VIEW_CONTRACT/);
+  assert.doesNotMatch(handler, /CHANGED_BY_SQL72_CLAIM_OK/);
 });
