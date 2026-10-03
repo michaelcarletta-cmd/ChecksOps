@@ -1,0 +1,291 @@
+{
+  "ok": true,
+  "code": null,
+  "message": null,
+  "mutated": true,
+  "step_a_applied": true,
+  "step_b_applied": true,
+  "pinned_sql39": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+  "receipt": {
+    "workstream": "mortgage-ops-repair-ad99",
+    "commit": "1ed46900077cf5834ba8ab5c1b30a332b6c692d6",
+    "sql_file": "aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql",
+    "one_use_id": "mops-prod-sql-transition-20261003-ad99-1",
+    "before_hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+    "after_step_a_hash": "284ac682e196309d5fc8999373e9a5d9c45244bb8cb233e0b92f393567d5d997",
+    "after_hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
+    "result": "applied",
+    "executor_identity": {
+      "function": "checksops-prod-mops-sql-transition-ad99",
+      "not_staging_executor": true
+    }
+  },
+  "before": {
+    "hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+    "login_role_mhr_table_update": [
+      {
+        "table_name": "mortgage_handling_requests",
+        "grantee": "checksops",
+        "privilege_type": "UPDATE"
+      }
+    ],
+    "checksops_mhr_table": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "authenticated_mhr_table": [],
+    "checksops_admin_mhr_table": [
+      "DELETE",
+      "INSERT",
+      "REFERENCES",
+      "SELECT",
+      "TRIGGER",
+      "TRUNCATE",
+      "UPDATE"
+    ],
+    "checksops_mhr_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "billed_at",
+      "billing_error",
+      "billing_status",
+      "cancelled_at",
+      "check_intake_item_id",
+      "check_received_back_date",
+      "check_sent_date",
+      "claim_id",
+      "claim_number",
+      "completed_at",
+      "created_at",
+      "date_of_loss",
+      "endorsement_order",
+      "flat_fee_cents",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "homeowner_ssn_last_four",
+      "id",
+      "insurance_company",
+      "invoice_notes",
+      "invoice_number",
+      "invoice_recipient_email",
+      "invoice_sent_at",
+      "invoice_services_cents",
+      "invoice_shipping_cents",
+      "invoice_shipping_description",
+      "invoice_url",
+      "loan_number",
+      "loss_type",
+      "mail_to_address",
+      "mail_to_name",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "policy_number",
+      "predecessor_request_id",
+      "property_address",
+      "requested_by",
+      "shipping_label_carrier",
+      "shipping_label_name",
+      "shipping_label_path",
+      "shipping_label_tracking",
+      "shipping_label_uploaded_at",
+      "shipping_label_uploaded_by",
+      "status",
+      "stripe_invoice_id",
+      "stripe_invoice_item_id",
+      "tenant_id",
+      "total_mortgagees",
+      "updated_at",
+      "work_notes"
+    ],
+    "authenticated_mhr_column_update": [],
+    "checksops_cbe": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "authenticated_cbe": [
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "historical_policy": {
+      "using_expr": "(aws_is_cross_tenant_reader() OR aws_can_write_tenant(tenant_id) OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))))",
+      "with_check": "(aws_is_cross_tenant_reader() OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))) OR (aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))"
+    },
+    "sql39_policies": [],
+    "has_agent_fn": false,
+    "force_rls": [
+      {
+        "table_name": "check_billing_events",
+        "rls": true,
+        "force_rls": false
+      },
+      {
+        "table_name": "mortgage_handling_requests",
+        "rls": true,
+        "force_rls": false
+      }
+    ],
+    "membership_601": {
+      "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+    }
+  },
+  "after_step_a": {
+    "hash": "284ac682e196309d5fc8999373e9a5d9c45244bb8cb233e0b92f393567d5d997",
+    "login_role_mhr_table_update": [],
+    "checksops_mhr_table": [
+      "DELETE",
+      "INSERT",
+      "SELECT"
+    ],
+    "authenticated_mhr_table": [],
+    "checksops_admin_mhr_table": [
+      "DELETE",
+      "INSERT",
+      "REFERENCES",
+      "SELECT",
+      "TRIGGER",
+      "TRUNCATE",
+      "UPDATE"
+    ],
+    "checksops_mhr_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "cancelled_at",
+      "claim_number",
+      "completed_at",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "insurance_company",
+      "loan_number",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "property_address",
+      "status",
+      "updated_at",
+      "work_notes"
+    ],
+    "authenticated_mhr_column_update": [],
+    "checksops_cbe": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "authenticated_cbe": [
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "historical_policy": {
+      "using_expr": "(aws_is_cross_tenant_reader() OR aws_can_write_tenant(tenant_id) OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))))",
+      "with_check": "(aws_is_cross_tenant_reader() OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))) OR (aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))"
+    },
+    "sql39_policies": [],
+    "has_agent_fn": false,
+    "force_rls": [
+      {
+        "table_name": "check_billing_events",
+        "rls": true,
+        "force_rls": false
+      },
+      {
+        "table_name": "mortgage_handling_requests",
+        "rls": true,
+        "force_rls": false
+      }
+    ],
+    "membership_601": {
+      "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+    }
+  },
+  "after": {
+    "hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
+    "login_role_mhr_table_update": [],
+    "checksops_mhr_table": [
+      "DELETE",
+      "INSERT",
+      "SELECT"
+    ],
+    "authenticated_mhr_table": [],
+    "checksops_admin_mhr_table": [
+      "DELETE",
+      "INSERT",
+      "REFERENCES",
+      "SELECT",
+      "TRIGGER",
+      "TRUNCATE",
+      "UPDATE"
+    ],
+    "checksops_mhr_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "cancelled_at",
+      "claim_number",
+      "completed_at",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "insurance_company",
+      "loan_number",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "property_address",
+      "status",
+      "updated_at",
+      "work_notes"
+    ],
+    "authenticated_mhr_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "completed_at"
+    ],
+    "checksops_cbe": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "authenticated_cbe": [
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "historical_policy": null,
+    "sql39_policies": [
+      "aws_insert_mortgage_ops_usage_events",
+      "aws_select_mortgage_ops_agent_queue",
+      "aws_update_mortgage_ops_accept_complete"
+    ],
+    "has_agent_fn": true,
+    "force_rls": [
+      {
+        "table_name": "check_billing_events",
+        "rls": true,
+        "force_rls": false
+      },
+      {
+        "table_name": "mortgage_handling_requests",
+        "rls": true,
+        "force_rls": false
+      }
+    ],
+    "membership_601": {
+      "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+    }
+  },
+  "step_a_errors": null,
+  "step_b_errors": null,
+  "prewrite_stops": null
+}
