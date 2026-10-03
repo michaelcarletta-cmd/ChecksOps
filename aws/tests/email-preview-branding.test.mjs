@@ -10,7 +10,7 @@ import {
   resolvePreviewLogoUrl,
   shouldReplacePreviewLogoSrc,
   PLATFORM_EMAIL_BRAND_COLOR,
-} from '../../src/lib/emailPreviewBranding.ts';
+} from '../../src/lib/brandingPublicUrl.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const FREEDOM_LOGO = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1790801891632.png';
@@ -78,7 +78,7 @@ test('preview HTML uses the SPA-resolved tenant logo and live brand color', () =
     apiBaseUrl: API_BASE,
   });
   assert.match(raw, /src="https:\/\/psr19uhop4/);
-  assert.doesNotMatch(raw, `src="${FREEDOM_LOGO}"`);
+  assert.equal(raw.includes(`src="${FREEDOM_LOGO}"`), false);
   assert.match(raw, /#0a3d73/);
   assert.doesNotMatch(raw, /#13579b/);
 

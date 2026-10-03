@@ -18,7 +18,7 @@ import {
   isSafeEmailBrandColor,
   normalizeEmailBrandColor,
   PLATFORM_EMAIL_BRAND_COLOR,
-} from "@/lib/emailPreviewBranding";
+} from "@/lib/brandingPublicUrl";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 import {

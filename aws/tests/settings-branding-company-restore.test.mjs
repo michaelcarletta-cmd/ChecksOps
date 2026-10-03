@@ -103,6 +103,7 @@ test('company branding preview resolves raw object paths at display time', () =>
   assert.match(company, /resolvePublicBrandingUrl\(letterheadUrl, "company-branding"\)/);
   assert.match(settings, /<TenantLogo/);
   assert.match(emailSender, /resolvePublicBrandingUrl\(settings\?\.logoUrl \|\| tenant\?\.logo_url/);
+  assert.match(emailSender, /from "@\/lib\/brandingPublicUrl"/);
   assert.match(emailSender, /applyEmailPreviewBranding/);
   assert.match(emailSender, /Email Brand Color/);
   assert.match(emailSender, /primary_color:\s*nextColor/);
