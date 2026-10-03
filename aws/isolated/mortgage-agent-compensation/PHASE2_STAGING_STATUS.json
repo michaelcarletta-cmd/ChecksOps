@@ -23,7 +23,15 @@
     "app_tsx_homeowner_route": "/h/ledger/:token before /:slug/*",
     "email_branding_showSendingDomain": true,
     "tenant_white_label_showSendingDomain": false,
-    "api_base": "befa19fba live Branding/billing Class A + Cognito hire lock + compensation"
+    "api_base": "befa19fba live Branding/billing Class A + Cognito hire lock + compensation",
+    "preserved_live_members_not_overlaid": [
+      "tenant-settings-handlers.mjs",
+      "tenant-billing-handlers.mjs",
+      "tenant-billing-engine.mjs",
+      "tenant-billing-destination.mjs",
+      "tenant-collection-v2.mjs",
+      "identity-env.mjs"
+    ]
   },
   "lambda_overlay": {
     "status": "PENDING_GUARDED_STAGING",

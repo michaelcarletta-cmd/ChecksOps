@@ -73,14 +73,27 @@ Preserved Cognito hire lock in `tenant-admin.mjs`:
 
 ## Lambda members that would change
 
-Overlay starts from the current live ZIP and replaces only:
+Fresh live ZIP `HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU=` Rev `7ce5717c-f8f5-4d1f-a20a-2712cfe957c7` has 6478 members.
 
-| Member | Change |
+Overlay starts from that ZIP and changes only:
+
+| Member | Op | Live SHA-256 | Source SHA-256 |
+| --- | --- | --- | --- |
+| `app-services.mjs` | replace | `6c7ac74f…c7be8875` | `cce9d0ff…1bcc0c5` (add compensation import/route only) |
+| `tenant-admin.mjs` | replace | `2e4a30da…17eb8244` | `8fc1f049…0c950bff` (add roster upsert only) |
+| `identity.mjs` | replace | `481c4fdc…54f1c715` | `30abd75f…022515b` (add `mortgageAgentStatus` only) |
+| `mortgage-agent-compensation.mjs` | add | absent | `c5f618df…5aae8d` |
+
+Preserved live Branding/billing/Cognito members (copied into source for composition completeness; **not** overlay-owned):
+
+| Member | Live SHA-256 |
 | --- | --- |
-| `app-services.mjs` | keep live Branding/billing routes; add compensation import/route |
-| `tenant-admin.mjs` | keep live Cognito lock; add roster upsert |
-| `identity.mjs` | add `mortgageAgentStatus` |
-| `mortgage-agent-compensation.mjs` | new member |
+| `tenant-settings-handlers.mjs` | `6e78cfdfaabedb5b2a6f34ee25699eae2f42bc79957346d812c0427afab8b3d6` |
+| `tenant-billing-handlers.mjs` | `8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c` |
+| `tenant-billing-engine.mjs` | `65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f` |
+| `tenant-billing-destination.mjs` | `7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80` |
+| `tenant-collection-v2.mjs` | `8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66` |
+| `identity-env.mjs` | `e814546feded3a323461b3a7a8369e3d8a09f9a5d306d68973e15389b871f443` |
 
 Unrelated live members remain byte-identical after overlay. The entire Lambda package is not replaced.
 
