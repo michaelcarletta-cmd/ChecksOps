@@ -35,8 +35,50 @@ const parseBody = (event) => {
   try { return JSON.parse(raw); } catch { return {}; }
 };
 
+const EMAIL_OTP = 'EMAIL_OTP';
+const SELECT_CHALLENGE = 'SELECT_CHALLENGE';
+
 const emailOf = (value) => String(value || '').trim().toLowerCase();
 const codeOf = (value) => String(value || '').trim().replace(/\s+/g, '');
+
+export const availableChallengesOf = (result) => (
+  Array.isArray(result?.AvailableChallenges) ? result.AvailableChallenges.map(String) : []
+);
+
+export const emailOtpIsListed = (result) => availableChallengesOf(result).includes(EMAIL_OTP);
+
+export const selectEmailOtpChallengeRequest = (email, session, clientId = CLIENT_ID()) => ({
+  ClientId: clientId,
+  ChallengeName: SELECT_CHALLENGE,
+  Session: session,
+  ChallengeResponses: {
+    USERNAME: email,
+    ANSWER: EMAIL_OTP,
+  },
+});
+
+const passwordlessEmailOtpIssued = (result, email) => ({
+  ok: true,
+  statusCode: 200,
+  completed: false,
+  challenge: EMAIL_OTP,
+  session: result.Session,
+  email,
+  delivery: {
+    destination: result.ChallengeParameters?.CODE_DELIVERY_DESTINATION || null,
+    deliveryMedium: 'EMAIL',
+  },
+  passwordUsed: false,
+});
+
+const emailOtpUnavailable = (result) => ({
+  ok: false,
+  statusCode: 409,
+  error: 'email_otp_unavailable',
+  challenge: result?.ChallengeName || null,
+  availableChallenges: availableChallengesOf(result),
+  message: 'This staging Cognito account is not currently eligible for passwordless email OTP.',
+});
 
 const authenticationOf = (result, refreshTokenFallback = null) => {
   const auth = result?.AuthenticationResult || {};
@@ -50,6 +92,36 @@ const authenticationOf = (result, refreshTokenFallback = null) => {
   };
 };
 
+const initiateUserAuth = (email, preferredEmailOtp) => {
+  const AuthParameters = { USERNAME: email };
+  if (preferredEmailOtp) AuthParameters.PREFERRED_CHALLENGE = EMAIL_OTP;
+  return cognitoJson('InitiateAuth', {
+    AuthFlow: 'USER_AUTH',
+    ClientId: CLIENT_ID(),
+    AuthParameters,
+  });
+};
+
+const completedPasswordless = (result) => ({
+  ok: true,
+  statusCode: 200,
+  completed: true,
+  authentication: authenticationOf(result),
+});
+
+const finishPasswordlessResult = async (email, result) => {
+  if (result.AuthenticationResult) return completedPasswordless(result);
+  if (result.ChallengeName === EMAIL_OTP) return passwordlessEmailOtpIssued(result, email);
+  if (!emailOtpIsListed(result) || !result.Session) return emailOtpUnavailable(result);
+  const selected = await cognitoJson(
+    'RespondToAuthChallenge',
+    selectEmailOtpChallengeRequest(email, result.Session),
+  );
+  if (selected.AuthenticationResult) return completedPasswordless(selected);
+  if (selected.ChallengeName === EMAIL_OTP) return passwordlessEmailOtpIssued(selected, email);
+  return emailOtpUnavailable(selected);
+};
+
 /**
  * Native Cognito passwordless start.
  *
@@ -58,56 +130,18 @@ const authenticationOf = (result, refreshTokenFallback = null) => {
  * the enumeration boundary; callers get a generic failure if the account is
  * not eligible for EMAIL_OTP.
  *
- * Production ChecksOps remains unchanged. This is staging Cognito only.
+ * After TOTP enrollment Cognito may present SOFTWARE_TOKEN_MFA first.
+ * If EMAIL_OTP remains in AvailableChallenges, select EMAIL_OTP on that
+ * session via SELECT_CHALLENGE. Do not complete TOTP or change MFA preferences.
+ * Fail closed when EMAIL_OTP is not listed.
  */
 export const handleAuthPasswordlessStart = async (event) => {
   const body = parseBody(event);
   const email = emailOf(body.email || body.username);
   if (!email) return { ok: false, statusCode: 400, error: 'missing_email' };
   try {
-    const result = await cognitoJson('InitiateAuth', {
-      AuthFlow: 'USER_AUTH',
-      ClientId: CLIENT_ID(),
-      AuthParameters: {
-        USERNAME: email,
-        PREFERRED_CHALLENGE: 'EMAIL_OTP',
-      },
-    });
-
-    if (result.AuthenticationResult) {
-      return {
-        ok: true,
-        statusCode: 200,
-        completed: true,
-        authentication: authenticationOf(result),
-      };
-    }
-
-    const challenge = result.ChallengeName || null;
-    if (challenge !== 'EMAIL_OTP') {
-      return {
-        ok: false,
-        statusCode: 409,
-        error: 'email_otp_unavailable',
-        challenge,
-        availableChallenges: Array.isArray(result.AvailableChallenges) ? result.AvailableChallenges : [],
-        message: 'This staging Cognito account is not currently eligible for passwordless email OTP.',
-      };
-    }
-
-    return {
-      ok: true,
-      statusCode: 200,
-      completed: false,
-      challenge: 'EMAIL_OTP',
-      session: result.Session,
-      email,
-      delivery: {
-        destination: result.ChallengeParameters?.CODE_DELIVERY_DESTINATION || null,
-        deliveryMedium: 'EMAIL',
-      },
-      passwordUsed: false,
-    };
+    const result = await initiateUserAuth(email, true);
+    return finishPasswordlessResult(email, result);
   } catch (error) {
     return {
       ok: false,
@@ -130,7 +164,7 @@ export const handleAuthPasswordlessVerify = async (event) => {
   try {
     const result = await cognitoJson('RespondToAuthChallenge', {
       ClientId: CLIENT_ID(),
-      ChallengeName: 'EMAIL_OTP',
+      ChallengeName: EMAIL_OTP,
       Session: session,
       ChallengeResponses: {
         USERNAME: email,
