@@ -1,0 +1,197 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "branch": "cursor/mortgage-ops-repair-ad99",
+  "pr": 631,
+  "run": "bc-60a461e2-8b0e-4b3c-9c7f-742615daad99",
+  "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "source_head_at_record": "8df339c65a73b76fba3ec78c002124fbb87ed50a",
+  "captured_at": "2026-10-03T00:03:40Z",
+  "production_writes": false,
+  "promoted_to_production": false,
+  "gate_1_preserve_601": {
+    "status": "CLEAN",
+    "candidate_built_from": "live staging executor ZIP, not origin/main",
+    "live_executor_before": {
+      "FunctionName": "checksops-staging-guarded-sql-executor",
+      "CodeSha256": "GlI2hMNdge353F0vvlxWI0z4f7G98gvLMSicOF8Zo8I=",
+      "RevisionId": "4fd3b735-2a3e-4c5e-99ce-c4d37a5f47f7",
+      "LastModified": "2026-10-02T20:06:01.000+0000",
+      "index_sha256": "6f765940f03ec301cac96439ad18d753aae5db37220416e168024f2be47f857c",
+      "membership_sql_sha256": "298506c90be829222c75781dd7c546fdefc6c5b2fa5cf86442eed30d383ef22e"
+    },
+    "preserved_exactly": {
+      "AUTHORIZED_MEMBERSHIP_ONLY_commit": "e97e2c7c3f873e564a9d0e5af6d1a921ff2c29b0",
+      "membership_sql": "sql/20261002200000_user_can_move_tenant_checks_membership_only.sql",
+      "membership_sql_sha256": "298506c90be829222c75781dd7c546fdefc6c5b2fa5cf86442eed30d383ef22e",
+      "handleMembershipOnlyHelper": true,
+      "sql44_sha256": "059f10e936f27439b9fddae7030b76fe594d6538087de389ab07950fefdf8763",
+      "tenant_users_same_check_permissions_sha256": "573ec6a0178d04a041e053aeb724560950b504d162b6f113563bec5108a0e518",
+      "tenant_users_can_override_check_status_sha256": "92053113ba19fbeabd3e68ee7737a69000de713e377961801e7b6088b7d63cb9"
+    },
+    "owned_changes_only": {
+      "index.mjs": {
+        "live": "6f765940f03ec301cac96439ad18d753aae5db37220416e168024f2be47f857c",
+        "candidate": "8c43f9983d0e6695e51c36c29fbac390dee2f9530cf7339fc061f6ee4bb67e80"
+      },
+      "lib/sql-executor-auth.mjs": {
+        "live": "0da26664f95b89012e63edb348fd0d8455978a18ccfc7c60b69f9250b9f666a7",
+        "candidate": "f9a1e82d590102ffb89f08ca27bc376e71ab8f0fd927f9f721ef7aa6d852f303"
+      },
+      "added": {
+        "mortgage-ops-sql39.mjs_first": "92edb2fa6afc6790263d995400473823f0ef6f4069faa2962f90ac2f8000926f",
+        "mortgage-ops-sql39.mjs_login_role_fix": "dc174aa1e44b7a1759569fdb1beb731362987d1d90ee66d92c1e0ce9215432e4",
+        "sql/39_mortgage_ops_agent_accept_complete.sql": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f"
+      }
+    },
+    "not_origin_main_executor": true,
+    "authorization_not_weakened": true,
+    "arbitrary_sql_not_allowed": true
+  },
+  "gate_2_staging_executor": {
+    "status": "APPLIED",
+    "before": {
+      "CodeSha256": "GlI2hMNdge353F0vvlxWI0z4f7G98gvLMSicOF8Zo8I=",
+      "RevisionId": "4fd3b735-2a3e-4c5e-99ce-c4d37a5f47f7",
+      "LastModified": "2026-10-02T20:06:01.000+0000"
+    },
+    "after_first_overlay": {
+      "CodeSha256": "NT0fBbICaVqZR9gvGdPcblxcwFpicqaC0WIPVKsYGQM=",
+      "RevisionId": "44e7b650-5838-4348-97a0-aa6fe086b1d8",
+      "LastModified": "2026-10-02T23:55:57.000+0000"
+    },
+    "after_handler_fix_overlay": {
+      "CodeSha256": "JTTXtiCukqvKyJCBwJvQ6ayat3ErrqyItuThOx+3xDI=",
+      "RevisionId": "96088875-473f-4857-9b37-8a9d7795872b",
+      "LastModified": "2026-10-02T23:57:49.000+0000"
+    },
+    "fresh_read_now_matches_handler_fix": true,
+    "after_zip_601": {
+      "membership_sql_sha256": "298506c90be829222c75781dd7c546fdefc6c5b2fa5cf86442eed30d383ef22e",
+      "handleMembershipOnlyHelper": true,
+      "AUTHORIZED_MEMBERSHIP_ONLY": true,
+      "isMembershipOnlyHelper": true,
+      "isMortgageOpsAcceptComplete": true,
+      "index_sha256": "8c43f9983d0e6695e51c36c29fbac390dee2f9530cf7339fc061f6ee4bb67e80",
+      "auth_sha256": "f9a1e82d590102ffb89f08ca27bc376e71ab8f0fd927f9f721ef7aa6d852f303",
+      "sql39_sha256": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+      "handler_sha256": "dc174aa1e44b7a1759569fdb1beb731362987d1d90ee66d92c1e0ce9215432e4"
+    },
+    "production_untouched": true
+  },
+  "gate_3_sql_39": {
+    "status": "APPLIED",
+    "file": "aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql",
+    "source_sha256": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+    "before_snapshot_hash": "511955b6821b55225a019a0f60ccf783a285456b87f0c5987ee2174127f6da2d",
+    "after_snapshot_hash": "4adc182c4ed13b11b37e8412056781112ea8f2a788bc1b51e21810460d13239b",
+    "fresh_inspect_hash": "4adc182c4ed13b11b37e8412056781112ea8f2a788bc1b51e21810460d13239b",
+    "fresh_inspect_exact": true,
+    "before": {
+      "exact": false,
+      "historical_policy_aws_update_mortgage_handling_requests": true,
+      "has_agent_fn": false,
+      "login_role_mhr_table_update": [],
+      "force_rls": false,
+      "membership_601": {
+        "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+        "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+      }
+    },
+    "after": {
+      "exact": true,
+      "historical_policy_aws_update_mortgage_handling_requests": false,
+      "policies": [
+        "aws_insert_mortgage_ops_usage_events",
+        "aws_select_mortgage_ops_agent_queue",
+        "aws_update_mortgage_ops_accept_complete"
+      ],
+      "has_agent_fn": true,
+      "login_role_mhr_table_update": [],
+      "admin_mhr_table_update_unchanged": true,
+      "accept_complete_column_grants": [
+        "authenticated:accepted_at",
+        "authenticated:assigned_employee_id",
+        "authenticated:completed_at",
+        "checksops:accepted_at",
+        "checksops:assigned_employee_id",
+        "checksops:completed_at"
+      ],
+      "force_rls": false,
+      "financial_table_grant_count": 10,
+      "membership_601_unchanged": true,
+      "no_force_rls_change": true,
+      "no_table_level_update_grant_for_login_roles": true,
+      "no_601_sql_modification": true
+    }
+  },
+  "gate_4_mortgage_ops_acceptance": {
+    "status": "STOPPED",
+    "reason": "mortgage_agent_cognito_credentials_unavailable"
+  },
+  "gate_5_regression": {
+    "status": "RECORDED",
+    "pass": 541,
+    "fail": 4,
+    "skipped": 1,
+    "unrepaired_unrelated_or_env": [
+      "PostgreSQL 16 initdb missing for mortgage-ops-library-parity-pg and ocr-claim-number-sql isolated tests",
+      "ops/release-locks database-rls tree_hash drift from adding SQL 39; production lock manifest not updated"
+    ]
+  },
+  "staging_lambda_spa": {
+    "staging_api": {
+      "CodeSha256": "7vJjjYSm2qkHTHHPIjlgHZ8w0hmkfou8p2EsXd4RWDk=",
+      "RevisionId": "57f0f181-b477-430a-b3a9-06cdbe54e209",
+      "LastModified": "2026-10-02T23:08:42.000+0000"
+    },
+    "staging_spa": {
+      "index": "/assets/index-moprRprA.js",
+      "queue": "assets/MortgageOpsQueue-mopsRprA.js",
+      "index_html_sha256": "5a702f6f05c149015feb9e2ad629be4aa66b5380e0cb727206262e8e4c4d21ee",
+      "index_html_etag": "bdb5a201fb92ff72871a27504fbac761",
+      "index_html_last_modified": "2026-10-02T23:10:14+00:00",
+      "queue_sha256": "287e74e07f14233695695ea04a62be9dc818fa28849a9c5584de0072c0fb5e07",
+      "queue_contains_bill_mortgage_handling": false
+    },
+    "staging_flags": {
+      "AWS_WRITES_ENABLED": "true",
+      "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": "true",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+      "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+      "AWS_MOOV_ENABLED": "false",
+      "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": "false",
+      "AWS_MOOV_MONTHLY_BILLING_ENABLED": "true"
+    }
+  },
+  "production_untouched": {
+    "production_prep_api": {
+      "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+      "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+      "LastModified": "2026-10-02T20:26:42.000+0000"
+    },
+    "production_spa": {
+      "bucket": "checksops-production-frontend-806168576068",
+      "index": "/assets/index-BgOCQCWm.js",
+      "index_html_etag": "b70636253b28bbeb25af61c9e105ebf2",
+      "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+      "LastModified": "2026-10-02T21:26:09+00:00",
+      "VersionId": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd"
+    }
+  },
+  "proposed_production_composition_not_promoted": {
+    "spa_authority": "/assets/index-BgOCQCWm.js",
+    "queue_authority": "MortgageOpsQueue-BD_nUT7A.js",
+    "keep_live_workflow_rpc": true,
+    "keep_live_tenant_billing_engine": true,
+    "keep_live_sql_executor_if_present": "forward-reconcile from live; do not restore origin/main",
+    "after_staging_acceptance_only": [
+      "isolated mortgage-ops-usage module",
+      "Accept/Complete RLS (SQL 39)",
+      "Complete billing removal from MortgageOpsQueue"
+    ],
+    "blockers": [
+      "Gate 4 mortgage-agent Cognito acceptance matrix is STOPPED",
+      "Do not promote until authorized agent Accept/$10/$5/Complete is proven on staging"
+    ]
+  }
+}

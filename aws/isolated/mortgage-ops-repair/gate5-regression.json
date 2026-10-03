@@ -1,0 +1,139 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "gate": 5,
+  "captured_at": "2026-10-03T00:03:10Z",
+  "command": "node --experimental-strip-types --test --test-reporter tap <gate5 suites>",
+  "totals": {
+    "tests": 546,
+    "pass": 541,
+    "fail": 4,
+    "skipped": 1,
+    "duration_ms": 12414
+  },
+  "extra_scripts": {
+    "bun scripts/test-moov-file-rules.mjs": { "passed": 21, "failed": 0 },
+    "node scripts/test-walletops-layout.mjs": { "passed": 15, "failed": 0 }
+  },
+  "suites": {
+    "issue_601_executor": {
+      "status": "pass",
+      "files": [
+        "aws/tests/mortgage-ops-executor-preserve.test.mjs",
+        "aws/tests/sql-executor-auth.test.mjs",
+        "aws/tests/guarded-sql-executor.test.mjs",
+        "aws/tests/mortgage-ops-sql39-executor.test.mjs"
+      ]
+    },
+    "claim_ledger": {
+      "status": "pass",
+      "files": [
+        "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "aws/tests/claim-ledger-discovery-grouping.test.mjs",
+        "aws/tests/claim-ledger-link-or-create-rpc.test.mjs",
+        "aws/tests/claim-ledger-link-or-create-sql.test.mjs"
+      ]
+    },
+    "moov_walletops": {
+      "status": "pass",
+      "note": "walletops-enable-payout and walletops-sweep-activity require --experimental-strip-types; they failed only when run without it",
+      "files": [
+        "aws/tests/moov-capabilities.test.mjs",
+        "aws/tests/moov-claim-ledger-spa-composition.test.mjs",
+        "aws/tests/moov-granular-capabilities-overlay.test.mjs",
+        "aws/tests/moov-production-sweep-read-guard.test.mjs",
+        "aws/tests/walletops-598-capability-composition.test.mjs",
+        "aws/tests/walletops-enable-payout.test.mjs",
+        "aws/tests/walletops-sweep-activity.test.mjs",
+        "aws/tests/api-moov-m62a-recipient-tos.test.mjs",
+        "aws/tests/api-moov-m62c-recipient-bank-verify.test.mjs",
+        "aws/tests/api-moov-m62d-static-deploy-gate.test.mjs"
+      ]
+    },
+    "tenant_isolation": {
+      "status": "pass",
+      "files": ["aws/tests/tenant-security-compliance.test.mjs"]
+    },
+    "signatures": {
+      "status": "pass",
+      "files": ["aws/tests/parity-signature-submit.test.mjs"]
+    },
+    "ocr": {
+      "status": "partial",
+      "passed_files": [
+        "aws/tests/ocr-azure-client.test.mjs",
+        "aws/tests/ocr-azure-image.test.mjs",
+        "aws/tests/ocr-azure-normalize.test.mjs",
+        "aws/tests/ocr-azure-secret.test.mjs",
+        "aws/tests/ocr-descriptive-persist.test.mjs",
+        "aws/tests/ocr-descriptive-text.test.mjs",
+        "aws/tests/ocr-intake-staging.test.mjs",
+        "aws/tests/ocr-parse-check1-fixes.test.mjs",
+        "aws/tests/ocr-parse-textract.test.mjs",
+        "aws/tests/ocr-provider-merge.test.mjs",
+        "aws/tests/ocr-textract-runner.test.mjs",
+        "aws/tests/aws-staging-ocr-upload.test.mjs",
+        "ops/release-locks/tests/ocr-azure-invariants.test.mjs"
+      ],
+      "failed": [
+        {
+          "name": "isolated PostgreSQL unique-tenant claim persist and auto-link",
+          "file": "aws/tests/ocr-claim-number-sql.test.mjs",
+          "reason": "PostgreSQL 16 initdb is not available in this environment"
+        },
+        {
+          "name": "170010 then SQL 41 still unique-links many checks to one tenant claim",
+          "file": "aws/tests/ocr-claim-number-sql.test.mjs",
+          "reason": "PostgreSQL 16 initdb is not available in this environment"
+        }
+      ]
+    },
+    "checkalt": {
+      "status": "pass",
+      "note": "file-level failures without --experimental-strip-types were load errors; rerun with strip-types passed",
+      "files": [
+        "aws/tests/checkalt-deposit-preflight.test.mjs",
+        "aws/tests/checkalt-endorsement-gate.test.mjs",
+        "aws/tests/checkalt-image-compliance.test.mjs",
+        "aws/tests/checkalt-lovable-prep-parity.test.mjs",
+        "aws/tests/checkalt-pending-sync.test.mjs",
+        "aws/tests/checkalt-status-read-gate.test.mjs",
+        "aws/tests/checkalt-ui-access.test.mjs",
+        "aws/tests/checkalt-auto-deposit-persist.test.mjs",
+        "aws/tests/checkalt-auto-deposit-registration.test.mjs",
+        "aws/tests/api-checkalt-production.test.mjs",
+        "aws/tests/legacy-checkalt-money-shutdown.test.mjs"
+      ]
+    },
+    "delete_check": {
+      "status": "pass",
+      "files": [
+        "aws/tests/frontend-delete-check-bridge.test.mjs",
+        "aws/tests/frontend-admin-delete-check-dispatcher.test.mjs",
+        "ops/release-locks/tests/delete-check-invariants.test.mjs"
+      ]
+    },
+    "mortgage_ops_contracts": {
+      "status": "partial",
+      "passed_files": [
+        "aws/tests/mortgage-ops-isolation.test.mjs",
+        "aws/tests/mortgage-ops-library-parity.test.mjs",
+        "aws/tests/mortgage-ops-usage.test.mjs",
+        "aws/tests/mortgage-ops-repair-overlay.test.mjs",
+        "aws/tests/parity-bill-mortgage.test.mjs"
+      ],
+      "failed": [
+        {
+          "name": "disposable PostgreSQL mortgage library RLS matrix",
+          "file": "aws/tests/mortgage-ops-library-parity-pg.test.mjs",
+          "reason": "PostgreSQL 16 initdb is not available in this environment"
+        }
+      ]
+    }
+  },
+  "unrepaired_related_failure": {
+    "name": "origin/main-based manifest validates fail-closed with production-spa PRODUCTION_LOCKED",
+    "file": "ops/release-locks/tests/validate-release-locks.test.mjs",
+    "reason": "Adding aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql changes the protected database-rls tree_hash (recorded 22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306, actual e3dfbb80a5502b331b096574b3d84fb27b864be38f86fc288b646e66f296e128). Not repaired: production lock manifest updates are out of scope for this staging workstream."
+  },
+  "repaired_unrelated_failures": false
+}
