@@ -18,6 +18,7 @@ import {
 } from './identity.mjs';
 import { assertTrustedIssuer } from './identity-env.mjs';
 import { denyTaxSecretQuery, denyTaxSecretRpc } from './tax-secrets.mjs';
+import { bindActiveTenantSlug } from './claim-owner-tenant.mjs';
 
 const { Client } = pg;
 const IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -171,6 +172,7 @@ export const ignoredSpoof = (event, body) => {
     headerRole: lower['x-role'] || null,
     bodyUserId: body.user_id || body.applicationUserId || body.sub || null,
     bodyTenantId: body.tenant_id || body.tenantId || null,
+    bodyOrgId: body.org_id || body.orgId || null,
     bodyRole: body.role || null,
   };
 };
@@ -230,6 +232,7 @@ export const withIdentity = async (event, fn, deps = {}) => {
     refuseSubAsApplicationId(mapping.application_user_id, claimsResult.claims.sub);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || claimsResult.claims.email || '']);
+    await bindActiveTenantSlug(client, event, body);
     const result = await fn({ client, mapping, claims: claimsResult.claims, body, spoof });
     const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
     if (commit && result?.ok !== false && status < 400) {
