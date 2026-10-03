@@ -41,6 +41,7 @@ export function packExecutor(root) {
     ['aws/write-path/guarded-sql-executor/index.mjs', 'index.mjs'],
     ['aws/write-path/guarded-sql-executor/package.json', 'package.json'],
     ['aws/write-path/sql/44_claim_ledger_link_or_create.sql', 'sql/44_claim_ledger_link_or_create.sql'],
+    ['aws/workflows/sql/71_homeowner_ledger_view_contract.sql', 'sql/71_homeowner_ledger_view_contract.sql'],
     ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
     ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],
     ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],

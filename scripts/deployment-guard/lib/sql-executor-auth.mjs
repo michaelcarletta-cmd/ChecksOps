@@ -44,12 +44,28 @@ export const AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS = Object.freeze({
   ]),
 });
 
+export const AUTHORIZED_SQL71 = Object.freeze({
+  filename: 'aws/workflows/sql/71_homeowner_ledger_view_contract.sql',
+  migration_id: '71_homeowner_ledger_view_contract',
+  commit: '1d945f76bead581459019e0109510365618485a5',
+  source_sha256: '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5',
+  intended_replacement_sha256: '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5',
+  function_identity: 'public.aws_public_homeowner_ledger_by_token(text)',
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  AUTHORIZED_SQL71,
 ]);
 
 export function resolveAuthorizedMigration(input = {}) {
+  if (
+    input.filename === AUTHORIZED_SQL71.filename
+    || input.migration_id === AUTHORIZED_SQL71.migration_id
+  ) {
+    return AUTHORIZED_SQL71;
+  }
   if (
     input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
     || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id
@@ -61,6 +77,10 @@ export function resolveAuthorizedMigration(input = {}) {
 
 export function isTenantUsersSameCheckPermissions(input = {}) {
   return resolveAuthorizedMigration(input) === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
+}
+
+export function isHomeownerLedgerViewContract(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_SQL71;
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/;

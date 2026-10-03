@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,6 +25,18 @@ const TOKEN_EXPIRED = '66666666-6666-4666-8666-666666666661';
 const TOKEN_REVOKED = '77777777-7777-4777-8777-777777777771';
 const TOKEN_MISMATCH = '88888888-8888-4888-8888-888888888881';
 const BATCH_A = '99999999-9999-4999-8999-999999999991';
+
+test('SQL 71 accepted source SHA256 is exact and grants are constrained', () => {
+  const sha = createHash('sha256').update(SQL71).digest('hex');
+  assert.equal(sha, '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5');
+  assert.match(SQL71, /CREATE OR REPLACE FUNCTION public\.aws_public_homeowner_ledger_by_token\(p_token text\)/);
+  assert.equal((SQL71.match(/CREATE OR REPLACE FUNCTION/g) || []).length, 1);
+  assert.match(SQL71, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) FROM PUBLIC/);
+  assert.match(SQL71, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) FROM authenticated/);
+  assert.match(SQL71, /GRANT EXECUTE ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) TO checksops/);
+  assert.doesNotMatch(SQL71, /CREATE TABLE|ALTER TABLE|ENABLE ROW LEVEL SECURITY|CREATE POLICY/);
+  assert.doesNotMatch(SQL71, /cognito|moov_|plaid_|wallet_|GRANT SELECT ON TABLE/i);
+});
 
 test('SQL 71 replaces the RPC in a new file and keeps historical 68 intact', () => {
   assert.match(SQL68, /CREATE OR REPLACE FUNCTION public\.aws_public_homeowner_ledger_by_token/);
