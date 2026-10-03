@@ -4,11 +4,43 @@ import { checkAltFetch } from '../parity/checkalt-client.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
-import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
+import { authorizeCheckAltProduction, CHECKALT_APPROVE_ACTION } from './checkalt-authz.mjs';
 import {
   loadExistingProductionDeposit,
   reconcileProductionCheckAltDeposit,
 } from './checkalt-poll.mjs';
+
+const PROVIDER_OUTCOME_PHASE = 'provider_outcome';
+const PROCESS_PENDING_STATUS = 40;
+
+/**
+ * Original successful /deposit/process evidence only.
+ * Item existence, history pages, and last_poll must not count as status-40 proof.
+ */
+export function storedProcessStatus40Evidence(row) {
+  const payload = row?.last_status_payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  if (payload.phase !== PROVIDER_OUTCOME_PHASE) return null;
+  if (Number(payload.status_code) !== PROCESS_PENDING_STATUS) return null;
+  const reference = row.checkalt_reference;
+  if (reference == null || String(reference).trim() === '') return null;
+  if (payload.synthesized === true) return null;
+  const source = payload.source == null ? null : String(payload.source);
+  if (source && source !== 'process' && source !== PROVIDER_OUTCOME_PHASE) return null;
+  return {
+    checkalt_reference: String(reference),
+    status_code: PROCESS_PENDING_STATUS,
+    phase: PROVIDER_OUTCOME_PHASE,
+  };
+}
+
+export function canApproveFromStoredProcess40(row, refreshed) {
+  if (!refreshed || refreshed.reconciled === true) return false;
+  if (refreshed.error !== 'reconciliation_required') return false;
+  if (String(row?.status) !== 'pending_approval') return false;
+  if (row?.checkalt_reference == null || String(row.checkalt_reference).trim() === '') return false;
+  return Boolean(storedProcessStatus40Evidence(row));
+}
 
 const jwtCache = { token: null, expiresAt: null };
 
@@ -59,9 +91,11 @@ const alreadyResolved = (row, refreshed, extra = {}) => ({
 });
 
 /**
- * Refresh CheckAlt item status, persist, then POST /deposit/approve only if
- * the provider still reports pending approval (40). Never treats 127/Approved
- * as settlement.
+ * Optional CheckAlt refresh, then POST /deposit/approve against the stored
+ * reference. Authoritative non-pending refresh is already_resolved. Authoritative
+ * pending_approval uses the existing approve path. Ambiguous refresh may approve
+ * only with local pending_approval + stored reference + original process status 40.
+ * Never treats 127/Approved as settlement. Never retries process or approve.
  */
 export async function handleProductionCheckAltApprove({
   client,
@@ -114,16 +148,17 @@ export async function handleProductionCheckAltApprove({
     mapping,
     memberships,
     check,
-    requireStepUp: false,
+    requireStepUp: actionName === 'approve',
+    actionKey: CHECKALT_APPROVE_ACTION,
   });
-  if (!authz.ok && (authz.error === 'financial_unauthorized' || authz.error === 'cross_tenant_denied')) {
-    return { ...authz, createdDeposit: false, approvePosted: false, action_taken: false, spoofFieldsIgnored: spoof };
-  }
-  if (!authz.evaluation?.roleOk) {
-    return fail('financial_unauthorized', 403, {
-      message: 'Operator cannot approve production CheckAlt for another authority path.',
+  if (!authz.ok) {
+    return {
+      ...authz,
+      createdDeposit: false,
+      approvePosted: false,
+      action_taken: false,
       spoofFieldsIgnored: spoof,
-    });
+    };
   }
 
   const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
@@ -141,7 +176,8 @@ export async function handleProductionCheckAltApprove({
     acct,
     fetchImpl,
   });
-  if (!refreshed.reconciled) {
+  const allowStoredProcess40 = canApproveFromStoredProcess40(row, refreshed);
+  if (!refreshed.reconciled && !allowStoredProcess40) {
     return fail(refreshed.error || 'reconciliation_required', refreshed.statusCode || 409, {
       message: refreshed.message || 'Could not refresh CheckAlt status. Approve/reject was not sent.',
       liveProviderCalled: refreshed.liveProviderCalled === true,
@@ -151,7 +187,7 @@ export async function handleProductionCheckAltApprove({
       status: refreshed.status || row.status,
     });
   }
-  if (refreshed.status !== 'pending_approval') {
+  if (refreshed.reconciled && refreshed.status !== 'pending_approval') {
     return {
       ...alreadyResolved(row, refreshed, { applicationUserId: mapping.application_user_id }),
       spoofFieldsIgnored: spoof,
@@ -180,6 +216,7 @@ export async function handleProductionCheckAltApprove({
   const raw = await resp.text();
   let json;
   try { json = JSON.parse(raw); } catch { json = { raw: String(raw).slice(0, 500) }; }
+  // Single POST only. Ambiguous HTTP/JSON must not trigger a second approve.
   if (!resp.ok || json?.success !== true) {
     return fail('checkalt_approve_failed', 502, {
       message: 'CheckAlt did not confirm the approval. Local status was refreshed first; no fabricated settlement.',
@@ -187,7 +224,7 @@ export async function handleProductionCheckAltApprove({
       productionExecution: true,
       spoofFieldsIgnored: spoof,
       deposit_id: row.id,
-      status: refreshed.status,
+      status: refreshed.reconciled ? refreshed.status : row.status,
     });
   }
 

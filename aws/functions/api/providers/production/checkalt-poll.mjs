@@ -86,6 +86,86 @@ export const matchHistoryByReference = (items, reference) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+const toYmd = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+};
+
+const addDays = (value, days) => {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date;
+};
+
+/**
+ * Documented FinCapture history body (Lovable + live api2.checkalt.com).
+ * Live 400 without userId: "[userId] must not be null; [userId] must not be blank".
+ * Live success envelope is a raw array of history rows, not {depositHistoryList}.
+ */
+export const buildCheckAltHistoryBody = ({
+  fiKey,
+  userId,
+  ssoKey = null,
+  accountNumber = null,
+  startDate = null,
+  endDate = null,
+} = {}) => {
+  const body = { fiKey };
+  if (userId) body.userId = userId;
+  if (ssoKey) body.ssoKey = ssoKey;
+  if (accountNumber) body.accountNumber = accountNumber;
+  if (startDate) body.startDate = startDate;
+  if (endDate) body.endDate = endDate;
+  return body;
+};
+
+/**
+ * Date windows used to locate a known reference instead of treating the
+ * default history page as complete.
+ *
+ * Proven live api2.checkalt.com contract (2026-09-23):
+ * - POST /fincapture/deposit/item returns processDate/aba/accountNumber/images/
+ *   ruleDetails/depositId/referenceNumber and never status/statusCode/
+ *   statusDescription/itemStatus. Item existence is not a status.
+ * - POST /fincapture/deposit/history requires userId. Rows that do appear expose
+ *   status + statusDescription (e.g. "40"/"Pending Approval", "127"/"Approved").
+ * - The host returns a capped ~57-row page and ignores startDate/endDate,
+ *   page/offset/sort, and referenceNumber filters. Pending (40) rows were not
+ *   present on that default page. If every window returns the same page without
+ *   a unique reference match, fail closed — do not infer pending_approval.
+ */
+export const historyWindowsForDeposit = (row = {}, now = new Date()) => {
+  const endDate = toYmd(now);
+  if (!endDate) return [];
+  const anchorRaw = row.submitted_at || row.created_at || row.provider_http_attempted_at;
+  const anchor = anchorRaw ? new Date(anchorRaw) : null;
+  const starts = [];
+  if (anchor && !Number.isNaN(anchor.getTime())) {
+    starts.push(toYmd(addDays(anchor, -1)));
+    starts.push(toYmd(addDays(anchor, -30)));
+    starts.push(toYmd(addDays(anchor, -90)));
+  } else {
+    starts.push(toYmd(addDays(now, -30)));
+    starts.push(toYmd(addDays(now, -90)));
+  }
+  const seen = new Set();
+  const windows = [];
+  for (const startDate of starts) {
+    if (!startDate || startDate > endDate) continue;
+    const key = `${startDate}:${endDate}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    windows.push({ startDate, endDate });
+  }
+  return windows;
+};
+
+export const historyListSignature = (items) => (items || [])
+  .map((item) => String(item?.referenceNumber ?? item?.reference ?? ''))
+  .join('|');
+
 export const reconciliationRequired = (row, extra = {}) => ({
   ok: true,
   statusCode: 200,
@@ -164,31 +244,67 @@ export async function reconcileProductionCheckAltDeposit({
   let json = item.json;
   let status = resolvePollStatus(json);
   if (!status) {
-    const hist = await checkAltFetch({
-      cfg,
-      credentials,
-      path: '/fincapture/deposit/history',
-      body: { fiKey: cfg.fi_key, ...(ssoKey ? { ssoKey } : {}) },
-      fetchImpl: safeFetch,
-      jwtCache,
-    });
-    const histJson = await parseJson(hist);
-    const match = matchHistoryByReference(historyListOf(histJson), reference);
+    const userId = acct?.sso_user_id || null;
+    if (!userId) {
+      return reconciliationRequired(row, {
+        liveProviderCalled: true,
+        productionExecution: true,
+        productionRecordsMutated: false,
+        applicationUserId: mapping?.application_user_id,
+        message: 'CheckAlt history requires userId (tenant sso_user_id). Status was not taken from item existence. Manual reconciliation required. A second process POST was not sent.',
+      });
+    }
+    const windows = historyWindowsForDeposit(row);
+    let match = null;
+    let lastSignature = null;
+    for (const window of windows.length ? windows : [{ startDate: null, endDate: null }]) {
+      const hist = await checkAltFetch({
+        cfg,
+        credentials,
+        path: '/fincapture/deposit/history',
+        body: buildCheckAltHistoryBody({
+          fiKey: cfg.fi_key,
+          userId,
+          ssoKey,
+          accountNumber: acct?.deposit_account_number || null,
+          startDate: window.startDate,
+          endDate: window.endDate,
+        }),
+        fetchImpl: safeFetch,
+        jwtCache,
+      });
+      const histJson = await parseJson(hist);
+      const list = historyListOf(histJson);
+      match = matchHistoryByReference(list, reference);
+      if (match) break;
+      const signature = historyListSignature(list);
+      if (signature && signature === lastSignature) break;
+      lastSignature = signature;
+    }
     if (!match) {
       return reconciliationRequired(row, {
         liveProviderCalled: true,
         productionExecution: true,
         productionRecordsMutated: false,
         applicationUserId: mapping?.application_user_id,
-        message: 'CheckAlt history has no unique referenceNumber match for this deposit. Amount is not a transaction id. Manual reconciliation required. A second process POST was not sent.',
+        message: 'CheckAlt history has no unique referenceNumber match for this deposit after userId and date-window lookup. Amount is not a transaction id. Item existence is not a status. Manual reconciliation required. A second process POST was not sent.',
       });
     }
     json = { ...json, history: match };
     status = resolvePollStatus(match);
   }
+  if (!status) {
+    return reconciliationRequired(row, {
+      liveProviderCalled: true,
+      productionExecution: true,
+      productionRecordsMutated: false,
+      applicationUserId: mapping?.application_user_id,
+      message: 'CheckAlt returned this reference without a mappable status or statusDescription. Local pending_approval was not inferred from item existence. Manual reconciliation required.',
+    });
+  }
   const saved = await persistPollOutcome(client, {
     rowId: row.id,
-    status: status || row.status,
+    status,
     reference,
     providerPayload: json,
   });
