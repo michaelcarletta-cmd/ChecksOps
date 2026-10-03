@@ -26,6 +26,10 @@
     "queueBlur": "blur active element before Accept/Complete refetch",
     "stagingBucket": "checksops-staging-frontend-c48b",
     "stagingDistribution": "E1CG52WRQZI7X1",
-    "productionUntouched": true
+    "productionUntouched": true,
+    "appliedAt": "2026-10-03T01:32:32Z",
+    "invalidationId": "IDYFFISM0S91FKBRLATDS7K0K3",
+    "entrySha256": "6d147f76ad647ff7599334b9eef617e71b5a34a876ce0aec31278eae522c8804",
+    "queueSha256": "2922043c0afe216e2768eccfa3bf52d670649937195f361f92f5553fb359f4d5"
   }
 }
