@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-10-03T02:12:40.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "permissionsUnchanged": true,
+  "cognitoUnchanged": true,
+  "whyDifferentBrowserStillShowsError": "Not cache. The composed entry index-moprRprB/C was a second React copy. Login/marketing chunks import index-BcLmLtnF.js, so a clean browser still hit removeChild then React #321 and AppErrorBoundary stuck.",
+  "liveFirstLoadErrorBeforeUnify": "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+  "liveErrorAfterCopiedEntry": "Minified React error #321",
+  "equivalentMobileError": "The object can not be found here.",
+  "whyTitlesMissingFromQueued": "GATE4-A and GATE4-B are assigned in_progress, so they correctly left Queued.",
+  "durableStateUnchanged": {
+    "GATE4-A": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49 in_progress accepted_at 2026-10-03T01:16:00.559Z",
+    "GATE4-B": "ab84a6ce-b375-4353-8126-4ad37646bc70 in_progress accepted_at 2026-10-03T01:23:55.080Z",
+    "billing": [
+      "fb20e909-… mortgage_ops_initial 1000",
+      "44426bcd-… mortgage_ops_additional_check 500"
+    ]
+  },
+  "sourceFix": {
+    "isTransientDomNodeError": "src/lib/transientDomNodeError.ts",
+    "errorBoundary": "ignore NotFoundError/removeChild; do not auto-reload"
+  },
+  "stagingOverlayApplied": {
+    "indexHtml": "/assets/index-BcLmLtnF.js",
+    "entry": "assets/index-BcLmLtnF.js overwritten no-cache",
+    "entrySha256": "8a29134acd4e2682aa3d09b4203b49a6ade16cd48c9702553b8528fa14faaa1a",
+    "queue": "assets/MortgageOpsQueue-mopsRprD.js",
+    "queueSha256": "76bd88ac66bce04f023e6f2840fd617a694bf08215097d375993a5d966241adc",
+    "singleReact": true,
+    "queueDefaultTab": "mine",
+    "billMortgageHandling": false,
+    "stagingBucket": "checksops-staging-frontend-c48b",
+    "stagingDistribution": "E1CG52WRQZI7X1",
+    "invalidationId": "IF5HDT32NR7V4EU67Y31KI8CT0",
+    "appliedAt": "2026-10-03T02:11:19Z"
+  },
+  "headlessVerify": {
+    "login": "Mortgage Ops EMAIL_OTP form, no ErrorBoundary",
+    "queueUnauthenticated": "redirects to login form, no ErrorBoundary",
+    "root": "marketing landing, no ErrorBoundary"
+  },
+  "fingerprintsUnchanged": {
+    "stagingApi": "HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU= 2026-10-03T01:12:35Z",
+    "productionPrepApi": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg= 2026-10-02T20:26:42Z",
+    "productionIndex": "2026-10-02T21:26:09Z etag b70636253b28bbeb25af61c9e105ebf2"
+  },
+  "completeOnly": {
+    "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "title": "GATE4 ACCEPT THIS — MOPS REPAIR",
+    "loan": "GATE4-20261003-A",
+    "tab": "In progress"
+  },
+  "doNotComplete": [
+    "ab84a6ce-b375-4353-8126-4ad37646bc70 GATE4-B",
+    "815a0702 leftover queued synthetic",
+    "0151f4b2 leftover queued synthetic"
+  ]
+}

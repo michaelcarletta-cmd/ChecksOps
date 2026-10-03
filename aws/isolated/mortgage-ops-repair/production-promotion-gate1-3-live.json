@@ -1,0 +1,70 @@
+{
+  "sql": {
+    "ok": true,
+    "mutated": false,
+    "hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
+    "matches_accepted_after": true,
+    "no_table_update": true,
+    "cols_17_exact": true,
+    "cols": [
+      "accepted_at",
+      "assigned_employee_id",
+      "cancelled_at",
+      "claim_number",
+      "completed_at",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "insurance_company",
+      "loan_number",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "property_address",
+      "status",
+      "updated_at",
+      "work_notes"
+    ],
+    "historical_absent": true,
+    "sql39_present": true,
+    "has_agent_fn": true,
+    "force_rls": [
+      {
+        "table_name": "check_billing_events",
+        "rls": true,
+        "force_rls": false
+      },
+      {
+        "table_name": "mortgage_handling_requests",
+        "rls": true,
+        "force_rls": false
+      }
+    ],
+    "membership_601": {
+      "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+    }
+  },
+  "pr601": {
+    "move": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+    "override": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+  },
+  "claim": {
+    "sql43": "exact",
+    "sql44": "exact",
+    "sql43_live": "31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806",
+    "sql44_live": "96d038c97a85bc3e49346442862c044e1e16ec1eb062519b4ad277bd998063a5"
+  },
+  "lambda": {
+    "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+    "LastModified": "2026-10-02T20:26:42.000+0000",
+    "matches_expected": true
+  },
+  "spa_index": {
+    "ETag": "\"b70636253b28bbeb25af61c9e105ebf2\"",
+    "VersionId": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd",
+    "LastModified": "2026-10-02T21:26:09+00:00",
+    "matches_expected_version": true
+  }
+}

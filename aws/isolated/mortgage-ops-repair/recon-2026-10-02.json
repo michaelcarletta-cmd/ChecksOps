@@ -1,0 +1,55 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "captured_at": "2026-10-02T22:51:48Z",
+  "staging_lambda": {
+    "name": "checksops-staging-api",
+    "CodeSha256": "70LMF4qoKSCbCzZKdmczXPwlEIPx5KWlW9bgKthzUCA=",
+    "RevisionId": "5468d1db-270a-4161-ad50-bcdff25e7428",
+    "LastModified": "2026-10-02T19:41:15.000+0000"
+  },
+  "production_prep_lambda": {
+    "name": "checksops-production-prep-api",
+    "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+    "LastModified": "2026-10-02T20:26:42.000+0000",
+    "note": "read-only fingerprint; no production writes authorized"
+  },
+  "live_members": {
+    "tenant-billing-engine.mjs": {
+      "sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+      "present_on_main": false,
+      "action": "preserve_in_place_do_not_overlay"
+    },
+    "workflow-rpc.mjs": {
+      "staging_sha256": "b030436c8d30eb2016eaac3329121785d2268adab48de2c148d7b897847e51cf",
+      "main_sha256": "c289af0b575e543ae6a6f266b4f179c5711c98b0be21d82cfde4ea1cc7e9856e",
+      "live_only": ["admin_set_check_claim", "save_claim_settlement_breakdown", "accrueMortgageOpsAcceptedRequest"],
+      "action": "patch_import_only_onto_live"
+    },
+    "write-check-workflow.mjs": {
+      "staging_sha256": "02d1ad2307b3ebf7964a3be489e3db7c08fc49050a90cb133d6d74b7227de1d5",
+      "main_sha256": "39f0eb41fc72f2077045c4f185e16941b901a8551e54a7081e043ecc82664158",
+      "action": "patch_claim_id_onto_live"
+    },
+    "bill-mortgage-handling.mjs": {
+      "sha256": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+      "matches_main": true,
+      "action": "leave_fail_closed"
+    }
+  },
+  "spa": {
+    "production_index": "/assets/index-BgOCQCWm.js",
+    "production_queue": "MortgageOpsQueue-BD_nUT7A.js",
+    "staging_index": "/assets/index-BcLmLtnF.js",
+    "staging_queue": "MortgageOpsQueue-B0d_WpSJ.js"
+  },
+  "flags_staging": {
+    "AWS_WRITES_ENABLED": true,
+    "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": true,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false
+  }
+}

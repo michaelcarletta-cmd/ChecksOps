@@ -1,0 +1,200 @@
+TAP version 13
+# Subtest: tenant admins are not Mortgage Desk billing staff
+ok 1 - tenant admins are not Mortgage Desk billing staff
+  ---
+  duration_ms: 0.534902
+  ...
+# Subtest: tenant admin cannot bill mortgage handling; agent and owner fail closed
+ok 2 - tenant admin cannot bill mortgage handling; agent and owner fail closed
+  ---
+  duration_ms: 0.696254
+  ...
+# Subtest: library manage requires tenant owner/admin membership; agents and other tenants are denied
+ok 3 - library manage requires tenant owner/admin membership; agents and other tenants are denied
+  ---
+  duration_ms: 0.3307
+  ...
+# Subtest: tenant-documents upload and metadata writes stay tenant-manage scoped
+ok 4 - tenant-documents upload and metadata writes stay tenant-manage scoped
+  ---
+  duration_ms: 0.979533
+  ...
+# Subtest: loss-draft uploads require tenant membership or a workable Desk request
+ok 5 - loss-draft uploads require tenant membership or a workable Desk request
+  ---
+  duration_ms: 1.211374
+  ...
+# Subtest: approved Mortgage Ops category is only library:mortgage:%
+ok 6 - approved Mortgage Ops category is only library:mortgage:%
+  ---
+  duration_ms: 0.887687
+  ...
+# Subtest: oneshot applies 29 only after write helpers and complete write policies
+ok 7 - oneshot applies 29 only after write helpers and complete write policies
+  ---
+  duration_ms: 0.446225
+  ...
+# Subtest: SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths
+ok 8 - SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths
+  ---
+  duration_ms: 0.630148
+  ...
+# Subtest: new active request receives only qualifying auto-share documents
+ok 9 - new active request receives only qualifying auto-share documents
+  ---
+  duration_ms: 0.508756
+  ...
+# Subtest: existing active request receives authorized backfill
+ok 10 - existing active request receives authorized backfill
+  ---
+  duration_ms: 0.697231
+  ...
+# Subtest: duplicate backfill is idempotent
+ok 11 - duplicate backfill is idempotent
+  ---
+  duration_ms: 0.207562
+  ...
+# Subtest: ordinary tenant member cannot perform an admin backfill
+ok 12 - ordinary tenant member cannot perform an admin backfill
+  ---
+  duration_ms: 0.162956
+  ...
+# Subtest: user_roles.admin plus ordinary membership cannot backfill tenant library docs
+ok 13 - user_roles.admin plus ordinary membership cannot backfill tenant library docs
+  ---
+  duration_ms: 0.09538
+  ...
+# Subtest: non-mortgage categories are rejected
+ok 14 - non-mortgage categories are rejected
+  ---
+  duration_ms: 0.244599
+  ...
+# Subtest: closed requests do not provide new document access
+ok 15 - closed requests do not provide new document access
+  ---
+  duration_ms: 0.278353
+  ...
+# Subtest: forged document id from another tenant is rejected
+ok 16 - forged document id from another tenant is rejected
+  ---
+  duration_ms: 0.179945
+  ...
+# Subtest: missing or invalid authentication is denied
+ok 17 - missing or invalid authentication is denied
+  ---
+  duration_ms: 0.543368
+  ...
+# Subtest: write path is disabled without identity mapping via allowlist authz
+ok 18 - write path is disabled without identity mapping via allowlist authz
+  ---
+  duration_ms: 0.230928
+  ...
+# Subtest: executeAllowlistedWrite denies update, delete, aliases, and batches
+ok 19 - executeAllowlistedWrite denies update, delete, aliases, and batches
+  ---
+  duration_ms: 0.674675
+  ...
+# Subtest: executeAllowlistedWrite ignores forged tenant_id and file_path
+ok 20 - executeAllowlistedWrite ignores forged tenant_id and file_path
+  ---
+  duration_ms: 0.575315
+  ...
+# Subtest: executeAllowlistedWrite denies forged request/document combinations
+ok 21 - executeAllowlistedWrite denies forged request/document combinations
+  ---
+  duration_ms: 0.333039
+  ...
+# Subtest: dual-tenant administrator cannot attach across tenants
+ok 22 - dual-tenant administrator cannot attach across tenants
+  ---
+  duration_ms: 0.260816
+  ...
+# Subtest: cancelled and completed requests reject backfill through the allowlist
+ok 23 - cancelled and completed requests reject backfill through the allowlist
+  ---
+  duration_ms: 0.458994
+  ...
+# Subtest: non-mortgage legacy attachment category is rejected through the allowlist
+ok 24 - non-mortgage legacy attachment category is rejected through the allowlist
+  ---
+  duration_ms: 0.208278
+  ...
+# Subtest: mortgage agent can read an attached qualifying document
+ok 25 - mortgage agent can read an attached qualifying document
+  ---
+  duration_ms: 0.529321
+  ...
+# Subtest: mortgage agent cannot read an unattached document
+ok 26 - mortgage agent cannot read an unattached document
+  ---
+  duration_ms: 0.102882
+  ...
+# Subtest: mortgage agent cannot read another tenant document through a forged object key
+ok 27 - mortgage agent cannot read another tenant document through a forged object key
+  ---
+  duration_ms: 0.105102
+  ...
+# Subtest: wildcard, suffix, and traversal object paths are not authorized
+ok 28 - wildcard, suffix, and traversal object paths are not authorized
+  ---
+  duration_ms: 0.463001
+  ...
+# Subtest: query-string variants of the exact attached key remain authorized
+ok 29 - query-string variants of the exact attached key remain authorized
+  ---
+  duration_ms: 0.116832
+  ...
+# Subtest: same filename in a different tenant folder is denied
+ok 30 - same filename in a different tenant folder is denied
+  ---
+  duration_ms: 0.067173
+  ...
+# Subtest: storage auth SQL requires an attachment, exact path, and open or assigned request
+ok 31 - storage auth SQL requires an attachment, exact path, and open or assigned request
+  ---
+  duration_ms: 0.13961
+  ...
+# Subtest: SQL 39 text is accepted as a narrow overlay and refuses table-level UPDATE / FORCE RLS / \#601 edits
+ok 32 - SQL 39 text is accepted as a narrow overlay and refuses table-level UPDATE / FORCE RLS / \#601 edits
+  ---
+  duration_ms: 0.919663
+  ...
+# Subtest: SQL 39 inspect reports \#601 hashes and no table-level UPDATE without applying
+ok 33 - SQL 39 inspect reports \#601 hashes and no table-level UPDATE without applying
+  ---
+  duration_ms: 8.447132
+  ...
+# Subtest: SQL 39 apply is idempotent when the live snapshot is already exact
+ok 34 - SQL 39 apply is idempotent when the live snapshot is already exact
+  ---
+  duration_ms: 1.697661
+  ...
+# Subtest: SQL 39 apply succeeds from an empty snapshot and preserves \#601 hashes
+ok 35 - SQL 39 apply succeeds from an empty snapshot and preserves \#601 hashes
+  ---
+  duration_ms: 1.760148
+  ...
+# Subtest: SQL 39 apply stops if FORCE RLS or \#601 hashes change
+ok 36 - SQL 39 apply stops if FORCE RLS or \#601 hashes change
+  ---
+  duration_ms: 1.061061
+  ...
+# Subtest: already-exact helper ignores checksops_admin table UPDATE and refuses authenticated/checksops table UPDATE
+ok 37 - already-exact helper ignores checksops_admin table UPDATE and refuses authenticated/checksops table UPDATE
+  ---
+  duration_ms: 0.159778
+  ...
+# Subtest: already-exact helper requires the three column grants and no table UPDATE
+ok 38 - already-exact helper requires the three column grants and no table UPDATE
+  ---
+  duration_ms: 0.190773
+  ...
+1..38
+# tests 38
+# suites 0
+# pass 38
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 181.422126

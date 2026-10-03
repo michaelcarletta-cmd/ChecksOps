@@ -1,0 +1,14 @@
+{
+  "writes_aws": false,
+  "live_sha256": "092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318",
+  "proposed_sha256": "da66439ccf2f2f8c70435091a7f6cb8255cfb34351b2db4bac719dddd6a2dfe2",
+  "illegal_sites_replaced": 3,
+  "blur": "document.activeElement instanceof HTMLElement&&document.activeElement.blur();",
+  "proofs": {
+    "parseable_module": true,
+    "no_const_blur": true,
+    "no_bill_mortgage": true,
+    "default_mine": true,
+    "accept_expression_blur": true
+  }
+}

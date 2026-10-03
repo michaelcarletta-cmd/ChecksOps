@@ -1,0 +1,217 @@
+{
+  "independent_inspect_ok": true,
+  "mutated": false,
+  "read_only": "on",
+  "hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
+  "hash_is_not_staging_4adc": true,
+  "matches_apply_after_hash": true,
+  "no_table_level_update": true,
+  "checksops_17_exact": true,
+  "checksops_cols": [
+    "accepted_at",
+    "assigned_employee_id",
+    "cancelled_at",
+    "claim_number",
+    "completed_at",
+    "homeowner_email",
+    "homeowner_name",
+    "homeowner_phone",
+    "insurance_company",
+    "loan_number",
+    "mortgage_company",
+    "mortgage_servicer",
+    "note",
+    "property_address",
+    "status",
+    "updated_at",
+    "work_notes"
+  ],
+  "authenticated_3_exact": true,
+  "authenticated_cols": [
+    "accepted_at",
+    "assigned_employee_id",
+    "completed_at"
+  ],
+  "authenticated_mhr_table": [],
+  "historical_gone": true,
+  "sql39_policies_present": true,
+  "has_agent_fn": true,
+  "policies": [
+    "aws_delete_mortgage_handling_requests",
+    "aws_insert_mortgage_handling_requests",
+    "aws_insert_mortgage_ops_usage_events",
+    "aws_select_check_billing_events",
+    "aws_select_mortgage_handling_requests",
+    "aws_select_mortgage_ops_agent_queue",
+    "aws_update_mortgage_ops_accept_complete",
+    "aws_write_check_billing_events",
+    "aws_write_check_billing_events_monthly_job",
+    "aws_write_check_billing_events_monthly_job_role"
+  ],
+  "force_rls": [
+    {
+      "table_name": "check_billing_events",
+      "rls": true,
+      "force_rls": false
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "rls": true,
+      "force_rls": false
+    }
+  ],
+  "membership_601": {
+    "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+    "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+  },
+  "pr601_move": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+  "pr601_override": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+  "claim_sql43": "exact",
+  "claim_sql44": "exact",
+  "claim_sql43_live": "31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806",
+  "claim_sql44_live": "96d038c97a85bc3e49346442862c044e1e16ec1eb062519b4ad277bd998063a5",
+  "cbe_checksops": [
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    }
+  ],
+  "mhr_table": [
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "REFERENCES"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRIGGER"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRUNCATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "SELECT"
+    }
+  ],
+  "financial_grants": [
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "REFERENCES"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRIGGER"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRUNCATE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    }
+  ],
+  "lambda_unchanged": {
+    "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "LastModified": "2026-10-02T20:26:42.000+0000",
+    "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a"
+  },
+  "spa_index": {
+    "ETag": "\"b70636253b28bbeb25af61c9e105ebf2\"",
+    "VersionId": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd"
+  },
+  "inspect_fn_unmodified": {
+    "CodeSha256": "JxL7z/ybetJExC0fUiOfJA5Xq+VjkfV3ov6ACrQQWmk=",
+    "Description": "Inspect-only production Mortgage Ops SQL 39 catalog probe. Read-only. Refuses caller SQL. snapshotMortgageOpsState only."
+  }
+}

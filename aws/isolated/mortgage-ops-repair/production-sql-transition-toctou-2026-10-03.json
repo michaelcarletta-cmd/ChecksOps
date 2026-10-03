@@ -1,0 +1,57 @@
+{
+  "inspect_ok": true,
+  "inspect_mutated": false,
+  "inspect_hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+  "hash_matches_investigation": true,
+  "table_update": [
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    }
+  ],
+  "historical": true,
+  "has_agent_fn": false,
+  "sql39_absent": [
+    "aws_select_mortgage_ops_agent_queue",
+    "aws_update_mortgage_ops_accept_complete",
+    "aws_insert_mortgage_ops_usage_events"
+  ],
+  "force_rls": [
+    {
+      "table_name": "check_billing_events",
+      "rls": true,
+      "force_rls": false
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "rls": true,
+      "force_rls": false
+    }
+  ],
+  "membership_601": {
+    "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+    "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+  },
+  "pr601_move": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+  "pr601_override": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5",
+  "claim_sql43": "exact",
+  "claim_sql44": "exact",
+  "claim_sql43_live": "31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806",
+  "claim_sql44_live": "96d038c97a85bc3e49346442862c044e1e16ec1eb062519b4ad277bd998063a5",
+  "lambda": {
+    "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "LastModified": "2026-10-02T20:26:42.000+0000",
+    "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+    "FunctionName": "checksops-production-prep-api"
+  },
+  "spa_index_etag": "\"b70636253b28bbeb25af61c9e105ebf2\"",
+  "spa_index_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd",
+  "spa_entry_etag": "\"134bdb8195a0149b93fb6a0d1177abee\"",
+  "spa_entry_version": "tzdkS.xol_.pzOZZBg61OMdzuN8TVS4D",
+  "inspect_fn": {
+    "CodeSha256": "JxL7z/ybetJExC0fUiOfJA5Xq+VjkfV3ov6ACrQQWmk=",
+    "LastModified": "2026-10-03T10:44:42.801+0000",
+    "Description": "Inspect-only production Mortgage Ops SQL 39 catalog probe. Read-only. Refuses caller SQL. snapshotMortgageOpsState only."
+  }
+}

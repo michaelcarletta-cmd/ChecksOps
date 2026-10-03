@@ -1,0 +1,34 @@
+{
+  "captured_at": "2026-10-03T10:42:30Z",
+  "workstream": "mortgage-ops-repair-ad99",
+  "mode": "authorized-production-promotion-toctou-before-any-write",
+  "stop": false,
+  "pins_match_approved_preflight": true,
+  "spa": {
+    "bucket": "checksops-production-frontend-806168576068",
+    "index": "/assets/index-BgOCQCWm.js",
+    "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+    "index_html_etag": "b70636253b28bbeb25af61c9e105ebf2",
+    "index_html_last_modified": "2026-10-02T21:26:09+00:00",
+    "index_html_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd",
+    "entry_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+    "queue": "MortgageOpsQueue-BD_nUT7A.js",
+    "queue_sha256": "a5a5a5b1318e09a8c53290d6e6bf2ba57f428d85c6406bd4d96c0f25fdec6288",
+    "login": "MortgageOpsLogin-Phn06bQA.js",
+    "login_sha256": "c56996bc719c0e7a4e365cf888e0197515f3f51820a58f621cfa76dbf7b31a21",
+    "css": "index-C9b4-_no.css",
+    "css_sha256": "fd80eaf5a2ed3227426e1d2e3251b3b34279b8e1afa08f1931725b89d919e049",
+    "sw_js": false
+  },
+  "lambda": {
+    "function": "checksops-production-prep-api",
+    "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+    "LastModified": "2026-10-02T20:26:42.000+0000",
+    "zip_sha256": "9dcd49d608d14781998a720987facd3298bf3d7777670aa0a1449cf4d465c158",
+    "member_count": 6477,
+    "workflow_rpc_sha256": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "mortgage_ops_usage_present": false,
+    "tenant_billing_engine_sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f"
+  }
+}

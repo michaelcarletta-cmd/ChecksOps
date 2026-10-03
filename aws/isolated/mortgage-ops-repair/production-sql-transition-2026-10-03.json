@@ -1,0 +1,174 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "mode": "authorized-production-sql-transition-only",
+  "status": "SQL_TRANSITION_APPLIED_AND_VERIFIED",
+  "captured_at": "2026-10-03T11:05:30Z",
+  "authorization": "revised Mortgage Ops production SQL transition only",
+  "not_deployed": [
+    "Lambda overlay",
+    "SPA overlay",
+    "CloudFront invalidation",
+    "Cognito changes",
+    "provider/environment changes",
+    "staging SQL executor"
+  ],
+  "inspect_function_modified": false,
+  "sql39_file_modified": false,
+  "sql39_sha256": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+  "mechanism": {
+    "path": "dedicated-production-sql-transition-ad99",
+    "function": "checksops-prod-mops-sql-transition-ad99",
+    "code_sha256": "fvH9Rtr8HMM84V4e9Mb0gky3/k4hIpNeBjF0B3n1+jU=",
+    "not_staging_executor": true,
+    "caller_sql": "refused",
+    "lease": "mops-prod-sql-transition-20261003-ad99-1",
+    "expected_before_hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+    "transaction": "BEGIN Step A; verify; Step B pinned SQL 39; verify; COMMIT"
+  },
+  "prewrite_toctou": {
+    "independent_inspect_function": "checksops-prod-mops-sql39-inspect-ad99",
+    "independent_inspect_code_sha256": "JxL7z/ybetJExC0fUiOfJA5Xq+VjkfV3ov6ACrQQWmk=",
+    "hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+    "hash_matches_investigation": true,
+    "checksops_table_update_exactly_as_diagnosed": true,
+    "historical_policy_unchanged": true,
+    "sql39_policies_absent": true,
+    "force_rls_false": true,
+    "membership_601_exact": true,
+    "claim_ledger_sql43_exact": true,
+    "claim_ledger_sql44_exact": true,
+    "no_other_sql_mutation_since_investigation": true,
+    "lambda_untouched": {
+      "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+      "LastModified": "2026-10-02T20:26:42.000+0000",
+      "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a"
+    },
+    "spa_index_untouched": {
+      "ETag": "b70636253b28bbeb25af61c9e105ebf2",
+      "VersionId": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd"
+    }
+  },
+  "before": {
+    "hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+    "login_role_mhr_table_update": ["checksops"],
+    "checksops_mhr_table": ["DELETE", "INSERT", "SELECT", "UPDATE"],
+    "authenticated_mhr_table": [],
+    "checksops_admin_mhr_table": ["DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"],
+    "checksops_mhr_column_update": "ALL_54_COLUMNS_VIA_TABLE_UPDATE",
+    "authenticated_mhr_column_update": [],
+    "checksops_cbe": ["DELETE", "INSERT", "SELECT", "UPDATE"],
+    "historical_policy_aws_update_mortgage_handling_requests": true,
+    "sql39_policies": [],
+    "has_agent_fn": false,
+    "force_rls": false,
+    "membership_601": {
+      "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+    }
+  },
+  "after_step_a_in_transaction": {
+    "hash": "284ac682e196309d5fc8999373e9a5d9c45244bb8cb233e0b92f393567d5d997",
+    "login_role_mhr_table_update": [],
+    "checksops_mhr_table": ["DELETE", "INSERT", "SELECT"],
+    "checksops_mhr_column_update_17": [
+      "accepted_at",
+      "assigned_employee_id",
+      "cancelled_at",
+      "claim_number",
+      "completed_at",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "insurance_company",
+      "loan_number",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "property_address",
+      "status",
+      "updated_at",
+      "work_notes"
+    ],
+    "authenticated_mhr_table": [],
+    "authenticated_mhr_column_update": [],
+    "historical_policy_still_present": true,
+    "sql39_not_yet_applied": true
+  },
+  "after": {
+    "hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
+    "not_equal_to_staging_4adc182c": true,
+    "login_role_mhr_table_update": [],
+    "checksops_mhr_table": ["DELETE", "INSERT", "SELECT"],
+    "checksops_mhr_column_update_17": [
+      "accepted_at",
+      "assigned_employee_id",
+      "cancelled_at",
+      "claim_number",
+      "completed_at",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "insurance_company",
+      "loan_number",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "property_address",
+      "status",
+      "updated_at",
+      "work_notes"
+    ],
+    "authenticated_mhr_table": [],
+    "authenticated_mhr_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "completed_at"
+    ],
+    "checksops_admin_mhr_table_unchanged": true,
+    "historical_policy_aws_update_mortgage_handling_requests": false,
+    "sql39_policies": [
+      "aws_insert_mortgage_ops_usage_events",
+      "aws_select_mortgage_ops_agent_queue",
+      "aws_update_mortgage_ops_accept_complete"
+    ],
+    "has_agent_fn": true,
+    "force_rls": false,
+    "checksops_cbe_unchanged": ["DELETE", "INSERT", "SELECT", "UPDATE"],
+    "membership_601_unchanged": true,
+    "claim_ledger_sql43": {
+      "classification": "exact",
+      "live_definition_sha256": "31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806"
+    },
+    "claim_ledger_sql44": {
+      "classification": "exact",
+      "live_definition_sha256": "96d038c97a85bc3e49346442862c044e1e16ec1eb062519b4ad277bd998063a5"
+    },
+    "payment_transfers_grants_unchanged": true
+  },
+  "mandatory_postwrite_proof": {
+    "checksops_no_table_level_update": true,
+    "checksops_exactly_17_column_update": true,
+    "historical_policy_gone": true,
+    "sql39_agent_policies_and_helper_exist": true,
+    "authenticated_only_sql39_column_privileges": true,
+    "authenticated_no_broad_mhr_dml": true,
+    "force_rls_false": true,
+    "pr601_functions_exact": true,
+    "claim_ledger_sql43_44_exact": true,
+    "unrelated_financial_grants_unchanged": true,
+    "check_billing_events_delete_unchanged": true,
+    "no_unrelated_sql_objects_changed": true,
+    "independent_inspect_hash_matches_apply_after": true
+  },
+  "contract_tests": {
+    "suites": [
+      "aws/tests/mortgage-ops-isolation.test.mjs",
+      "aws/tests/mortgage-ops-sql39-executor.test.mjs",
+      "aws/tests/mortgage-ops-library-parity.test.mjs"
+    ],
+    "tests": 38,
+    "pass": 38,
+    "fail": 0
+  },
+  "stopped_after_sql_verification": true
+}

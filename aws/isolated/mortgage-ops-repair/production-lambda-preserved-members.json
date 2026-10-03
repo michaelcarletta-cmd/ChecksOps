@@ -1,0 +1,163 @@
+[
+  {
+    "member": "providers/parity/sweep-read.mjs",
+    "expected": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
+    "live": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
+    "proposed": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
+    "ok": true
+  },
+  {
+    "member": "providers/moov.mjs",
+    "expected": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75",
+    "live": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75",
+    "proposed": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75",
+    "ok": true
+  },
+  {
+    "member": "providers/parity/moov-wallet.mjs",
+    "expected": "4f6f548960cfdadd524402d953cfa903594a672448a561cc4f223d2fe56f4144",
+    "live": "4f6f548960cfdadd524402d953cfa903594a672448a561cc4f223d2fe56f4144",
+    "proposed": "4f6f548960cfdadd524402d953cfa903594a672448a561cc4f223d2fe56f4144",
+    "ok": true
+  },
+  {
+    "member": "write-check-workflow.mjs",
+    "expected": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
+    "live": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
+    "proposed": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
+    "ok": true
+  },
+  {
+    "member": "write-claim-settlement.mjs",
+    "expected": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+    "live": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+    "proposed": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+    "ok": true
+  },
+  {
+    "member": "signature-submit.mjs",
+    "expected": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+    "live": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+    "proposed": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+    "ok": true
+  },
+  {
+    "member": "esign.mjs",
+    "expected": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+    "live": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+    "proposed": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+    "ok": true
+  },
+  {
+    "member": "write-signature.mjs",
+    "expected": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26",
+    "live": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26",
+    "proposed": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26",
+    "ok": true
+  },
+  {
+    "member": "ocr.mjs",
+    "expected": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+    "live": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+    "proposed": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+    "ok": true
+  },
+  {
+    "member": "ocr-parse.mjs",
+    "expected": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5",
+    "live": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5",
+    "proposed": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5",
+    "ok": true
+  },
+  {
+    "member": "providers/checkalt.mjs",
+    "expected": "f65a4450f71c4f9835620bbb0205737335cabe1e238f3ad8c2c11905dcee5dca",
+    "live": "f65a4450f71c4f9835620bbb0205737335cabe1e238f3ad8c2c11905dcee5dca",
+    "proposed": "f65a4450f71c4f9835620bbb0205737335cabe1e238f3ad8c2c11905dcee5dca",
+    "ok": true
+  },
+  {
+    "member": "providers/production/checkalt-submit.mjs",
+    "expected": "3bff32b31c6810e4c7b745536a4213c41a18c39e14f65a06a12187e031d2c151",
+    "live": "3bff32b31c6810e4c7b745536a4213c41a18c39e14f65a06a12187e031d2c151",
+    "proposed": "3bff32b31c6810e4c7b745536a4213c41a18c39e14f65a06a12187e031d2c151",
+    "ok": true
+  },
+  {
+    "member": "homeowner.mjs",
+    "expected": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
+    "live": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
+    "proposed": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
+    "ok": true
+  },
+  {
+    "member": "financial-authz.mjs",
+    "expected": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
+    "live": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
+    "proposed": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
+    "ok": true
+  },
+  {
+    "member": "provider-authz.mjs",
+    "expected": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+    "live": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+    "proposed": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+    "ok": true
+  },
+  {
+    "member": "provider-flags.mjs",
+    "expected": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
+    "live": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
+    "proposed": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
+    "ok": true
+  },
+  {
+    "member": "bill-mortgage-handling.mjs",
+    "expected": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+    "live": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+    "proposed": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+    "ok": true
+  },
+  {
+    "member": "tenant-billing-engine.mjs",
+    "expected": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "live": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "proposed": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "ok": true
+  },
+  {
+    "member": "write-allowlist.mjs",
+    "expected": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
+    "live": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
+    "proposed": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
+    "ok": true
+  },
+  {
+    "member": "write.mjs",
+    "expected": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
+    "live": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
+    "proposed": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
+    "ok": true
+  },
+  {
+    "member": "documents.mjs",
+    "expected": "2f98678e4a019c604bc58821f01aa9cfc8de467ce46a0b04121c8fbdf1faba3f",
+    "live": "2f98678e4a019c604bc58821f01aa9cfc8de467ce46a0b04121c8fbdf1faba3f",
+    "proposed": "2f98678e4a019c604bc58821f01aa9cfc8de467ce46a0b04121c8fbdf1faba3f",
+    "ok": true
+  },
+  {
+    "member": "data.mjs",
+    "expected": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+    "live": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+    "proposed": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+    "ok": true
+  },
+  {
+    "member": "index.mjs",
+    "expected": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+    "live": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+    "proposed": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+    "ok": true
+  }
+]

@@ -1,0 +1,140 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "captured_at": "2026-10-03T01:01:06Z",
+  "read_only_after_seed": true,
+  "accept_performed": false,
+  "click_this": {
+    "ui_route": "https://staging.checksops.com/mortgage-ops/queue",
+    "tab": "Queued",
+    "sort_note": "Queued is oldest-first; this card is newest and will be at the bottom.",
+    "title": "GATE4 ACCEPT THIS \u2014 MOPS REPAIR",
+    "tenant": "SYNTHETIC Mortgage Ops Billing",
+    "loan_number": "GATE4-20261003-A",
+    "homeowner": "SYNTHETIC GATE4 HOMEOWNER",
+    "insurance": "SYNTHETIC / NOT NEGOTIABLE",
+    "check_amount": "1042.00",
+    "request_id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "do_not_click": [
+      {
+        "title": "SYNTHETIC Lender",
+        "loan_number": "LN-0f0f7ade",
+        "id": "815a0702-c19e-491a-a032-be9e77b11577"
+      },
+      {
+        "title": "SYNTHETIC / TEST / NOT NEGOTIABLE",
+        "loan_number": "SYNTHETIC-MDRETURN-QUEUE-bad88242",
+        "id": "0151f4b2-d15b-461a-9f5a-7cc394450096"
+      }
+    ]
+  },
+  "before": {
+    "tenant": {
+      "id": "41cbc4b4-c5cd-4020-a6aa-0905e79dafe9",
+      "name": "SYNTHETIC Mortgage Ops Billing",
+      "slug": "synthetic-mortgage-ops-billing",
+      "mortgage_ops_initial_rate_cents": 1000,
+      "mortgage_ops_additional_rate_cents": 500
+    },
+    "launch": {
+      "launched_at": "2026-09-01T00:00:00.000Z"
+    },
+    "creditBalances": [
+      {
+        "tenant_id": "41cbc4b4-c5cd-4020-a6aa-0905e79dafe9",
+        "has_stripe_customer": false
+      }
+    ],
+    "markerRequests": [
+      {
+        "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+        "status": "requested",
+        "assigned_employee_id": null,
+        "accepted_at": null,
+        "completed_at": null,
+        "created_at": "2026-10-03T01:00:48.211Z",
+        "updated_at": "2026-10-03T01:00:48.211Z",
+        "tenant_id": "41cbc4b4-c5cd-4020-a6aa-0905e79dafe9",
+        "check_intake_item_id": "16d5ace0-b600-4740-ad5b-d336e2c72a0f",
+        "claim_id": "16a90465-c492-48b8-9f81-f91d18133d64",
+        "mortgage_company": "GATE4 ACCEPT THIS \u2014 MOPS REPAIR",
+        "loan_number": "GATE4-20261003-A",
+        "note": "GATE4: click Accept on this Queued card only. Isolated synthetic. Not a customer.",
+        "homeowner_name": "SYNTHETIC GATE4 HOMEOWNER",
+        "insurance_company": "SYNTHETIC / NOT NEGOTIABLE",
+        "billing_status": "unbilled",
+        "billed_at": null,
+        "stripe_invoice_id": null,
+        "tenant_name": "SYNTHETIC Mortgage Ops Billing"
+      }
+    ],
+    "requestedUnassignedOnBillingTenant": [
+      {
+        "id": "815a0702-c19e-491a-a032-be9e77b11577",
+        "status": "requested",
+        "assigned_employee_id": null,
+        "accepted_at": null,
+        "mortgage_company": "SYNTHETIC Lender",
+        "loan_number": "LN-0f0f7ade",
+        "created_at": "2026-09-25T18:54:40.775Z",
+        "homeowner_name": null,
+        "tenant_name": "SYNTHETIC Mortgage Ops Billing"
+      },
+      {
+        "id": "0151f4b2-d15b-461a-9f5a-7cc394450096",
+        "status": "requested",
+        "assigned_employee_id": null,
+        "accepted_at": null,
+        "mortgage_company": "SYNTHETIC / TEST / NOT NEGOTIABLE",
+        "loan_number": "SYNTHETIC-MDRETURN-QUEUE-bad88242",
+        "created_at": "2026-09-27T17:59:14.724Z",
+        "homeowner_name": "SYNTHETIC / TEST / NOT NEGOTIABLE",
+        "tenant_name": "SYNTHETIC Mortgage Ops Billing"
+      },
+      {
+        "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+        "status": "requested",
+        "assigned_employee_id": null,
+        "accepted_at": null,
+        "mortgage_company": "GATE4 ACCEPT THIS \u2014 MOPS REPAIR",
+        "loan_number": "GATE4-20261003-A",
+        "created_at": "2026-10-03T01:00:48.211Z",
+        "homeowner_name": "SYNTHETIC GATE4 HOMEOWNER",
+        "tenant_name": "SYNTHETIC Mortgage Ops Billing"
+      }
+    ],
+    "claims": [
+      {
+        "id": "16a90465-c492-48b8-9f81-f91d18133d64",
+        "org_id": "41cbc4b4-c5cd-4020-a6aa-0905e79dafe9",
+        "claim_number": "SYNTHETIC-GATE4-MOPS-REPAIR-20261003",
+        "policyholder_name": "SYNTHETIC GATE4 HOMEOWNER",
+        "status": "open",
+        "insurance_company": "SYNTHETIC / NOT NEGOTIABLE"
+      }
+    ],
+    "checks": [
+      {
+        "id": "16d5ace0-b600-4740-ad5b-d336e2c72a0f",
+        "tenant_id": "41cbc4b4-c5cd-4020-a6aa-0905e79dafe9",
+        "claim_id": "16a90465-c492-48b8-9f81-f91d18133d64",
+        "amount": "1042.00",
+        "check_number": "SYNTHETIC-GATE4-MOPS-REPAIR-20261003-CHK1",
+        "payee_line": "SYNTHETIC / TEST / NOT NEGOTIABLE",
+        "status": "pending_review",
+        "front_image_path": "synthetic/gate4/SYNTHETIC-GATE4-MOPS-REPAIR-20261003/NOT-A-NEGOTIABLE-INSTRUMENT.txt"
+      }
+    ],
+    "billing": []
+  },
+  "seed": {
+    "requestId": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "claimId": "16a90465-c492-48b8-9f81-f91d18133d64",
+    "checkId": "16d5ace0-b600-4740-ad5b-d336e2c72a0f",
+    "tenant_id": "41cbc4b4-c5cd-4020-a6aa-0905e79dafe9",
+    "billing_events": [],
+    "status": "requested",
+    "assigned_employee_id": null,
+    "accepted_at": null,
+    "completed_at": null
+  }
+}

@@ -302,6 +302,22 @@ const executeAcceptMortgage = async ({ client, mapping, args }) => {
     [requestId, mapping.application_user_id],
   )).rows;
   if (!rows.length) return { error: 'already_taken', message: 'already_taken' };
+  // JS accrual .catch() swallows 42501 but still aborts the Postgres
+  // transaction. Without a savepoint, COMMIT becomes ROLLBACK and the UI
+  // shows "Write transaction did not commit". The DB trigger
+  // tr_accrue_mortgage_ops_billing remains the durable $10/$5 path.
+  try {
+    await client.query('SAVEPOINT mortgage_ops_accrue');
+    try {
+      const { accrueMortgageOpsAcceptedRequest } = await import('./mortgage-ops-usage.mjs');
+      await accrueMortgageOpsAcceptedRequest(client, { request: rows[0], persist: true });
+      await client.query('RELEASE SAVEPOINT mortgage_ops_accrue');
+    } catch {
+      await client.query('ROLLBACK TO SAVEPOINT mortgage_ops_accrue');
+    }
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT mortgage_ops_accrue'); } catch { /* ignore */ }
+  }
   return { data: rows[0] };
 };
 

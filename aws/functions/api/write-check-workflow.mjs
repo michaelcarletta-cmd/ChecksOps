@@ -60,7 +60,7 @@ const lookupCheck = async (client, checkId) => {
   const invalid = requireUuid('check_id', checkId);
   if (invalid) return invalid;
   const rows = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+    'SELECT id, tenant_id, claim_id FROM public.check_intake_items WHERE id = $1::uuid',
     [checkId],
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
@@ -905,10 +905,10 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
     const rows = (await client.query(
       `INSERT INTO public.mortgage_handling_requests (
          tenant_id, check_intake_item_id, mortgage_company, loan_number, note,
-         requested_by, status
+         requested_by, status, claim_id
        ) VALUES (
          $1::uuid, $2::uuid, $3::text, $4::text, $5::text,
-         $6::uuid, 'requested'
+         $6::uuid, 'requested', $7::uuid
        ) RETURNING *`,
       [
         looked.check.tenant_id,
@@ -917,6 +917,7 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
         loan.value,
         note.value,
         mapping.application_user_id,
+        looked.check.claim_id || null,
       ],
     )).rows;
     return { rows };

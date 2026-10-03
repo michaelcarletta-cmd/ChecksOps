@@ -1,0 +1,60 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "gate": 4,
+  "status": "STOPPED",
+  "reason": "mortgage_agent_cognito_credentials_unavailable",
+  "captured_at": "2026-10-03T00:02:30Z",
+  "production_writes": false,
+  "admin_identity_substituted": false,
+  "cognito_user_created_or_reset": false,
+  "required_identity": {
+    "role": "mortgage_agent",
+    "email": "claims@freedomadj.com",
+    "known_app_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9"
+  },
+  "staging_cognito_user_exists": {
+    "pool": "us-east-1_vPmQ7cL1F",
+    "pool_name": "checksops-staging",
+    "username": "047824f8-b0b1-7018-c5e3-c0350a6c8a40",
+    "sub": "047824f8-b0b1-7018-c5e3-c0350a6c8a40",
+    "enabled": true,
+    "status": "CONFIRMED",
+    "email_verified": true
+  },
+  "credential_search": {
+    "CLOUD_AGENT_ALL_SECRET_NAMES": ["CURSOR_AWS_ASSUME_IAM_ROLE_ARN"],
+    "CLOUD_AGENT_INJECTED_SECRET_NAMES": ["CURSOR_AWS_ASSUME_IAM_ROLE_ARN"],
+    "mortgage_agent_password_present": false,
+    "cognito_client_secret_present": false,
+    "id_or_access_token_present": false
+  },
+  "why_not_created": "Creating or resetting a Cognito password would be an unauthorized Cognito/IAM write. Substituting an admin identity is forbidden by Gate 4.",
+  "matrix": {
+    "request": "not_run",
+    "queue": "not_run",
+    "authorized_agent_accept": "blocked",
+    "self_assignment_in_progress_accepted_at": "blocked",
+    "other_tenant_denied": "blocked",
+    "already_assigned_cannot_steal": "blocked",
+    "initial_qualifying_check_exactly_one_10_usd": "blocked",
+    "retry_no_duplicate": "blocked",
+    "additional_qualifying_check_exactly_one_5_usd": "blocked",
+    "assigned_agent_complete": "blocked",
+    "unauthorized_or_other_agent_cannot_complete": "blocked",
+    "completed_at_persists": "blocked",
+    "complete_no_second_billing_event": "blocked",
+    "bill_mortgage_handling_fail_closed_uninvoked": "spa_source_and_staging_queue_chunk_verified_only",
+    "no_moov_stripe_ach_provider_invoice_execution": "staging_flags_still_fail_closed"
+  },
+  "static_fail_closed_evidence": {
+    "staging_queue_chunk": "assets/MortgageOpsQueue-mopsRprA.js",
+    "staging_queue_sha256": "287e74e07f14233695695ea04a62be9dc818fa28849a9c5584de0072c0fb5e07",
+    "contains_bill_mortgage_handling": false,
+    "staging_api_flags": {
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+      "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+      "AWS_MOOV_ENABLED": "false",
+      "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": "false"
+    }
+  }
+}

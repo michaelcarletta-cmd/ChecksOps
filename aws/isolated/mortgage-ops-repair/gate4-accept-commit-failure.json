@@ -1,0 +1,76 @@
+{
+  "generatedAt": "2026-10-03T01:09:00.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "acceptNotPerformed": true,
+  "permissionsUnchanged": true,
+  "cognitoUnchanged": true,
+  "requestId": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+  "agentApplicationUserId": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+  "uiError": "Write transaction did not commit",
+  "errorSource": {
+    "lambda": "checksops-staging-api",
+    "file": "data.mjs",
+    "function": "commitWriteTransaction",
+    "returnedError": "transaction_not_committed",
+    "message": "Write transaction did not commit"
+  },
+  "cloudWatch": [
+    {
+      "timestamp": "2026-10-03T01:02:38.765Z",
+      "event": "write_transaction_not_committed",
+      "firstSqlstate": "42501",
+      "firstTable": "check_billing_events",
+      "firstOperation": "INSERT",
+      "firstMessagePrefix": "new row violates row-level security policy for table \"check_billing_events\""
+    },
+    {
+      "timestamp": "2026-10-03T01:02:57.104Z",
+      "event": "write_transaction_not_committed",
+      "firstSqlstate": "42501",
+      "firstTable": "check_billing_events",
+      "firstOperation": "INSERT",
+      "firstMessagePrefix": "new row violates row-level security policy for table \"check_billing_events\""
+    }
+  ],
+  "probeAccept": {
+    "lambda": "checksops-staging-mops-gate4-oneshot",
+    "committed": false,
+    "leaked": false,
+    "agentContext": {
+      "current_user": "checksops",
+      "auth_uid": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+      "is_agent": true,
+      "can_access_billing_tenant": false,
+      "can_write_billing_tenant": false
+    },
+    "updateAccept": {
+      "ok": true,
+      "rowCount": 1,
+      "status": "in_progress"
+    },
+    "triggerBillingVisibleToAdmin": {
+      "event_type": "mortgage_ops_initial",
+      "status": "recorded",
+      "unit_price_cents": 1000,
+      "note": "tr_accrue_mortgage_ops_billing inserted $10 in the same transaction. Agent SELECT cannot see it. Probe rolled this row back."
+    },
+    "firstFailure": {
+      "name": "insert_usage_event",
+      "code": "42501",
+      "message": "new row violates row-level security policy for table \"check_billing_events\""
+    },
+    "afterRollback": {
+      "status": "requested",
+      "assigned_employee_id": null,
+      "accepted_at": null,
+      "billing": []
+    }
+  },
+  "rootCause": "executeAcceptMortgage UPDATE succeeds under SQL 39. JS accrueMortgageOpsAcceptedRequest then INSERTs check_billing_events as the dedicated mortgage_agent. That INSERT is denied by RLS (agent is not a tenant writer). mortgage-ops-usage.mjs swallows the error, leaving the Postgres transaction aborted. withIdentityWrite still attempts COMMIT; PostgreSQL returns ROLLBACK; the API surfaces Write transaction did not commit. Accept and trigger billing both roll back.",
+  "smallestFix": "Wrap JS accrual in SAVEPOINT mortgage_ops_accrue and ROLLBACK TO SAVEPOINT on failure so Accept and tr_accrue_mortgage_ops_billing can commit. Do not change RLS, Cognito, or tenant membership. Staging API overlay only.",
+  "doNotClick": [
+    "815a0702-c19e-491a-a032-be9e77b11577",
+    "0151f4b2-d15b-461a-9f5a-7cc394450096"
+  ]
+}

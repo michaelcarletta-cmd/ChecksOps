@@ -1,0 +1,67 @@
+{
+  "live_member_count": 6477,
+  "missing_interest": [
+    "mortgage-ops-usage.mjs",
+    "moov.mjs",
+    "moov-transfers.mjs",
+    "wallet.mjs",
+    "checkalt.mjs",
+    "claim-ledger.mjs",
+    "claim-ledger-link.mjs"
+  ],
+  "workflow_rpc": {
+    "present": true,
+    "sha256": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "bytes": 54606,
+    "has_accept": true,
+    "has_savepoint": false,
+    "has_admin_set_check_claim": true,
+    "has_settlement_breakdown": true,
+    "has_usage_import": false,
+    "has_moov": false,
+    "exports_or_handlers": {
+      "accept_mortgage_handling_request": true,
+      "update_mortgage_handling_request_status": true,
+      "admin_set_check_claim": true
+    }
+  },
+  "usage": {
+    "live_present": false,
+    "live_sha256": null,
+    "accepted_source_sha256": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2",
+    "accepted_source_bytes": 9331,
+    "identical_to_accepted": false
+  },
+  "proposed": {
+    "writes_aws": false,
+    "overlay_reason": "savepoint_plus_isolated_usage_from_live_billing_import",
+    "workflow_rpc_changed": true,
+    "workflow_rpc_before": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+    "workflow_rpc_after": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
+    "usage_op": "add",
+    "usage_before": null,
+    "usage_after": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2",
+    "candidate_zip_sha256": "4b6095d23df359f61fc9f4af988ab46b13219d289bd549ed65956a3afcf105b7",
+    "candidate_member_count": 6478,
+    "added_or_changed": [
+      {
+        "member": "mortgage-ops-usage.mjs",
+        "op": "add",
+        "before": null,
+        "after": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2"
+      },
+      {
+        "member": "workflow-rpc.mjs",
+        "op": "replace",
+        "before": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+        "after": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654"
+      }
+    ],
+    "removed": [],
+    "proposed_rpc_keeps_admin_set_check_claim": true,
+    "proposed_rpc_keeps_settlement": true,
+    "proposed_rpc_has_savepoint": true,
+    "worktree_rpc_rejected_as_wholesale_replacement": true
+  },
+  "preserved_ok": true
+}

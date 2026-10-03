@@ -1,0 +1,606 @@
+{
+  "ok": true,
+  "mutated": false,
+  "hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+  "historical_policy": true,
+  "has_agent_fn": false,
+  "policies_present": [
+    "aws_delete_mortgage_handling_requests",
+    "aws_insert_mortgage_handling_requests",
+    "aws_select_check_billing_events",
+    "aws_select_mortgage_handling_requests",
+    "aws_update_mortgage_handling_requests",
+    "aws_write_check_billing_events",
+    "aws_write_check_billing_events_monthly_job",
+    "aws_write_check_billing_events_monthly_job_role"
+  ],
+  "login_role_mhr_table_update": [
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    }
+  ],
+  "force_rls": [
+    {
+      "table_name": "check_billing_events",
+      "rls": true,
+      "force_rls": false
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "rls": true,
+      "force_rls": false
+    }
+  ],
+  "membership_601": {
+    "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+    "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+  },
+  "policies": [
+    {
+      "table_name": "check_billing_events",
+      "policy_name": "aws_select_check_billing_events",
+      "command": "r",
+      "using_expr": "(aws_is_cross_tenant_reader() OR aws_can_access_tenant(tenant_id))",
+      "with_check": null
+    },
+    {
+      "table_name": "check_billing_events",
+      "policy_name": "aws_write_check_billing_events_monthly_job_role",
+      "command": "*",
+      "using_expr": "(aws_monthly_billing_job() OR is_platform_owner())",
+      "with_check": "(aws_monthly_billing_job() OR is_platform_owner())"
+    },
+    {
+      "table_name": "check_billing_events",
+      "policy_name": "aws_write_check_billing_events_monthly_job",
+      "command": "*",
+      "using_expr": "(is_platform_owner() OR aws_monthly_billing_job())",
+      "with_check": "(is_platform_owner() OR aws_monthly_billing_job())"
+    },
+    {
+      "table_name": "check_billing_events",
+      "policy_name": "aws_write_check_billing_events",
+      "command": "*",
+      "using_expr": "aws_can_write_tenant(tenant_id)",
+      "with_check": "aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "policy_name": "aws_delete_mortgage_handling_requests",
+      "command": "d",
+      "using_expr": "(aws_is_cross_tenant_reader() OR aws_can_write_tenant(tenant_id))",
+      "with_check": null
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "policy_name": "aws_insert_mortgage_handling_requests",
+      "command": "a",
+      "using_expr": null,
+      "with_check": "(aws_is_cross_tenant_reader() OR (aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "policy_name": "aws_select_mortgage_handling_requests",
+      "command": "r",
+      "using_expr": "(aws_is_cross_tenant_reader() OR aws_can_access_tenant(tenant_id) OR aws_mortgage_agent_queue_visible(status, assigned_employee_id))",
+      "with_check": null
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "policy_name": "aws_update_mortgage_handling_requests",
+      "command": "w",
+      "using_expr": "(aws_is_cross_tenant_reader() OR aws_can_write_tenant(tenant_id) OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))))",
+      "with_check": "(aws_is_cross_tenant_reader() OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))) OR (aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))"
+    }
+  ],
+  "table_grants": [
+    {
+      "table_name": "check_billing_events",
+      "grantee": "authenticated",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "authenticated",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "authenticated",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops_admin",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops_admin",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops_admin",
+      "privilege_type": "REFERENCES"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops_admin",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRIGGER"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRUNCATE"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops_admin",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "check_billing_events",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "REFERENCES"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRIGGER"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRUNCATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops_admin",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "REFERENCES"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRIGGER"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "TRUNCATE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops_admin",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "DELETE"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "INSERT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "SELECT"
+    },
+    {
+      "table_name": "payment_transfers",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    }
+  ],
+  "column_update_grants_non_admin": [
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "accepted_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "assigned_employee_id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "billed_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "billing_error",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "billing_status",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "cancelled_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "check_intake_item_id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "check_received_back_date",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "check_sent_date",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "claim_id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "claim_number",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "completed_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "created_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "date_of_loss",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "endorsement_order",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "flat_fee_cents",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "homeowner_email",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "homeowner_name",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "homeowner_phone",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "homeowner_ssn_last_four",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "insurance_company",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_notes",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_number",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_recipient_email",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_sent_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_services_cents",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_shipping_cents",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_shipping_description",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "invoice_url",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "loan_number",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "loss_type",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "mail_to_address",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "mail_to_name",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "mortgage_company",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "mortgage_servicer",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "note",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "policy_number",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "predecessor_request_id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "property_address",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "requested_by",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "shipping_label_carrier",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "shipping_label_name",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "shipping_label_path",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "shipping_label_tracking",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "shipping_label_uploaded_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "shipping_label_uploaded_by",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "status",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "stripe_invoice_id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "stripe_invoice_item_id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "tenant_id",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "total_mortgagees",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "updated_at",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    },
+    {
+      "table_name": "mortgage_handling_requests",
+      "column_name": "work_notes",
+      "grantee": "checksops",
+      "privilege_type": "UPDATE"
+    }
+  ]
+}

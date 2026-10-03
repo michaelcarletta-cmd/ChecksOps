@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-02T15:03:04Z (index-HXTuSrE0.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live Branding checksops.com SPA verified 2026-10-03T10:28:16Z (index-BgOCQCWm.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "delete-check-contract": {
       "id": "delete-check-contract",
@@ -558,8 +558,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306",
+        "git_sha": "46dfbd8c7eeee65ad599aeba6cd7775a0577092f",
+        "tree_hash": "e3dfbb80a5502b331b096574b3d84fb27b864be38f86fc288b646e66f296e128",
         "merged": true,
         "merged_pr": null
       },
@@ -571,6 +571,14 @@
           "applied_environment": null,
           "applied_sha256": null,
           "proof": null
+        },
+        {
+          "path": "aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql",
+          "source_sha256": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": "Accepted on staging 2026-10-03. Production apply is not authorized in this preflight. Do not apply from this lock update."
         }
       ],
       "artifact": {
@@ -595,8 +603,8 @@
         "notes": "Staging oneshot apply docs exist; production RLS catalog hash is unknown."
       },
       "missing_evidence": [
-        "production RLS catalog hash",
-        "revalidation of current protected database/RLS source tree"
+        "production Mortgage Ops policy/grant catalog hash immediately before SQL 39 apply",
+        "production apply proof for SQL 39"
       ],
       "open_pr_overlap": [
         "#289",
@@ -605,7 +613,7 @@
         "#350",
         "#310"
       ],
-      "notes": "Fail-closed metadata reconciliation only. The protected database/RLS tree advanced on merged main through reviewed Manager/CheckAlt and Claim Ledger changes, including PR #543. Classification remains UNVERIFIED. This records source drift only; it does not apply, reapply, rollback, or modify any database SQL, RLS policy, write allowlist behavior, or production database state."
+      "notes": "Fail-closed metadata reconciliation only. tree_hash retargeted to the accepted source composition that includes SQL 39 (e3dfbb80\u2026). Classification remains UNVERIFIED. This does not apply SQL 39, does not replace any production SQL executor, and does not disable the lock."
     },
     "provider-secrets": {
       "id": "provider-secrets",
@@ -704,20 +712,20 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "2277ab9ead9ab8270446468421f9dd8cc3e1a401",
-        "tree_hash": "246646f329218c5be81392dd75142830ca947951551ef76be319f29508f5255b",
+        "git_sha": "b8a6fa5e5f015cece599e013005ddf5c5a82c031",
+        "tree_hash": "abe7da8c71197e4f4a87ac34fb639d94fe4f519421bdbb6ccdcf562929cc9177",
         "merged": false,
         "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-HXTuSrE0.js",
-        "version": "PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX",
-        "hash": "d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d",
+        "name": "/assets/index-BgOCQCWm.js",
+        "version": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
+        "hash": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "9f673420-a5a1-43df-a798-cc7022a4fb8d",
+        "lambda_version": "2f112f18-9055-4760-859d-62be8899b91f",
         "lambda_alias": null
       },
       "production_validation": {
@@ -725,37 +733,37 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-10-02T15:03:04Z",
+        "recorded_at": "2026-10-03T11:41:43Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "2277ab9ead9ab8270446468421f9dd8cc3e1a401",
-        "artifact_identity": "/assets/index-HXTuSrE0.js",
-        "evidence_producer": "read-only live HTTPS verification of checksops.com",
-        "evidence_type": "production SPA baseline freeze"
+        "git_sha": "b8a6fa5e5f015cece599e013005ddf5c5a82c031",
+        "artifact_identity": "/assets/index-BgOCQCWm.js",
+        "evidence_producer": "official production-spa-upload per_object_put after Mortgage Ops queue blur hotfix",
+        "evidence_type": "production SPA Mortgage Ops overlay on live Branding plus expression-safe queue blur"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-HXTuSrE0.js",
-        "spa_sha256": "d584fe66e677db7ff0b532fc2a296a578a40f6b4f7b5f7a58f5c8e839d90041d",
+        "spa_bundle": "/assets/index-BgOCQCWm.js",
+        "spa_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX",
+        "cloudfront_deployment_fingerprint": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "9f673420-a5a1-43df-a798-cc7022a4fb8d",
-        "lambda_code_hash": null,
-        "applied_sql_hash": null,
-        "database_evidence_record": null,
-        "config_hash": "a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52",
-        "notes": "Accepted live production SPA 2026-10-02T15:03:04Z. Host checksops.com. Entry /assets/index-HXTuSrE0.js. index.html sha256 a33569d86c2483eecdb8550a47013ccb087011d201f718765a567647958d2b52. S3 version PzXfOI.HeUgvUqw6Q2L_PzPMmL1EbEXX. Previous gYa_BW8r baseline is superseded lineage only. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved."
+        "lambda_version": "2f112f18-9055-4760-859d-62be8899b91f",
+        "lambda_code_hash": "4b6095d23df359f61fc9f4af988ab46b13219d289bd549ed65956a3afcf105b7",
+        "applied_sql_hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
+        "database_evidence_record": "aws/isolated/mortgage-ops-repair/production-sql-transition-2026-10-03.json",
+        "config_hash": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+        "notes": "Mortgage Ops overlay plus expression-safe queue blur hotfix 2026-10-03T11:41:43Z. Host checksops.com. Entry filename unchanged /assets/index-BgOCQCWm.js. Entry sha256 ae4ea2c9\u2026. Queue da66439c\u2026. index.html sha256 3832fadc\u2026 unchanged. New index VersionId QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd. CloudFront I5T9PLB4T87BWXGN0C3I0CV9E8. Branding repair and Homeowner /h/ledger routing were not included."
       },
       "rollback": {
-        "git_sha": "b39738cab7c1afd68e97c88781766b6cabe04896",
-        "artifact": "/assets/index-gYa_BW8r.js",
-        "notes": "Immediate previous accepted baseline is /assets/index-gYa_BW8r.js (2026-10-02T01:51:18Z, s3 TYCJ6QSvW7E1bkW1sRdPbvpwJlWeCTsJ, sha256 71dcf3eb5f95eafcbc19e47897b0d106c1194044d4ef9c40f8f831fdfbecd280). Do not restore gYa_BW8r over the current live identity unless a separately authorized guarded rollback names that exact artifact."
+        "git_sha": "2277ab9ead9ab8270446468421f9dd8cc3e1a401",
+        "artifact": "/assets/index-BgOCQCWm.js",
+        "notes": "Immediate previous accepted baseline is the pre-overlay Branding entry /assets/index-BgOCQCWm.js sha256 7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf, index VersionId w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd. Do not restore HXTuSrE0 or the pre-overlay entry unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
-      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This update records evidence only and does not deploy."
+      "notes": "Authoritative production frontend is the live Branding SPA plus the accepted Mortgage Ops overlay. Entry filename remains /assets/index-BgOCQCWm.js. Branding repair and Homeowner /h/ledger routing are not in this lock. Future production SPA work must start from this live identity. Do not promote main merely because it is main. SPA-only lock: no further SQL."
     },
     "production-release": {
       "id": "production-release",
@@ -764,8 +772,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "6a7834b842752d7c1e103bf51bba3892b09ffa512eecb6be4a63cfa2c3d62abb",
+        "git_sha": "46dfbd8c7eeee65ad599aeba6cd7775a0577092f",
+        "tree_hash": "2d356051ce740327c4379371062b45901b2e229ec251a75587870a221b66996f",
         "merged": true,
         "merged_pr": null
       },

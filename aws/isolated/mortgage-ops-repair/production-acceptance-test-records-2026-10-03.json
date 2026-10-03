@@ -1,0 +1,72 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "captured_at": "2026-10-03T11:40:00Z",
+  "sql_modified": false,
+  "cognito_modified": false,
+  "provider_flags_modified": false,
+  "env_vars_modified": false,
+  "purpose": "Controlled production test records for Mortgage Ops acceptance. Isolated synthetic tenant only.",
+  "do_not_touch": {
+    "id": "5b20db20-13e1-4919-9528-06388d8661d2",
+    "reason": "Existing production requested row on a real tenant. Not labeled synthetic. Left unassigned."
+  },
+  "agent": {
+    "email": "claims@freedomadj.com",
+    "application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "production_cognito_sub": "34c8a478-e0d1-70f3-3c49-02225e7404b6",
+    "roles": ["mortgage_agent"],
+    "tenant_users": [],
+    "isolated_mortgage_agent": true
+  },
+  "tenant": {
+    "id": "6f2c1a90-0ad9-4c3e-9b71-2c8e6d4f1a20",
+    "name": "SYNTHETIC Mortgage Ops Acceptance 20261003",
+    "slug": "synthetic-mops-accept-20261003",
+    "mortgage_ops_initial_rate_cents": 1000,
+    "mortgage_ops_additional_rate_cents": 500
+  },
+  "claim": {
+    "id": "4278dd11-6d81-4f5d-9948-6239048fcc4d",
+    "claim_number": "SYNTHETIC-PROD-MOPS-ACCEPT-20261003",
+    "policyholder_name": "SYNTHETIC PROD MOPS HOMEOWNER"
+  },
+  "click_this_first": {
+    "title": "PROD ACCEPT $10 — MOPS REPAIR",
+    "loan": "PROD-MOPS-20261003-A",
+    "request_id": "7a7ec1ce-de9a-4601-875c-4a67db635fd2",
+    "check_id": "cef7186d-b638-4df3-af65-718ea0ac1d44",
+    "amount": "1042.00"
+  },
+  "click_this_second": {
+    "title": "PROD ACCEPT $5 — MOPS REPAIR",
+    "loan": "PROD-MOPS-20261003-B",
+    "request_id": "71ea6822-df95-4aa9-a04c-4a00a5f6d043",
+    "check_id": "6151136b-cf47-4fe8-8afb-253404b2c26a",
+    "amount": "555.00"
+  },
+  "billing_events_at_seed": 0,
+  "billing_events_after_acceptance": [
+    {
+      "id": "3df0c417-641d-45c2-87dc-47fdd2c1d80c",
+      "event_type": "mortgage_ops_initial",
+      "unit_price_cents": 1000,
+      "request_id": "7a7ec1ce-de9a-4601-875c-4a67db635fd2"
+    },
+    {
+      "id": "e68193b5-cb9c-4754-92dd-a85884cd2f98",
+      "event_type": "mortgage_ops_additional_check",
+      "unit_price_cents": 500,
+      "request_id": "71ea6822-df95-4aa9-a04c-4a00a5f6d043"
+    }
+  ],
+  "accidental_freedom_usage_event": {
+    "id": "6c661cc3-9be0-4906-9996-210e3be005dc",
+    "request_id": "5b20db20-13e1-4919-9528-06388d8661d2",
+    "event_type": "mortgage_ops_initial",
+    "unit_price_cents": 1000,
+    "status": "recorded",
+    "row_left": "in_progress_not_completed"
+  },
+  "seed_function": "checksops-prod-mops-accept-seed-ad99",
+  "inspect_function": "checksops-prod-mops-accept-inspect-ad99"
+}

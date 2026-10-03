@@ -1,0 +1,53 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "gate": 5,
+  "captured_at": "2026-10-03T10:20:10Z",
+  "after": "GATE4-A Complete",
+  "command": "node --experimental-strip-types --test --test-reporter tap <gate5 suites + workflow-rpc-bridges + spa notfound tests>",
+  "totals": {
+    "tests": 562,
+    "pass": 557,
+    "fail": 4,
+    "skipped": 1,
+    "duration_ms": 12570
+  },
+  "extra_scripts": {
+    "bun scripts/test-moov-file-rules.mjs": { "passed": 21, "failed": 0 },
+    "node scripts/test-walletops-layout.mjs": { "passed": 15, "failed": 0 }
+  },
+  "new_workstream_tests_passed": [
+    "aws/tests/workflow-rpc-bridges.test.mjs",
+    "src/lib/transientDomNodeError.test.mjs",
+    "scripts/lib/staging-spa-dom-notfound-patch.test.mjs"
+  ],
+  "unrepaired_same_as_prior_gate5": [
+    {
+      "name": "disposable PostgreSQL mortgage library RLS matrix",
+      "file": "aws/tests/mortgage-ops-library-parity-pg.test.mjs",
+      "reason": "PostgreSQL 16 initdb is not available in this environment"
+    },
+    {
+      "name": "isolated PostgreSQL unique-tenant claim persist and auto-link",
+      "file": "aws/tests/ocr-claim-number-sql.test.mjs",
+      "reason": "PostgreSQL 16 initdb is not available in this environment"
+    },
+    {
+      "name": "170010 then SQL 41 still unique-links many checks to one tenant claim",
+      "file": "aws/tests/ocr-claim-number-sql.test.mjs",
+      "reason": "PostgreSQL 16 initdb is not available in this environment"
+    },
+    {
+      "name": "origin/main-based manifest validates fail-closed with production-spa PRODUCTION_LOCKED",
+      "file": "ops/release-locks/tests/validate-release-locks.test.mjs",
+      "reason": "Adding aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql changes the protected database-rls tree_hash. Production lock manifest not updated."
+    }
+  ],
+  "skipped": [
+    {
+      "name": "isolated PostgreSQL Claim Ledger RPC links, creates atomically, and denies cross-tenant",
+      "reason": "PostgreSQL 16 initdb is not installed in this environment"
+    }
+  ],
+  "repaired_unrelated_failures": false,
+  "promoted_to_production": false
+}

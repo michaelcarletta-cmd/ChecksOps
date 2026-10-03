@@ -1,0 +1,89 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "commit": "3ba3be3c3fbf6be7ffbdbbd9716fc6c9f8a27775",
+  "applied_at": "2026-10-02T23:10:14Z",
+  "production_writes": false,
+  "staging_lambda_before": {
+    "CodeSha256": "70LMF4qoKSCbCzZKdmczXPwlEIPx5KWlW9bgKthzUCA=",
+    "RevisionId": "5468d1db-270a-4161-ad50-bcdff25e7428",
+    "LastModified": "2026-10-02T19:41:15.000+0000"
+  },
+  "staging_lambda_after": {
+    "CodeSha256": "7vJjjYSm2qkHTHHPIjlgHZ8w0hmkfou8p2EsXd4RWDk=",
+    "RevisionId": "57f0f181-b477-430a-b3a9-06cdbe54e209",
+    "LastModified": "2026-10-02T23:08:42.000+0000"
+  },
+  "production_prep_untouched": {
+    "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+    "LastModified": "2026-10-02T20:26:42.000+0000"
+  },
+  "lambda_member_delta": {
+    "replaced": {
+      "workflow-rpc.mjs": {
+        "before": "b030436c8d30eb2016eaac3329121785d2268adab48de2c148d7b897847e51cf",
+        "after": "5b9738864ae8ffadd52a0b7114ac539f957f340ff36f5394f754c867f7dd6cab",
+        "change": "retarget Accept accrue import from tenant-billing-engine.mjs to mortgage-ops-usage.mjs; Claim Ledger RPCs preserved"
+      },
+      "write-check-workflow.mjs": {
+        "before": "02d1ad2307b3ebf7964a3be489e3db7c08fc49050a90cb133d6d74b7227de1d5",
+        "after": "7d3eb430899796cc02bc7175db0a3f1cca1ee82763f2a0404b0c13380d1131a7",
+        "change": "SELECT/INSERT claim_id while keeping deposited_at and payee_line"
+      }
+    },
+    "added": {
+      "mortgage-ops-usage.mjs": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2"
+    },
+    "preserved": {
+      "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+      "bill-mortgage-handling.mjs": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8",
+      "write-claim-settlement.mjs": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d"
+    }
+  },
+  "flags_staging_after": {
+    "AWS_WRITES_ENABLED": "true",
+    "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": "true",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": "false",
+    "AWS_MOOV_MONTHLY_BILLING_ENABLED": "true"
+  },
+  "spa_before": {
+    "index": "/assets/index-BcLmLtnF.js",
+    "queue": "MortgageOpsQueue-B0d_WpSJ.js",
+    "index_html_sha256": "1b040bd04326418e7e9df39628200fbe8cc84b05617e65c1a53bf6f2e9dc7ffe"
+  },
+  "spa_after": {
+    "index": "/assets/index-moprRprA.js",
+    "queue": "MortgageOpsQueue-mopsRprA.js",
+    "index_html_sha256": "5a702f6f05c149015feb9e2ad629be4aa66b5380e0cb727206262e8e4c4d21ee",
+    "invalidation_id": "IAYG64ZECUYD9ZUWK6ARPCOV9T",
+    "queue_bill_mortgage_handling": false
+  },
+  "production_spa_untouched": {
+    "index": "/assets/index-BgOCQCWm.js",
+    "index_html_etag": "b70636253b28bbeb25af61c9e105ebf2",
+    "LastModified": "2026-10-02T21:26:09+00:00"
+  },
+  "sql_39_status": "STOPPED",
+  "sql_39_stop_reason": {
+    "code": "unexpected_staging_live_drift",
+    "live_executor": {
+      "name": "checksops-staging-guarded-sql-executor",
+      "CodeSha256": "GlI2hMNdge353F0vvlxWI0z4f7G98gvLMSicOF8Zo8I=",
+      "RevisionId": "4fd3b735-2a3e-4c76-aec4-05ac8707cc8a",
+      "LastModified": "2026-10-02T20:06:01.000+0000"
+    },
+    "live_only": [
+      "AUTHORIZED_MEMBERSHIP_ONLY / 20261002200000_user_can_move_tenant_checks_membership_only.sql",
+      "handleMembershipOnlyHelper in live index.mjs"
+    ],
+    "why_not_applied": "sql-executor-ensure packs from origin/main and would destroy the live #601 membership-only helper. The executor is not a shared overlay target, and lambda-overlay-apply only reads member_sources from aws/functions/api. SQL 39 is policy SQL, not a function replace the live executor can apply."
+  },
+  "synthetic_accept_matrix": "blocked_on_sql_39_and_cognito_tokens",
+  "collision_check": {
+    "this_run": "bc-60a461e2-8b0e-4b3c-9c7f-742615daad99",
+    "other_running": "bc-cd467a8c-494f-5bfe-91f3-7a16b1e58379 OTP verify then wait for redirect (unrelated, no branch)"
+  }
+}

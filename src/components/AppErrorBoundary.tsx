@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { isTransientDomNodeError } from "@/lib/transientDomNodeError";
 
 interface Props {
   children: ReactNode;
@@ -14,6 +15,9 @@ export class AppErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): State {
+    if (isTransientDomNodeError(error)) {
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 
@@ -35,7 +39,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <Button
             type="button"
             className="mt-6"
-            onClick={() => this.setState({ hasError: false, error: null })}
+            onClick={() => window.location.reload()}
           >
             Try again
           </Button>

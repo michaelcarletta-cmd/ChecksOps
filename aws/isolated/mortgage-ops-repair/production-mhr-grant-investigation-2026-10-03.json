@@ -1,0 +1,250 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "mode": "read-only-grant-investigation",
+  "status": "ANALYSIS_COMPLETE",
+  "production_writes": false,
+  "sql39_applied": false,
+  "lambda_deployed": false,
+  "spa_deployed": false,
+  "inspect_function_modified": false,
+  "pr601_changed": false,
+  "claim_ledger_changed": false,
+  "guard_taught_to_accept_table_update": false,
+  "captured_at": "2026-10-03T10:55:00Z",
+  "production_inspect": {
+    "function": "checksops-prod-mops-sql39-inspect-ad99",
+    "hash": "9b428140630157a29f7f96f1f368d8eeb264aceaa764c0a214b5a3aa58538ee0",
+    "source": "/tmp/mops-repair/prod-promote/sql/inspect-result.json"
+  },
+  "staging_gate4_model": {
+    "before_hash": "511955b6821b55225a019a0f60ccf783a285456b87f0c5987ee2174127f6da2d",
+    "after_hash": "4adc182c4ed13b11b37e8412056781112ea8f2a788bc1b51e21810460d13239b",
+    "login_role_mhr_table_update_before": [],
+    "login_role_mhr_table_update_after": [],
+    "checksops_mhr_table_grants": ["DELETE", "INSERT", "SELECT"],
+    "authenticated_mhr_table_grants": ["DELETE", "INSERT", "SELECT"],
+    "login_role_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "cancelled_at",
+      "claim_number",
+      "completed_at",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "insurance_company",
+      "loan_number",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "property_address",
+      "status",
+      "updated_at",
+      "work_notes"
+    ],
+    "cbe_checksops": ["INSERT", "SELECT", "UPDATE"],
+    "cbe_authenticated": ["INSERT", "SELECT", "UPDATE"],
+    "cbe_checksops_delete": false
+  },
+  "production_live": {
+    "login_role_mhr_table_update": ["checksops"],
+    "authenticated_mhr_table_grants": [],
+    "checksops_mhr_table_grants": ["DELETE", "INSERT", "SELECT", "UPDATE"],
+    "checksops_column_update": "ALL_54_COLUMNS_VIA_TABLE_UPDATE",
+    "authenticated_column_update": [],
+    "cbe_checksops": ["DELETE", "INSERT", "SELECT", "UPDATE"],
+    "cbe_authenticated": ["INSERT", "SELECT", "UPDATE"],
+    "historical_policy_present": true,
+    "sql39_policies_present": false,
+    "force_rls": false
+  },
+  "historical_policy": {
+    "name": "aws_update_mortgage_handling_requests",
+    "command": "UPDATE",
+    "using": "(aws_is_cross_tenant_reader() OR aws_can_write_tenant(tenant_id) OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))))",
+    "with_check": "(aws_is_cross_tenant_reader() OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))) OR (aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))",
+    "broader_than_intended": true,
+    "reason": "Combined with table-level UPDATE, mortgage_agent and cross_tenant_reader can write every MHR column, including billing, invoice, SSN, shipping, tenant_id, and Stripe ids. Tenant writers can rewrite any column on still-requested unassigned rows."
+  },
+  "provenance": {
+    "repo_table_level_update_to_checksops": false,
+    "repo_sources_found": [
+      "supabase/migrations/20260715110727: GRANT SELECT, INSERT, UPDATE ON mortgage_handling_requests TO authenticated (not checksops)",
+      "aws/workflows/sql/50_tranche5_write_grants.sql: GRANT SELECT, INSERT, DELETE plus column UPDATE (13 metadata cols) TO checksops, authenticated",
+      "aws/workflows/sql/51_tranche5_revoke_write_grants.sql: REVOKE ALL then GRANT SELECT only",
+      "aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql: GRANT UPDATE (assigned_employee_id, accepted_at, completed_at) only; forbids table-level UPDATE",
+      "aws/tests/mortgage-ops-library-parity-pg.test.mjs: test-only GRANT SELECT, INSERT, UPDATE"
+    ],
+    "most_likely_entry": "Out-of-repo production write-path overlay that granted checksops table DML (SELECT/INSERT/UPDATE/DELETE) and never granted authenticated. Matches later production grant philosophy in checksops-production-workflow-grants-83c9 (GRANT checksops only; never authenticated). Not SQL 45/46 (billing only). Not tranche 5 file as written (that file is column-scoped and also grants authenticated).",
+    "cannot_pin_apply_timestamp": true,
+    "split_policies_not_in_repo": [
+      "aws_insert_mortgage_handling_requests",
+      "aws_update_mortgage_handling_requests",
+      "aws_delete_mortgage_handling_requests"
+    ]
+  },
+  "cbe_delete": {
+    "production_has_checksops_delete": true,
+    "staging_has_checksops_delete": false,
+    "repo_grant_found": false,
+    "live_lambda_deletes_cbe": false,
+    "live_delete_check": "SELECT blocker only; refuses delete when CBE rows exist; may fall back to SECURITY DEFINER admin_delete_check",
+    "relevant_to_mortgage_ops_sql39": false,
+    "recommendation": "Leave unchanged. Do not REVOKE or GRANT as part of Mortgage Ops."
+  },
+  "writers": [
+    {
+      "id": "create_request",
+      "path": "live write-check-workflow.mjs executeMortgageRequests insert; SPA SendToMortgageDeskButton / CheckMortgageMonitoring",
+      "op": "INSERT",
+      "columns": ["tenant_id", "check_intake_item_id", "mortgage_company", "loan_number", "note", "requested_by", "status"],
+      "needs_table_update": false,
+      "needs_insert": true,
+      "impact_if_revoke_table_update": "none"
+    },
+    {
+      "id": "queue_select",
+      "path": "MortgageOpsQueue select; aws_select_mortgage_handling_requests (+ later SQL39 agent queue)",
+      "op": "SELECT",
+      "columns": [],
+      "needs_table_update": false,
+      "impact_if_revoke_table_update": "none"
+    },
+    {
+      "id": "tenant_metadata_update",
+      "path": "live write-check-workflow.mjs executeMortgageRequests update",
+      "op": "UPDATE",
+      "columns": ["mortgage_company", "mortgage_servicer", "loan_number", "note", "work_notes", "property_address", "claim_number", "insurance_company", "homeowner_name", "homeowner_email", "homeowner_phone", "status"],
+      "needs_table_update": false,
+      "needs_column_update": true,
+      "rls_after_sql39": "denied unless caller is mortgage_agent matching accept-complete policy; matches staging Gate 4 after SQL 39 (historical update policy dropped)",
+      "impact_if_revoke_table_update_keep_17_cols": "privilege preserved; RLS still agent-only after SQL 39, same as staging"
+    },
+    {
+      "id": "accept",
+      "path": "live workflow-rpc.mjs executeAcceptMortgage",
+      "op": "UPDATE",
+      "columns": ["assigned_employee_id", "status", "accepted_at", "updated_at"],
+      "needs_table_update": false,
+      "needs_column_update": true,
+      "impact_if_revoke_table_update_keep_17_cols": "preserved"
+    },
+    {
+      "id": "complete_or_cancel",
+      "path": "live workflow-rpc.mjs executeUpdateMortgageStatus",
+      "op": "UPDATE",
+      "columns": ["status", "completed_at", "work_notes", "updated_at"],
+      "needs_table_update": false,
+      "needs_column_update": true,
+      "impact_if_revoke_table_update_keep_17_cols": "preserved"
+    },
+    {
+      "id": "billing_usage",
+      "path": "live tenant-billing-engine.mjs accrueMortgageOpsAcceptedRequest; DB trigger tr_accrue_mortgage_ops_billing",
+      "op": "INSERT check_billing_events",
+      "columns": [],
+      "needs_mhr_update": false,
+      "needs_cbe_insert": true,
+      "needs_cbe_delete": false,
+      "impact_if_revoke_table_update": "none"
+    },
+    {
+      "id": "bill_mortgage_handling",
+      "path": "live bill-mortgage-handling.mjs",
+      "op": "SELECT then denyProviderExecution",
+      "needs_table_update": false,
+      "impact_if_revoke_table_update": "none"
+    },
+    {
+      "id": "delete_check",
+      "path": "live workflow.mjs handleDeleteCheck",
+      "op": "SELECT CBE as blocker; does not DELETE MHR or CBE; may call admin_delete_check SECURITY DEFINER",
+      "needs_table_update": false,
+      "needs_cbe_delete": false,
+      "needs_mhr_delete": false,
+      "impact_if_revoke_table_update": "none"
+    },
+    {
+      "id": "admin_unassign",
+      "path": "AdminMortgageOps.tsx supabase update assigned_employee_id/status/accepted_at",
+      "op": "UPDATE",
+      "columns": ["assigned_employee_id", "status", "accepted_at"],
+      "live_aws": "assigned_employee_id and accepted_at are write-allowlist clientIgnored; not a working AWS /data/write path",
+      "sql39_with_check": "would reject assigned_employee_id IS NULL after update",
+      "impact": "already non-functional on AWS; SQL 39 does not newly break a live AWS writer"
+    },
+    {
+      "id": "detail_shipping_invoice_dates",
+      "path": "MortgageOpsRequestDetail.tsx / SendToMortgageDeskButton endorsement_order",
+      "op": "UPDATE",
+      "columns": ["mail_to_*", "shipping_label_*", "invoice_*", "check_sent_date", "check_received_back_date", "endorsement_order", "total_mortgagees"],
+      "live_aws": "not in write-allowlist columns; Lambda rejects before DB",
+      "needs_table_update": false,
+      "impact_if_revoke_table_update": "none on current production AWS path"
+    }
+  ],
+  "proposed_transition": {
+    "must_not": [
+      "teach handleMortgageOpsAcceptComplete to accept leftover table UPDATE",
+      "apply current SQL 39 alone (would UNRELATED_MUTATION on leftover checksops table UPDATE)",
+      "REVOKE check_billing_events DELETE",
+      "change #601 or Claim Ledger",
+      "GRANT table-level UPDATE to authenticated"
+    ],
+    "step_a_privilege_narrowing": {
+      "revoke": [
+        "REVOKE UPDATE ON TABLE public.mortgage_handling_requests FROM checksops;"
+      ],
+      "grant": [
+        "GRANT UPDATE (assigned_employee_id, accepted_at, completed_at, cancelled_at, status, updated_at, work_notes, mortgage_company, mortgage_servicer, loan_number, note, property_address, claim_number, insurance_company, homeowner_name, homeowner_email, homeowner_phone) ON TABLE public.mortgage_handling_requests TO checksops;"
+      ],
+      "keep": [
+        "checksops SELECT, INSERT, DELETE on mortgage_handling_requests",
+        "checksops_admin owner privileges",
+        "no authenticated MHR table DML (production current)",
+        "check_billing_events DELETE on checksops (out of workstream)"
+      ]
+    },
+    "step_b_sql39_pinned": {
+      "file": "aws/rls/sql/39_mortgage_ops_agent_accept_complete.sql",
+      "sha256": "c59845e439cfdfd48be955d8ab78128de4ba39211b136616fc23799215145e3f",
+      "drop_policy": "aws_update_mortgage_handling_requests",
+      "add_function": "aws_is_mortgage_ops_agent()",
+      "add_policies": [
+        "aws_select_mortgage_ops_agent_queue",
+        "aws_update_mortgage_ops_accept_complete",
+        "aws_insert_mortgage_ops_usage_events"
+      ],
+      "grant": [
+        "GRANT UPDATE (assigned_employee_id, accepted_at, completed_at) TO checksops, authenticated",
+        "GRANT INSERT ON check_billing_events TO checksops, authenticated (already present)"
+      ]
+    },
+    "after_login_role_mhr_table_update": [],
+    "after_checksops_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "cancelled_at",
+      "claim_number",
+      "completed_at",
+      "homeowner_email",
+      "homeowner_name",
+      "homeowner_phone",
+      "insurance_company",
+      "loan_number",
+      "mortgage_company",
+      "mortgage_servicer",
+      "note",
+      "property_address",
+      "status",
+      "updated_at",
+      "work_notes"
+    ],
+    "after_authenticated_column_update": [
+      "accepted_at",
+      "assigned_employee_id",
+      "completed_at"
+    ],
+    "snapshot_hash_will_not_equal_staging_4adc": "production has no authenticated MHR INSERT/DELETE/SELECT; staging does. Do not add those grants just to match the hash."
+  }
+}

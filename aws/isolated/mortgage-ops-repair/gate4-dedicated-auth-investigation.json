@@ -1,0 +1,64 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "captured_at": "2026-10-03T00:16:20Z",
+  "read_only": true,
+  "writes_attempted": false,
+  "production_changed": false,
+  "gate_4": "STOPPED",
+  "conclusion": "Dedicated Mortgage Ops authentication already exists and is wired on staging. claims@freedomadj.com is a mortgage_agent-only identity with no tenant_users membership. The Gate 4 blocker is mailbox/OTP completion, not a missing company login.",
+  "intended_path": {
+    "authenticate": "Cognito EMAIL_OTP (or HTTPS passkey) on the isolated Mortgage Desk client",
+    "entry": "https://staging.checksops.com/mortgage-ops/login",
+    "after_login": "/mortgage-ops/queue",
+    "session_key": "checksops.aws.staging.auth.mortgage-ops",
+    "not_entry": ["/login", "/{slug}/login", "tenant white-label", "company ChecksOps UI"],
+    "identity_chain": "Cognito sub -> identity_accounts.application_user_id -> auth.uid() -> user_roles.mortgage_agent"
+  },
+  "live_staging_identity": {
+    "email": "claims@freedomadj.com",
+    "cognito_pool": "us-east-1_vPmQ7cL1F",
+    "cognito_username": "047824f8-b0b1-7018-c5e3-c0350a6c8a40",
+    "cognito_sub": "047824f8-b0b1-7018-c5e3-c0350a6c8a40",
+    "cognito_status": "CONFIRMED",
+    "email_verified": true,
+    "application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "identity_accounts_status": "active",
+    "identity_accounts_linked_at": "2026-09-23T21:30:20.410Z",
+    "user_roles": ["mortgage_agent"],
+    "tenant_users": [],
+    "is_master_owner": false,
+    "is_platform_owner": false,
+    "has_admin_role": false,
+    "aws_is_cross_tenant_reader": false,
+    "historical_onboard_sub_retired": "2498c4b8-f0a1-701b-da4b-a1f5c79f675a",
+    "live_sub_matches_identity_accounts": true
+  },
+  "visibility": {
+    "requires_tenant_users": false,
+    "queue_select": "aws_is_mortgage_ops_agent() via SQL 39; all mortgage_handling_requests",
+    "ui_available": "unassigned requested rows",
+    "ui_in_progress_completed": "only rows assigned to auth.uid()",
+    "checks_claims": "helpers scoped to active requested/in_progress mortgage_handling_requests",
+    "tenants": "names on queue rows only; not a tenant writer"
+  },
+  "staging_spa_supports_dedicated_model": {
+    "index": "/assets/index-moprRprA.js",
+    "authProvider_baked": "cognito",
+    "isAwsStaging_constant_true": true,
+    "routes_present": ["/mortgage-ops/login", "/mortgage-ops/queue"],
+    "mortgage_session_key_present": true,
+    "passwordless_routes_present": true,
+    "queue_chunk": "MortgageOpsQueue-mopsRprA.js",
+    "queue_contains_bill_mortgage_handling": false
+  },
+  "smallest_change": {
+    "code": "none",
+    "do_not": [
+      "convert claims@ into a company/tenant user",
+      "add tenant_users membership",
+      "grant admin or staff",
+      "route the agent through /login"
+    ],
+    "operational": "Complete EMAIL_OTP at /mortgage-ops/login using the claims@freedomadj.com mailbox, or provide the resulting mortgage-ops Cognito session. Then resume Gate 4."
+  }
+}

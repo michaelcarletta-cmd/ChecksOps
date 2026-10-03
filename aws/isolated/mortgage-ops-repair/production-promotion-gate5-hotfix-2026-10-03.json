@@ -1,0 +1,44 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "gate": "5-spa-queue-blur-hotfix",
+  "captured_at": "2026-10-03T11:41:43Z",
+  "sql_modified": false,
+  "cognito_modified": false,
+  "provider_flags_modified": false,
+  "env_vars_modified": false,
+  "promoted_to_production": true,
+  "status": "APPLIED",
+  "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "commit_at_apply": "b8a6fa5e5f015cece599e013005ddf5c5a82c031",
+  "reason": "First queue overlay inserted const after a comma; MortgageOpsQueue-BD_nUT7A.js 092057a7 was unparseable. Expression-safe blur hotfix applied through official production SPA writer.",
+  "lambda": {
+    "function": "checksops-production-prep-api",
+    "unchanged": true,
+    "CodeSha256": "S2CV0j3zWfYfyfSvmIq0axMhnSib1UntZZVqOvzxBbc=",
+    "RevisionId": "2f112f18-9055-4760-859d-62be8899b91f",
+    "LastUpdateStatus": "Successful"
+  },
+  "spa": {
+    "writer": "scripts/deployment-guard/production-spa-upload.mjs",
+    "deploy_mode": "per_object_put",
+    "role": "ChecksOpsProductionSpaDeploy",
+    "uploads_order": [
+      "assets/MortgageOpsQueue-BD_nUT7A.js",
+      "assets/index-BgOCQCWm.js",
+      "index.html"
+    ],
+    "queue_sha256_before": "092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318",
+    "queue_sha256_after": "da66439ccf2f2f8c70435091a7f6cb8255cfb34351b2db4bac719dddd6a2dfe2",
+    "entry_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
+    "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+    "index_html_version_before": ".Z.2EBH5QBbyDTgcLX9fSOPrcr5u8y5P",
+    "index_html_version_after": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
+    "host_verified": true,
+    "cloudfront_invalidation": {
+      "distribution_id": "E1B0ZWWO5559U5",
+      "invalidation_id": "I5T9PLB4T87BWXGN0C3I0CV9E8"
+    },
+    "excluded": ["branding repair", "homeowner /h/ledger routing", "sw.js"]
+  },
+  "acceptance": "resume dedicated Mortgage Agent login after parseable queue"
+}

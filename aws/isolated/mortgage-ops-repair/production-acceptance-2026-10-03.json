@@ -1,0 +1,84 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "captured_at": "2026-10-03T11:48:50Z",
+  "sql_modified": false,
+  "cognito_modified": false,
+  "provider_flags_modified": false,
+  "env_vars_modified": false,
+  "login": {
+    "email": "claims@freedomadj.com",
+    "application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "production_cognito_sub": "34c8a478-e0d1-70f3-3c49-02225e7404b6",
+    "roles": ["mortgage_agent"],
+    "tenant_users": [],
+    "isolated_mortgage_agent": true
+  },
+  "lambda": {
+    "function": "checksops-production-prep-api",
+    "CodeSha256": "S2CV0j3zWfYfyfSvmIq0axMhnSib1UntZZVqOvzxBbc=",
+    "RevisionId": "2f112f18-9055-4760-859d-62be8899b91f",
+    "unchanged_by_spa_hotfix": true
+  },
+  "spa": {
+    "entry": "/assets/index-BgOCQCWm.js",
+    "entry_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
+    "queue": "/assets/MortgageOpsQueue-BD_nUT7A.js",
+    "queue_sha256": "da66439ccf2f2f8c70435091a7f6cb8255cfb34351b2db4bac719dddd6a2dfe2",
+    "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+    "index_html_version": "QjOrqc19jhbyw1VYHKdDXoEgI.B5mVYd",
+    "cloudfront_invalidation": "I5T9PLB4T87BWXGN0C3I0CV9E8"
+  },
+  "sql_authority": {
+    "table_update": [],
+    "checksops_column_update_count": 17,
+    "catalog_expected": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126"
+  },
+  "synthetic": {
+    "tenant_id": "6f2c1a90-0ad9-4c3e-9b71-2c8e6d4f1a20",
+    "claim_id": "4278dd11-6d81-4f5d-9948-6239048fcc4d",
+    "first": {
+      "request_id": "7a7ec1ce-de9a-4601-875c-4a67db635fd2",
+      "check_id": "cef7186d-b638-4df3-af65-718ea0ac1d44",
+      "loan": "PROD-MOPS-20261003-A",
+      "status": "completed",
+      "completed_at": "2026-10-03T11:48:30.185Z",
+      "billing_event_id": "3df0c417-641d-45c2-87dc-47fdd2c1d80c",
+      "event_type": "mortgage_ops_initial",
+      "unit_price_cents": 1000
+    },
+    "second": {
+      "request_id": "71ea6822-df95-4aa9-a04c-4a00a5f6d043",
+      "check_id": "6151136b-cf47-4fe8-8afb-253404b2c26a",
+      "loan": "PROD-MOPS-20261003-B",
+      "status": "completed",
+      "completed_at": "2026-10-03T11:48:46.905Z",
+      "billing_event_id": "e68193b5-cb9c-4754-92dd-a85884cd2f98",
+      "event_type": "mortgage_ops_additional_check",
+      "unit_price_cents": 500
+    },
+    "billing_event_count": 2,
+    "complete_created_no_second_billing": true,
+    "stripe_customer": false,
+    "platform_fee_line_items": 0
+  },
+  "accidental_freedom_row": {
+    "id": "5b20db20-13e1-4919-9528-06388d8661d2",
+    "mortgage_company": "PROD E2E TEST LENDER",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "status": "in_progress",
+    "assigned_employee_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "accepted_at": "2026-10-03T11:45:11.665Z",
+    "completed_at": null,
+    "billing_event_id": "6c661cc3-9be0-4906-9996-210e3be005dc",
+    "event_type": "mortgage_ops_initial",
+    "unit_price_cents": 1000,
+    "stripe_customer": false,
+    "platform_fee_line_items_since": 0,
+    "note": "First Accept click walked too far up the DOM and self-assigned this pre-existing Freedom queued row. Left in_progress. Not completed. Usage event recorded only; no Stripe customer and no platform fee."
+  },
+  "isolation": {
+    "settings_admin_company_dashboard": "Organization Not Found",
+    "cannot_access_company_administration": true
+  },
+  "management_compensation": "not started"
+}

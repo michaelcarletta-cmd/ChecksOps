@@ -1,0 +1,56 @@
+{
+  "generatedAt": "2026-10-03T01:12:45.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "acceptNotPerformed": true,
+  "permissionsUnchanged": true,
+  "cognitoUnchanged": true,
+  "overlay": {
+    "function": "checksops-staging-api",
+    "ownedMember": "workflow-rpc.mjs",
+    "before": {
+      "codeSha256": "7vJjjYSm2qkHTHHPIjlgHZ8w0hmkfou8p2EsXd4RWDk=",
+      "revisionId": "57f0f181-b477-430a-b3a9-06cdbe54e209",
+      "lastModified": "2026-10-02T23:08:42.000+0000"
+    },
+    "after": {
+      "codeSha256": "HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU=",
+      "revisionId": "7ce5717c-f8f5-4d1f-a20a-2712cfe957c7",
+      "lastModified": "2026-10-03T01:12:35.000+0000",
+      "lastUpdateStatus": "Successful"
+    },
+    "liveContainsSavepoint": true,
+    "liveKeepsClaimSettlementRpcs": true,
+    "writeCheckWorkflowUnchanged": true,
+    "tenantBillingEngineUnchanged": true
+  },
+  "productionPrepUntouched": {
+    "codeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "lastModified": "2026-10-02T20:26:42.000+0000"
+  },
+  "flagsFailClosed": {
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_PLAID_ENABLED": "false",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_WRITES_ENABLED": "true",
+    "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": "true"
+  },
+  "requestStillQueued": {
+    "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "status": "requested",
+    "assigned_employee_id": null,
+    "accepted_at": null,
+    "billing": []
+  },
+  "clickThisCard": {
+    "title": "GATE4 ACCEPT THIS — MOPS REPAIR",
+    "loan": "GATE4-20261003-A",
+    "homeowner": "SYNTHETIC GATE4 HOMEOWNER",
+    "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "queuePosition": "bottom of Queued (oldest-first)"
+  },
+  "doNotClick": [
+    "815a0702-c19e-491a-a032-be9e77b11577",
+    "0151f4b2-d15b-461a-9f5a-7cc394450096"
+  ]
+}

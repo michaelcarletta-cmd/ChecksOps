@@ -121,6 +121,11 @@ export default function MortgageOpsQueue() {
 
   useAwsPollingFallback(!!user, fetchQueues, 15_000);
 
+  const blurActive = () => {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement) el.blur();
+  };
+
   const handleAccept = async (id: string) => {
     setBusyId(id);
     const { error } = await supabase.rpc("accept_mortgage_handling_request", { _request_id: id });
@@ -133,10 +138,12 @@ export default function MortgageOpsQueue() {
       } else {
         toast.error(error.message);
       }
+      blurActive();
       void fetchQueues();
       return;
     }
     toast.success("Task accepted");
+    blurActive();
     void fetchQueues();
   };
 
@@ -176,26 +183,13 @@ export default function MortgageOpsQueue() {
           description: "Our mortgage team finished working with your mortgage company on this check.",
         } as any);
       }
-      // Trigger billing
-
-      const { data: bill, error: billErr } = await supabase.functions.invoke("bill-mortgage-handling", {
-        body: { request_id: id },
-      });
       setBusyId(null);
-      if (billErr || !bill?.ok) {
-        const detail = (bill as any)?.error || billErr?.message || "billing failed";
-        toast.error(`Marked complete — billing failed: ${detail}`);
-      } else if ((bill as any)?.already_billed) {
-        toast.success("Marked complete (already billed)");
-      } else {
-        const totalCents = (bill as any).total_cents ?? (bill as any).flat_fee_cents;
-        const dollars = (totalCents / 100).toFixed(2);
-        toast.success(`Marked complete — billed $${dollars} to ${(bill as any).tenant_name}`);
-      }
+      toast.success("Marked complete");
     } else {
       setBusyId(null);
       toast.success("Cancelled");
     }
+    blurActive();
     void fetchQueues();
   };
 
@@ -261,7 +255,7 @@ export default function MortgageOpsQueue() {
           badge="Mortgage Ops"
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
-        <Tabs defaultValue="available">
+        <Tabs defaultValue="mine">
 
           <TabsList>
             <TabsTrigger value="available" className="gap-2">

@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-10-03T01:25:02.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "permissionsUnchanged": true,
+  "cognitoUnchanged": true,
+  "acceptA": {
+    "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "loan": "GATE4-20261003-A",
+    "status": "in_progress",
+    "assigned_employee_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "accepted_at": "2026-10-03T01:16:00.559Z",
+    "completed_at": null
+  },
+  "acceptB": {
+    "id": "ab84a6ce-b375-4353-8126-4ad37646bc70",
+    "loan": "GATE4-20261003-B",
+    "title": "GATE4 ACCEPT $5 — MOPS REPAIR",
+    "status": "in_progress",
+    "assigned_employee_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "accepted_at": "2026-10-03T01:23:55.080Z",
+    "completed_at": null,
+    "check_id": "cf9c3807-00c9-4664-b7dd-8dd231abc792",
+    "check_amount": "555.00",
+    "claim_id": "16a90465-c492-48b8-9f81-f91d18133d64"
+  },
+  "billing": [
+    {
+      "id": "fb20e909-f4e8-4483-823c-7d1bae511664",
+      "event_type": "mortgage_ops_initial",
+      "status": "recorded",
+      "unit_price_cents": 1000,
+      "mortgage_request_id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+      "payment_transfer_id": null,
+      "invoice_id": null,
+      "stripe_meter_event_id": null,
+      "stripe_customer_id": null,
+      "billed_at": "2026-10-03T01:16:00.559Z"
+    },
+    {
+      "id": "44426bcd-31e9-4fab-a7d4-119a73f2b92b",
+      "event_type": "mortgage_ops_additional_check",
+      "status": "recorded",
+      "unit_price_cents": 500,
+      "mortgage_request_id": "ab84a6ce-b375-4353-8126-4ad37646bc70",
+      "payment_transfer_id": null,
+      "invoice_id": null,
+      "stripe_meter_event_id": null,
+      "stripe_customer_id": null,
+      "billed_at": "2026-10-03T01:23:55.080Z"
+    }
+  ],
+  "billingCount": 2,
+  "initialUnchanged": true,
+  "additionalExactlyOne": true,
+  "providerExecution": false,
+  "cloudWatchCommitFailuresAfter0119": 0,
+  "postAcceptUiError": {
+    "surface": "AppErrorBoundary",
+    "message": "The object can not be found here.",
+    "interpretation": "WebKit DOM NotFoundError after the Accept button unmounted on queue refresh. Write and billing already committed. Not RLS, not duplicate billing, not a provider call.",
+    "durableStateUnaffected": true
+  },
+  "leftoverQueuedDoNotClick": [
+    "815a0702-c19e-491a-a032-be9e77b11577",
+    "0151f4b2-d15b-461a-9f5a-7cc394450096"
+  ],
+  "clickThisCardNext": {
+    "title": "GATE4 ACCEPT THIS — MOPS REPAIR",
+    "loan": "GATE4-20261003-A",
+    "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "action": "Mark complete",
+    "tab": "In progress"
+  },
+  "doNotComplete": [
+    "ab84a6ce-b375-4353-8126-4ad37646bc70"
+  ],
+  "stagingApi": {
+    "codeSha256": "HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU=",
+    "lastModified": "2026-10-03T01:12:35.000+0000"
+  },
+  "productionPrepUntouched": {
+    "codeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+    "lastModified": "2026-10-02T20:26:42.000+0000"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "writes_aws": false,
+  "spa_authority": "/assets/index-BgOCQCWm.js",
+  "queue_authority": "MortgageOpsQueue-BD_nUT7A.js",
+  "login_authority": "MortgageOpsLogin-Phn06bQA.js",
+  "not_staging_spa": {
+    "rejected_entries": [
+      "index-BcLmLtnF.js",
+      "index-moprRprA.js",
+      "MortgageOpsQueue-mopsRprD.js"
+    ]
+  },
+  "live": {
+    "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+    "entry_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+    "queue_sha256": "a5a5a5b1318e09a8c53290d6e6bf2ba57f428d85c6406bd4d96c0f25fdec6288",
+    "login_sha256": "c56996bc719c0e7a4e365cf888e0197515f3f51820a58f621cfa76dbf7b31a21",
+    "css_sha256": "fd80eaf5a2ed3227426e1d2e3251b3b34279b8e1afa08f1931725b89d919e049"
+  },
+  "proposed": {
+    "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+    "index_html_changed": false,
+    "entry_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
+    "queue_sha256": "092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318",
+    "login_sha256": "c56996bc719c0e7a4e365cf888e0197515f3f51820a58f621cfa76dbf7b31a21",
+    "css_sha256": "fd80eaf5a2ed3227426e1d2e3251b3b34279b8e1afa08f1931725b89d919e049",
+    "filenames_preserved": true,
+    "single_react_entry": "index-BgOCQCWm.js"
+  },
+  "exact_delta": [
+    "AppErrorBoundary ignores transient DOM NotFoundError/removeChild",
+    "Try again reloads the page instead of remounting a broken tree",
+    "MortgageOpsQueue default tab becomes mine",
+    "MortgageOpsQueue blurs the focused Accept/Complete control before refetch",
+    "MortgageOpsQueue Complete no longer invokes bill-mortgage-handling"
+  ],
+  "unchanged": [
+    "index.html still points at /assets/index-BgOCQCWm.js",
+    "MortgageOpsLogin-Phn06bQA.js",
+    "index-C9b4-_no.css",
+    "all other Branding lazy chunks and CSS",
+    "no sw.js / Workbox"
+  ],
+  "proofs": {
+    "entry_keeps_branding_filename": true,
+    "entry_has_dom_ignore": true,
+    "entry_try_again_reloads": true,
+    "entry_no_auto_reload_loop": true,
+    "queue_imports_branding_entry": true,
+    "queue_no_bill_mortgage": true,
+    "queue_default_mine": true,
+    "login_unchanged": true,
+    "html_unchanged": true
+  }
+}

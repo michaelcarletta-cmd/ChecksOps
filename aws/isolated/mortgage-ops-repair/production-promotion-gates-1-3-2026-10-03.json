@@ -1,0 +1,95 @@
+{
+  "workstream": "mortgage-ops-repair-ad99",
+  "branch": "cursor/mortgage-ops-repair-ad99",
+  "pr": 631,
+  "mode": "production-lambda-spa-promotion",
+  "sql_modified": false,
+  "writes_aws": false,
+  "promoted_to_production": false,
+  "captured_at": "2026-10-03T11:14:00Z",
+  "origin_main": "7c64dae2dee6c78dd296c946c04ea6ccaa793aef",
+  "gate_1_sql_authority": {
+    "status": "PASS",
+    "stops": [],
+    "hash": "0d959621d34c99879dc9092cb925bfdb169273a21bea76c6a44242c2d64cd126",
+    "matches_accepted_after": true,
+    "no_checksops_table_update": true,
+    "checksops_exactly_17_column_update": true,
+    "sql39_present": true,
+    "historical_aws_update_mortgage_handling_requests_absent": true,
+    "pr601_unchanged": {
+      "user_can_move_tenant_checks_sha256": "010a450154c4d0d97c4d5b4ab82858c83ab57a3044c9937d40dec86a6c7a749d",
+      "admin_override_check_status_sha256": "74a234df30847cecab759c72d75fb7ced55ef6e0a0e3d7f86d78e51310ab84e5"
+    },
+    "claim_ledger_unchanged": {
+      "sql43": "exact",
+      "sql44": "exact",
+      "sql43_live": "31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806",
+      "sql44_live": "96d038c97a85bc3e49346442862c044e1e16ec1eb062519b4ad277bd998063a5"
+    }
+  },
+  "gate_2_lambda": {
+    "status": "COMPOSED",
+    "live": {
+      "function": "checksops-production-prep-api",
+      "CodeSha256": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg=",
+      "RevisionId": "c8483271-f94e-4c76-aec4-05ac8707cc8a",
+      "LastModified": "2026-10-02T20:26:42.000+0000",
+      "matches_expected": true,
+      "workflow_rpc_sha256": "afd8ac239ad60786e6ac54eac41595cb06a7cbc5de217ddcbbb82a210507cd87",
+      "member_count": 6477
+    },
+    "proposed": {
+      "base": "fresh live ZIP, not an older worktree",
+      "worktree_rpc_rejected_as_wholesale_replacement": true,
+      "workflow_rpc_after": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
+      "usage_op": "add",
+      "usage_after": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2",
+      "candidate_zip_sha256": "4b6095d23df359f61fc9f4af988ab46b13219d289bd549ed65956a3afcf105b7",
+      "candidate_member_count": 6478,
+      "added_or_changed": [
+        "mortgage-ops-usage.mjs",
+        "workflow-rpc.mjs"
+      ],
+      "removed": [],
+      "preserved_ok": true,
+      "keeps_admin_set_check_claim": true,
+      "keeps_settlement": true,
+      "has_savepoint": true
+    }
+  },
+  "gate_3_spa": {
+    "status": "COMPOSED",
+    "live": {
+      "index": "/assets/index-BgOCQCWm.js",
+      "entry_sha256": "7d65f3c16d638fb5b01b9333338040e0a082ab75c62d65f5bb21a891711f11bf",
+      "index_html_sha256": "3832fadc3d3fc77c8989a3426ee9e3f4b76a85d0c434f3782ec50cf7e43ba5df",
+      "index_html_version": "w6KPzOeYx631RcnJr9la9tTZ2_J3mSSd",
+      "queue_sha256": "a5a5a5b1318e09a8c53290d6e6bf2ba57f428d85c6406bd4d96c0f25fdec6288",
+      "login_sha256": "c56996bc719c0e7a4e365cf888e0197515f3f51820a58f621cfa76dbf7b31a21",
+      "css_sha256": "fd80eaf5a2ed3227426e1d2e3251b3b34279b8e1afa08f1931725b89d919e049",
+      "matches_expected": true
+    },
+    "proposed": {
+      "index_html_changed": false,
+      "entry_sha256": "ae4ea2c96546b590f442fcff73d557e2ceafea25cb3ed2a51642948cbdad4190",
+      "queue_sha256": "092057a7bb4c06844b061df806f0178449cfed3c6f42a7c63ad1849d010a7318",
+      "login_unchanged": true,
+      "css_unchanged": true,
+      "filenames_preserved": true,
+      "single_react_entry": "index-BgOCQCWm.js",
+      "no_sw_js": true,
+      "not_branding_repair": true,
+      "not_homeowner_ledger_routing_repair": true,
+      "exact_delta": [
+        "AppErrorBoundary ignores transient DOM NotFoundError/removeChild",
+        "Try again reloads the page instead of remounting a broken tree",
+        "MortgageOpsQueue default tab becomes mine",
+        "MortgageOpsQueue blurs the focused Accept/Complete control before refetch",
+        "MortgageOpsQueue Complete no longer invokes bill-mortgage-handling"
+      ]
+    }
+  },
+  "gate_4": "pending",
+  "gate_5": "blocked_until_gate_4"
+}
