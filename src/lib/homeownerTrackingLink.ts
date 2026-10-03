@@ -1,7 +1,5 @@
 /** Tracking-link eligibility is claim-scoped and independent of payment/deposit. */
 
-import { resolveAuthoritativeClaimId } from "@/lib/checkClaimLinkGuard";
-
 export const HOMEOWNER_TRACKING_LINK_DISABLED_REASON = "missing_claim_id" as const;
 
 export const HOMEOWNER_TRACKING_LINK_DISABLED_MESSAGE =
@@ -22,11 +20,7 @@ export function evaluateHomeownerTrackingLinkEligibility(opts: {
   /** Ignored. Disbursement readiness is not a tracking-link gate. */
   payoutEnabled?: boolean;
 }) {
-  const claimId = resolveAuthoritativeClaimId({
-    liveCheckClaimId: opts.liveCheckClaimId ?? null,
-    loadedClaimId: null,
-    claimIdProp: opts.claimId ?? null,
-  });
+  const claimId = opts.liveCheckClaimId || opts.claimId || null;
   if (!claimId) {
     return {
       enabled: false as const,
