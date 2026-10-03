@@ -17,9 +17,10 @@ const RECIPIENT_ACCOUNT = 'ee8c608e-0000-4000-8000-00000000fc5f';
 
 test('page load and refresh only invoke the session reader, never mutation functions', () => {
   assert.match(ui, /useEffect\(\(\) => \{ void load\(\); \}, \[token\]\)/);
-  assert.match(ui, /invoke\("moov-recipient-session"/);
+  assert.match(ui, /loadRecipientSession\(token/);
   const loadBlock = ui.slice(ui.indexOf('async function load()'), ui.indexOf('useEffect(() => { void load(); }'));
-  assert.match(loadBlock, /moov-recipient-session/);
+  assert.match(loadBlock, /loadRecipientSession/);
+  assert.doesNotMatch(loadBlock, /invoke\(/);
   assert.doesNotMatch(loadBlock, /moov-recipient-kyc-update/);
   assert.doesNotMatch(loadBlock, /moov-recipient-tos-accept/);
   assert.doesNotMatch(loadBlock, /moov-recipient-bank-add/);
@@ -47,8 +48,8 @@ test('session handler performs no Moov resource mutations', () => {
 test('KYC PATCH is only reachable from explicit identity form submit', () => {
   assert.match(ui, /async function submitIdentity\(e: React\.FormEvent\)/);
   assert.match(ui, /<form onSubmit=\{submitIdentity\}/);
-  assert.match(ui, /invoke\("moov-recipient-kyc-update"/);
-  const kycInvokeIdx = ui.indexOf('invoke("moov-recipient-kyc-update"');
+  assert.match(ui, /submitRecipientKyc\(token/);
+  const kycInvokeIdx = ui.indexOf('submitRecipientKyc(token');
   const submitIdx = ui.indexOf('async function submitIdentity');
   const nextFn = ui.indexOf('async function submitTerms');
   assert.ok(kycInvokeIdx > submitIdx && kycInvokeIdx < nextFn);
@@ -65,35 +66,31 @@ test('ToS Drop render does not accept terms; server PATCH requires Drop token an
   assert.doesNotMatch(ui, /<Checkbox/);
   assert.match(tos, /rejectForgedRecipientTos/);
   assert.match(tos, /dropTokenFromBody/);
-  assert.match(ui, /terms_of_service_token: tosDropToken/);
+  assert.match(ui, /submitRecipientTos\(token \|\| "", tosDropToken\)/);
   assert.match(tos, /method:\s*"PATCH"/);
   assert.match(tos, /termsOfService: \{ token: dropToken \}/);
-  const tosInvokeIdx = ui.indexOf('invoke("moov-recipient-tos-accept"');
+  const tosInvokeIdx = ui.indexOf('submitRecipientTos(token');
   const submitTermsIdx = ui.indexOf('async function submitTerms');
-  const submitBankIdx = ui.indexOf('async function submitBank');
-  assert.ok(tosInvokeIdx > submitTermsIdx && tosInvokeIdx < submitBankIdx);
+  const bankHeldIdx = ui.indexOf('Bank verification is not available yet');
+  assert.ok(tosInvokeIdx > submitTermsIdx && tosInvokeIdx < bankHeldIdx);
 });
 
-test('micro-deposit POST /verify is only triggered by Send verification deposit click', () => {
-  assert.match(ui, /onClick=\{\(\) => void initiateBankVerify\(\)\}/);
-  assert.match(ui, /Send verification deposit/);
-  const initiateFn = ui.slice(ui.indexOf('async function initiateBankVerify'), ui.indexOf('async function confirmBankVerify'));
-  assert.match(initiateFn, /action: "initiate"/);
-  assert.doesNotMatch(ui.slice(0, ui.indexOf('async function initiateBankVerify')), /action: "initiate"/);
+test('micro-deposit POST /verify stays unavailable on the public pay-setup page this phase', () => {
+  assert.doesNotMatch(ui, /Send verification deposit/);
+  assert.doesNotMatch(ui, /initiateBankVerify/);
+  assert.doesNotMatch(ui, /moov-recipient-bank-verify/);
+  assert.match(ui, /Bank verification is not available yet/);
   assert.doesNotMatch(loadBlockSafe(ui), /moov-recipient-bank-verify/);
   assert.match(verify, /method: "POST"/);
   assert.match(verify, /\/bank-accounts\/\$\{liveBankId\}\/verify/);
   assert.match(verify, /shouldInitiateInstantMicroDeposit/);
 });
 
-test('MV code PUT /verify is only triggered by explicit confirm submit', () => {
-  assert.match(ui, /<form onSubmit=\{confirmBankVerify\}/);
-  const confirmFn = ui.slice(ui.indexOf('async function confirmBankVerify'), ui.indexOf('return <main'));
-  assert.match(confirmFn, /action: "confirm"/);
-  assert.match(confirmFn, /code: verifyCode/);
+test('MV code PUT /verify is not reachable from the public pay-setup page this phase', () => {
+  assert.doesNotMatch(ui, /confirmBankVerify/);
+  assert.doesNotMatch(ui, /action: "confirm"/);
   assert.match(verify, /method: "PUT"/);
   assert.match(verify, /moovInstantVerifyBody/);
-  assert.doesNotMatch(ui, /action: "confirm".*useEffect/);
 });
 
 test('existing recipient account and bank are resumed, not recreated, on the public link', () => {
