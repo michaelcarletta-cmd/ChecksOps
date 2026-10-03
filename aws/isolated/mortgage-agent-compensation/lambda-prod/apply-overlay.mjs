@@ -49,6 +49,9 @@ async function main() {
   loadAwsEnv();
   process.env.AWS_REGION = REGION;
   process.env.AWS_DEFAULT_REGION = REGION;
+  delete process.env.CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT;
+  delete process.env.CHECKSOPS_SKIP_DEPLOYMENT_GUARD;
+  delete process.env.CHECKSOPS_DEPLOYMENT_GUARD_BYPASS;
   process.env.CHECKSOPS_DEPLOYMENT_GUARD_APPLY = '1';
   process.env.CHECKSOPS_WORKSTREAM_ID = WORKSTREAM_ID;
   process.env.CHECKSOPS_COMMIT = COMMIT;
