@@ -1,0 +1,90 @@
+{
+  "generatedAt": "2026-10-03T10:19:20.000Z",
+  "environment": "staging",
+  "productionUnauthorized": true,
+  "permissionsUnchanged": true,
+  "cognitoUnchanged": true,
+  "completeVerified": {
+    "id": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+    "loan": "GATE4-20261003-A",
+    "title": "GATE4 ACCEPT THIS — MOPS REPAIR",
+    "status": "completed",
+    "assigned_employee_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "accepted_at": "2026-10-03T01:16:00.559Z",
+    "completed_at": "2026-10-03T10:17:12.547Z",
+    "updated_at": "2026-10-03T10:17:12.547Z",
+    "acceptedAtUnchanged": true
+  },
+  "billingUnchanged": {
+    "count": 2,
+    "events": [
+      {
+        "id": "fb20e909-f4e8-4483-823c-7d1bae511664",
+        "request": "c4f1b55b-18ba-4e70-86ce-230bdf14ed49",
+        "event_type": "mortgage_ops_initial",
+        "unit_price_cents": 1000,
+        "billed_at": "2026-10-03T01:16:00.559Z",
+        "payment_transfer_id": null,
+        "invoice_id": null,
+        "stripe_meter_event_id": null,
+        "stripe_customer_id": null
+      },
+      {
+        "id": "44426bcd-31e9-4fab-a7d4-119a73f2b92b",
+        "request": "ab84a6ce-b375-4353-8126-4ad37646bc70",
+        "event_type": "mortgage_ops_additional_check",
+        "unit_price_cents": 500,
+        "billed_at": "2026-10-03T01:23:55.080Z",
+        "payment_transfer_id": null,
+        "invoice_id": null,
+        "stripe_meter_event_id": null,
+        "stripe_customer_id": null
+      }
+    ],
+    "secondBillingOnA": false,
+    "extraEvents": false
+  },
+  "gate4BUntouched": {
+    "id": "ab84a6ce-b375-4353-8126-4ad37646bc70",
+    "status": "in_progress",
+    "completed_at": null,
+    "accepted_at": "2026-10-03T01:23:55.080Z"
+  },
+  "leftoverQueuedUntouched": [
+    "815a0702-c19e-491a-a032-be9e77b11577",
+    "0151f4b2-d15b-461a-9f5a-7cc394450096"
+  ],
+  "checksStillPendingReview": [
+    "16d5ace0-b600-4740-ad5b-d336e2c72a0f 1042.00",
+    "cf9c3807-00c9-4664-b7dd-8dd231abc792 555.00"
+  ],
+  "providerExecution": false,
+  "flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_PLAID_ENABLED": "false",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false"
+  },
+  "cloudWatchCompleteWindow": {
+    "from": "2026-10-03T10:16:00Z",
+    "to": "2026-10-03T10:20:00Z",
+    "starts": 28,
+    "completeNearbyInvoke": "2026-10-03T10:17:15.547Z duration 133ms",
+    "billMortgage": 0,
+    "stripe": 0,
+    "moov": 0,
+    "checkalt": 0,
+    "writeTransactionNotCommitted": 0,
+    "sqlstate42501": 0,
+    "ERROR": 0
+  },
+  "stagingApi": {
+    "codeSha256": "HN09hmWB5D22ljOfRhvpcPYPGEqWFuTXB6CR2h13zpU=",
+    "lastModified": "2026-10-03T01:12:35.000+0000",
+    "revisionId": "7ce5717c-f8f5-4d1f-a20a-2712cfe957c7"
+  },
+  "productionUntouched": {
+    "prepApi": "nc1J1gjRR4GZinIJh/rNMpi/PXd3ZwqgoUSc9NRlwVg= 2026-10-02T20:26:42Z",
+    "spaIndex": "2026-10-02T21:26:09Z etag b70636253b28bbeb25af61c9e105ebf2"
+  }
+}
