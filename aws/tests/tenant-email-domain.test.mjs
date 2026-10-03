@@ -13,6 +13,8 @@ import {
   fallbackFromHeader,
   sesIdentityVerified,
   consumeDurableRateLimit,
+  resolveSesV2,
+  createLiveSesV2Adapter,
   RATE_LIMITS,
   RATE_LIMIT_ACTIONS,
   assertSendingDomainUniquenessPreflight,
@@ -437,6 +439,7 @@ test('authorization: member cannot configure, cross-tenant denied, platform owne
 test('frontend cannot set verified status on save', async () => {
   resetDomainRateLimits();
   const client = memoryClient();
+  const sesv2 = mockSes();
   client.state.settings.set(TENANT, {
     tenant_id: TENANT,
     sending_domain: DOMAIN,
@@ -456,6 +459,7 @@ test('frontend cannot set verified status on save', async () => {
       verified: true,
     },
     spoof,
+    sesv2,
   });
   assert.equal(saved.ok, true);
   assert.deepEqual(saved.ignoredClientFields.sort(), ['domain_status', 'sending_mode', 'verified']);
@@ -470,6 +474,7 @@ test('unsafe From display names are rejected; from must belong to verified domai
     mapping,
     body: { tenantId: TENANT, fromName: 'X\r\nBcc: evil@x.com' },
     spoof,
+    sesv2: mockSes(),
   });
   assert.equal(unsafe.statusCode, 400);
   assert.equal(unsafe.error, 'unsafe_from_name');
@@ -503,7 +508,7 @@ test('disable custom sending does not delete SES identity', async () => {
     client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
   });
   const disabled = await runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof,
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
   });
   assert.equal(disabled.disabled, true);
   assert.equal(disabled.sesIdentityDeleted, false);
@@ -518,6 +523,54 @@ test('disable custom sending does not delete SES identity', async () => {
     sesv2,
   });
   assert.equal(operator.statusCode, 403);
+});
+
+test('tenant-email mutations fail closed when the domain flag is disabled', async () => {
+  resetDomainRateLimits();
+  const prevDomain = process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+  const prevDelete = process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED;
+  delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+  process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED = 'true';
+  try {
+    const existing = {
+      tenant_id: TENANT,
+      sending_domain: DOMAIN,
+      domain_status: 'pending',
+      sending_mode: 'custom',
+      custom_sending_enabled: false,
+      from_name: 'Freedom Adjustment',
+      from_address: `noreply@${DOMAIN}`,
+    };
+    const body = { tenantId: TENANT, domain: DOMAIN, fromName: 'Hijack', replyTo: 'claims@freedomadj.com' };
+    const cases = [
+      ['domain_start', (client) => runStartDomainVerification({ client, mapping, body, spoof })],
+      ['domain_check', (client) => runCheckDomainVerification({ client, mapping, body: { tenantId: TENANT }, spoof })],
+      ['domain_save', (client) => runSaveEmailBranding({ client, mapping, body, spoof })],
+      ['domain_disable', (client) => runDisableCustomSending({ client, mapping, body: { tenantId: TENANT }, spoof })],
+      ['domain_delete', (client) => runDeleteSesIdentity({
+        client,
+        mapping,
+        body: { tenantId: TENANT, domain: DOMAIN },
+        spoof,
+      })],
+    ];
+    for (const [action, run] of cases) {
+      const client = memoryClient({ master: true, systemRole: 'admin' });
+      client.state.settings.set(TENANT, { ...existing });
+      const result = await run(client);
+      assert.equal(result.statusCode, 503, action);
+      assert.equal(result.error, 'tenant_email_domain_disabled', action);
+      assert.equal(result.ok, false, action);
+      assert.deepEqual(client.state.settings.get(TENANT), existing, action);
+      assert.equal(client.state.rateLimitStore.rows.size, 0, action);
+      assert.equal(client.state.audits.length, 0, action);
+    }
+  } finally {
+    if (prevDomain === undefined) delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+    else process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = prevDomain;
+    if (prevDelete === undefined) delete process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED;
+    else process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED = prevDelete;
+  }
 });
 
 test('preview uses shared layout and fallback keeps tenant logo/color', async () => {
@@ -563,7 +616,56 @@ test('sink mode remains active and no live SES SDK is imported', async () => {
   ].join('\n');
   assert.match(src, /@aws-sdk\/client-sesv2/);
   assert.match(src, /tenantEmailDomainEnabled/);
+  assert.match(src, /createSinkSesV2Adapter/);
+  assert.match(src, /sink_mode_blocks_live_ses/);
   assert.doesNotMatch(src, /from '@aws-sdk\/client-sesv2'/);
+});
+
+test('domain flag in sink mode uses a local SES adapter and never constructs SESv2', async () => {
+  resetDomainRateLimits();
+  const prevMode = process.env.AWS_EMAIL_MODE;
+  const prevFlag = process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+  process.env.AWS_EMAIL_MODE = 'sink';
+  process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = 'true';
+  try {
+    const adapter = await resolveSesV2();
+    assert.equal(adapter.mode, 'sink');
+    const created = await adapter.createEmailIdentity({ EmailIdentity: DOMAIN });
+    assert.equal(created.sink, true);
+    assert.equal(created.VerificationStatus, 'PENDING');
+    assert.equal(created.DkimAttributes.Status, 'PENDING');
+    await assert.rejects(
+      () => createLiveSesV2Adapter(),
+      (error) => error?.code === 'sink_mode_blocks_live_ses' || String(error?.message) === 'sesv2_unavailable',
+    );
+
+    const client = memoryClient();
+    const started = await runStartDomainVerification({
+      client,
+      mapping,
+      body: { tenantId: TENANT, domain: DOMAIN, fromName: 'Freedom Adjustment', replyTo: 'claims@freedomadj.com' },
+      spoof,
+    });
+    assert.equal(started.statusCode, 200, started.error);
+    assert.equal(started.status, 'pending');
+    assert.equal(started.verified, false);
+    assert.ok(Array.isArray(started.dns) && started.dns.length >= 1);
+
+    const checked = await runCheckDomainVerification({
+      client,
+      mapping,
+      body: { tenantId: TENANT },
+      spoof,
+    });
+    assert.equal(checked.statusCode, 200, checked.error);
+    assert.equal(checked.verified, false);
+    assert.notEqual(checked.status, 'verified');
+    assert.equal(client.state.settings.get(TENANT).custom_sending_enabled, false);
+  } finally {
+    process.env.AWS_EMAIL_MODE = prevMode;
+    if (prevFlag === undefined) delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+    else process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = prevFlag;
+  }
 });
 
 test('SES tags omit PII and engagement interface stays inert', () => {
@@ -632,6 +734,13 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.match(proposed, /RETURNS TABLE\(allowed boolean, count integer, retry_after_seconds integer\)/);
   assert.doesNotMatch(proposed, /CREATE POLICY/);
   assert.doesNotMatch(proposed, /GRANT EXECUTE[\s\S]{0,200}TO (authenticated|anon|PUBLIC)/);
+  const settingsDml = fs.readFileSync(
+    path.join(ROOT, 'aws/migrations/proposed/APPLIED_STAGING_20260910_tenant_email_settings_checksops_dml.sql'),
+    'utf8',
+  );
+  assert.match(settingsDml, /GRANT SELECT, INSERT, UPDATE ON TABLE public\.tenant_email_settings TO checksops/);
+  assert.doesNotMatch(settingsDml, /GRANT DELETE ON/);
+  assert.doesNotMatch(settingsDml, /GRANT .+ ON TABLE public\.tenant_email_action_rate_limits/);
   assert.match(CONSUME_RATE_LIMIT_SQL, /consume_tenant_email_action_rate_limit/);
   assert.doesNotMatch(CONSUME_RATE_LIMIT_SQL, /INSERT INTO public\.tenant_email_action_rate_limits/);
   assert.doesNotMatch(CONSUME_RATE_LIMIT_SQL, /Date\.now|window_started_at/);
@@ -643,6 +752,7 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.equal(allowedTables.includes('tenant_email_action_rate_limits'), false);
   const classAGrants = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/68_staging_class_a_grants.sql'), 'utf8');
   assert.match(classAGrants, /GRANT EXECUTE ON FUNCTION .+ TO checksops/);
+  assert.match(classAGrants, /GRANT SELECT, INSERT, UPDATE ON TABLE public\.tenant_email_settings TO checksops/);
   const writeAuth = fs.readFileSync(path.join(ROOT, 'aws/rls/WRITE_AUTHORIZATION.md'), 'utf8');
   assert.match(writeAuth, /API role is `checksops`, never `checksops_admin`/);
   assert.equal(sesIdentityVerified({
@@ -967,7 +1077,7 @@ test('mutating operations roll back when audit insertion fails', async () => {
     from_address: `noreply@${DOMAIN}`,
   });
   const disabled = await withTx(client, () => runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof,
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2: mockSes(),
   }));
   assert.equal(disabled.statusCode, 503);
   assert.equal(disabled.error, 'audit_unavailable');

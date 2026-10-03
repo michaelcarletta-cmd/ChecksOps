@@ -1,11 +1,12 @@
 /**
  * Tenant sending-domain validation and SES v2 lifecycle helpers.
- * Live SESv2 is never constructed unless AWS_TENANT_EMAIL_DOMAIN_ENABLED=true
- * and no mock adapter is injected. Tests must inject a mock.
+ * Live SESv2 is never constructed unless AWS_TENANT_EMAIL_DOMAIN_ENABLED=true,
+ * AWS_EMAIL_MODE is not sink, and no mock adapter is injected.
+ * In sink mode the domain APIs use a local adapter with zero AWS SES calls.
  */
 import { randomUUID } from 'node:crypto';
 import { isIPv4, isIPv6 } from 'node:net';
-import { normalizeEmail } from './email-policy.mjs';
+import { emailMode, normalizeEmail } from './email-policy.mjs';
 import {
   PLATFORM_FROM_DOMAIN,
   addressDomain,
@@ -671,9 +672,53 @@ export const resolveTenantAccess = async (client, mapping, tenantId) => {
 };
 
 let liveSesV2Promise = null;
+const sinkIdentities = new Map();
+
+const sinkPendingIdentity = (name, tokens) => ({
+  EmailIdentity: name,
+  VerificationStatus: 'PENDING',
+  DkimAttributes: {
+    Tokens: tokens,
+    Status: 'PENDING',
+    SigningEnabled: true,
+  },
+  sink: true,
+});
+
+const sinkTokensFor = (domain) => {
+  const stem = String(domain || 'sink').replace(/[^a-z0-9]/g, '').slice(0, 8) || 'sink';
+  return [`sink0${stem}`, `sink1${stem}`, `sink2${stem}`];
+};
+
+export const createSinkSesV2Adapter = (store = sinkIdentities) => ({
+  mode: 'sink',
+  createEmailIdentity: async (input) => {
+    const name = String(input?.EmailIdentity || '').trim().toLowerCase();
+    const identity = sinkPendingIdentity(name, sinkTokensFor(name));
+    store.set(name, identity);
+    return identity;
+  },
+  getEmailIdentity: async (input) => {
+    const name = String(input?.EmailIdentity || '').trim().toLowerCase();
+    if (store.has(name)) return store.get(name);
+    const identity = sinkPendingIdentity(name, sinkTokensFor(name));
+    store.set(name, identity);
+    return identity;
+  },
+  deleteEmailIdentity: async (input) => {
+    store.delete(String(input?.EmailIdentity || '').trim().toLowerCase());
+    return { sink: true };
+  },
+  putMailFrom: async () => ({ sink: true }),
+});
 
 export const createLiveSesV2Adapter = async () => {
   if (!tenantEmailDomainEnabled()) return null;
+  if (emailMode() === 'sink') {
+    const err = new Error('sesv2_unavailable');
+    err.code = 'sink_mode_blocks_live_ses';
+    throw err;
+  }
   if (liveSesV2Promise) return liveSesV2Promise;
   liveSesV2Promise = import('@aws-sdk/client-sesv2').then((mod) => {
     const client = new mod.SESv2Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -695,6 +740,7 @@ export const createLiveSesV2Adapter = async () => {
 export const resolveSesV2 = async (injected) => {
   if (injected) return injected;
   if (!tenantEmailDomainEnabled()) return null;
+  if (emailMode() === 'sink') return createSinkSesV2Adapter();
   return createLiveSesV2Adapter();
 };
 
