@@ -28,6 +28,7 @@ const DEMO = Object.freeze({
   reqCancel: 'a47cad99-0000-4000-8000-000000000023',
   check1: 'a47cad99-0000-4000-8000-000000000011',
   check2: 'a47cad99-0000-4000-8000-000000000012',
+  checkCancel: 'a47cad99-0000-4000-8000-000000000013',
   claim: 'a47cad99-0000-4000-8000-0000000000c1',
 });
 const OWNED_TABLES = [
@@ -262,6 +263,67 @@ async function applySql47(client, text) {
   await client.query(text);
 }
 
+async function tableColumns(client, table) {
+  const { rows } = await client.query(`
+    SELECT column_name, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = $1
+  `, [table]);
+  return rows;
+}
+
+function addIfPresent(names, fields, values, name, value) {
+  if (names.has(name)) {
+    fields.push(name);
+    values.push(value);
+  }
+}
+
+async function ensureDemoClaim(client, tenantId) {
+  const existing = await client.query(`SELECT id FROM public.claims WHERE id = $1`, [DEMO.claim]);
+  if (existing.rows[0]) return DEMO.claim;
+  const cols = await tableColumns(client, 'claims');
+  const names = new Set(cols.map((c) => c.column_name));
+  const fields = ['id'];
+  const values = [DEMO.claim];
+  addIfPresent(names, fields, values, 'org_id', tenantId);
+  addIfPresent(names, fields, values, 'tenant_id', tenantId);
+  addIfPresent(names, fields, values, 'claim_number', 'MACOMP-STAGING-DEMO');
+  addIfPresent(names, fields, values, 'policyholder_name', 'MACOMP STAGING DEMO');
+  addIfPresent(names, fields, values, 'insured_name', 'MACOMP STAGING DEMO');
+  addIfPresent(names, fields, values, 'status', 'open');
+  const placeholders = fields.map((_, i) => `$${i + 1}`);
+  await client.query(
+    `INSERT INTO public.claims (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`,
+    values,
+  );
+  return DEMO.claim;
+}
+
+async function ensureDemoCheck(client, tenantId, checkId, ownerId, claimId) {
+  const existing = await client.query(`SELECT id FROM public.check_intake_items WHERE id = $1`, [checkId]);
+  if (existing.rows[0]) return checkId;
+  const cols = await tableColumns(client, 'check_intake_items');
+  const names = new Set(cols.map((c) => c.column_name));
+  const fields = ['id'];
+  const values = [checkId];
+  addIfPresent(names, fields, values, 'tenant_id', tenantId);
+  addIfPresent(names, fields, values, 'claim_id', claimId);
+  addIfPresent(names, fields, values, 'uploaded_by', ownerId);
+  addIfPresent(names, fields, values, 'front_image_path', `synthetic/macomp/${checkId}/NOT-A-NEGOTIABLE-INSTRUMENT.txt`);
+  addIfPresent(names, fields, values, 'status', 'uploaded');
+  addIfPresent(names, fields, values, 'payee_line', 'MACOMP STAGING DEMO');
+  addIfPresent(names, fields, values, 'check_number', `MACOMP-${checkId.slice(-4)}`);
+  addIfPresent(names, fields, values, 'amount', 0);
+  addIfPresent(names, fields, values, 'review_notes', 'MACOMP staging compensation fixture. Not a negotiable instrument.');
+  const placeholders = fields.map((_, i) => `$${i + 1}`);
+  await client.query(
+    `INSERT INTO public.check_intake_items (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`,
+    values,
+  );
+  return checkId;
+}
+
 async function runDemo(client) {
   const notes = [];
   const note = (line) => notes.push(line);
@@ -337,31 +399,24 @@ async function runDemo(client) {
     DELETE FROM public.check_billing_events
     WHERE mortgage_request_id = ANY($1::uuid[])
        OR check_intake_item_id = ANY($2::uuid[])
-  `, [[DEMO.req1, DEMO.req2, DEMO.reqCancel], [DEMO.check1, DEMO.check2]]).catch(() => null);
+  `, [[DEMO.req1, DEMO.req2, DEMO.reqCancel], [DEMO.check1, DEMO.check2, DEMO.checkCancel]]).catch(() => null);
+
+  const claimId = await ensureDemoClaim(client, tenant.id);
+  const check1 = await ensureDemoCheck(client, tenant.id, DEMO.check1, owner.user_id, claimId);
+  const check2 = await ensureDemoCheck(client, tenant.id, DEMO.check2, owner.user_id, claimId);
+  const checkCancel = await ensureDemoCheck(client, tenant.id, DEMO.checkCancel, owner.user_id, claimId);
+  note(`fixtures claim=${claimId} checks=${check1},${check2},${checkCancel}`);
 
   const insertReq = async (id, checkId, loan) => {
     await client.query(`
       INSERT INTO public.mortgage_handling_requests
         (id, tenant_id, check_intake_item_id, claim_id, mortgage_company, loan_number, status)
       VALUES ($1, $2, $3, $4, 'MACOMP STAGING DEMO', $5, 'requested')
-    `, [id, tenant.id, checkId, DEMO.claim, loan]);
+    `, [id, tenant.id, checkId, claimId, loan]);
   };
-
-  const insertDemoRequests = async (withChecks) => {
-    await insertReq(DEMO.req1, withChecks ? DEMO.check1 : null, 'MACOMP-1');
-    await insertReq(DEMO.req2, withChecks ? DEMO.check2 : null, 'MACOMP-2');
-    await insertReq(DEMO.reqCancel, null, 'MACOMP-X');
-  };
-  try {
-    await insertDemoRequests(true);
-  } catch (error) {
-    await client.query(`
-      DELETE FROM public.mortgage_handling_requests
-      WHERE id = ANY($1::uuid[])
-    `, [[DEMO.req1, DEMO.req2, DEMO.reqCancel]]);
-    await insertDemoRequests(false);
-    note(`mhr_inserted_without_checks:${error.message.slice(0, 120)}`);
-  }
+  await insertReq(DEMO.req1, check1, 'MACOMP-1');
+  await insertReq(DEMO.req2, check2, 'MACOMP-2');
+  await insertReq(DEMO.reqCancel, checkCancel, 'MACOMP-X');
 
   const insertBilling = async (reqId, checkId, type, cents) => {
     await client.query(`
