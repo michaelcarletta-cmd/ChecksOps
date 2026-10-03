@@ -34,13 +34,15 @@ interface Props {
 type Mode = "loading" | "verify" | "enroll" | "setup-error";
 
 /**
- * Blocking two-factor challenge shown before any money-movement action.
- * If the user has no TOTP authenticator yet, it enrolls one inline — there is
- * no path to a financial action that skips this dialog.
+ * Blocking financial-authenticator challenge shown before any money-movement action.
+ * On AWS this is ChecksOps Financial TOTP, not login MFA. If the user has no
+ * authenticator yet, it enrolls one inline — there is no path to a financial
+ * action that skips this dialog.
  */
 export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
   const { toast } = useToast();
   const open = request !== null;
+  const awsMode = awsMfaAvailable();
 
   const [mode, setMode] = useState<Mode>("loading");
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           const status = await getAwsMfaStatus();
           if (cancelled) return;
           if (status.totpEnrolled) {
-            setFactorId("software-token");
+            setFactorId("financial-totp");
             setMode("verify");
             return;
           }
@@ -83,13 +85,13 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           });
           const qr = await totpQrDataUrl(uri);
           if (cancelled) return;
-          setFactorId("software-token");
+          setFactorId("financial-totp");
           setSecret(associated.secret);
           setQr(qr);
           setMode("enroll");
         } catch (err: unknown) {
           if (cancelled) return;
-          setError(`Could not check your two-factor setup: ${err instanceof Error ? err.message : String(err)}`);
+          setError(`Could not check your ChecksOps Financial authenticator: ${err instanceof Error ? err.message : String(err)}`);
           setMode("setup-error");
         }
         return;
@@ -143,12 +145,16 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
 
   const submit = async () => {
     if (!factorId) {
-      setError("Two-factor is not ready yet. Close and try again.");
+      setError(awsMode
+        ? "ChecksOps Financial authenticator is not ready yet. Close and try again."
+        : "Two-factor is not ready yet. Close and try again.");
       return;
     }
     const normalized = normalizeTotpCode(code);
     if (!normalized.ok) {
-      setError("Enter the 6-digit code from your authenticator app.");
+      setError(awsMode
+        ? "Enter the 6-digit code from your ChecksOps Financial authenticator."
+        : "Enter the 6-digit code from your authenticator app.");
       return;
     }
 
@@ -180,7 +186,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         await onFactorsChanged();
         toast({
           title: "Verified",
-          description: "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
+          description: "ChecksOps Financial authenticator confirmed for this action. This is not a login MFA prompt. Production CheckAlt still requires a financial role server-side.",
         });
         onResolved(true);
         return;
@@ -235,13 +241,21 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
             {request?.title
-              ?? (request?.actionKey === "deposit.submit" ? "Deposit Verification" : "Confirm with two-factor")}
+              ?? (awsMode
+                ? (request?.actionKey === "deposit.submit"
+                  ? "Deposit Verification"
+                  : "Confirm with ChecksOps Financial authenticator")
+                : (request?.actionKey === "deposit.submit" ? "Deposit Verification" : "Confirm with two-factor"))}
           </DialogTitle>
           <DialogDescription>
             {request?.description
-              ?? (request?.actionKey === "deposit.submit"
-                ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
-                : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
+              ?? (awsMode
+                ? (request?.actionKey === "deposit.submit"
+                  ? "Enter the current 6-digit code from your ChecksOps Financial authenticator to authorize this deposit. This is not a login MFA prompt."
+                  : "Money movement requires your ChecksOps Financial authenticator. This is not a login MFA prompt.")
+                : (request?.actionKey === "deposit.submit"
+                  ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
+                  : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app."))}
           </DialogDescription>
         </DialogHeader>
 
@@ -264,7 +278,11 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
                     <a href="https://apps.apple.com/app/microsoft-authenticator/id983156458" target="_blank" rel="noreferrer" className="underline">Microsoft Authenticator</a>, Authy, or 1Password.
                     On iPhone you can also use the built-in Passwords app.
                   </li>
-                  <li>In the app, tap the “+” and choose Scan a QR code, then scan the square below. Can't scan? Choose “Enter a setup key” and paste the key underneath.</li>
+                  <li>
+                    {awsMode
+                      ? "In the app, tap the “+” and choose Scan a QR code, then scan the ChecksOps Financial QR below. Can't scan? Choose “Enter a setup key” and paste the ChecksOps Financial key underneath."
+                      : "In the app, tap the “+” and choose Scan a QR code, then scan the square below. Can't scan? Choose “Enter a setup key” and paste the key underneath."}
+                  </li>
                   <li>The app shows a 6-digit number that changes every 30 seconds. Type the current one below and press Verify.</li>
                 </ol>
               </AlertDescription>
@@ -315,9 +333,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             {mode === "verify" && (
               <div className="space-y-2 text-xs text-muted-foreground">
                 <p>
-                  This account already has an authenticator linked. Open Google Authenticator,
-                  Microsoft Authenticator, Authy, 1Password, or iPhone Passwords and enter the
-                  current 6-digit number listed for ChecksOps.
+                  {awsMode
+                    ? "This account already has a ChecksOps Financial authenticator linked. Open Google Authenticator, Microsoft Authenticator, Authy, 1Password, or iPhone Passwords and enter the current 6-digit number listed for ChecksOps Financial. This is not a login MFA prompt."
+                    : "This account already has an authenticator linked. Open Google Authenticator, Microsoft Authenticator, Authy, 1Password, or iPhone Passwords and enter the current 6-digit number listed for ChecksOps."}
                 </p>
                 <p>
                   Installing a new app will not recreate an existing code. If you no longer have
