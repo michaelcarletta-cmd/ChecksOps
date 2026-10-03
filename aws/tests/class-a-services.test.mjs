@@ -29,6 +29,16 @@ test('recipient policy sinks non-allowlisted addresses in ses mode', () => {
   process.env.AWS_EMAIL_MODE = prev;
 });
 
+test('ses-identity mode sinks allowlisted recipients', () => {
+  const prev = process.env.AWS_EMAIL_MODE;
+  process.env.AWS_EMAIL_MODE = 'ses-identity';
+  const [row] = applyRecipientPolicy(['mcarletta@freedomadj.com']);
+  assert.equal(row.delivery, 'sink');
+  assert.equal(row.originalEmail, 'mcarletta@freedomadj.com');
+  assert.equal(row.policy, 'staging_ses_identity');
+  process.env.AWS_EMAIL_MODE = prev;
+});
+
 test('sink mode always rewrites destination', () => {
   const prev = process.env.AWS_EMAIL_MODE;
   process.env.AWS_EMAIL_MODE = 'sink';

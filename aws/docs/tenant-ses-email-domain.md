@@ -116,7 +116,7 @@ ARNs, account IDs, claims, or secrets.
 
 | Name | Default | Meaning |
 | --- | --- | --- |
-| `AWS_EMAIL_MODE` | `sink` | All mail still goes through `sendViaSesOrSink()` |
+| `AWS_EMAIL_MODE` | `sink` | Mail goes through `sendViaSesOrSink()`. `ses-identity` enables live Create/Get EmailIdentity without SendEmail. `ses` additionally allows allowlisted SendEmail. |
 | `AWS_TENANT_EMAIL_DOMAIN_ENABLED` | `false` | When false, never construct a live SESv2 client |
 | `AWS_SES_CONFIGURATION_SET` | empty | Prepared only; unused in sink mode |
 | `AWS_TENANT_SES_IDENTITY_DELETE_ENABLED` | `false` | Operator-only SES identity deletion |
@@ -183,7 +183,7 @@ Verified:
 2. Apply the additive migration in a dedicated, reviewed change (one transaction).
 3. Set `AWS_TENANT_EMAIL_DOMAIN_ENABLED=true` only in the intended environment.
 4. Attach the narrow SES identity IAM actions above.
-5. Keep `AWS_EMAIL_MODE=sink` until send-enablement is separately approved.
+5. Keep `AWS_EMAIL_MODE=sink` until identity or send-enablement is separately approved. Use `ses-identity` for domain verification without outbound send.
 6. Create/verify a ChecksOps SES configuration set, then set
    `AWS_SES_CONFIGURATION_SET` (still does nothing in sink mode).
 7. Do not change Cognito email configuration.
