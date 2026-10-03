@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SQL71 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/71_homeowner_ledger_view_contract.sql'), 'utf8');
+const SQL72 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/72_homeowner_ledger_view_claim_ok.sql'), 'utf8');
 const SQL68 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/68_staging_class_a_grants.sql'), 'utf8');
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 
@@ -16,14 +17,24 @@ const TENANT_A = '11111111-1111-4111-8111-111111111111';
 const TENANT_B = '22222222-2222-4222-8222-222222222222';
 const CLAIM_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 const CLAIM_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
+const CLAIM_ORG_B_CHECK = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1';
+const CLAIM_ORG_B_EVENT = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1';
+const CLAIM_ORG_B_NONE = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1';
+const CLAIM_ORG_B_OTHER_TENANT = 'ffffffff-ffff-4fff-8fff-fffffffffff1';
 const CHECK_A = '33333333-3333-4333-8333-333333333331';
 const CHECK_B = '33333333-3333-4333-8333-333333333332';
 const CHECK_OTHER_CLAIM = '33333333-3333-4333-8333-333333333333';
+const CHECK_ORG_B_CLAIM = '33333333-3333-4333-8333-333333333334';
+const CHECK_OTHER_TENANT_ON_CLAIM = '33333333-3333-4333-8333-333333333335';
 const TOKEN_CLAIM = '44444444-4444-4444-8444-444444444441';
 const TOKEN_PRE = '55555555-5555-4555-8555-555555555551';
 const TOKEN_EXPIRED = '66666666-6666-4666-8666-666666666661';
 const TOKEN_REVOKED = '77777777-7777-4777-8777-777777777771';
 const TOKEN_MISMATCH = '88888888-8888-4888-8888-888888888881';
+const TOKEN_ORG_B_CHECK = '44444444-4444-4444-8444-444444444442';
+const TOKEN_ORG_B_EVENT = '44444444-4444-4444-8444-444444444443';
+const TOKEN_ORG_B_NONE = '44444444-4444-4444-8444-444444444444';
+const TOKEN_ORG_B_OTHER_TENANT = '44444444-4444-4444-8444-444444444445';
 const BATCH_A = '99999999-9999-4999-8999-999999999991';
 
 test('SQL 71 accepted source SHA256 is exact and grants are constrained', () => {
@@ -37,6 +48,57 @@ test('SQL 71 accepted source SHA256 is exact and grants are constrained', () => 
   assert.doesNotMatch(SQL71, /CREATE TABLE|ALTER TABLE|ENABLE ROW LEVEL SECURITY|CREATE POLICY/);
   const sql71Body = SQL71.replace(/^--.*$/gm, '');
   assert.doesNotMatch(sql71Body, /cognito|moov_|plaid_|wallet_|GRANT SELECT ON TABLE/i);
+});
+
+test('SQL 72 accepted source SHA256 is exact and grants stay constrained', () => {
+  const sha = createHash('sha256').update(SQL72).digest('hex');
+  assert.equal(sha, '8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f');
+  assert.match(SQL72, /CREATE OR REPLACE FUNCTION public\.aws_public_homeowner_ledger_by_token\(p_token text\)/);
+  assert.equal((SQL72.match(/CREATE OR REPLACE FUNCTION/g) || []).length, 1);
+  assert.match(SQL72, /SECURITY DEFINER/);
+  assert.match(SQL72, /SET search_path = public/);
+  assert.match(SQL72, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) FROM PUBLIC/);
+  assert.match(SQL72, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) FROM authenticated/);
+  assert.match(SQL72, /GRANT EXECUTE ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) TO checksops/);
+  assert.doesNotMatch(SQL72, /CREATE TABLE|ALTER TABLE|ENABLE ROW LEVEL SECURITY|CREATE POLICY/);
+  const sql72Body = SQL72.replace(/^--.*$/gm, '');
+  assert.doesNotMatch(sql72Body, /cognito|moov_|plaid_|wallet_|GRANT SELECT ON TABLE/i);
+});
+
+test('SQL 72 is a forward claim_ok repair and does not rewrite 71 or 68', () => {
+  assert.match(SQL72, /Does NOT rewrite historical aws\/workflows\/sql\/71_homeowner_ledger_view_contract\.sql/);
+  assert.match(SQL72, /Does NOT rewrite historical aws\/workflows\/sql\/68_staging_class_a_grants\.sql/);
+  assert.match(SQL71, /c\.org_id IS NULL\s+AND \(/);
+  assert.match(SQL71, /AND \(c\.org_id IS NULL OR c\.org_id = tok\.tenant_id\)/);
+  assert.match(SQL71, /WHERE id = tok\.claim_id\s+AND \(org_id IS NULL OR org_id = tok\.tenant_id\)/);
+  assert.doesNotMatch(SQL72, /c\.org_id IS NULL\s+AND \(/);
+  assert.doesNotMatch(SQL72, /AND \(c\.org_id IS NULL OR c\.org_id = tok\.tenant_id\)/);
+  assert.match(SQL72, /c\.org_id = tok\.tenant_id/);
+  assert.match(SQL72, /i\.claim_id = tok\.claim_id\s+AND i\.tenant_id = tok\.tenant_id/);
+  assert.match(SQL72, /e\.claim_id = tok\.claim_id\s+AND e\.tenant_id = tok\.tenant_id/);
+  assert.match(SQL72, /WHERE id = tok\.claim_id\s*\n\s*\) c;/);
+  assert.match(SQL72, /c\.org_id = tok\.tenant_id/);
+  assert.match(SQL72, /AND i\.claim_id = tok\.claim_id/);
+  assert.match(SQL72, /WHERE claim_id = tok\.claim_id\s+AND tenant_id = tok\.tenant_id/);
+  assert.match(SQL72, /pending_signatures', '\[\]'::jsonb/);
+  assert.match(SQL72, /'money', NULL/);
+  assert.match(SQL72, /allow_deductible_payment', false/);
+  assert.doesNotMatch(SQL72, /wallet_balance|routing_number|account_number|moov_transfer|plaid_transfer/);
+  assert.doesNotMatch(SQL72, /homeowner_email = tok\.homeowner_email/);
+  assert.doesNotMatch(SQL72, /claim_number = tok/);
+  assert.doesNotMatch(SQL72, /policyholder_address\s*=/);
+  assert.doesNotMatch(SQL72, /GRANT SELECT ON TABLE public\.claims TO authenticated/);
+  const sha71 = createHash('sha256').update(SQL71).digest('hex');
+  assert.equal(sha71, '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5');
+  const executorAuth = fs.readFileSync(
+    path.join(ROOT, 'scripts/deployment-guard/lib/sql-executor-auth.mjs'),
+    'utf8',
+  );
+  assert.match(executorAuth, /21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5/);
+  assert.match(executorAuth, /71_homeowner_ledger_view_contract/);
+  assert.match(executorAuth, /72_homeowner_ledger_view_claim_ok/);
+  assert.match(executorAuth, /8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f/);
+  assert.match(executorAuth, /5918ebec1b3338dd4e34a4420c5f2a654f0b2d3311527923f7fd962c891fbcfa/);
 });
 
 test('SQL 71 replaces the RPC in a new file and keeps historical 68 intact', () => {
@@ -85,6 +147,14 @@ const mustRun = (bin, args, opts = {}) => {
 };
 
 const SCHEMA = `
+DO $$ BEGIN
+  CREATE ROLE authenticated NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE ROLE checksops NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 CREATE TABLE public.homeowner_ledger_tokens (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL,
@@ -168,18 +238,26 @@ CREATE TABLE public.claim_disbursements (
 const SEED = `
 INSERT INTO public.claims (id, org_id, claim_number, policyholder_address, loss_type, status, created_at) VALUES
   ('${CLAIM_A}', '${TENANT_A}', 'CL-100', '1 Main St', 'wind', 'open', '2026-01-01T00:00:00Z'),
-  ('${CLAIM_B}', '${TENANT_B}', 'CL-FOREIGN', '9 Other Rd', 'hail', 'open', '2026-01-01T00:00:00Z');
+  ('${CLAIM_B}', '${TENANT_B}', 'CL-FOREIGN', '9 Other Rd', 'hail', 'open', '2026-01-01T00:00:00Z'),
+  ('${CLAIM_ORG_B_CHECK}', '${TENANT_B}', 'CL-ORG-B-CHECK', '2 Bind St', 'wind', 'open', '2026-01-01T00:00:00Z'),
+  ('${CLAIM_ORG_B_EVENT}', '${TENANT_B}', 'CL-ORG-B-EVENT', '3 Bind St', 'wind', 'open', '2026-01-01T00:00:00Z'),
+  ('${CLAIM_ORG_B_NONE}', '${TENANT_B}', 'CL-ORG-B-NONE', '4 None St', 'wind', 'open', '2026-01-01T00:00:00Z'),
+  ('${CLAIM_ORG_B_OTHER_TENANT}', '${TENANT_B}', 'CL-ORG-B-FOREIGN-BIND', '5 Other St', 'wind', 'open', '2026-01-01T00:00:00Z');
 
 INSERT INTO public.check_intake_items (id, tenant_id, claim_id, amount, check_stage, check_number) VALUES
   ('${CHECK_A}', '${TENANT_A}', '${CLAIM_A}', 1000, 'deposited', '1001'),
   ('${CHECK_B}', '${TENANT_A}', '${CLAIM_A}', 250, 'review', '1002'),
-  ('${CHECK_OTHER_CLAIM}', '${TENANT_B}', '${CLAIM_B}', 9000, 'deposited', '9999');
+  ('${CHECK_OTHER_CLAIM}', '${TENANT_B}', '${CLAIM_B}', 9000, 'deposited', '9999'),
+  ('${CHECK_ORG_B_CLAIM}', '${TENANT_A}', '${CLAIM_ORG_B_CHECK}', 333, 'deposited', '2001'),
+  ('${CHECK_OTHER_TENANT_ON_CLAIM}', '${TENANT_B}', '${CLAIM_ORG_B_OTHER_TENANT}', 7777, 'deposited', '3001');
 
 INSERT INTO public.homeowner_ledger_events
   (id, tenant_id, claim_id, check_id, event_type, occurred_at, amount, actor_label, payload_json)
 VALUES
   ('e1111111-1111-4111-8111-111111111111', '${TENANT_A}', '${CLAIM_A}', '${CHECK_A}', 'check_received', '2026-01-02T00:00:00Z', 1000, 'Intake', '{}'::jsonb),
-  ('e2222222-2222-4222-8222-222222222222', '${TENANT_B}', '${CLAIM_B}', '${CHECK_OTHER_CLAIM}', 'check_received', '2026-01-02T00:00:00Z', 9000, 'Foreign', '{}'::jsonb);
+  ('e2222222-2222-4222-8222-222222222222', '${TENANT_B}', '${CLAIM_B}', '${CHECK_OTHER_CLAIM}', 'check_received', '2026-01-02T00:00:00Z', 9000, 'Foreign', '{}'::jsonb),
+  ('e3333333-3333-4333-8333-333333333333', '${TENANT_A}', '${CLAIM_ORG_B_EVENT}', NULL, 'check_received', '2026-01-02T00:00:00Z', 50, 'Same-tenant event', '{}'::jsonb),
+  ('e4444444-4444-4444-8444-444444444444', '${TENANT_B}', '${CLAIM_ORG_B_OTHER_TENANT}', '${CHECK_OTHER_TENANT_ON_CLAIM}', 'check_received', '2026-01-02T00:00:00Z', 7777, 'Other-tenant event', '{}'::jsonb);
 
 INSERT INTO public.check_endorsements
   (id, check_id, tenant_id, payee_name, payee_type, status, token, contact_email, signed_at, request_sent_at, created_at)
@@ -195,7 +273,8 @@ INSERT INTO public.disbursement_splits (batch_id, tenant_id, amount, status)
 VALUES ('${BATCH_A}', '${TENANT_A}', 400, 'sent');
 INSERT INTO public.claim_disbursements (claim_id, check_id, amount, status)
 VALUES ('${CLAIM_A}', '${CHECK_A}', 25, 'paid'),
-       ('${CLAIM_B}', '${CHECK_OTHER_CLAIM}', 8000, 'paid');
+       ('${CLAIM_B}', '${CHECK_OTHER_CLAIM}', 8000, 'paid'),
+       ('${CLAIM_ORG_B_CHECK}', '${CHECK_ORG_B_CLAIM}', 8000, 'paid');
 
 INSERT INTO public.homeowner_ledger_tokens
   (id, tenant_id, claim_id, token, homeowner_email, homeowner_name, revoked_at, expires_at)
@@ -204,13 +283,17 @@ VALUES
   ('${TOKEN_PRE}', '${TENANT_A}', NULL, 'valid-preclaim-token-value', 'ada@example.com', 'Ada Lovelace', NULL, NULL),
   ('${TOKEN_EXPIRED}', '${TENANT_A}', '${CLAIM_A}', 'expired-token-value', 'ada@example.com', 'Ada Lovelace', NULL, now() - interval '1 day'),
   ('${TOKEN_REVOKED}', '${TENANT_A}', '${CLAIM_A}', 'revoked-token-value', 'ada@example.com', 'Ada Lovelace', now(), NULL),
-  ('${TOKEN_MISMATCH}', '${TENANT_B}', '${CLAIM_A}', 'mismatch-token-value', 'eve@example.com', 'Eve', NULL, NULL);
+  ('${TOKEN_MISMATCH}', '${TENANT_B}', '${CLAIM_A}', 'mismatch-token-value', 'eve@example.com', 'Eve', NULL, NULL),
+  ('${TOKEN_ORG_B_CHECK}', '${TENANT_A}', '${CLAIM_ORG_B_CHECK}', 'org-b-check-token-value', 'ada@example.com', 'Ada Lovelace', NULL, NULL),
+  ('${TOKEN_ORG_B_EVENT}', '${TENANT_A}', '${CLAIM_ORG_B_EVENT}', 'org-b-event-token-value', 'ada@example.com', 'Ada Lovelace', NULL, NULL),
+  ('${TOKEN_ORG_B_NONE}', '${TENANT_A}', '${CLAIM_ORG_B_NONE}', 'org-b-none-token-value', 'ada@example.com', 'Ada Lovelace', NULL, NULL),
+  ('${TOKEN_ORG_B_OTHER_TENANT}', '${TENANT_A}', '${CLAIM_ORG_B_OTHER_TENANT}', 'org-b-other-tenant-token-value', 'ada@example.com', 'Ada Lovelace', NULL, NULL);
 
 INSERT INTO public.homeowner_ledger_check_uploads (token_id, tenant_id)
 VALUES ('${TOKEN_PRE}', '${TENANT_A}'), ('${TOKEN_PRE}', '${TENANT_A}');
 `;
 
-test('isolated PostgreSQL RPC enforces the view contract and fail-closed isolation', { timeout: 180000 }, async (t) => {
+test('isolated PostgreSQL RPC enforces SQL 71 then SQL 72 claim_ok isolation', { timeout: 180000 }, async (t) => {
   if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
     t.skip('PostgreSQL 16 initdb is not installed in this environment');
     return;
@@ -295,6 +378,64 @@ max_connections = 20
     assert.equal(JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('expired-token-value')::text`)).error, 'expired');
     assert.equal(JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('revoked-token-value')::text`)).error, 'revoked');
     assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('mismatch-token-value') IS NULL`), 't');
+
+    // Historical SQL 71 still fail-closes when org_id is a different non-null org,
+    // even with an exact same-tenant check or event on that claim.
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-check-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-event-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-none-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-other-tenant-token-value') IS NULL`), 't');
+
+    psql(SQL72);
+
+    const afterRepair = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('valid-claim-token-value')::text`));
+    assert.equal(afterRepair.ok, true);
+    assert.equal(afterRepair.mode, 'claim');
+    assert.equal(afterRepair.claim.claim_number, 'CL-100');
+    assert.equal(Number(afterRepair.totals.received), 1250);
+    assert.equal(Number(afterRepair.totals.released), 425);
+    assert.doesNotMatch(JSON.stringify(afterRepair), /CL-FOREIGN|Internal PA|endorse-pa|endorse-other|9000|wallet|routing|bank_account|7777|CL-ORG-B/);
+
+    const orgMatchStillAllowed = afterRepair;
+    assert.equal(orgMatchStillAllowed.claim.id, CLAIM_A);
+
+    const checkBound = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-check-token-value')::text`));
+    assert.equal(checkBound.ok, true);
+    assert.equal(checkBound.mode, 'claim');
+    assert.equal(checkBound.claim.id, CLAIM_ORG_B_CHECK);
+    assert.equal(checkBound.claim.claim_number, 'CL-ORG-B-CHECK');
+    assert.equal(Number(checkBound.totals.received), 333);
+    assert.equal(Number(checkBound.totals.deposited), 333);
+    assert.equal(Number(checkBound.totals.released), 0);
+    assert.equal(Number(checkBound.totals.remaining), 333);
+    assert.equal(checkBound.money, null);
+    assert.doesNotMatch(JSON.stringify(checkBound), /CL-FOREIGN|CL-100|9000|7777|8000|wallet|routing|bank_account|moov|plaid|provider/);
+
+    const eventBound = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-event-token-value')::text`));
+    assert.equal(eventBound.ok, true);
+    assert.equal(eventBound.mode, 'claim');
+    assert.equal(eventBound.claim.id, CLAIM_ORG_B_EVENT);
+    assert.equal(eventBound.claim.claim_number, 'CL-ORG-B-EVENT');
+    assert.equal(eventBound.events.length, 1);
+    assert.equal(eventBound.events[0].event_type, 'check_received');
+    assert.equal(Number(eventBound.totals.received), 0);
+    assert.equal(eventBound.money, null);
+    assert.doesNotMatch(JSON.stringify(eventBound), /CL-FOREIGN|CL-100|9000|7777|wallet|routing|bank_account|Other-tenant/);
+
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-none-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-other-tenant-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('mismatch-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('missing-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('short') IS NULL`), 't');
+    assert.equal(JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('expired-token-value')::text`)).error, 'expired');
+    assert.equal(JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('revoked-token-value')::text`)).error, 'revoked');
+
+    const preAfter = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('valid-preclaim-token-value')::text`));
+    assert.equal(preAfter.mode, 'pre_claim');
+    assert.equal(preAfter.claim, null);
+    assert.equal(preAfter.pending_upload_count, 2);
+    assert.equal(preAfter.money, null);
+    assert.deepEqual(preAfter.pending_endorsements, []);
   } finally {
     run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', 'stop']);
   }
