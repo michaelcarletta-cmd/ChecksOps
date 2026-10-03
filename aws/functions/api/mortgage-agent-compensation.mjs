@@ -132,6 +132,8 @@ async function handleEntries(client, body) {
         e.claim_id::text AS claim_id,
         e.tenant_id::text AS tenant_id,
         t.name AS tenant_name,
+        r.homeowner_name,
+        r.claim_number,
         r.mortgage_company,
         r.loan_number,
         e.classification,
