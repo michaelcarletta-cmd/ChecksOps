@@ -61,5 +61,8 @@ verify_jwt = false
 [functions.aws-staging-storage-bridge]
 verify_jwt = false
 
+[functions.moov-recipient-session]
+verify_jwt = false
+
 [functions.moov-recipient-bank-verify]
 verify_jwt = false

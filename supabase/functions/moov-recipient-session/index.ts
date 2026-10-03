@@ -1,7 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { bindMoovEnvironment, moovConfigured, moovEnvironment, moovFetch, moovToken, scopes } from "../_shared/moovClient.ts";
+import { bindMoovEnvironment, moovConfigured, moovEnvironment, moovFetch, moovOrigin, moovToken, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json } from "../_shared/moovGuard.ts";
+import {
+  buildEdgeCredentialFingerprint,
+  classifyMoovAccountGetFailure,
+  decodeMoovJwtMetadata,
+  operatorClassifyRequested,
+} from "../_shared/moovAccountGetClassify.ts";
 import {
   identityRequirementsOutstanding,
   interpretRecipientBankVerification,
@@ -67,9 +73,59 @@ serve(async (req) => {
     }
 
     const { data: tenant } = await supabase.from("tenants").select("name, logo_url, primary_color, secondary_color").eq("id", recipient.tenant_id).maybeSingle();
-    const account = await moovFetch<any>(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId) }).catch(() => null);
+    const apiVersion = Deno.env.get("MOOV_API_VERSION") ?? "v2024.01.00";
+    const originUsed = moovOrigin();
+    const creds = await buildEdgeCredentialFingerprint(environment);
+    let oauthTokenIssued = false;
+    let accountGetSent = false;
+    let jwtMeta: ReturnType<typeof decodeMoovJwtMetadata> = null;
+    let account: any = null;
+    try {
+      const accessToken = await moovToken(scopes.accountRead(accountId));
+      oauthTokenIssued = true;
+      jwtMeta = decodeMoovJwtMetadata(accessToken);
+      accountGetSent = true;
+      account = await moovFetch<any>(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId) });
+    } catch (err) {
+      const stage = oauthTokenIssued ? "account_get" : "oauth_token";
+      const classify = await classifyMoovAccountGetFailure({
+        error: err,
+        stage,
+        oauthTokenIssued,
+        accountGetSent,
+        origin: originUsed,
+        environment,
+        apiVersion,
+        accountId,
+        jwt: jwtMeta,
+        creds,
+      });
+      console.error("[moov-recipient-session] account_get_failed", JSON.stringify(classify));
+      const extra: Record<string, string> = {};
+      if (operatorClassifyRequested(req)) {
+        extra["x-checksops-moov-classify"] = JSON.stringify(classify);
+      }
+      return json({ error: "moov_account_get_failed", message: "Could not load the payment-provider account." }, 502, extra);
+    }
     if (liveAccountReadFailed(account)) {
-      return json({ error: "moov_account_get_failed", message: "Could not load the payment-provider account." }, 502);
+      const classify = await classifyMoovAccountGetFailure({
+        error: { status: null, message: "empty_account" },
+        stage: oauthTokenIssued ? "account_get" : "oauth_token",
+        oauthTokenIssued,
+        accountGetSent,
+        origin: originUsed,
+        environment,
+        apiVersion,
+        accountId,
+        jwt: jwtMeta,
+        creds,
+      });
+      console.error("[moov-recipient-session] account_get_failed", JSON.stringify(classify));
+      const extra: Record<string, string> = {};
+      if (operatorClassifyRequested(req)) {
+        extra["x-checksops-moov-classify"] = JSON.stringify(classify);
+      }
+      return json({ error: "moov_account_get_failed", message: "Could not load the payment-provider account." }, 502, extra);
     }
     let capabilities: any[] = [];
     let capabilitiesReadOk = false;
