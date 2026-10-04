@@ -103,6 +103,7 @@ test('this workstream does not touch API write-allowlist, signature submit, or S
     'aws/tests/signature-request-spa-write-allowlist.test.mjs',
     'ops/release-locks/locked-components.json',
     'ops/release-locks/overlap-allowlist.json',
+    'ops/release-locks/tests/hardening.test.mjs',
   ].includes(rel));
   assert.deepEqual(extra, [], 'no unexpected files beyond the two-table restore and lock hash refresh');
 });
