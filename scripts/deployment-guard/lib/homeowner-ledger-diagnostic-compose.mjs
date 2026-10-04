@@ -1,10 +1,22 @@
 /**
- * Forward-compose the staging Homeowner ledger-view diagnostic onto a
- * freshly downloaded live SPA. Never rebuilds from a stale workspace Vite
- * baseline. Mint new hashed HomeownerLedger + index entry names so immutable
- * CloudFront assets are not overwritten in place.
+ * Staging Homeowner diagnostic compose / restore.
+ *
+ * Minting a second index-*.js entry duplicates the Vite React runtime.
+ * Lazy chunks keep importing hooks from the original index chunk, which
+ * produces React error #321 on every page. Homeowner-only patches must
+ * not retarget the shared index/runtime. Restore retargets current live
+ * index.html back to the still-live accepted runtime without uploading
+ * historical files from disk.
  */
 import { createHash } from 'node:crypto';
+
+export const ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC = Object.freeze({
+  index_html_sha256: '2186175d03b33bf9faae9b142b9f8e386b467027407623a773bd0fb0d1b6785b',
+  entry_bundle: '/assets/index-BomgsBaq.js',
+  homeowner_chunk: 'HomeownerLedger-cDMDKYsn.js',
+});
+
+export const DUPLICATE_REACT_RUNTIME_MESSAGE = 'duplicating the shared index/runtime chunk creates a second React copy (error #321)';
 
 export const STALE_SPA_ENTRY_MARKERS = Object.freeze(['DJNHggvS', 'B4Tts4y1', 'Da1p11Te']);
 
@@ -167,40 +179,65 @@ export function composeHomeownerLedgerDiagnostic({
     throw new Error('compose dropped /ledger/:token from the live index entry');
   }
 
-  let entryHash = viteContentHash(nextEntry);
-  const liveEntryName = entryFileName || liveEntry.replace(/^\/assets\//, '');
-  let nextEntryName = rewriteAssetName(liveEntryName, entryHash, 'index');
-  if (nextEntryName === liveEntryName) {
-    entryHash = `${entryHash}X`;
-    nextEntryName = rewriteAssetName(liveEntryName, entryHash, 'index');
-  }
-  assertNoStaleEntry(nextEntryName, 'composed index entry');
-  assertNoStaleEntry(nextHomeownerName, 'composed HomeownerLedger');
+  throw new Error(DUPLICATE_REACT_RUNTIME_MESSAGE);
+}
 
-  let nextHtml = String(indexHtml || '').split(liveEntryName).join(nextEntryName);
-  if (nextHtml.includes(liveHomeownerName)) {
-    nextHtml = nextHtml.split(liveHomeownerName).join(nextHomeownerName);
-  }
-  if (nextHtml === indexHtml) {
-    throw new Error('compose did not retarget index.html to the new entry bundle');
-  }
-  if (entryFromHtml(nextHtml) !== `/assets/${nextEntryName}`) {
-    throw new Error('composed index.html entry bundle is not the minted index hash');
+export function sha256Text(text) {
+  return createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
+}
+
+export function reconcileDiagnosticIndexToAcceptedRuntime({
+  currentIndexHtml,
+  acceptedEntry = ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC.entry_bundle,
+  expectedIndexSha256 = ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC.index_html_sha256,
+  diagnosticEntry,
+} = {}) {
+  const liveEntry = entryFromHtml(currentIndexHtml);
+  if (!liveEntry) throw new Error('current live index.html is missing /assets/index-*.js');
+  assertNoStaleEntry(acceptedEntry, 'accepted index entry');
+
+  if (diagnosticEntry && liveEntry !== diagnosticEntry) {
+    throw new Error(`live entry drifted from the diagnostic entry ${diagnosticEntry}; refusing blind restore`);
   }
 
+  if (liveEntry === acceptedEntry) {
+    const sha = sha256Text(currentIndexHtml);
+    if (sha !== expectedIndexSha256) {
+      throw new Error('index already points at the accepted runtime but the HTML hash drifted');
+    }
+    return {
+      origin: 'fresh-live-download',
+      clean_build: true,
+      already_restored: true,
+      index_html: currentIndexHtml,
+      entry_bundle: acceptedEntry,
+      index_html_sha256: sha,
+    };
+  }
+
+  const liveName = liveEntry.replace(/^\/assets\//, '');
+  const acceptedName = acceptedEntry.replace(/^\/assets\//, '');
+  if (!String(currentIndexHtml).includes(liveName)) {
+    throw new Error('current live index.html does not contain the live entry name');
+  }
+  const nextHtml = String(currentIndexHtml).split(liveName).join(acceptedName);
+  if (entryFromHtml(nextHtml) !== acceptedEntry) {
+    throw new Error('reconcile did not retarget index.html to the accepted runtime');
+  }
+  if (nextHtml.includes(liveName)) {
+    throw new Error('reconcile left the duplicated diagnostic runtime in index.html');
+  }
+  const sha = sha256Text(nextHtml);
+  if (sha !== expectedIndexSha256) {
+    throw new Error('reconstructed index.html does not match the accepted pre-diagnostic composition');
+  }
   return {
     origin: 'fresh-live-download',
     clean_build: true,
-    live_entry: liveEntry,
-    live_homeowner: liveHomeownerName,
-    homeowner_file_name: nextHomeownerName,
-    entry_file_name: nextEntryName,
+    already_restored: false,
     index_html: nextHtml,
-    entry_js: nextEntry,
-    homeowner_ledger_js: patchedHomeowner,
-    preserved_routes: {
-      h_ledger: String(entryJs).includes('/h/ledger/'),
-      ledger: String(entryJs).includes('/ledger/'),
-    },
+    entry_bundle: acceptedEntry,
+    index_html_sha256: sha,
+    removed_entry: liveEntry,
   };
 }
