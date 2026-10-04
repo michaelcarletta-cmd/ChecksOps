@@ -11,10 +11,14 @@ import {
   isHomeownerLedgerViewDiagnosticEnabled,
 } from '../../src/lib/homeownerLedgerViewDiagnostic.ts';
 import {
+  ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC,
+  DUPLICATE_REACT_RUNTIME_MESSAGE,
   FORBIDDEN_DIAGNOSTIC_LEAKS,
   INLINED_DIAGNOSTIC_HELPER,
   composeHomeownerLedgerDiagnostic,
   entryFromHtml,
+  reconcileDiagnosticIndexToAcceptedRuntime,
+  sha256Text,
 } from '../../scripts/deployment-guard/lib/homeowner-ledger-diagnostic-compose.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -108,56 +112,54 @@ test('HomeownerLedger error UI keeps generic copy and only adds the safe diagnos
   assert.doesNotMatch(helper, /window\.location\.href/);
 });
 
-test('forward-compose patches the live HomeownerLedger chunk and mints new hashes', () => {
+test('compose refuses to mint a second index/runtime chunk (React #321)', () => {
   const liveHomeowner = [
     'const q={functions:{invoke:async()=>({})}};',
     'export default function HomeownerLedger(){',
-    'const[l,s]=u.useState(!0);const[d,c]=u.useState(null);const[t,n]=u.useState(null);',
     'const load=async()=>{n(!0),u(null);try{const{data:x,error:h}=await q.functions.invoke("homeowner-ledger-view",{body:{token:a}});',
     'if(h)throw h;if(x!=null&&x.error)throw new Error(x.error);c(x)}catch(x){n(x.message||"Could not load ledger")}finally{n(!1)}};',
-    'return t?i.jsxs("div",{children:[i.jsx("div",{className:"font-semibold",children:"This link isn\'t working"}),',
-    'i.jsx("p",{className:"text-sm text-muted-foreground",children:t==="revoked"?"Your claim team has ended access to this link.":',
+    "return t?i.jsxs(\"div\",{children:[i.jsx(\"div\",{children:\"This link isn't working\"}),i.jsx(\"p\",{className:\"text-sm text-muted-foreground\",children:t===\"revoked\"?\"Your claim team has ended access to this link.\":",
     't==="expired"?"This link has expired. Ask your claim team for a new one.":"Ask your claim team to resend your ledger link."})]}):null}',
   ].join('');
-  const liveEntry = [
-    'const routes=[',
-    '{path:"/h/ledger/:token",lazy:()=>import("./HomeownerLedger-cDMDKYsn.js")}',
-    ',{path:"/ledger/:token",lazy:()=>import("./HomeownerLedger-cDMDKYsn.js")}',
-    ',{path:"/branding",lazy:()=>import("./Branding-keep.js")}',
-    ',{path:"/mortgage",lazy:()=>import("./Mortgage-keep.js")}',
-    '];',
-  ].join('');
-  const liveHtml = '<!doctype html><script type="module" src="/assets/index-BomgsBaq.js"></script>';
-
-  const composed = composeHomeownerLedgerDiagnostic({
-    indexHtml: liveHtml,
+  const liveEntry = 'import("./HomeownerLedger-cDMDKYsn.js");const routes=["/h/ledger/:token","/ledger/:token"]';
+  assert.throws(() => composeHomeownerLedgerDiagnostic({
+    indexHtml: '<!doctype html><script type="module" src="/assets/index-BomgsBaq.js"></script>',
     entryJs: liveEntry,
     homeownerLedgerJs: liveHomeowner,
     homeownerLedgerFileName: 'HomeownerLedger-cDMDKYsn.js',
     entryFileName: 'index-BomgsBaq.js',
-  });
-
-  assert.equal(composed.origin, 'fresh-live-download');
-  assert.equal(composed.clean_build, true);
-  assert.notEqual(composed.homeowner_file_name, 'HomeownerLedger-cDMDKYsn.js');
-  assert.notEqual(composed.entry_file_name, 'index-BomgsBaq.js');
-  assert.equal(entryFromHtml(composed.index_html), `/assets/${composed.entry_file_name}`);
-  assert.match(composed.entry_js, /\/h\/ledger\/:token/);
-  assert.match(composed.entry_js, /\/ledger\/:token/);
-  assert.match(composed.entry_js, /Branding-keep\.js/);
-  assert.match(composed.entry_js, /Mortgage-keep\.js/);
-  assert.match(composed.homeowner_ledger_js, /Diagnostic: /);
-  assert.match(composed.homeowner_ledger_js, /__hoFormatLedgerViewDiag/);
-  assert.match(composed.homeowner_ledger_js, /globalThis\.__hoLedgerViewErr/);
-  assert.match(composed.homeowner_ledger_js, /homeowner-ledger-view-diagnostic/);
-  assert.match(composed.homeowner_ledger_js, /globalThis\.__hoLedgerViewErr=null/);
-  assert.match(composed.homeowner_ledger_js, /Ask your claim team to resend your ledger link/);
-  assert.doesNotMatch(composed.homeowner_ledger_js, /Authorization/);
-  assert.doesNotMatch(composed.homeowner_ledger_js, /tenant_id/);
-  assert.doesNotMatch(composed.homeowner_ledger_js, /claim_id/);
+  }), new RegExp(DUPLICATE_REACT_RUNTIME_MESSAGE.replace(/[()]/g, '\\$&')));
   for (const leak of FORBIDDEN_DIAGNOSTIC_LEAKS) {
     assert.equal(INLINED_DIAGNOSTIC_HELPER.includes(leak), false, leak);
   }
+});
+
+test('restore retargets a duplicated diagnostic index.html back to the accepted runtime', () => {
+  const accepted = '<!doctype html><script type="module" src="/assets/index-BomgsBaq.js"></script>';
+  const diagnostic = accepted.replace('index-BomgsBaq.js', 'index-jz3OgxyD.js');
+  const restored = reconcileDiagnosticIndexToAcceptedRuntime({
+    currentIndexHtml: diagnostic,
+    acceptedEntry: '/assets/index-BomgsBaq.js',
+    expectedIndexSha256: sha256Text(accepted),
+    diagnosticEntry: '/assets/index-jz3OgxyD.js',
+  });
+  assert.equal(restored.origin, 'fresh-live-download');
+  assert.equal(restored.already_restored, false);
+  assert.equal(restored.entry_bundle, '/assets/index-BomgsBaq.js');
+  assert.equal(entryFromHtml(restored.index_html), '/assets/index-BomgsBaq.js');
+  assert.equal(restored.index_html_sha256, sha256Text(accepted));
+  assert.equal(restored.index_html.includes('jz3OgxyD'), false);
+  assert.throws(() => reconcileDiagnosticIndexToAcceptedRuntime({
+    currentIndexHtml: diagnostic.replace('jz3OgxyD', 'DriftedX1'),
+    acceptedEntry: '/assets/index-BomgsBaq.js',
+    expectedIndexSha256: sha256Text(accepted),
+    diagnosticEntry: '/assets/index-jz3OgxyD.js',
+  }), /drifted from the diagnostic entry/);
+  assert.equal(ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC.entry_bundle, '/assets/index-BomgsBaq.js');
+  assert.equal(
+    ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC.index_html_sha256,
+    '2186175d03b33bf9faae9b142b9f8e386b467027407623a773bd0fb0d1b6785b',
+  );
 });
 
 test('compose refuses a stale or unmatched live HomeownerLedger chunk', () => {
