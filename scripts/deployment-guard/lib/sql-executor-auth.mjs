@@ -99,7 +99,7 @@ export const AUTHORIZED_SQL73 = Object.freeze({
 export const AUTHORIZED_SQL74 = Object.freeze({
   filename: 'aws/workflows/sql/74_homeowner_signing_rls_boundary.sql',
   migration_id: '74_homeowner_signing_rls_boundary',
-  commit: 'ed5ce2bae7ef3fed4e988f8d745ac0040ead6631',
+  commit: 'dba4a9be28eb48e54aba75ca7eab1b0c1f36b55d',
   source_sha256: 'a7ee929bc25a7ca56bf29dacebdab20198bf1a7625e661333545dc9d1f662c4f',
   intended_replacement_sha256: 'a7ee929bc25a7ca56bf29dacebdab20198bf1a7625e661333545dc9d1f662c4f',
   function_identities: Object.freeze([
