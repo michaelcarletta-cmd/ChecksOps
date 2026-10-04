@@ -9,6 +9,7 @@
  * - /endorse                → check endorsement
  * - /payment-direction/:id  → payment direction
  * - /h/claim/:token         → homeowner claim portal
+ * - /h/ledger/:token        → homeowner ledger (AWS send URL)
  * - /h/upload               → homeowner check upload
  * - /invoice/:token         → public invoice
  * - /verify-account/:token  → account verification

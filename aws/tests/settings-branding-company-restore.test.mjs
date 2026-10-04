@@ -160,18 +160,20 @@ test('unsupported invoice fields are not submitted or shown', () => {
   assert.deepEqual(extras.columns.sort(), ['invoice_accent_color', 'invoice_theme']);
 });
 
-test('tenant Branding tab does not mount Sending Subdomain or EmailSenderSettings', () => {
+test('tenant Branding tab mounts Email Branding without Sending Subdomain/DKIM/SES', () => {
   assert.match(brandingTab, /<CompanyBrandingSettings/);
-  assert.doesNotMatch(brandingTab, /<EmailSenderSettings/);
+  assert.match(brandingTab, /<EmailSenderSettings showSendingDomain=\{false\} \/>/);
   assert.doesNotMatch(brandingTab, /<BrandingSettings/);
   assert.doesNotMatch(brandingTab, /Sending Subdomain/i);
-  assert.doesNotMatch(settings, /from "@\/components\/settings\/EmailSenderSettings"/);
-  assert.doesNotMatch(settings, /EmailSenderSettings/);
+  assert.doesNotMatch(brandingTab, /showSendingDomain=\{true\}/);
+  assert.match(settings, /from "@\/components\/settings\/EmailSenderSettings"/);
 
   assert.match(emailSender, /export function EmailSenderSettings/);
+  assert.match(emailSender, /showSendingDomain/);
   assert.match(emailSender, /Sending subdomain/i);
+  assert.match(emailSender, /\{showSendingDomain && <SectionCard/);
   assert.match(adminTenants, /from "@\/components\/settings\/EmailSenderSettings"/);
-  assert.match(adminTenants, /<EmailSenderSettings/);
+  assert.match(adminTenants, /<EmailSenderSettings showSendingDomain=\{true\} \/>/);
 
   assert.match(settings, /function BrandingSettings/);
   assert.match(settings, /secondary_color:\s*secondaryColor/);
