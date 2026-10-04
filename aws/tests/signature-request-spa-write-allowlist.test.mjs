@@ -101,11 +101,16 @@ test('this workstream does not touch API write-allowlist, signature submit, or S
   const extra = changed.filter((rel) => ![
     CLIENT_REL,
     'aws/tests/signature-request-spa-write-allowlist.test.mjs',
+    'aws/tests/signature-request-files-tab-claim-id.test.mjs',
+    'src/components/check-review/CheckFilesSection.tsx',
+    'src/pages/CheckCommandCenter.tsx',
+    'src/lib/signature-source-files.ts',
+    'tests/signature-source-files.test.ts',
     'ops/release-locks/locked-components.json',
     'ops/release-locks/overlap-allowlist.json',
     'ops/release-locks/tests/hardening.test.mjs',
   ].includes(rel));
-  assert.deepEqual(extra, [], 'no unexpected files beyond the two-table restore and lock hash refresh');
+  assert.deepEqual(extra, [], 'no unexpected files beyond the SR SPA allowlist + Files-tab claim-id repair');
 });
 
 test('source write-allowlist is not broadened by this SPA repair', () => {

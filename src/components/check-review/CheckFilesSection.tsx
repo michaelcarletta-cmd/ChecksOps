@@ -25,10 +25,17 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { SignatureRequests } from "@/components/claim-detail/SignatureRequests";
-import { signatureSourceFilesQueryKey } from "@/lib/signature-source-files";
+import {
+  resolveSignatureRequestClaimId,
+  shouldUseSignatureClaimFallback,
+  signatureRequestsRegionMode,
+  signatureSourceFilesQueryKey,
+  SIGNATURE_REQUESTS_UNLINKED_COPY,
+} from "@/lib/signature-source-files";
 
 interface CheckFilesSectionProps {
   checkIntakeItemId: string;
+  claimId?: string | null;
 }
 
 interface CheckFile {
@@ -46,7 +53,7 @@ interface CheckFile {
 
 const BUCKET = "claim-files";
 
-export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps) {
+export function CheckFilesSection({ checkIntakeItemId, claimId = null }: CheckFilesSectionProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -69,6 +76,7 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
     },
   });
 
+  const suppliedClaimId = resolveSignatureRequestClaimId(claimId, null);
   const { data: checkClaim } = useQuery({
     queryKey: ["check-signature-claim", checkIntakeItemId],
     queryFn: async () => {
@@ -80,8 +88,10 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
       if (error) throw error;
       return data;
     },
+    enabled: shouldUseSignatureClaimFallback(suppliedClaimId),
   });
-  const resolvedClaimId = checkClaim?.claim_id || null;
+  const resolvedClaimId = resolveSignatureRequestClaimId(suppliedClaimId, checkClaim?.claim_id);
+  const regionMode = signatureRequestsRegionMode(resolvedClaimId);
   const linkedClaim = resolvedClaimId
     ? {
         id: resolvedClaimId,
@@ -363,13 +373,22 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
         )}
       </CardContent>
 
-      {linkedClaim?.id && (
-        <SignatureRequests
-          claimId={linkedClaim.id}
-          claim={linkedClaim}
-          checkIntakeItemId={checkIntakeItemId}
-        />
-      )}
+      <div data-testid="signature-requests-region">
+        {regionMode === "requests" && linkedClaim?.id ? (
+          <SignatureRequests
+            claimId={linkedClaim.id}
+            claim={linkedClaim}
+            checkIntakeItemId={checkIntakeItemId}
+          />
+        ) : (
+          <div data-testid="signature-requests-unlinked" className="px-6 pb-6 space-y-1">
+            <h3 className="text-lg font-semibold">Signature Requests</h3>
+            <p className="text-sm text-muted-foreground">
+              {SIGNATURE_REQUESTS_UNLINKED_COPY}
+            </p>
+          </div>
+        )}
+      </div>
 
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh]">

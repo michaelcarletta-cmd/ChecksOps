@@ -80,3 +80,26 @@ export const signatureRequestDocumentFields = ({
   document_name: documentName,
   document_path: documentPath,
 });
+
+const normalizeClaimId = (value?: string | null) => {
+  const trimmed = String(value || "").trim();
+  return trimmed || null;
+};
+
+/** CCC check.claim_id wins. The Files-tab re-query is fallback only. */
+export const resolveSignatureRequestClaimId = (
+  suppliedClaimId?: string | null,
+  fallbackClaimId?: string | null,
+) => normalizeClaimId(suppliedClaimId) || normalizeClaimId(fallbackClaimId);
+
+export const shouldUseSignatureClaimFallback = (suppliedClaimId?: string | null) =>
+  !normalizeClaimId(suppliedClaimId);
+
+export type SignatureRequestsRegionMode = "requests" | "unlinked";
+
+export const signatureRequestsRegionMode = (
+  resolvedClaimId?: string | null,
+): SignatureRequestsRegionMode => (normalizeClaimId(resolvedClaimId) ? "requests" : "unlinked");
+
+export const SIGNATURE_REQUESTS_UNLINKED_COPY =
+  "This check is not linked to a claim. Link the check to a claim before requesting signatures.";
