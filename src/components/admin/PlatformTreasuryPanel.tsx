@@ -135,6 +135,11 @@ export function PlatformTreasuryPanel() {
             <Badge variant="outline" className="capitalize">
               {data?.environment ?? "unknown"}
             </Badge>
+            {data?.platform_account_id && (
+              <p className="font-mono text-xs text-muted-foreground break-all">
+                {data.platform_account_id}
+              </p>
+            )}
             {wallet?.setup_required && (
               <Badge variant="outline" className="border-amber-500/40 text-amber-500">
                 Balance not provisioned yet
