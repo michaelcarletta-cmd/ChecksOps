@@ -69,7 +69,7 @@ export function resolvePlatformFinanceEnvironment(input: {
   if (host.startsWith("staging.") || host === "staging.checksops.com" || appHost.startsWith("staging.")) {
     return "sandbox";
   }
-  if (env === "production") return "production";
+  if (env === "production" || env === "production-prep") return "production";
   if (PRODUCTION_HOSTS.has(host) || PRODUCTION_HOSTS.has(appHost)) return "production";
   return "sandbox";
 }

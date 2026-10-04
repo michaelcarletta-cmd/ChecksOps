@@ -51,8 +51,22 @@ export const isPlatformFinanceReadAction = (action) => {
 };
 
 /**
+ * Live production Lambda uses CHECKSOPS_ENV=production-prep.
+ * That name is production, never sandbox.
+ */
+export const PLATFORM_FINANCE_PRODUCTION_ENVS = Object.freeze(['production', 'production-prep']);
+
+/** Known ChecksOps sandbox facilitator. Forbidden when environment is production. */
+export const SANDBOX_PLATFORM_ACCOUNT_ID = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
+
+export function isPlatformFinanceProductionEnv(checksopsEnv) {
+  const env = String(checksopsEnv || '').trim().toLowerCase();
+  return PLATFORM_FINANCE_PRODUCTION_ENVS.includes(env);
+}
+
+/**
  * Server environment is authoritative. Staging always sandbox.
- * Production CHECKSOPS_ENV selects the production facilitator.
+ * Production and production-prep select the production facilitator.
  * Client tenant_id / memberships never participate.
  */
 export function resolvePlatformFinanceEnvironment({
@@ -63,11 +77,38 @@ export function resolvePlatformFinanceEnvironment({
   const host = String(hostname || '').trim().toLowerCase();
   if (env === 'staging' || env === 'sandbox' || env === 'uat') return 'sandbox';
   if (host.startsWith('staging.') || host === 'staging.checksops.com') return 'sandbox';
-  if (env === 'production') return 'production';
+  if (isPlatformFinanceProductionEnv(env)) return 'production';
   if (host === 'checksops.com' || host === 'www.checksops.com' || host === 'checkops.com' || host === 'www.checkops.com') {
     return 'production';
   }
   return 'sandbox';
+}
+
+export function isForbiddenSandboxFacilitatorId(accountId, sandboxPlatformAccountId = null) {
+  const value = String(accountId || '').trim().toLowerCase();
+  if (!value) return false;
+  if (value === SANDBOX_PLATFORM_ACCOUNT_ID) return true;
+  const sandbox = String(sandboxPlatformAccountId || '').trim().toLowerCase();
+  return Boolean(sandbox) && value === sandbox;
+}
+
+/**
+ * Production facilitator only. Never the sandbox account, a tenant, or memberships[0].
+ * Secret MOOV_ACCOUNT_ID / MOOV_PLATFORM_ACCOUNT_ID win; otherwise the live
+ * production billing destination is the ChecksOps facilitator.
+ */
+export function resolveProductionPlatformAccountId({
+  secrets = {},
+  billingDestinationAccountId = null,
+  sandboxPlatformAccountId = null,
+} = {}) {
+  const fromSecret = secrets?.MOOV_ACCOUNT_ID || secrets?.MOOV_PLATFORM_ACCOUNT_ID || null;
+  const candidate = fromSecret || billingDestinationAccountId || null;
+  if (!candidate) return null;
+  if (isForbiddenSandboxFacilitatorId(candidate, sandboxPlatformAccountId || secrets?.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID)) {
+    return null;
+  }
+  return candidate;
 }
 
 /**
@@ -83,7 +124,12 @@ export function resolvePlatformFacilitatorId({
   void claimedTenantId;
   void membershipTenantId;
   const env = String(environment || '').toLowerCase();
-  if (env === 'production') return productionPlatformAccountId || null;
+  if (env === 'production') {
+    if (isForbiddenSandboxFacilitatorId(productionPlatformAccountId, sandboxPlatformAccountId)) {
+      return null;
+    }
+    return productionPlatformAccountId || null;
+  }
   return sandboxPlatformAccountId || null;
 }
 
@@ -223,7 +269,11 @@ export async function loadPlatformFinanceCredentials({
       environment: 'production',
       publicKey: secrets?.MOOV_PUBLIC_KEY || null,
       secretKey: secrets?.MOOV_SECRET_KEY || null,
-      platformAccountId: secrets?.MOOV_ACCOUNT_ID || secrets?.MOOV_PLATFORM_ACCOUNT_ID || null,
+      platformAccountId: resolveProductionPlatformAccountId({
+        secrets,
+        billingDestinationAccountId: process.env.AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID || null,
+        sandboxPlatformAccountId: secrets?.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID || null,
+      }),
       apiVersion: 'v2024.01.00',
     };
   }
@@ -594,6 +644,13 @@ export const wrapPlatformFinance = (handler, name) => async (event, deps = {}) =
       claimedTenantId: body?.tenant_id || body?.tenantId || null,
       membershipTenantId: null,
     });
+    if (environment === 'production' && !platformAccountId) {
+      return fail('Production platform facilitator account is not configured.', 503, {
+        liveProviderCalled: false,
+        tenant_context_used: false,
+        sandbox_selected: false,
+      });
+    }
     const moovContext = environment === 'production'
       ? {
         environment: 'production',
