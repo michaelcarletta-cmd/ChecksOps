@@ -115,7 +115,7 @@ export const AUTHORIZED_SQL74 = Object.freeze({
 export const AUTHORIZED_SQL75 = Object.freeze({
   filename: 'aws/workflows/sql/75_signature_request_check_files_link_grant.sql',
   migration_id: '75_signature_request_check_files_link_grant',
-  commit: 'cccccccccccccccccccccccccccccccccccccccc',
+  commit: '8f4ee284221951dd55e1ad921b66578ba968c550',
   source_sha256: 'cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283',
   intended_replacement_sha256: 'cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283',
   expected_live_definition_sha256: '42c83390575d90d39326aee61ccaf87851fd5320e278d6c7f687137245b62166',
