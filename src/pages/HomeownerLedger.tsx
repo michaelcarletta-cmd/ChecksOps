@@ -51,6 +51,7 @@ type PendingEndorsementParty = {
   status: string;
   sent_at: string | null;
   is_homeowner: boolean;
+  can_sign?: boolean;
   sign_url: string | null;
 };
 type PendingEndorsement = {
@@ -258,7 +259,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
       <CollapsibleUpload token={token} onDone={onRefresh} />
 
 
-      <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} onRefresh={onRefresh} />
+      <PendingEndorsementsPanel token={token} pending={data.pending_endorsements ?? []} onRefresh={onRefresh} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
       <SharedDocumentsPanel documents={data.shared_documents ?? []} />
 
@@ -376,9 +377,43 @@ function PreClaimView({ token, homeowner, pending, onRefresh }: {
   );
 }
 
-function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndorsement[]; onRefresh?: () => void }) {
+function isSafeEndorseUrl(url: string): boolean {
+  if (!url.startsWith("/endorse?")) return false;
+  if (url.includes("://") || url.includes("//") || url.includes("\\") || url.includes("..")) return false;
+  return true;
+}
+
+function PendingEndorsementsPanel({
+  pending,
+  token,
+  onRefresh,
+}: {
+  pending: PendingEndorsement[];
+  token: string;
+  onRefresh?: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
   if (!pending || pending.length === 0) return null;
   const partyLabel = (t: string) => t === "mortgage_company" ? "Mortgage company" : t === "insured" ? "Homeowner" : t;
+
+  const reviewAndSign = async (endorsementId: string) => {
+    setBusyId(endorsementId);
+    try {
+      const { data, error } = await supabase.functions.invoke("homeowner-ledger-endorse-link", {
+        body: { token, endorsement_id: endorsementId },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const url = String((data as any)?.sign_url || "");
+      if (!isSafeEndorseUrl(url)) throw new Error("No sign link returned");
+      window.location.assign(url);
+    } catch (e: any) {
+      toast.error(e.message || "Could not open check signing");
+      setBusyId(null);
+      if (onRefresh) onRefresh();
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -386,16 +421,24 @@ function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndo
           <PenTool className="h-4 w-4 text-amber-400" /> Checks awaiting signature
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          You can sign right here — or use the link we emailed you. Once signed either way, it will no longer show as awaiting your signature.
+          Review and sign your insurance check here. Mortgage or other required signers are handled separately.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        {pending.map((chk) => (
+        {pending.map((chk) => {
+          const canSignAny = chk.parties.some((p) => p.can_sign === true);
+          const otherRequiredRemains = chk.parties.some((p) => p.payee_type !== "insured");
+          return (
           <div key={chk.check_id} className="rounded-lg border border-border p-3 space-y-2">
             <div className="text-sm font-medium">
               Check {chk.check_number ? `#${chk.check_number}` : ""}
               {chk.check_amount != null && <span className="text-muted-foreground"> — {fmt(Number(chk.check_amount))}</span>}
             </div>
+            {!canSignAny && otherRequiredRemains && (
+              <div className="text-xs text-emerald-400 bg-emerald-400/10 rounded px-2 py-1.5">
+                Your signature completed. This check is still awaiting another required signer.
+              </div>
+            )}
             <ul className="space-y-1.5">
               {chk.parties.map((p) => (
                 <li key={p.endorsement_id} className="flex items-center justify-between gap-2 text-xs rounded bg-muted/40 px-2 py-1.5">
@@ -408,17 +451,16 @@ function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndo
                       {p.sent_at ? `Requested ${new Date(p.sent_at).toLocaleDateString()}` : "Awaiting request"}
                     </div>
                   </div>
-                  {p.sign_url ? (
+                  {p.can_sign ? (
                     <Button
                       size="sm"
                       className="h-7 px-2 text-[11px] shrink-0"
-                      onClick={() => {
-                        window.open(p.sign_url!, "_blank", "noopener,noreferrer");
-                        toast.info("Signing opened in a new tab. Return here and refresh when done.");
-                        if (onRefresh) setTimeout(onRefresh, 15000);
-                      }}
+                      disabled={busyId === p.endorsement_id}
+                      onClick={() => reviewAndSign(p.endorsement_id)}
                     >
-                      Sign now
+                      {busyId === p.endorsement_id
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : "Review & Sign Check"}
                     </Button>
                   ) : (
                     <Badge variant="secondary" className="text-[10px] shrink-0">
@@ -429,7 +471,8 @@ function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndo
               ))}
             </ul>
           </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );

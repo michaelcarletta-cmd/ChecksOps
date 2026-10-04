@@ -110,6 +110,7 @@ function CheckOpsRoutes() {
       <Route path="/pros" element={<Navigate to="/find-a-pro" replace />} />
       <Route path="/h/upload" element={<Suspense fallback={<PageLoader />}><HomeownerCheckUpload /></Suspense>} />
       <Route path="/h/claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerClaimPortal /></Suspense>} />
+      <Route path="/h/ledger/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger /></Suspense>} />
       <Route path="/ledger/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger /></Suspense>} />
       <Route path="/start-claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger preClaim /></Suspense>} />
       <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
@@ -198,6 +199,7 @@ function isPublicTokenRoute(pathname: string): boolean {
     pathname.startsWith("/verify-account/") ||
     pathname.startsWith("/h/upload") ||
     pathname.startsWith("/h/claim/") ||
+    pathname.startsWith("/h/ledger/") ||
     pathname.startsWith("/invoice/")
   );
 }

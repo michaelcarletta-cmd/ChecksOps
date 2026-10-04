@@ -13,9 +13,20 @@ interface EndorsementData {
   requires_payment_direction?: boolean;
 }
 
+function safeHomeownerReturnTo(value: string | null): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (raw.includes("://") || raw.includes("//") || raw.includes("\\") || raw.includes("..")) {
+    return null;
+  }
+  if (!/^\/(h\/)?ledger\/[A-Za-z0-9_-]{8,}$/.test(raw)) return null;
+  return raw;
+}
+
 export default function Endorse() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
+  const returnTo = safeHomeownerReturnTo(searchParams.get("return_to"));
 
   const [data, setData] = useState<EndorsementData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -297,6 +308,15 @@ export default function Endorse() {
             <p style={{ color: "#64748b", fontSize: 12, marginTop: 16 }}>
               If you have questions about this check, please contact your adjuster.
             </p>
+            {returnTo && (
+              <button
+                type="button"
+                style={{ ...styles.btn, ...styles.btnApprove, marginTop: 20, width: "100%" }}
+                onClick={() => { window.location.assign(returnTo); }}
+              >
+                Return to Homeowner Ops
+              </button>
+            )}
           </div>
         )}
         {isRejected && (
