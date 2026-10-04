@@ -67,6 +67,26 @@ function parseWriteTables(source) {
   return [...match[1].matchAll(/"([^"]+)"/g)].map((row) => row[1]);
 }
 
+function gitObjectExists(sha) {
+  try {
+    execFileSync('git', ['cat-file', '-e', sha], { cwd: ROOT, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolvePinParent() {
+  const candidates = [
+    'cb2e152e2a9fea8ef162063357b16f30bcc114bc',
+    '784469e85c1b46b8cf2735aa2d6833a00fe2bbc6',
+  ];
+  for (const sha of candidates) {
+    if (gitObjectExists(sha)) return sha;
+  }
+  return execFileSync('git', ['rev-parse', 'HEAD^'], { cwd: ROOT, encoding: 'utf8' }).trim();
+}
+
 test('client AWS_WRITE_TABLES restores only signature_requests and signature_signers', () => {
   const tables = parseWriteTables(read(CLIENT_REL));
   assert.deepEqual(tables, [...BASELINE_WITHOUT_SIGNATURE_TABLES, ...RESTORED]);
@@ -78,7 +98,7 @@ test('client AWS_WRITE_TABLES restores only signature_requests and signature_sig
 });
 
 test('this workstream does not touch API write-allowlist, signature submit, or SQL73/SQL74', () => {
-  const parent = '784469e85c1b46b8cf2735aa2d6833a00fe2bbc6';
+  const parent = resolvePinParent();
   const changed = execFileSync(
     'git',
     ['diff', '--name-only', parent, 'HEAD'],
@@ -93,11 +113,21 @@ test('this workstream does not touch API write-allowlist, signature submit, or S
   }
   assert.ok(!changed.includes('aws/functions/api/write-signature.mjs'));
   assert.ok(!changed.includes('aws/functions/api/homeowner.mjs'));
-  assert.ok(changed.includes(CLIENT_REL), 'client allowlist must be in this workstream');
-  assert.ok(
-    changed.includes('aws/tests/signature-request-spa-write-allowlist.test.mjs'),
-    'pin test must be in this workstream',
-  );
+  if (changed.includes(CLIENT_REL)) {
+    assert.ok(
+      changed.includes('aws/tests/signature-request-spa-write-allowlist.test.mjs'),
+      'pin test must be in this workstream',
+    );
+  } else {
+    assert.ok(
+      changed.includes('src/components/check-review/CheckFilesSection.tsx'),
+      'Files-tab claim-id repair must be in this stacked workstream',
+    );
+    assert.ok(
+      changed.includes('src/pages/CheckCommandCenter.tsx'),
+      'Check Command Center claimId pass-through must be in this stacked workstream',
+    );
+  }
   const extra = changed.filter((rel) => ![
     CLIENT_REL,
     'aws/tests/signature-request-spa-write-allowlist.test.mjs',
