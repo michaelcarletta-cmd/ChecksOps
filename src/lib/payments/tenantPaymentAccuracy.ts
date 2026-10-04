@@ -182,9 +182,13 @@ export function isSelfDestination(
     recipient_tenant_id?: string | null;
   },
 ): boolean {
-  const dest = String(row.destination_tenant_id ?? row.recipient_tenant_id ?? "").trim();
-  if (!dest) return false;
-  return dest === tenantId && dest === String(row.payer_tenant_id ?? tenantId);
+  const payer = String(row.payer_tenant_id ?? tenantId).trim();
+  if (!payer) return false;
+  for (const raw of [row.recipient_tenant_id, row.destination_tenant_id]) {
+    const dest = String(raw ?? "").trim();
+    if (dest && dest === tenantId && dest === payer) return true;
+  }
+  return false;
 }
 
 export function settlementDateIso(row: {
@@ -348,6 +352,11 @@ export function mapOutgoingSplit(row: unknown, tenantId: string): LedgerPaymentR
   if (!id) return null;
   const status = String(r.status ?? "");
   if (normalizeStatus(status) === "pending") return null;
+  if (isSelfDestination(tenantId, {
+    payer_tenant_id: tenantId,
+    recipient_tenant_id: r.recipient_tenant_id as string | null,
+    destination_tenant_id: r.destination_tenant_id as string | null,
+  })) return null;
   const stakeholder = (r.stakeholder_accounts ?? null) as StakeholderAccountRef | null;
   const recipientTenantId = resolveRecipientTenantId({
     recipient_tenant_id: r.recipient_tenant_id as string | null,

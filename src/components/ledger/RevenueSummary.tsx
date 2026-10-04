@@ -97,7 +97,7 @@ export function RevenueSummary() {
             <div className="text-2xl font-bold">
               ${stats.totalIncoming.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground">From deposited checks</p>
+            <p className="text-xs text-muted-foreground">From deposited checks and incoming settled payments</p>
           </CardContent>
         </Card>
 

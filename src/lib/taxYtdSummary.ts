@@ -119,6 +119,9 @@ export function aggregateRecipientRows({
     const m = d.getMonth();
     const amount = Number(p.amount ?? 0);
     const payerId = p.payer_tenant_id ?? p.tenant_id ?? null;
+    const rawRecipient = String(p.recipient_tenant_id ?? "").trim();
+    const rawDestination = String(p.destination_tenant_id ?? "").trim();
+    if (payerId && (rawRecipient === payerId || rawDestination === payerId)) continue;
     const recipientTenant = [p.destination_tenant_id, p.recipient_tenant_id]
       .map((v) => String(v ?? "").trim())
       .find((id) => id && id !== payerId);

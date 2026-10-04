@@ -269,6 +269,96 @@ test("tax year grouping uses settled_at and durable tenant identity", () => {
   assert.equal(wrongYear.length, 0);
 });
 
+test("self-destination A→A split is excluded; A→B stays Paid", () => {
+  const selfSplit = {
+    ...splitAtoB,
+    id: "split-aa-self",
+    recipient_tenant_id: TENANT_A,
+    recipient_name: "Tenant A LLC",
+    moov_transfer_id: "moov-self-aa",
+    stakeholder_accounts: {
+      id: "stake-a",
+      nickname: "Tenant A LLC",
+      tenant_id: TENANT_A,
+      account_type: "operating",
+    },
+  };
+  const rows = buildTenantPaymentLedgerRows({
+    outgoingSplits: [selfSplit, splitAtoB],
+    incomingReceived: [],
+    payerTransfers: [],
+  }, TENANT_A);
+  assert.equal(rows.some((r) => r.id === "split-aa-self"), false);
+  assert.equal(rows.filter((r) => r.id === SPLIT_ID).length, 1);
+  const totals = revenueTotals({ ownChecks: [checkA], movements: rows });
+  assert.equal(totals.totalIncoming, 10000);
+  assert.equal(totals.totalOutgoing, 9000);
+  assert.equal(totals.profit, 1000);
+});
+
+test("A→B with identical company names is included when tenant IDs differ", () => {
+  const rows = buildTenantPaymentLedgerRows({
+    outgoingSplits: [{
+      ...splitAtoB,
+      recipient_name: "Acme Restoration",
+      stakeholder_accounts: {
+        id: "stake-b",
+        nickname: "Acme Restoration",
+        custname: "Acme Restoration",
+        tenant_id: TENANT_A,
+        account_type: "contractor",
+      },
+    }],
+    incomingReceived: [],
+    payerTransfers: [],
+  }, TENANT_A);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, SPLIT_ID);
+  assert.equal(rows[0].recipient_tenant_id, TENANT_B);
+  assert.equal(revenueTotals({ ownChecks: [checkA], movements: rows }).profit, 1000);
+});
+
+test("two legitimate separate A→B payments remain two payments", () => {
+  const rows = buildTenantPaymentLedgerRows({
+    outgoingSplits: [
+      { ...splitAtoB, id: "pay-1", moov_transfer_id: "moov-1" },
+      { ...splitAtoB, id: "pay-2", moov_transfer_id: "moov-2" },
+    ],
+    incomingReceived: [],
+    payerTransfers: [],
+  }, TENANT_A);
+  assert.equal(rows.length, 2);
+  const totals = revenueTotals({ ownChecks: [checkA], movements: rows });
+  assert.equal(totals.totalIncoming, 10000);
+  assert.equal(totals.totalOutgoing, 18000);
+  assert.equal(totals.profit, -8000);
+});
+
+test("tax aggregate skips A→A and keeps A→B even when names match", () => {
+  const rows = aggregateRecipientRows({
+    year: 2026,
+    payments: [
+      {
+        settled_at: "2026-01-15T18:00:00.000Z",
+        amount: 5000,
+        recipient_name: "Acme Restoration",
+        recipient_tenant_id: TENANT_A,
+        tenant_id: TENANT_A,
+      },
+      {
+        settled_at: "2026-01-15T18:00:00.000Z",
+        amount: 9000,
+        recipient_name: "Acme Restoration",
+        recipient_tenant_id: TENANT_B,
+        tenant_id: TENANT_A,
+      },
+    ],
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, `tenant:${TENANT_B}`);
+  assert.equal(rows[0].total, 9000);
+});
+
 test("recipient tiles and paid totals honor the same settlement-date window", () => {
   const rows: LedgerPaymentRow[] = buildTenantPaymentLedgerRows({
     outgoingSplits: [
