@@ -103,6 +103,9 @@ test('SQL 72 is a forward claim_ok repair and does not rewrite 71 or 68', () => 
   assert.match(executorAuth, /73_homeowner_ledger_view_last_viewed_best_effort/);
   assert.match(executorAuth, /02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e/);
   assert.match(executorAuth, /b099a0d44b3078fbdc78ecf03ab813b84a402d3234510bcfbc21c2278004ab76/);
+  assert.match(executorAuth, /74_homeowner_signing_rls_boundary/);
+  assert.match(executorAuth, /a7ee929bc25a7ca56bf29dacebdab20198bf1a7625e661333545dc9d1f662c4f/);
+  assert.match(executorAuth, /42c83390575d90d39326aee61ccaf87851fd5320e278d6c7f687137245b62166/);
 });
 
 test('SQL 73 accepted source SHA256 is exact and grants stay constrained', () => {

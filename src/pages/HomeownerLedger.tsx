@@ -36,11 +36,13 @@ type PendingSigner = {
   status: string;
   signed_at: string | null;
   is_homeowner: boolean;
+  can_sign?: boolean;
 };
 type PendingSignature = {
   request_id: string;
   document_name: string;
   sent_at: string | null;
+  status?: string | null;
   signers: PendingSigner[];
 };
 
@@ -183,6 +185,20 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+
+  useEffect(() => {
+    const refresh = () => { if (token) load(); };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refresh();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("focus", refresh);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   if (loading) {
     return <Shell><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></Shell>;
@@ -426,7 +442,7 @@ function PendingEndorsementsPanel({
       </CardHeader>
       <CardContent className="space-y-3">
         {pending.map((chk) => {
-          const canSignAny = chk.parties.some((p) => p.can_sign === true);
+          const openInsuredRemains = chk.parties.some((p) => p.payee_type === "insured");
           const otherRequiredRemains = chk.parties.some((p) => p.payee_type !== "insured");
           return (
           <div key={chk.check_id} className="rounded-lg border border-border p-3 space-y-2">
@@ -434,7 +450,7 @@ function PendingEndorsementsPanel({
               Check {chk.check_number ? `#${chk.check_number}` : ""}
               {chk.check_amount != null && <span className="text-muted-foreground"> — {fmt(Number(chk.check_amount))}</span>}
             </div>
-            {!canSignAny && otherRequiredRemains && (
+            {!openInsuredRemains && otherRequiredRemains && (
               <div className="text-xs text-emerald-400 bg-emerald-400/10 rounded px-2 py-1.5">
                 Your signature completed. This check is still awaiting another required signer.
               </div>
@@ -479,24 +495,33 @@ function PendingEndorsementsPanel({
 }
 
 
+function isSafeDocumentSignUrl(url: string): boolean {
+  if (!url.startsWith("/sign?")) return false;
+  if (url.includes("://") || url.includes("//") || url.includes("\\") || url.includes("..")) return false;
+  return true;
+}
+
 function PendingSignaturesPanel({ token, pending }: { token: string; pending: PendingSignature[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   if (!pending || pending.length === 0) return null;
 
-  const openSignLink = async (signerId: string) => {
+  const reviewAndSignDocument = async (signerId: string) => {
     setBusyId(signerId);
     try {
-      const { data, error } = await supabase.functions.invoke("homeowner-ledger-sign-link", {
+      const { data, error } = await supabase.functions.invoke("homeowner-ledger-document-sign-link", {
         body: { token, signer_id: signerId },
       });
       if (error) throw new Error(error.message);
-      if ((data as any)?.error) throw new Error((data as any).error);
-      const url = (data as any)?.sign_url;
-      if (!url) throw new Error("No sign link returned");
-      window.location.href = url;
+      const err = String((data as any)?.error || "");
+      if (err === "existing_email_link_required") {
+        throw new Error((data as any)?.message || "Use the signing link already emailed to you. Homeowner Ops will not replace that link.");
+      }
+      if (err) throw new Error(err);
+      const url = String((data as any)?.sign_url || "");
+      if (!isSafeDocumentSignUrl(url)) throw new Error("No sign link returned");
+      window.location.assign(url);
     } catch (e: any) {
-      toast.error(e.message || "Could not open signing page");
-    } finally {
+      toast.error(e.message || "Could not open document signing");
       setBusyId(null);
     }
   };
@@ -505,8 +530,11 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <PenTool className="h-4 w-4 text-amber-400" /> Signatures
+          <PenTool className="h-4 w-4 text-amber-400" /> Awaiting your signature
         </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Review and sign documents requested from you. Other signers are handled separately.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {pending.map((r) => (
@@ -516,11 +544,11 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
                 <div className="text-sm font-medium truncate">{r.document_name}</div>
                 {r.sent_at && (
                   <div className="text-[11px] text-muted-foreground">
-                    Sent {new Date(r.sent_at).toLocaleString()}
+                    Requested {new Date(r.sent_at).toLocaleString()}
                   </div>
                 )}
               </div>
-              <Badge variant="secondary" className="text-[10px]">Awaiting signatures</Badge>
+              <Badge variant="secondary" className="text-[10px]">{r.status || "Awaiting signature"}</Badge>
             </div>
             <ul className="space-y-1.5">
               {r.signers.map((s) => (
@@ -538,14 +566,14 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
                   </div>
                   {s.status === "signed" ? (
                     <span className="text-[10px] text-emerald-400">Signed</span>
-                  ) : s.is_homeowner ? (
+                  ) : s.can_sign ? (
                     <Button
                       size="sm"
                       className="h-7 px-2 text-xs"
                       disabled={busyId === s.signer_id}
-                      onClick={() => openSignLink(s.signer_id)}
+                      onClick={() => reviewAndSignDocument(s.signer_id)}
                     >
-                      {busyId === s.signer_id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Sign now"}
+                      {busyId === s.signer_id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Review & Sign Document"}
                     </Button>
                   ) : (
                     <span className="text-[10px] text-muted-foreground">Pending</span>

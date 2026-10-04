@@ -30,6 +30,7 @@ import {
   handleHomeownerLedgerAttachUpload,
   handleHomeownerLedgerSignLink,
   handleHomeownerLedgerEndorseLink,
+  handleHomeownerLedgerDocumentSignLink,
   handleHomeownerLedgerSend,
   handleSendFileToHomeowner,
   handleSendPortalInvite,
@@ -120,6 +121,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-ledger-upload',
   'homeowner-ledger-sign-link',
   'homeowner-ledger-endorse-link',
+  'homeowner-ledger-document-sign-link',
   'homeowner-ledger-send',
   'homeowner-ledger-attach-upload',
   'homeowner-upload-check',
@@ -247,6 +249,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerLedgerSignLink(event);
     case 'homeowner-ledger-endorse-link':
       return handleHomeownerLedgerEndorseLink(event);
+    case 'homeowner-ledger-document-sign-link':
+      return handleHomeownerLedgerDocumentSignLink(event);
     case 'homeowner-ledger-send':
       return handleHomeownerLedgerSend(event);
     case 'homeowner-ledger-attach-upload':

@@ -14,6 +14,10 @@ import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
+import {
+  loadPendingSignaturesForHomeowner,
+  runHomeownerLedgerDocumentSignLink,
+} from './homeowner-signing-integration.mjs';
 
 const { Client } = pg;
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -160,15 +164,16 @@ const namePartsForHomeowner = (name) => String(name || '')
   .split(/\s+/)
   .filter((part) => part.length >= 3);
 
-export const isHomeownerEndorsementParty = (endorsement, homeowner = {}) => {
+export const isHomeownerEndorsementParty = (endorsement, homeowner = {}, ctx = {}) => {
   if (String(endorsement?.payee_type || '') !== 'insured') return false;
   const email = String(homeowner.email || '').toLowerCase().trim();
   const emailHit = email && String(endorsement?.contact_email || '').toLowerCase() === email;
   const nameHit = namePartsForHomeowner(homeowner.name).some((part) => (
     String(endorsement?.payee_name || '').toLowerCase().includes(part)
   ));
-  // Empty homeowner email is not a match-all. Require email or name identity.
-  return Boolean(emailHit || nameHit);
+  if (emailHit || nameHit) return true;
+  const openInsuredCount = Number(ctx.openInsuredCount);
+  return Number.isInteger(openInsuredCount) && openInsuredCount === 1;
 };
 
 export const safeHomeownerReturnTo = (value, ledgerToken) => {
@@ -183,16 +188,17 @@ export const safeHomeownerReturnTo = (value, ledgerToken) => {
   return null;
 };
 
-const publicEndorsementParty = (party = {}, homeowner = {}) => {
+const publicEndorsementParty = (party = {}, homeowner = {}, ctx = {}) => {
   const payeeType = String(party?.payee_type || '');
   const email = String(homeowner.email || '').toLowerCase().trim();
   const recomputed = isHomeownerEndorsementParty({
     payee_type: payeeType,
     payee_name: party?.payee_name,
     contact_email: party?.contact_email,
-  }, homeowner);
+  }, homeowner, ctx);
   // SQL73 may still mark every insured row is_homeowner when email is empty.
-  // Ignore that match-all unless the homeowner email is present.
+  // Ignore that match-all unless the homeowner email is present or this check
+  // has exactly one open insured endorsement.
   const sqlSaysHomeowner = party?.is_homeowner === true && payeeType === 'insured';
   const isHomeowner = email ? Boolean(recomputed || sqlSaysHomeowner) : recomputed;
   return {
@@ -207,16 +213,36 @@ const publicEndorsementParty = (party = {}, homeowner = {}) => {
   };
 };
 
-export const sanitizePendingEndorsementsForHomeowner = (pending = [], homeowner = {}) => {
+export const openInsuredCountFromPendingEndorsements = (pending = []) => {
+  const counts = {};
+  if (!Array.isArray(pending)) return counts;
+  for (const check of pending) {
+    const checkId = String(check?.check_id || '');
+    if (!checkId) continue;
+    const parties = Array.isArray(check.parties) ? check.parties : [];
+    counts[checkId] = parties.filter((party) => String(party?.payee_type || '') === 'insured').length;
+  }
+  return counts;
+};
+
+export const sanitizePendingEndorsementsForHomeowner = (
+  pending = [],
+  homeowner = {},
+  openInsuredByCheck = {},
+) => {
   if (!Array.isArray(pending)) return [];
-  return pending.map((check) => ({
-    check_id: check.check_id,
-    check_number: check.check_number ?? null,
-    check_amount: check.check_amount ?? null,
-    parties: Array.isArray(check.parties)
-      ? check.parties.map((party) => publicEndorsementParty(party, homeowner))
-      : [],
-  }));
+  return pending.map((check) => {
+    const checkId = String(check.check_id || '');
+    const openInsuredCount = openInsuredByCheck[checkId];
+    return {
+      check_id: check.check_id,
+      check_number: check.check_number ?? null,
+      check_amount: check.check_amount ?? null,
+      parties: Array.isArray(check.parties)
+        ? check.parties.map((party) => publicEndorsementParty(party, homeowner, { openInsuredCount }))
+        : [],
+    };
+  });
 };
 
 const endorsementIsDone = (endorsement) => Boolean(
@@ -229,20 +255,38 @@ const endorsementIsSent = (endorsement) => {
   return HOMEOWNER_LEDGER_SENT_ENDORSEMENT_STATUSES.includes(String(endorsement?.status || '').toLowerCase());
 };
 
+const openInsuredCountFromEndorsements = (endorsements = []) => {
+  const counts = {};
+  for (const endorsement of endorsements) {
+    if (String(endorsement?.payee_type || '') !== 'insured') continue;
+    if (endorsementIsDone(endorsement)) continue;
+    if (HOMEOWNER_LEDGER_CANCELLED_ENDORSEMENT_STATUSES.includes(
+      String(endorsement?.status || '').toLowerCase(),
+    )) continue;
+    const checkId = String(endorsement.check_id || '');
+    if (!checkId) continue;
+    counts[checkId] = (counts[checkId] || 0) + 1;
+  }
+  return counts;
+};
+
 export const pendingEndorsementsForHomeowner = ({
   checks = [],
   endorsements = [],
   homeowner = {},
 } = {}) => {
   const checkMeta = new Map(checks.map((row) => [String(row.id), row]));
+  const openInsuredByCheck = openInsuredCountFromEndorsements(endorsements);
   const byCheck = new Map();
   for (const endorsement of endorsements) {
     const payeeType = String(endorsement?.payee_type || '');
     if (!HOMEOWNER_LEDGER_PUBLIC_PAYEE_TYPES.includes(payeeType)) continue;
     if (endorsementIsDone(endorsement)) continue;
-    const isHomeowner = isHomeownerEndorsementParty(endorsement, homeowner);
-    if (!endorsementIsSent(endorsement) && !isHomeowner) continue;
     const checkId = String(endorsement.check_id || '');
+    const isHomeowner = isHomeownerEndorsementParty(endorsement, homeowner, {
+      openInsuredCount: openInsuredByCheck[checkId],
+    });
+    if (!endorsementIsSent(endorsement) && !isHomeowner) continue;
     const meta = checkMeta.get(checkId);
     if (!meta) continue;
     if (!byCheck.has(checkId)) {
@@ -261,7 +305,7 @@ export const pendingEndorsementsForHomeowner = ({
       sent_at: endorsement.request_sent_at || null,
       is_homeowner: isHomeowner,
       contact_email: endorsement.contact_email,
-    }, homeowner));
+    }, homeowner, { openInsuredCount: openInsuredByCheck[checkId] }));
   }
   return Array.from(byCheck.values());
 };
@@ -308,8 +352,9 @@ export const normalizeHomeownerLedgerView = (doc = {}) => {
       remaining: asMoney(totalsIn.remaining),
     },
     pending_upload_count: asMoney(doc.pending_upload_count),
-    // FOLLOW-UP SECURITY REPAIR: handleHomeownerLedgerSignLink is not
-    // token/claim scoped. Do not expose document signature links here.
+    // handleHomeownerLedgerSignLink is not token/claim scoped. SQL73 still
+    // forces pending_signatures []. Claim-scoped documents are attached later
+    // in runHomeownerLedgerView. Do not trust RPC sign URLs.
     pending_signatures: [],
     pending_endorsements: sanitizePendingEndorsementsForHomeowner(
       Array.isArray(doc.pending_endorsements) ? doc.pending_endorsements : [],
@@ -377,9 +422,24 @@ export const runHomeownerLedgerView = async ({ client, token, spoof }) => {
     }
   }
 
+  const homeowner = publicHomeownerFromDoc(working);
+  const openInsuredByCheck = openInsuredCountFromPendingEndorsements(working.pending_endorsements);
+  let pendingSignatures = [];
+  if (working.mode === 'claim' || working.token?.claim_id) {
+    try {
+      pendingSignatures = await loadPendingSignaturesForHomeowner(client, token, homeowner);
+    } catch { /* sibling reader may be absent until SQL 74 */ }
+  }
+
   const normalized = stripSensitiveHomeownerLedgerKeys(normalizeHomeownerLedgerView(working));
   return {
     ...normalized,
+    pending_endorsements: sanitizePendingEndorsementsForHomeowner(
+      normalized.pending_endorsements,
+      homeowner,
+      openInsuredByCheck,
+    ),
+    pending_signatures: pendingSignatures,
     ok: true,
     statusCode: 200,
     spoofFieldsIgnored: spoof,
@@ -858,13 +918,32 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
   }
 };
 
+const HOMEOWNER_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const signLinkStatus = (error) => {
   if (error === 'revoked' || error === 'expired') return 410;
-  if (error === 'already_signed') return 409;
+  if (error === 'already_signed' || error === 'existing_email_link_required') return 409;
   if (error === 'mismatch' || error === 'not_your_signature' || error === 'invalid_state') return 403;
   if (error === 'invalid_hash' || error === 'missing_fields') return 400;
   if (error === 'signer_not_found' || error === 'not_found' || error === 'no_claim') return 404;
   return 403;
+};
+
+const mapHomeownerCapabilityError = (error, spoof) => {
+  const code = String(error || 'not_found');
+  if (code === 'revoked' || code === 'expired') {
+    return { ok: false, statusCode: 410, error: code, spoofFieldsIgnored: spoof };
+  }
+  if (code === 'already_signed' || code === 'existing_email_link_required') {
+    return { ok: false, statusCode: 409, error: code, spoofFieldsIgnored: spoof };
+  }
+  if (code === 'missing_fields') {
+    return { ok: false, statusCode: 400, error: code, spoofFieldsIgnored: spoof };
+  }
+  if (code === 'no_claim' || code === 'not_found') {
+    return { ok: false, statusCode: 404, error: code, spoofFieldsIgnored: spoof };
+  }
+  return { ok: false, statusCode: signLinkStatus(code), error: code, spoofFieldsIgnored: spoof };
 };
 
 export const runHomeownerLedgerEndorseLink = async ({ client, token, endorsementId, spoof }) => {
@@ -873,72 +952,21 @@ export const runHomeownerLedgerEndorseLink = async ({ client, token, endorsement
   if (!ledgerToken || ledgerToken.length < 8 || !id) {
     return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
   }
+  if (!HOMEOWNER_UUID_RE.test(id)) {
+    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
+  }
 
-  const doc = (await client.query(
-    'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-    [ledgerToken],
+  const cap = (await client.query(
+    'SELECT public.aws_public_homeowner_ledger_endorse_capability($1, $2::uuid) AS doc',
+    [ledgerToken, id],
   )).rows[0]?.doc;
-  if (!doc) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-  }
-  if (doc.error) {
-    const status = doc.error === 'revoked' || doc.error === 'expired' ? 410 : 400;
-    return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
+  if (!cap || cap.error || cap.ok === false) {
+    return mapHomeownerCapabilityError(cap?.error || 'not_found', spoof);
   }
 
-  const tok = doc.token && typeof doc.token === 'object' ? doc.token : null;
-  if (!tok?.tenant_id || !tok?.claim_id) {
-    return { ok: false, statusCode: 404, error: 'no_claim', spoofFieldsIgnored: spoof };
-  }
-
-  const row = (await client.query(
-    `SELECT e.id, e.check_id, e.payee_name, e.payee_type, e.status, e.token,
-            e.contact_email, e.signed_at, e.tenant_id, e.revoked_at,
-            i.tenant_id AS check_tenant_id, i.claim_id AS check_claim_id
-     FROM public.check_endorsements e
-     JOIN public.check_intake_items i
-       ON i.id = e.check_id
-     WHERE e.id::text = $1
-     LIMIT 1`,
-    [id],
-  )).rows[0];
-  if (!row) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-  }
-  if (String(row.check_tenant_id) !== String(tok.tenant_id)
-    || String(row.check_claim_id) !== String(tok.claim_id)) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-  }
-  if (row.tenant_id != null && String(row.tenant_id) !== String(tok.tenant_id)) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-  }
-  if (String(row.payee_type || '') !== 'insured') {
-    return { ok: false, statusCode: 403, error: 'not_your_signature', spoofFieldsIgnored: spoof };
-  }
-
-  const homeowner = publicHomeownerFromDoc(doc);
-  if (!isHomeownerEndorsementParty(row, homeowner)) {
-    return { ok: false, statusCode: 403, error: 'not_your_signature', spoofFieldsIgnored: spoof };
-  }
-
-  const status = String(row.status || '').toLowerCase();
-  if (row.signed_at || HOMEOWNER_LEDGER_DONE_ENDORSEMENT_STATUSES.includes(status)) {
-    return { ok: false, statusCode: 409, error: 'already_signed', spoofFieldsIgnored: spoof };
-  }
-  if (row.revoked_at || HOMEOWNER_LEDGER_CANCELLED_ENDORSEMENT_STATUSES.includes(status)) {
-    return { ok: false, statusCode: 403, error: 'invalid_state', spoofFieldsIgnored: spoof };
-  }
-
-  let endorseToken = String(row.token || '').trim();
+  const endorseToken = String(cap.endorse_token || '').trim();
   if (!endorseToken) {
-    endorseToken = randomUUID();
-    await client.query(
-      `UPDATE public.check_endorsements
-       SET token = $2
-       WHERE id::text = $1
-         AND (token IS NULL OR token = '')`,
-      [row.id, endorseToken],
-    );
+    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
   }
 
   const returnTo = safeHomeownerReturnTo(`/h/ledger/${ledgerToken}`, ledgerToken);
@@ -946,8 +974,8 @@ export const runHomeownerLedgerEndorseLink = async ({ client, token, endorsement
     ok: true,
     statusCode: 200,
     sign_url: `/endorse?token=${encodeURIComponent(endorseToken)}&return_to=${encodeURIComponent(returnTo)}`,
-    endorsement_id: row.id,
-    check_id: row.check_id,
+    endorsement_id: cap.endorsement_id || id,
+    check_id: cap.check_id || null,
     return_to: returnTo,
     spoofFieldsIgnored: spoof,
   };
@@ -986,6 +1014,49 @@ export const handleHomeownerLedgerEndorseLink = async (event) => {
       ok: false,
       statusCode: 503,
       error: 'endorse_link_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
+export const handleHomeownerLedgerDocumentSignLink = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  const token = String(body.token || '').trim();
+  const signerId = body.signer_id || body.signature_signer_id;
+  if (!token || token.length < 8 || !signerId) {
+    return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
+  }
+  let client;
+  try {
+    client = await publicDb(true);
+    await client.query('BEGIN');
+    await client.query('SET TRANSACTION READ WRITE');
+    const result = await runHomeownerLedgerDocumentSignLink({
+      client,
+      token,
+      signerId,
+      spoof,
+    });
+    if (!result.ok) {
+      await client.query('ROLLBACK');
+      return result;
+    }
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'document_sign_link_failed',
       message: sanitizePublicError(error),
       spoofFieldsIgnored: spoof,
     };

@@ -219,8 +219,10 @@ test('an existing valid Homeowner token still loads the ledger successfully', as
     spoof: {},
     client: {
       query: async (sql) => {
-        assert.match(sql, /aws_public_homeowner_ledger_by_token/);
-        return { rows: [{ doc }] };
+        if (String(sql).includes('aws_public_homeowner_ledger_by_token')) {
+          return { rows: [{ doc }] };
+        }
+        return { rows: [] };
       },
     },
   });
