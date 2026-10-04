@@ -474,12 +474,12 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
     try {
       await client.query(embedded.details.temp);
       const updated = await client.query(EXCLUDE_UPDATE_SQL, [
-        snapshot.entry_ids,
+        [...snapshot.entry_ids],
         EXCLUDE_REASON,
         SYNTHETIC_TENANT_ID,
-        ALLOWED_REQUESTS,
-        ALLOWED_CHECKS,
-        ALLOWED_AGENTS,
+        [...ALLOWED_REQUESTS],
+        [...ALLOWED_CHECKS],
+        [...ALLOWED_AGENTS],
       ]);
       if (updated.rows.length !== snapshot.entry_ids.length) {
         throw new Error(`allowlisted update counted ${updated.rows.length}, expected ${snapshot.entry_ids.length}`);

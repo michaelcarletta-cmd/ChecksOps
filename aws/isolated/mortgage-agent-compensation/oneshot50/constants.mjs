@@ -56,7 +56,7 @@ export const EXCLUDE_REASON =
   'SQL47/48/49 staging demo leftover. Exclude from active Mortgage Agent payables.';
 export const EXCLUSIONS_INSERT_SQL = `
 INSERT INTO public.mortgage_agent_compensation_exclusions (mortgage_request_id, reason)
-SELECT x, $2
+SELECT x, $2::text
   FROM unnest($1::uuid[]) AS x
  ON CONFLICT (mortgage_request_id) DO NOTHING`;
 export const EXCLUDE_UPDATE_SQL = `
@@ -74,9 +74,9 @@ export const AUDIT_INSERT_SQL = `
 INSERT INTO public.mortgage_agent_compensation_audit (
   entry_id, actor_id, action, from_status, to_status, payload
 ) VALUES (
-  $1::uuid, $2::uuid, 'exclude', $3, 'excluded',
+  $1::uuid, $2::uuid, 'exclude', $3::text, 'excluded',
   jsonb_build_object(
-    'reason', $4,
+    'reason', $4::text,
     'bookkeeping_only', true,
     'payment_reference_preserved', true
   )
