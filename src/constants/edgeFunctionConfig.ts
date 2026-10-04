@@ -13,7 +13,8 @@
  * - /invoice/:token         → public invoice
  * - /verify-account/:token  → account verification
  * - /pay-setup/:token       → recipient payment setup
- * - /ledger/:token          → homeowner ledger
+ * - /ledger/:token          → homeowner ledger (legacy)
+ * - /h/ledger/:token        → homeowner ledger
  * - /unsubscribe            → email unsubscribe
  *
  * When adding new edge functions, set verify_jwt = false in supabase/config.toml:
