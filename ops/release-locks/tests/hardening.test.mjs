@@ -81,9 +81,18 @@ test('partner-share apply_evidence is append-only against origin/main ledger', (
   const candidate = sourceLedger();
   const errors = appendOnlyLedgerErrors(ROOT, candidate, base, { genesis: false });
   assert.deepEqual(errors, []);
-  const evidence = candidate.entries.filter((row) => row.record_kind === 'apply_evidence');
-  assert.equal(evidence.length >= 4, true);
-  assert.equal(evidence.every((row) => row.applied === true && row.applied_environment === 'production'), true);
+  const partnerShare = candidate.entries.filter((row) => (
+    row.record_kind === 'apply_evidence'
+    && row.component === 'partner-sharing'
+  ));
+  assert.equal(partnerShare.length >= 4, true);
+  assert.equal(partnerShare.every((row) => row.applied === true && row.applied_environment === 'production'), true);
+  const stagingSr = candidate.entries.filter((row) => (
+    row.record_kind === 'apply_evidence'
+    && row.component === 'signature-requests'
+  ));
+  assert.equal(stagingSr.length, 3);
+  assert.equal(stagingSr.every((row) => row.applied === true && row.applied_environment === 'staging'), true);
 });
 
 test('fake production evidence (recorded=true or arbitrary hash) fails', () => {
