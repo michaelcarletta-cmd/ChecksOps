@@ -8,6 +8,8 @@ import { TrendingUp, TrendingDown, DollarSign, Wallet, ArrowRight } from "lucide
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { fetchTenantPaymentLedgerRows } from "@/lib/payments/tenantPaymentAccuracyQueries";
+import { revenueTotals, incomingSettledRows } from "@/lib/payments/tenantPaymentAccuracy";
 
 export function RevenueSummary() {
   const { tenant } = useTenant();
@@ -31,25 +33,38 @@ export function RevenueSummary() {
   const { data: disbursementData, isLoading: disbursementLoading } = useQuery({
     queryKey: ["revenue-summary-outgoing", tenant?.id],
     enabled: !!tenant?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("disbursement_splits")
-        .select("amount, status")
-        .eq("tenant_id", tenant!.id)
-        .eq("status", "settled");
-
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchTenantPaymentLedgerRows(supabase as any, tenant!.id),
   });
 
   const stats = useMemo(() => {
-    const totalIncoming = revenueData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
-    const totalOutgoing = disbursementData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
-    const profit = totalIncoming - totalOutgoing;
-    const margin = totalIncoming > 0 ? (profit / totalIncoming) * 100 : 0;
+    const totals = revenueTotals({
+      ownChecks: revenueData ?? [],
+      movements: disbursementData ?? [],
+    });
+    const margin = totals.totalIncoming > 0 ? (totals.profit / totals.totalIncoming) * 100 : 0;
+    return { ...totals, margin };
+  }, [revenueData, disbursementData]);
 
-    return { totalIncoming, totalOutgoing, profit, margin };
+  const revenueSources = useMemo(() => {
+    const checks = (revenueData ?? []).map((check) => ({
+      id: check.id,
+      deposited_at: check.deposited_at,
+      freedom_claim_number: check.freedom_claim_number,
+      carrier_name: check.carrier_name,
+      check_number: check.check_number,
+      amount: Number(check.amount || 0),
+      status: check.status,
+    }));
+    const incoming = incomingSettledRows(disbursementData ?? []).map((row) => ({
+      id: row.id,
+      deposited_at: row.settled_at ?? row.created_at,
+      freedom_claim_number: null,
+      carrier_name: row.recipient_name ?? row.disbursement_batches?.check_intake_items?.carrier_name ?? null,
+      check_number: row.disbursement_batches?.check_intake_items?.check_number ?? null,
+      amount: Number(row.amount || 0),
+      status: "received",
+    }));
+    return [...checks, ...incoming];
   }, [revenueData, disbursementData]);
 
   if (revenueLoading || disbursementLoading) {
@@ -137,12 +152,12 @@ export function RevenueSummary() {
                 </tr>
               </thead>
               <tbody>
-                {revenueData?.length === 0 ? (
+                {revenueSources.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-muted-foreground italic">No deposited checks found.</td>
                   </tr>
                 ) : (
-                  revenueData?.map((check) => (
+                  revenueSources.map((check) => (
                     <tr key={check.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                         {check.deposited_at ? format(new Date(check.deposited_at), "MMM d, yyyy") : "—"}
@@ -157,7 +172,7 @@ export function RevenueSummary() {
                       </td>
                       <td className="p-3 text-right">
                         <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                          {check.status === "deposited" ? "Deposited" : "Released"}
+                          {check.status === "deposited" ? "Deposited" : check.status === "received" ? "Received" : "Released"}
                         </Badge>
                       </td>
                     </tr>
