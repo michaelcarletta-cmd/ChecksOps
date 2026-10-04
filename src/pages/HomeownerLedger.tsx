@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import homeownerOpsLogo from "@/assets/homeowner-ops-logo.png";
+import { homeownerLedgerViewDiagnosticLine } from "@/lib/homeownerLedgerViewDiagnostic";
 
 type LedgerEvent = {
   id: string;
@@ -158,6 +159,7 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostic, setDiagnostic] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = preClaim ? "Send your check | ChecksOps" : "Your claim ledger | ChecksOps";
@@ -167,6 +169,7 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
     if (!token) return;
     setLoading(true);
     setError(null);
+    setDiagnostic(null);
     try {
       const { data: res, error: e } = await supabase.functions.invoke("homeowner-ledger-view", {
         body: { token },
@@ -176,6 +179,9 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
       setData(res as Summary);
     } catch (e: any) {
       setError(e.message || "Could not load ledger");
+      setDiagnostic(homeownerLedgerViewDiagnosticLine(e, {
+        hostname: typeof window !== "undefined" ? window.location.hostname : "",
+      }));
     } finally {
       setLoading(false);
     }
@@ -198,6 +204,14 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
                error === "expired" ? "This link has expired. Ask your claim team for a new one." :
                "Ask your claim team to resend your ledger link."}
             </p>
+            {diagnostic ? (
+              <p
+                className="text-xs text-muted-foreground font-mono"
+                data-testid="homeowner-ledger-view-diagnostic"
+              >
+                {diagnostic}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       </Shell>
