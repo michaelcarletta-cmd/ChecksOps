@@ -48,6 +48,34 @@
       ]
     },
     {
+      "id": "homeowner-ops-staging",
+      "title": "Homeowner Ops staging baseline after SQL73",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging"],
+      "components": ["homeowner-ops-staging", "staging-frontend", "checksops-staging-api", "staging-sql"],
+      "deployment_types": ["spa-promote", "lambda-overlay", "sql-apply", "sql-executor-invoke"],
+      "test": "aws/tests/homeowner-ops-staging-baseline.test.mjs",
+      "tests": [
+        "aws/tests/homeowner-ops-staging-baseline.test.mjs",
+        "aws/tests/homeowner-ledger-view-contract.test.mjs",
+        "aws/tests/homeowner-ledger-view-contract-sql.test.mjs",
+        "ops/release-locks/tests/homeowner-ops-staging-invariants.test.mjs"
+      ],
+      "evidence": "ops/deployment-guard/homeowner-ops-staging-accepted.json",
+      "invariants": [
+        "SQL73 source bytes remain exactly the accepted staging function",
+        "claim_ok remains the SQL72 org_id or same-tenant check or same-tenant event rule",
+        "pending_signatures remains [] until a claim-scoped signing mint exists",
+        "handleHomeownerLedgerSignLink stays disabled as unrestricted remint",
+        "valid Homeowner ledger token still loads mode=claim",
+        "live /h/ledger/:token and legacy /ledger/:token both remain",
+        "homeowner.mjs send URL continues to mint /h/ledger/:token",
+        "unrelated Branding, Mortgage, ChecksOps, and production fingerprints stay untouched",
+        "later Homeowner work is a forward change from this composition"
+      ]
+    },
+    {
       "id": "signature-requests",
       "title": "Signature Requests",
       "accepted": true,

@@ -1,0 +1,77 @@
+{
+  "id": "homeowner-ops-staging-accepted",
+  "contract_id": "homeowner-ops-staging",
+  "accepted": true,
+  "environment": "staging",
+  "production_changed": false,
+  "accepted_at": "2026-10-04T01:45:00Z",
+  "manual_uat": {
+    "result": "existing_homeowner_ops_link_loads_after_sql73",
+    "claim_number": "695064-GQ",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "claim_id": "398df4b8-f23a-476f-b856-ff864a4148b8",
+    "public_token_rpc_invoked_by_this_lock": false
+  },
+  "behavior": {
+    "sql73_applied": true,
+    "sql73_rewritten": false,
+    "claim_ok_preserved_from_sql72": true,
+    "pending_signatures_forced_empty": true,
+    "handleHomeownerLedgerSignLink_disabled": true,
+    "h_ledger_route_live": true,
+    "legacy_ledger_route_live": true,
+    "application_functionality_changed_by_lock": false
+  },
+  "staging_fingerprints": {
+    "spa_host": "https://staging.checksops.com/index.html",
+    "index_html_sha256": "2186175d03b33bf9faae9b142b9f8e386b467027407623a773bd0fb0d1b6785b",
+    "spa_entry": "/assets/index-BomgsBaq.js",
+    "spa_entry_sha256": "c8ae5fa760744129d13594c387c3ae17227f1caa4255e9cfe1acf65e8827af1a",
+    "homeowner_chunk": "/assets/HomeownerLedger-cDMDKYsn.js",
+    "homeowner_chunk_sha256": "8e806b890866834fb60a0fb7369ebdda5b2eb57db8b7dca87bbf938787fccc4b",
+    "api_lambda_name": "checksops-staging-api",
+    "api_lambda_sha256": "wzp8UfI+GhlpIbChnOOFODUGCQtnsV//bRdh8ZSS2YA=",
+    "api_revision_id": "1c671313-ece2-4723-8975-b314317c22a7",
+    "homeowner_mjs_sha256": "fa995062af8b98b2da298e2636606e9bb9726b3c25d6df3c800252dd59362dfd",
+    "sql_executor_name": "checksops-staging-guarded-sql-executor",
+    "sql_executor_sha256": "SYnnbN5P9+3lJJeTRdMU9F1K/Lb8NPAYsEcAH5JpM8s=",
+    "sql_executor_revision_id": "1ee7c80f-00c8-44fc-95f3-0c929ea03e05",
+    "sql_executor_zip_sha256": "4989e76cde4ff7ede524979345d314f45d4afcb6fc34f018b047001f926933cb",
+    "sql73_source_sha256": "02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e",
+    "sql73_live_function_sha256": "42c83390575d90d39326aee61ccaf87851fd5320e278d6c7f687137245b62166"
+  },
+  "unrelated_fingerprints": {
+    "sql72_source_sha256": "8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f",
+    "sql71_source_sha256": "21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5",
+    "sql44_source_sha256": "059f10e936f27439b9fddae7030b76fe594d6538087de389ab07950fefdf8763",
+    "sql44_live_sha256": "96d038c97a85bc3e49346442862c044e1e16ec1eb062519b4ad277bd998063a5",
+    "sql43_live_sha256": "31a3d2fb20033987a3bdde93f102573c36acc99ae3969e84ad4dc50c916f4806",
+    "membership_sha256": "0cd4a7b515656be4777a1f467aa7ca3e0160060031fca66b207cc9fb0854b48e",
+    "sql39_live_sha256": "4adc182c4ed13b11b37e8412056781112ea8f2a788bc1b51e21810460d13239b",
+    "production_api_sha256": "CWB8lxnHoqANyVcaNpKL7h4MtDSPMlHZ6wliFuGE6yA=",
+    "production_api_revision_id": "16327bba-cc0a-4a17-b2a8-55b7b2d1b069",
+    "production_spa_entry": "/assets/index-HXTuSrE0.js"
+  },
+  "source_pins": {
+    "sql73_file": "aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql",
+    "sql73_source_sha256": "02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e",
+    "sql73_source_commit": "e61d8d0f9c1e531e1969e31a6f694567d0956505",
+    "composition_commit": "a451da1df046b30a8df1b987f3549394cd918195",
+    "homeowner_handler": "aws/functions/api/homeowner.mjs",
+    "homeowner_handler_sha256": "fa995062af8b98b2da298e2636606e9bb9726b3c25d6df3c800252dd59362dfd",
+    "homeowner_ledger_page": "src/pages/HomeownerLedger.tsx",
+    "legacy_route": "/ledger/:token",
+    "accepted_live_route": "/h/ledger/:token"
+  },
+  "invariants": [
+    "SQL73 source bytes remain exactly the accepted staging function",
+    "claim_ok remains the SQL72 org_id or same-tenant check or same-tenant event rule",
+    "pending_signatures remains [] until a claim-scoped signing mint exists",
+    "handleHomeownerLedgerSignLink stays disabled as unrestricted remint",
+    "valid Homeowner ledger token still loads mode=claim",
+    "live /h/ledger/:token and legacy /ledger/:token both remain",
+    "homeowner.mjs send URL continues to mint /h/ledger/:token",
+    "unrelated Branding, Mortgage, ChecksOps, and production fingerprints stay untouched",
+    "later Homeowner work is a forward change from this composition"
+  ]
+}

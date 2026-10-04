@@ -201,6 +201,20 @@
         "aws/functions/api/textract-check-ocr.mjs"
       ]
     },
+    "homeowner-ops-staging": {
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
+      "description": "Accepted staging Homeowner Ops portal after SQL73. Live fingerprints and handler hashes are pinned in evidence; this group owns SQL73 plus the lock/evidence files only so unrelated Homeowner PRs are not claimed.",
+      "paths": [
+        "aws/tests/homeowner-ops-staging-baseline.test.mjs",
+        "aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql",
+        "ops/deployment-guard/homeowner-check-signing-plan.md",
+        "ops/deployment-guard/homeowner-ops-staging-accepted.json",
+        "ops/release-locks/proof/homeowner-ops-staging-baseline.md",
+        "ops/release-locks/tests/homeowner-ops-staging-invariants.test.mjs"
+      ]
+    },
     "production-spa": {
       "owners": [
         "@michaelcarletta-cmd"

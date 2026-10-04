@@ -765,7 +765,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "6a7834b842752d7c1e103bf51bba3892b09ffa512eecb6be4a63cfa2c3d62abb",
+        "tree_hash": "8cb0b69980e52889271cf8743fb55584fa8451a457c8092efd5d6b611f9f6554",
         "merged": true,
         "merged_pr": null
       },
@@ -810,6 +810,78 @@
         "#328"
       ],
       "notes": "Fail-closed control-plane metadata reconciliation only. The protected release-control tree advanced on merged main, including PR #508 production SPA baseline safeguards and subsequent guard/lock maintenance. Classification remains UNVERIFIED. This source hash update does not change production, does not authorize deployment, and does not replace the authoritative live-SPA or current-live-Lambda requirements."
+    },
+    "homeowner-ops-staging": {
+      "id": "homeowner-ops-staging",
+      "ownership_group": "homeowner-ops-staging",
+      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "production_active": false,
+      "environment": "staging",
+      "source": {
+        "git_sha": "a451da1df046b30a8df1b987f3549394cd918195",
+        "tree_hash": "7eaa09787abda165873016fd7828137b3da608311a563c535df28c2c6935c71a",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql",
+          "source_sha256": "02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e",
+          "applied": true,
+          "applied_environment": "staging",
+          "applied_sha256": "02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e",
+          "proof": "ops/release-locks/proof/homeowner-ops-staging-baseline.md"
+        }
+      ],
+      "artifact": {
+        "type": "spa",
+        "name": "/assets/index-BomgsBaq.js",
+        "version": null,
+        "hash": "c8ae5fa760744129d13594c387c3ae17227f1caa4255e9cfe1acf65e8827af1a",
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-staging-api",
+        "lambda_version": "1c671313-ece2-4723-8975-b314317c22a7",
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "ops/release-locks/proof/homeowner-ops-staging-baseline.md",
+          "ops/deployment-guard/homeowner-ops-staging-accepted.json"
+        ],
+        "recorded_at": "2026-10-04T01:45:00Z",
+        "environment": "staging",
+        "component": "homeowner-ops-staging",
+        "git_sha": "a451da1df046b30a8df1b987f3549394cd918195",
+        "artifact_identity": "/assets/index-BomgsBaq.js",
+        "evidence_producer": "read-only live HTTPS and AWS get-function of staging.checksops.com after SQL73 apply plus manual UAT of an existing Homeowner Ops link",
+        "evidence_type": "staging Homeowner Ops baseline freeze"
+      },
+      "deployment_fingerprint": {
+        "recorded": true,
+        "spa_bundle": "/assets/index-BomgsBaq.js",
+        "spa_sha256": "c8ae5fa760744129d13594c387c3ae17227f1caa4255e9cfe1acf65e8827af1a",
+        "cloudfront_id": null,
+        "cloudfront_distribution": null,
+        "cloudfront_deployment_fingerprint": null,
+        "lambda_name": "checksops-staging-api",
+        "lambda_version": "1c671313-ece2-4723-8975-b314317c22a7",
+        "lambda_code_hash": null,
+        "applied_sql_hash": "42c83390575d90d39326aee61ccaf87851fd5320e278d6c7f687137245b62166",
+        "database_evidence_record": "ops/release-locks/proof/homeowner-ops-staging-baseline.md",
+        "config_hash": "2186175d03b33bf9faae9b142b9f8e386b467027407623a773bd0fb0d1b6785b",
+        "notes": "Accepted staging Homeowner Ops 2026-10-04. index.html sha256 2186175d03b33bf9faae9b142b9f8e386b467027407623a773bd0fb0d1b6785b. Homeowner chunk /assets/HomeownerLedger-cDMDKYsn.js sha256 8e806b890866834fb60a0fb7369ebdda5b2eb57db8b7dca87bbf938787fccc4b. API CodeSha256 wzp8UfI+GhlpIbChnOOFODUGCQtnsV//bRdh8ZSS2YA=. homeowner.mjs fa995062af8b98b2da298e2636606e9bb9726b3c25d6df3c800252dd59362dfd. Executor SYnnbN5P9+3lJJeTRdMU9F1K/Lb8NPAYsEcAH5JpM8s=. SQL73 source 02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e. Production untouched CWB8lxnHoqANyVcaNpKL7h4MtDSPMlHZ6wliFuGE6yA= / index-HXTuSrE0.js. Live SPA already serves /h/ledger/:token and /ledger/:token."
+      },
+      "rollback": {
+        "git_sha": "a451da1df046b30a8df1b987f3549394cd918195",
+        "artifact": "/assets/index-BomgsBaq.js",
+        "notes": "This is the accepted staging Homeowner composition. Do not restore a pre-SQL73 function, an older homeowner.mjs, or an older Homeowner chunk over this baseline. Production rollback is out of scope."
+      },
+      "missing_evidence": [
+        "production promotion is not authorized for this Homeowner Ops composition"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Authoritative staging Homeowner Ops baseline after SQL73 and manual UAT. Future Homeowner signature work must be a forward change from this composition. Do not rewrite SQL73. Do not re-enable handleHomeownerLedgerSignLink as-is. Preserve /h/ledger/:token and /ledger/:token. This lock records evidence only and does not deploy."
     }
   }
 }

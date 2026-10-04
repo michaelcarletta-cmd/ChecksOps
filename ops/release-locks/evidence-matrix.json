@@ -192,6 +192,20 @@
       ],
       "open_pr_overlap": []
     },
+    "homeowner-ops-staging": {
+      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "git_sha": "a451da1df046b30a8df1b987f3549394cd918195",
+      "merged_pr": null,
+      "merge_commit": null,
+      "deployed_artifact": "Accepted staging composition: SPA /assets/index-BomgsBaq.js + HomeownerLedger-cDMDKYsn.js; checksops-staging-api wzp8UfI+GhlpIbChnOOFODUGCQtnsV//bRdh8ZSS2YA=; live homeowner.mjs fa995062af8b98b2da298e2636606e9bb9726b3c25d6df3c800252dd59362dfd; SQL executor SYnnbN5P9+3lJJeTRdMU9F1K/Lb8NPAYsEcAH5JpM8s=; SQL73 live function 42c83390575d90d39326aee61ccaf87851fd5320e278d6c7f687137245b62166",
+      "applied_migrations": "SQL73 applied in staging only; do not reapply; production not authorized",
+      "environment": "staging",
+      "missing_evidence": [
+        "production promotion is not authorized for this Homeowner Ops composition",
+        "production SQL73 apply is not authorized"
+      ],
+      "open_pr_overlap": []
+    },
     "production-spa": {
       "classification": "PRODUCTION_LOCKED",
       "git_sha": "e3e4649478a0c3978065b71b0528dd93baa8dac1",

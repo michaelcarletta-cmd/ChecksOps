@@ -111,6 +111,11 @@
 /aws/functions/api/ocr-normalize-azure.mjs @michaelcarletta-cmd
 /aws/functions/api/textract-check-ocr.mjs @michaelcarletta-cmd
 
+/aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql @michaelcarletta-cmd
+/ops/deployment-guard/homeowner-ops-staging-accepted.json @michaelcarletta-cmd
+/ops/deployment-guard/homeowner-check-signing-plan.md @michaelcarletta-cmd
+/aws/tests/homeowner-ops-staging-baseline.test.mjs @michaelcarletta-cmd
+
 /aws/template.yaml @michaelcarletta-cmd
 /aws/samconfig.toml @michaelcarletta-cmd
 /aws/cutover/production/ @michaelcarletta-cmd

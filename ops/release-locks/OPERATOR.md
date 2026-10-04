@@ -115,6 +115,15 @@ worktree unless the candidate contains or reconciles this baseline. If live
 production no longer matches the lock, refuse deployment; do not auto-fix
 production and do not restore an older baseline.
 
+## Homeowner Ops staging baseline
+
+`homeowner-ops-staging` is `STAGING_LOCKED_NOT_PRODUCTION`. Proof:
+`ops/release-locks/proof/homeowner-ops-staging-baseline.md`.
+
+This records the working Homeowner portal after SQL73. It does not authorize
+production, SQL73 rewrite, or restoring an older Homeowner SPA/Lambda. Later
+Homeowner check-signing work must be a forward change from that composition.
+
 ## Overlap exceptions
 
 `overlap-allowlist.json` is empty. An exception must name:

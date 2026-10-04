@@ -1271,6 +1271,13 @@
       "review_condition": "other-PR-must-rebase-before-merge"
     },
     {
+      "other_pr": 653,
+      "path": "aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql",
+      "reason": "This Homeowner Ops staging baseline records SQL73 as already applied. PR #653 is the parent SQL73 source PR on the same lineage; this exception records that overlap only and does not rewrite, reapply, or deploy SQL73.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
       "other_pr": 600,
       "path": "ops/release-locks/locked-components.json",
       "reason": "PR #597 only refreshes the partner-sharing source.tree_hash after CheckCommandCenter changed. PR #600 also edits locked-components.json to refresh the production SPA baseline. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #600.",
