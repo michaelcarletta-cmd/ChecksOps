@@ -92,7 +92,7 @@ export type SignatureCreateSignerInput = {
   signing_order?: number | null;
 };
 
-/** Live esign.mjs create-payload contract when requestId is absent. */
+/** Live esign.mjs create-payload contract for a new send (no existing request id). */
 export const buildSendSignatureRequestCreatePayload = ({
   claimId,
   checkIntakeItemId,

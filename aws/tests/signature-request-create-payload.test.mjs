@@ -34,10 +34,13 @@ test('Files tab still uses the authoritative CCC claim ID', () => {
   const files = read('src/components/check-review/CheckFilesSection.tsx');
   const ccc = read('src/pages/CheckCommandCenter.tsx');
   assert.match(ccc, /<CheckFilesSection checkIntakeItemId=\{checkId\} claimId=\{check\?\.claim_id \?\? null\} \/>/);
+  assert.match(files, /resolveSignatureRequestClaimId\(claimId, null\)/);
+  assert.match(files, /resolveSignatureRequestClaimId\(suppliedClaimId, checkClaim\?\.claim_id\)/);
   assert.match(files, /<SignatureRequests/);
-  assert.match(files, /claimId=\{resolvedClaimId\}/);
+  assert.match(files, /claimId=\{linkedClaim\.id\}/);
   assert.match(files, /checkIntakeItemId=\{checkIntakeItemId\}/);
   assert.match(files, /data-testid="signature-requests-region"/);
+  assert.match(files, /data-testid="signature-requests-unlinked"/);
 });
 
 test('wizard create/send uses the complete send-signature-request payload', () => {
@@ -56,7 +59,14 @@ test('wizard create/send uses the complete send-signature-request payload', () =
   assert.match(helper, /signer_type:/);
   assert.match(helper, /signing_order:/);
   assert.match(helper, /skipEmail: skipEmail === true/);
-  assert.doesNotMatch(helper, /requestId/);
+  assert.doesNotMatch(helper, /requestId\s*:/);
+  const createFn = wizard.slice(
+    wizard.indexOf('const createRequestMutation = useMutation'),
+    wizard.indexOf('const resendMutation = useMutation'),
+  );
+  assert.match(createFn, /buildSendSignatureRequestCreatePayload\(/);
+  assert.doesNotMatch(createFn, /\.insert\(/);
+  assert.doesNotMatch(createFn, /requestId/);
   assert.doesNotMatch(wizard, /\.from\("signature_requests"\)\s*\.insert\(/);
   assert.doesNotMatch(wizard, /\.from\("signature_signers"\)\s*\.insert\(/);
   const payload = buildSendSignatureRequestCreatePayload({
