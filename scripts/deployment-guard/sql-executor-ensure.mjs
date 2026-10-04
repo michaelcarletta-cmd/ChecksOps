@@ -46,6 +46,7 @@ export function packExecutor(root) {
     ['aws/workflows/sql/72_homeowner_ledger_view_claim_ok.sql', 'sql/72_homeowner_ledger_view_claim_ok.sql'],
     ['aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql', 'sql/73_homeowner_ledger_view_last_viewed_best_effort.sql'],
     ['aws/workflows/sql/74_homeowner_signing_rls_boundary.sql', 'sql/74_homeowner_signing_rls_boundary.sql'],
+    ['aws/workflows/sql/75_signature_request_check_files_link_grant.sql', 'sql/75_signature_request_check_files_link_grant.sql'],
     ['aws/write-path/guarded-sql-executor/sql/39_mortgage_ops_agent_accept_complete.sql', 'sql/39_mortgage_ops_agent_accept_complete.sql'],
     ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
     ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],

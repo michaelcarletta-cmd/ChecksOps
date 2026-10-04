@@ -4,8 +4,8 @@
  * CREATE OR REPLACE must not invoke the function.
  *
  * Forward-composed from the live staging executor. Preserves SQL 44,
- * #601, membership-only, Mortgage Ops SQL 39, SQL 71, SQL 72, and SQL 73.
- * Adds only SQL 74 Homeowner signing RLS-boundary sibling dispatch.
+ * #601, membership-only, Mortgage Ops SQL 39, SQL 71, SQL 72, SQL 73,
+ * and SQL 74. Adds only SQL 75 check_files.signature_request_id column grant.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -20,6 +20,7 @@ import {
   AUTHORIZED_SQL72,
   AUTHORIZED_SQL73,
   AUTHORIZED_SQL74,
+  AUTHORIZED_SQL75,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   AUTHORIZED_MEMBERSHIP_ONLY,
   SQL_EXECUTOR_FUNCTION,
@@ -28,6 +29,7 @@ import {
   isHomeownerLedgerViewContract,
   isHomeownerLedgerViewLastViewedBestEffort,
   isHomeownerSigningRlsBoundary,
+  isSignatureRequestCheckFilesLinkGrant,
   isMembershipOnlyHelper,
   isMortgageOpsAcceptComplete,
   isTenantUsersSameCheckPermissions,
@@ -58,6 +60,7 @@ const SQL71_FILE = path.join(ROOT, 'sql/71_homeowner_ledger_view_contract.sql');
 const SQL72_FILE = path.join(ROOT, 'sql/72_homeowner_ledger_view_claim_ok.sql');
 const SQL73_FILE = path.join(ROOT, 'sql/73_homeowner_ledger_view_last_viewed_best_effort.sql');
 const SQL74_FILE = path.join(ROOT, 'sql/74_homeowner_signing_rls_boundary.sql');
+const SQL75_FILE = path.join(ROOT, 'sql/75_signature_request_check_files_link_grant.sql');
 const SQL74_BEHAVIOR_MARKERS = [
   'aws_public_homeowner_ledger_endorse_capability',
   'aws_public_homeowner_pending_signatures',
@@ -894,6 +897,276 @@ async function handleHomeownerSigningRlsBoundary({
   }
 }
 
+function sql75SourceMatchesBehavior(text) {
+  if (!text) return false;
+  return text.includes('GRANT UPDATE (signature_request_id) ON TABLE public.check_files TO checksops, authenticated;')
+    && text.includes('aws_write_check_files')
+    && text.includes('aws_can_write_check(check_intake_item_id)')
+    && !text.includes('GRANT UPDATE ON TABLE public.check_files')
+    && !text.includes('GRANT ALL ON TABLE public.check_files')
+    && !text.includes('CREATE POLICY')
+    && !text.includes('DROP POLICY')
+    && !text.includes('ENABLE ROW LEVEL SECURITY')
+    && !text.includes('CREATE OR REPLACE FUNCTION')
+    && !text.includes('TO PUBLIC')
+    && !text.includes('TO anon');
+}
+
+const CHECK_FILES_CATALOG_SQL = `
+SELECT jsonb_build_object(
+  'table_grants', (
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'grantee', grantee, 'privilege', privilege_type
+    ) ORDER BY grantee, privilege_type), '[]'::jsonb)
+    FROM information_schema.role_table_grants
+    WHERE table_schema = 'public' AND table_name = 'check_files'
+      AND grantee IN ('checksops', 'authenticated', 'PUBLIC', 'anon')
+  ),
+  'column_update_grants', (
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'grantee', grantee, 'column', column_name
+    ) ORDER BY grantee, column_name), '[]'::jsonb)
+    FROM information_schema.column_privileges
+    WHERE table_schema = 'public' AND table_name = 'check_files'
+      AND privilege_type = 'UPDATE'
+      AND grantee IN ('checksops', 'authenticated', 'PUBLIC', 'anon')
+  ),
+  'rls', (
+    SELECT jsonb_build_object(
+      'relrowsecurity', c.relrowsecurity,
+      'relforcerowsecurity', c.relforcerowsecurity
+    )
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = 'check_files'
+  ),
+  'policies', (
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'policyname', policyname, 'cmd', cmd, 'roles', roles, 'qual', qual, 'with_check', with_check
+    ) ORDER BY policyname), '[]'::jsonb)
+    FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'check_files'
+  )
+) AS catalog
+`;
+
+const SQL75_PREEXISTING_UPDATE_COLUMNS = Object.freeze([
+  'category',
+  'description',
+  'file_name',
+  'file_path',
+  'file_size',
+  'file_type',
+  'source',
+]);
+
+function sql75GrantsConstrained(catalog) {
+  const tableGrants = catalog?.table_grants || [];
+  const columnGrants = catalog?.column_update_grants || [];
+  const tableUpdate = tableGrants.filter((row) => row.privilege === 'UPDATE');
+  const allowedColumns = new Set(['signature_request_id', ...SQL75_PREEXISTING_UPDATE_COLUMNS]);
+  const extraColumns = columnGrants.filter((row) => !allowedColumns.has(row.column));
+  const publicOrAnon = [
+    ...tableGrants.filter((row) => row.grantee === 'PUBLIC' || row.grantee === 'anon'),
+    ...columnGrants.filter((row) => row.grantee === 'PUBLIC' || row.grantee === 'anon'),
+  ];
+  const hasChecksopsCol = columnGrants.some((row) => row.grantee === 'checksops' && row.column === 'signature_request_id');
+  const hasAuthenticatedCol = columnGrants.some((row) => row.grantee === 'authenticated' && row.column === 'signature_request_id');
+  const writePolicy = (catalog?.policies || []).find((row) => row.policyname === 'aws_write_check_files');
+  if (tableUpdate.length || extraColumns.length || publicOrAnon.length || !hasChecksopsCol || !hasAuthenticatedCol) {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 75 check_files grants are not constrained to signature_request_id plus previously accepted columns', {
+      table_update: tableUpdate,
+      extra_columns: extraColumns,
+      public_or_anon: publicOrAnon,
+      has_checksops_column: hasChecksopsCol,
+      has_authenticated_column: hasAuthenticatedCol,
+    });
+  }
+  if (!writePolicy || !String(writePolicy.qual || '').includes('aws_can_write_check')) {
+    return fail(CODES.SQL_COLLISION, 'aws_write_check_files authorization boundary is missing after SQL 75', {
+      policy: writePolicy || null,
+    });
+  }
+  return ok({
+    grants_constrained: true,
+    column: 'signature_request_id',
+    checksops_update: true,
+    authenticated_update: true,
+    table_wide_update: false,
+    policy: writePolicy.policyname,
+  });
+}
+
+function hashCheckFilesCatalog(catalog) {
+  return hashSqlDefinition(JSON.stringify(catalog || {}));
+}
+
+async function readCheckFilesCatalog(client) {
+  const rows = (await client.query(CHECK_FILES_CATALOG_SQL)).rows;
+  return rows[0]?.catalog || {};
+}
+
+async function handleSignatureRequestCheckFilesLinkGrant({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile75,
+  expectedLiveDefinitionSha256 = AUTHORIZED_SQL75.expected_live_definition_sha256,
+}) {
+  if (event.expected_live_definition_sha256 !== AUTHORIZED_SQL75.expected_live_definition_sha256) {
+    return fail(CODES.SQL_COLLISION, 'SQL 75 authority requires the current live SQL 73 definition hash', {
+      expected_live_definition_sha256: event.expected_live_definition_sha256 || null,
+      required_live_definition_sha256: AUTHORIZED_SQL75.expected_live_definition_sha256,
+    });
+  }
+
+  const embedded = readEmbeddedSql(sqlFile75, AUTHORIZED_SQL75.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!sql75SourceMatchesBehavior(embedded.details.text)) {
+    return fail(CODES.SQL_COLLISION, 'embedded SQL 75 does not match the column-scoped check_files grant');
+  }
+
+  let client;
+  try {
+    client = await connect();
+    const sql73Lookup = await definitionTextOrFail(client, AUTHORIZED_SQL75.sql73_function_identity);
+    if (!sql73Lookup.ok) return sql73Lookup;
+    const sql73BeforeDef = sql73Lookup.details.definition;
+    const sql73BeforeHash = sql73BeforeDef ? hashSqlDefinition(sql73BeforeDef) : null;
+
+    const sql74Before = {};
+    for (const identityName of AUTHORIZED_SQL75.sql74_function_identities) {
+      const lookup = await definitionTextOrFail(client, identityName);
+      if (!lookup.ok) return lookup;
+      sql74Before[identityName] = lookup.details.definition
+        ? hashSqlDefinition(lookup.details.definition)
+        : null;
+    }
+
+    const catalogBefore = await readCheckFilesCatalog(client);
+    const catalogBeforeHash = hashCheckFilesCatalog(catalogBefore);
+    const policyBefore = (catalogBefore.policies || []).find((row) => row.policyname === 'aws_write_check_files') || null;
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      if (event.inspect?.token || event.verify?.token) {
+        return fail(CODES.UNRELATED_MUTATION, 'SQL 75 inspect/verify must not invoke a public token RPC');
+      }
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: catalogBeforeHash,
+          after_hash: catalogBeforeHash,
+          result: event.action,
+          executor_identity: identity,
+          sql73_hash: sql73BeforeHash,
+          sql74_hashes: sql74Before,
+          required_live_definition_sha256: expectedLiveDefinitionSha256,
+          check_files_catalog: catalogBefore,
+          aws_write_check_files: policyBefore,
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 75 executor action ${event.action}`);
+    }
+
+    if (sql73BeforeHash !== expectedLiveDefinitionSha256) {
+      return fail(CODES.SQL_COLLISION, 'live SQL 73 definition drifted; SQL 75 apply refused', {
+        expected_live_definition_sha256: expectedLiveDefinitionSha256,
+        live_definition_sha256: sql73BeforeHash,
+      });
+    }
+    if (!policyBefore || !String(policyBefore.qual || '').includes('aws_can_write_check')) {
+      return fail(CODES.SQL_COLLISION, 'aws_write_check_files is missing or drifted; SQL 75 apply refused', {
+        policy: policyBefore,
+      });
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: expectedLiveDefinitionSha256,
+      live_definition_sha256: sql73BeforeHash,
+      live_definition: sql73BeforeDef,
+    });
+    if (!collision.ok) return collision;
+
+    await client.query(embedded.details.text);
+
+    const sql73AfterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL75.sql73_function_identity);
+    if (!sql73AfterLookup.ok) return sql73AfterLookup;
+    const sql73AfterHash = sql73AfterLookup.details.definition
+      ? hashSqlDefinition(sql73AfterLookup.details.definition)
+      : null;
+    if (sql73AfterHash !== sql73BeforeHash || sql73AfterHash !== expectedLiveDefinitionSha256) {
+      return fail(CODES.SQL_COLLISION, 'SQL 75 apply changed the live SQL 73 definition; STOP', {
+        expected: expectedLiveDefinitionSha256,
+        live: sql73AfterHash,
+      });
+    }
+
+    const sql74After = {};
+    for (const identityName of AUTHORIZED_SQL75.sql74_function_identities) {
+      const lookup = await definitionTextOrFail(client, identityName);
+      if (!lookup.ok) return lookup;
+      sql74After[identityName] = lookup.details.definition
+        ? hashSqlDefinition(lookup.details.definition)
+        : null;
+      if (sql74After[identityName] !== sql74Before[identityName]) {
+        return fail(CODES.SQL_COLLISION, 'SQL 75 apply changed a live SQL 74 definition; STOP', {
+          function_identity: identityName,
+          expected: sql74Before[identityName],
+          live: sql74After[identityName],
+        });
+      }
+    }
+
+    const catalogAfter = await readCheckFilesCatalog(client);
+    const policyAfter = (catalogAfter.policies || []).find((row) => row.policyname === 'aws_write_check_files') || null;
+    if (JSON.stringify(policyAfter) !== JSON.stringify(policyBefore)) {
+      return fail(CODES.SQL_COLLISION, 'SQL 75 apply changed aws_write_check_files; STOP', {
+        before: policyBefore,
+        after: policyAfter,
+      });
+    }
+    const grants = sql75GrantsConstrained(catalogAfter);
+    if (!grants.ok) return grants;
+
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: catalogBeforeHash,
+        after_hash: hashCheckFilesCatalog(catalogAfter),
+        result: 'applied',
+        executor_identity: identity,
+        sql73_hash: sql73AfterHash,
+        sql74_hashes: sql74After,
+        required_live_definition_sha256: expectedLiveDefinitionSha256,
+        check_files_catalog_before: catalogBefore,
+        check_files_catalog_after: catalogAfter,
+        aws_write_check_files: policyAfter,
+      },
+      grants: grants.details,
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 function sql71GrantsConstrained(grants) {
   const genericGrantees = new Set(['PUBLIC', 'authenticated', 'anon']);
   const execute = (grants.routine || []).filter((row) => row.privilege_type === 'EXECUTE');
@@ -1287,9 +1560,11 @@ export function createHandler({
   sqlFile72 = SQL72_FILE,
   sqlFile73 = SQL73_FILE,
   sqlFile74 = SQL74_FILE,
+  sqlFile75 = SQL75_FILE,
   expectedSql72LiveHash = AUTHORIZED_SQL72.expected_live_definition_sha256,
   expectedSql73LiveHash = AUTHORIZED_SQL73.expected_live_definition_sha256,
   expectedSql74LiveHash = AUTHORIZED_SQL74.expected_live_definition_sha256,
+  expectedSql75LiveHash = AUTHORIZED_SQL75.expected_live_definition_sha256,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
 } = {}) {
   return async function handler(event = {}) {
@@ -1339,6 +1614,17 @@ export function createHandler({
         connect,
         sqlFile601,
         sqlFile601Predecessor,
+      });
+    }
+
+    if (isSignatureRequestCheckFilesLinkGrant(event)) {
+      return handleSignatureRequestCheckFilesLinkGrant({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile75,
+        expectedLiveDefinitionSha256: expectedSql75LiveHash,
       });
     }
 

@@ -18,6 +18,7 @@ import {
   AUTHORIZED_SQL72,
   AUTHORIZED_SQL73,
   AUTHORIZED_SQL74,
+  AUTHORIZED_SQL75,
   AUTHORIZED_STAGING_SQL,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
@@ -27,6 +28,7 @@ import {
   isHomeownerLedgerViewContract,
   isHomeownerLedgerViewLastViewedBestEffort,
   isHomeownerSigningRlsBoundary,
+  isSignatureRequestCheckFilesLinkGrant,
   isMembershipOnlyHelper,
   isMortgageOpsAcceptComplete,
   isTenantUsersSameCheckPermissions,
@@ -580,6 +582,7 @@ test('composed allowlist keeps live families and adds exact SQL 71', () => {
     '72_homeowner_ledger_view_claim_ok',
     '73_homeowner_ledger_view_last_viewed_best_effort',
     '74_homeowner_signing_rls_boundary',
+    '75_signature_request_check_files_link_grant',
   ]);
   assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL44).migration_id, AUTHORIZED_SQL44.migration_id);
   assert.equal(isTenantUsersSameCheckPermissions(AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS), true);
@@ -596,6 +599,9 @@ test('composed allowlist keeps live families and adds exact SQL 71', () => {
   assert.equal(isHomeownerSigningRlsBoundary(AUTHORIZED_SQL74), true);
   assert.equal(isHomeownerSigningRlsBoundary(AUTHORIZED_SQL73), false);
   assert.equal(isHomeownerLedgerViewLastViewedBestEffort(AUTHORIZED_SQL74), false);
+  assert.equal(isSignatureRequestCheckFilesLinkGrant(AUTHORIZED_SQL75), true);
+  assert.equal(isSignatureRequestCheckFilesLinkGrant(AUTHORIZED_SQL74), false);
+  assert.equal(isHomeownerSigningRlsBoundary(AUTHORIZED_SQL75), false);
   assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL71).function_identity, AUTHORIZED_SQL71.function_identity);
   assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL72).function_identity, AUTHORIZED_SQL72.function_identity);
   assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL73).function_identity, AUTHORIZED_SQL73.function_identity);
@@ -714,6 +720,7 @@ test('sql-executor-ensure packs the non-throwing function-def lookup', () => {
   assert.match(src, /72_homeowner_ledger_view_claim_ok\.sql/);
   assert.match(src, /73_homeowner_ledger_view_last_viewed_best_effort\.sql/);
   assert.match(src, /74_homeowner_signing_rls_boundary\.sql/);
+  assert.match(src, /75_signature_request_check_files_link_grant\.sql/);
   assert.match(src, /39_mortgage_ops_agent_accept_complete\.sql/);
   assert.match(src, /20261002200000_user_can_move_tenant_checks_membership_only\.sql/);
   assert.match(src, /mortgage-ops-sql39\.mjs/);
@@ -816,6 +823,88 @@ test('SQL 74 exact pin is accepted and requires the live SQL 73 hash', () => {
   }, { now });
   assert.equal(wrongLive.ok, false);
   assert.equal(wrongLive.code, CODES.SQL_COLLISION);
+
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...input,
+    target_environment: 'production',
+    target_component: 'production-sql',
+  }, { now }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+});
+
+function sql75Input(overrides = {}) {
+  const requiredLive = AUTHORIZED_SQL75.expected_live_definition_sha256;
+  const pinNow = Date.parse('2026-10-04T15:00:00.000Z');
+  return {
+    input: {
+      workstream_id: 'sr-check-files-sig-link-grant-6f10',
+      branch: 'cursor/sr-check-files-sig-link-grant-6f10',
+      commit: AUTHORIZED_SQL75.commit,
+      operator: 'test-agent',
+      target_environment: 'staging',
+      target_component: 'staging-sql',
+      deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+      owned_components: [AUTHORIZED_SQL75.filename],
+      filename: AUTHORIZED_SQL75.filename,
+      migration_id: AUTHORIZED_SQL75.migration_id,
+      source_sha256: AUTHORIZED_SQL75.source_sha256,
+      intended_replacement_sha256: AUTHORIZED_SQL75.intended_replacement_sha256,
+      expected_live_definition_sha256: requiredLive,
+      one_use_id: 'sql75-auth-0001',
+      expiry: '2026-10-04T17:00:00.000Z',
+      action: 'authorize',
+      function_name: 'checksops-staging-guarded-sql-executor',
+      build_timestamp: '2026-10-04T15:00:00.000Z',
+      preflight_live_fingerprint: authorizationFingerprint({
+        ...AUTHORIZED_SQL75,
+        expected_live_definition_sha256: requiredLive,
+        one_use_id: 'sql75-auth-0001',
+      }),
+      ...overrides,
+    },
+    now: pinNow,
+  };
+}
+
+test('SQL 75 exact pin is accepted and requires the live SQL 73 hash', () => {
+  const bytes = fs.readFileSync(path.join(ROOT, AUTHORIZED_SQL75.filename));
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  assert.equal(sha, AUTHORIZED_SQL75.source_sha256);
+  assert.equal(sha, 'cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283');
+  assert.equal(
+    AUTHORIZED_SQL75.expected_live_definition_sha256,
+    AUTHORIZED_SQL74.expected_live_definition_sha256,
+  );
+  assert.equal(
+    AUTHORIZED_SQL73.source_sha256,
+    '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e',
+  );
+
+  const { input, now } = sql75Input();
+  const pin = evaluateSqlExecutorAuthorization(input, { now });
+  assert.equal(pin.ok, true, pin.message);
+  assert.equal(pin.details.allowlist_entry.filename, AUTHORIZED_SQL75.filename);
+  assert.notEqual(pin.details.allowlist_entry.filename, AUTHORIZED_SQL74.filename);
+
+  const wrongLive = evaluateSqlExecutorAuthorization({
+    ...input,
+    expected_live_definition_sha256: '2'.repeat(64),
+    one_use_id: 'sql75-auth-0002',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL75,
+      expected_live_definition_sha256: '2'.repeat(64),
+      one_use_id: 'sql75-auth-0002',
+    }),
+  }, { now });
+  assert.equal(wrongLive.ok, false);
+  assert.equal(wrongLive.code, CODES.SQL_COLLISION);
+
+  const alteredHash = evaluateSqlExecutorAuthorization({
+    ...input,
+    source_sha256: '1'.repeat(64),
+    one_use_id: 'sql75-auth-0003',
+  }, { now });
+  assert.equal(alteredHash.ok, false);
+  assert.equal(alteredHash.code, CODES.SQL_COLLISION);
 
   assert.equal(evaluateSqlExecutorAuthorization({
     ...input,
