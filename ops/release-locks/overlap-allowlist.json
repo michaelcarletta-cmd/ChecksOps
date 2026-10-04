@@ -1283,6 +1283,69 @@
       "reason": "PR #597 only refreshes the partner-sharing source.tree_hash after CheckCommandCenter changed. PR #600 also edits locked-components.json to refresh the production SPA baseline. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #600.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 623,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "This staging SPA repair restores only signature_requests and signature_signers on AWS_WRITE_TABLES. PR #623 also edits client.ts for Claim Ledger figures. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #623.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 622,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "This staging SPA repair restores only signature_requests and signature_signers on AWS_WRITE_TABLES. PR #622 also edits client.ts for Claim Ledger figures. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #622.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 621,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "This staging SPA repair restores only signature_requests and signature_signers on AWS_WRITE_TABLES. PR #621 also edits client.ts for Claim Ledger figures. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #621.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 657,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This workstream only refreshes delete-check-contract and identity-cognito tree hashes after the two-table client allowlist restore. PR #657 also edits locked-components.json on the parent Homeowner lineage. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 655,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This workstream only refreshes delete-check-contract and identity-cognito tree hashes after the two-table client allowlist restore. PR #655 also edits locked-components.json on the parent Homeowner lineage. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 654,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This workstream only refreshes delete-check-contract and identity-cognito tree hashes after the two-table client allowlist restore. PR #654 also edits locked-components.json on the parent Homeowner lineage. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 649,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This workstream only refreshes delete-check-contract and identity-cognito tree hashes after the two-table client allowlist restore. PR #649 also edits locked-components.json for the production SPA baseline. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 631,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This workstream only refreshes delete-check-contract and identity-cognito tree hashes after the two-table client allowlist restore. PR #631 also edits locked-components.json for Mortgage Ops. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 654,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "This workstream adds reviewed overlap exceptions for the Signature Request client allowlist restore. PR #654 also edits overlap-allowlist.json on the parent Homeowner lineage. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }

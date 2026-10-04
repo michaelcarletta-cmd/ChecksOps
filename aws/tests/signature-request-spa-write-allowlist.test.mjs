@@ -93,10 +93,18 @@ test('this workstream does not touch API write-allowlist, signature submit, or S
   }
   assert.ok(!changed.includes('aws/functions/api/write-signature.mjs'));
   assert.ok(!changed.includes('aws/functions/api/homeowner.mjs'));
-  assert.deepEqual(changed.sort(), [
-    'aws/tests/signature-request-spa-write-allowlist.test.mjs',
+  assert.ok(changed.includes(CLIENT_REL), 'client allowlist must be in this workstream');
+  assert.ok(
+    changed.includes('aws/tests/signature-request-spa-write-allowlist.test.mjs'),
+    'pin test must be in this workstream',
+  );
+  const extra = changed.filter((rel) => ![
     CLIENT_REL,
-  ]);
+    'aws/tests/signature-request-spa-write-allowlist.test.mjs',
+    'ops/release-locks/locked-components.json',
+    'ops/release-locks/overlap-allowlist.json',
+  ].includes(rel));
+  assert.deepEqual(extra, [], 'no unexpected files beyond the two-table restore and lock hash refresh');
 });
 
 test('source write-allowlist is not broadened by this SPA repair', () => {
