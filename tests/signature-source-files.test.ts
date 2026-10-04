@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  buildSendSignatureRequestCreatePayload,
   isEligibleSignatureSourceFile,
   mergeClaimAndCheckSignatureFiles,
   resolveSignatureRequestClaimId,
@@ -101,6 +102,43 @@ test("signature request fields keep the selected path and check id", () => {
   assert.equal(fields.document_path, `check-intake/${CHECK_A}/files/ui.pdf`);
 });
 
+test("create payload matches the live send-signature-request contract", () => {
+  const payload = buildSendSignatureRequestCreatePayload({
+    claimId: CLAIM,
+    checkIntakeItemId: CHECK_A,
+    documentName: "UI-SIGNATURE-TEST-UNSIGNED.pdf",
+    documentPath: `check-intake/${CHECK_A}/files/ui.pdf`,
+    documentType: "other",
+    fieldData: [{ type: "signature", page: 1, x: 10, y: 20 }],
+    signers: [{ name: "Michael Carletta", email: "uat@example.com", type: "policyholder", order: 1 }],
+    skipEmail: false,
+  });
+  assert.deepEqual(Object.keys(payload), [
+    "claim_id",
+    "check_intake_item_id",
+    "document_name",
+    "document_path",
+    "document_type",
+    "field_data",
+    "signers",
+    "skipEmail",
+  ]);
+  assert.equal(payload.claim_id, CLAIM);
+  assert.equal(payload.check_intake_item_id, CHECK_A);
+  assert.equal(payload.document_name, "UI-SIGNATURE-TEST-UNSIGNED.pdf");
+  assert.equal(payload.document_path, `check-intake/${CHECK_A}/files/ui.pdf`);
+  assert.equal(payload.document_type, "other");
+  assert.equal(payload.skipEmail, false);
+  assert.deepEqual(payload.signers, [{
+    signer_name: "Michael Carletta",
+    signer_email: "uat@example.com",
+    signer_type: "policyholder",
+    signing_order: 1,
+  }]);
+  assert.equal("requestId" in payload, false);
+  assert.equal("status" in payload, false);
+});
+
 test("Files tab remounts SignatureRequests and the wizard can select check files", () => {
   const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
   const files = readFileSync("src/components/check-review/CheckFilesSection.tsx", "utf8");
@@ -124,9 +162,10 @@ test("Files tab remounts SignatureRequests and the wizard can select check files
   assert.match(wizard, /mergeClaimAndCheckSignatureFiles/);
   assert.match(wizard, /Select a file from claim\/check files/);
   assert.match(wizard, /from\("check_files"\)/);
-  assert.match(wizard, /check_intake_item_id: checkIntakeItemId \|\| null/);
+  assert.match(wizard, /buildSendSignatureRequestCreatePayload\(/);
   assert.match(wizard, /\.from\("signature_requests"\)/);
-  assert.match(wizard, /\.from\("signature_signers"\)/);
+  assert.doesNotMatch(wizard, /\.from\("signature_requests"\)\s*\.insert\(/);
+  assert.doesNotMatch(wizard, /\.from\("signature_signers"\)\s*\.insert\(/);
   assert.match(wizard, /functions\.invoke\("send-signature-request"/);
   assert.doesNotMatch(wizard, /file_name\.ilike\.%\.pdf/);
   assert.equal(signatureSourceFilesQueryKey(CLAIM, CHECK_A)[0], "signature-source-files");

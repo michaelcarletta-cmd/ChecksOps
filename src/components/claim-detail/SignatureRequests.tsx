@@ -15,6 +15,7 @@ const FieldPlacementEditor = lazy(() => import("./FieldPlacementEditor").then((m
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import {
+  buildSendSignatureRequestCreatePayload,
   mergeClaimAndCheckSignatureFiles,
   signatureSourceFilesQueryKey,
 } from "@/lib/signature-source-files";
@@ -292,44 +293,17 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
         ? uploadedFile?.name || "Document"
         : selectedTemplate?.name || "Document";
 
-      const { data: request, error: requestError } = await supabase
-        .from("signature_requests")
-        .insert({
-          claim_id: claimId,
-          check_intake_item_id: checkIntakeItemId || null,
-          document_name: docName,
-          document_path: generatedDocPath,
-          document_type: detectDocumentType(docName),
-          field_data: placedFields,
-          status: "draft",
-        })
-        .select()
-        .single();
-      if (requestError) throw requestError;
-
-      if (checkIntakeItemId && generatedDocPath) {
-        await supabase
-          .from("check_files")
-          .update({ signature_request_id: request.id })
-          .eq("check_intake_item_id", checkIntakeItemId)
-          .eq("file_path", generatedDocPath);
-      }
-
-      const signersData = signers.map((s) => ({
-        signature_request_id: request.id,
-        signer_name: s.name,
-        signer_email: s.email,
-        signer_type: s.type,
-        signing_order: s.order,
-      }));
-
-      const { error: signersError } = await supabase
-        .from("signature_signers")
-        .insert(signersData);
-      if (signersError) throw signersError;
-
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
-        body: { requestId: request.id, skipEmail },
+        body: buildSendSignatureRequestCreatePayload({
+          claimId,
+          checkIntakeItemId,
+          documentName: docName,
+          documentPath: generatedDocPath,
+          documentType: detectDocumentType(docName),
+          fieldData: placedFields,
+          signers,
+          skipEmail,
+        }),
       });
       if (error) {
         throw new Error(await getFunctionErrorMessage(error, "Could not send signature request"));
@@ -341,7 +315,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
         navigator.clipboard.writeText(links);
       }
 
-      return { ...request, mode: data?.mode || (skipEmail ? "manual_bypass" : "delivered") };
+      return { mode: data?.mode || (skipEmail ? "manual_bypass" : "delivered") };
     },
     onSuccess: (data) => {
       const mode = (data as any)?.mode;

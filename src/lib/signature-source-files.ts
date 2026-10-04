@@ -81,6 +81,52 @@ export const signatureRequestDocumentFields = ({
   document_path: documentPath,
 });
 
+export type SignatureCreateSignerInput = {
+  name?: string | null;
+  email?: string | null;
+  type?: string | null;
+  order?: number | null;
+  signer_name?: string | null;
+  signer_email?: string | null;
+  signer_type?: string | null;
+  signing_order?: number | null;
+};
+
+/** Live esign.mjs create-payload contract for a new send (no existing request id). */
+export const buildSendSignatureRequestCreatePayload = ({
+  claimId,
+  checkIntakeItemId,
+  documentName,
+  documentPath,
+  documentType,
+  fieldData,
+  signers,
+  skipEmail,
+}: {
+  claimId?: string | null;
+  checkIntakeItemId?: string | null;
+  documentName: string;
+  documentPath: string;
+  documentType?: string | null;
+  fieldData?: unknown;
+  signers?: SignatureCreateSignerInput[];
+  skipEmail?: boolean;
+}) => ({
+  claim_id: claimId || null,
+  check_intake_item_id: checkIntakeItemId || null,
+  document_name: documentName,
+  document_path: documentPath,
+  document_type: documentType || null,
+  field_data: Array.isArray(fieldData) ? fieldData : [],
+  signers: (signers || []).map((signer, index) => ({
+    signer_name: String(signer.signer_name || signer.name || "").trim(),
+    signer_email: String(signer.signer_email || signer.email || "").trim(),
+    signer_type: String(signer.signer_type || signer.type || "policyholder").trim() || "policyholder",
+    signing_order: Number(signer.signing_order ?? signer.order ?? index + 1) || index + 1,
+  })).filter((signer) => signer.signer_name && signer.signer_email),
+  skipEmail: skipEmail === true,
+});
+
 const normalizeClaimId = (value?: string | null) => {
   const trimmed = String(value || "").trim();
   return trimmed || null;
