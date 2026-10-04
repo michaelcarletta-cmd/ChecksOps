@@ -82,10 +82,19 @@ const endorsementRow = (overrides = {}) => ({
   ...overrides,
 });
 
-const mintClient = ({ doc = claimDoc(), row = endorsementRow(), updates = [] } = {}) => sqlClient([
+const mintClient = ({
+  doc = claimDoc(),
+  row = endorsementRow(),
+  updates = [],
+  openInsuredCount = 1,
+} = {}) => sqlClient([
   {
     match: (sql) => sql.includes('aws_public_homeowner_ledger_by_token'),
     result: () => ({ rows: [{ doc }] }),
+  },
+  {
+    match: (sql) => sql.includes('COUNT(*)') && sql.includes('check_endorsements'),
+    result: () => ({ rows: [{ n: openInsuredCount }] }),
   },
   {
     match: (sql) => sql.includes('FROM public.check_endorsements'),
@@ -102,9 +111,11 @@ const mintClient = ({ doc = claimDoc(), row = endorsementRow(), updates = [] } =
 
 test('class A registry includes homeowner-ledger-endorse-link and not remint', () => {
   assert.equal(CLASS_A_FUNCTIONS.has('homeowner-ledger-endorse-link'), true);
+  assert.equal(CLASS_A_FUNCTIONS.has('homeowner-ledger-document-sign-link'), true);
   assert.equal(CLASS_A_FUNCTIONS.has('homeowner-ledger-sign-link'), true);
   const services = fs.readFileSync(path.join(ROOT, 'aws/functions/api/app-services.mjs'), 'utf8');
   assert.match(services, /handleHomeownerLedgerEndorseLink/);
+  assert.match(services, /handleHomeownerLedgerDocumentSignLink/);
   assert.doesNotMatch(services, /aws_public_homeowner_ledger_remint_signer/);
 });
 
@@ -124,6 +135,16 @@ test('empty homeowner email is not a match-all for insured parties', () => {
     payee_name: 'Ada Lovelace',
     contact_email: 'ada@example.com',
   }, { name: 'Ada Lovelace', email: 'ada@example.com' }), false);
+  assert.equal(isHomeownerEndorsementParty({
+    payee_type: 'insured',
+    payee_name: 'Joint Payee Line',
+    contact_email: '',
+  }, { name: 'Ada Lovelace', email: '' }, { openInsuredCount: 1 }), true);
+  assert.equal(isHomeownerEndorsementParty({
+    payee_type: 'insured',
+    payee_name: 'Joint Payee Line',
+    contact_email: '',
+  }, { name: 'Ada Lovelace', email: '' }, { openInsuredCount: 2 }), false);
 });
 
 test('SQL73 empty-email is_homeowner match-all is ignored and raw tokens are stripped', () => {
@@ -386,11 +407,35 @@ test('empty-email homeowner cannot mint another insured party', async () => {
         payee_name: 'Other Insured',
         contact_email: 'other@example.com',
       }),
+      openInsuredCount: 2,
     }),
   });
   assert.equal(result.ok, false);
   assert.equal(result.statusCode, 403);
   assert.equal(result.error, 'not_your_signature');
+});
+
+test('sole open insured on the authorized check can mint without email/name match', async () => {
+  const result = await runHomeownerLedgerEndorseLink({
+    token: LEDGER_TOKEN,
+    endorsementId: ENDORSE_INSURED,
+    spoof: {},
+    client: mintClient({
+      doc: claimDoc({
+        token: { homeowner_email: 'invite@example.com', homeowner_name: 'Ada Lovelace' },
+        homeowner: { name: 'Ada Lovelace', email: 'invite@example.com' },
+      }),
+      row: endorsementRow({
+        payee_name: 'JOHN SMITH AND JANE SMITH',
+        contact_email: 'payee@example.com',
+        check_number: '271682',
+      }),
+      openInsuredCount: 1,
+    }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.statusCode, 200);
+  assert.match(result.sign_url, /^\/endorse\?token=existing-endorse-token/);
 });
 
 test('source still does not call remint or rewrite SQL73', () => {

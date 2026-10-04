@@ -61,6 +61,7 @@
         "aws/tests/homeowner-ledger-view-contract.test.mjs",
         "aws/tests/homeowner-ledger-view-contract-sql.test.mjs",
         "aws/tests/homeowner-ledger-endorse-link.test.mjs",
+        "aws/tests/homeowner-ledger-document-sign-link.test.mjs",
         "ops/release-locks/tests/homeowner-ops-staging-invariants.test.mjs"
       ],
       "evidence": "ops/deployment-guard/homeowner-ops-staging-accepted.json",
