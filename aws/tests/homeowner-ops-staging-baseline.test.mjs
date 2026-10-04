@@ -143,18 +143,27 @@ test('SQL73 source remains the accepted staging function and still forces pendin
 
 test('homeowner handler still mints /h/ledger and keeps remint disabled', () => {
   const evidence = loadEvidence();
-  assert.equal(sha256(HOMEOWNER_REL), evidence.source_pins.homeowner_handler_sha256);
+  assert.equal(
+    evidence.source_pins.homeowner_handler_sha256,
+    'fa995062af8b98b2da298e2636606e9bb9726b3c25d6df3c800252dd59362dfd',
+  );
+  assert.notEqual(sha256(HOMEOWNER_REL), evidence.source_pins.homeowner_handler_sha256);
   const handler = read(HOMEOWNER_REL);
   assert.match(handler, /\$\{origin\}\/h\/ledger\/\$\{tokenRow\.token\}/);
   assert.match(handler, /pending_signatures: \[\]/);
   assert.match(handler, /handleHomeownerLedgerSignLink is not/);
   assert.match(handler, /aws_public_homeowner_ledger_remint_signer/);
+  assert.match(handler, /handleHomeownerLedgerEndorseLink/);
+  assert.match(handler, /homeowner-ledger-endorse-link|runHomeownerLedgerEndorseLink/);
   const page = read(PAGE_REL);
   assert.match(page, /PendingEndorsementsPanel/);
   assert.match(page, /Checks awaiting signature/);
+  assert.match(page, /Review & Sign Check/);
   assert.match(page, /homeowner-ledger-view/);
+  assert.match(page, /homeowner-ledger-endorse-link/);
   const app = read(APP_REL);
   assert.match(app, /path="\/ledger\/:token"/);
+  assert.match(app, /path="\/h\/ledger\/:token"/);
 });
 
 test('an existing valid Homeowner token still loads the ledger successfully', async () => {
@@ -224,6 +233,8 @@ test('an existing valid Homeowner token still loads the ledger successfully', as
   assert.deepEqual(result.pending_signatures, []);
   assert.equal(result.pending_endorsements.length, 1);
   assert.equal(result.pending_endorsements[0].parties[0].payee_type, 'insured');
+  assert.equal(result.pending_endorsements[0].parties[0].sign_url, null);
+  assert.equal(result.pending_endorsements[0].parties[0].can_sign, true);
   assert.equal(result.pending_endorsements[0].parties[1].payee_type, 'mortgage_company');
   assert.equal(result.pending_endorsements[0].parties[1].sign_url, null);
   assert.equal(result.money, null);
@@ -272,6 +283,8 @@ test('homeowner endorsement helper still withholds mortgage/other payee sign URL
   });
   assert.equal(pending.length, 1);
   assert.equal(pending[0].parties.length, 2);
-  assert.equal(pending[0].parties[0].sign_url, '/endorse?token=ins-token');
+  assert.equal(pending[0].parties[0].sign_url, null);
+  assert.equal(pending[0].parties[0].can_sign, true);
   assert.equal(pending[0].parties[1].sign_url, null);
+  assert.doesNotMatch(JSON.stringify(pending), /ins-token|mtg-token|pa-token/);
 });

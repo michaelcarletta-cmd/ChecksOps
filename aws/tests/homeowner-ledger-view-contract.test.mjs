@@ -208,11 +208,14 @@ test('pending endorsements keep insured vs mortgage distinction and exclude inte
   const insured = pending[0].parties.find((row) => row.payee_type === 'insured');
   const mortgage = pending[0].parties.find((row) => row.payee_type === 'mortgage_company');
   assert.equal(insured.is_homeowner, true);
-  assert.equal(insured.sign_url, '/endorse?token=endorse-ada');
+  assert.equal(insured.can_sign, true);
+  assert.equal(insured.sign_url, null);
   assert.equal(mortgage.is_homeowner, false);
+  assert.equal(mortgage.can_sign, false);
   assert.equal(mortgage.sign_url, null);
   assert.ok(!JSON.stringify(pending).includes('Internal PA'));
   assert.ok(!JSON.stringify(pending).includes('endorse-mtg-secret'));
+  assert.ok(!JSON.stringify(pending).includes('endorse-ada'));
   assert.ok(!JSON.stringify(pending).includes(CHECK_OTHER));
 });
 
@@ -307,13 +310,15 @@ test('valid claim-linked token returns mode claim with homeowner, claim, totals,
   assert.equal(result.events.length, 1);
   assert.equal(result.events[0].event_type, 'check_received');
   assert.equal(result.pending_endorsements[0].parties[0].payee_type, 'insured');
+  assert.equal(result.pending_endorsements[0].parties[0].can_sign, true);
+  assert.equal(result.pending_endorsements[0].parties[0].sign_url, null);
   assert.equal(result.pending_endorsements[0].parties[1].payee_type, 'mortgage_company');
   assert.equal(result.money, null);
   assert.equal(result.allow_deductible_payment, false);
   assert.deepEqual(result.deductible_payments, []);
   assert.deepEqual(result.pending_signatures, []);
   const encoded = JSON.stringify(result);
-  assert.doesNotMatch(encoded, /wallet|routing_number|bank_last_four|Secret Bank|provider/i);
+  assert.doesNotMatch(encoded, /wallet|routing_number|bank_last_four|Secret Bank|provider|endorse-ada/i);
 });
 
 test('thin claim-linked RPC is enriched from tenant+claim scoped records', async () => {
@@ -410,8 +415,10 @@ test('thin claim-linked RPC is enriched from tenant+claim scoped records', async
   assert.equal(result.events[0].event_type, 'deposited');
   assert.ok(!('tenant_id' in result.events[0]));
   assert.equal(result.pending_endorsements[0].parties.length, 2);
+  assert.equal(result.pending_endorsements[0].parties[0].sign_url, null);
+  assert.equal(result.pending_endorsements[0].parties[0].can_sign, true);
   assert.equal(result.money, null);
-  assert.doesNotMatch(JSON.stringify(result), /mtg-secret|pa-secret|wallet_balance/);
+  assert.doesNotMatch(JSON.stringify(result), /mtg-secret|pa-secret|endorse-ada|wallet_balance/);
 });
 
 test('other tenant, other claim, invalid, expired, and revoked tokens fail closed', async () => {
@@ -560,6 +567,7 @@ test('source does not rewrite historical SQL 68 or public routes', () => {
   assert.match(handler, /sign_url: `\$\{origin\}\/sign\?token=\$\{raw\}`/);
   assert.doesNotMatch(handler, /allow_deductible_payment: true/);
   assert.match(app, /path="\/ledger\/:token"/);
+  assert.match(app, /path="\/h\/ledger\/:token"/);
   assert.doesNotMatch(app, /CHANGED_BY_VIEW_CONTRACT/);
   assert.doesNotMatch(handler, /CHANGED_BY_SQL72_CLAIM_OK/);
   assert.doesNotMatch(handler, /CHANGED_BY_SQL73_LAST_VIEWED/);
