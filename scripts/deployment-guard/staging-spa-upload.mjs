@@ -33,7 +33,9 @@ function sha256Text(text) {
 }
 
 function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+  // Vite entry hashes are [A-Za-z0-9_-]. A character class of [^"'\\s] treats
+  // "s" as a forbidden literal and rejects fresh builds such as index-4s1EuDgJ.js.
+  const match = String(html || '').match(/\/assets\/index-[A-Za-z0-9_-]+\.js/);
   return match ? match[0] : null;
 }
 
