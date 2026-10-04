@@ -14,6 +14,7 @@ import {
   AUTHORIZED_SQL72,
   AUTHORIZED_SQL73,
   AUTHORIZED_SQL74,
+  AUTHORIZED_SQL75,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
@@ -1073,6 +1074,170 @@ test('SQL 74 altered embedded artifact fails closed', async () => {
   const tampered = path.join(os.tmpdir(), `sql74-tampered-${process.pid}.sql`);
   fs.writeFileSync(tampered, `${fs.readFileSync(SQL74_FILE, 'utf8')}\n-- altered\n`);
   const altered = await sql74Handler(mockSql71Connect(), { sqlFile74: tampered })(sql74AuthEvent());
+  assert.equal(altered.ok, false);
+  assert.equal(altered.code, CODES.SQL_COLLISION);
+  assert.match(altered.message, /embedded SQL file SHA256 does not match/);
+});
+
+const SQL75_FILE = path.join(ROOT, AUTHORIZED_SQL75.filename);
+const SQL75_SQL73_DEF = 'CREATE FUNCTION public.aws_public_homeowner_ledger_by_token() SQL75-LIVE';
+const SQL75_SQL74_DEF = 'CREATE FUNCTION public.aws_public_homeowner_ledger_endorse_capability() SQL74-STABLE';
+const SQL75_POLICY = {
+  policyname: 'aws_write_check_files',
+  cmd: 'ALL',
+  roles: '{authenticated}',
+  qual: 'public.aws_can_write_check(check_intake_item_id)',
+  with_check: 'public.aws_can_write_check(check_intake_item_id)',
+};
+const SQL75_CATALOG_BEFORE = {
+  table_grants: [
+    { grantee: 'authenticated', privilege: 'DELETE' },
+    { grantee: 'authenticated', privilege: 'SELECT' },
+    { grantee: 'checksops', privilege: 'DELETE' },
+    { grantee: 'checksops', privilege: 'SELECT' },
+  ],
+  column_update_grants: [],
+  rls: { relrowsecurity: true, relforcerowsecurity: false },
+  policies: [SQL75_POLICY],
+};
+const SQL75_CATALOG_AFTER = {
+  ...SQL75_CATALOG_BEFORE,
+  column_update_grants: [
+    { grantee: 'authenticated', column: 'signature_request_id' },
+    { grantee: 'checksops', column: 'signature_request_id' },
+  ],
+};
+
+function sql75AuthEvent(overrides = {}) {
+  const expectedLive = overrides.expected_live_definition_sha256
+    || AUTHORIZED_SQL75.expected_live_definition_sha256;
+  const oneUse = overrides.one_use_id || `sql75-exec-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return {
+    action: 'authorize',
+    workstream_id: 'sr-check-files-sig-link-grant-6f10',
+    branch: 'cursor/sr-check-files-sig-link-grant-6f10',
+    commit: AUTHORIZED_SQL75.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+    owned_components: [AUTHORIZED_SQL75.filename],
+    filename: AUTHORIZED_SQL75.filename,
+    migration_id: AUTHORIZED_SQL75.migration_id,
+    source_sha256: AUTHORIZED_SQL75.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL75.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: oneUse,
+    expiry: '2026-10-04T17:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-04T15:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL75,
+      expected_live_definition_sha256: expectedLive,
+      one_use_id: oneUse,
+    }),
+    ...overrides,
+  };
+}
+
+function mockSql75Connect({
+  sql73Def = SQL75_SQL73_DEF,
+  catalogAfter = SQL75_CATALOG_AFTER,
+} = {}) {
+  let applied = false;
+  const client = {
+    applied() { return applied; },
+    async query(sql, params = []) {
+      const text = String(sql);
+      if (text.includes('GRANT UPDATE (signature_request_id) ON TABLE public.check_files')) {
+        applied = true;
+        return { rows: [] };
+      }
+      if (text.includes('FROM pg_proc') || text.includes('pg_get_functiondef')) {
+        const name = String(params?.[1] || '');
+        if (name.includes('aws_public_homeowner_ledger_by_token')) {
+          return { rows: [{ def: sql73Def }] };
+        }
+        return { rows: [{ def: SQL75_SQL74_DEF }] };
+      }
+      if (text.includes('tablename = \'check_files\'') || text.includes("tablename = 'check_files'") || text.includes('AS catalog')) {
+        return { rows: [{ catalog: applied ? catalogAfter : SQL75_CATALOG_BEFORE }] };
+      }
+      throw new Error(`unexpected query: ${text.slice(0, 160)}`);
+    },
+    async end() {},
+  };
+  return async () => client;
+}
+
+function sql75Handler(connect, extra = {}) {
+  const consumed = path.join(os.tmpdir(), `sql75-exec-consumed-${process.pid}-${Date.now()}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = consumed;
+  process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
+  return createHandler({
+    connect,
+    now: () => Date.parse('2026-10-04T15:00:00.000Z'),
+    sqlFile75: SQL75_FILE,
+    expectedSql75LiveHash: hashSqlDefinition(SQL75_SQL73_DEF),
+    ...extra,
+  });
+}
+
+test('SQL 75 authorize inspects check_files catalog and does not apply', async () => {
+  const connect = mockSql75Connect();
+  const handler = sql75Handler(connect);
+  const result = await handler(sql75AuthEvent());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'authorize');
+  assert.equal(result.details.receipt.sql_file, AUTHORIZED_SQL75.filename);
+  assert.equal(result.details.receipt.aws_write_check_files.policyname, 'aws_write_check_files');
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('SQL 75 apply grants only signature_request_id and keeps SQL73/SQL74', async () => {
+  const connect = mockSql75Connect();
+  const handler = sql75Handler(connect);
+  const result = await handler(sql75AuthEvent({ action: 'apply' }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'applied');
+  assert.equal(result.details.grants.column, 'signature_request_id');
+  assert.equal(result.details.grants.table_wide_update, false);
+  assert.equal(result.details.receipt.sql73_hash, hashSqlDefinition(SQL75_SQL73_DEF));
+  const client = await connect();
+  assert.equal(client.applied(), true);
+});
+
+test('SQL 75 apply refuses when live SQL 73 definition drifted', async () => {
+  const connect = mockSql75Connect({ sql73Def: 'CREATE FUNCTION drifted()' });
+  const handler = sql75Handler(connect);
+  const result = await handler(sql75AuthEvent({ action: 'apply' }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('SQL 75 apply refuses table-wide UPDATE after grant', async () => {
+  const connect = mockSql75Connect({
+    catalogAfter: {
+      ...SQL75_CATALOG_AFTER,
+      table_grants: [
+        ...SQL75_CATALOG_AFTER.table_grants,
+        { grantee: 'checksops', privilege: 'UPDATE' },
+      ],
+    },
+  });
+  const handler = sql75Handler(connect);
+  const result = await handler(sql75AuthEvent({ action: 'apply' }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+});
+
+test('SQL 75 altered embedded artifact fails closed', async () => {
+  const tampered = path.join(os.tmpdir(), `sql75-tampered-${process.pid}.sql`);
+  fs.writeFileSync(tampered, `${fs.readFileSync(SQL75_FILE, 'utf8')}\n-- altered\n`);
+  const altered = await sql75Handler(mockSql75Connect(), { sqlFile75: tampered })(sql75AuthEvent());
   assert.equal(altered.ok, false);
   assert.equal(altered.code, CODES.SQL_COLLISION);
   assert.match(altered.message, /embedded SQL file SHA256 does not match/);

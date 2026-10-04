@@ -112,6 +112,22 @@ export const AUTHORIZED_SQL74 = Object.freeze({
   expected_sql73_definition_sha256: '42c83390575d90d39326aee61ccaf87851fd5320e278d6c7f687137245b62166',
 });
 
+export const AUTHORIZED_SQL75 = Object.freeze({
+  filename: 'aws/workflows/sql/75_signature_request_check_files_link_grant.sql',
+  migration_id: '75_signature_request_check_files_link_grant',
+  commit: 'cccccccccccccccccccccccccccccccccccccccc',
+  source_sha256: 'cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283',
+  intended_replacement_sha256: 'cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283',
+  expected_live_definition_sha256: '42c83390575d90d39326aee61ccaf87851fd5320e278d6c7f687137245b62166',
+  sql73_function_identity: 'public.aws_public_homeowner_ledger_by_token(text)',
+  sql74_function_identities: Object.freeze([
+    'public.aws_public_homeowner_ledger_endorse_capability(text,uuid)',
+    'public.aws_public_homeowner_pending_signatures(text)',
+    'public.aws_public_homeowner_document_sign_capability(text,uuid)',
+  ]),
+  policy_name: 'aws_write_check_files',
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
@@ -121,9 +137,16 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL72,
   AUTHORIZED_SQL73,
   AUTHORIZED_SQL74,
+  AUTHORIZED_SQL75,
 ]);
 
 export function resolveAuthorizedMigration(input = {}) {
+  if (
+    input.filename === AUTHORIZED_SQL75.filename
+    || input.migration_id === AUTHORIZED_SQL75.migration_id
+  ) {
+    return AUTHORIZED_SQL75;
+  }
   if (
     input.filename === AUTHORIZED_SQL74.filename
     || input.migration_id === AUTHORIZED_SQL74.migration_id
@@ -195,6 +218,10 @@ export function isHomeownerLedgerViewLastViewedBestEffort(input = {}) {
 
 export function isHomeownerSigningRlsBoundary(input = {}) {
   return resolveAuthorizedMigration(input) === AUTHORIZED_SQL74;
+}
+
+export function isSignatureRequestCheckFilesLinkGrant(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_SQL75;
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
@@ -346,6 +373,20 @@ export function evaluateSqlExecutorAuthorization(input = {}, opts = {}) {
       {
         expected_live_definition_sha256: input.expected_live_definition_sha256 || null,
         required_live_definition_sha256: AUTHORIZED_SQL74.expected_live_definition_sha256,
+      },
+    ));
+  }
+  if (
+    allowed
+    && allowed === AUTHORIZED_SQL75
+    && input.expected_live_definition_sha256 !== AUTHORIZED_SQL75.expected_live_definition_sha256
+  ) {
+    errors.push(errorEntry(
+      CODES.SQL_COLLISION,
+      'SQL 75 authority requires the current live SQL 73 definition hash',
+      {
+        expected_live_definition_sha256: input.expected_live_definition_sha256 || null,
+        required_live_definition_sha256: AUTHORIZED_SQL75.expected_live_definition_sha256,
       },
     ));
   }
