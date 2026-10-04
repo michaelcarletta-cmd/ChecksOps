@@ -1089,20 +1089,29 @@ const SQL75_POLICY = {
   qual: 'public.aws_can_write_check(check_intake_item_id)',
   with_check: 'public.aws_can_write_check(check_intake_item_id)',
 };
+const SQL75_PREEXISTING_COLUMNS = [
+  'category', 'description', 'file_name', 'file_path', 'file_size', 'file_type', 'source',
+];
 const SQL75_CATALOG_BEFORE = {
   table_grants: [
     { grantee: 'authenticated', privilege: 'DELETE' },
+    { grantee: 'authenticated', privilege: 'INSERT' },
     { grantee: 'authenticated', privilege: 'SELECT' },
     { grantee: 'checksops', privilege: 'DELETE' },
+    { grantee: 'checksops', privilege: 'INSERT' },
     { grantee: 'checksops', privilege: 'SELECT' },
   ],
-  column_update_grants: [],
+  column_update_grants: SQL75_PREEXISTING_COLUMNS.flatMap((column) => ([
+    { grantee: 'authenticated', column },
+    { grantee: 'checksops', column },
+  ])),
   rls: { relrowsecurity: true, relforcerowsecurity: false },
   policies: [SQL75_POLICY],
 };
 const SQL75_CATALOG_AFTER = {
   ...SQL75_CATALOG_BEFORE,
   column_update_grants: [
+    ...SQL75_CATALOG_BEFORE.column_update_grants,
     { grantee: 'authenticated', column: 'signature_request_id' },
     { grantee: 'checksops', column: 'signature_request_id' },
   ],
@@ -1216,6 +1225,22 @@ test('SQL 75 apply refuses when live SQL 73 definition drifted', async () => {
   assert.equal(result.code, CODES.SQL_COLLISION);
   const client = await connect();
   assert.equal(client.applied(), false);
+});
+
+test('SQL 75 apply refuses an unexpected extra column grant', async () => {
+  const connect = mockSql75Connect({
+    catalogAfter: {
+      ...SQL75_CATALOG_AFTER,
+      column_update_grants: [
+        ...SQL75_CATALOG_AFTER.column_update_grants,
+        { grantee: 'checksops', column: 'uploaded_by' },
+      ],
+    },
+  });
+  const handler = sql75Handler(connect);
+  const result = await handler(sql75AuthEvent({ action: 'apply' }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
 });
 
 test('SQL 75 apply refuses table-wide UPDATE after grant', async () => {

@@ -950,11 +950,22 @@ SELECT jsonb_build_object(
 ) AS catalog
 `;
 
+const SQL75_PREEXISTING_UPDATE_COLUMNS = Object.freeze([
+  'category',
+  'description',
+  'file_name',
+  'file_path',
+  'file_size',
+  'file_type',
+  'source',
+]);
+
 function sql75GrantsConstrained(catalog) {
   const tableGrants = catalog?.table_grants || [];
   const columnGrants = catalog?.column_update_grants || [];
   const tableUpdate = tableGrants.filter((row) => row.privilege === 'UPDATE');
-  const extraColumns = columnGrants.filter((row) => row.column !== 'signature_request_id');
+  const allowedColumns = new Set(['signature_request_id', ...SQL75_PREEXISTING_UPDATE_COLUMNS]);
+  const extraColumns = columnGrants.filter((row) => !allowedColumns.has(row.column));
   const publicOrAnon = [
     ...tableGrants.filter((row) => row.grantee === 'PUBLIC' || row.grantee === 'anon'),
     ...columnGrants.filter((row) => row.grantee === 'PUBLIC' || row.grantee === 'anon'),
@@ -963,7 +974,7 @@ function sql75GrantsConstrained(catalog) {
   const hasAuthenticatedCol = columnGrants.some((row) => row.grantee === 'authenticated' && row.column === 'signature_request_id');
   const writePolicy = (catalog?.policies || []).find((row) => row.policyname === 'aws_write_check_files');
   if (tableUpdate.length || extraColumns.length || publicOrAnon.length || !hasChecksopsCol || !hasAuthenticatedCol) {
-    return fail(CODES.UNRELATED_MUTATION, 'SQL 75 check_files grants are not constrained to signature_request_id', {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 75 check_files grants are not constrained to signature_request_id plus previously accepted columns', {
       table_update: tableUpdate,
       extra_columns: extraColumns,
       public_or_anon: publicOrAnon,
