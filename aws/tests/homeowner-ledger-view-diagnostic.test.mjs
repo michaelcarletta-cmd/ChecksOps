@@ -113,8 +113,8 @@ test('forward-compose patches the live HomeownerLedger chunk and mints new hashe
     'const q={functions:{invoke:async()=>({})}};',
     'export default function HomeownerLedger(){',
     'const[l,s]=u.useState(!0);const[d,c]=u.useState(null);const[t,n]=u.useState(null);',
-    'const load=async()=>{try{const{data:x,error:h}=await q.functions.invoke("homeowner-ledger-view",{body:{token:a}});',
-    'if(h)throw h;if(x!=null&&x.error)throw new Error(x.error);c(x)}catch(x){n(x.message||"Could not load ledger")}};',
+    'const load=async()=>{n(!0),u(null);try{const{data:x,error:h}=await q.functions.invoke("homeowner-ledger-view",{body:{token:a}});',
+    'if(h)throw h;if(x!=null&&x.error)throw new Error(x.error);c(x)}catch(x){n(x.message||"Could not load ledger")}finally{n(!1)}};',
     'return t?i.jsxs("div",{children:[i.jsx("div",{className:"font-semibold",children:"This link isn\'t working"}),',
     'i.jsx("p",{className:"text-sm text-muted-foreground",children:t==="revoked"?"Your claim team has ended access to this link.":',
     't==="expired"?"This link has expired. Ask your claim team for a new one.":"Ask your claim team to resend your ledger link."})]}):null}',
@@ -149,6 +149,8 @@ test('forward-compose patches the live HomeownerLedger chunk and mints new hashe
   assert.match(composed.homeowner_ledger_js, /Diagnostic: /);
   assert.match(composed.homeowner_ledger_js, /__hoFormatLedgerViewDiag/);
   assert.match(composed.homeowner_ledger_js, /globalThis\.__hoLedgerViewErr/);
+  assert.match(composed.homeowner_ledger_js, /homeowner-ledger-view-diagnostic/);
+  assert.match(composed.homeowner_ledger_js, /globalThis\.__hoLedgerViewErr=null/);
   assert.match(composed.homeowner_ledger_js, /Ask your claim team to resend your ledger link/);
   assert.doesNotMatch(composed.homeowner_ledger_js, /Authorization/);
   assert.doesNotMatch(composed.homeowner_ledger_js, /tenant_id/);

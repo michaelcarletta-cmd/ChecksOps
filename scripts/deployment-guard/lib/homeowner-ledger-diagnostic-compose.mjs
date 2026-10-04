@@ -100,22 +100,23 @@ function patchHomeownerLedgerJs(liveJs) {
     '}catch($1){$2($1.message||"Could not load ledger");globalThis.__hoLedgerViewErr=$1}',
   );
 
+  const resetRe = /([A-Za-z_$][\w$]*)\(!0\),([A-Za-z_$][\w$]*)\(null\);try\{const\{data:/;
+  if (resetRe.test(next) && !next.includes('globalThis.__hoLedgerViewErr=null;try{const{data:')) {
+    next = next.replace(resetRe, '$1(!0),$2(null);globalThis.__hoLedgerViewErr=null;try{const{data:');
+  }
+
   const copy = 'Ask your claim team to resend your ledger link.';
   if (!next.includes(copy)) {
     throw new Error('live HomeownerLedger generic error copy is missing');
   }
-  const diagnosticAppend = `${copy}"+(function(){var d=__hoFormatLedgerViewDiag(globalThis.__hoLedgerViewErr);return d?"\\n\\n"+d:""})()+"`;
-  if (!next.includes(diagnosticAppend)) {
+  const jsxMatch = next.match(/([A-Za-z_$][\w$]*)\.jsx\("p",\{className:"text-sm text-muted-foreground",children:[^;]*Ask your claim team to resend your ledger link\."\}\)/);
+  if (jsxMatch && !next.includes('data-testid":"homeowner-ledger-view-diagnostic"')) {
+    const jsxId = jsxMatch[1];
+    const sibling = `,(function(){var d=__hoFormatLedgerViewDiag(globalThis.__hoLedgerViewErr);return d?${jsxId}.jsx("p",{className:"text-xs text-muted-foreground font-mono","data-testid":"homeowner-ledger-view-diagnostic",children:d}):null})()`;
+    next = next.replace(jsxMatch[0], `${jsxMatch[0]}${sibling}`);
+  } else if (!next.includes('__hoFormatLedgerViewDiag(globalThis.__hoLedgerViewErr)')) {
+    const diagnosticAppend = `${copy}"+(function(){var d=__hoFormatLedgerViewDiag(globalThis.__hoLedgerViewErr);return d?"\\n\\n"+d:""})()+"`;
     next = next.replace(copy, diagnosticAppend);
-  }
-
-  const errorClass = 'text-sm text-muted-foreground",children:';
-  const errorClassWrapped = 'text-sm text-muted-foreground whitespace-pre-wrap",children:';
-  if (next.includes('Your claim team has ended access to this link.') && next.includes(errorClass) && !next.includes(errorClassWrapped)) {
-    const classAt = next.lastIndexOf(errorClass, next.indexOf('Your claim team has ended access to this link.'));
-    if (classAt >= 0) {
-      next = `${next.slice(0, classAt)}${errorClassWrapped}${next.slice(classAt + errorClass.length)}`;
-    }
   }
 
   for (const leak of FORBIDDEN_DIAGNOSTIC_LEAKS) {
