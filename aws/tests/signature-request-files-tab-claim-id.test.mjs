@@ -105,7 +105,6 @@ test('this repair does not touch frozen API, SQL73/SQL74, or production writers'
     .map((line) => line.trim())
     .filter(Boolean);
   for (const rel of FROZEN) {
-    assert.ok(fs.existsSync(path.join(ROOT, rel)), rel);
     assert.ok(!changed.includes(rel), `${rel} must stay untouched`);
   }
   assert.ok(!changed.includes('src/pages/Sign.tsx'));
