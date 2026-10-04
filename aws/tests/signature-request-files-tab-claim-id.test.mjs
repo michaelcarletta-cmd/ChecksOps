@@ -85,12 +85,15 @@ test('browser write adapter still permits only signature_requests and signature_
 
 test('create → signer → send path remains intact', () => {
   const wizard = read('src/components/claim-detail/SignatureRequests.tsx');
-  assert.match(wizard, /\.from\("signature_requests"\)\s*\.insert\(\{/);
-  assert.match(wizard, /claim_id: claimId/);
-  assert.match(wizard, /check_intake_item_id: checkIntakeItemId \|\| null/);
-  assert.match(wizard, /\.from\("signature_signers"\)\s*\.insert\(signersData\)/);
+  assert.match(wizard, /buildSendSignatureRequestCreatePayload\(/);
   assert.match(wizard, /functions\.invoke\("send-signature-request"/);
-  assert.match(wizard, /body: \{ requestId: request\.id, skipEmail \}/);
+  assert.match(wizard, /documentName: docName/);
+  assert.match(wizard, /documentPath: generatedDocPath/);
+  assert.match(wizard, /fieldData: placedFields/);
+  assert.match(wizard, /skipEmail/);
+  assert.doesNotMatch(wizard, /\.from\("signature_requests"\)\s*\.insert\(/);
+  assert.doesNotMatch(wizard, /\.from\("signature_signers"\)\s*\.insert\(/);
+  assert.match(wizard, /body: \{ requestId, skipEmail: false, targetSignerIds \}/);
   assert.match(read('src/App.tsx'), /path="\/sign"/);
 });
 
