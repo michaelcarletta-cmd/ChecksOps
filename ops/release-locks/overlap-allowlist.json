@@ -1346,6 +1346,62 @@
       "reason": "This workstream adds reviewed overlap exceptions for the Signature Request client allowlist restore. PR #654 also edits overlap-allowlist.json on the parent Homeowner lineage. This exception is limited to that single file.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 658,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This Files-tab claim-id repair only refreshes the partner-sharing tree hash because CheckCommandCenter is in that lock group. PR #658 also edits locked-components.json for the Signature Request allowlist restore. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 658,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "This Files-tab claim-id repair adds reviewed overlap exceptions. PR #658 also edits overlap-allowlist.json for the Signature Request allowlist restore. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 657,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This Files-tab claim-id repair only refreshes the partner-sharing tree hash after passing check.claim_id into CheckFilesSection. PR #657 also edits locked-components.json on the parent Homeowner lineage. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 655,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This Files-tab claim-id repair only refreshes the partner-sharing tree hash after passing check.claim_id into CheckFilesSection. PR #655 also edits locked-components.json on the parent Homeowner lineage. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 654,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This Files-tab claim-id repair only refreshes the partner-sharing tree hash after passing check.claim_id into CheckFilesSection. PR #654 also edits locked-components.json on the parent Homeowner lineage. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 649,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This Files-tab claim-id repair only refreshes the partner-sharing tree hash after passing check.claim_id into CheckFilesSection. PR #649 also edits locked-components.json for the production SPA baseline. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 631,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "This Files-tab claim-id repair only refreshes the partner-sharing tree hash after passing check.claim_id into CheckFilesSection. PR #631 also edits locked-components.json for Mortgage Ops. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 628,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "This Files-tab claim-id repair only passes the already-loaded check.claim_id into CheckFilesSection and always renders the Signature Requests region. PR #628 also edits CheckCommandCenter.tsx. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #628.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
