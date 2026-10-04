@@ -4,6 +4,16 @@ import {
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
 import { toStorageObjectPath } from "@/lib/storagePath";
+import {
+  resolvePublicBrandingUrl as resolveBrandingUrl,
+  rewriteBrandingStorageFields,
+  rewriteSupabaseBrandingUrl,
+} from "@/lib/brandingPublicUrl";
+
+export {
+  brandingBucketForField,
+  isRawBrandingObjectPath,
+} from "@/lib/brandingPublicUrl";
 
 const storageError = (message: string, statusCode = 403) => ({
   message,
@@ -45,32 +55,15 @@ async function apiFetch(path: string, init: RequestInit, token?: string | null) 
 
 export function rewriteSupabaseStorageUrl(value: unknown): unknown {
   if (typeof value !== "string") return value;
-  const match = value.match(
-    /^https?:\/\/[^/]*supabase\.co\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/([^?]+)/i,
-  );
-  if (!match) return value;
-  const bucket = match[1];
-  const path = decodeURIComponent(match[2]);
-  if (bucket === "tenant-logos" || bucket === "email-assets" || bucket === "company-branding") {
-    return `${awsApiBaseUrl()}/storage/public?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
-  }
-  return value;
+  return rewriteSupabaseBrandingUrl(value, awsApiBaseUrl());
+}
+
+export function resolvePublicBrandingUrl(value: unknown, bucket: string): string | null {
+  return resolveBrandingUrl(value, bucket, awsApiBaseUrl());
 }
 
 export function rewriteStorageFields(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(rewriteStorageFields);
-  if (!value || typeof value !== "object") return rewriteSupabaseStorageUrl(value);
-  const out: Record<string, unknown> = {};
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof nested === "string" && /(_url|logoUrl)$/i.test(key)) {
-      out[key] = rewriteSupabaseStorageUrl(nested);
-    } else if (nested && typeof nested === "object") {
-      out[key] = rewriteStorageFields(nested);
-    } else {
-      out[key] = nested;
-    }
-  }
-  return out;
+  return rewriteBrandingStorageFields(value, awsApiBaseUrl());
 }
 
 export function createAwsStorageAdapter(opts: { getToken?: TokenGetter } = {}) {

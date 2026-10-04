@@ -31,9 +31,11 @@ import { useRef } from "react";
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { CheckAltTenantAccountCard } from "@/components/settings/CheckAltTenantAccountCard";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
+import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnouncementsManager";
+import { MortgageAgentsPanel } from "@/components/admin/MortgageAgentsPanel";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
@@ -209,6 +211,7 @@ export default function AdminTenants() {
           <TabsList className="mb-6 w-full justify-start overflow-x-auto flex-nowrap">
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
+            <TabsTrigger value="mortgage-agents"><Briefcase className="w-4 h-4 mr-1" /> Mortgage Agents</TabsTrigger>
             <TabsTrigger value="platform-finance"><Landmark className="w-4 h-4 mr-1" /> Platform Finance</TabsTrigger>
             <TabsTrigger value="checkalt"><Banknote className="w-4 h-4 mr-1" /> CheckAlt</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
@@ -251,6 +254,9 @@ export default function AdminTenants() {
           </TabsContent>
           <TabsContent value="announcements">
             <PlatformAnnouncementsManager />
+          </TabsContent>
+          <TabsContent value="mortgage-agents">
+            <MortgageAgentsPanel />
           </TabsContent>
 
         </Tabs>
@@ -362,7 +368,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="branding" className="mt-6 space-y-6">
             <BrandingTab tenant={tenant} onUpdated={onUpdated} />
-            <EmailSenderSettings />
+            <EmailSenderSettings showSendingDomain={true} />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             <ComplianceSettings tenantId={tenant.id} />
@@ -558,7 +564,7 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
           />
           {logoUrl ? (
             <div className="flex items-center gap-3 rounded border border-border bg-muted/30 p-2">
-              <img src={logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
+              <img src={resolvePublicBrandingUrl(logoUrl, "tenant-logos") || logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
               <div className="flex gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
                   {uploading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Upload className="w-3 h-3 mr-1" />} Replace

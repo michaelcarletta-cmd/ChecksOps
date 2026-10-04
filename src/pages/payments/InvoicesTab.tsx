@@ -19,6 +19,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { supabase } from "@/integrations/supabase/client";
+import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban, Settings,
@@ -251,7 +252,7 @@ export function InvoicesTab() {
                 {branding?.invoice_letterhead_url && (
                   <div className="mb-4 flex justify-center border-b pb-4">
                     <img 
-                      src={branding.invoice_letterhead_url} 
+                      src={resolvePublicBrandingUrl(branding.invoice_letterhead_url, "company-branding") || branding.invoice_letterhead_url} 
                       alt="Invoice Letterhead" 
                       className="max-h-16 object-contain opacity-80" 
                     />
