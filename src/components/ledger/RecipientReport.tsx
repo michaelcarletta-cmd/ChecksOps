@@ -12,6 +12,12 @@ import { Label } from "@/components/ui/label";
 import { Download, Search, Users, Pencil } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { fetchTenantPaymentLedgerRows } from "@/lib/payments/tenantPaymentAccuracyQueries";
+import {
+  filterRowsBySettlementDate,
+  recipientAggregateKey,
+  type LedgerPaymentRow,
+} from "@/lib/payments/tenantPaymentAccuracy";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -110,30 +116,16 @@ export function RecipientReport() {
   }, [dateRange]);
 
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["recipient-report", tenant?.id, dateRange],
+    queryKey: ["recipient-report", tenant?.id],
     enabled: !!tenant?.id,
-    queryFn: async () => {
-      let q = (supabase as any)
-        .from("disbursement_splits")
-        .select(`
-          id, amount, status, method, recipient_name, recipient_type, created_at, settled_at,
-          stakeholder_accounts (id, nickname, custname, account_type, chk_acct)
-        `)
-        .eq("tenant_id", tenant!.id)
-        .neq("status", "pending")
-        .order("created_at", { ascending: false });
-      if (dateFilters) {
-        q = q.gte("created_at", dateFilters.from.toISOString())
-             .lte("created_at", dateFilters.to.toISOString());
-      }
-      const { data, error } = await q;
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchTenantPaymentLedgerRows(supabase as any, tenant!.id),
   });
 
   const normalized = useMemo(() => {
-    return (rows as any[]).map((r) => {
+    return filterRowsBySettlementDate(
+      (rows as LedgerPaymentRow[]).filter((r) => r.direction === "outgoing"),
+      dateFilters,
+    ).map((r) => {
       const acct = r.stakeholder_accounts;
       const name = acct?.nickname ?? acct?.custname ?? r.recipient_name ?? "—";
       const type = acct?.account_type ?? r.recipient_type ?? "other";
@@ -147,9 +139,13 @@ export function RecipientReport() {
         amount: Number(r.amount ?? 0),
         status: r.status,
         method: r.method ?? "ach",
+        aggregateKey: recipientAggregateKey({
+          ...r,
+          payer_tenant_id: tenant?.id ?? r.payer_tenant_id,
+        }),
       };
     });
-  }, [rows]);
+  }, [rows, dateFilters, tenant?.id]);
 
   const filtered = useMemo(() => normalized.filter((r) => {
     const matchSearch = !search || r.name.toLowerCase().includes(search.toLowerCase());
@@ -176,7 +172,7 @@ export function RecipientReport() {
     const acc: Record<string, { name: string; type: string; total: number; count: number; last: string }> = {};
     for (const r of filtered) {
       if (r.status !== "settled") continue;
-      const k = `${r.type}|${r.name}`;
+      const k = r.aggregateKey ?? `${r.type}|${r.name}`;
       if (!acc[k]) acc[k] = { name: r.name, type: r.type, total: 0, count: 0, last: r.date };
       acc[k].total += r.amount;
       acc[k].count += 1;
