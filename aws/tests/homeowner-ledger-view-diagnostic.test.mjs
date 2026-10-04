@@ -20,6 +20,7 @@ import {
   reconcileDiagnosticIndexToAcceptedRuntime,
   sha256Text,
 } from '../../scripts/deployment-guard/lib/homeowner-ledger-diagnostic-compose.mjs';
+import { entryFromHtml as stagingUploadEntryFromHtml } from '../../scripts/deployment-guard/staging-spa-upload.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const page = readFileSync(path.join(ROOT, 'src/pages/HomeownerLedger.tsx'), 'utf8');
@@ -155,6 +156,10 @@ test('restore retargets a duplicated diagnostic index.html back to the accepted 
     expectedIndexSha256: sha256Text(accepted),
     diagnosticEntry: '/assets/index-jz3OgxyD.js',
   }), /drifted from the diagnostic entry/);
+  assert.equal(
+    stagingUploadEntryFromHtml(restored.index_html),
+    '/assets/index-BomgsBaq.js',
+  );
   assert.equal(ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC.entry_bundle, '/assets/index-BomgsBaq.js');
   assert.equal(
     ACCEPTED_STAGING_SPA_BEFORE_DIAGNOSTIC.index_html_sha256,
