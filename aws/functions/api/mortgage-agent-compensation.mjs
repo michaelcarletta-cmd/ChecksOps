@@ -113,6 +113,7 @@ async function handleMonthly(client, period) {
         count(*) FILTER (WHERE e.parent_entry_id IS NULL AND e.classification = 'initial')::int AS initial_count,
         count(*) FILTER (WHERE e.parent_entry_id IS NULL AND e.classification = 'additional')::int AS additional_count,
         count(*) FILTER (WHERE e.parent_entry_id IS NULL)::int AS files_worked,
+        coalesce(sum(e.amount_cents) FILTER (WHERE e.parent_entry_id IS NOT NULL), 0)::int AS adjustment_cents,
         coalesce(sum(e.amount_cents), 0)::int AS gross_owed_cents,
         coalesce(sum(e.amount_cents) FILTER (WHERE e.status = 'paid'), 0)::int AS paid_cents,
         coalesce(sum(e.amount_cents) FILTER (WHERE e.status IN ('earned', 'approved')), 0)::int AS balance_cents
@@ -128,6 +129,7 @@ async function handleMonthly(client, period) {
     initial_count: acc.initial_count + Number(row.initial_count || 0),
     additional_count: acc.additional_count + Number(row.additional_count || 0),
     files_worked: acc.files_worked + Number(row.files_worked || 0),
+    adjustment_cents: acc.adjustment_cents + Number(row.adjustment_cents || 0),
     gross_owed_cents: acc.gross_owed_cents + Number(row.gross_owed_cents || 0),
     paid_cents: acc.paid_cents + Number(row.paid_cents || 0),
     balance_cents: acc.balance_cents + Number(row.balance_cents || 0),
@@ -135,6 +137,7 @@ async function handleMonthly(client, period) {
     initial_count: 0,
     additional_count: 0,
     files_worked: 0,
+    adjustment_cents: 0,
     gross_owed_cents: 0,
     paid_cents: 0,
     balance_cents: 0,

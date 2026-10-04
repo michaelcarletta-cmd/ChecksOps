@@ -104,6 +104,8 @@ test('platform owner monthly totals stay bookkeeping-only', async () => {
   assert.equal(result.totals.balance_cents, 1500);
   assert.match(seen[0], /classification = 'initial'/);
   assert.match(seen[0], /classification = 'additional'/);
+  assert.match(seen[0], /parent_entry_id IS NOT NULL/);
+  assert.equal(result.totals.adjustment_cents, 0);
   assert.doesNotMatch(seen[0], /homeowner_name/);
 });
 
