@@ -46,10 +46,13 @@ export {
 };
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const SQL_DIR = path.join(ROOT, '..', 'sql');
-const SQL50_DOC = path.join(SQL_DIR, '50_exclude_mortgage_agent_compensation.sql');
-const SQL_TEMP = path.join(SQL_DIR, '50_temp_allowlist_trigger.sql');
-const SQL_RESTORE = path.join(SQL_DIR, '50_restore_sql47_trigger.sql');
+const SQL_DIR = [
+  path.join(ROOT, '..', 'sql'),
+  path.join(ROOT, 'sql'),
+].find((dir) => fs.existsSync(path.join(dir, '50_restore_sql47_trigger.sql')));
+const SQL50_DOC = path.join(SQL_DIR || ROOT, '50_exclude_mortgage_agent_compensation.sql');
+const SQL_TEMP = path.join(SQL_DIR || ROOT, '50_temp_allowlist_trigger.sql');
+const SQL_RESTORE = path.join(SQL_DIR || ROOT, '50_restore_sql47_trigger.sql');
 const consumed = new Set();
 
 export function sha256(text) {

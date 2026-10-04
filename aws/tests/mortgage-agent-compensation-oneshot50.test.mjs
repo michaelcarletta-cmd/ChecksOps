@@ -304,6 +304,17 @@ test('inspect does not exclude; confirmed apply uses allowlisted update and rest
   assert.equal(triggerPreservesPaidImmutability(triggerDef), true);
 });
 
+test('inspect helper and pack-and-create refuse apply', () => {
+  const invoke = fs.readFileSync(path.join(ROOT, 'isolated/mortgage-agent-compensation/oneshot50/invoke.mjs'), 'utf8');
+  const pack = fs.readFileSync(path.join(ROOT, 'isolated/mortgage-agent-compensation/oneshot50/pack-and-create.mjs'), 'utf8');
+  assert.match(invoke, /this helper is inspect-only/);
+  assert.match(pack, /pack-and-create is inspect-setup only/);
+  assert.match(pack, /refusing overwrite/);
+  assert.doesNotMatch(pack, /update-function-code/);
+  assert.doesNotMatch(pack, /delete-function/);
+  assert.match(pack, /get-function-configuration', '--function-name', 'checksops-staging-api'/);
+});
+
 test('monthly UI/API expose Adjustments without changing Gross/Paid/Balance formula', () => {
   assert.match(API, /parent_entry_id IS NOT NULL\), 0\)::int AS adjustment_cents/);
   assert.match(API, /coalesce\(sum\(e.amount_cents\), 0\)::int AS gross_owed_cents/);
