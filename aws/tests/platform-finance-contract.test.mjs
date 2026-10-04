@@ -241,7 +241,10 @@ test('source wiring stays platform-scoped and does not reuse onboard add', () =>
   assert.match(fns, /platformFinanceTreasury/);
   assert.doesNotMatch(fns, /'moov-platform-bank': platformBank/);
   assert.doesNotMatch(fns, /'platform-treasury': platformTreasury/);
-  assert.doesNotMatch(platform, /bankAccountAdd/);
+  assert.doesNotMatch(platform, /from ['"].*moov-onboard/);
+  assert.doesNotMatch(platform, /\bbankAccountAdd\s*\(/);
+  assert.doesNotMatch(platform, /import[\s\S]*\bbankAccountAdd\b/);
+  assert.match(platform, /bankAccountAddInvoked:\s*false/);
   assert.doesNotMatch(platform, /moov-tenant-fee-charge/);
   assert.doesNotMatch(bankPanel, /action:\s*["']add["']/);
   assert.doesNotMatch(bankPanel, /initiate_micro_deposit/);
