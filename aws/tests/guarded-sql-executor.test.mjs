@@ -13,6 +13,7 @@ import {
   AUTHORIZED_SQL71,
   AUTHORIZED_SQL72,
   AUTHORIZED_SQL73,
+  AUTHORIZED_SQL74,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
@@ -977,6 +978,101 @@ test('SQL 73 altered embedded artifact fails closed', async () => {
   const tampered = path.join(os.tmpdir(), `sql73-tampered-${process.pid}.sql`);
   fs.writeFileSync(tampered, `${fs.readFileSync(SQL73_FILE, 'utf8')}\n-- altered\n`);
   const altered = await sql73Handler(mockSql71Connect(), { sqlFile73: tampered })(sql73AuthEvent());
+  assert.equal(altered.ok, false);
+  assert.equal(altered.code, CODES.SQL_COLLISION);
+  assert.match(altered.message, /embedded SQL file SHA256 does not match/);
+});
+
+const SQL74_FILE = path.join(ROOT, AUTHORIZED_SQL74.filename);
+
+function sql74AuthEvent(overrides = {}) {
+  const expectedLive = overrides.expected_live_definition_sha256
+    || AUTHORIZED_SQL74.expected_live_definition_sha256;
+  const oneUse = overrides.one_use_id || `sql74-exec-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return {
+    action: 'authorize',
+    workstream_id: 'homeowner-signing-rls-boundary-6f10',
+    branch: 'cursor/homeowner-signing-integration-6f10',
+    commit: AUTHORIZED_SQL74.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+    owned_components: [AUTHORIZED_SQL74.filename],
+    filename: AUTHORIZED_SQL74.filename,
+    migration_id: AUTHORIZED_SQL74.migration_id,
+    source_sha256: AUTHORIZED_SQL74.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL74.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: oneUse,
+    expiry: '2026-10-04T14:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-04T12:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL74,
+      expected_live_definition_sha256: expectedLive,
+      one_use_id: oneUse,
+    }),
+    ...overrides,
+  };
+}
+
+function sql74Handler(connect, extra = {}) {
+  const consumed = path.join(os.tmpdir(), `sql74-exec-consumed-${process.pid}-${Date.now()}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = consumed;
+  process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
+  return createHandler({
+    connect,
+    now: () => Date.parse('2026-10-04T12:00:00.000Z'),
+    sqlFile74: SQL74_FILE,
+    ...extra,
+  });
+}
+
+test('SQL 74 authorize uses the SQL 74 pin and does not apply or invoke SQL 73', async () => {
+  const connect = mockSql71Connect();
+  const handler = sql74Handler(connect);
+  const result = await handler(sql74AuthEvent());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'authorize');
+  assert.equal(result.details.receipt.sql_file, AUTHORIZED_SQL74.filename);
+  assert.deepEqual(result.details.receipt.function_identities, AUTHORIZED_SQL74.function_identities);
+  assert.equal(
+    result.details.receipt.required_live_definition_sha256,
+    AUTHORIZED_SQL74.expected_live_definition_sha256,
+  );
+  const client = await connect();
+  assert.equal(client.applied71(), false);
+  assert.equal(client.applied44(), false);
+  assert.equal(client.invoked71(), false);
+});
+
+test('SQL 74 apply refuses when live SQL 73 definition drifted', async () => {
+  const connect = mockSql71Connect();
+  const handler = sql74Handler(connect);
+  const result = await handler(sql74AuthEvent({ action: 'apply' }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied71(), false);
+  assert.equal(client.invoked71(), false);
+});
+
+test('SQL 74 inspect/verify must not invoke the public token RPC', async () => {
+  const connect = mockSql71Connect();
+  const handler = sql74Handler(connect);
+  const result = await handler(sql74AuthEvent({
+    action: 'inspect',
+    inspect: { token: 'do-not-use' },
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+});
+
+test('SQL 74 altered embedded artifact fails closed', async () => {
+  const tampered = path.join(os.tmpdir(), `sql74-tampered-${process.pid}.sql`);
+  fs.writeFileSync(tampered, `${fs.readFileSync(SQL74_FILE, 'utf8')}\n-- altered\n`);
+  const altered = await sql74Handler(mockSql71Connect(), { sqlFile74: tampered })(sql74AuthEvent());
   assert.equal(altered.ok, false);
   assert.equal(altered.code, CODES.SQL_COLLISION);
   assert.match(altered.message, /embedded SQL file SHA256 does not match/);

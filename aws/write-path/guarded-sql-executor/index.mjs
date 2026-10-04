@@ -4,8 +4,8 @@
  * CREATE OR REPLACE must not invoke the function.
  *
  * Forward-composed from the live staging executor. Preserves SQL 44,
- * #601, membership-only, Mortgage Ops SQL 39, SQL 71, and SQL 72.
- * Adds only SQL 73 Homeowner Ledger last_viewed_at / totals dispatch.
+ * #601, membership-only, Mortgage Ops SQL 39, SQL 71, SQL 72, and SQL 73.
+ * Adds only SQL 74 Homeowner signing RLS-boundary sibling dispatch.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -19,6 +19,7 @@ import {
   AUTHORIZED_SQL71,
   AUTHORIZED_SQL72,
   AUTHORIZED_SQL73,
+  AUTHORIZED_SQL74,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   AUTHORIZED_MEMBERSHIP_ONLY,
   SQL_EXECUTOR_FUNCTION,
@@ -26,6 +27,7 @@ import {
   isHomeownerLedgerViewClaimOk,
   isHomeownerLedgerViewContract,
   isHomeownerLedgerViewLastViewedBestEffort,
+  isHomeownerSigningRlsBoundary,
   isMembershipOnlyHelper,
   isMortgageOpsAcceptComplete,
   isTenantUsersSameCheckPermissions,
@@ -55,6 +57,15 @@ const MORTGAGE_OPS_SQL_FILE = path.join(
 const SQL71_FILE = path.join(ROOT, 'sql/71_homeowner_ledger_view_contract.sql');
 const SQL72_FILE = path.join(ROOT, 'sql/72_homeowner_ledger_view_claim_ok.sql');
 const SQL73_FILE = path.join(ROOT, 'sql/73_homeowner_ledger_view_last_viewed_best_effort.sql');
+const SQL74_FILE = path.join(ROOT, 'sql/74_homeowner_signing_rls_boundary.sql');
+const SQL74_BEHAVIOR_MARKERS = [
+  'aws_public_homeowner_ledger_endorse_capability',
+  'aws_public_homeowner_pending_signatures',
+  'aws_public_homeowner_document_sign_capability',
+  'existing_email_link_required',
+  "payee_type IS DISTINCT FROM 'insured'",
+  "lower(COALESCE(s.signer_type, '')) IN ('policyholder', 'insured', 'homeowner')",
+];
 const SQL71_BEHAVIOR_MARKERS = [
   "mode', 'claim'",
   "mode', 'pre_claim'",
@@ -671,6 +682,218 @@ function sql73DefinitionMatchesSourceBehavior(def) {
     && !def.includes('c.org_id IS NULL');
 }
 
+function sql74SourceMatchesBehavior(text) {
+  if (!text) return false;
+  return SQL74_BEHAVIOR_MARKERS.every((marker) => text.includes(marker))
+    && text.includes('SET search_path = public')
+    && text.includes('SECURITY DEFINER')
+    && text.includes('GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_ledger_endorse_capability(text, uuid) TO checksops')
+    && text.includes('GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_pending_signatures(text) TO checksops')
+    && text.includes('GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_document_sign_capability(text, uuid) TO checksops')
+    && !text.includes('CREATE TABLE')
+    && !text.includes('ENABLE ROW LEVEL SECURITY')
+    && !text.includes('GRANT SELECT ON TABLE')
+    && !text.includes('UPDATE public.signature_signers')
+    && !text.includes('SET token_hash');
+}
+
+async function readSql74Grants(client) {
+  const routine = await client.query(`
+    SELECT routine_name, grantee, privilege_type
+    FROM information_schema.routine_privileges
+    WHERE routine_schema = 'public'
+      AND routine_name IN (
+        'aws_public_homeowner_ledger_endorse_capability',
+        'aws_public_homeowner_pending_signatures',
+        'aws_public_homeowner_document_sign_capability',
+        'aws_public_homeowner_ledger_by_token'
+      )
+    ORDER BY routine_name, grantee, privilege_type
+  `);
+  return { routine: routine.rows };
+}
+
+function sql74GrantsConstrained(grants) {
+  const genericGrantees = new Set(['PUBLIC', 'authenticated', 'anon']);
+  const execute = (grants.routine || []).filter((row) => row.privilege_type === 'EXECUTE');
+  const badRoutine = execute.filter((row) => genericGrantees.has(row.grantee));
+  const required = [
+    'aws_public_homeowner_ledger_endorse_capability',
+    'aws_public_homeowner_pending_signatures',
+    'aws_public_homeowner_document_sign_capability',
+    'aws_public_homeowner_ledger_by_token',
+  ];
+  const missingChecksops = required.filter((name) => (
+    !execute.some((row) => row.routine_name === name && row.grantee === 'checksops')
+  ));
+  if (badRoutine.length || missingChecksops.length) {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 74 grants are not constrained', {
+      bad_routine: badRoutine,
+      missing_checksops: missingChecksops,
+    });
+  }
+  return ok({ grants_constrained: true, checksops_execute: true });
+}
+
+async function handleHomeownerSigningRlsBoundary({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile74,
+  expectedLiveDefinitionSha256 = AUTHORIZED_SQL74.expected_live_definition_sha256,
+}) {
+  if (event.expected_live_definition_sha256 !== expectedLiveDefinitionSha256) {
+    return fail(CODES.SQL_COLLISION, 'SQL 74 authority requires the current live SQL 73 definition hash', {
+      expected_live_definition_sha256: event.expected_live_definition_sha256 || null,
+      required_live_definition_sha256: expectedLiveDefinitionSha256,
+    });
+  }
+
+  const embedded = readEmbeddedSql(sqlFile74, AUTHORIZED_SQL74.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!sql74SourceMatchesBehavior(embedded.details.text)) {
+    return fail(CODES.SQL_COLLISION, 'embedded SQL 74 does not match intended sibling-definer behavior');
+  }
+
+  let client;
+  try {
+    client = await connect();
+    const sql73Lookup = await definitionTextOrFail(client, AUTHORIZED_SQL74.sql73_function_identity);
+    if (!sql73Lookup.ok) return sql73Lookup;
+    const sql73BeforeDef = sql73Lookup.details.definition;
+    const sql73BeforeHash = sql73BeforeDef ? hashSqlDefinition(sql73BeforeDef) : null;
+    const sql44Lookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+    if (!sql44Lookup.ok) return sql44Lookup;
+    const sql44BeforeHash = sql44Lookup.details.definition
+      ? hashSqlDefinition(sql44Lookup.details.definition)
+      : null;
+
+    const beforeNew = {};
+    for (const identityName of AUTHORIZED_SQL74.function_identities) {
+      const lookup = await definitionTextOrFail(client, identityName);
+      if (!lookup.ok) return lookup;
+      beforeNew[identityName] = lookup.details.definition
+        ? hashSqlDefinition(lookup.details.definition)
+        : null;
+    }
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      if (event.inspect?.token || event.verify?.token) {
+        return fail(CODES.UNRELATED_MUTATION, 'SQL 74 inspect/verify must not invoke the public token RPC');
+      }
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: sql73BeforeHash,
+          after_hash: sql73BeforeHash,
+          result: event.action,
+          executor_identity: identity,
+          function_identities: AUTHORIZED_SQL74.function_identities,
+          sql73_hash: sql73BeforeHash,
+          sql44_hash: sql44BeforeHash,
+          required_live_definition_sha256: expectedLiveDefinitionSha256,
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 74 executor action ${event.action}`);
+    }
+
+    if (sql73BeforeHash !== expectedLiveDefinitionSha256) {
+      return fail(CODES.SQL_COLLISION, 'live SQL 73 definition drifted; SQL 74 apply refused', {
+        expected_live_definition_sha256: expectedLiveDefinitionSha256,
+        live_definition_sha256: sql73BeforeHash,
+      });
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: sql73BeforeHash,
+      live_definition: sql73BeforeDef,
+    });
+    if (!collision.ok) return collision;
+
+    await client.query(embedded.details.text);
+
+    const sql73AfterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL74.sql73_function_identity);
+    if (!sql73AfterLookup.ok) return sql73AfterLookup;
+    const sql73AfterHash = sql73AfterLookup.details.definition
+      ? hashSqlDefinition(sql73AfterLookup.details.definition)
+      : null;
+    if (sql73AfterHash !== sql73BeforeHash || sql73AfterHash !== expectedLiveDefinitionSha256) {
+      return fail(CODES.SQL_COLLISION, 'SQL 74 apply changed the live SQL 73 definition; STOP', {
+        expected: expectedLiveDefinitionSha256,
+        live: sql73AfterHash,
+      });
+    }
+    if (!sql73DefinitionMatchesSourceBehavior(sql73AfterLookup.details.definition)) {
+      return fail(CODES.SQL_COLLISION, 'SQL 73 behavior markers changed during SQL 74 apply; STOP');
+    }
+
+    const afterNew = {};
+    for (const identityName of AUTHORIZED_SQL74.function_identities) {
+      const lookup = await definitionTextOrFail(client, identityName);
+      if (!lookup.ok) return lookup;
+      if (!lookup.details.definition) {
+        return fail(CODES.SQL_COLLISION, 'SQL 74 apply did not create a required sibling function', {
+          function_identity: identityName,
+        });
+      }
+      afterNew[identityName] = hashSqlDefinition(lookup.details.definition);
+    }
+
+    const grants = sql74GrantsConstrained(await readSql74Grants(client));
+    if (!grants.ok) return grants;
+
+    const sql44AfterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+    if (!sql44AfterLookup.ok) return sql44AfterLookup;
+    const sql44AfterHash = sql44AfterLookup.details.definition
+      ? hashSqlDefinition(sql44AfterLookup.details.definition)
+      : null;
+    if (sql44AfterHash !== sql44BeforeHash) {
+      return fail(CODES.SQL_COLLISION, 'SQL 74 apply changed the live SQL 44 definition; STOP', {
+        expected: sql44BeforeHash,
+        live: sql44AfterHash,
+      });
+    }
+
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: sql73BeforeHash,
+        after_hash: sql73AfterHash,
+        result: 'applied',
+        executor_identity: identity,
+        function_identities: AUTHORIZED_SQL74.function_identities,
+        new_function_hashes: afterNew,
+        prior_function_hashes: beforeNew,
+        sql73_hash: sql73AfterHash,
+        sql44_hash: sql44AfterHash,
+        required_live_definition_sha256: expectedLiveDefinitionSha256,
+      },
+      grants: grants.details,
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 function sql71GrantsConstrained(grants) {
   const genericGrantees = new Set(['PUBLIC', 'authenticated', 'anon']);
   const execute = (grants.routine || []).filter((row) => row.privilege_type === 'EXECUTE');
@@ -1063,8 +1286,10 @@ export function createHandler({
   sqlFile71 = SQL71_FILE,
   sqlFile72 = SQL72_FILE,
   sqlFile73 = SQL73_FILE,
+  sqlFile74 = SQL74_FILE,
   expectedSql72LiveHash = AUTHORIZED_SQL72.expected_live_definition_sha256,
   expectedSql73LiveHash = AUTHORIZED_SQL73.expected_live_definition_sha256,
+  expectedSql74LiveHash = AUTHORIZED_SQL74.expected_live_definition_sha256,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
 } = {}) {
   return async function handler(event = {}) {
@@ -1114,6 +1339,17 @@ export function createHandler({
         connect,
         sqlFile601,
         sqlFile601Predecessor,
+      });
+    }
+
+    if (isHomeownerSigningRlsBoundary(event)) {
+      return handleHomeownerSigningRlsBoundary({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile74,
+        expectedLiveDefinitionSha256: expectedSql74LiveHash,
       });
     }
 

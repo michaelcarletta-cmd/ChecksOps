@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   isHomeownerEndorsementParty,
+  openInsuredCountFromPendingEndorsements,
   pendingEndorsementsForHomeowner,
   runHomeownerLedgerEndorseLink,
   safeHomeownerReturnTo,
@@ -82,30 +83,56 @@ const endorsementRow = (overrides = {}) => ({
   ...overrides,
 });
 
+const capabilityFrom = ({
+  doc = claimDoc(),
+  row = endorsementRow(),
+  openInsuredCount = 1,
+  mintedToken = 'minted-endorse-token',
+} = {}) => {
+  if (doc?.error) return { ok: false, error: doc.error };
+  if (!doc?.token?.claim_id) return { ok: false, error: 'no_claim' };
+  if (!row) return { ok: false, error: 'not_found' };
+  if (String(row.check_tenant_id) !== String(doc.token.tenant_id)
+    || String(row.check_claim_id) !== String(doc.token.claim_id)) {
+    return { ok: false, error: 'not_found' };
+  }
+  if (row.tenant_id != null && String(row.tenant_id) !== String(doc.token.tenant_id)) {
+    return { ok: false, error: 'not_found' };
+  }
+  if (String(row.payee_type || '') !== 'insured') {
+    return { ok: false, error: 'not_your_signature' };
+  }
+  const homeowner = {
+    name: doc.homeowner?.name ?? doc.token?.homeowner_name ?? '',
+    email: doc.homeowner?.email ?? doc.token?.homeowner_email ?? '',
+  };
+  if (!isHomeownerEndorsementParty(row, homeowner, { openInsuredCount })) {
+    return { ok: false, error: 'not_your_signature' };
+  }
+  const status = String(row.status || '').toLowerCase();
+  if (row.signed_at || ['signed', 'waived', 'endorsed', 'completed', 'complete'].includes(status)) {
+    return { ok: false, error: 'already_signed' };
+  }
+  if (row.revoked_at || ['cancelled', 'canceled', 'rejected', 'revoked', 'expired', 'voided'].includes(status)) {
+    return { ok: false, error: 'invalid_state' };
+  }
+  return {
+    ok: true,
+    endorsement_id: row.id,
+    check_id: row.check_id,
+    endorse_token: row.token || mintedToken,
+  };
+};
+
 const mintClient = ({
   doc = claimDoc(),
   row = endorsementRow(),
-  updates = [],
   openInsuredCount = 1,
+  mintedToken = 'minted-endorse-token',
 } = {}) => sqlClient([
   {
-    match: (sql) => sql.includes('aws_public_homeowner_ledger_by_token'),
-    result: () => ({ rows: [{ doc }] }),
-  },
-  {
-    match: (sql) => sql.includes('COUNT(*)') && sql.includes('check_endorsements'),
-    result: () => ({ rows: [{ n: openInsuredCount }] }),
-  },
-  {
-    match: (sql) => sql.includes('FROM public.check_endorsements'),
-    result: () => ({ rows: row ? [row] : [] }),
-  },
-  {
-    match: (sql) => sql.includes('UPDATE public.check_endorsements'),
-    result: (_params, compact) => {
-      updates.push(compact);
-      return { rows: [], rowCount: 1 };
-    },
+    match: (sql) => sql.includes('aws_public_homeowner_ledger_endorse_capability'),
+    result: () => ({ rows: [{ doc: capabilityFrom({ doc, row, openInsuredCount, mintedToken }) }] }),
   },
 ]);
 
@@ -251,19 +278,60 @@ test('mint returns existing endorsement token for the authorized insured row', a
 });
 
 test('mint creates a token only when the endorsement row has none', async () => {
-  const updates = [];
   const result = await runHomeownerLedgerEndorseLink({
     token: LEDGER_TOKEN,
     endorsementId: ENDORSE_INSURED,
     spoof: {},
     client: mintClient({
       row: endorsementRow({ token: null }),
-      updates,
+      mintedToken: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9',
     }),
   });
   assert.equal(result.ok, true);
-  assert.match(result.sign_url, /^\/endorse\?token=[0-9a-f-]{36}&return_to=/i);
-  assert.equal(updates.length, 1);
+  assert.match(result.sign_url, /^\/endorse\?token=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9&return_to=/i);
+});
+
+test('SQL73 pending_endorsements party count makes a sole unmatched insured actionable', () => {
+  const pending = [{
+    check_id: CHECK_A,
+    check_number: '271682',
+    check_amount: 9634.82,
+    parties: [{
+      endorsement_id: ENDORSE_INSURED,
+      payee_name: 'JOHN SMITH AND JANE SMITH',
+      payee_type: 'insured',
+      status: 'sent',
+      is_homeowner: false,
+    }],
+  }];
+  const counts = openInsuredCountFromPendingEndorsements(pending);
+  assert.equal(counts[CHECK_A], 1);
+  const sanitized = sanitizePendingEndorsementsForHomeowner(
+    pending,
+    { name: 'Ada Lovelace', email: 'invite@example.com' },
+    counts,
+  );
+  assert.equal(sanitized[0].parties[0].can_sign, true);
+  assert.equal(sanitized[0].parties[0].sign_url, null);
+});
+
+test('multiple unmatched insureds from SQL73 pending_endorsements fail closed', () => {
+  const pending = [{
+    check_id: CHECK_A,
+    parties: [
+      { endorsement_id: 'e-1', payee_name: 'JOHN SMITH', payee_type: 'insured', status: 'sent' },
+      { endorsement_id: 'e-2', payee_name: 'JANE SMITH', payee_type: 'insured', status: 'sent' },
+    ],
+  }];
+  const counts = openInsuredCountFromPendingEndorsements(pending);
+  assert.equal(counts[CHECK_A], 2);
+  const sanitized = sanitizePendingEndorsementsForHomeowner(
+    pending,
+    { name: 'Ada Lovelace', email: 'invite@example.com' },
+    counts,
+  );
+  assert.equal(sanitized[0].parties[0].can_sign, false);
+  assert.equal(sanitized[0].parties[1].can_sign, false);
 });
 
 test('cross-tenant endorsement id fails closed', async () => {
@@ -444,14 +512,24 @@ test('source still does not call remint or rewrite SQL73', () => {
     path.join(ROOT, 'aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql'),
     'utf8',
   );
+  const sql74 = fs.readFileSync(
+    path.join(ROOT, 'aws/workflows/sql/74_homeowner_signing_rls_boundary.sql'),
+    'utf8',
+  );
   const page = fs.readFileSync(path.join(ROOT, 'src/pages/HomeownerLedger.tsx'), 'utf8');
   const endorse = fs.readFileSync(path.join(ROOT, 'src/pages/Endorse.tsx'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf8');
   assert.match(handler, /runHomeownerLedgerEndorseLink/);
   assert.match(handler, /pending_signatures: \[\]/);
   assert.match(handler, /aws_public_homeowner_ledger_remint_signer/);
+  assert.match(handler, /aws_public_homeowner_ledger_endorse_capability/);
+  assert.match(handler, /openInsuredCountFromPendingEndorsements/);
+  assert.doesNotMatch(handler, /loadOpenInsuredCountsByCheck/);
   assert.doesNotMatch(handler, /CHANGED_BY_SQL73_LAST_VIEWED/);
   assert.match(sql73, /Does NOT rewrite historical aws\/workflows\/sql\/72_homeowner_ledger_view_claim_ok\.sql/);
+  assert.match(sql74, /Does NOT rewrite historical aws\/workflows\/sql\/73_homeowner_ledger_view_last_viewed_best_effort\.sql/);
+  assert.match(sql74, /aws_public_homeowner_ledger_endorse_capability/);
+  assert.doesNotMatch(sql74, /e\.revoked_at/);
   assert.match(page, /Review & Sign Check/);
   assert.match(page, /Your signature completed/);
   assert.match(page, /homeowner-ledger-endorse-link/);

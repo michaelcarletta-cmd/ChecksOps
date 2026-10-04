@@ -137,59 +137,45 @@ export const pendingSignaturesForHomeowner = ({
   return out;
 };
 
-export const loadPendingSignaturesForHomeowner = async (client, token, homeowner) => {
-  if (!token?.claim_id || !token?.tenant_id) return [];
-  const rows = (await client.query(
-    `SELECT r.id AS request_id, r.document_name, r.status AS request_status,
-            r.sent_at, r.created_at, r.claim_id, r.check_intake_item_id,
-            s.id AS signer_id, s.signer_name, s.signer_email, s.signer_type,
-            s.status AS signer_status, s.signed_at, s.signing_order, s.expires_at
-     FROM public.signature_requests r
-     JOIN public.signature_signers s
-       ON s.signature_request_id = r.id
-     LEFT JOIN public.claims c
-       ON c.id = r.claim_id
-     LEFT JOIN public.check_intake_items i
-       ON i.id = r.check_intake_item_id
-     WHERE (
-        r.claim_id = $1::uuid
-        OR (
-          r.check_intake_item_id IS NOT NULL
-          AND i.claim_id = $1::uuid
-          AND i.tenant_id = $2::uuid
-        )
-      )
-       AND (c.id IS NULL OR c.org_id = $2::uuid)
-       AND lower(COALESCE(r.status, '')) IN ('pending', 'sent', 'partial', 'in_progress')
-     ORDER BY r.sent_at DESC NULLS LAST, r.created_at DESC NULLS LAST`,
-    [token.claim_id, token.tenant_id],
-  )).rows;
-  const byRequest = new Map();
-  for (const row of rows) {
-    const requestId = String(row.request_id);
-    if (!byRequest.has(requestId)) {
-      byRequest.set(requestId, {
-        request_id: row.request_id,
-        document_name: row.document_name,
-        status: row.request_status,
-        sent_at: row.sent_at,
-        created_at: row.created_at,
-        signers: [],
-      });
-    }
-    byRequest.get(requestId).signers.push({
-      signer_id: row.signer_id,
-      signer_name: row.signer_name,
-      signer_email: row.signer_email,
-      signer_type: row.signer_type,
-      status: row.signer_status,
-      signed_at: row.signed_at,
-      signing_order: row.signing_order,
-      expires_at: row.expires_at,
-    });
+const HOMEOWNER_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const mapDocumentCapabilityError = (cap, spoof) => {
+  const code = String(cap?.error || 'not_found');
+  if (code === 'revoked' || code === 'expired') {
+    return { ok: false, statusCode: 410, error: code, spoofFieldsIgnored: spoof };
   }
+  if (code === 'already_signed' || code === 'existing_email_link_required') {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: code,
+      message: code === 'existing_email_link_required'
+        ? 'The existing emailed signing link is still the valid /sign capability. Homeowner Ops will not replace that signer token.'
+        : undefined,
+      request_id: cap?.request_id || null,
+      signer_id: cap?.signer_id || null,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (code === 'missing_fields') {
+    return { ok: false, statusCode: 400, error: code, spoofFieldsIgnored: spoof };
+  }
+  if (code === 'no_claim' || code === 'not_found') {
+    return { ok: false, statusCode: 404, error: code, spoofFieldsIgnored: spoof };
+  }
+  return { ok: false, statusCode: 403, error: code, spoofFieldsIgnored: spoof };
+};
+
+export const loadPendingSignaturesForHomeowner = async (client, token, homeowner) => {
+  const ledgerToken = String(token || '').trim();
+  if (!ledgerToken || ledgerToken.length < 8) return [];
+  const doc = (await client.query(
+    'SELECT public.aws_public_homeowner_pending_signatures($1) AS doc',
+    [ledgerToken],
+  )).rows[0]?.doc;
+  if (!doc || doc.error || !Array.isArray(doc.requests)) return [];
   return pendingSignaturesForHomeowner({
-    requests: Array.from(byRequest.values()),
+    requests: doc.requests,
     homeowner,
   });
 };
@@ -202,97 +188,25 @@ export const runHomeownerLedgerDocumentSignLink = async ({
   if (!ledgerToken || ledgerToken.length < 8 || !id) {
     return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
   }
+  if (!HOMEOWNER_UUID_RE.test(id)) {
+    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
+  }
 
-  const doc = (await client.query(
-    'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-    [ledgerToken],
+  const cap = (await client.query(
+    'SELECT public.aws_public_homeowner_document_sign_capability($1, $2::uuid) AS doc',
+    [ledgerToken, id],
   )).rows[0]?.doc;
-  if (!doc) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
+  if (!cap || cap.error || cap.ok === false) {
+    return mapDocumentCapabilityError(cap, spoof);
   }
-  if (doc.error) {
-    const status = doc.error === 'revoked' || doc.error === 'expired' ? 410 : 400;
-    return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
-  }
-
-  const tok = doc.token && typeof doc.token === 'object' ? doc.token : null;
-  if (!tok?.tenant_id || !tok?.claim_id) {
-    return { ok: false, statusCode: 404, error: 'no_claim', spoofFieldsIgnored: spoof };
-  }
-
-  const row = (await client.query(
-    `SELECT s.id, s.signer_name, s.signer_email, s.signer_type, s.status, s.signed_at,
-            s.signing_order, s.expires_at, s.access_token, s.revoked_at,
-            r.id AS request_id, r.status AS request_status, r.document_name,
-            r.claim_id, r.check_intake_item_id,
-            c.org_id AS claim_tenant_id,
-            i.tenant_id AS check_tenant_id, i.claim_id AS check_claim_id
-     FROM public.signature_signers s
-     JOIN public.signature_requests r
-       ON r.id = s.signature_request_id
-     LEFT JOIN public.claims c
-       ON c.id = r.claim_id
-     LEFT JOIN public.check_intake_items i
-       ON i.id = r.check_intake_item_id
-     WHERE s.id::text = $1
-     LIMIT 1`,
-    [id],
-  )).rows[0];
-  if (!row) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-  }
-
-  const requestClaim = row.claim_id || row.check_claim_id;
-  const requestTenant = row.claim_tenant_id || row.check_tenant_id;
-  if (!requestClaim || String(requestClaim) !== String(tok.claim_id)) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-  }
-  if (requestTenant && String(requestTenant) !== String(tok.tenant_id)) {
-    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-  }
-  if (!isHomeownerDocumentSignerType(row)) {
-    return { ok: false, statusCode: 403, error: 'not_your_signature', spoofFieldsIgnored: spoof };
-  }
-
-  const siblings = (await client.query(
-    `SELECT id, signer_type, status, signed_at, signing_order, expires_at, revoked_at
-     FROM public.signature_signers
-     WHERE signature_request_id = $1::uuid`,
-    [row.request_id],
-  )).rows.map((sibling) => ({
-    ...sibling,
-    signer_id: sibling.id,
-    signer_status: sibling.status,
-  }));
-  const homeownerSignerCount = siblings.filter((sibling) => isHomeownerDocumentSignerType(sibling)).length;
-  const homeowner = {
-    name: doc.homeowner?.name ?? tok.homeowner_name ?? null,
-    email: doc.homeowner?.email ?? tok.homeowner_email ?? null,
-  };
-  if (!isHomeownerDocumentSigner(row, homeowner, { homeownerSignerCount })) {
-    return { ok: false, statusCode: 403, error: 'not_your_signature', spoofFieldsIgnored: spoof };
-  }
-  if (!requestIsOpen({ status: row.request_status })) {
-    return { ok: false, statusCode: 403, error: 'invalid_state', spoofFieldsIgnored: spoof };
-  }
-  if (row.signed_at || DONE_SIGNER_STATUSES.includes(String(row.status || '').toLowerCase())) {
-    return { ok: false, statusCode: 409, error: 'already_signed', spoofFieldsIgnored: spoof };
-  }
-  if (!signerIsOpen(row)) {
-    return { ok: false, statusCode: 403, error: 'invalid_state', spoofFieldsIgnored: spoof };
-  }
-  if (priorSignerBlocks(row, siblings)) {
-    return { ok: false, statusCode: 403, error: 'signer_order_blocked', spoofFieldsIgnored: spoof };
-  }
-
-  if (!isReusableDocumentAccessToken(row.access_token)) {
+  if (!isReusableDocumentAccessToken(cap.access_token)) {
     return {
       ok: false,
       statusCode: 409,
       error: 'existing_email_link_required',
       message: 'The existing emailed signing link is still the valid /sign capability. Homeowner Ops will not replace that signer token.',
-      request_id: row.request_id,
-      signer_id: row.id,
+      request_id: cap.request_id || null,
+      signer_id: cap.signer_id || id,
       spoofFieldsIgnored: spoof,
     };
   }
@@ -300,9 +214,9 @@ export const runHomeownerLedgerDocumentSignLink = async ({
   return {
     ok: true,
     statusCode: 200,
-    sign_url: `/sign?token=${encodeURIComponent(String(row.access_token).trim())}`,
-    request_id: row.request_id,
-    signer_id: row.id,
+    sign_url: `/sign?token=${encodeURIComponent(String(cap.access_token).trim())}`,
+    request_id: cap.request_id || null,
+    signer_id: cap.signer_id || id,
     reused_existing_access_token: true,
     spoofFieldsIgnored: spoof,
   };

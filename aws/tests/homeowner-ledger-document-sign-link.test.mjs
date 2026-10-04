@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   isHomeownerDocumentSigner,
+  isHomeownerDocumentSignerType,
   pendingSignaturesForHomeowner,
   runHomeownerLedgerDocumentSignLink,
 } from '../functions/api/homeowner-signing-integration.mjs';
@@ -86,32 +87,71 @@ const signerRow = (overrides = {}) => ({
   ...overrides,
 });
 
+const capabilityFrom = ({
+  doc = claimDoc(),
+  row = signerRow(),
+} = {}) => {
+  if (doc?.error) return { ok: false, error: doc.error };
+  if (!doc?.token?.claim_id) return { ok: false, error: 'no_claim' };
+  if (!row) return { ok: false, error: 'not_found' };
+  const requestClaim = row.claim_id || row.check_claim_id;
+  const requestTenant = row.claim_tenant_id || row.check_tenant_id;
+  if (row.check_intake_item_id) {
+    if (String(row.check_tenant_id) !== String(doc.token.tenant_id)
+      || String(row.check_claim_id) !== String(doc.token.claim_id)) {
+      return { ok: false, error: 'not_found' };
+    }
+  } else if (!requestClaim || String(requestClaim) !== String(doc.token.claim_id)) {
+    return { ok: false, error: 'not_found' };
+  }
+  if (requestTenant && String(requestTenant) !== String(doc.token.tenant_id)) {
+    return { ok: false, error: 'not_found' };
+  }
+  if (!isHomeownerDocumentSignerType(row)) {
+    return { ok: false, error: 'not_your_signature' };
+  }
+  const homeowner = {
+    name: doc.homeowner?.name ?? doc.token?.homeowner_name ?? '',
+    email: doc.homeowner?.email ?? doc.token?.homeowner_email ?? '',
+  };
+  if (!isHomeownerDocumentSigner(row, homeowner, { homeownerSignerCount: 1 })) {
+    return { ok: false, error: 'not_your_signature' };
+  }
+  const requestStatus = String(row.request_status || '').toLowerCase();
+  if (['cancelled', 'canceled', 'revoked', 'expired', 'completed', 'complete', 'failed', 'voided'].includes(requestStatus)) {
+    return { ok: false, error: 'invalid_state' };
+  }
+  const signerStatus = String(row.status || '').toLowerCase();
+  if (row.signed_at || ['signed', 'completed', 'complete'].includes(signerStatus)) {
+    return { ok: false, error: 'already_signed' };
+  }
+  if (row.revoked_at || ['cancelled', 'canceled', 'revoked', 'expired', 'voided', 'rejected'].includes(signerStatus)) {
+    return { ok: false, error: 'invalid_state' };
+  }
+  if (!row.access_token) {
+    return {
+      ok: false,
+      error: 'existing_email_link_required',
+      request_id: row.request_id,
+      signer_id: row.id,
+    };
+  }
+  return {
+    ok: true,
+    request_id: row.request_id,
+    signer_id: row.id,
+    access_token: row.access_token,
+    reused_existing_access_token: true,
+  };
+};
+
 const mintClient = ({
   doc = claimDoc(),
   row = signerRow(),
-  siblings = null,
 } = {}) => sqlClient([
   {
-    match: (sql) => sql.includes('aws_public_homeowner_ledger_by_token'),
-    result: () => ({ rows: [{ doc }] }),
-  },
-  {
-    match: (sql) => sql.includes('FROM public.signature_signers s'),
-    result: () => ({ rows: row ? [row] : [] }),
-  },
-  {
-    match: (sql) => sql.includes('FROM public.signature_signers') && sql.includes('signature_request_id'),
-    result: () => ({
-      rows: siblings || [{
-        id: row.id,
-        signer_type: row.signer_type,
-        status: row.status,
-        signed_at: row.signed_at,
-        signing_order: row.signing_order,
-        expires_at: row.expires_at,
-        revoked_at: row.revoked_at,
-      }],
-    }),
+    match: (sql) => sql.includes('aws_public_homeowner_document_sign_capability'),
+    result: () => ({ rows: [{ doc: capabilityFrom({ doc, row }) }] }),
   },
 ]);
 
@@ -360,6 +400,9 @@ test('source does not call remint or rewrite SQL73 or Sign.tsx', () => {
   assert.match(handler, /pending_signatures: \[\]/);
   assert.doesNotMatch(integration, /SELECT public\.aws_public_homeowner_ledger_remint_signer/);
   assert.doesNotMatch(integration, /UPDATE public.signature_signers/);
+  assert.match(integration, /aws_public_homeowner_pending_signatures/);
+  assert.match(integration, /aws_public_homeowner_document_sign_capability/);
+  assert.doesNotMatch(integration, /FROM public\.signature_signers/);
   assert.match(sql73, /pending_signatures', '\[\]'::jsonb/);
   assert.match(page, /Review & Sign Document/);
   assert.match(page, /homeowner-ledger-document-sign-link/);
