@@ -89,7 +89,7 @@ export const AUTHORIZED_SQL72 = Object.freeze({
 export const AUTHORIZED_SQL73 = Object.freeze({
   filename: 'aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql',
   migration_id: '73_homeowner_ledger_view_last_viewed_best_effort',
-  commit: '01bb1d609918e5ca1c78ec1dee694ae34638a23c',
+  commit: 'e61d8d0f9c1e531e1969e31a6f694567d0956505',
   source_sha256: '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e',
   intended_replacement_sha256: '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e',
   function_identity: 'public.aws_public_homeowner_ledger_by_token(text)',
