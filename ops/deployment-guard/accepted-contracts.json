@@ -54,9 +54,29 @@
       "enabled": true,
       "environments": ["staging", "production"],
       "components": ["*"],
-      "deployment_types": ["spa-promote", "lambda-overlay"],
-      "test": "aws/tests/parity-signature-submit.test.mjs",
-      "invariants": ["signature submit path remains available"]
+      "deployment_types": ["spa-promote", "lambda-overlay", "sql-apply", "sql-executor-invoke"],
+      "test": "aws/tests/signature-request-accepted-contract.test.mjs",
+      "tests": [
+        "aws/tests/signature-request-accepted-contract.test.mjs",
+        "aws/tests/esign-sr-invariants.test.mjs",
+        "aws/tests/signature-stamp-submit-values.test.mjs",
+        "aws/tests/parity-signature-submit.test.mjs",
+        "aws/tests/email-branding-sr-txn.test.mjs",
+        "aws/tests/class-a-ingest-esign.test.mjs"
+      ],
+      "evidence": "ops/deployment-guard/signature-request-accepted-staging.json",
+      "invariants": [
+        "normal create/send does not depend on generic browser inserts",
+        "no access_token = NULL",
+        "no claims.latest_signature_request_id mutation",
+        "SQL75 column-level file-link permission remains narrow with RLS enforced",
+        "email branding does not assume unapplied SES columns",
+        "editor field IDs map safely to persisted UUID fields",
+        "no first-signature-wins/ambiguous cross-mapping",
+        "completed PDF uses the accepted signed-document storage contract",
+        "Class A create-payload remains the creation boundary",
+        "submitted values are passed in-memory into flatten/stamp"
+      ]
     },
     {
       "id": "check-files",

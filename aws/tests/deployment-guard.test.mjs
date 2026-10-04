@@ -580,6 +580,35 @@ test('claim-ledger accepted contract covers the 695064-GQ freeze', () => {
   assert.ok(fs.existsSync(path.join(ROOT, contract.evidence)));
 });
 
+test('signature-requests accepted contract covers the 2026-10-04 staging freeze', () => {
+  const registry = loadContractRegistry(ROOT);
+  const contract = registry.contracts.find((row) => row.id === 'signature-requests');
+  assert.ok(contract);
+  assert.equal(contract.accepted, true);
+  assert.equal(contract.test, 'aws/tests/signature-request-accepted-contract.test.mjs');
+  assert.equal(contract.evidence, 'ops/deployment-guard/signature-request-accepted-staging.json');
+  for (const type of ['spa-promote', 'lambda-overlay', 'sql-apply', 'sql-executor-invoke']) {
+    assert.ok((contract.deployment_types || []).includes(type), type);
+  }
+  for (const invariant of [
+    'normal create/send does not depend on generic browser inserts',
+    'no access_token = NULL',
+    'no claims.latest_signature_request_id mutation',
+    'SQL75 column-level file-link permission remains narrow with RLS enforced',
+    'email branding does not assume unapplied SES columns',
+    'editor field IDs map safely to persisted UUID fields',
+    'no first-signature-wins/ambiguous cross-mapping',
+    'completed PDF uses the accepted signed-document storage contract',
+  ]) {
+    assert.ok((contract.invariants || []).includes(invariant), invariant);
+  }
+  assert.ok(fs.existsSync(path.join(ROOT, contract.test)));
+  assert.ok(fs.existsSync(path.join(ROOT, contract.evidence)));
+  for (const rel of contract.tests || []) {
+    assert.ok(fs.existsSync(path.join(ROOT, rel)), rel);
+  }
+});
+
 test('cursor rule and AGENTS.md instruct future chats to use the guard', () => {
   const rule = fs.readFileSync(path.join(ROOT, '.cursor/rules/deployment-guard.mdc'), 'utf8');
   const agents = fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8');

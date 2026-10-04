@@ -765,7 +765,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "6a7834b842752d7c1e103bf51bba3892b09ffa512eecb6be4a63cfa2c3d62abb",
+        "tree_hash": "f1e923310c2a3e0c9e12f204f0591044db6ba9cab4d3fc4b5772c05e1e6c94d4",
         "merged": true,
         "merged_pr": null
       },
@@ -810,6 +810,94 @@
         "#328"
       ],
       "notes": "Fail-closed control-plane metadata reconciliation only. The protected release-control tree advanced on merged main, including PR #508 production SPA baseline safeguards and subsequent guard/lock maintenance. Classification remains UNVERIFIED. This source hash update does not change production, does not authorize deployment, and does not replace the authoritative live-SPA or current-live-Lambda requirements."
+    },
+    "signature-requests": {
+      "id": "signature-requests",
+      "ownership_group": "signature-requests",
+      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "production_active": false,
+      "environment": "staging",
+      "source": {
+        "git_sha": "5e194a4d88987ef8905e6aa4df4a5a82676a2c3a",
+        "tree_hash": "1f5dd4351f5ed6c4236281383e99b1bc6abcafc7132b9966fb0393fffc68d11c",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql",
+          "source_sha256": "02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e",
+          "applied": true,
+          "applied_environment": "staging",
+          "applied_sha256": "02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e",
+          "proof": "ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md"
+        },
+        {
+          "path": "aws/workflows/sql/74_homeowner_signing_rls_boundary.sql",
+          "source_sha256": "a7ee929bc25a7ca56bf29dacebdab20198bf1a7625e661333545dc9d1f662c4f",
+          "applied": true,
+          "applied_environment": "staging",
+          "applied_sha256": "a7ee929bc25a7ca56bf29dacebdab20198bf1a7625e661333545dc9d1f662c4f",
+          "proof": "ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md"
+        },
+        {
+          "path": "aws/workflows/sql/75_signature_request_check_files_link_grant.sql",
+          "source_sha256": "cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283",
+          "applied": true,
+          "applied_environment": "staging",
+          "applied_sha256": "cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283",
+          "proof": "ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md"
+        }
+      ],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-staging-api",
+        "version": "99a9dd03-e001-448f-8c18-7ba9f0e823e5",
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-staging-api",
+        "lambda_version": "99a9dd03-e001-448f-8c18-7ba9f0e823e5",
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md",
+          "ops/deployment-guard/signature-request-accepted-staging.json"
+        ],
+        "recorded_at": "2026-10-04T18:32:16.082Z",
+        "environment": "staging",
+        "component": "signature-requests",
+        "git_sha": "5e194a4d88987ef8905e6aa4df4a5a82676a2c3a",
+        "artifact_identity": "aZ0K2droM3XKT0eQRUYdHEKwW0ehTlAy8VY/qm7YCgE=",
+        "evidence_producer": "manual end-to-end Signature Request UAT plus read-only live fingerprint capture",
+        "evidence_type": "staging Signature Request baseline freeze"
+      },
+      "deployment_fingerprint": {
+        "recorded": true,
+        "spa_bundle": "/assets/index-DDibq3aS.js",
+        "spa_sha256": "1236a7b145e43bab4cb99b933febd90e2fcc553a0ba93c9575267f25681371e9",
+        "cloudfront_id": null,
+        "cloudfront_distribution": null,
+        "cloudfront_deployment_fingerprint": null,
+        "lambda_name": "checksops-staging-api",
+        "lambda_version": "99a9dd03-e001-448f-8c18-7ba9f0e823e5",
+        "lambda_code_hash": null,
+        "applied_sql_hash": "cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283",
+        "database_evidence_record": "ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md",
+        "config_hash": null,
+        "notes": "Accepted staging API CodeSha256 aZ0K2droM3XKT0eQRUYdHEKwW0ehTlAy8VY/qm7YCgE=. Production untouched CWB8lxnHoqANyVcaNpKL7h4MtDSPMlHZ6wliFuGE6yA=. This fingerprint does not authorize production."
+      },
+      "rollback": {
+        "git_sha": "5e194a4d88987ef8905e6aa4df4a5a82676a2c3a",
+        "artifact": "checksops-staging-api aZ0K2droM3XKT0eQRUYdHEKwW0ehTlAy8VY/qm7YCgE=",
+        "notes": "This is the accepted staging baseline, not a rollback target. Do not restore a prior Lambda/SPA/ZIP over this composition unless a separately authorized guarded rollback names that exact artifact."
+      },
+      "missing_evidence": [
+        "production Signature Request overlay is not authorized; this lock is the staging UAT baseline only"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Manual UAT passed 2026-10-04 for the Files → Class A create/send → Homeowner doorway → /sign → submitted-value stamp → signed PDF chain. Future compositions must keep this chain or explicitly update this lock. No production."
     }
   }
 }

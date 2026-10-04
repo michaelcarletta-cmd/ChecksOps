@@ -114,3 +114,17 @@
 /aws/template.yaml @michaelcarletta-cmd
 /aws/samconfig.toml @michaelcarletta-cmd
 /aws/cutover/production/ @michaelcarletta-cmd
+
+/aws/functions/api/esign.mjs @michaelcarletta-cmd
+/aws/functions/api/signature-submit.mjs @michaelcarletta-cmd
+/aws/functions/api/email-branding.mjs @michaelcarletta-cmd
+/aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql @michaelcarletta-cmd
+/aws/workflows/sql/74_homeowner_signing_rls_boundary.sql @michaelcarletta-cmd
+/aws/workflows/sql/75_signature_request_check_files_link_grant.sql @michaelcarletta-cmd
+/aws/tests/signature-request-accepted-contract.test.mjs @michaelcarletta-cmd
+/aws/tests/esign-sr-invariants.test.mjs @michaelcarletta-cmd
+/aws/tests/signature-stamp-submit-values.test.mjs @michaelcarletta-cmd
+/ops/deployment-guard/signature-request-accepted-staging.json @michaelcarletta-cmd
+/ops/release-locks/contracts/signature-request-staging-contract.json @michaelcarletta-cmd
+/ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md @michaelcarletta-cmd
+/ops/release-locks/tests/signature-request-invariants.test.mjs @michaelcarletta-cmd

@@ -1,0 +1,34 @@
+{
+  "id": "signature-request-staging-contract",
+  "title": "Accepted staging Signature Request end-to-end chain",
+  "environment": "staging",
+  "production_active": false,
+  "accepted": true,
+  "evidence": "ops/deployment-guard/signature-request-accepted-staging.json",
+  "proof": "ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md",
+  "test": "aws/tests/signature-request-accepted-contract.test.mjs",
+  "chain": [
+    "Files",
+    "authoritative claim ID",
+    "Class A create-payload",
+    "request/signers",
+    "check-file association",
+    "token lifecycle",
+    "send",
+    "Homeowner discovery/doorway",
+    "/sign",
+    "submitted-value mapping",
+    "flatten/stamp",
+    "signed PDF attachment/completion"
+  ],
+  "invariants": [
+    "normal create/send does not depend on generic browser inserts",
+    "no access_token = NULL",
+    "no claims.latest_signature_request_id mutation",
+    "SQL75 column-level file-link permission remains narrow with RLS enforced",
+    "email branding does not assume unapplied SES columns",
+    "editor field IDs map safely to persisted UUID fields",
+    "no first-signature-wins/ambiguous cross-mapping",
+    "completed PDF uses the accepted signed-document storage contract"
+  ]
+}

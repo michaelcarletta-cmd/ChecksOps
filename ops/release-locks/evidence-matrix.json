@@ -216,6 +216,18 @@
         "direct pushes and administrator bypasses disabled"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"]
+    },
+    "signature-requests": {
+      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "git_sha": "5e194a4d88987ef8905e6aa4df4a5a82676a2c3a",
+      "merged_pr": null,
+      "deployed_artifact": "checksops-staging-api CodeSha256 aZ0K2droM3XKT0eQRUYdHEKwW0ehTlAy8VY/qm7YCgE= rev 99a9dd03-e001-448f-8c18-7ba9f0e823e5; SPA /assets/index-DDibq3aS.js",
+      "applied_migrations": "SQL73/74/75 applied in staging; see ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md; do not reapply",
+      "environment": "staging",
+      "missing_evidence": [
+        "production Signature Request overlay is not authorized; this lock is the staging UAT baseline only"
+      ],
+      "open_pr_overlap": []
     }
   }
 }

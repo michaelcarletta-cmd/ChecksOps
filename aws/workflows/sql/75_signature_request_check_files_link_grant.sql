@@ -1,0 +1,21 @@
+-- AWS staging: column-scoped GRANT so Signature Request create-payload
+-- can link a check-scoped document after inserting the request.
+--
+-- Forward migration. Does NOT rewrite historical:
+--   aws/write-path/sql/35_tranche3_write_grants.sql
+--   aws/write-path/sql/36_tranche3_revoke_write_grants.sql
+--   aws/workflows/sql/50_tranche5_write_grants.sql
+--   aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql
+--   aws/workflows/sql/74_homeowner_signing_rls_boundary.sql
+--
+-- Grants UPDATE only on check_files.signature_request_id.
+-- Does not GRANT table-wide UPDATE on check_files.
+-- Does not GRANT UPDATE on file_name, file_path, file_type, file_size,
+-- category, source, description, uploaded_by, or any other column.
+-- Does not GRANT to PUBLIC or anon.
+-- Does not ENABLE/FORCE RLS. Does not CREATE, DROP, or ALTER policies.
+-- Existing aws_write_check_files / aws_can_write_check(check_intake_item_id)
+-- remains the authorization boundary for same-check vs cross-check writes.
+-- Does not touch production.
+
+GRANT UPDATE (signature_request_id) ON TABLE public.check_files TO checksops, authenticated;

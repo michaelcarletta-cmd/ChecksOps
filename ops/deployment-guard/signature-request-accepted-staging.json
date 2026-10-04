@@ -1,0 +1,113 @@
+{
+  "id": "signature-request-accepted-staging-2026-10-04",
+  "contract_id": "signature-requests",
+  "accepted": true,
+  "environment": "staging",
+  "production_changed": false,
+  "accepted_at": "2026-10-04T18:32:16.082Z",
+  "accepted_by": "manual_uat",
+  "uat": {
+    "result": "passed",
+    "scope": "end_to_end_signature_request",
+    "steps": [
+      "Files-tab Signature Request creation",
+      "Class A create-payload",
+      "request/signer creation",
+      "check_files.signature_request_id association",
+      "send",
+      "token lifecycle",
+      "Homeowner Ops pending-document discovery",
+      "Homeowner document doorway",
+      "/sign",
+      "signature submission",
+      "request completion",
+      "signature visibly stamped in the correct PDF location",
+      "completed signed PDF returned to ChecksOps"
+    ]
+  },
+  "chain": [
+    "Files",
+    "authoritative claim ID",
+    "Class A create-payload",
+    "request/signers",
+    "check-file association",
+    "token lifecycle",
+    "send",
+    "Homeowner discovery/doorway",
+    "/sign",
+    "submitted-value mapping",
+    "flatten/stamp",
+    "signed PDF attachment/completion"
+  ],
+  "staging_fingerprints": {
+    "spa_entry": "/assets/index-DDibq3aS.js",
+    "spa_index_sha256": "1236a7b145e43bab4cb99b933febd90e2fcc553a0ba93c9575267f25681371e9",
+    "api_lambda_sha256": "aZ0K2droM3XKT0eQRUYdHEKwW0ehTlAy8VY/qm7YCgE=",
+    "api_revision_id": "99a9dd03-e001-448f-8c18-7ba9f0e823e5",
+    "api_last_modified": "2026-10-04T18:09:27.000+0000",
+    "members": {
+      "esign.mjs": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+      "signature-submit.mjs": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+      "email-branding.mjs": "8b23eb8893377bad1c11d9a02522c789d222053b084d4ba53107eae7d374bb4b",
+      "homeowner.mjs": "e770bbca94c31096443a96b03aed6a0e36e780ef79b17e1e73423647ede3e302",
+      "homeowner-signing-integration.mjs": "d1a83f97003024419fcab8948667a3789d1e623e32f7229144587a35dc755a6f"
+    }
+  },
+  "production_untouched": {
+    "api_lambda_sha256": "CWB8lxnHoqANyVcaNpKL7h4MtDSPMlHZ6wliFuGE6yA=",
+    "api_revision_id": "16327bba-cc0a-4a17-b2a8-55b7b2d1b069"
+  },
+  "sql": {
+    "sql73": {
+      "path": "aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql",
+      "source_sha256": "02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e",
+      "source_commit": "e61d8d0f9c1e531e1969e31a6f694567d0956505",
+      "applied_environment": "staging",
+      "catalog": "aws_public_homeowner_ledger_by_token last-viewed best-effort"
+    },
+    "sql74": {
+      "path": "aws/workflows/sql/74_homeowner_signing_rls_boundary.sql",
+      "source_sha256": "a7ee929bc25a7ca56bf29dacebdab20198bf1a7625e661333545dc9d1f662c4f",
+      "source_commit": "dba4a9be28eb48e54aba75ca7eab1b0c1f36b55d",
+      "applied_environment": "staging",
+      "catalog": "Homeowner endorsement and Signature Request doorway definers; does not rotate signer tokens"
+    },
+    "sql75": {
+      "path": "aws/workflows/sql/75_signature_request_check_files_link_grant.sql",
+      "source_sha256": "cbf158109926f12a8ec2a32b6815978468dc9d3f5fe22560c2646826582c8283",
+      "source_commit": "8f4ee284221951dd55e1ad921b66578ba968c550",
+      "applied_environment": "staging",
+      "catalog": "GRANT UPDATE (signature_request_id) ON public.check_files TO checksops, authenticated; RLS remains enforced"
+    },
+    "live_catalog_read": {
+      "ok": false,
+      "attempted_at": "2026-10-04T18:36:36.400Z",
+      "reason": "DATABASE_SECRET_ARN is present on checksops-staging-api, but this environment has no VPC path to the staging catalog; the read-only query timed out. No SQL apply or catalog mutation was attempted.",
+      "do_not_reapply": true,
+      "recorded_state": "source hashes and prior staging apply evidence are the freeze pins; live routine-definition hashes were not available from this environment"
+    }
+  },
+  "storage_path_contract": {
+    "claim_linked": "signed/{claim_id}/{request_id}-final.pdf",
+    "check_linked_fallback": "check-intake/{check_intake_item_id}/files/{request_id}-final.pdf",
+    "s3_key_prefix": "files/claim-files/",
+    "attach_rpc": "aws_public_signature_attach_signed"
+  },
+  "source_pins": {
+    "esign": "aws/functions/api/esign.mjs",
+    "signature_submit": "aws/functions/api/signature-submit.mjs",
+    "email_branding": "aws/functions/api/email-branding.mjs"
+  },
+  "invariants": [
+    "normal create/send does not depend on generic browser inserts",
+    "no access_token = NULL",
+    "no claims.latest_signature_request_id mutation",
+    "SQL75 column-level file-link permission remains narrow with RLS enforced",
+    "email branding does not assume unapplied SES columns",
+    "editor field IDs map safely to persisted UUID fields",
+    "no first-signature-wins/ambiguous cross-mapping",
+    "completed PDF uses the accepted signed-document storage contract",
+    "Class A create-payload remains the creation boundary",
+    "submitted values are passed in-memory into flatten/stamp"
+  ]
+}

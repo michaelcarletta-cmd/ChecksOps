@@ -8,7 +8,9 @@
   ],
   "ownership_groups": {
     "delete-check-contract": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Accepted Delete Check bridge contract (UI -> AWS RPC dispatcher). Any change must preserve reason forwarding invariants and update locks.",
       "paths": [
         "src/integrations/aws/deleteCheckBridge.ts",
@@ -238,6 +240,26 @@
         "aws/cutover/scripts/",
         "aws/cutover/production/",
         "aws/production/LIVE_RESOURCES.md"
+      ]
+    },
+    "signature-requests": {
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
+      "description": "Accepted staging Signature Request end-to-end chain. Live Homeowner members are fingerprint-pinned; this group owns the matching repo create/send/submit/branding/SQL sources plus the staging acceptance contract.",
+      "paths": [
+        "aws/functions/api/esign.mjs",
+        "aws/functions/api/signature-submit.mjs",
+        "aws/functions/api/email-branding.mjs",
+        "aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql",
+        "aws/workflows/sql/74_homeowner_signing_rls_boundary.sql",
+        "aws/workflows/sql/75_signature_request_check_files_link_grant.sql",
+        "ops/release-locks/contracts/signature-request-staging-contract.json",
+        "ops/release-locks/proof/signature-request-staging-acceptance-2026-10-04.md",
+        "ops/deployment-guard/signature-request-accepted-staging.json",
+        "aws/tests/signature-request-accepted-contract.test.mjs",
+        "aws/tests/esign-sr-invariants.test.mjs",
+        "aws/tests/signature-stamp-submit-values.test.mjs"
       ]
     }
   }
