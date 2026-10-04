@@ -6,12 +6,15 @@ import { fileURLToPath } from 'node:url';
 import {
   FUNCTION_NAME,
   FORBIDDEN_FUNCTIONS,
-  PINNED_SQL50_SHA256,
+  PINNED_SQL50_DOC_SHA256,
+  PINNED_TEMP_TRIGGER_SHA256,
+  PINNED_RESTORE_TRIGGER_SHA256,
   APPLY_CONFIRM,
   KNOWN_ROOT_IDS,
   ALLOWED_REQUESTS,
   EXCLUDE_REASON,
   EXCLUSIONS_INSERT_SQL,
+  EXCLUDE_UPDATE_SQL,
   readEmbeddedSql,
   refuseEvent,
   handleEvent,
@@ -19,12 +22,16 @@ import {
   classifyFamily,
   monthlyFromRows,
   summarizeCleanup,
+  triggerPreservesPaidImmutability,
   SYNTHETIC_TENANT_ID,
 } from '../isolated/mortgage-agent-compensation/oneshot50/index.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SQL50 = path.join(ROOT, 'isolated/mortgage-agent-compensation/sql/50_exclude_mortgage_agent_compensation.sql');
-const SQL = fs.readFileSync(SQL50, 'utf8');
+const SQL_DIR = path.join(ROOT, 'isolated/mortgage-agent-compensation/sql');
+const SQL_DOC = fs.readFileSync(path.join(SQL_DIR, '50_exclude_mortgage_agent_compensation.sql'), 'utf8');
+const SQL_TEMP = fs.readFileSync(path.join(SQL_DIR, '50_temp_allowlist_trigger.sql'), 'utf8');
+const SQL_RESTORE = fs.readFileSync(path.join(SQL_DIR, '50_restore_sql47_trigger.sql'), 'utf8');
+const SQL47 = fs.readFileSync(path.join(SQL_DIR, '47_mortgage_agent_compensation.sql'), 'utf8');
 const PANEL = fs.readFileSync(path.join(ROOT, '..', 'src/components/admin/MortgageAgentsPanel.tsx'), 'utf8');
 const API = fs.readFileSync(path.join(ROOT, 'functions/api/mortgage-agent-compensation.mjs'), 'utf8');
 
@@ -39,6 +46,7 @@ const family = [
     classification: 'initial',
     amount_cents: 1000,
     status: 'paid',
+    payment_reference: 'MACOMP-STAGING-15',
     pay_period: '2026-10',
   },
   {
@@ -51,6 +59,7 @@ const family = [
     classification: 'additional',
     amount_cents: 500,
     status: 'paid',
+    payment_reference: 'MACOMP-STAGING-15',
     pay_period: '2026-10',
   },
   {
@@ -63,6 +72,7 @@ const family = [
     classification: 'initial',
     amount_cents: 1000,
     status: 'paid',
+    payment_reference: 'MACOMP48',
     pay_period: '2026-10',
   },
   {
@@ -75,6 +85,7 @@ const family = [
     classification: 'additional',
     amount_cents: 500,
     status: 'earned',
+    payment_reference: null,
     pay_period: '2026-10',
   },
   {
@@ -127,12 +138,28 @@ const family = [
   },
 ];
 
+const SQL47_TRIGGER = `
+CREATE OR REPLACE FUNCTION public.tg_protect_mortgage_agent_compensation_facts()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF OLD.status = 'paid' AND NEW.status IS DISTINCT FROM 'paid' THEN
+    RAISE EXCEPTION 'compensation_paid_immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+`;
+
 test('SQL 50 oneshot is inspect-default and refuses production, delete, and unconfirmed apply', () => {
   assert.equal(FUNCTION_NAME, 'checksops-staging-macomp50-oneshot');
   assert.equal(FORBIDDEN_FUNCTIONS.includes('checksops-staging-api'), true);
   assert.equal(FORBIDDEN_FUNCTIONS.includes('checksops-staging-guarded-sql-executor'), true);
-  assert.equal(sha256(SQL), PINNED_SQL50_SHA256);
-  assert.equal(readEmbeddedSql(SQL50).ok, true);
+  assert.equal(sha256(SQL_DOC), PINNED_SQL50_DOC_SHA256);
+  assert.equal(sha256(SQL_TEMP), PINNED_TEMP_TRIGGER_SHA256);
+  assert.equal(sha256(SQL_RESTORE), PINNED_RESTORE_TRIGGER_SHA256);
+  assert.equal(readEmbeddedSql().ok, true);
   assert.equal(refuseEvent({ sql_text: 'DELETE FROM public.mortgage_agent_compensation_entries' }).ok, false);
   assert.equal(refuseEvent({ action: 'inspect' }, { RDS_HOST: 'checksops-production.example' }).ok, false);
   assert.equal(refuseEvent({ action: 'demo' }).ok, false);
@@ -142,14 +169,26 @@ test('SQL 50 oneshot is inspect-default and refuses production, delete, and unco
   }), null);
 });
 
-test('SQL 50 excludes without deleting facts or touching tenant billing / money rails', () => {
-  const executable = SQL.replace(/--.*$/gm, '');
-  assert.match(SQL, /exclude_mortgage_agent_compensation/);
-  assert.match(SQL, /NEW.status NOT IN \('voided', 'excluded'\)/);
-  assert.doesNotMatch(SQL, /DELETE\s+FROM\s+public\.mortgage_agent_compensation_entries/i);
-  assert.doesNotMatch(executable, /mortgage_handling_requests|check_billing_events/i);
-  assert.doesNotMatch(executable, /\bmoov_|\bstripe_|\bach_|\bwallet\b/i);
-  assert.doesNotMatch(executable, /amount_cents\s*=/);
+test('SQL 50 is not a permanent paid→excluded|voided capability', () => {
+  assert.match(SQL_DOC, /NOT a permanent catalog migration/);
+  assert.doesNotMatch(SQL_DOC, /CREATE OR REPLACE FUNCTION public\.exclude_mortgage_agent_compensation/);
+  assert.match(SQL_TEMP, /a47cad99-0000-4000-8000-000000000021/);
+  assert.match(SQL_TEMP, /a2c0fbfe-e8c5-42dc-bc32-2c4edf8f2074/);
+  assert.doesNotMatch(SQL_TEMP, /NEW\.status NOT IN \('voided', 'excluded'\)/);
+  assert.match(SQL_RESTORE, /OLD\.status = 'paid' AND NEW\.status IS DISTINCT FROM 'paid'/);
+  assert.doesNotMatch(SQL_RESTORE, /NEW\.status = 'excluded'/);
+  assert.match(SQL47, /OLD\.status = 'paid' AND NEW\.status IS DISTINCT FROM 'paid'/);
+  assert.equal(triggerPreservesPaidImmutability(SQL_RESTORE), true);
+  assert.equal(triggerPreservesPaidImmutability(SQL_TEMP), false);
+  assert.doesNotMatch(EXCLUDE_UPDATE_SQL, /payment_reference\s*=/);
+  assert.doesNotMatch(EXCLUDE_UPDATE_SQL, /amount_cents\s*=/);
+  assert.doesNotMatch(EXCLUDE_UPDATE_SQL, /paid_at\s*=/);
+  for (const text of [SQL_DOC, SQL_TEMP, SQL_RESTORE, EXCLUDE_UPDATE_SQL]) {
+    const executable = String(text).replace(/--.*$/gm, '');
+    assert.doesNotMatch(text, /DELETE\s+FROM\s+public\.mortgage_agent_compensation_entries/i);
+    assert.doesNotMatch(executable, /mortgage_handling_requests|check_billing_events/i);
+    assert.doesNotMatch(executable, /\bmoov_|\bstripe_|\bach_|\bwallet\b/i);
+  }
 });
 
 test('allowlist accepts only a47/a48 synthetic family and expected monthly fingerprint', () => {
@@ -192,19 +231,36 @@ test('allowlist rejects Freedom, GATE4, and other-tenant rows', () => {
   assert.equal(rejected.rejected[0].reject_reasons.includes('forbidden_request'), true);
 });
 
-test('inspect does not exclude; confirmed apply excludes family plus allowlisted requests', async () => {
+test('inspect does not exclude; confirmed apply uses allowlisted update and restores SQL 47 trigger', async () => {
   const calls = [];
+  let triggerDef = SQL47_TRIGGER;
   const client = {
     async query(sql, params) {
       calls.push({ sql, params });
-      if (String(sql).includes('FROM public.mortgage_agent_compensation_entries')) {
+      const text = String(sql);
+      if (text.includes('FROM public.mortgage_agent_compensation_entries')) {
         return { rows: family };
       }
-      if (String(sql).includes('FROM public.user_roles')) {
+      if (text.includes('pg_get_functiondef')) {
+        return { rows: [{ def: triggerDef }] };
+      }
+      if (text.includes('FROM public.user_roles')) {
         return { rows: [{ user_id: '233c588f-dc33-4307-8c3f-3da49c9fd2b3' }] };
       }
-      if (String(sql).includes('exclude_mortgage_agent_compensation')) {
-        return { rows: [{ n: family.length }] };
+      if (text.includes("SET status = 'excluded'")) {
+        return {
+          rows: family.map((row) => ({
+            id: row.id,
+            status: 'excluded',
+            payment_reference: row.payment_reference || null,
+            paid_at: row.status === 'paid' ? '2026-10-03T17:00:46.472Z' : null,
+            amount_cents: row.amount_cents,
+          })),
+        };
+      }
+      if (text.includes('CREATE OR REPLACE FUNCTION public.tg_protect_mortgage_agent_compensation_facts()')) {
+        triggerDef = text;
+        return { rows: [] };
       }
       return { rows: [] };
     },
@@ -214,13 +270,11 @@ test('inspect does not exclude; confirmed apply excludes family plus allowlisted
     RDS_HOST: 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
     AWS_LAMBDA_FUNCTION_NAME: FUNCTION_NAME,
   };
-  const inspect = await handleEvent({ action: 'inspect', function_name: FUNCTION_NAME }, env, {
-    client,
-    sqlFile: SQL50,
-  });
+  const inspect = await handleEvent({ action: 'inspect', function_name: FUNCTION_NAME }, env, { client });
   assert.equal(inspect.ok, true);
   assert.equal(inspect.details.executed, false);
-  assert.equal(calls.some((call) => String(call.sql).includes('exclude_mortgage_agent_compensation')), false);
+  assert.equal(inspect.details.trigger_restored, true);
+  assert.equal(calls.some((call) => String(call.sql).includes("SET status = 'excluded'")), false);
   assert.equal(calls.some((call) => String(call.sql).includes('mortgage_agent_compensation_exclusions')), false);
 
   const apply = await handleEvent({
@@ -229,19 +283,25 @@ test('inspect does not exclude; confirmed apply excludes family plus allowlisted
     function_name: FUNCTION_NAME,
     one_use_id: 'oneshot50-test-apply',
     expected_ids_fingerprint: inspect.details.ids_fingerprint,
-  }, env, { client, sqlFile: SQL50 });
-  assert.equal(apply.ok, true);
+  }, env, { client });
+  assert.equal(apply.ok, true, apply.message);
   assert.equal(apply.details.executed, true);
   assert.equal(apply.details.excluded, family.length);
-  const excludeCall = calls.find((call) => String(call.sql).includes('SELECT public.exclude_mortgage_agent_compensation'));
-  assert.ok(excludeCall);
-  assert.deepEqual(excludeCall.params[1], inspect.details.entry_ids);
-  assert.equal(excludeCall.params[2], EXCLUDE_REASON);
+  assert.equal(apply.details.trigger_restored, true);
+  assert.equal(apply.details.trigger_has_demo_allowlist, false);
+  assert.equal(apply.details.payment_references_preserved[0].payment_reference, 'MACOMP-STAGING-15');
+  const updateCall = calls.find((call) => String(call.sql).includes("SET status = 'excluded'"));
+  assert.ok(updateCall);
+  assert.deepEqual(updateCall.params[0], inspect.details.entry_ids);
+  assert.equal(updateCall.params[1], EXCLUDE_REASON);
+  assert.equal(updateCall.params[2], SYNTHETIC_TENANT_ID);
   const requestInsert = calls.find((call) => String(call.sql).includes('unnest($1::uuid[])'));
   assert.ok(requestInsert);
   assert.deepEqual(requestInsert.params[0], [...ALLOWED_REQUESTS]);
-  assert.equal(requestInsert.params[1], EXCLUDE_REASON);
   assert.match(EXCLUSIONS_INSERT_SQL, /ON CONFLICT \(mortgage_request_id\) DO NOTHING/);
+  assert.equal(calls.some((call) => String(call.sql) === 'BEGIN'), true);
+  assert.equal(calls.some((call) => String(call.sql) === 'COMMIT'), true);
+  assert.equal(triggerPreservesPaidImmutability(triggerDef), true);
 });
 
 test('monthly UI/API expose Adjustments without changing Gross/Paid/Balance formula', () => {

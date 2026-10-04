@@ -1,8 +1,9 @@
 /**
- * Staging-only SQL 50 demo-compensation exclude oneshot.
+ * Staging-only A47/A48 demo compensation exclude oneshot.
  * Default action is inspect. Apply requires confirm token.
  * Does not accept caller SQL. Does not target production.
  * Does not delete rows. Does not touch tenant billing or money rails.
+ * Does not permanently weaken paid-row immutability.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -11,7 +12,9 @@ import { fileURLToPath } from 'node:url';
 import {
   FUNCTION_NAME,
   FORBIDDEN_FUNCTIONS,
-  PINNED_SQL50_SHA256,
+  PINNED_SQL50_DOC_SHA256,
+  PINNED_TEMP_TRIGGER_SHA256,
+  PINNED_RESTORE_TRIGGER_SHA256,
   APPLY_CONFIRM,
   SYNTHETIC_TENANT_ID,
   ALLOWED_AGENTS,
@@ -21,12 +24,17 @@ import {
   FORBIDDEN_REQUESTS,
   EXCLUDE_REASON,
   EXCLUSIONS_INSERT_SQL,
+  EXCLUDE_UPDATE_SQL,
+  AUDIT_INSERT_SQL,
+  TRIGGER_DEF_SQL,
 } from './constants.mjs';
 
 export {
   FUNCTION_NAME,
   FORBIDDEN_FUNCTIONS,
-  PINNED_SQL50_SHA256,
+  PINNED_SQL50_DOC_SHA256,
+  PINNED_TEMP_TRIGGER_SHA256,
+  PINNED_RESTORE_TRIGGER_SHA256,
   APPLY_CONFIRM,
   SYNTHETIC_TENANT_ID,
   ALLOWED_REQUESTS,
@@ -34,10 +42,14 @@ export {
   KNOWN_ROOT_IDS,
   EXCLUDE_REASON,
   EXCLUSIONS_INSERT_SQL,
+  EXCLUDE_UPDATE_SQL,
 };
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const SQL50 = path.join(ROOT, '..', 'sql', '50_exclude_mortgage_agent_compensation.sql');
+const SQL_DIR = path.join(ROOT, '..', 'sql');
+const SQL50_DOC = path.join(SQL_DIR, '50_exclude_mortgage_agent_compensation.sql');
+const SQL_TEMP = path.join(SQL_DIR, '50_temp_allowlist_trigger.sql');
+const SQL_RESTORE = path.join(SQL_DIR, '50_restore_sql47_trigger.sql');
 const consumed = new Set();
 
 export function sha256(text) {
@@ -79,26 +91,52 @@ export function refuseEvent(event = {}, env = process.env) {
   return null;
 }
 
-export function readEmbeddedSql(sqlFile = SQL50, expected = PINNED_SQL50_SHA256) {
+function readPinned(sqlFile, expected, label) {
   if (!fs.existsSync(sqlFile)) {
-    return fail('INVALID_MANIFEST', 'embedded SQL 50 is missing');
+    return fail('INVALID_MANIFEST', `${label} is missing`);
   }
   const text = fs.readFileSync(sqlFile, 'utf8');
   const hash = sha256(text);
   if (hash !== expected) {
-    return fail('SQL_COLLISION', 'embedded SQL 50 hash mismatch', { hash, expected });
+    return fail('SQL_COLLISION', `${label} hash mismatch`, { hash, expected });
   }
   const executable = text.replace(/--.*$/gm, '');
   if (/DELETE\s+FROM\s+public\.mortgage_agent_compensation_entries/i.test(text)) {
-    return fail('UNRELATED_MUTATION', 'SQL 50 must not delete compensation rows');
+    return fail('UNRELATED_MUTATION', `${label} must not delete compensation rows`);
   }
   if (/mortgage_handling_requests|check_billing_events/i.test(executable)) {
-    return fail('UNRELATED_MUTATION', 'SQL 50 must not touch Desk requests or tenant billing');
+    return fail('UNRELATED_MUTATION', `${label} must not touch Desk requests or tenant billing`);
   }
   if (/\bmoov\b|\bstripe\b|\bach\b|\bwallet\b/i.test(executable)) {
-    return fail('UNRELATED_MUTATION', 'SQL 50 must not reference money rails');
+    return fail('UNRELATED_MUTATION', `${label} must not reference money rails`);
   }
-  return ok({ text, hash });
+  return ok({ text, hash, label });
+}
+
+export function readEmbeddedSql() {
+  const doc = readPinned(SQL50_DOC, PINNED_SQL50_DOC_SHA256, 'SQL 50 doc');
+  if (!doc.ok) return doc;
+  const temp = readPinned(SQL_TEMP, PINNED_TEMP_TRIGGER_SHA256, 'temp allowlist trigger');
+  if (!temp.ok) return temp;
+  const restore = readPinned(SQL_RESTORE, PINNED_RESTORE_TRIGGER_SHA256, 'SQL 47 trigger restore');
+  if (!restore.ok) return restore;
+  if (!/a47cad99-0000-4000-8000-000000000021/.test(temp.details.text)) {
+    return fail('INVALID_MANIFEST', 'temp trigger must hard-bind the A47/A48 allowlist');
+  }
+  if (/NEW\.status NOT IN \('voided', 'excluded'\)/.test(restore.details.text)
+      || /NEW\.status = 'excluded'/.test(restore.details.text)) {
+    return fail('UNRELATED_MUTATION', 'restore trigger must not keep a paid carve-out');
+  }
+  if (!/OLD\.status = 'paid' AND NEW\.status IS DISTINCT FROM 'paid'/.test(restore.details.text)) {
+    return fail('INVALID_MANIFEST', 'restore trigger must keep paid-row immutability');
+  }
+  return ok({
+    hash: doc.details.hash,
+    temp: temp.details.text,
+    restore: restore.details.text,
+    temp_sha256: temp.details.hash,
+    restore_sha256: restore.details.hash,
+  });
 }
 
 export const FAMILY_SELECT_SQL = `
@@ -202,6 +240,13 @@ export function summarizeCleanup(familyRows, periodRows, period = '2026-10') {
   };
 }
 
+export function triggerPreservesPaidImmutability(definition) {
+  const def = String(definition || '');
+  return /OLD\.status = 'paid' AND NEW\.status IS DISTINCT FROM 'paid'/.test(def)
+    && !/NEW\.status = 'excluded'/.test(def)
+    && !/NEW\.status NOT IN \('voided', 'excluded'\)/.test(def);
+}
+
 function consumeOneUse(id) {
   if (!id) throw new Error('one_use_id required');
   if (consumed.has(id)) throw new Error(`one_use_replay:${id}`);
@@ -277,10 +322,18 @@ async function loadSnapshot(client, period) {
   return summarizeCleanup(family.rows, periodRows.rows, period);
 }
 
+async function liveTriggerState(client) {
+  const def = (await client.query(TRIGGER_DEF_SQL)).rows[0]?.def || '';
+  return {
+    trigger_restored: triggerPreservesPaidImmutability(def),
+    trigger_has_demo_allowlist: /a47cad99-0000-4000-8000-000000000021/.test(def),
+  };
+}
+
 export async function handleEvent(event = {}, env = process.env, deps = {}) {
   const refused = refuseEvent(event, env);
   if (refused) return refused;
-  const embedded = readEmbeddedSql(deps.sqlFile || SQL50);
+  const embedded = readEmbeddedSql();
   if (!embedded.ok) return embedded;
   const action = String(event.action || 'inspect');
   const period = String(event.period || '2026-10');
@@ -290,15 +343,19 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
   const close = !deps.client;
   try {
     const snapshot = await loadSnapshot(client, period);
+    const trigger = await liveTriggerState(client);
     if (action === 'inspect' || action === 'verify') {
       return ok({
         action,
         executed: false,
-        sql50_sha256: embedded.details.hash,
+        sql50_doc_sha256: embedded.details.hash,
+        temp_trigger_sha256: embedded.details.temp_sha256,
+        restore_trigger_sha256: embedded.details.restore_sha256,
         period,
         ...snapshot,
+        ...trigger,
         known_roots_present: KNOWN_ROOT_IDS.filter((id) => snapshot.entry_ids.includes(id)),
-        note: 'Inspect only. Apply is a later authorization.',
+        note: 'Inspect only. Apply is a later authorization. SQL 50 is not a permanent trigger weakening.',
       });
     }
     if (!snapshot.safe) {
@@ -311,31 +368,62 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
         entry_ids: snapshot.entry_ids,
       });
     }
-    await client.query(embedded.details.text);
     const owner = (await client.query(
       `SELECT user_id FROM public.user_roles WHERE role = 'admin' ORDER BY user_id LIMIT 1`,
     )).rows[0];
     if (!owner?.user_id) {
-      return fail('NOT_AUTHORIZED', 'no staging admin identity for exclude RPC');
+      return fail('NOT_AUTHORIZED', 'no staging admin identity for exclude audit');
     }
-    const excluded = await client.query(`
-      SELECT public.exclude_mortgage_agent_compensation($2::uuid[], $3) AS n
-      FROM (SELECT set_config('request.app_user_id', $1, true) AS uid) cfg
-    `, [
-      owner.user_id,
-      snapshot.entry_ids,
-      EXCLUDE_REASON,
-    ]);
-    // Cover allowlisted requests with no payable yet (a47…023 cancel-before-complete).
-    await client.query(EXCLUSIONS_INSERT_SQL, [ALLOWED_REQUESTS, EXCLUDE_REASON]);
-    const after = await loadSnapshot(client, period);
-    return ok({
-      action,
-      executed: true,
-      excluded: Number(excluded.rows[0]?.n || 0),
-      before: snapshot,
-      after,
-    });
+
+    await client.query('BEGIN');
+    try {
+      await client.query(embedded.details.temp);
+      const updated = await client.query(EXCLUDE_UPDATE_SQL, [
+        snapshot.entry_ids,
+        EXCLUDE_REASON,
+        SYNTHETIC_TENANT_ID,
+        ALLOWED_REQUESTS,
+        ALLOWED_CHECKS,
+        ALLOWED_AGENTS,
+      ]);
+      if (updated.rows.length !== snapshot.entry_ids.length) {
+        throw new Error(`allowlisted update counted ${updated.rows.length}, expected ${snapshot.entry_ids.length}`);
+      }
+      for (const row of snapshot.rows) {
+        await client.query(AUDIT_INSERT_SQL, [
+          row.id,
+          owner.user_id,
+          row.status,
+          EXCLUDE_REASON,
+        ]);
+      }
+      await client.query(EXCLUSIONS_INSERT_SQL, [ALLOWED_REQUESTS, EXCLUDE_REASON]);
+      await client.query(embedded.details.restore);
+      const afterTrigger = await liveTriggerState(client);
+      if (!afterTrigger.trigger_restored || afterTrigger.trigger_has_demo_allowlist) {
+        throw new Error('SQL 47 paid-immutability trigger was not restored');
+      }
+      await client.query('COMMIT');
+      const after = await loadSnapshot(client, period);
+      return ok({
+        action,
+        executed: true,
+        excluded: updated.rows.length,
+        payment_references_preserved: updated.rows.map((row) => ({
+          id: row.id,
+          status: row.status,
+          payment_reference: row.payment_reference,
+          paid_at: row.paid_at,
+          amount_cents: row.amount_cents,
+        })),
+        before: snapshot,
+        after,
+        ...afterTrigger,
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => null);
+      return fail('UNRELATED_MUTATION', error.message);
+    }
   } finally {
     if (close) await client.end().catch(() => null);
   }
