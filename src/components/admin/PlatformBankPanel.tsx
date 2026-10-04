@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  PLATFORM_FINANCE_WRITE_BLOCKED_MESSAGE,
+  composePlatformBankDisplay,
+} from "@/lib/payments/platformFinance";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Landmark,
@@ -22,10 +23,7 @@ import {
 /**
  * Platform (master merchant) banking panel.
  *
- * Links and verifies the settlement bank account on the ChecksOps platform
- * payment account so Tenant Management can pull funds from and send funds to
- * tenant accounts. Every action goes through the `moov-platform-bank`
- * function, which is locked to the platform owner login.
+ * Read-only ChecksOps facilitator bank display. Writes stay fail-closed.
  */
 
 type Capability = { capability: string; status: string };
@@ -79,10 +77,6 @@ export function PlatformBankPanel() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState<StatusPayload | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,53 +102,12 @@ export function PlatformBankPanel() {
     load();
   }, [load]);
 
-  async function initiateMicroDeposit(methodId: string) {
-    setBusy(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("moov-platform-bank", {
-        body: { action: "initiate_micro_deposit", payment_method_id: methodId },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).message ?? (data as any).error);
-      if ((data as any)?.already_verified) {
-        toast({ title: "Already verified", description: "This bank account is already verified." });
-        await load();
-        return;
-      }
-      toast({
-        title: "Micro-deposit sent",
-        description: "A $0.01 deposit with an MV#### code is on its way to the bank. It usually arrives within minutes.",
-      });
-      setVerifyingId(methodId);
-      setCode("");
-      await load();
-    } catch (err: any) {
-      toast({ title: "Couldn't start verification", description: err?.message, variant: "destructive" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function confirmMicroDeposit(methodId: string) {
-    if (!/^\d{4}$/.test(code)) return;
-    setBusy(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("moov-platform-bank", {
-        body: { action: "confirm_micro_deposit", payment_method_id: methodId, code },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) {
-        throw new Error((data as any).message ?? "That code did not match.");
-      }
-      toast({ title: "Bank account verified", description: "The platform settlement bank is ready to move money." });
-      setVerifyingId(null);
-      setCode("");
-      await load();
-    } catch (err: any) {
-      toast({ title: "Verification failed", description: err?.message, variant: "destructive" });
-    } finally {
-      setBusy(false);
-    }
+  function refuseWrite(title: string) {
+    toast({
+      title,
+      description: PLATFORM_FINANCE_WRITE_BLOCKED_MESSAGE,
+      variant: "destructive",
+    });
   }
 
   if (loading && !state) {
@@ -166,7 +119,10 @@ export function PlatformBankPanel() {
   }
 
   const capabilities = state?.capabilities ?? [];
-  const methods = state?.methods ?? [];
+  const methods = composePlatformBankDisplay({
+    providerBanks: state?.provider_bank_accounts ?? [],
+    localMethods: state?.methods ?? [],
+  });
 
   return (
     <div className="space-y-6">
@@ -256,30 +212,22 @@ export function PlatformBankPanel() {
           <div>
             <CardTitle>Settlement Bank Accounts</CardTitle>
             <CardDescription>
-              Bank accounts linked to the platform account. Verify ownership with the instant
-              micro-deposit code before pulling or sending funds.
+              Bank accounts on the ChecksOps facilitator Moov account. This view is read-only.
             </CardDescription>
           </div>
-          {!showAddForm && (
-            <Button size="sm" variant="outline" onClick={() => setShowAddForm(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Add bank
-            </Button>
-          )}
+          <Button size="sm" variant="outline" onClick={() => refuseWrite("Bank changes are unavailable")}>
+            <Plus className="h-4 w-4 mr-1" /> Add bank
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
-          {methods.length === 0 && !showAddForm && (
+          {methods.length === 0 && (
             <p className="text-sm text-muted-foreground py-6 text-center">
-              No platform bank account yet. Add the settlement bank to get started.
+              No ChecksOps facilitator bank account is visible yet.
             </p>
           )}
 
-          {methods.map((m) => {
-            const verified = m.verification_status === "verified";
-            const pending = m.verification_status === "pending_micro_deposit" ||
-              m.micro_deposit?.status === "pending";
-            const isVerifying = verifyingId === m.id;
-            return (
-              <div key={m.id} className="border rounded-lg p-4 space-y-3 bg-card/50">
+          {methods.map((m) => (
+              <div key={m.id || m.bank_account_id} className="border rounded-lg p-4 space-y-3 bg-card/50">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-3">
                     <Landmark className="h-4 w-4 text-muted-foreground" />
@@ -295,214 +243,20 @@ export function PlatformBankPanel() {
                   </div>
                   <div className="flex items-center gap-2">
                     {statusBadge(m.verification_status)}
-                    {!verified && !isVerifying && (
-                      <Button
-                        size="sm"
-                        variant={pending ? "default" : "outline"}
-                        disabled={busy}
-                        onClick={() =>
-                          pending ? setVerifyingId(m.id) : initiateMicroDeposit(m.id)
-                        }
-                      >
-                        {busy && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-                        {pending ? "Enter code" : "Verify"}
-                      </Button>
-                    )}
                   </div>
                 </div>
-
-                {isVerifying && !verified && (
-                  <div className="flex flex-wrap items-end gap-2 pt-1">
-                    <div className="space-y-1">
-                      <Label htmlFor={`code-${m.id}`} className="text-xs">
-                        4-digit code from the $0.01 deposit (MV####)
-                      </Label>
-                      <Input
-                        id={`code-${m.id}`}
-                        inputMode="numeric"
-                        className="w-32 font-mono tracking-widest"
-                        placeholder="0000"
-                        value={code}
-                        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                      />
-                    </div>
-                    <Button
-                      size="sm"
-                      disabled={busy || code.length !== 4}
-                      onClick={() => confirmMicroDeposit(m.id)}
-                    >
-                      {busy && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-                      Confirm
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => initiateMicroDeposit(m.id)}
-                    >
-                      Resend deposit
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setVerifyingId(null); setCode(""); }}>
-                      Cancel
-                    </Button>
-                  </div>
-                )}
               </div>
-            );
-          })}
+          ))}
 
-          {showAddForm && (
-            <AddPlatformBankForm
-              onConnected={async () => {
-                setShowAddForm(false);
-                await load();
-              }}
-              onExit={() => setShowAddForm(false)}
-            />
+          {!!state?.warnings?.length && (
+            <p className="text-xs text-muted-foreground">{state.warnings.join(" · ")}</p>
           )}
-
           <p className="text-[11px] text-muted-foreground flex items-start gap-2">
             <ShieldCheck className="h-3.5 w-3.5 mt-px shrink-0" />
-            Bank details are sent directly to the payment provider. ChecksOps stores only the bank
-            name, account type, and last four digits.
+            {PLATFORM_FINANCE_WRITE_BLOCKED_MESSAGE}
           </p>
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-/* ---------------- Add bank form ---------------- */
-
-function AddPlatformBankForm({
-  onConnected,
-  onExit,
-}: {
-  onConnected: () => void;
-  onExit: () => void;
-}) {
-  const { toast } = useToast();
-  const [saving, setSaving] = useState(false);
-  const [holderName, setHolderName] = useState("");
-  const [holderType, setHolderType] = useState("business");
-  const [bankAccountType, setBankAccountType] = useState("checking");
-  const [routingNumber, setRoutingNumber] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-
-  const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
-
-  const canSubmit =
-    holderName.trim().length >= 2 &&
-    routingNumber.length === 9 &&
-    accountNumber.length >= 4 &&
-    !saving;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setSaving(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("moov-platform-bank", {
-        body: {
-          action: "add",
-          holder_name: holderName.trim(),
-          holder_type: holderType,
-          bank_account_type: bankAccountType,
-          routing_number: routingNumber,
-          account_number: accountNumber,
-        },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-
-      setAccountNumber("");
-      setRoutingNumber("");
-      toast({
-        title: "Platform bank account connected",
-        description: "Verify ownership with an instant micro-deposit to finish.",
-      });
-      onConnected();
-    } catch (err: any) {
-      toast({
-        title: "Couldn't connect the bank account",
-        description: err?.message ?? "An unexpected error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4 border rounded-lg bg-card/50">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="platform-bank-holder-name">Account holder name</Label>
-          <Input
-            id="platform-bank-holder-name"
-            value={holderName}
-            onChange={(e) => setHolderName(e.target.value.slice(0, 128))}
-            placeholder="Exactly as it appears at the bank"
-            autoComplete="off"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Holder type</Label>
-          <Select value={holderType} onValueChange={setHolderType}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="business">Business</SelectItem>
-              <SelectItem value="individual">Individual</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Account type</Label>
-          <Select value={bankAccountType} onValueChange={setBankAccountType}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="checking">Checking</SelectItem>
-              <SelectItem value="savings">Savings</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="platform-bank-routing">Routing number</Label>
-          <Input
-            id="platform-bank-routing"
-            inputMode="numeric"
-            value={routingNumber}
-            onChange={(e) => setRoutingNumber(digitsOnly(e.target.value, 9))}
-            placeholder="9 digits"
-            autoComplete="off"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="platform-bank-account">Account number</Label>
-          <Input
-            id="platform-bank-account"
-            inputMode="numeric"
-            value={accountNumber}
-            onChange={(e) => setAccountNumber(digitsOnly(e.target.value, 17))}
-            placeholder="4–17 digits"
-            autoComplete="off"
-          />
-        </div>
-      </div>
-
-      <div className="flex gap-2 justify-end">
-        <Button type="button" variant="ghost" onClick={onExit} disabled={saving}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!canSubmit}>
-          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          Connect bank
-        </Button>
-      </div>
-    </form>
   );
 }
