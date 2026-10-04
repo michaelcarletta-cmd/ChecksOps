@@ -86,6 +86,16 @@ export const AUTHORIZED_SQL72 = Object.freeze({
   expected_live_definition_sha256: '5918ebec1b3338dd4e34a4420c5f2a654f0b2d3311527923f7fd962c891fbcfa',
 });
 
+export const AUTHORIZED_SQL73 = Object.freeze({
+  filename: 'aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql',
+  migration_id: '73_homeowner_ledger_view_last_viewed_best_effort',
+  commit: 'e61d8d0f9c1e531e1969e31a6f694567d0956505',
+  source_sha256: '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e',
+  intended_replacement_sha256: '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e',
+  function_identity: 'public.aws_public_homeowner_ledger_by_token(text)',
+  expected_live_definition_sha256: 'b099a0d44b3078fbdc78ecf03ab813b84a402d3234510bcfbc21c2278004ab76',
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
@@ -93,9 +103,16 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_MORTGAGE_OPS_AGENT_ACCEPT_COMPLETE,
   AUTHORIZED_SQL71,
   AUTHORIZED_SQL72,
+  AUTHORIZED_SQL73,
 ]);
 
 export function resolveAuthorizedMigration(input = {}) {
+  if (
+    input.filename === AUTHORIZED_SQL73.filename
+    || input.migration_id === AUTHORIZED_SQL73.migration_id
+  ) {
+    return AUTHORIZED_SQL73;
+  }
   if (
     input.filename === AUTHORIZED_SQL72.filename
     || input.migration_id === AUTHORIZED_SQL72.migration_id
@@ -147,6 +164,10 @@ export function isHomeownerLedgerViewContract(input = {}) {
 
 export function isHomeownerLedgerViewClaimOk(input = {}) {
   return resolveAuthorizedMigration(input) === AUTHORIZED_SQL72;
+}
+
+export function isHomeownerLedgerViewLastViewedBestEffort(input = {}) {
+  return resolveAuthorizedMigration(input) === AUTHORIZED_SQL73;
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
@@ -270,6 +291,20 @@ export function evaluateSqlExecutorAuthorization(input = {}, opts = {}) {
       {
         expected_live_definition_sha256: input.expected_live_definition_sha256 || null,
         required_live_definition_sha256: AUTHORIZED_SQL72.expected_live_definition_sha256,
+      },
+    ));
+  }
+  if (
+    allowed
+    && allowed === AUTHORIZED_SQL73
+    && input.expected_live_definition_sha256 !== AUTHORIZED_SQL73.expected_live_definition_sha256
+  ) {
+    errors.push(errorEntry(
+      CODES.SQL_COLLISION,
+      'SQL 73 authority requires the current live SQL 72 definition hash',
+      {
+        expected_live_definition_sha256: input.expected_live_definition_sha256 || null,
+        required_live_definition_sha256: AUTHORIZED_SQL73.expected_live_definition_sha256,
       },
     ));
   }

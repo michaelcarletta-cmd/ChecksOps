@@ -4,8 +4,8 @@
  * CREATE OR REPLACE must not invoke the function.
  *
  * Forward-composed from the live staging executor. Preserves SQL 44,
- * #601, membership-only, Mortgage Ops SQL 39, and SQL 71. Adds only
- * SQL 72 Homeowner Ledger claim_ok dispatch.
+ * #601, membership-only, Mortgage Ops SQL 39, SQL 71, and SQL 72.
+ * Adds only SQL 73 Homeowner Ledger last_viewed_at / totals dispatch.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -18,12 +18,14 @@ import {
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL71,
   AUTHORIZED_SQL72,
+  AUTHORIZED_SQL73,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   AUTHORIZED_MEMBERSHIP_ONLY,
   SQL_EXECUTOR_FUNCTION,
   evaluateSqlExecutorAuthorization,
   isHomeownerLedgerViewClaimOk,
   isHomeownerLedgerViewContract,
+  isHomeownerLedgerViewLastViewedBestEffort,
   isMembershipOnlyHelper,
   isMortgageOpsAcceptComplete,
   isTenantUsersSameCheckPermissions,
@@ -52,6 +54,7 @@ const MORTGAGE_OPS_SQL_FILE = path.join(
 );
 const SQL71_FILE = path.join(ROOT, 'sql/71_homeowner_ledger_view_contract.sql');
 const SQL72_FILE = path.join(ROOT, 'sql/72_homeowner_ledger_view_claim_ok.sql');
+const SQL73_FILE = path.join(ROOT, 'sql/73_homeowner_ledger_view_last_viewed_best_effort.sql');
 const SQL71_BEHAVIOR_MARKERS = [
   "mode', 'claim'",
   "mode', 'pre_claim'",
@@ -659,6 +662,15 @@ async function readSql71Grants(client) {
   return { routine: routine.rows };
 }
 
+function sql73DefinitionMatchesSourceBehavior(def) {
+  if (!sql71DefinitionMatchesSourceBehavior(def)) return false;
+  return def.includes('check_stage::text')
+    && def.includes('EXCEPTION')
+    && def.includes('last_viewed_at')
+    && def.includes("c.org_id = tok.tenant_id")
+    && !def.includes('c.org_id IS NULL');
+}
+
 function sql71GrantsConstrained(grants) {
   const genericGrantees = new Set(['PUBLIC', 'authenticated', 'anon']);
   const execute = (grants.routine || []).filter((row) => row.privilege_type === 'EXECUTE');
@@ -671,6 +683,134 @@ function sql71GrantsConstrained(grants) {
     });
   }
   return ok({ grants_constrained: true, checksops_execute: true });
+}
+
+async function handleHomeownerLedgerViewLastViewedBestEffort({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile73,
+  expectedLiveDefinitionSha256 = AUTHORIZED_SQL73.expected_live_definition_sha256,
+}) {
+  if (event.expected_live_definition_sha256 !== expectedLiveDefinitionSha256) {
+    return fail(CODES.SQL_COLLISION, 'SQL 73 authority requires the current live SQL 72 definition hash', {
+      expected_live_definition_sha256: event.expected_live_definition_sha256 || null,
+      required_live_definition_sha256: expectedLiveDefinitionSha256,
+    });
+  }
+
+  const embedded = readEmbeddedSql(sqlFile73, AUTHORIZED_SQL73.source_sha256);
+  if (!embedded.ok) return embedded;
+
+  let client;
+  try {
+    client = await connect();
+    const beforeLookup = await definitionTextOrFail(client, AUTHORIZED_SQL73.function_identity);
+    if (!beforeLookup.ok) return beforeLookup;
+    const beforeDef = beforeLookup.details.definition;
+    const beforeHash = beforeDef ? hashSqlDefinition(beforeDef) : null;
+    const sql44Lookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+    if (!sql44Lookup.ok) return sql44Lookup;
+    const sql44BeforeHash = sql44Lookup.details.definition
+      ? hashSqlDefinition(sql44Lookup.details.definition)
+      : null;
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      if (event.inspect?.token || event.verify?.token) {
+        return fail(CODES.UNRELATED_MUTATION, 'SQL 73 inspect/verify must not invoke the public token RPC');
+      }
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: beforeHash,
+          after_hash: beforeHash,
+          result: event.action,
+          executor_identity: identity,
+          function_identity: AUTHORIZED_SQL73.function_identity,
+          sql44_hash: sql44BeforeHash,
+          required_live_definition_sha256: expectedLiveDefinitionSha256,
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 73 executor action ${event.action}`);
+    }
+
+    if (beforeHash !== expectedLiveDefinitionSha256) {
+      return fail(CODES.SQL_COLLISION, 'live function is not the accepted SQL 72 definition; SQL 73 apply refused', {
+        expected_live_definition_sha256: expectedLiveDefinitionSha256,
+        live_definition_sha256: beforeHash,
+      });
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: beforeHash,
+      live_definition: beforeDef,
+    });
+    if (!collision.ok) return collision;
+
+    await client.query(embedded.details.text);
+    const afterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL73.function_identity);
+    if (!afterLookup.ok) return afterLookup;
+    const afterDef = afterLookup.details.definition;
+    const afterHash = afterDef ? hashSqlDefinition(afterDef) : null;
+    if (!sql73DefinitionMatchesSourceBehavior(afterDef)) {
+      return fail(CODES.SQL_COLLISION, 'applied SQL 73 definition does not match intended source behavior', {
+        after_hash: afterHash,
+      });
+    }
+    if (afterHash === beforeHash) {
+      return fail(CODES.SQL_COLLISION, 'apply did not change the live homeowner ledger definition');
+    }
+
+    const grants = sql71GrantsConstrained(await readSql71Grants(client));
+    if (!grants.ok) return grants;
+
+    const sql44AfterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+    if (!sql44AfterLookup.ok) return sql44AfterLookup;
+    const sql44AfterHash = sql44AfterLookup.details.definition
+      ? hashSqlDefinition(sql44AfterLookup.details.definition)
+      : null;
+    if (sql44AfterHash !== sql44BeforeHash) {
+      return fail(CODES.SQL_COLLISION, 'SQL 73 apply changed the live SQL 44 definition; STOP', {
+        expected: sql44BeforeHash,
+        live: sql44AfterHash,
+      });
+    }
+
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: beforeHash,
+        after_hash: afterHash,
+        result: 'applied',
+        executor_identity: identity,
+        function_identity: AUTHORIZED_SQL73.function_identity,
+        sql44_hash: sql44AfterHash,
+        required_live_definition_sha256: expectedLiveDefinitionSha256,
+      },
+      grants: grants.details,
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
 }
 
 async function handleHomeownerLedgerViewClaimOk({
@@ -922,7 +1062,9 @@ export function createHandler({
   sqlFile39 = MORTGAGE_OPS_SQL_FILE,
   sqlFile71 = SQL71_FILE,
   sqlFile72 = SQL72_FILE,
+  sqlFile73 = SQL73_FILE,
   expectedSql72LiveHash = AUTHORIZED_SQL72.expected_live_definition_sha256,
+  expectedSql73LiveHash = AUTHORIZED_SQL73.expected_live_definition_sha256,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
 } = {}) {
   return async function handler(event = {}) {
@@ -972,6 +1114,17 @@ export function createHandler({
         connect,
         sqlFile601,
         sqlFile601Predecessor,
+      });
+    }
+
+    if (isHomeownerLedgerViewLastViewedBestEffort(event)) {
+      return handleHomeownerLedgerViewLastViewedBestEffort({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile73,
+        expectedLiveDefinitionSha256: expectedSql73LiveHash,
       });
     }
 

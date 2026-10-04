@@ -13,6 +13,7 @@ import {
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL71,
   AUTHORIZED_SQL72,
+  AUTHORIZED_SQL73,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
   evaluateSqlExecutorAuthorization,
@@ -118,6 +119,7 @@ function handlerFor(connect) {
     sqlFile39: path.join(ROOT, 'aws/write-path/guarded-sql-executor/sql/39_mortgage_ops_agent_accept_complete.sql'),
     sqlFile71: path.join(ROOT, AUTHORIZED_SQL71.filename),
     sqlFile72: path.join(ROOT, AUTHORIZED_SQL72.filename),
+    sqlFile73: path.join(ROOT, AUTHORIZED_SQL73.filename),
   });
 }
 
@@ -186,6 +188,17 @@ test('composed package routes each live family and SQL 71 to its own handler', a
   assert.notEqual(sql72Result.details.receipt.sql_file, AUTHORIZED_SQL71.filename);
   assert.equal(sql72.client.seen().some((sql) => sql.includes('CREATE OR REPLACE FUNCTION public.claim_ledger_link_or_create')), false);
   assert.equal(sql72.client.seen().some((sql) => sql.includes('aws_public_homeowner_ledger_by_token($1')), false);
+
+  const sql73 = recordingConnect();
+  const sql73Result = await handlerFor(sql73.connect)(familyEvent(AUTHORIZED_SQL73, {
+    expected_live_definition_sha256: AUTHORIZED_SQL73.expected_live_definition_sha256,
+  }));
+  assert.equal(sql73Result.ok, true, sql73Result.message);
+  assert.equal(sql73Result.details.receipt.sql_file, AUTHORIZED_SQL73.filename);
+  assert.equal(sql73Result.details.receipt.function_identity, AUTHORIZED_SQL73.function_identity);
+  assert.notEqual(sql73Result.details.receipt.sql_file, AUTHORIZED_SQL72.filename);
+  assert.equal(sql73.client.seen().some((sql) => sql.includes('CREATE OR REPLACE FUNCTION public.claim_ledger_link_or_create')), false);
+  assert.equal(sql73.client.seen().some((sql) => sql.includes('aws_public_homeowner_ledger_by_token($1')), false);
 });
 
 test('SQL 71 cannot fall through to SQL 44 and negatives stay fail-closed', () => {
@@ -253,6 +266,52 @@ test('SQL 72 cannot fall through to SQL 71/44 and negatives stay fail-closed', (
     filename: AUTHORIZED_SQL71.filename,
     migration_id: AUTHORIZED_SQL71.migration_id,
     owned_components: [AUTHORIZED_SQL71.filename],
+  }, { now }).code, CODES.SQL_COLLISION);
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...exact,
+    sql_text: 'DROP FUNCTION public.aws_public_homeowner_ledger_by_token(text)',
+  }, { now }).code, CODES.UNRELATED_MUTATION);
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...exact,
+    target_environment: 'production',
+    target_component: 'production-sql',
+  }, { now }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+});
+
+test('SQL 73 cannot fall through to SQL 72/71/44 and negatives stay fail-closed', () => {
+  const { now } = { now: NOW_MS };
+  const exact = familyEvent(AUTHORIZED_SQL73, {
+    expected_live_definition_sha256: AUTHORIZED_SQL73.expected_live_definition_sha256,
+  });
+  const ok73 = evaluateSqlExecutorAuthorization(exact, { now });
+  assert.equal(ok73.ok, true, ok73.message);
+  assert.equal(ok73.details.allowlist_entry.filename, AUTHORIZED_SQL73.filename);
+  assert.notEqual(ok73.details.allowlist_entry.filename, AUTHORIZED_SQL72.filename);
+  assert.notEqual(ok73.details.allowlist_entry.filename, AUTHORIZED_SQL71.filename);
+  assert.notEqual(ok73.details.allowlist_entry.filename, AUTHORIZED_SQL44.filename);
+
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...exact,
+    source_sha256: '1'.repeat(64),
+  }, { now }).code, CODES.SQL_COLLISION);
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...exact,
+    commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  }, { now }).code, CODES.SQL_COLLISION);
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...exact,
+    expected_live_definition_sha256: '2'.repeat(64),
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL73,
+      expected_live_definition_sha256: '2'.repeat(64),
+      one_use_id: exact.one_use_id,
+    }),
+  }, { now }).code, CODES.SQL_COLLISION);
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...exact,
+    filename: AUTHORIZED_SQL72.filename,
+    migration_id: AUTHORIZED_SQL72.migration_id,
+    owned_components: [AUTHORIZED_SQL72.filename],
   }, { now }).code, CODES.SQL_COLLISION);
   assert.equal(evaluateSqlExecutorAuthorization({
     ...exact,
