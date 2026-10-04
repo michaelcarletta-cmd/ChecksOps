@@ -6,6 +6,8 @@ export const PINNED_TEMP_TRIGGER_SHA256 = '882bd2c9613bde48f96c0cb156a07be631e90
 export const PINNED_RESTORE_TRIGGER_SHA256 = 'cdac6beb58ae6d5c94e7834c1649d0dc7e448564adba24ee7525f9195bd16d0b';
 export const FUNCTION_NAME = 'checksops-staging-macomp50-oneshot';
 export const APPLY_CONFIRM = 'STAGING_EXCLUDE_MACOMP_DEMO_A47_A48';
+export const AUTHORIZED_IDS_FINGERPRINT =
+  '66aa2f109a4cb55adedd99779287057c363d1eaf9f43883ec813ece74e60bb4f';
 export const FORBIDDEN_FUNCTIONS = Object.freeze([
   'checksops-staging-api',
   'checksops-staging-guarded-sql-executor',

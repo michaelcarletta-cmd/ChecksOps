@@ -16,6 +16,7 @@ import {
   PINNED_TEMP_TRIGGER_SHA256,
   PINNED_RESTORE_TRIGGER_SHA256,
   APPLY_CONFIRM,
+  AUTHORIZED_IDS_FINGERPRINT,
   SYNTHETIC_TENANT_ID,
   ALLOWED_AGENTS,
   ALLOWED_REQUESTS,
@@ -36,6 +37,7 @@ export {
   PINNED_TEMP_TRIGGER_SHA256,
   PINNED_RESTORE_TRIGGER_SHA256,
   APPLY_CONFIRM,
+  AUTHORIZED_IDS_FINGERPRINT,
   SYNTHETIC_TENANT_ID,
   ALLOWED_REQUESTS,
   ALLOWED_CHECKS,
@@ -87,6 +89,12 @@ export function refuseEvent(event = {}, env = process.env) {
   }
   if (action === 'apply' && event.confirm !== APPLY_CONFIRM) {
     return fail('APPLY_NOT_CONFIRMED', 'apply requires confirm=STAGING_EXCLUDE_MACOMP_DEMO_A47_A48');
+  }
+  if (action === 'apply' && event.expected_ids_fingerprint !== AUTHORIZED_IDS_FINGERPRINT) {
+    return fail('ID_FINGERPRINT_MISMATCH', 'apply requires the inspect-locked A47/A48 fingerprint', {
+      expected: AUTHORIZED_IDS_FINGERPRINT,
+      got: event.expected_ids_fingerprint || null,
+    });
   }
   if (event.reapply_sql47 === true || event.delete === true || event.demo === true) {
     return fail('UNRELATED_MUTATION', 'delete / demo / SQL 47 reapply are forbidden');
@@ -333,6 +341,82 @@ async function liveTriggerState(client) {
   };
 }
 
+export function boundaryFingerprint(rows) {
+  return sha256(JSON.stringify(rows));
+}
+
+async function loadBoundaries(client) {
+  const cbe = await client.query(
+    `SELECT id::text, check_intake_item_id::text, event_type, unit_price_cents, status
+       FROM public.check_billing_events
+      WHERE check_intake_item_id = ANY($1::uuid[])
+      ORDER BY id`,
+    [ALLOWED_CHECKS],
+  );
+  const mhr = await client.query(
+    `SELECT id::text, status, assigned_employee_id::text, accepted_at, completed_at, cancelled_at
+       FROM public.mortgage_handling_requests
+      WHERE id = ANY($1::uuid[])
+      ORDER BY id`,
+    [ALLOWED_REQUESTS],
+  );
+  const exclusions = await client.query(
+    `SELECT mortgage_request_id::text, reason
+       FROM public.mortgage_agent_compensation_exclusions
+      WHERE mortgage_request_id = ANY($1::uuid[])
+      ORDER BY mortgage_request_id`,
+    [ALLOWED_REQUESTS],
+  );
+  const foreign = await client.query(
+    `SELECT count(*)::int AS n
+       FROM public.mortgage_agent_compensation_entries
+      WHERE mortgage_request_id = ANY($1::uuid[])`,
+    [FORBIDDEN_REQUESTS],
+  );
+  return {
+    cbe_rows: cbe.rows,
+    cbe_fingerprint: boundaryFingerprint(cbe.rows),
+    mhr_rows: mhr.rows,
+    mhr_fingerprint: boundaryFingerprint(mhr.rows),
+    exclusion_rows: exclusions.rows,
+    forbidden_entry_count: Number(foreign.rows[0]?.n || 0),
+  };
+}
+
+async function probeUnauthorizedPaidExclude(client) {
+  const paid = await client.query(
+    `SELECT id::text
+       FROM public.mortgage_agent_compensation_entries
+      WHERE status = 'paid'
+        AND tenant_id IS DISTINCT FROM $1::uuid
+      ORDER BY id
+      LIMIT 1`,
+    [SYNTHETIC_TENANT_ID],
+  );
+  if (!paid.rows[0]) {
+    return { probed: false, rejected: null, reason: 'no_non_synthetic_paid_row' };
+  }
+  await client.query('BEGIN');
+  try {
+    await client.query(
+      `UPDATE public.mortgage_agent_compensation_entries
+          SET status = 'excluded'
+        WHERE id = $1::uuid`,
+      [paid.rows[0].id],
+    );
+    await client.query('ROLLBACK');
+    return { probed: true, rejected: false, id: paid.rows[0].id };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => null);
+    return {
+      probed: true,
+      rejected: /compensation_paid_immutable/.test(String(error.message || '')),
+      id: paid.rows[0].id,
+      message: String(error.message || '').slice(0, 200),
+    };
+  }
+}
+
 export async function handleEvent(event = {}, env = process.env, deps = {}) {
   const refused = refuseEvent(event, env);
   if (refused) return refused;
@@ -347,7 +431,11 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
   try {
     const snapshot = await loadSnapshot(client, period);
     const trigger = await liveTriggerState(client);
+    const boundaries = await loadBoundaries(client);
     if (action === 'inspect' || action === 'verify') {
+      const probe = action === 'verify'
+        ? await probeUnauthorizedPaidExclude(client)
+        : { probed: false, reason: 'inspect_skips_mutation_probe' };
       return ok({
         action,
         executed: false,
@@ -357,16 +445,20 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
         period,
         ...snapshot,
         ...trigger,
+        ...boundaries,
+        unauthorized_paid_exclude: probe,
         known_roots_present: KNOWN_ROOT_IDS.filter((id) => snapshot.entry_ids.includes(id)),
-        note: 'Inspect only. Apply is a later authorization. SQL 50 is not a permanent trigger weakening.',
+        note: action === 'verify'
+          ? 'Verify only. No exclude applied in this action.'
+          : 'Inspect only. Apply is a later authorization. SQL 50 is not a permanent trigger weakening.',
       });
     }
     if (!snapshot.safe) {
       return fail('ALLOWLIST_VIOLATION', 'refusing apply; family contains non-allowlisted rows', snapshot);
     }
-    if (event.expected_ids_fingerprint && event.expected_ids_fingerprint !== snapshot.ids_fingerprint) {
+    if (snapshot.ids_fingerprint !== AUTHORIZED_IDS_FINGERPRINT) {
       return fail('ID_FINGERPRINT_MISMATCH', 'live family IDs drifted after inspect', {
-        expected: event.expected_ids_fingerprint,
+        expected: AUTHORIZED_IDS_FINGERPRINT,
         live: snapshot.ids_fingerprint,
         entry_ids: snapshot.entry_ids,
       });
@@ -408,6 +500,8 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
       }
       await client.query('COMMIT');
       const after = await loadSnapshot(client, period);
+      const afterBoundaries = await loadBoundaries(client);
+      const probe = await probeUnauthorizedPaidExclude(client);
       return ok({
         action,
         executed: true,
@@ -421,6 +515,11 @@ export async function handleEvent(event = {}, env = process.env, deps = {}) {
         })),
         before: snapshot,
         after,
+        boundaries_before: boundaries,
+        boundaries_after: afterBoundaries,
+        billing_unchanged: boundaries.cbe_fingerprint === afterBoundaries.cbe_fingerprint,
+        desk_unchanged: boundaries.mhr_fingerprint === afterBoundaries.mhr_fingerprint,
+        unauthorized_paid_exclude: probe,
         ...afterTrigger,
       });
     } catch (error) {

@@ -10,6 +10,7 @@ import {
   PINNED_TEMP_TRIGGER_SHA256,
   PINNED_RESTORE_TRIGGER_SHA256,
   APPLY_CONFIRM,
+  AUTHORIZED_IDS_FINGERPRINT,
   KNOWN_ROOT_IDS,
   ALLOWED_REQUESTS,
   EXCLUDE_REASON,
@@ -76,7 +77,7 @@ const family = [
     pay_period: '2026-10',
   },
   {
-    id: 'aaaaaaaa-0000-4000-8000-000000000024',
+    id: '382533fc-9ad1-47fb-b394-727fafcf8401',
     parent_entry_id: null,
     agent_user_id: '4584ac20-2703-4a2f-835e-7bd574aa5376',
     mortgage_request_id: 'a48cad99-0000-4000-8000-000000000024',
@@ -89,7 +90,7 @@ const family = [
     pay_period: '2026-10',
   },
   {
-    id: 'aaaaaaaa-0000-4000-8000-000000000101',
+    id: 'cd77d3ee-ea09-4eeb-9851-be24a2bb1ce1',
     parent_entry_id: '144e5657-f0c9-4fab-9bb8-eea28ad41136',
     agent_user_id: '4584ac20-2703-4a2f-835e-7bd574aa5376',
     mortgage_request_id: 'a48cad99-0000-4000-8000-000000000021',
@@ -101,7 +102,7 @@ const family = [
     pay_period: '2026-10',
   },
   {
-    id: 'aaaaaaaa-0000-4000-8000-000000000102',
+    id: '77bcb6e2-5d2c-4d9f-b1ed-ca32d5597ff7',
     parent_entry_id: '144e5657-f0c9-4fab-9bb8-eea28ad41136',
     agent_user_id: '4584ac20-2703-4a2f-835e-7bd574aa5376',
     mortgage_request_id: 'a48cad99-0000-4000-8000-000000000021',
@@ -113,7 +114,7 @@ const family = [
     pay_period: '2026-10',
   },
   {
-    id: 'aaaaaaaa-0000-4000-8000-000000000103',
+    id: '2524afee-ed56-4f7d-8387-17bf85ecd053',
     parent_entry_id: '144e5657-f0c9-4fab-9bb8-eea28ad41136',
     agent_user_id: '4584ac20-2703-4a2f-835e-7bd574aa5376',
     mortgage_request_id: 'a48cad99-0000-4000-8000-000000000021',
@@ -125,7 +126,7 @@ const family = [
     pay_period: '2026-10',
   },
   {
-    id: 'aaaaaaaa-0000-4000-8000-000000000104',
+    id: '24d78765-b7e0-43b1-ac0f-f73b4a30b36c',
     parent_entry_id: '144e5657-f0c9-4fab-9bb8-eea28ad41136',
     agent_user_id: 'b100f05d-9e81-4a7b-b9cc-9baf173131d9',
     mortgage_request_id: 'a48cad99-0000-4000-8000-000000000021',
@@ -165,6 +166,14 @@ test('SQL 50 oneshot is inspect-default and refuses production, delete, and unco
   assert.equal(refuseEvent({ action: 'demo' }).ok, false);
   assert.equal(refuseEvent({ action: 'apply' }).ok, false);
   assert.equal(refuseEvent({ action: 'apply', confirm: APPLY_CONFIRM, function_name: FUNCTION_NAME }, {
+    RDS_HOST: 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
+  }).code, 'ID_FINGERPRINT_MISMATCH');
+  assert.equal(refuseEvent({
+    action: 'apply',
+    confirm: APPLY_CONFIRM,
+    function_name: FUNCTION_NAME,
+    expected_ids_fingerprint: AUTHORIZED_IDS_FINGERPRINT,
+  }, {
     RDS_HOST: 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
   }), null);
 });
@@ -238,6 +247,9 @@ test('inspect does not exclude; confirmed apply uses allowlisted update and rest
     async query(sql, params) {
       calls.push({ sql, params });
       const text = String(sql);
+      if (text.includes('tenant_id IS DISTINCT FROM')) {
+        return { rows: [] };
+      }
       if (text.includes('FROM public.mortgage_agent_compensation_entries')) {
         return { rows: family };
       }
@@ -275,14 +287,15 @@ test('inspect does not exclude; confirmed apply uses allowlisted update and rest
   assert.equal(inspect.details.executed, false);
   assert.equal(inspect.details.trigger_restored, true);
   assert.equal(calls.some((call) => String(call.sql).includes("SET status = 'excluded'")), false);
-  assert.equal(calls.some((call) => String(call.sql).includes('mortgage_agent_compensation_exclusions')), false);
+  assert.equal(calls.some((call) => /INSERT INTO public\.mortgage_agent_compensation_exclusions/.test(String(call.sql))), false);
+  assert.equal(inspect.details.ids_fingerprint, AUTHORIZED_IDS_FINGERPRINT);
 
   const apply = await handleEvent({
     action: 'apply',
     confirm: APPLY_CONFIRM,
     function_name: FUNCTION_NAME,
     one_use_id: 'oneshot50-test-apply',
-    expected_ids_fingerprint: inspect.details.ids_fingerprint,
+    expected_ids_fingerprint: AUTHORIZED_IDS_FINGERPRINT,
   }, env, { client });
   assert.equal(apply.ok, true, apply.message);
   assert.equal(apply.details.executed, true);
