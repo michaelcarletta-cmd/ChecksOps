@@ -157,7 +157,13 @@ test('source keeps Class A create, optionalUuid, token mint, and the two proven 
   assert.doesNotMatch(esign, /access_token\s*=\s*NULL/i);
   assert.doesNotMatch(esign, /latest_signature_request_id/);
   assert.doesNotMatch(esign, /UPDATE public\.claims/);
-  assert.match(submit, /WHERE s\.token_hash = \$1/);
+  assert.match(submit, /export const mapSubmittedFieldValues/);
+  assert.match(submit, /export const buildSubmitSignersWithValues/);
+  assert.match(submit, /export const sameFieldPlacement/);
+  assert.match(submit, /export const shouldStampSignatureImage/);
+  assert.match(submit, /aws_public_signature_attach_signed/);
+  assert.match(submit, /signersWithValues/);
+  assert.match(submit, /if \(shouldStampSignatureImage\(field\)\)/);
 });
 
 test('Class A create-payload inserts request + signers, links check_files, and mints token_hash', async () => {
