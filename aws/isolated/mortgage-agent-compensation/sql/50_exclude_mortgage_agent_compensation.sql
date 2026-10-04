@@ -1,0 +1,14 @@
+-- SQL 50 is NOT a permanent catalog migration.
+-- Do not apply this file as a standalone CREATE OR REPLACE of the facts trigger.
+-- The general paid → excluded|voided carve-out was rejected in the safety review.
+--
+-- Staging oneshot apply, inside one transaction, must:
+--   1. install 50_temp_allowlist_trigger.sql (A47/A48 IDs only);
+--   2. UPDATE allowlisted rows to status=excluded without touching
+--      amount_cents, payment_reference, paid_at, or tenant billing;
+--   3. write compensation audit + request exclusions;
+--   4. restore 50_restore_sql47_trigger.sql (original paid-immutability);
+--   5. COMMIT. ROLLBACK leaves the SQL 47 trigger unchanged.
+--
+-- No new GRANT. No durable exclude RPC. No Moov / ACH / Stripe / wallet.
+-- No mortgage_handling_requests or check_billing_events writes.

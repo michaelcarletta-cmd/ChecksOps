@@ -48,6 +48,7 @@ type MonthlyRow = {
   initial_count: number;
   additional_count: number;
   files_worked: number;
+  adjustment_cents?: number;
   gross_owed_cents: number;
   paid_cents: number;
   balance_cents: number;
@@ -133,6 +134,7 @@ export function MortgageAgentsPanel() {
     initial_count: 0,
     additional_count: 0,
     files_worked: 0,
+    adjustment_cents: 0,
     gross_owed_cents: 0,
     paid_cents: 0,
     balance_cents: 0,
@@ -469,10 +471,13 @@ export function MortgageAgentsPanel() {
         </TabsContent>
 
         <TabsContent value="monthly" className="mt-4 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className={`grid gap-3 sm:grid-cols-3 ${Number(totals.adjustment_cents || 0) !== 0 ? "lg:grid-cols-7" : "lg:grid-cols-6"}`}>
             <Summary label="Initial $10" value={String(totals.initial_count)} />
             <Summary label="Additional $5" value={String(totals.additional_count)} />
             <Summary label="Files Worked" value={String(totals.files_worked)} />
+            {Number(totals.adjustment_cents || 0) !== 0 ? (
+              <Summary label="Adjustments" value={dollars(totals.adjustment_cents)} />
+            ) : null}
             <Summary label="Gross Owed" value={dollars(totals.gross_owed_cents)} />
             <Summary label="Paid" value={dollars(totals.paid_cents)} />
             <Summary label="Balance" value={dollars(totals.balance_cents)} />
@@ -490,6 +495,9 @@ export function MortgageAgentsPanel() {
                     <TableHead className="text-right">Initial $10</TableHead>
                     <TableHead className="text-right">Additional $5</TableHead>
                     <TableHead className="text-right">Files Worked</TableHead>
+                    {Number(totals.adjustment_cents || 0) !== 0 ? (
+                      <TableHead className="text-right">Adjustments</TableHead>
+                    ) : null}
                     <TableHead className="text-right">Gross Owed</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
@@ -502,6 +510,9 @@ export function MortgageAgentsPanel() {
                       <TableCell className="text-right">{row.initial_count}</TableCell>
                       <TableCell className="text-right">{row.additional_count}</TableCell>
                       <TableCell className="text-right">{row.files_worked}</TableCell>
+                      {Number(totals.adjustment_cents || 0) !== 0 ? (
+                        <TableCell className="text-right">{dollars(row.adjustment_cents || 0)}</TableCell>
+                      ) : null}
                       <TableCell className="text-right">{dollars(row.gross_owed_cents)}</TableCell>
                       <TableCell className="text-right">{dollars(row.paid_cents)}</TableCell>
                       <TableCell className="text-right">{dollars(row.balance_cents)}</TableCell>
@@ -512,6 +523,9 @@ export function MortgageAgentsPanel() {
                     <TableCell className="text-right font-semibold">{totals.initial_count}</TableCell>
                     <TableCell className="text-right font-semibold">{totals.additional_count}</TableCell>
                     <TableCell className="text-right font-semibold">{totals.files_worked}</TableCell>
+                    {Number(totals.adjustment_cents || 0) !== 0 ? (
+                      <TableCell className="text-right font-semibold">{dollars(totals.adjustment_cents)}</TableCell>
+                    ) : null}
                     <TableCell className="text-right font-semibold">{dollars(totals.gross_owed_cents)}</TableCell>
                     <TableCell className="text-right font-semibold">{dollars(totals.paid_cents)}</TableCell>
                     <TableCell className="text-right font-semibold">{dollars(totals.balance_cents)}</TableCell>
