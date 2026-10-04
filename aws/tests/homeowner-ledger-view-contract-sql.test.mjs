@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SQL71 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/71_homeowner_ledger_view_contract.sql'), 'utf8');
 const SQL72 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/72_homeowner_ledger_view_claim_ok.sql'), 'utf8');
+const SQL73 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql'), 'utf8');
 const SQL68 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/68_staging_class_a_grants.sql'), 'utf8');
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 
@@ -99,6 +100,49 @@ test('SQL 72 is a forward claim_ok repair and does not rewrite 71 or 68', () => 
   assert.match(executorAuth, /72_homeowner_ledger_view_claim_ok/);
   assert.match(executorAuth, /8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f/);
   assert.match(executorAuth, /5918ebec1b3338dd4e34a4420c5f2a654f0b2d3311527923f7fd962c891fbcfa/);
+  assert.match(executorAuth, /73_homeowner_ledger_view_last_viewed_best_effort/);
+  assert.match(executorAuth, /02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e/);
+  assert.match(executorAuth, /b099a0d44b3078fbdc78ecf03ab813b84a402d3234510bcfbc21c2278004ab76/);
+});
+
+test('SQL 73 accepted source SHA256 is exact and grants stay constrained', () => {
+  const sha = createHash('sha256').update(SQL73).digest('hex');
+  assert.equal(sha, '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e');
+  assert.match(SQL73, /CREATE OR REPLACE FUNCTION public\.aws_public_homeowner_ledger_by_token\(p_token text\)/);
+  assert.equal((SQL73.match(/CREATE OR REPLACE FUNCTION/g) || []).length, 1);
+  assert.match(SQL73, /SECURITY DEFINER/);
+  assert.match(SQL73, /SET search_path = public/);
+  assert.match(SQL73, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) FROM PUBLIC/);
+  assert.match(SQL73, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) FROM authenticated/);
+  assert.match(SQL73, /GRANT EXECUTE ON FUNCTION public\.aws_public_homeowner_ledger_by_token\(text\) TO checksops/);
+  assert.doesNotMatch(SQL73, /CREATE TABLE|ALTER TABLE|ENABLE ROW LEVEL SECURITY|CREATE POLICY/);
+  const sql73Body = SQL73.replace(/^--.*$/gm, '');
+  assert.doesNotMatch(sql73Body, /cognito|moov_|plaid_|wallet_|GRANT SELECT ON TABLE/i);
+});
+
+test('SQL 73 is a forward last_viewed/totals repair and does not rewrite 71 or 72', () => {
+  assert.match(SQL73, /Does NOT rewrite historical aws\/workflows\/sql\/71_homeowner_ledger_view_contract\.sql/);
+  assert.match(SQL73, /Does NOT rewrite historical aws\/workflows\/sql\/72_homeowner_ledger_view_claim_ok\.sql/);
+  assert.equal(createHash('sha256').update(SQL71).digest('hex'), '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5');
+  assert.equal(createHash('sha256').update(SQL72).digest('hex'), '8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f');
+  const claimOk72 = SQL72.slice(SQL72.indexOf('-- Fail closed: claim must exist'), SQL72.indexOf('IF NOT claim_ok THEN'));
+  const claimOk73 = SQL73.slice(SQL73.indexOf('-- Fail closed: claim must exist'), SQL73.indexOf('IF NOT claim_ok THEN'));
+  assert.equal(claimOk73, claimOk72);
+  assert.match(SQL73, /i\.check_stage::text/);
+  assert.doesNotMatch(SQL72, /i\.check_stage::text/);
+  assert.match(SQL73, /EXCEPTION\s+WHEN OTHERS THEN/);
+  assert.match(SQL73, /pending_signatures', '\[\]'::jsonb/);
+  assert.match(SQL73, /'money', NULL/);
+  assert.match(SQL73, /allow_deductible_payment', false/);
+  const sql72UpdateIdx = SQL72.indexOf('SET last_viewed_at = now()');
+  const sql72ClaimOkIdx = SQL72.indexOf('INTO claim_ok');
+  assert.ok(sql72UpdateIdx > 0 && sql72UpdateIdx < sql72ClaimOkIdx);
+  const sql73FirstViewed = SQL73.indexOf('SET last_viewed_at = now()');
+  const sql73ClaimOk = SQL73.indexOf('INTO claim_ok');
+  const sql73ClaimJson = SQL73.indexOf('INTO claim_json');
+  const sql73SecondViewed = SQL73.indexOf('SET last_viewed_at = now()', sql73ClaimJson);
+  assert.ok(sql73FirstViewed > 0 && sql73FirstViewed < sql73ClaimOk);
+  assert.ok(sql73SecondViewed > sql73ClaimJson);
 });
 
 test('SQL 71 replaces the RPC in a new file and keeps historical 68 intact', () => {
@@ -436,6 +480,314 @@ max_connections = 20
     assert.equal(preAfter.pending_upload_count, 2);
     assert.equal(preAfter.money, null);
     assert.deepEqual(preAfter.pending_endorsements, []);
+
+    psql(`UPDATE public.homeowner_ledger_tokens SET last_viewed_at = NULL`);
+    psql(SQL73);
+
+    const after73 = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('valid-claim-token-value')::text`));
+    assert.equal(after73.ok, true);
+    assert.equal(after73.mode, 'claim');
+    assert.equal(after73.claim.claim_number, 'CL-100');
+    assert.equal(Number(after73.totals.received), 1250);
+    assert.equal(Number(after73.totals.deposited), 1000);
+    assert.equal(Number(after73.totals.released), 425);
+    assert.equal(Number(after73.totals.remaining), 825);
+    assert.equal(after73.pending_endorsements.length, 1);
+    assert.deepEqual(after73.pending_signatures, []);
+    assert.equal(after73.money, null);
+    assert.equal(after73.allow_deductible_payment, false);
+    assert.doesNotMatch(JSON.stringify(after73), /CL-FOREIGN|Internal PA|endorse-pa|endorse-other|9000|wallet|routing|bank_account/);
+    assert.equal(psql(`SELECT last_viewed_at IS NOT NULL FROM public.homeowner_ledger_tokens WHERE token = 'valid-claim-token-value'`), 't');
+
+    const checkBound73 = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-check-token-value')::text`));
+    assert.equal(checkBound73.ok, true);
+    assert.equal(checkBound73.claim.id, CLAIM_ORG_B_CHECK);
+    assert.equal(Number(checkBound73.totals.received), 333);
+    assert.equal(Number(checkBound73.totals.released), 0);
+
+    const eventBound73 = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-event-token-value')::text`));
+    assert.equal(eventBound73.ok, true);
+    assert.equal(eventBound73.claim.id, CLAIM_ORG_B_EVENT);
+
+    psql(`UPDATE public.homeowner_ledger_tokens SET last_viewed_at = NULL WHERE token IN ('org-b-none-token-value', 'mismatch-token-value', 'expired-token-value', 'revoked-token-value')`);
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-none-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('org-b-other-tenant-token-value') IS NULL`), 't');
+    assert.equal(psql(`SELECT public.aws_public_homeowner_ledger_by_token('mismatch-token-value') IS NULL`), 't');
+    assert.equal(JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('expired-token-value')::text`)).error, 'expired');
+    assert.equal(JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('revoked-token-value')::text`)).error, 'revoked');
+    assert.equal(psql(`SELECT last_viewed_at IS NULL FROM public.homeowner_ledger_tokens WHERE token = 'org-b-none-token-value'`), 't');
+    assert.equal(psql(`SELECT last_viewed_at IS NULL FROM public.homeowner_ledger_tokens WHERE token = 'mismatch-token-value'`), 't');
+    assert.equal(psql(`SELECT last_viewed_at IS NULL FROM public.homeowner_ledger_tokens WHERE token = 'expired-token-value'`), 't');
+    assert.equal(psql(`SELECT last_viewed_at IS NULL FROM public.homeowner_ledger_tokens WHERE token = 'revoked-token-value'`), 't');
+
+    const pre73 = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('valid-preclaim-token-value')::text`));
+    assert.equal(pre73.mode, 'pre_claim');
+    assert.equal(pre73.pending_upload_count, 2);
+    assert.equal(psql(`SELECT last_viewed_at IS NOT NULL FROM public.homeowner_ledger_tokens WHERE token = 'valid-preclaim-token-value'`), 't');
+  } finally {
+    run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', 'stop']);
+  }
+});
+
+const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const CLAIM_695064 = '398df4b8-f23a-476f-b856-ff864a4148b8';
+const CHECK_ENDORSING_A = '00062a57-13b5-493d-a996-cf6e72d5cc89';
+const CHECK_ENDORSING_B = '3ebc2f0f-1cf7-47b5-9b0b-ac9ce6bdace9';
+const CHECK_REVIEW_A = '6238a632-84f1-4eea-a352-2cf639ebe4b4';
+const CHECK_REVIEW_B = '66174175-ccd3-4d15-a0e2-49aeeb074fc5';
+const TOKEN_695064 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+
+const ENUM_SCHEMA = `
+DO $$ BEGIN
+  CREATE ROLE authenticated NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE ROLE checksops NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+CREATE TYPE public.check_stage AS ENUM (
+  'review', 'loss_draft', 'endorsing', 'ready_for_deposit',
+  'deposited', 'funds_released', 'disbursed_externally', 'returned'
+);
+CREATE TABLE public.homeowner_ledger_tokens (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  claim_id uuid,
+  token text NOT NULL,
+  homeowner_email text,
+  homeowner_name text,
+  revoked_at timestamptz,
+  expires_at timestamptz,
+  last_viewed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.claims (
+  id uuid PRIMARY KEY,
+  org_id uuid,
+  claim_number text,
+  policyholder_address text,
+  loss_type text,
+  status text,
+  created_at timestamptz
+);
+CREATE TABLE public.check_intake_items (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  claim_id uuid,
+  amount numeric,
+  check_stage public.check_stage,
+  check_number text
+);
+CREATE TABLE public.homeowner_ledger_events (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  claim_id uuid NOT NULL,
+  check_id uuid,
+  event_type text,
+  occurred_at timestamptz NOT NULL,
+  amount numeric,
+  actor_label text,
+  payload_json jsonb
+);
+CREATE TABLE public.homeowner_ledger_check_uploads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_id uuid,
+  tenant_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.check_endorsements (
+  id uuid PRIMARY KEY,
+  check_id uuid NOT NULL,
+  tenant_id uuid,
+  payee_name text,
+  payee_type text,
+  status text,
+  token text,
+  contact_email text,
+  signed_at timestamptz,
+  request_sent_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.disbursement_batches (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  check_intake_item_id uuid
+);
+CREATE TABLE public.disbursement_splits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id uuid NOT NULL,
+  tenant_id uuid NOT NULL,
+  amount numeric,
+  status text
+);
+CREATE TABLE public.claim_disbursements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  claim_id uuid NOT NULL,
+  check_id uuid,
+  amount numeric,
+  status text
+);
+`;
+
+const SEED_695064 = `
+INSERT INTO public.claims (id, org_id, claim_number, policyholder_address, loss_type, status, created_at)
+VALUES ('${CLAIM_695064}', '${FREEDOM}', '695064-GQ', '1 Freedom Way', 'wind', 'open', '2026-01-01T00:00:00Z');
+INSERT INTO public.check_intake_items (id, tenant_id, claim_id, amount, check_stage, check_number) VALUES
+  ('${CHECK_ENDORSING_A}', '${FREEDOM}', '${CLAIM_695064}', 1500, 'endorsing', '1001'),
+  ('${CHECK_ENDORSING_B}', '${FREEDOM}', '${CLAIM_695064}', 2200, 'endorsing', '1002'),
+  ('${CHECK_REVIEW_A}', '${FREEDOM}', '${CLAIM_695064}', 800, 'review', '1003'),
+  ('${CHECK_REVIEW_B}', '${FREEDOM}', '${CLAIM_695064}', 400, 'review', '1004');
+INSERT INTO public.homeowner_ledger_events
+  (id, tenant_id, claim_id, check_id, event_type, occurred_at, amount, actor_label, payload_json)
+VALUES
+  ('e1111111-1111-4111-8111-111111111111', '${FREEDOM}', '${CLAIM_695064}', '${CHECK_ENDORSING_A}', 'check_received', '2026-01-02T00:00:00Z', 1500, 'Intake', '{}'::jsonb);
+INSERT INTO public.check_endorsements
+  (id, check_id, tenant_id, payee_name, payee_type, status, token, contact_email, signed_at, request_sent_at, created_at)
+VALUES
+  ('d1111111-1111-4111-8111-111111111111', '${CHECK_ENDORSING_A}', '${FREEDOM}', 'Ada Lovelace', 'insured', 'pending', 'endorse-ada-a', 'ada@example.com', NULL, NULL, now()),
+  ('d2222222-2222-4222-8222-222222222222', '${CHECK_ENDORSING_A}', '${FREEDOM}', 'First National', 'mortgage_company', 'sent', 'endorse-mtg-a', 'bank@example.com', NULL, '2026-01-03T00:00:00Z', now()),
+  ('d3333333-3333-4333-8333-333333333333', '${CHECK_ENDORSING_B}', '${FREEDOM}', 'Ada Lovelace', 'insured', 'pending', 'endorse-ada-b', 'ada@example.com', NULL, NULL, now()),
+  ('d4444444-4444-4444-8444-444444444444', '${CHECK_ENDORSING_B}', '${FREEDOM}', 'First National', 'mortgage_company', 'sent', 'endorse-mtg-b', 'bank@example.com', NULL, '2026-01-03T00:00:00Z', now()),
+  ('d5555555-5555-4555-8555-555555555555', '${CHECK_ENDORSING_A}', '${FREEDOM}', 'Internal PA', 'public_adjuster', 'sent', 'endorse-pa', 'pa@example.com', NULL, '2026-01-03T00:00:00Z', now());
+INSERT INTO public.homeowner_ledger_tokens
+  (id, tenant_id, claim_id, token, homeowner_email, homeowner_name, revoked_at, expires_at)
+VALUES
+  ('${TOKEN_695064}', '${FREEDOM}', '${CLAIM_695064}', 'freedom-695064-token-value', 'ada@example.com', 'Ada Lovelace', NULL, NULL);
+`;
+
+test('SQL 72 throws on live check_stage enum; SQL 73 returns the 695064-GQ ledger', { timeout: 180000 }, async (t) => {
+  if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
+    t.skip('PostgreSQL 16 initdb is not installed in this environment');
+    return;
+  }
+  const pgData = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-homeowner-ledger-enum-'));
+  const port = 56900 + (process.pid % 1000);
+  const logPath = path.join(pgData, 'pg.log');
+  mustRun(path.join(PG_BIN, 'initdb'), [
+    '-D', pgData, '--auth=trust', '--no-sync', '--username=ubuntu', '--encoding=UTF8',
+  ]);
+  fs.appendFileSync(path.join(pgData, 'postgresql.conf'), `
+listen_addresses = ''
+port = ${port}
+unix_socket_directories = '${pgData}'
+logging_collector = off
+shared_buffers = 32MB
+max_connections = 20
+`);
+  const started = run(path.join(PG_BIN, 'pg_ctl'), [
+    '-D', pgData, '-l', logPath, '-w', '-t', '30', 'start',
+  ]);
+  if (started.status !== 0) {
+    throw new Error(`pg_ctl start failed: ${started.stderr || fs.readFileSync(logPath, 'utf8')}`);
+  }
+  const psql = (sql, { stop = true } = {}) => {
+    const args = [
+      '-h', pgData, '-p', String(port), '-U', 'ubuntu', '-d', 'postgres', '-At',
+    ];
+    if (stop) args.push('-v', 'ON_ERROR_STOP=1');
+    args.push('-c', sql);
+    const result = run(path.join(PG_BIN, 'psql'), args);
+    if (stop && result.status !== 0) {
+      throw new Error(`psql failed (${result.status}): ${result.stderr || result.stdout}`);
+    }
+    return result;
+  };
+  try {
+    psql(ENUM_SCHEMA);
+    psql(SQL72);
+    psql(SEED_695064);
+
+    const claimJson = psql(`SELECT to_jsonb(c)::text FROM (SELECT id, claim_number FROM public.claims WHERE id = '${CLAIM_695064}') c`);
+    assert.match(claimJson.stdout, /695064-GQ/);
+
+    const events = psql(`SELECT COALESCE(jsonb_agg(to_jsonb(e)), '[]'::jsonb)::text FROM (SELECT event_type FROM public.homeowner_ledger_events WHERE claim_id = '${CLAIM_695064}' AND tenant_id = '${FREEDOM}') e`);
+    assert.match(events.stdout, /check_received/);
+
+    const totalsThrow = psql(`
+      SELECT COALESCE(SUM(CASE
+        WHEN lower(COALESCE(i.check_stage, '')) IN ('deposited', 'cleared', 'funds_released', 'disbursed')
+          THEN COALESCE(i.amount, 0) ELSE 0 END), 0)
+      FROM public.check_intake_items i
+      WHERE i.claim_id = '${CLAIM_695064}' AND i.tenant_id = '${FREEDOM}'
+    `, { stop: false });
+    assert.notEqual(totalsThrow.status, 0);
+    assert.match(`${totalsThrow.stderr}${totalsThrow.stdout}`, /invalid input value for enum check_stage/);
+
+    const totalsCast = psql(`
+      SELECT COALESCE(SUM(COALESCE(i.amount, 0)), 0)::text || '|' ||
+             COALESCE(SUM(CASE
+               WHEN lower(COALESCE(i.check_stage::text, '')) IN ('deposited', 'cleared', 'funds_released', 'disbursed')
+                 THEN COALESCE(i.amount, 0) ELSE 0 END), 0)::text
+      FROM public.check_intake_items i
+      WHERE i.claim_id = '${CLAIM_695064}' AND i.tenant_id = '${FREEDOM}'
+    `);
+    assert.equal(totalsCast.stdout.trim(), '4900|0');
+
+    const endorsements = psql(`
+      SELECT COUNT(*)::text
+      FROM public.check_intake_items i
+      JOIN public.check_endorsements e
+        ON e.check_id = i.id
+       AND (e.tenant_id IS NULL OR e.tenant_id = '${FREEDOM}')
+      WHERE i.claim_id = '${CLAIM_695064}'
+        AND i.tenant_id = '${FREEDOM}'
+        AND e.payee_type IN ('insured', 'mortgage_company')
+        AND e.signed_at IS NULL
+    `);
+    assert.equal(endorsements.stdout.trim(), '4');
+
+    const rpc72 = psql(`SELECT public.aws_public_homeowner_ledger_by_token('freedom-695064-token-value')::text`, { stop: false });
+    assert.notEqual(rpc72.status, 0);
+    assert.match(`${rpc72.stderr}${rpc72.stdout}`, /invalid input value for enum check_stage/);
+
+    psql(SQL73);
+    const doc = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('freedom-695064-token-value')::text`).stdout.trim());
+    assert.equal(doc.ok, true);
+    assert.equal(doc.mode, 'claim');
+    assert.equal(doc.claim.claim_number, '695064-GQ');
+    assert.equal(doc.claim.id, CLAIM_695064);
+    assert.equal(Number(doc.totals.received), 4900);
+    assert.equal(Number(doc.totals.deposited), 0);
+    assert.equal(Number(doc.totals.released), 0);
+    assert.equal(Number(doc.totals.remaining), 4900);
+    assert.equal(doc.events.length, 1);
+    assert.equal(doc.pending_endorsements.length, 2);
+    const checkIds = doc.pending_endorsements.map((row) => row.check_id).sort();
+    assert.deepEqual(checkIds, [CHECK_ENDORSING_A, CHECK_ENDORSING_B].sort());
+    for (const row of doc.pending_endorsements) {
+      assert.deepEqual(row.parties.map((party) => party.payee_type).sort(), ['insured', 'mortgage_company']);
+      const insured = row.parties.find((party) => party.payee_type === 'insured');
+      assert.equal(insured.is_homeowner, true);
+      assert.match(insured.sign_url, /^\/endorse\?token=endorse-ada-/);
+    }
+    assert.deepEqual(doc.pending_signatures, []);
+    assert.equal(doc.money, null);
+    assert.equal(doc.allow_deductible_payment, false);
+    assert.doesNotMatch(JSON.stringify(doc), /Internal PA|endorse-pa|wallet|routing|bank_account|moov|plaid/);
+    assert.equal(psql(`SELECT last_viewed_at IS NOT NULL FROM public.homeowner_ledger_tokens WHERE token = 'freedom-695064-token-value'`).stdout.trim(), 't');
+
+    psql(`UPDATE public.homeowner_ledger_tokens SET last_viewed_at = NULL WHERE token = 'freedom-695064-token-value'`);
+    psql(`
+      CREATE OR REPLACE FUNCTION public.trg_fail_last_viewed()
+      RETURNS trigger LANGUAGE plpgsql AS $fn$
+      BEGIN
+        IF NEW.last_viewed_at IS NOT NULL THEN
+          RAISE EXCEPTION 'last_viewed_at telemetry failed';
+        END IF;
+        RETURN NEW;
+      END;
+      $fn$;
+      CREATE TRIGGER trg_fail_last_viewed
+      BEFORE UPDATE OF last_viewed_at ON public.homeowner_ledger_tokens
+      FOR EACH ROW EXECUTE FUNCTION public.trg_fail_last_viewed();
+    `);
+    const afterTelemetryFail = JSON.parse(psql(`SELECT public.aws_public_homeowner_ledger_by_token('freedom-695064-token-value')::text`).stdout.trim());
+    assert.equal(afterTelemetryFail.ok, true);
+    assert.equal(afterTelemetryFail.mode, 'claim');
+    assert.equal(Number(afterTelemetryFail.totals.received), 4900);
+    assert.equal(afterTelemetryFail.pending_endorsements.length, 2);
+    assert.equal(psql(`SELECT last_viewed_at IS NULL FROM public.homeowner_ledger_tokens WHERE token = 'freedom-695064-token-value'`).stdout.trim(), 't');
   } finally {
     run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', 'stop']);
   }

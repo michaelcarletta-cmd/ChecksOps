@@ -16,6 +16,7 @@ import {
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL71,
   AUTHORIZED_SQL72,
+  AUTHORIZED_SQL73,
   AUTHORIZED_STAGING_SQL,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
@@ -23,6 +24,7 @@ import {
   evaluateSqlExecutorAuthorization,
   isHomeownerLedgerViewClaimOk,
   isHomeownerLedgerViewContract,
+  isHomeownerLedgerViewLastViewedBestEffort,
   isMembershipOnlyHelper,
   isMortgageOpsAcceptComplete,
   isTenantUsersSameCheckPermissions,
@@ -574,6 +576,7 @@ test('composed allowlist keeps live families and adds exact SQL 71', () => {
     '39_mortgage_ops_agent_accept_complete',
     '71_homeowner_ledger_view_contract',
     '72_homeowner_ledger_view_claim_ok',
+    '73_homeowner_ledger_view_last_viewed_best_effort',
   ]);
   assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL44).migration_id, AUTHORIZED_SQL44.migration_id);
   assert.equal(isTenantUsersSameCheckPermissions(AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS), true);
@@ -584,16 +587,118 @@ test('composed allowlist keeps live families and adds exact SQL 71', () => {
   assert.equal(isHomeownerLedgerViewClaimOk(AUTHORIZED_SQL72), true);
   assert.equal(isHomeownerLedgerViewClaimOk(AUTHORIZED_SQL71), false);
   assert.equal(isHomeownerLedgerViewContract(AUTHORIZED_SQL72), false);
+  assert.equal(isHomeownerLedgerViewLastViewedBestEffort(AUTHORIZED_SQL73), true);
+  assert.equal(isHomeownerLedgerViewLastViewedBestEffort(AUTHORIZED_SQL72), false);
+  assert.equal(isHomeownerLedgerViewClaimOk(AUTHORIZED_SQL73), false);
   assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL71).function_identity, AUTHORIZED_SQL71.function_identity);
   assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL72).function_identity, AUTHORIZED_SQL72.function_identity);
+  assert.equal(resolveAuthorizedMigration(AUTHORIZED_SQL73).function_identity, AUTHORIZED_SQL73.function_identity);
   assert.notEqual(resolveAuthorizedMigration(AUTHORIZED_SQL71).filename, AUTHORIZED_SQL44.filename);
   assert.notEqual(resolveAuthorizedMigration(AUTHORIZED_SQL72).filename, AUTHORIZED_SQL71.filename);
+  assert.notEqual(resolveAuthorizedMigration(AUTHORIZED_SQL73).filename, AUTHORIZED_SQL72.filename);
   assert.equal(AUTHORIZED_SQL71.source_sha256, '21d0968676097bb771e0271a6793e9ad0d48d4be02c70e85d728eb0f0b657ab5');
+  assert.equal(AUTHORIZED_SQL72.source_sha256, '8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f');
+  assert.equal(AUTHORIZED_SQL73.source_sha256, '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e');
+  assert.equal(
+    AUTHORIZED_SQL72.expected_live_definition_sha256,
+    '5918ebec1b3338dd4e34a4420c5f2a654f0b2d3311527923f7fd962c891fbcfa',
+  );
+  assert.equal(
+    AUTHORIZED_SQL73.expected_live_definition_sha256,
+    'b099a0d44b3078fbdc78ecf03ab813b84a402d3234510bcfbc21c2278004ab76',
+  );
+});
+
+function sql73Input(overrides = {}) {
+  const requiredLive = AUTHORIZED_SQL73.expected_live_definition_sha256;
+  const pinNow = Date.parse('2026-10-04T01:30:00.000Z');
+  return {
+    input: {
+      workstream_id: 'sql73-last-viewed-best-effort-6f10',
+      branch: 'cursor/sql73-last-viewed-best-effort-6f10',
+      commit: AUTHORIZED_SQL73.commit,
+      operator: 'test-agent',
+      target_environment: 'staging',
+      target_component: 'staging-sql',
+      deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+      owned_components: [AUTHORIZED_SQL73.filename],
+      filename: AUTHORIZED_SQL73.filename,
+      migration_id: AUTHORIZED_SQL73.migration_id,
+      source_sha256: AUTHORIZED_SQL73.source_sha256,
+      intended_replacement_sha256: AUTHORIZED_SQL73.intended_replacement_sha256,
+      expected_live_definition_sha256: requiredLive,
+      one_use_id: 'sql73-auth-0001',
+      expiry: '2026-10-04T03:00:00.000Z',
+      action: 'authorize',
+      function_name: 'checksops-staging-guarded-sql-executor',
+      build_timestamp: '2026-10-04T01:30:00.000Z',
+      preflight_live_fingerprint: authorizationFingerprint({
+        ...AUTHORIZED_SQL73,
+        expected_live_definition_sha256: requiredLive,
+        one_use_id: 'sql73-auth-0001',
+      }),
+      ...overrides,
+    },
+    now: pinNow,
+  };
+}
+
+test('SQL 73 exact pin is accepted and altered artifact/hash/commit/live-hash still fail closed', () => {
+  const bytes = fs.readFileSync(path.join(ROOT, AUTHORIZED_SQL73.filename));
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  assert.equal(sha, AUTHORIZED_SQL73.source_sha256);
+  assert.equal(sha, '02a19f8ef11cb3e60122b1ff1e07dd331f95a677d13028564d497ef06e523c9e');
   assert.equal(AUTHORIZED_SQL72.source_sha256, '8ecb14d3f24e223ae6c9a7e17da6cab30d6425147040a5625302b58f3d6c2e9f');
   assert.equal(
     AUTHORIZED_SQL72.expected_live_definition_sha256,
     '5918ebec1b3338dd4e34a4420c5f2a654f0b2d3311527923f7fd962c891fbcfa',
   );
+
+  const { input, now } = sql73Input();
+  const pin = evaluateSqlExecutorAuthorization(input, { now });
+  assert.equal(pin.ok, true, pin.message);
+  assert.equal(pin.details.allowlist_entry.filename, AUTHORIZED_SQL73.filename);
+  assert.equal(pin.details.allowlist_entry.function_identity, AUTHORIZED_SQL73.function_identity);
+  assert.notEqual(pin.details.allowlist_entry.filename, AUTHORIZED_SQL72.filename);
+
+  const alteredHash = evaluateSqlExecutorAuthorization({
+    ...input,
+    source_sha256: '1'.repeat(64),
+    one_use_id: 'sql73-auth-0002',
+  }, { now });
+  assert.equal(alteredHash.ok, false);
+  assert.equal(alteredHash.code, CODES.SQL_COLLISION);
+
+  const wrongCommit = evaluateSqlExecutorAuthorization({
+    ...input,
+    commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    one_use_id: 'sql73-auth-0003',
+  }, { now });
+  assert.equal(wrongCommit.ok, false);
+  assert.equal(wrongCommit.code, CODES.SQL_COLLISION);
+
+  const wrongLive = evaluateSqlExecutorAuthorization({
+    ...input,
+    expected_live_definition_sha256: '2'.repeat(64),
+    one_use_id: 'sql73-auth-0004',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL73,
+      expected_live_definition_sha256: '2'.repeat(64),
+      one_use_id: 'sql73-auth-0004',
+    }),
+  }, { now });
+  assert.equal(wrongLive.ok, false);
+  assert.equal(wrongLive.code, CODES.SQL_COLLISION);
+
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...input,
+    sql_text: 'DROP FUNCTION public.aws_public_homeowner_ledger_by_token(text)',
+  }, { now }).code, CODES.UNRELATED_MUTATION);
+  assert.equal(evaluateSqlExecutorAuthorization({
+    ...input,
+    target_environment: 'production',
+    target_component: 'production-sql',
+  }, { now }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
 test('sql-executor-ensure packs the non-throwing function-def lookup', () => {
@@ -601,6 +706,7 @@ test('sql-executor-ensure packs the non-throwing function-def lookup', () => {
   assert.match(src, /function-def-lookup\.mjs/);
   assert.match(src, /71_homeowner_ledger_view_contract\.sql/);
   assert.match(src, /72_homeowner_ledger_view_claim_ok\.sql/);
+  assert.match(src, /73_homeowner_ledger_view_last_viewed_best_effort\.sql/);
   assert.match(src, /39_mortgage_ops_agent_accept_complete\.sql/);
   assert.match(src, /20261002200000_user_can_move_tenant_checks_membership_only\.sql/);
   assert.match(src, /mortgage-ops-sql39\.mjs/);
