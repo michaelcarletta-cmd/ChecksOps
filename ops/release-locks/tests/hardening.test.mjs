@@ -81,7 +81,10 @@ test('partner-share apply_evidence is append-only against origin/main ledger', (
   const candidate = sourceLedger();
   const errors = appendOnlyLedgerErrors(ROOT, candidate, base, { genesis: false });
   assert.deepEqual(errors, []);
-  const evidence = candidate.entries.filter((row) => row.record_kind === 'apply_evidence');
+  const evidence = candidate.entries.filter((row) => (
+    row.record_kind === 'apply_evidence'
+    && row.component === 'partner-sharing'
+  ));
   assert.equal(evidence.length >= 4, true);
   assert.equal(evidence.every((row) => row.applied === true && row.applied_environment === 'production'), true);
 });
