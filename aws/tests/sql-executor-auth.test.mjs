@@ -20,6 +20,7 @@ import {
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-guard.mjs';
+import { loadContractRegistry, relevantContracts } from '../../scripts/deployment-guard/lib/contracts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const NOW = '2026-09-29T18:00:00.000Z';
@@ -200,12 +201,10 @@ test('sql-apply receipt cannot authorize executor invoke', () => {
   assert.equal(refused.code, CODES.RECEIPT_MISMATCH);
 });
 
-test('official preflight forwards executor authorization fields', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-'));
-  const input = executorInput();
+function spawnOfficialPreflight(dir, input) {
   const file = path.join(dir, 'manifest.json');
-  fs.writeFileSync(file, `${JSON.stringify({ ...input, contract_results: { 'claim-ledger': { ok: true }, 'tenant-isolation': { ok: true }, 'financial-write-protections': { ok: true } } })}\n`);
-  const result = spawnSync(process.execPath, [
+  fs.writeFileSync(file, `${JSON.stringify(input)}\n`);
+  return spawnSync(process.execPath, [
     path.join(ROOT, 'scripts/deployment-guard/preflight.mjs'),
     '--input', file,
     '--environment', 'staging',
@@ -214,6 +213,54 @@ test('official preflight forwards executor authorization fields', () => {
     '--workstream-id', 'claim-ledger',
     '--commit', AUTHORIZED_SQL44.commit,
   ], { encoding: 'utf8', cwd: ROOT, env: { ...process.env, CHECKSOPS_DEPLOYMENT_GUARD_ROOT: dir } });
+}
+
+function executeOfficialAcceptedContract(rel) {
+  return spawnSync(process.execPath, ['--test', path.join(ROOT, rel)], {
+    encoding: 'utf8',
+    cwd: ROOT,
+  });
+}
+
+function relevantSqlExecutorContracts() {
+  return relevantContracts(loadContractRegistry(ROOT), {
+    environment: 'staging',
+    component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+  });
+}
+
+test('official preflight forwards executor authorization fields', () => {
+  const relevant = relevantSqlExecutorContracts();
+  const ids = relevant.map((row) => row.id);
+  assert.ok(ids.includes('signature-requests'), 'PR #665 requires signature-requests on sql-executor-invoke');
+  assert.ok(ids.includes('claim-ledger'));
+  assert.ok(ids.includes('tenant-isolation'));
+  assert.ok(ids.includes('financial-write-protections'));
+
+  const staleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-stale-'));
+  const stale = spawnOfficialPreflight(staleDir, {
+    ...executorInput(),
+    contract_results: {
+      'claim-ledger': { ok: true },
+      'tenant-isolation': { ok: true },
+      'financial-write-protections': { ok: true },
+    },
+  });
+  assert.notEqual(stale.status, 0, stale.stdout);
+  assert.match(`${stale.stderr}${stale.stdout}`, /accepted contract signature-requests was not executed before deployment/);
+
+  const contract_results = {};
+  for (const row of relevant) {
+    assert.ok(row.test, `${row.id} must name an official contract test`);
+    const executed = executeOfficialAcceptedContract(row.test);
+    assert.equal(executed.status, 0, `${row.id} official test failed:\n${executed.stderr}${executed.stdout}`);
+    contract_results[row.id] = { ok: true };
+  }
+  assert.equal(contract_results['signature-requests']?.ok, true);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-'));
+  const result = spawnOfficialPreflight(dir, { ...executorInput(), contract_results });
   assert.equal(result.status, 0, result.stderr);
   const parsed = JSON.parse(result.stdout);
   assert.equal(parsed.ok, true, parsed.message);
