@@ -274,16 +274,74 @@ test('detects SQL contract removed', () => {
   )));
 });
 
-test('detects stale source substituted', () => {
+test('allows legitimate forward edits when accepted behavior remains intact', () => {
   const root = writeTree({ 'src/components/FixtureWidget.tsx': ACCEPTED_WIDGET });
   const result = evaluateAcceptedFeatures({
     root,
     registry: registry([feature()]),
     overlay: {
-      'src/components/FixtureWidget.tsx': `${ACCEPTED_WIDGET}\n// stale substitute from an older SHA\n`,
+      'src/components/FixtureWidget.tsx': `${ACCEPTED_WIDGET}\nexport const unrelatedForwardImprovement = true;\n`,
     },
   });
-  assert.ok(result.findings.some((row) => row.code === CODES.STALE_SOURCE));
+  assert.equal(result.findings.some((row) => row.code === CODES.STALE_SOURCE), false);
+  assert.equal(result.findings.some((row) => row.feature_id === 'fixture-ui'), false);
+  assert.ok(result.present_accepted.includes('fixture-ui'));
+});
+
+test('detects required source path removed even when another invariant still passes', () => {
+  const root = writeTree({
+    'src/components/FixtureWidget.tsx': ACCEPTED_WIDGET,
+    'src/components/RequiredHelper.ts': 'export const helper = true;\n',
+  });
+  const result = evaluateAcceptedFeatures({
+    root,
+    registry: registry([feature({
+      source_paths: ['src/components/FixtureWidget.tsx', 'src/components/RequiredHelper.ts'],
+    })]),
+    overlay: { 'src/components/RequiredHelper.ts': null },
+  });
+  assert.ok(result.findings.some((row) => (
+    row.code === CODES.FEATURE_MISSING
+    && row.feature_id === 'fixture-ui'
+    && row.details?.file === 'src/components/RequiredHelper.ts'
+  )));
+  assert.ok(result.missing_accepted.includes('fixture-ui'));
+});
+
+test('detects semantic contract changes even when invariant IDs are unchanged', () => {
+  const previous = feature();
+  const changedMarker = feature({
+    semantic_invariants: [{
+      ...previous.semantic_invariants[0],
+      must_match: '<DifferentWidget',
+    }],
+  });
+  const result = detectUnauthorizedSupersession(previous, changedMarker);
+  assert.equal(result.ok, false);
+  assert.equal(result.finding.code, CODES.UNAUTHORIZED_SUPERSESSION);
+});
+
+test('detects required-test changes without supersession', () => {
+  const previous = feature();
+  const changedTests = feature({
+    required_tests: ['aws/tests/replacement.test.mjs'],
+  });
+  const result = detectUnauthorizedSupersession(previous, changedTests);
+  assert.equal(result.ok, false);
+  assert.equal(result.finding.code, CODES.UNAUTHORIZED_SUPERSESSION);
+});
+
+test('empty explicit composition cannot omit accepted features', () => {
+  const root = writeTree({ 'src/components/FixtureWidget.tsx': ACCEPTED_WIDGET });
+  const result = evaluateAcceptedFeatures({
+    root,
+    registry: registry([feature()]),
+    composition: {
+      candidate_commit: SHA,
+      declared_feature_ids: [],
+    },
+  });
+  assert.ok(result.findings.some((row) => row.code === CODES.COMPOSITION_GAP));
 });
 
 test('detects accepted workstream omitted from composition', () => {
@@ -331,6 +389,37 @@ test('candidate own tests passing cannot hide another accepted feature failure',
   assert.ok(result.present_accepted.includes('fixture-ui'));
   assert.ok(result.missing_accepted.includes('fixture-other'));
   assert.ok(result.findings.some((row) => row.feature_id === 'fixture-other'));
+});
+
+test('required test evidence must cover every accepted feature and candidate commit', () => {
+  const root = writeTree({ 'src/components/FixtureWidget.tsx': ACCEPTED_WIDGET });
+  const missing = evaluateAcceptedFeatures({
+    root,
+    registry: registry([feature()]),
+    composition: { candidate_commit: SHA, declared_feature_ids: ['fixture-ui'] },
+    attestation: { ok: true, test_executions: [] },
+  });
+  assert.ok(missing.findings.some((row) => (
+    row.code === CODES.ATTESTATION_REJECTED && row.feature_id === 'fixture-ui'
+  )));
+
+  const wrongCommit = evaluateAcceptedFeatures({
+    root,
+    registry: registry([feature()]),
+    composition: { candidate_commit: SHA_B, declared_feature_ids: ['fixture-ui'] },
+    attestation: {
+      ok: true,
+      test_executions: [{
+        test: 'aws/tests/fixture-widget.test.mjs',
+        candidate_commit: SHA,
+        exit_code: 0,
+        output_sha256: sha256('real test output'),
+      }],
+    },
+  });
+  assert.ok(wrongCommit.findings.some((row) => (
+    row.code === CODES.ATTESTATION_REJECTED && row.feature_id === 'fixture-ui'
+  )));
 });
 
 test('rejects fake {ok:true} attestation', () => {
