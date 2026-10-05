@@ -1,8 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Production CloudFront WAFv2 for checksops.com. Managed rule groups are COUNT
-  (monitor) to avoid false-positive blocks. Path rate limits for /auth /storage
-  /public are BLOCK at conservative ceilings. Do not attach to staging.
+  Production CloudFront WAFv2 for checksops.com. Common and KnownBadInputs managed
+  rule groups enforce their native AWS actions after monitored production evidence
+  showed exploit and secret-file probes. IP reputation and general rate limiting
+  remain COUNT for further observation. Path rate limits for /auth /storage /public
+  remain BLOCK at conservative ceilings. Do not attach to staging.
 
 Resources:
   ProductionCloudFrontWebACL:
@@ -17,10 +19,10 @@ Resources:
         CloudWatchMetricsEnabled: true
         MetricName: checksopsProductionCloudFrontWaf
       Rules:
-        - Name: AWSManagedCommonCount
+        - Name: AWSManagedCommonEnforce
           Priority: 0
           OverrideAction:
-            Count: {}
+            None: {}
           Statement:
             ManagedRuleGroupStatement:
               VendorName: AWS
@@ -28,11 +30,11 @@ Resources:
           VisibilityConfig:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
-            MetricName: AWSManagedCommonCount
-        - Name: AWSManagedKnownBadInputsCount
+            MetricName: AWSManagedCommonEnforce
+        - Name: AWSManagedKnownBadInputsEnforce
           Priority: 1
           OverrideAction:
-            Count: {}
+            None: {}
           Statement:
             ManagedRuleGroupStatement:
               VendorName: AWS
@@ -40,7 +42,7 @@ Resources:
           VisibilityConfig:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
-            MetricName: AWSManagedKnownBadInputsCount
+            MetricName: AWSManagedKnownBadInputsEnforce
         - Name: AWSManagedIpReputationCount
           Priority: 2
           OverrideAction:
