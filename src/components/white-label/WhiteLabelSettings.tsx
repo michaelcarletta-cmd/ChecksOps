@@ -26,6 +26,7 @@ import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibra
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
+import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
 
@@ -211,6 +212,7 @@ export function WhiteLabelSettings() {
 
               <TabsContent value="branding" className="space-y-6">
                 <CompanyBrandingSettings />
+                <EmailSenderSettings showSendingDomain={false} />
               </TabsContent>
             </>
           )}

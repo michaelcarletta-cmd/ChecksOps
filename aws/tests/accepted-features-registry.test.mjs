@@ -134,7 +134,7 @@ const ACCEPTED_WIDGET = `export function Host() {\n  return <FixtureWidget showF
 const LAMBDA_ROUTE = `export async function handleFixtureRoute(event) {\n  return { ok: true };\n}\n`;
 const SQL_CONTRACT = `CREATE OR REPLACE FUNCTION fixture_contract() RETURNS void AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql;\n`;
 
-test('live registry is evaluate-only, has no accepted features, and Branding fails intended invariants', () => {
+test('live registry is evaluate-only, has no accepted features, and Branding intended invariants are satisfied', () => {
   const live = loadRegistry(ROOT);
   const schema = validateRegistry(live);
   assert.equal(schema.ok, true, schema.errors.join('; '));
@@ -158,19 +158,23 @@ test('live registry is evaluate-only, has no accepted features, and Branding fai
   const branding = result.features.find((row) => row.feature_id === 'branding');
   assert.ok(branding);
   assert.equal(branding.status, 'inventory_only');
-  assert.ok(branding.passed_invariants.includes('branding-company-mounted'));
-  assert.ok(branding.passed_invariants.includes('branding-admin-branding-email-present'));
-  assert.ok(branding.passed_invariants.includes('branding-admin-email-sender-mounted'));
-  const failedIds = branding.failing_invariants.map((row) => row.invariant_id);
-  assert.ok(failedIds.includes('branding-tenant-email-mounted'), 'tenant Email Branding should fail on current main');
-  assert.ok(failedIds.includes('branding-tenant-show-sending-domain-false'), 'showSendingDomain={false} should fail on current main');
-  assert.ok(failedIds.includes('branding-tenant-sending-subdomain-hidden'), 'Sending Subdomain hide contract should fail on current main');
-  assert.ok(failedIds.includes('branding-public-url-resolver'), 'brandingPublicUrl.ts should be missing on current main');
-  assert.ok(failedIds.includes('branding-intended-invariants'));
-  assert.ok(result.findings.some((row) => row.feature_id === 'branding'));
+  assert.deepEqual(branding.failing_invariants, []);
+  for (const id of [
+    'branding-company-mounted',
+    'branding-tenant-email-mounted',
+    'branding-tenant-show-sending-domain-false',
+    'branding-tenant-sending-subdomain-hidden',
+    'branding-admin-branding-email-present',
+    'branding-admin-email-sender-mounted',
+    'branding-public-url-resolver',
+    'branding-intended-invariants',
+  ]) {
+    assert.ok(branding.passed_invariants.includes(id), id);
+  }
+  assert.equal(result.findings.some((row) => row.feature_id === 'branding'), false);
 });
 
-test('evaluate-only CLI reports Branding findings and cannot block, including --enforce', () => {
+test('evaluate-only CLI reports no Branding findings and cannot block, including --enforce', () => {
   const proc = spawnSync(process.execPath, [
     'scripts/validate-accepted-features.mjs',
     '--json',
@@ -185,7 +189,11 @@ test('evaluate-only CLI reports Branding findings and cannot block, including --
   assert.equal(payload.evaluate_only, true);
   assert.equal(payload.blocking, false);
   assert.equal(payload.exit_code, 0);
-  assert.ok(payload.findings.some((row) => row.feature_id === 'branding'));
+  assert.equal(payload.findings.some((row) => row.feature_id === 'branding'), false);
+  const branding = payload.features.find((row) => row.feature_id === 'branding');
+  assert.ok(branding);
+  assert.equal(branding.status, 'inventory_only');
+  assert.deepEqual(branding.failing_invariants, []);
   assert.match(proc.stderr, /--enforce is ignored/);
   assert.equal(validateMain(['--json'], ROOT), 0);
 });
