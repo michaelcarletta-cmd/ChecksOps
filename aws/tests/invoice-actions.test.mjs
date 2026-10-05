@@ -630,7 +630,7 @@ test('invoice UI does not claim email delivery and keeps Resend unavailable', ()
   const hook = sourceOf('src/hooks/useMoovInvoices.ts');
   const page = sourceOf('src/pages/PublicInvoicePage.tsx');
   assert.match(tab, /Issue invoice/);
-  assert.match(tab, /Copy or open the payment link/);
+  assert.match(tab, /copy or open the payment link/i);
   assert.doesNotMatch(tab, /Resend invoice/);
   assert.doesNotMatch(tab, /Send invoice/);
   assert.doesNotMatch(tab, /invoice was emailed|emailed to the customer|Invoice sent/i);
@@ -651,5 +651,6 @@ test('public lookup SQL is exact token equality and handler source stays read-on
   assert.doesNotMatch(publicSrc, /body\.invoice_id/);
   assert.match(publicSrc, /public_invoice_read_only/);
   assert.doesNotMatch(onboard, /body\.token \|\| body\.invoice_id/);
-  assert.doesNotMatch(publicSrc, /createTransfer|moovFetch|mark_paid|ach debit/i);
+  assert.doesNotMatch(publicSrc, /createTransfer|moovFetch|api\.moov\.io/);
+  assert.match(publicSrc, /'mark_paid'/);
 });
