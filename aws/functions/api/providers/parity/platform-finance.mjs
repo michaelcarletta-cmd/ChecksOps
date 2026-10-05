@@ -192,6 +192,291 @@ export function classifyFeeCollection(fee = {}) {
   return 'outstanding';
 }
 
+export const V2_COLLECTION_CONTRACT = 'tenant-collection-v2';
+export const V2_COLLECTION_KIND = 'monthly_subscription';
+export const V2_EXCLUDED_KINDS = Object.freeze(['billing_verification']);
+const V2_INCOMPLETE_STATUSES = new Set([
+  'pending', 'submitted', 'processing', 'failed', 'cancelled', 'canceled', 'returned', 'void',
+]);
+const V2_COMPLETED_STATUSES = new Set(['completed', 'settled', 'cleared']);
+const MOOV_TRANSFER_IN_NOTES = /moov:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
+function metadataOf(record = {}) {
+  const raw = record.provider_metadata ?? record.metadata ?? {};
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function recordKind(record = {}) {
+  const meta = metadataOf(record);
+  return String(
+    record.kind
+    || record.checksops_kind
+    || meta.checksops_kind
+    || meta.kind
+    || '',
+  ).trim().toLowerCase();
+}
+
+function recordContract(record = {}) {
+  const meta = metadataOf(record);
+  return String(record.collection_contract || meta.collection_contract || '').trim().toLowerCase();
+}
+
+export function extractMoovTransferId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const match = raw.match(MOOV_TRANSFER_IN_NOTES);
+  return match ? match[1].toLowerCase() : '';
+}
+
+export function durableProviderTransferId(record = {}) {
+  const meta = metadataOf(record);
+  return String(
+    record.provider_transfer_id
+    || record.transfer_id
+    || meta.provider_transfer_id
+    || meta.transfer_id
+    || extractMoovTransferId(record.notes)
+    || '',
+  ).trim();
+}
+
+export function v2PaymentId(record = {}) {
+  const meta = metadataOf(record);
+  return String(
+    record.payment_id
+    || record.checksops_payment_id
+    || meta.checksops_payment_id
+    || meta.obligation_id
+    || (record.id && (record.collection_contract || record.period_start || record.period_end) ? record.id : '')
+    || '',
+  ).trim();
+}
+
+export function inferV2Kind(record = {}) {
+  const direct = recordKind(record);
+  if (direct) return direct;
+  const notes = String(record.notes || record.description || record.memo || '').toLowerCase();
+  if (/(billing[_-\s]?verification)/.test(notes)) return 'billing_verification';
+  const parenthetical = notes.match(/\((monthly_subscription|consolidated|maintenance)\)/);
+  if (parenthetical) return parenthetical[1];
+  if (notes.includes('monthly_subscription') || /subscription/.test(notes)) return V2_COLLECTION_KIND;
+  return '';
+}
+
+export function isExcludedV2Kind(record = {}) {
+  return V2_EXCLUDED_KINDS.includes(recordKind(record) || inferV2Kind(record));
+}
+
+export function isV2CollectionRecord(record = {}) {
+  if (isExcludedV2Kind(record)) return false;
+  if (recordContract(record) === V2_COLLECTION_CONTRACT) return true;
+  return recordKind(record) === V2_COLLECTION_KIND;
+}
+
+export function isAttributableCollectionCost(cost = {}) {
+  const memo = String(cost.memo || cost.kind || cost.cost_kind || '').toLowerCase();
+  if (!memo && cost.provider_fee_cents == null && cost.amount_cents == null) return false;
+  if (/(kyc|kyb|minimum commitment|wallet fee|instant verification)/.test(memo)) return false;
+  if (/fee for ach payment|ach payment fee|ach (debit|collect) fee/.test(memo)) return true;
+  if (cost.associated === true && Number.isFinite(Number(cost.provider_fee_cents ?? cost.amount_cents))) {
+    return true;
+  }
+  return false;
+}
+
+export function classifyV2Collection(collection = {}) {
+  if (!isV2CollectionRecord(collection)) return 'ignored';
+  const providerTransferId = durableProviderTransferId(collection);
+  if (!providerTransferId) return 'ignored';
+  const status = String(collection.status || collection.provider_status || collection.new_status || '').toLowerCase();
+  if (V2_INCOMPLETE_STATUSES.has(status)) return 'ignored';
+  if (!V2_COMPLETED_STATUSES.has(status)) return 'ignored';
+  if (!toIsoTimestamp(collection.completed_at || collection.settled_at)) return 'ignored';
+  const amount = Number(collection.amount_cents || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return 'ignored';
+  if (!String(collection.tenant_id || '').trim()) return 'ignored';
+  const environment = String(collection.environment || '').toLowerCase();
+  if (environment && environment !== 'production') return 'ignored';
+  return 'collected';
+}
+
+export function v2CollectionIdentityKeys(collection = {}) {
+  const keys = [
+    durableProviderTransferId(collection),
+    v2PaymentId(collection),
+    String(collection.wallet_transaction_id || '').trim(),
+  ].filter(Boolean).map((value) => value.toLowerCase());
+  return [...new Set(keys)];
+}
+
+function identitiesOverlap(left, right) {
+  return left.some((key) => right.includes(key));
+}
+
+function statusRank(status) {
+  const value = String(status || '').toLowerCase();
+  if (V2_COMPLETED_STATUSES.has(value)) return 3;
+  if (V2_INCOMPLETE_STATUSES.has(value) && !['pending', 'submitted', 'processing'].includes(value)) return 2;
+  if (value) return 1;
+  return 0;
+}
+
+function mergeV2Evidence(target, source) {
+  const next = { ...target };
+  for (const [key, value] of Object.entries(source || {})) {
+    if (value == null || value === '') continue;
+    if (next[key] == null || next[key] === '') next[key] = value;
+  }
+  const targetMeta = metadataOf(target);
+  const sourceMeta = metadataOf(source);
+  next.provider_metadata = { ...targetMeta, ...sourceMeta };
+  if (!next.kind) next.kind = recordKind(next) || inferV2Kind(next) || recordKind(source) || inferV2Kind(source);
+  if (!next.collection_contract) {
+    next.collection_contract = recordContract(next) || recordContract(source)
+      || (next.kind === V2_COLLECTION_KIND ? V2_COLLECTION_CONTRACT : '');
+  }
+  if (statusRank(source.status || source.new_status) > statusRank(next.status)) {
+    next.status = source.status || source.new_status;
+  }
+  const sourceCompleted = source.completed_at || source.settled_at
+    || (V2_COMPLETED_STATUSES.has(String(source.status || source.new_status || '').toLowerCase())
+      ? source.created_at
+      : null);
+  if (!next.completed_at && sourceCompleted) next.completed_at = sourceCompleted;
+  if (!next.settled_at && (source.settled_at || sourceCompleted)) next.settled_at = source.settled_at || sourceCompleted;
+  if (!next.provider_transfer_id) next.provider_transfer_id = durableProviderTransferId(next) || durableProviderTransferId(source);
+  if (!next.payment_id) next.payment_id = v2PaymentId(next) || v2PaymentId(source);
+  if (!next.tenant_id) next.tenant_id = source.tenant_id || sourceMeta.checksops_tenant_id || null;
+  if (!next.environment) next.environment = source.environment || sourceMeta.environment || '';
+  if (next.provider_fee_cents == null && source.provider_fee_cents != null) {
+    next.provider_fee_cents = source.provider_fee_cents;
+  }
+  return next;
+}
+
+export function normalizeEventForV2(event = {}) {
+  const meta = metadataOf(event);
+  const status = String(event.status || event.new_status || '').toLowerCase();
+  const completed = V2_COMPLETED_STATUSES.has(status);
+  const feeCents = event.provider_fee_cents ?? meta.provider_fee_cents ?? meta.fee_cents ?? null;
+  return {
+    ...event,
+    status: event.status || event.new_status || '',
+    completed_at: event.completed_at || event.settled_at || (completed ? event.created_at : null),
+    settled_at: event.settled_at || (completed ? event.created_at : null),
+    amount_cents: event.amount_cents ?? meta.amount_cents ?? null,
+    kind: recordKind(event) || inferV2Kind(event),
+    collection_contract: recordContract(event),
+    payment_id: v2PaymentId(event),
+    provider_transfer_id: durableProviderTransferId(event),
+    tenant_id: event.tenant_id || meta.checksops_tenant_id || null,
+    environment: event.environment || meta.environment || '',
+    provider_fee_cents: feeCents,
+  };
+}
+
+/**
+ * Collapse local payment, provider transfer, and wallet credit evidence
+ * for one economic collection. Unrelated wallet credits and platform
+ * KYC / minimum-commitment fees never join a collection.
+ */
+export function assembleV2Collections({
+  payments = [],
+  events = [],
+  transfers = [],
+  walletTransactions = [],
+} = {}) {
+  const groups = [];
+  const consider = (record, extras = {}) => {
+    const merged = mergeV2Evidence({ ...record, ...extras }, record);
+    if (!isV2CollectionRecord(merged) && !durableProviderTransferId(merged) && !v2PaymentId(merged)) {
+      return;
+    }
+    const keys = v2CollectionIdentityKeys(merged);
+    const match = keys.length
+      ? groups.find((group) => identitiesOverlap(group.keys, keys))
+      : null;
+    if (match) {
+      match.record = mergeV2Evidence(match.record, merged);
+      match.keys = [...new Set([...match.keys, ...v2CollectionIdentityKeys(match.record)])];
+      return;
+    }
+    groups.push({ record: merged, keys });
+  };
+
+  for (const payment of payments) {
+    const kind = payment.kind || recordKind(payment) || inferV2Kind(payment);
+    const contract = payment.collection_contract || recordContract(payment)
+      || (kind === V2_COLLECTION_KIND ? V2_COLLECTION_CONTRACT : '');
+    const candidate = {
+      ...payment,
+      payment_id: payment.payment_id || payment.id,
+      kind,
+      collection_contract: contract,
+      provider_transfer_id: durableProviderTransferId(payment),
+    };
+    if (isExcludedV2Kind(candidate)) continue;
+    if (!isV2CollectionRecord(candidate) && !durableProviderTransferId(candidate)) continue;
+    consider(candidate);
+  }
+  for (const event of events) {
+    const normalized = normalizeEventForV2(event);
+    if (isExcludedV2Kind(normalized)) continue;
+    if (!isV2CollectionRecord(normalized) && !durableProviderTransferId(normalized) && !v2PaymentId(normalized)) {
+      continue;
+    }
+    consider(normalized);
+  }
+  for (const transfer of transfers) {
+    if (!isV2CollectionRecord(transfer) && !v2PaymentId(transfer)) continue;
+    consider(transfer);
+  }
+  for (const wallet of walletTransactions) {
+    const transferId = durableProviderTransferId(wallet)
+      || extractMoovTransferId(wallet.memo)
+      || String(wallet.source_id || wallet.sourceID || '').trim();
+    const paymentId = v2PaymentId(wallet);
+    const type = String(wallet.transactionType || wallet.type || '').toLowerCase();
+    const amount = Number(wallet.grossAmount ?? wallet.amount_cents ?? 0);
+    if (type === 'moov-fee' || type === 'fee') {
+      const cost = {
+        memo: wallet.memo || wallet.kind,
+        amount_cents: Math.abs(amount),
+        provider_fee_cents: Math.abs(amount),
+        associated: Boolean(transferId || paymentId),
+      };
+      if (!isAttributableCollectionCost(cost)) continue;
+      const keys = [transferId, paymentId].filter(Boolean).map((value) => value.toLowerCase());
+      const match = keys.length ? groups.find((group) => identitiesOverlap(group.keys, keys)) : null;
+      if (match && match.record.provider_fee_cents == null) {
+        match.record.provider_fee_cents = Math.abs(amount);
+        match.record.cost_kind = wallet.memo || 'Fee for ACH payment';
+      }
+      continue;
+    }
+    if (!isV2CollectionRecord(wallet) && !transferId && !paymentId) continue;
+    consider({
+      ...wallet,
+      provider_transfer_id: transferId || durableProviderTransferId(wallet),
+      amount_cents: wallet.amount_cents ?? (amount > 0 ? amount : null),
+      wallet_transaction_id: wallet.walletTransactionID || wallet.wallet_transaction_id || wallet.id,
+      wallet_credit_cents: amount > 0 ? amount : wallet.wallet_credit_cents,
+    });
+  }
+
+  return groups.map((group) => group.record);
+}
+
 export function isCompletedProductionTransfer(transfer = {}) {
   const environment = String(transfer.environment || '').toLowerCase();
   const status = String(transfer.status || '').toLowerCase();
@@ -214,27 +499,40 @@ function emptyLedgerBucket() {
     billed_processing_cents: 0,
     collected_fee_cents: 0,
     collected_transfer_fee_cents: 0,
+    collected_v2_cents: 0,
     provider_cost_cents: 0,
     provider_cost_rows: 0,
     provider_cost_missing_rows: 0,
+    v2_cost_rows: 0,
+    v2_cost_missing_rows: 0,
     volume_cents: 0,
     transfer_count: 0,
   };
 }
 
 export function shapePlatformLedger(bucket = emptyLedgerBucket()) {
-  const collected = Number(bucket.collected_fee_cents || 0) + Number(bucket.collected_transfer_fee_cents || 0);
+  const occurrenceCollected = Number(bucket.collected_fee_cents || 0)
+    + Number(bucket.collected_transfer_fee_cents || 0);
+  const v2Collected = Number(bucket.collected_v2_cents || 0);
+  const collected = occurrenceCollected + v2Collected;
   const hasVolume = Number(bucket.transfer_count || 0) > 0;
-  const costComplete = Number(bucket.provider_cost_missing_rows || 0) === 0;
-  const providerCostMissing = Number(bucket.provider_cost_missing_rows || 0) > 0
-    || (collected > 0 && !hasVolume);
-  const providerCostAvailable = hasVolume && costComplete;
+  const volumeCostComplete = Number(bucket.provider_cost_missing_rows || 0) === 0;
+  const v2CostComplete = v2Collected === 0 || Number(bucket.v2_cost_missing_rows || 0) === 0;
+  const occurrenceCostIncomplete = occurrenceCollected > 0 && !hasVolume;
+  const volumeCostIncomplete = hasVolume && !volumeCostComplete;
+  const providerCostMissing = occurrenceCostIncomplete
+    || volumeCostIncomplete
+    || (v2Collected > 0 && !v2CostComplete);
+  const providerCostAvailable = (
+    (hasVolume && volumeCostComplete)
+    || (v2Collected > 0 && v2CostComplete && !occurrenceCostIncomplete && !volumeCostIncomplete)
+  );
   let profitCents = null;
   let profitAvailable = false;
   if (collected === 0) {
     profitCents = 0;
     profitAvailable = true;
-  } else if (hasVolume && costComplete) {
+  } else if (!providerCostMissing) {
     profitCents = collected - Number(bucket.provider_cost_cents || 0);
     profitAvailable = true;
   }
@@ -245,6 +543,7 @@ export function shapePlatformLedger(bucket = emptyLedgerBucket()) {
     collected_cents: collected,
     collected_fee_cents: Number(bucket.collected_fee_cents || 0),
     collected_transfer_fee_cents: Number(bucket.collected_transfer_fee_cents || 0),
+    collected_v2_cents: v2Collected,
     revenue_cents: collected,
     provider_cost_cents: Number(bucket.provider_cost_cents || 0),
     provider_cost_available: providerCostAvailable,
@@ -267,6 +566,10 @@ export function buildPlatformPnl({
   tenants = [],
   fees = [],
   transfers = [],
+  collections = [],
+  payments = [],
+  events = [],
+  walletTransactions = [],
   since = null,
 } = {}) {
   const nameById = new Map((tenants || []).map((row) => [row.id, row.name]));
@@ -274,11 +577,15 @@ export function buildPlatformPnl({
   const byTenant = new Map();
   const seenFees = new Set();
   const seenTransfers = new Set();
+  const seenCollections = new Set();
   const bump = (map, key) => {
     if (!map.has(key)) map.set(key, emptyLedgerBucket());
     return map.get(key);
   };
   const activity = [];
+  const assembledCollections = (collections || []).length
+    ? collections
+    : assembleV2Collections({ payments, events, transfers, walletTransactions });
 
   for (const fee of fees || []) {
     const collection = classifyFeeCollection(fee);
@@ -351,6 +658,52 @@ export function buildPlatformPnl({
     });
   }
 
+  for (const collection of assembledCollections || []) {
+    if (classifyV2Collection(collection) !== 'collected') continue;
+    const keys = v2CollectionIdentityKeys(collection);
+    const identity = keys[0] || collection.payment_id || collection.id || '';
+    if (!identity) continue;
+    if (keys.some((key) => seenCollections.has(key)) || seenCollections.has(identity)) continue;
+    for (const key of keys) seenCollections.add(key);
+    seenCollections.add(identity);
+    const amount = Number(collection.amount_cents || 0);
+    const monthKey = monthOf(collection.completed_at || collection.settled_at);
+    const tenantKey = collection.tenant_id || 'unassigned';
+    const recordedCost = collection.provider_fee_cents != null
+      && collection.provider_fee_cents !== ''
+      && Number.isFinite(Number(collection.provider_fee_cents));
+    for (const bucket of [bump(byMonth, monthKey), bump(byTenant, tenantKey)]) {
+      bucket.charged_cents += amount;
+      bucket.collected_v2_cents += amount;
+      if (recordedCost) {
+        bucket.provider_cost_cents += Number(collection.provider_fee_cents);
+        bucket.v2_cost_rows += 1;
+      } else {
+        bucket.v2_cost_missing_rows += 1;
+      }
+    }
+    activity.push({
+      kind: 'v2_collection',
+      id: collection.payment_id || collection.id || null,
+      tenant_id: collection.tenant_id || null,
+      tenant_name: nameById.get(collection.tenant_id) ?? (collection.tenant_id ? 'Unassigned' : 'Unassigned'),
+      fee_code: collection.kind || V2_COLLECTION_KIND,
+      description: collection.description || collection.notes || V2_COLLECTION_CONTRACT,
+      amount_cents: amount,
+      collection_status: 'collected',
+      occurred_at: toIsoTimestamp(collection.completed_at || collection.settled_at),
+      completed_at: toIsoTimestamp(collection.completed_at || collection.settled_at),
+      source_reference: collection.period || collection.checksops_period
+        || metadataOf(collection).checksops_period || collection.period_start || null,
+      payment_id: collection.payment_id || collection.id || null,
+      provider_transfer_id: durableProviderTransferId(collection) || null,
+      provider_fee_cents: recordedCost ? Number(collection.provider_fee_cents) : null,
+      provider_fee_recorded: recordedCost,
+      wallet_transaction_id: collection.wallet_transaction_id || null,
+      collection_contract: collection.collection_contract || V2_COLLECTION_CONTRACT,
+    });
+  }
+
   const months = [...byMonth.entries()]
     .filter(([key]) => key !== 'unknown')
     .sort(([left], [right]) => (left < right ? -1 : 1))
@@ -369,9 +722,12 @@ export function buildPlatformPnl({
     acc.billed_processing_cents += bucket.billed_processing_cents;
     acc.collected_fee_cents += bucket.collected_fee_cents;
     acc.collected_transfer_fee_cents += bucket.collected_transfer_fee_cents;
+    acc.collected_v2_cents += bucket.collected_v2_cents;
     acc.provider_cost_cents += bucket.provider_cost_cents;
     acc.provider_cost_rows += bucket.provider_cost_rows;
     acc.provider_cost_missing_rows += bucket.provider_cost_missing_rows;
+    acc.v2_cost_rows += bucket.v2_cost_rows;
+    acc.v2_cost_missing_rows += bucket.v2_cost_missing_rows;
     acc.volume_cents += bucket.volume_cents;
     acc.transfer_count += bucket.transfer_count;
     return acc;
@@ -383,11 +739,12 @@ export function buildPlatformPnl({
     tenants: tenantRows,
     activity,
     definitions: {
-      charged: 'Non-void platform_fee_line_items amounts (accrued charges).',
+      charged: 'Non-void platform_fee_line_items amounts plus collected tenant-collection-v2 amounts. Pending, failed, or unverified v2 requests do not accrue.',
       outstanding: "Line items with status unbilled. Not collected.",
       billed_processing: 'Line items with status billed that lack a completed occurrence plus provider_transfer_id.',
-      collected: 'Billed line items whose occurrence is completed and has provider_transfer_id, plus platform_fee_cents on completed production transfers.',
-      provider_cost: 'Recorded provider_fee_cents on completed production transfers only. Missing values are not treated as $0.',
+      collected: 'Billed line items whose occurrence is completed and has provider_transfer_id, plus platform_fee_cents on completed production transfers, plus tenant-collection-v2 collections proven by a durable provider_transfer_id and completed/settled timestamp. Local payment rows, billed flags, and pending transfers are not collected.',
+      collected_v2: 'Authoritative tenant-collection-v2 collected revenue. Independent from platform_fee_occurrences. One economic collection is counted once across the local payment, provider transfer, and wallet credit.',
+      provider_cost: 'Recorded provider_fee_cents on completed production transfers plus ACH payment fees durably associated with a collected v2 transfer. KYC, minimum-commitment, and unrelated wallet fees are excluded. Missing values are not treated as $0.',
       profit: 'Collected revenue minus recorded provider cost only when cost is complete. Unbilled fees are never profit.',
       volume: 'Completed production payment_transfers with provider_transfer_id and completed_at.',
     },
@@ -706,12 +1063,35 @@ async function walletPayload({ accountId, environment, fetchImpl, knownWalletId 
       available_balance_cents: Number(item.availableBalance ?? 0),
       created_at: item.createdOn ?? item.completedOn ?? null,
       memo: item.memo ?? item.sourceType ?? null,
+      source_id: item.sourceID ?? item.sourceId ?? null,
+      provider_transfer_id: item.transferID
+        ?? item.transferId
+        ?? item.sourceID
+        ?? item.sourceId
+        ?? extractMoovTransferId(item.memo)
+        ?? null,
     })),
     warnings,
   };
 }
 
-async function pnlPayload(client) {
+function walletTransactionsForPnl(transactions = []) {
+  return (transactions || []).map((item) => ({
+    id: item.id || item.walletTransactionID || item.wallet_transaction_id || null,
+    walletTransactionID: item.walletTransactionID || item.wallet_transaction_id || item.id || null,
+    transactionType: item.transactionType || item.type || null,
+    type: item.type || item.transactionType || null,
+    status: item.status || null,
+    amount_cents: item.amount_cents ?? item.grossAmount ?? null,
+    grossAmount: item.grossAmount ?? item.amount_cents ?? null,
+    memo: item.memo || null,
+    source_id: item.source_id || item.sourceID || null,
+    provider_transfer_id: item.provider_transfer_id || item.transferID || item.transferId || item.source_id || null,
+    created_at: item.created_at || item.createdOn || null,
+  }));
+}
+
+async function pnlPayload(client, { walletTransactions = [] } = {}) {
   const empty = buildPlatformPnl({ tenants: [], fees: [], transfers: [] });
   if (!client?.query) return empty;
   const since = new Date();
@@ -721,6 +1101,8 @@ async function pnlPayload(client) {
   let tenants = [];
   let fees = [];
   let transfers = [];
+  let payments = [];
+  let events = [];
   try {
     tenants = (await client.query('SELECT id, name FROM public.tenants')).rows;
   } catch { /* optional */ }
@@ -764,7 +1146,34 @@ async function pnlPayload(client) {
       )).rows;
     } catch { /* optional */ }
   }
-  return buildPlatformPnl({ tenants, fees, transfers, since: sinceIso });
+  try {
+    payments = (await client.query(
+      `SELECT id, tenant_id, amount_cents, status, notes, reference, method,
+              received_at, submitted_at, created_at, updated_at,
+              period_start, period_end, idempotence_key
+         FROM public.tenant_maintenance_payments
+        WHERE COALESCE(received_at, submitted_at, created_at) >= $1`,
+      [sinceIso],
+    )).rows;
+  } catch { /* optional — table may be absent in older fixtures */ }
+  try {
+    events = (await client.query(
+      `SELECT id, tenant_id, provider_transfer_id, transfer_id, event_type,
+              new_status, previous_status, environment, provider_metadata, created_at
+         FROM public.payment_event_log
+        WHERE created_at >= $1`,
+      [sinceIso],
+    )).rows;
+  } catch { /* optional — table may be absent in older fixtures */ }
+  return buildPlatformPnl({
+    tenants,
+    fees,
+    transfers,
+    payments,
+    events,
+    walletTransactions: walletTransactionsForPnl(walletTransactions),
+    since: sinceIso,
+  });
 }
 
 async function statusPayload({ client, accountId, environment, fetchImpl }) {
@@ -860,10 +1269,8 @@ async function runPlatformFinance({ client, body, ctx, fetchImpl }) {
       fee_pull: false,
     });
   }
-  const [wallet, pnl] = await Promise.all([
-    walletPayload({ accountId, environment, fetchImpl, knownWalletId }),
-    pnlPayload(client),
-  ]);
+  const wallet = await walletPayload({ accountId, environment, fetchImpl, knownWalletId });
+  const pnl = await pnlPayload(client, { walletTransactions: wallet.transactions || [] });
   return jsonResult({
     success: true,
     environment,
