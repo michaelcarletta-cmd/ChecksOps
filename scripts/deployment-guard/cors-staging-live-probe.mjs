@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-export const STAGING_URL='https://psr19uhop4.execute-api.us-east-1.amazonaws.com';
+export const STAGING_URL='https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
 export const API_PROBE_PATH='/authorization/jwks-check';
 export const ALLOWED_ORIGIN='https://staging.checksops.com';
 export const UNTRUSTED_ORIGIN='https://cors-probe.invalid';
