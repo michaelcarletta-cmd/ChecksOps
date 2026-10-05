@@ -26,6 +26,7 @@ export const loadMoovAccount = async (client, tenantId, environment = 'sandbox')
 
 export const logPaymentEvent = async (client, row) => {
   try {
+    await client.query('SAVEPOINT payment_event_log');
     await client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, event_type, new_status, previous_status,
@@ -43,7 +44,18 @@ export const logPaymentEvent = async (client, row) => {
         JSON.stringify(sanitize(row.provider_metadata || {})),
       ],
     );
-  } catch { /* event log must not fail the provider call */ }
+    await client.query('RELEASE SAVEPOINT payment_event_log');
+  } catch (error) {
+    try { await client.query('ROLLBACK TO SAVEPOINT payment_event_log'); } catch { /* ignore */ }
+    console.error(JSON.stringify({
+      service: 'checksops-api',
+      event: 'payment_event_log_failed',
+      sqlstate: error?.code || null,
+      table: 'payment_event_log',
+      operation: 'INSERT',
+      message: String(error?.message || error).slice(0, 200),
+    }));
+  }
 };
 
 export const membershipRole = (memberships, tenantId) =>

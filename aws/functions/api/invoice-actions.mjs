@@ -1,15 +1,18 @@
 /**
- * Tenant Payments → Invoices action contract.
+ * Tenant Payments → Invoices public-token and action contract.
  *
- * Local-durable document workflow for the existing Invoices UI.
- * Does not call Moov, ACH, wallet, or transfer APIs.
- * Does not mark an invoice paid because it was sent.
- * Provider payment IDs stay null until a separately authorized provider sync.
+ * Provider-backed lifecycle lives in invoice-provider.mjs (INV3/INV6).
+ * This module keeps the later token-only public ChecksOps route:
+ * CSPRNG UUID v4, exact lookup, fail-closed read-only shaping.
+ * Does not persist a local/synthetic invoice (5480 path removed).
  */
 import { randomUUID } from 'node:crypto';
 import { fail, jsonResult, membershipsOf, resolveTenant } from './providers/parity/caller.mjs';
 
 export const INVOICE_ACTIONS = new Set([
+  'preflight',
+  'list',
+  'recover',
   'create',
   'create_and_send',
   'send',
@@ -23,8 +26,6 @@ export const TERMINAL_PAID = new Set(['paid']);
 export const DELETE_ALLOWED = new Set(['draft', 'canceled']);
 export const CANCEL_BLOCKED = new Set(['paid', 'canceled']);
 export const RESEND_BLOCKED = new Set(['paid', 'canceled']);
-export const LOCAL_MERCHANT = 'local';
-
 /** RFC 4122 UUID v4. Node `randomUUID()` is CSPRNG; variant/version bits leave 122 bits of entropy. */
 export const PUBLIC_INVOICE_TOKEN_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -242,218 +243,31 @@ async function loadInvoiceRow(client, { invoiceId, tenantId }) {
   return row || null;
 }
 
-async function upsertLocalCustomer(client, {
-  tenantId,
-  environment,
-  customerName,
-  customerEmail,
-  customerType,
-  userId,
-}) {
-  const existing = (await client.query(
-    `SELECT id, moov_account_id FROM public.moov_invoice_customers
-     WHERE tenant_id = $1::uuid AND environment = $2 AND lower(email) = lower($3)
-     LIMIT 1`,
-    [tenantId, environment, customerEmail],
-  )).rows[0];
-  if (existing) return existing;
-  const localAccountId = `local:${customerEmail}`;
-  const saved = (await client.query(
-    `INSERT INTO public.moov_invoice_customers
-      (tenant_id, environment, display_name, email, customer_type, moov_account_id, created_by)
-     VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::uuid)
-     RETURNING id, moov_account_id`,
-    [tenantId, environment, customerName, customerEmail, customerType, localAccountId, userId],
-  )).rows[0];
-  return saved;
-}
-
-function invoiceNumber() {
-  return `INV-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
-
 export async function runInvoiceAction({
   client,
   body = {},
   tenantId,
   userId,
   environment = 'sandbox',
-  liveProvider = false,
+  fetchImpl,
+  ctx,
 } = {}) {
-  if (liveProvider === true) {
-    return fail('Invoice provider live calls are not authorized in this workstream', 403, {
-      error: 'invoice_provider_not_authorized',
-      liveProviderCalled: false,
-    });
-  }
-
   const action = String(body.action || '').trim();
   if (!action) return fail('action is required', 400);
   if (!INVOICE_ACTIONS.has(action)) return fail(`Unknown action "${action}"`, 400);
-  if (!tenantId) return fail('tenant_id is required', 400);
-
-  if (action === 'create' || action === 'create_and_send') {
-    const customerName = String(body.customer_name ?? '').trim();
-    const customerEmail = String(body.customer_email ?? '').trim().toLowerCase();
-    if (customerName.length < 2) return fail('Customer name is required', 400);
-    if (!EMAIL_RE.test(customerEmail)) return fail('A valid customer email is required', 400);
-    const items = normalizeLineItems(body.line_items);
-    if (typeof items === 'string') return fail(items, 400);
-    const amount = invoiceTotal(items);
-    const customerType = body.customer_type === 'individual' ? 'individual' : 'business';
-    const description = body.description ? String(body.description).slice(0, 500) : null;
-    const customer = await upsertLocalCustomer(client, {
-      tenantId,
-      environment,
-      customerName,
-      customerEmail,
-      customerType,
+  const resolvedTenantId = ctx?.tenantId || tenantId;
+  if (!resolvedTenantId) return fail('tenant_id is required', 400);
+  const { runProviderInvoiceAction } = await import('./invoice-provider.mjs');
+  return runProviderInvoiceAction({
+    client,
+    body,
+    fetchImpl,
+    ctx: ctx || {
+      tenantId: resolvedTenantId,
       userId,
-    });
-    const now = new Date().toISOString();
-    const sendNow = action === 'create_and_send';
-    const publicToken = generatePublicToken();
-    const row = (await client.query(
-      `INSERT INTO public.moov_invoices (
-         tenant_id, environment, moov_account_id, moov_invoice_id, invoice_number,
-         customer_id, customer_name, customer_email, customer_moov_account_id,
-         description, line_items, total_amount, paid_amount, status,
-         invoice_date, due_date, payment_link_url, public_token, sent_at, paid_at,
-         last_synced_at, provider_metadata, created_by
-       ) VALUES (
-         $1::uuid, $2, $3, NULL, $4,
-         $5::uuid, $6, $7, $8,
-         $9, $10::jsonb, $11, 0, $12,
-         $13, $14, NULL, $15::uuid, $16::timestamptz, NULL,
-         now(), '{}'::jsonb, $17::uuid
-       ) RETURNING *`,
-      [
-        tenantId,
-        environment,
-        LOCAL_MERCHANT,
-        invoiceNumber(),
-        customer?.id || null,
-        customerName,
-        customerEmail,
-        customer?.moov_account_id || `local:${customerEmail}`,
-        description,
-        JSON.stringify(items),
-        amount,
-        sendNow ? 'unpaid' : 'draft',
-        body.invoice_date || null,
-        body.due_date || null,
-        publicToken,
-        sendNow ? now : null,
-        userId,
-      ],
-    )).rows[0];
-    return jsonResult({
-      success: true,
-      invoice: row,
-      emailed: false,
-      liveProviderCalled: false,
-      provider_warning: sendNow
-        ? 'Customer email is not sent until the payment-provider invoice path is separately authorized. Share the invoice page link.'
-        : null,
-    });
-  }
-
-  if (action === 'send' || action === 'resend') {
-    const row = await loadInvoiceRow(client, { invoiceId: body.invoice_id, tenantId });
-    if (!row) return fail('Invoice not found', 404);
-    if (action === 'resend' && !canResendStatus(row.status) && row.status !== 'draft') {
-      if (row.status === 'paid') return fail('This invoice is already paid', 400);
-      if (row.status === 'canceled') return fail('A canceled invoice cannot be resent', 400);
-    }
-    const next = applySendTransition(row);
-    if (next.error) return fail(next.error, next.statusCode);
-    const updated = (await client.query(
-      `UPDATE public.moov_invoices
-       SET status = $2, sent_at = $3::timestamptz, public_token = COALESCE(public_token, $4::uuid),
-           last_synced_at = now()
-       WHERE id = $1::uuid AND tenant_id = $5::uuid
-       RETURNING *`,
-      [row.id, next.status, next.sent_at, next.public_token, tenantId],
-    )).rows[0];
-    return jsonResult({
-      success: true,
-      invoice: updated,
-      emailed: false,
-      liveProviderCalled: false,
-      idempotent: row.status === 'unpaid' && action === 'resend',
-      provider_warning: 'Customer email is not sent until the payment-provider invoice path is separately authorized. Share the invoice page link.',
-    });
-  }
-
-  if (action === 'cancel') {
-    const row = await loadInvoiceRow(client, { invoiceId: body.invoice_id, tenantId });
-    if (!row) return fail('Invoice not found', 404);
-    const next = applyCancelTransition(row);
-    if (next.error) return fail(next.error, next.statusCode);
-    const updated = (await client.query(
-      `UPDATE public.moov_invoices
-       SET status = 'canceled', last_synced_at = now()
-       WHERE id = $1::uuid AND tenant_id = $2::uuid
-       RETURNING *`,
-      [row.id, tenantId],
-    )).rows[0];
-    return jsonResult({
-      success: true,
-      invoice: updated,
-      liveProviderCalled: false,
-      idempotent: next.idempotent === true,
-    });
-  }
-
-  if (action === 'delete') {
-    const row = await loadInvoiceRow(client, { invoiceId: body.invoice_id, tenantId });
-    if (!row) return fail('Invoice not found', 404);
-    if (!canDeleteStatus(row.status)) {
-      return fail('Only canceled or draft invoices can be deleted', 400);
-    }
-    await client.query(
-      `DELETE FROM public.moov_invoices WHERE id = $1::uuid AND tenant_id = $2::uuid`,
-      [row.id, tenantId],
-    );
-    return jsonResult({
-      success: true,
-      deleted: true,
-      liveProviderCalled: false,
-    });
-  }
-
-  if (action === 'sync') {
-    const params = [tenantId, environment];
-    let sql = `SELECT id, status, paid_amount, paid_at, moov_invoice_id
-               FROM public.moov_invoices
-               WHERE tenant_id = $1::uuid AND environment = $2`;
-    if (body.invoice_id) {
-      params.push(body.invoice_id);
-      sql += ` AND id = $3::uuid`;
-    } else {
-      sql += ` AND status NOT IN ('paid','canceled','void')`;
-    }
-    sql += ' ORDER BY created_at DESC NULLS LAST LIMIT 100';
-    const rows = (await client.query(sql, params)).rows;
-    let synced = 0;
-    for (const row of rows) {
-      const next = applySyncTransition(row, null);
-      await client.query(
-        `UPDATE public.moov_invoices SET last_synced_at = now()
-         WHERE id = $1::uuid AND tenant_id = $2::uuid AND status = $3 AND paid_amount = $4`,
-        [row.id, tenantId, next.status, next.paid_amount],
-      );
-      synced += 1;
-    }
-    return jsonResult({
-      success: true,
-      synced,
-      liveProviderCalled: false,
-      invented_paid: false,
-    });
-  }
-
-  return fail(`Unknown action "${action}"`, 400);
+      environment: environment || 'sandbox',
+    },
+  });
 }
 
 export async function loadPublicInvoiceByToken(client, token) {

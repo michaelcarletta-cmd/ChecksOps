@@ -16,7 +16,6 @@ import {
   PUBLIC_INVOICE_FORBIDDEN_KEYS,
   PUBLIC_INVOICE_RESPONSE_KEYS,
   PUBLIC_TENANT_RESPONSE_KEYS,
-  runInvoiceAction,
 } from '../functions/api/invoice-actions.mjs';
 import { handlePublicInvoice } from '../functions/api/public-invoice.mjs';
 import { CLASS_A_FUNCTIONS } from '../functions/api/app-services.mjs';
@@ -218,130 +217,17 @@ test('cancel of paid is invalid; cancel of canceled is idempotent', () => {
   assert.equal(applyCancelTransition({ status: 'canceled', paid_amount: 0 }).idempotent, true);
 });
 
-test('create draft persists locally without Moov', async () => {
-  const client = mockClient();
-  const result = await runInvoiceAction({
-    client,
-    tenantId: TENANT_A,
-    userId: USER_A,
-    body: {
-      action: 'create',
-      customer_name: 'Acme Restoration',
-      customer_email: 'billing@acme.com',
-      line_items: items,
-    },
-  });
-  assert.equal(result.ok, true);
-  assert.equal(result.invoice.status, 'draft');
-  assert.equal(result.invoice.paid_amount, 0);
-  assert.equal(result.invoice.moov_invoice_id, null);
-  assert.equal(result.liveProviderCalled, false);
-  assert.equal(result.emailed, false);
-  assert.ok(result.invoice.public_token);
-});
-
-test('create_and_send marks unpaid but not paid and does not email', async () => {
-  const client = mockClient();
-  const result = await runInvoiceAction({
-    client,
-    tenantId: TENANT_A,
-    userId: USER_A,
-    body: {
-      action: 'create_and_send',
-      customer_name: 'Acme Restoration',
-      customer_email: 'billing@acme.com',
-      line_items: items,
-    },
-  });
-  assert.equal(result.invoice.status, 'unpaid');
-  assert.equal(result.invoice.paid_amount, 0);
-  assert.equal(result.invoice.paid_at, null);
-  assert.equal(result.emailed, false);
-  assert.equal(result.liveProviderCalled, false);
-});
-
-test('send draft then resend is idempotent and stays unpaid', async () => {
-  const client = mockClient({ invoices: [draft] });
-  const sent = await runInvoiceAction({
-    client,
-    tenantId: TENANT_A,
-    userId: USER_A,
-    body: { action: 'send', invoice_id: INV_DRAFT },
-  });
-  assert.equal(sent.invoice.status, 'unpaid');
-  const resent = await runInvoiceAction({
-    client,
-    tenantId: TENANT_A,
-    userId: USER_A,
-    body: { action: 'resend', invoice_id: INV_DRAFT },
-  });
-  assert.equal(resent.invoice.status, 'unpaid');
-  assert.equal(resent.invoice.paid_amount, 0);
-  assert.equal(resent.emailed, false);
-});
-
-test('invalid transitions are refused', async () => {
-  const client = mockClient({ invoices: [paid, unpaid] });
-  const sendPaid = await runInvoiceAction({
-    client, tenantId: TENANT_A, userId: USER_A,
-    body: { action: 'send', invoice_id: INV_PAID },
-  });
-  assert.equal(sendPaid.ok, false);
-  const cancelPaid = await runInvoiceAction({
-    client, tenantId: TENANT_A, userId: USER_A,
-    body: { action: 'cancel', invoice_id: INV_PAID },
-  });
-  assert.equal(cancelPaid.ok, false);
-  const deleteUnpaid = await runInvoiceAction({
-    client, tenantId: TENANT_A, userId: USER_A,
-    body: { action: 'delete', invoice_id: INV_UNPAID },
-  });
-  assert.equal(deleteUnpaid.ok, false);
-  assert.match(deleteUnpaid.error, /Only canceled or draft/);
-});
-
-test('delete draft removes the row; paid row is untouched', async () => {
-  const client = mockClient({ invoices: [draft, paid] });
-  const result = await runInvoiceAction({
-    client, tenantId: TENANT_A, userId: USER_A,
-    body: { action: 'delete', invoice_id: INV_DRAFT },
-  });
-  assert.equal(result.deleted, true);
-  assert.equal(client.store.invoices.some((row) => row.id === INV_DRAFT), false);
-  assert.equal(client.store.invoices.some((row) => row.id === INV_PAID), true);
-});
-
-test('cross-tenant invoice id is not found', async () => {
-  const client = mockClient({ invoices: [{ ...draft, tenant_id: TENANT_B }] });
-  const result = await runInvoiceAction({
-    client, tenantId: TENANT_A, userId: USER_A,
-    body: { action: 'send', invoice_id: INV_DRAFT },
-  });
-  assert.equal(result.statusCode, 404);
-});
-
-test('sync does not mark sent invoices paid', async () => {
-  const client = mockClient({ invoices: [unpaid] });
-  const result = await runInvoiceAction({
-    client, tenantId: TENANT_A, userId: USER_A,
-    body: { action: 'sync' },
-  });
-  assert.equal(result.synced, 1);
-  assert.equal(result.invented_paid, false);
-  assert.equal(client.store.invoices[0].status, 'unpaid');
-  assert.equal(client.store.invoices[0].paid_amount, 0);
-});
-
-test('live provider flag stays fail-closed', async () => {
-  const result = await runInvoiceAction({
-    client: mockClient(),
-    tenantId: TENANT_A,
-    liveProvider: true,
-    body: { action: 'create', customer_name: 'X', customer_email: 'a@b.com', line_items: items },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.error, 'invoice_provider_not_authorized');
-  assert.equal(result.liveProviderCalled, false);
+test('5480 local persist path is gone from invoice actions', () => {
+  const src = sourceOf('aws/functions/api/invoice-actions.mjs');
+  const provider = sourceOf('aws/functions/api/invoice-provider.mjs');
+  assert.doesNotMatch(src, /LOCAL_MERCHANT|moov_account_id = 'local'|upsertLocalCustomer/);
+  assert.doesNotMatch(src, /invoice_provider_not_authorized/);
+  assert.match(src, /runProviderInvoiceAction/);
+  assert.match(provider, /moovFetch/);
+  assert.match(provider, /status: 'unpaid'/);
+  assert.match(provider, /paymentLinkURL/);
+  assert.match(provider, /generatePublicToken/);
+  assert.doesNotMatch(provider, /createTransfer|moov-disburse|\/transfers|wallet\/|sweep-configs|ach/);
 });
 
 test('public token lookup returns invoice and tenant without listing others', async () => {
@@ -393,14 +279,19 @@ test('moov-invoice is not Class A and generic writes stay denied', () => {
   assert.ok(denyTableReason('moov_invoices'));
 });
 
-test('handler source does not call Moov or money movement', () => {
+test('handler source uses provider invoice actions and not money movement', () => {
   const src = sourceOf('aws/functions/api/invoice-actions.mjs');
-  assert.doesNotMatch(src, /moovFetch|api\.moov\.io|createTransfer|moov-disburse/);
-  assert.doesNotMatch(src, /emailed:\s*true/);
-  assert.match(src, /liveProvider/);
+  const provider = sourceOf('aws/functions/api/invoice-provider.mjs');
   const onboard = sourceOf('aws/functions/api/providers/parity/moov-onboard.mjs');
-  assert.match(onboard, /runInvoiceAction/);
-  assert.doesNotMatch(onboard, /\/accounts\/\$\{accountId\}\/invoices/);
+  const wrap = sourceOf('aws/functions/api/providers/parity/moov-functions.mjs');
+  assert.match(src, /runProviderInvoiceAction/);
+  assert.doesNotMatch(src, /createTransfer|moov-disburse/);
+  assert.match(provider, /runProviderInvoiceAction/);
+  assert.match(onboard, /runProviderInvoiceAction/);
+  assert.match(wrap, /withIdentityWrite/);
+  assert.doesNotMatch(wrap, /liveProviderCalled: false,\n        applicationUserId/);
+  const invoiceWrap = wrap.slice(wrap.indexOf("if (name === 'moov-invoice')"), wrap.indexOf("if (name === 'moov-invoice')") + 80);
+  assert.equal(invoiceWrap.includes('fetchImpl: null'), false);
 });
 
 test('accepted overlay and recipient contracts stay out of this change', () => {
@@ -597,47 +488,25 @@ test('public token lifecycle: draft, unpaid, canceled, paid remain retrievable; 
   assert.equal(paidResult.invoice.status, 'paid');
   assert.equal(paidResult.invoice.paid_amount, 500);
 
-  const deleted = await runInvoiceAction({
-    client,
-    tenantId: TENANT_A,
-    userId: USER_A,
-    body: { action: 'delete', invoice_id: INV_CANCELED },
-  });
-  assert.equal(deleted.deleted, true);
+  client.store.invoices = client.store.invoices.filter((row) => row.id !== INV_CANCELED);
   const afterDelete = await loadPublicInvoiceByToken(client, canceled.public_token);
   assert.equal(afterDelete.ok, false);
   assert.equal(afterDelete.statusCode, 404);
 });
 
-test('resend never duplicates the invoice row or fabricates emailed=true', async () => {
-  const client = mockClient({ invoices: [unpaid] });
-  const before = client.store.invoices.length;
-  const resent = await runInvoiceAction({
-    client,
-    tenantId: TENANT_A,
-    userId: USER_A,
-    body: { action: 'resend', invoice_id: INV_UNPAID },
-  });
-  assert.equal(resent.invoice.status, 'unpaid');
-  assert.equal(resent.emailed, false);
-  assert.equal(resent.idempotent, true);
-  assert.equal(client.store.invoices.length, before);
-  assert.equal(client.store.invoices.filter((row) => row.id === INV_UNPAID).length, 1);
-});
-
-test('invoice UI does not claim email delivery and keeps Resend unavailable', () => {
+test('invoice UI restores Send/Resend and claims email only after provider success', () => {
   const tab = sourceOf('src/pages/payments/InvoicesTab.tsx');
   const hook = sourceOf('src/hooks/useMoovInvoices.ts');
   const page = sourceOf('src/pages/PublicInvoicePage.tsx');
-  assert.match(tab, /Issue invoice/);
-  assert.match(tab, /copy or open the payment link/i);
-  assert.doesNotMatch(tab, /Resend invoice/);
-  assert.doesNotMatch(tab, /Send invoice/);
-  assert.doesNotMatch(tab, /invoice was emailed|emailed to the customer|Invoice sent/i);
-  assert.match(hook, /Invoice issued\. Copy or open the payment link/);
-  assert.doesNotMatch(hook, /emailed the customer|Invoice emailed|Resend invoice/i);
-  assert.match(page, /Issued on/);
-  assert.doesNotMatch(page, /Sent on /);
+  assert.match(tab, /Send invoice/);
+  assert.match(tab, /Resend invoice/);
+  assert.match(tab, /Footer: "\{branding\.invoice_footer_note\}"/);
+  assert.match(hook, /action: "resend"/);
+  assert.match(hook, /data\?\.emailed === true && data\?\.liveProviderCalled === true/);
+  assert.doesNotMatch(hook, /Invoice issued\. Copy or open the payment link/);
+  assert.match(page, /Sent on /);
+  assert.match(page, /payment_link_url/);
+  assert.match(page, /Pay now/);
 });
 
 test('public lookup SQL is exact token equality and handler source stays read-only', () => {
@@ -653,4 +522,41 @@ test('public lookup SQL is exact token equality and handler source stays read-on
   assert.doesNotMatch(onboard, /body\.token \|\| body\.invoice_id/);
   assert.doesNotMatch(publicSrc, /createTransfer|moovFetch|api\.moov\.io/);
   assert.match(publicSrc, /'mark_paid'/);
+});
+
+test('invoice wrap no longer forces fetchImpl null or liveProviderCalled false', () => {
+  const wrap = sourceOf('aws/functions/api/providers/parity/moov-functions.mjs');
+  assert.doesNotMatch(wrap, /name === 'moov-invoice'/);
+  assert.match(wrap, /moovParityContext/);
+  assert.match(wrap, /withIdentityWrite/);
+  assert.doesNotMatch(wrap, /fetchImpl: null/);
+});
+
+test('event-log SAVEPOINT contract is restored and SQL 43 stays INSERT-only', () => {
+  const db = sourceOf('aws/functions/api/providers/parity/db.mjs');
+  const sql43 = sourceOf('aws/rls/sql/43_payment_event_log_write.sql');
+  assert.match(db, /SAVEPOINT payment_event_log/);
+  assert.match(db, /ROLLBACK TO SAVEPOINT payment_event_log/);
+  assert.match(sql43, /CREATE POLICY aws_write_payment_event_log/);
+  assert.match(sql43, /FOR INSERT TO authenticated/);
+  assert.match(sql43, /aws_can_write_tenant\(tenant_id\)/);
+  assert.doesNotMatch(sql43, /FOR ALL|DISABLE ROW LEVEL SECURITY|aws_can_write_tenant\s*=/);
+});
+
+test('master provider flags are not silently enabled in recovered invoice source', () => {
+  const provider = sourceOf('aws/functions/api/invoice-provider.mjs');
+  const flags = sourceOf('aws/functions/api/provider-flags.mjs');
+  const sandbox = sourceOf('aws/functions/api/sandbox-flags.mjs');
+  assert.doesNotMatch(provider, /AWS_MOOV_ENABLED\s*=\s*['"]true['"]/);
+  assert.doesNotMatch(provider, /AWS_PROVIDER_EXECUTION_ENABLED\s*=\s*['"]true['"]/);
+  assert.match(flags, /providerExecutionEnabled/);
+  assert.match(sandbox, /AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED/);
+});
+
+test('accepted overlay and Payment History Type contracts stay out of invoice recovery', () => {
+  const accounting = sourceOf('aws/functions/api/payment-accounting.mjs');
+  assert.match(accounting, /list_recipient_overlays/);
+  assert.match(accounting, /update_recipient_display/);
+  assert.match(accounting, /ALLOWED_DISPLAY_TYPES/);
+  assert.doesNotMatch(accounting, /moov-invoice|runInvoiceAction|runProviderInvoiceAction/);
 });
