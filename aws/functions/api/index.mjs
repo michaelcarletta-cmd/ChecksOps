@@ -17,8 +17,8 @@ import {
   handleStoragePublic,
   handleStorageWritesDisabled,
   handlePublicSignatureDocument,
-  handleBrandingLogo,
 } from './storage.mjs';
+import * as storageApi from './storage.mjs';
 import { handlePublicEndorsement } from './check-endorsement.mjs';
 import { handlePublicSignatureSubmit } from './signature-submit.mjs';
 import { handlePublicInvoice } from './public-invoice.mjs';
@@ -235,7 +235,8 @@ export const handler = async (event) => {
 
 
   const brandingLogoPath = path.replace(/^\/prep(?=\/|$)/, '') || '/';
-  if (method === 'GET' && (brandingLogoPath === '/branding/logo' || /^\/branding\/logo\/[0-9a-fA-F-]{36}$/.test(brandingLogoPath))) {
+  const handleBrandingLogo = storageApi.handleBrandingLogo;
+  if (typeof handleBrandingLogo === 'function' && method === 'GET' && (brandingLogoPath === '/branding/logo' || /^\/branding\/logo\/[0-9a-fA-F-]{36}$/.test(brandingLogoPath))) {
     const result = await handleBrandingLogo({ ...event, rawPath: brandingLogoPath });
     if (result.binary && result.body) {
       return {
