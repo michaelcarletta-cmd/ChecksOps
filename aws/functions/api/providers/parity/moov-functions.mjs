@@ -71,6 +71,10 @@ const wrap = (handler, name) => async (event, deps = {}) => {
   const { parseBody, withIdentity, withIdentityWrite } = await import('../../data.mjs');
   const { loadSandboxCredentials } = await import('../../sandbox-credentials.mjs');
   const { executionAllowed } = await import('../../provider-flags.mjs');
+  if (name === 'public-invoice') {
+    const { handlePublicInvoice } = await import('../../public-invoice.mjs');
+    return handlePublicInvoice(event, deps);
+  }
   const loader = typeof deps.loadSandboxCredentials === 'function'
     ? deps.loadSandboxCredentials
     : loadSandboxCredentials;
@@ -81,6 +85,46 @@ const wrap = (handler, name) => async (event, deps = {}) => {
     && (action === 'get' || action === 'list' || action === 'sweeps')
     && executionAllowed('moov')
   );
+  if (name === 'moov-invoice') {
+    return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+      const { membershipsOf, resolveTenant, fail } = await import('./caller.mjs');
+      const memberships = await membershipsOf(client, mapping.application_user_id);
+      const tenant = await resolveTenant(client, {
+        userId: mapping.application_user_id,
+        body,
+        memberships,
+        requireAdmin: false,
+      });
+      if (tenant.error) return { ...tenant, spoofFieldsIgnored: spoof };
+      if (!tenant.tenantId) return { ...fail('tenant_id is required', 400), spoofFieldsIgnored: spoof };
+      const result = await handler.run({
+        client,
+        mapping,
+        claims,
+        body,
+        spoof,
+        ctx: {
+          tenantId: tenant.tenantId,
+          isAdmin: tenant.isAdmin,
+          environment: 'sandbox',
+          userId: mapping.application_user_id,
+          memberships,
+        },
+        fetchImpl: null,
+        event,
+      });
+      return {
+        ...result,
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+        authUid: mapping.application_user_id,
+        cognitoSub: claims.sub,
+        productionExecution: false,
+        environment: 'sandbox',
+        liveProviderCalled: false,
+      };
+    }, deps);
+  }
   const identity = productionRead ? withIdentity : withIdentityWrite;
   return identity(event, async ({ client, mapping, claims, body, spoof }) => {
     const ctx = productionRead

@@ -24,6 +24,10 @@ const ROUTES = {
     aws: "/public/endorsement",
     supabase: "/functions/v1/check-endorsement",
   },
+  "public-invoice": {
+    aws: "/public/invoice",
+    supabase: "/functions/v1/public-invoice",
+  },
 } as const;
 
 export type PublicWorkflowName = keyof typeof ROUTES;

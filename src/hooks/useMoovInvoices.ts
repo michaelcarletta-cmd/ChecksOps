@@ -87,13 +87,13 @@ export function useMoovInvoices() {
         tenant_id: tenantId,
         ...input,
       }),
-    onSuccess: (_d, vars) => {
+    onSuccess: (_data, vars) => {
       invalidate();
       toast({
-        title: vars.send ? "Invoice sent" : "Invoice created",
+        title: vars.send ? "Invoice issued" : "Invoice created",
         description: vars.send
-          ? `${vars.customer_email} was emailed a secure payment link.`
-          : "Saved as a draft — send it when you're ready.",
+          ? "Invoice issued. Copy or open the payment link to share it with the customer."
+          : "Saved as a draft — issue it when you're ready.",
       });
     },
     onError,
@@ -104,20 +104,16 @@ export function useMoovInvoices() {
       callInvoiceFn({ action: "send", tenant_id: tenantId, invoice_id: invoiceId }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "Invoice sent", description: "The customer was emailed a payment link." });
+      toast({
+        title: "Invoice issued",
+        description: "Invoice issued. Copy or open the payment link to share it with the customer.",
+      });
     },
     onError,
   });
 
-  const resendInvoice = useMutation({
-    mutationFn: (invoiceId: string) =>
-      callInvoiceFn({ action: "resend", tenant_id: tenantId, invoice_id: invoiceId }),
-    onSuccess: () => {
-      invalidate();
-      toast({ title: "Invoice resent", description: "The payment link was emailed again." });
-    },
-    onError,
-  });
+  // Resend stays unused in the Invoices UI until an authorized delivery path exists.
+  // The backend action remains idempotent and never sets emailed=true.
 
   const cancelInvoice = useMutation({
     mutationFn: (invoiceId: string) =>
@@ -143,11 +139,11 @@ export function useMoovInvoices() {
     mutationFn: () => callInvoiceFn({ action: "sync", tenant_id: tenantId }),
     onSuccess: (data: any) => {
       invalidate();
-      toast({ title: "Invoices refreshed", description: `${data?.synced ?? 0} updated from the payment provider.` });
+      toast({ title: "Invoices refreshed", description: "Invoice list refreshed." });
     },
     onError,
   });
 
-  return { tenantId, invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice, syncInvoices };
+  return { tenantId, invoices, createInvoice, sendInvoice, cancelInvoice, deleteInvoice, syncInvoices };
 }
 

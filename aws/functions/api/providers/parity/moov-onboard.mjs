@@ -1160,40 +1160,16 @@ export const sweepConfig = {
   },
 };
 
-const INVOICE_API_VERSION = 'v2026.07.00';
-
 export const invoice = {
-  run: async ({ client, body, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const accountId = account.provider_account_id;
-    const action = body.action || 'create';
-    if (action === 'list') {
-      const data = await moovFetch(`/accounts/${accountId}/invoices`, {
-        scopes: [`/accounts/${accountId}/invoices.read`], apiVersion: INVOICE_API_VERSION, fetchImpl,
-      });
-      return jsonResult({ success: true, invoices: data, liveProviderCalled: true, apiVersion: INVOICE_API_VERSION });
-    }
-    const items = Array.isArray(body.line_items) ? body.line_items : [];
-    if (!items.length) return fail('At least one line item is required', 400);
-    const created = await moovFetch(`/accounts/${accountId}/invoices`, {
-      method: 'POST',
-      scopes: [`/accounts/${accountId}/invoices.write`],
-      apiVersion: INVOICE_API_VERSION,
-      fetchImpl,
-      body: {
-        customer: body.customer || {},
-        lineItems: items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity ?? 1,
-          unitPrice: { currency: 'USD', valueDecimal: Number(i.unit_price).toFixed(2) },
-        })),
-      },
-    });
-    return jsonResult({
-      success: true, invoice: created, liveProviderCalled: true,
-      apiVersion: INVOICE_API_VERSION,
-      note: 'Production moov-invoice pins v2026.07.00 for invoices only. Platform transfers remain v2024.01.00.',
+  run: async ({ client, body, ctx }) => {
+    const { runInvoiceAction } = await import('../../invoice-actions.mjs');
+    return runInvoiceAction({
+      client,
+      body,
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      environment: ctx.environment || 'sandbox',
+      liveProvider: false,
     });
   },
 };
@@ -1430,15 +1406,9 @@ export const stakeholderResendVerification = {
 };
 
 export const publicInvoice = {
-  run: async ({ client, body, fetchImpl }) => {
-    const token = body.token || body.invoice_id;
-    if (!token) return fail('token is required', 400);
-    const row = (await client.query(
-      `SELECT * FROM public.payment_invoices WHERE public_token = $1 OR id::text = $1 LIMIT 1`,
-      [token],
-    )).rows[0];
-    if (!row) return fail('Invoice not found.', 404);
-    return jsonResult({ success: true, invoice: sanitize(row), liveProviderCalled: false });
+  run: async ({ client, body }) => {
+    const { loadPublicInvoiceByToken } = await import('../../invoice-actions.mjs');
+    return loadPublicInvoiceByToken(client, body.token);
   },
 };
 

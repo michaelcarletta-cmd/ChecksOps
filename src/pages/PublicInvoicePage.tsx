@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
+import { isAwsStaging } from "@/lib/awsStaging";
 import { AlertCircle, CheckCircle2, Clock, FileText, Lock, ExternalLink, Ban, Calendar } from "lucide-react";
 import { resolvePublicBrandingUrl } from "@/integrations/aws/storage";
 
@@ -84,16 +86,32 @@ export default function PublicInvoicePage() {
       return;
     }
 
-    supabase.functions
-      .invoke("public-invoice", { body: { token } })
-      .then(({ data, error: fnErr }) => {
-        if (fnErr || (data as any)?.error) {
-          setError((data as any)?.error || fnErr?.message || "Could not load invoice.");
+    const load = async () => {
+      if (isAwsStaging() || import.meta.env.MODE === "aws") {
+        const req = publicWorkflowRequest("public-invoice");
+        const response = await fetch(req.url, {
+          method: "POST",
+          headers: req.headers,
+          body: JSON.stringify({ token }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || (data as any)?.error) {
+          setError((data as any)?.error || (data as any)?.message || "Could not load invoice.");
         } else {
           setInvoice((data as any).invoice);
           setTenant((data as any).tenant);
         }
-      })
+        return;
+      }
+      const { data, error: fnErr } = await supabase.functions.invoke("public-invoice", { body: { token } });
+      if (fnErr || (data as any)?.error) {
+        setError((data as any)?.error || fnErr?.message || "Could not load invoice.");
+      } else {
+        setInvoice((data as any).invoice);
+        setTenant((data as any).tenant);
+      }
+    };
+    load()
       .catch((e) => setError(e.message || "Could not load invoice."))
       .finally(() => setLoading(false));
   }, [token]);
@@ -187,7 +205,7 @@ export default function PublicInvoicePage() {
                 <p className="text-sm text-muted-foreground">
                   {isPaid
                     ? `Paid on ${formatDate(invoice.paid_at)}`
-                    : `Sent on ${formatDate(invoice.sent_at || invoice.created_at)}`}
+                    : `Issued on ${formatDate(invoice.sent_at || invoice.created_at)}`}
                 </p>
               </div>
               <Badge className={`w-fit gap-1.5 px-2.5 py-1 text-xs ${statusMeta?.className || ""}`}>

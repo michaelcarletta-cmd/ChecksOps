@@ -765,6 +765,8 @@ export const FINANCIAL_OR_PROVIDER_TABLES = new Set([
   'disbursement_batches',
   'disbursement_splits',
   'homeowner_ledger_events',
+  'moov_invoice_customers',
+  'moov_invoices',
   'payment_event_log',
   'payment_idempotency_keys',
   'payment_methods',

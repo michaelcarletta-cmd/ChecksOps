@@ -20,6 +20,7 @@ import {
 } from './storage.mjs';
 import { handlePublicEndorsement } from './check-endorsement.mjs';
 import { handlePublicSignatureSubmit } from './signature-submit.mjs';
+import { handlePublicInvoice } from './public-invoice.mjs';
 import {
   handleStorageUploadUrl,
   handleStorageDelete,
@@ -364,6 +365,16 @@ export const handler = async (event) => {
 
   if (method === 'POST' && path === '/public/signature-submit') {
     const result = await handlePublicSignatureSubmit(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/invoice') {
+    const result = await handlePublicInvoice(event);
     return json(result.statusCode || (result.ok ? 200 : 400), {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
