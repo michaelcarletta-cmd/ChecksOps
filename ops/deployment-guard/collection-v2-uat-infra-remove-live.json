@@ -1,0 +1,32 @@
+{
+  "function_name": "checksops-staging-api",
+  "read_at": "2026-10-05T19:48:00.000Z",
+  "code_sha256": "GnVu6M3syf8AcnQCXpQ8ONBvGH6k5Q07rkd4yVW1i7A=",
+  "revision_id": "c19a91f4-8935-4e51-8b43-a39b321f0ec3",
+  "live_member_count": 6488,
+  "candidate_member_count": 6486,
+  "live_index_sha256": "9b26e9910e180cd516bab80a86909b98c40b13216f4ba97bb7023552410eddce",
+  "candidate_index_sha256": "8c2f9d459ed4f5fdd78255c018707a961855b8738e706bbc6903c2b823315117",
+  "remove_members": [
+    "tenant-collection-v2-uat.mjs",
+    "tenant-maintenance-payments-catalog-inspect.mjs"
+  ],
+  "live_temporary_members": {
+    "tenant-collection-v2-uat.mjs": "adf8f25053fbde1259c97add99f89005dfbcb09e4dae8577003f7959182c910e",
+    "tenant-maintenance-payments-catalog-inspect.mjs": "4caa3728bb50c144f930d16b3392b8df624a0b9edf7b7ead5ee1a8511a982350"
+  },
+  "protected_collection_v2": {
+    "tenant-collection-v2-settlement.mjs": "075d96d0826beb55a36261a799b80aa4898486b6322949b705017769151d7b40",
+    "tenant-collection-v2.mjs": "dfa85b8806ad69d10465d7e143d44c5f4078c98e099f0eb3c956314ad9466a88",
+    "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "tenant-billing-engine.mjs": "903d0fc9bff50510677d16201100bc123af8e92949f5175656754d5c18f4ab10",
+    "providers/webhooks.mjs": "4bd776a7766b0bd63e17ba18e790e28bb0b4fb8a7c9cceb271bf4f84280e7681",
+    "providers/webhook-apply.mjs": "adc59fbba6d16ab36bef3667d1ef8f636c43e754f0a8fe523ce93859341d56f9",
+    "tenant-billing-destination.mjs": "7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80"
+  },
+  "invoice_recovery": {
+    "invoice-actions.mjs": "1786e2d84219379396311450532aa5963ff1ea52d4514c8d4766acc4c7f9c141",
+    "invoice-provider.mjs": "1b219a8a24ef8faf4b5db888dd6f772a9f04b3eb0ec2b869b76cd3b0b7d54e24",
+    "public-invoice.mjs": "e2d5ea84d231608775e34660051a5a5a6f119d331f4b3ae5fcd60e24fceff389"
+  }
+}

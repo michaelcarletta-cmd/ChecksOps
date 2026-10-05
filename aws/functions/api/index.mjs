@@ -30,7 +30,6 @@ import {
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
-import { handleCollectionV2UatRequest } from './tenant-collection-v2-uat.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -407,18 +406,6 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
-    });
-  }
-
-  // TEMPORARY staging-only Collection V2 UAT harness. Remove with tenant-collection-v2-uat.mjs.
-  const collectionV2Uat = await handleCollectionV2UatRequest(event, path, method);
-  if (collectionV2Uat) {
-    return json(collectionV2Uat.statusCode || (collectionV2Uat.ok ? 200 : 403), {
-      service: 'checksops-api',
-      environment: process.env.CHECKSOPS_ENV || 'unknown',
-      productionSupabaseChanged: false,
-      liveProviderTransactions: false,
-      ...collectionV2Uat,
     });
   }
 

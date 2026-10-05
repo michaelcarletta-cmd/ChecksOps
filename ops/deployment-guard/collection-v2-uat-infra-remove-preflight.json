@@ -1,0 +1,37 @@
+{
+  "workstream_id": "collection-v2-uat-infra-remove-93da",
+  "branch": "cursor/collection-v2-uat-infra-remove-93da",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "staging",
+  "target_component": "checksops-staging-api",
+  "deployment_type": "lambda-overlay",
+  "owned_members": [
+    "index.mjs",
+    "tenant-collection-v2-uat.mjs",
+    "tenant-maintenance-payments-catalog-inspect.mjs"
+  ],
+  "owned_member_ops": {
+    "replace": ["index.mjs"],
+    "add": [],
+    "remove": [
+      "tenant-collection-v2-uat.mjs",
+      "tenant-maintenance-payments-catalog-inspect.mjs"
+    ]
+  },
+  "add_members": [],
+  "member_sources": {
+    "index.mjs": "aws/functions/api/index.mjs"
+  },
+  "preflight": {
+    "codeSha256": "GnVu6M3syf8AcnQCXpQ8ONBvGH6k5Q07rkd4yVW1i7A=",
+    "revisionId": "c19a91f4-8935-4e51-8b43-a39b321f0ec3"
+  },
+  "immediately_before": {
+    "codeSha256": "GnVu6M3syf8AcnQCXpQ8ONBvGH6k5Q07rkd4yVW1i7A=",
+    "revisionId": "c19a91f4-8935-4e51-8b43-a39b321f0ec3"
+  },
+  "package": {
+    "origin": "fresh-live-download"
+  },
+  "notes": "SOURCE ONLY. evaluate-only. Do not apply. Do not write checksops-staging-api."
+}
