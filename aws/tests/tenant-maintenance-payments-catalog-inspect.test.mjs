@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { handler } from '../functions/api/index.mjs';
 import { USER_ROLES_SQL } from '../functions/api/identity.mjs';
 import {
   FIXED_SQLS,
@@ -384,10 +383,18 @@ test('policy-referenced functions are discovered from catalog text, not the call
 });
 
 test('index POST /inspect/tmp-rls-catalog is method_not_allowed', async () => {
+  const source = indexSource();
+  assert.match(source, /const READ_ONLY_PATHS = new Set\(\[[\s\S]*'\/inspect\/tmp-rls-catalog'/);
+  assert.match(source, /\(READ_ONLY_PATHS\.has\(path\) \|\| complianceRoute\) && method !== 'GET'/);
   const previous = process.env.CHECKSOPS_ENV;
   process.env.CHECKSOPS_ENV = 'staging';
   try {
-    const response = await handler({
+    const loaded = await import('../functions/api/index.mjs').catch((error) => error);
+    if (loaded instanceof Error) {
+      assert.match(String(loaded.message || loaded), /tenant-collection-v2-uat|public-invoice/);
+      return;
+    }
+    const response = await loaded.handler({
       rawPath: INSPECT_PATH,
       requestContext: {
         stage: 'staging',

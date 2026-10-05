@@ -18,8 +18,10 @@ import {
   handleStorageWritesDisabled,
   handlePublicSignatureDocument,
 } from './storage.mjs';
+import * as storageApi from './storage.mjs';
 import { handlePublicEndorsement } from './check-endorsement.mjs';
 import { handlePublicSignatureSubmit } from './signature-submit.mjs';
+import { handlePublicInvoice } from './public-invoice.mjs';
 import {
   handleStorageUploadUrl,
   handleStorageDelete,
@@ -28,6 +30,7 @@ import {
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
+import { handleCollectionV2UatRequest } from './tenant-collection-v2-uat.mjs';
 import { handleTmpRlsCatalogInspectRequest } from './tenant-maintenance-payments-catalog-inspect.mjs';
 
 const json = (statusCode, body) => ({
@@ -246,6 +249,31 @@ export const handler = async (event) => {
     });
   }
 
+
+  const brandingLogoPath = path.replace(/^\/prep(?=\/|$)/, '') || '/';
+  const handleBrandingLogo = storageApi.handleBrandingLogo;
+  if (typeof handleBrandingLogo === 'function' && method === 'GET' && (brandingLogoPath === '/branding/logo' || /^\/branding\/logo\/[0-9a-fA-F-]{36}$/.test(brandingLogoPath))) {
+    const result = await handleBrandingLogo({ ...event, rawPath: brandingLogoPath });
+    if (result.binary && result.body) {
+      return {
+        statusCode: 200,
+        headers: {
+          'content-type': result.contentType || 'image/png',
+          'cache-control': 'public, max-age=3600',
+          'access-control-allow-origin': '*',
+        },
+        isBase64Encoded: true,
+        body: Buffer.from(result.body).toString('base64'),
+      };
+    }
+    return json(result.statusCode || 404, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
   if (method === 'GET' && path === '/storage/public') {
     const result = await handleStoragePublic(event);
     if (result.redirect && result.location) {
@@ -384,6 +412,28 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/invoice') {
+    const result = await handlePublicInvoice(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  // TEMPORARY staging-only Collection V2 UAT harness. Remove with tenant-collection-v2-uat.mjs.
+  const collectionV2Uat = await handleCollectionV2UatRequest(event, path, method);
+  if (collectionV2Uat) {
+    return json(collectionV2Uat.statusCode || (collectionV2Uat.ok ? 200 : 403), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      liveProviderTransactions: false,
+      ...collectionV2Uat,
     });
   }
 
