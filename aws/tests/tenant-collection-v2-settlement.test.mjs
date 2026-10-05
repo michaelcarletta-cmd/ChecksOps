@@ -117,6 +117,12 @@ function createSettlementClient({
           settled_at: nextStatus === 'settled'
             ? (state.obligation.settled_at || params[3] || SETTLED_AT)
             : state.obligation.settled_at,
+          returned_at: nextStatus === 'returned'
+            ? (state.obligation.returned_at || new Date().toISOString())
+            : state.obligation.returned_at,
+          return_reason: nextStatus === 'returned'
+            ? (params[2] || state.obligation.return_reason || null)
+            : state.obligation.return_reason,
         };
         return { rows: [state.obligation] };
       }
@@ -376,6 +382,27 @@ test('returned or failed provider status cannot become settled', async () => {
   assert.equal(refuseFail.applied, false);
   assert.equal(refuseFail.skipped, 'already_settled');
   assert.equal(already.state.obligation.status, 'settled');
+});
+
+test('settled then returned is applied and is not hidden by prior settlement', async () => {
+  const client = createSettlementClient({
+    row: obligation({ status: 'settled', settled_at: SETTLED_AT }),
+  });
+  const reversed = await applyBillingProviderEvent(client, {
+    providerTransferId: XFER,
+    status: 'returned',
+    reason: 'ach_return',
+    environment: 'production',
+  });
+  assert.equal(reversed.applied, true);
+  assert.equal(reversed.skipped, undefined);
+  assert.equal(reversed.occurrence.status, 'returned');
+  assert.equal(client.state.obligation.status, 'returned');
+  assert.equal(client.state.obligation.settled_at, SETTLED_AT);
+  assert.ok(client.state.obligation.returned_at);
+  assert.equal(client.state.obligation.return_reason, 'ach_return');
+  assert.equal(client.queries.some((query) => query.sql.includes('UPDATE public.tenant_maintenance_payments')), true);
+  assert.equal(reversed.event.written, true);
 });
 
 test('unrelated Moov transfers cannot settle another obligation', async () => {
