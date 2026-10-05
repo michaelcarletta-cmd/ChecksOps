@@ -18,6 +18,10 @@ import {
   recipientAggregateKey,
   type LedgerPaymentRow,
 } from "@/lib/payments/tenantPaymentAccuracy";
+import {
+  PAYMENT_ACCOUNTING_QUERY_KEYS,
+  updateRecipientDisplay,
+} from "@/lib/payments/paymentAccounting";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -66,15 +70,20 @@ export function RecipientReport() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
-  const [editTarget, setEditTarget] = useState<{ name: string; type: string; count: number } | null>(null);
+  const [editTarget, setEditTarget] = useState<{
+    name: string;
+    type: string;
+    count: number;
+    aggregateKey: string;
+  } | null>(null);
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("other");
   const [editSaving, setEditSaving] = useState(false);
 
-  const openEdit = (name: string, type: string, count: number) => {
-    setEditTarget({ name, type, count });
-    setEditName(name);
-    setEditType(type);
+  const openEdit = (target: { name: string; type: string; count: number; aggregateKey: string }) => {
+    setEditTarget(target);
+    setEditName(target.name);
+    setEditType(target.type);
   };
 
   const saveEdit = async () => {
@@ -84,18 +93,27 @@ export function RecipientReport() {
       toast({ title: "Recipient name required", variant: "destructive" });
       return;
     }
+    if (!editTarget.aggregateKey) {
+      toast({ title: "Couldn't update recipient", description: "Missing recipient identity", variant: "destructive" });
+      return;
+    }
     setEditSaving(true);
     try {
-      const { error } = await (supabase as any)
-        .from("disbursement_splits")
-        .update({ recipient_name: newName, recipient_type: editType })
-        .eq("tenant_id", tenant.id)
-        .eq("recipient_name", editTarget.name)
-        .eq("recipient_type", editTarget.type);
-      if (error) throw error;
-      toast({ title: "Recipient updated", description: `${editTarget.count} payment${editTarget.count !== 1 ? "s" : ""} updated` });
+      const result = await updateRecipientDisplay(supabase as any, {
+        tenantId: tenant.id,
+        aggregateKey: editTarget.aggregateKey,
+        displayName: newName,
+        displayType: editType,
+      });
+      const updatedCount = Number(result.updated_count ?? editTarget.count);
+      toast({
+        title: "Recipient updated",
+        description: `${updatedCount} payment${updatedCount !== 1 ? "s" : ""} updated`,
+      });
       setEditTarget(null);
-      qc.invalidateQueries({ queryKey: ["recipient-report", tenant.id] });
+      for (const key of PAYMENT_ACCOUNTING_QUERY_KEYS) {
+        qc.invalidateQueries({ queryKey: [key, tenant.id] });
+      }
       qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant.id] });
     } catch (e: any) {
       toast({ title: "Couldn't update recipient", description: e.message, variant: "destructive" });
@@ -169,11 +187,11 @@ export function RecipientReport() {
   }, [filtered]);
 
   const byRecipient = useMemo(() => {
-    const acc: Record<string, { name: string; type: string; total: number; count: number; last: string }> = {};
+    const acc: Record<string, { aggregateKey: string; name: string; type: string; total: number; count: number; last: string }> = {};
     for (const r of filtered) {
       if (r.status !== "settled") continue;
       const k = r.aggregateKey ?? `${r.type}|${r.name}`;
-      if (!acc[k]) acc[k] = { name: r.name, type: r.type, total: 0, count: 0, last: r.date };
+      if (!acc[k]) acc[k] = { aggregateKey: k, name: r.name, type: r.type, total: 0, count: 0, last: r.date };
       acc[k].total += r.amount;
       acc[k].count += 1;
       if (new Date(r.date) > new Date(acc[k].last)) acc[k].last = r.date;
@@ -369,7 +387,12 @@ export function RecipientReport() {
                           variant="ghost"
                           className="h-7 w-7 p-0"
                           title="Edit recipient"
-                          onClick={() => openEdit(r.name, r.type, r.count)}
+                          onClick={() => openEdit({
+                            name: r.name,
+                            type: r.type,
+                            count: r.count,
+                            aggregateKey: r.aggregateKey,
+                          })}
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
