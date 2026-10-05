@@ -244,6 +244,26 @@ test('create check derives tenant and uploaded_by and ignores spoofed identity',
   assert.equal(insert.params.includes(C1C_TENANT), false);
   assert.equal(insert.params.includes(SPOOF_ID), false);
   assert.equal(insert.params.includes('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), false);
+  assert.equal(insert.params[16], null);
+});
+
+test('create check persists amount only when sent on POST /workflow/checks', async () => {
+  const client = mockClient();
+  const result = await handleCreateCheck(jwtEvent('/workflow/checks', 'POST', {
+    amount: 1.00,
+    routing_number: '000000000',
+    account_number: '000000000000',
+    review_notes: 'TEST / UAT VOID NOT NEGOTIABLE — create-time amount 1.00; routing/account omitted',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.check_intake_items'));
+  assert.ok(insert);
+  assert.equal(insert.params[16], 1);
+  assert.equal(insert.params.includes('000000000'), false);
+  assert.equal(insert.params.includes('000000000000'), false);
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('amount'), false);
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('routing_number'), false);
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('account_number'), false);
 });
 
 test('T5 kill switch disables create without a write transaction', async () => {

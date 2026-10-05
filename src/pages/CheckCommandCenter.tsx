@@ -10,6 +10,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
+import { buildAwsStagingCheckCreateValues } from "@/integrations/aws/uatSyntheticCheck";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
@@ -29,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -2496,6 +2498,8 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
   const [skipAi, setSkipAi] = useState(false);
+  const [syntheticUat, setSyntheticUat] = useState(false);
+  const awsStaging = isAwsStaging();
   const [mortgagee1, setMortgagee1] = useState("");
   const [mortgagee2, setMortgagee2] = useState("");
   const [showSecondMortgagee, setShowSecondMortgagee] = useState(false);
@@ -2532,7 +2536,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (!user) throw new Error("Not authenticated");
 
       const { data: session } = await supabase.auth.getSession();
-      const aws = isAwsStaging();
+      const aws = awsStaging;
 
       // AWS staging creates the internal check first so images can use the
       // validated check-scoped S3 prefix (checks/{checkId}/). Production still
@@ -2545,9 +2549,14 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         const { createAwsCheck } = await import("@/integrations/aws/workflow");
         const token = session.session?.access_token;
         if (!token) throw new Error("Not authenticated");
-        const created = await createAwsCheck(token, {
-          review_notes: skipAi ? "AWS staging intake — manual entry (OCR skipped)" : "AWS staging intake",
-        });
+        const created = await createAwsCheck(
+          token,
+          buildAwsStagingCheckCreateValues({
+            isAwsStaging: true,
+            syntheticUat,
+            skipAi,
+          }),
+        );
         check = created.check as { id: string };
         prefix = created.imagePrefix.replace(/\/$/, "");
       } else {
@@ -2701,6 +2710,25 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           {skipAi ? "Turn AI On" : "Turn AI Off"}
         </Button>
       </div>
+
+      {awsStaging && (
+        <label className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 cursor-pointer">
+          <Checkbox
+            checked={syntheticUat}
+            onCheckedChange={(value) => setSyntheticUat(value === true)}
+            className="mt-0.5"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium leading-tight">
+              Synthetic UAT / VOID check
+            </span>
+            <span className="block text-[11px] text-muted-foreground leading-tight mt-0.5">
+              Opt-in only. Creates this check with $1.00 at upload so Review can be submitted.
+              Routing and account stay blank. Ordinary staging uploads are unchanged.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div>
         <Label>Front of Check *</Label>
