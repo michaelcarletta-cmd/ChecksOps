@@ -12,6 +12,14 @@ function snap(){
 }
 const good=()=>({workstream_id:'security-sh2-cors',commit:'a'.repeat(40),before:snap(),after:snap(),probes:{staging_origin_allowed:true,unauthorized_origin_not_privileged:true,prep_health_ok:true,authenticated_flow_ok:true,no_financial_write:true}});
 
+function manualGood(){
+  const x=good();
+  x.probes.authenticated_flow_ok=false;
+  const fingerprint=validateStagingAcceptance({...x,probes:{...x.probes,authenticated_flow_ok:true}}).evidence.live_fingerprint;
+  x.manual_uat={kind:'cors-manual-auth-uat',workstream_id:x.workstream_id,commit:x.commit,staging_fingerprint:fingerprint,operator:'michaelcarletta-cmd',authenticated_login_ok:true,no_financial_write:true};
+  return x;
+}
+
 test('read-only staging acceptance emits deterministic reference',()=>{
   const a=validateStagingAcceptance(good());
   const b=validateStagingAcceptance(good());
@@ -41,4 +49,26 @@ test('financial mutation is never accepted as UAT',()=>{
   const r=validateStagingAcceptance(x);
   assert.equal(r.ok,false);
   assert.ok(r.errors.includes('financial_write_forbidden'));
+});
+
+
+test('manual authenticated UAT is accepted only when bound to exact staging evidence',()=>{
+  const r=validateStagingAcceptance(manualGood());
+  assert.equal(r.ok,true);
+  assert.equal(r.evidence.probes.authenticated_flow_source,'manual-attestation');
+});
+
+test('manual UAT fails closed on provenance or fingerprint mismatch',()=>{
+  for(const mutate of [
+    x=>{x.manual_uat.commit='b'.repeat(40);},
+    x=>{x.manual_uat.staging_fingerprint='0'.repeat(64);},
+    x=>{x.manual_uat.operator='';},
+    x=>{x.manual_uat.authenticated_login_ok=false;},
+    x=>{x.manual_uat.no_financial_write=false;},
+  ]){
+    const x=manualGood(); mutate(x);
+    const r=validateStagingAcceptance(x);
+    assert.equal(r.ok,false);
+    assert.ok(r.errors.includes('authenticated_flow_failed'));
+  }
 });
