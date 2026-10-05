@@ -51,6 +51,19 @@ invariants are expected to fail:
 
 This PR does not repair Branding. The failing report is the control case.
 
+## Forward-safe protection
+
+Accepted features are protected by their required source paths, semantic invariants,
+required tests, and explicit feature membership. A normal forward edit to a
+registered file is allowed when those contracts still pass. File-byte differences
+alone are not treated as stale source; this avoids freezing legitimate development
+or encouraging rollback to an older file.
+
+Changing the accepted contract itself (source paths, invariant definitions,
+required tests, artifact types, or status) requires reviewed supersession once
+enforcement is activated. Removing a required source path is a feature failure even
+when another invariant still passes.
+
 ## Composition
 
 Do not treat `accepted_source_composition=true` as membership.
@@ -86,8 +99,9 @@ A later reviewed PR may promote individual features to `status=accepted`
 only after:
 
 1. invariants pass on the candidate source, not on a boolean;
-2. required tests execute and bind `candidate_commit`, `exit_code`, and
-   `output_sha256`;
+2. every required test executes and binds its test path, `candidate_commit`,
+   `exit_code`, and `output_sha256`; the candidate commit must match the
+   composition being evaluated;
 3. `restore_authority` is true only for that accepted SHA;
 4. Release Locks and Deployment Guard remain unchanged in role;
 5. a separate enforcement PR flips `evaluate_only` / `enforcement` after
