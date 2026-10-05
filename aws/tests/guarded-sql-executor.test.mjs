@@ -932,6 +932,42 @@ function mockSql40Connect({
       if (text.includes('sql40_tmp')) return { rows: rows.tmp };
       if (text.includes('sql40_events')) return { rows: rows.events };
       if (text.includes('sql40_transfers')) return { rows: rows.transfers };
+      if (text.includes('sql40_freedom_tmp')) {
+        return {
+          rows: [{
+            id: '72b622f9-b68f-4032-a971-a854dbcfbf57',
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            provider_transfer_id: 'b31c7752-031f-4b8b-9b6e-82dd0aaed2cb',
+            amount_cents: 13900,
+            provider_environment: 'sandbox',
+            status: 'settled',
+          }],
+        };
+      }
+      if (text.includes('sql40_freedom_xfer')) return { rows: [] };
+      if (text.includes('sql40_freedom_tmp_by_xfer')) return { rows: [] };
+      if (text.includes('sql40_freedom_events')) return { rows: [{ n: 0 }] };
+      if (text.includes('sql40_tmp_grants')) {
+        return {
+          rows: [
+            { grantee: 'authenticated', privilege_type: 'INSERT' },
+            { grantee: 'authenticated', privilege_type: 'SELECT' },
+            { grantee: 'authenticated', privilege_type: 'UPDATE' },
+            { grantee: 'checksops', privilege_type: 'INSERT' },
+            { grantee: 'checksops', privilege_type: 'SELECT' },
+            { grantee: 'checksops', privilege_type: 'UPDATE' },
+          ],
+        };
+      }
+      if (text.includes('sql40_tmp_write_policy')) {
+        return {
+          rows: [{
+            name: 'aws_write_tenant_maintenance_payments',
+            using: '(public.aws_can_write_tenant(tenant_id))',
+            with_check: '(public.aws_can_write_tenant(tenant_id))',
+          }],
+        };
+      }
       throw new Error(`unexpected query: ${text.slice(0, 160)}`);
     },
     async end() {},

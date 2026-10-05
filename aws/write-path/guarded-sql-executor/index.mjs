@@ -25,6 +25,7 @@ import {
 import {
   AUTHORIZED_SYNTHETIC_FIXTURE,
   EMPTY_FIXTURE_SHA256,
+  FORBIDDEN_FREEDOM,
   evaluateFixtureGuards,
   hashFixtureSnapshot,
 } from './lib/collection-v2-synthetic-uat-cleanup.mjs';
@@ -744,6 +745,86 @@ async function readSql40Fixture(client) {
   };
 }
 
+async function readSql40Preservation(client) {
+  const freedom = FORBIDDEN_FREEDOM;
+  const freedomTmp = (await client.query(`
+    /* sql40_freedom_tmp */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           amount_cents,
+           provider_environment,
+           status
+      FROM public.tenant_maintenance_payments
+     WHERE id = $1::uuid
+  `, [freedom.tmp_id])).rows[0] || null;
+  const freedomTransfers = (await client.query(`
+    /* sql40_freedom_xfer */
+    SELECT provider_transfer_id,
+           tenant_id::text AS tenant_id
+      FROM public.payment_transfers
+     WHERE provider_transfer_id = $1
+  `, [freedom.provider_transfer_id])).rows;
+  const freedomTmpByXfer = (await client.query(`
+    /* sql40_freedom_tmp_by_xfer */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           amount_cents,
+           provider_environment,
+           status
+      FROM public.tenant_maintenance_payments
+     WHERE provider_transfer_id = $1
+        OR id = $2::uuid
+  `, [freedom.provider_transfer_id, freedom.tmp_id])).rows;
+  const freedomEvents = (await client.query(`
+    /* sql40_freedom_events */
+    SELECT count(*)::int AS n
+      FROM public.payment_event_log
+     WHERE provider_transfer_id = $1
+        OR id = $2::uuid
+  `, [freedom.provider_transfer_id, freedom.tmp_id])).rows[0];
+  const grants = (await client.query(`
+    /* sql40_tmp_grants */
+    SELECT grantee, privilege_type
+      FROM information_schema.role_table_grants
+     WHERE table_schema = 'public'
+       AND table_name = 'tenant_maintenance_payments'
+       AND grantee IN ('authenticated', 'checksops', 'PUBLIC', 'anon')
+     ORDER BY grantee, privilege_type
+  `)).rows;
+  const writePolicies = (await client.query(`
+    /* sql40_tmp_write_policy */
+    SELECT pol.polname AS name,
+           pg_get_expr(pol.polqual, pol.polrelid) AS using,
+           pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+      FROM pg_policy pol
+      JOIN pg_class c ON c.oid = pol.polrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = 'tenant_maintenance_payments'
+       AND pol.polname IN (
+         'aws_write_tenant_maintenance_payments',
+         'aws_write_tenant_maintenance_payments_job'
+       )
+     ORDER BY pol.polname
+  `)).rows;
+  const deleteGranted = grants.some((row) => String(row.privilege_type).toUpperCase() === 'DELETE');
+  const write = writePolicies.find((row) => row.name === 'aws_write_tenant_maintenance_payments');
+  return {
+    freedom_tmp: freedomTmp,
+    freedom_tmp_by_transfer_or_id: freedomTmpByXfer,
+    freedom_event_count: Number(freedomEvents?.n || 0),
+    freedom_transfers: freedomTransfers,
+    grants,
+    write_policies: writePolicies,
+    application_delete_granted: deleteGranted,
+    sql39_write_intended: Boolean(
+      write && writePredicateIntended(write.using) && writePredicateIntended(write.with_check),
+    ),
+  };
+}
+
 async function handleSql40({
   event,
   authorization,
@@ -762,6 +843,7 @@ async function handleSql40({
     const guards = evaluateFixtureGuards(live);
 
     if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      const preservation = await readSql40Preservation(client);
       return ok({
         authorization: authorization.details,
         receipt: {
@@ -774,6 +856,7 @@ async function handleSql40({
           executor_identity: identity,
           fixture: live,
           fixture_guards: guards,
+          preservation,
           expected_deletes: {
             payment_event_log: 2,
             tenant_maintenance_payments: 1,
