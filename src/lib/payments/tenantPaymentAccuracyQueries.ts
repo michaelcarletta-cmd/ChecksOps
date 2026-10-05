@@ -4,12 +4,12 @@
  * (same split id as the payer), not a copied Tenant B transaction.
  */
 
-import { listRecipientOverlays } from "./paymentAccounting";
+import { listRecipientOverlays } from "./paymentAccounting.ts";
 import {
   buildTenantPaymentLedgerRows,
   type LedgerPaymentRow,
   type TenantPaymentSources,
-} from "./tenantPaymentAccuracy";
+} from "./tenantPaymentAccuracy.ts";
 
 const OUTGOING_SPLIT_SELECT = `
   id, amount, status, submitted_at, settled_at, returned_at,
