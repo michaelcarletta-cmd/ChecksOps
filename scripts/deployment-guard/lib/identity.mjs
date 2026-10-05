@@ -23,6 +23,7 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   's3-object-write',
   'lambda-oneshot',
   'apigateway-update',
+  'apigateway-cors-update',
   'infra-mutate',
   'verify-only',
 ]);
