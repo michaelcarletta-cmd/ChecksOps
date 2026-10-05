@@ -85,6 +85,13 @@
       "note": "Official production SPA writer. Requires a production-spa spa-promote receipt + active lease and fails on any drift."
     },
     {
+      "path": "scripts/deployment-guard/production-cors-update.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["apigateway-update-api", "cors-allow-origins"],
+      "shared_target": true,
+      "note": "Official production CORS-only writer. Requires production-http-api receipt + active lease; pins API/routes/authorizer/CloudFront/Lambda and re-reads immediately before UpdateApi."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]

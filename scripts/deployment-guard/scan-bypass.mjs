@@ -15,7 +15,7 @@ export const SCAN_PATTERNS = Object.freeze([
   { id: 'sam-deploy', re: /\bsam\s+deploy\b/ },
   { id: 'cloudformation-mutate', re: /(?:create-stack|update-stack|cloudformation\s+deploy)\b/ },
   { id: 's3-spa-index', re: /s3(?:api)?[\s'"` ,]+(?:sync|cp|put-object)[\s\S]{0,160}index\.html|index\.html[\s\S]{0,120}s3(?:api)?[\s'"` ,]+(?:sync|cp|put-object)/ },
-  { id: 'apigateway-mutate', re: /apigatewayv2['"`\s,\[]+(?:create-route|update-route|update-integration)\b/ },
+  { id: 'apigateway-mutate', re: /apigatewayv2['"`\s,\[]+(?:create-route|update-route|update-integration|update-api)\b/ },
   { id: 'sql-psql-exec', re: /(?:execFileSync|spawnSync|execSync)\(\s*['"`]psql['"`]/ },
 ]);
 
