@@ -28,6 +28,7 @@ import {
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
+import { handleTmpRlsCatalogInspectRequest } from './tenant-maintenance-payments-catalog-inspect.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -69,6 +70,7 @@ const READ_ONLY_PATHS = new Set([
   '/identity/session',
   '/ops/readiness',
   '/cutover/readiness',
+  '/inspect/tmp-rls-catalog',
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
@@ -127,6 +129,19 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...validation,
+    });
+  }
+
+  // TEMPORARY staging-only TMP RLS catalog inspect. Remove with tenant-maintenance-payments-catalog-inspect.mjs.
+  const tmpRlsCatalog = await handleTmpRlsCatalogInspectRequest(event, path, method);
+  if (tmpRlsCatalog) {
+    return json(tmpRlsCatalog.statusCode || (tmpRlsCatalog.ok ? 200 : 403), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      readOnly: true,
+      writesAttempted: false,
+      ...tmpRlsCatalog,
     });
   }
 
