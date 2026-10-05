@@ -10,6 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { Download, Search, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { fetchTenantPaymentLedgerRows } from "@/lib/payments/tenantPaymentAccuracyQueries";
+import {
+  filterRowsBySettlementDate,
+  settlementDateIso,
+  type LedgerPaymentRow,
+} from "@/lib/payments/tenantPaymentAccuracy";
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: "text-blue-600 border-blue-500/30 bg-blue-500/10",
@@ -83,44 +89,18 @@ export function PaymentLedger() {
   }, [dateRange]);
 
   const { data: payments = [], isLoading } = useQuery({
-    queryKey: ["payment-ledger", tenant?.id, dateRange],
+    queryKey: ["payment-ledger", tenant?.id],
     enabled: !!tenant?.id,
-    queryFn: async () => {
-      let query = (supabase as any)
-        .from("disbursement_splits")
-        .select(`
-          id, amount, status, submitted_at, settled_at, returned_at,
-          return_code, return_desc, actum_order_id, created_at,
-          method, recipient_name, recipient_type, external_check_number,
-          stakeholder_accounts (
-            id, nickname, custname, account_type, chk_acct
-          ),
-          disbursement_batches (
-            id, check_amount, check_intake_item_id,
-            check_intake_items:check_intake_item_id (
-              check_number, carrier_name, amount,
-              claim_id
-            )
-          )
-        `)
-        .eq("tenant_id", tenant!.id)
-        .neq("status", "pending")
-        .order("created_at", { ascending: false });
-
-      if (dateFilters) {
-        query = query
-          .gte("created_at", dateFilters.from.toISOString())
-          .lte("created_at", dateFilters.to.toISOString());
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchTenantPaymentLedgerRows(supabase as any, tenant!.id),
   });
 
+  const ranged = useMemo(
+    () => filterRowsBySettlementDate(payments as LedgerPaymentRow[], dateFilters),
+    [payments, dateFilters],
+  );
+
   const filtered = useMemo(() => {
-    return payments.filter((p: any) => {
+    return ranged.filter((p: LedgerPaymentRow) => {
       const acct = p.stakeholder_accounts;
       const batch = p.disbursement_batches;
       const check = batch?.check_intake_items;
@@ -138,10 +118,10 @@ export function PaymentLedger() {
 
       return matchSearch && matchType && matchStatus;
     });
-  }, [payments, search, typeFilter, statusFilter]);
+  }, [ranged, search, typeFilter, statusFilter]);
 
   const stats = useMemo(() => {
-    const settled = filtered.filter((p: any) => p.status === "settled");
+    const settled = filtered.filter((p: any) => p.status === "settled" && p.direction === "outgoing");
     const totalOut = settled.reduce((s: number, p: any) => s + Number(p.amount), 0);
     const byType = settled.reduce((acc: Record<string, number>, p: any) => {
       const t = p.stakeholder_accounts?.account_type ?? p.recipient_type ?? "other";
@@ -158,8 +138,8 @@ export function PaymentLedger() {
       const acct = p.stakeholder_accounts;
       const check = p.disbursement_batches?.check_intake_items;
       return [
-        format(new Date(p.created_at), "MM/dd/yyyy"),
-        acct?.nickname ?? acct?.custname ?? "—",
+        format(new Date(settlementDateIso(p) ?? p.created_at), "MM/dd/yyyy"),
+        acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "—",
         ACCOUNT_TYPE_LABELS[acct?.account_type] ?? "—",
         acct?.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "—",
         check?.check_number ?? "—",
@@ -297,13 +277,13 @@ export function PaymentLedger() {
                         : "";
                     return (
                       <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">{format(new Date(p.created_at), "MMM d, yyyy")}</td>
+                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">{format(new Date(settlementDateIso(p) ?? p.created_at), "MMM d, yyyy")}</td>
                         <td className="p-3">
                           <p className="font-medium text-xs">{name}</p>
                           {acctLabel && <p className="text-[10px] text-muted-foreground font-mono">{acctLabel}</p>}
                         </td>
                         <td className="p-3 hidden md:table-cell">
-                          {acct ? (
+                          {acct || p.direction === "incoming" || p.source !== "disbursement_split" ? (
                             <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[type ?? ""] ?? ""}`}>
                               {type ? (ACCOUNT_TYPE_LABELS[type] ?? type) : "—"}
                             </Badge>
@@ -336,7 +316,7 @@ export function PaymentLedger() {
                   <tr className="border-t bg-muted/20">
                     <td colSpan={5} className="p-3 text-xs text-muted-foreground">{filtered.length} payment{filtered.length !== 1 ? "s" : ""}</td>
                     <td className="p-3 text-right font-semibold text-sm">
-                      ${filtered.filter((p: any) => p.status === "settled").reduce((s: number, p: any) => s + Number(p.amount), 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      ${filtered.filter((p: any) => p.status === "settled" && p.direction === "outgoing").reduce((s: number, p: any) => s + Number(p.amount), 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </td>
                     <td className="p-3 text-xs text-muted-foreground">settled</td>
                   </tr>

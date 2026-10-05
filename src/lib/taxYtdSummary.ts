@@ -55,12 +55,17 @@ type SplitPayment = {
   amount?: number | string | null;
   recipient_name?: string | null;
   recipient_type?: string | null;
+  recipient_tenant_id?: string | null;
+  destination_tenant_id?: string | null;
+  payer_tenant_id?: string | null;
+  tenant_id?: string | null;
   stakeholder_accounts?: {
     id?: string;
     nickname?: string | null;
     custname?: string | null;
     account_type?: string | null;
     chk_acct?: string | null;
+    tenant_id?: string | null;
   } | null;
 };
 
@@ -113,7 +118,29 @@ export function aggregateRecipientRows({
     if (d.getFullYear() !== year) continue;
     const m = d.getMonth();
     const amount = Number(p.amount ?? 0);
-    if (acct?.id) {
+    const payerId = p.payer_tenant_id ?? p.tenant_id ?? null;
+    const rawRecipient = String(p.recipient_tenant_id ?? "").trim();
+    const rawDestination = String(p.destination_tenant_id ?? "").trim();
+    if (payerId && (rawRecipient === payerId || rawDestination === payerId)) continue;
+    const recipientTenant = [p.destination_tenant_id, p.recipient_tenant_id]
+      .map((v) => String(v ?? "").trim())
+      .find((id) => id && id !== payerId);
+    const stakeholderTenant = String(acct?.tenant_id ?? "").trim();
+    if (recipientTenant) {
+      upsert(`tenant:${recipientTenant}`, {
+        nickname: p.recipient_name ?? acct?.nickname ?? undefined,
+        custname: acct?.custname ?? p.recipient_name ?? undefined,
+        account_type: acct?.account_type ?? p.recipient_type ?? undefined,
+        chk_acct: acct?.chk_acct ?? undefined,
+      }, amount, m);
+    } else if (stakeholderTenant && payerId && stakeholderTenant !== payerId) {
+      upsert(`tenant:${stakeholderTenant}`, {
+        nickname: acct?.nickname ?? p.recipient_name ?? undefined,
+        custname: acct?.custname ?? undefined,
+        account_type: acct?.account_type ?? p.recipient_type ?? undefined,
+        chk_acct: acct?.chk_acct ?? undefined,
+      }, amount, m);
+    } else if (acct?.id) {
       upsert(`acct:${acct.id}`, {
         nickname: acct.nickname ?? undefined,
         custname: acct.custname ?? undefined,

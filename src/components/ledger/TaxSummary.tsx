@@ -199,15 +199,13 @@ export function TaxSummary() {
         .from("disbursement_splits")
         .select(`
           id, amount, status, created_at, settled_at,
-          recipient_name, recipient_type,
+          recipient_name, recipient_type, recipient_tenant_id, tenant_id,
           stakeholder_accounts (
-            id, nickname, custname, account_type, chk_acct
+            id, nickname, custname, account_type, chk_acct, tenant_id
           )
         `)
         .eq("tenant_id", tenant!.id)
-        .eq("status", "settled")
-        .gte("created_at", startOfYear(new Date(year, 0, 1)).toISOString())
-        .lte("created_at", endOfYear(new Date(year, 0, 1)).toISOString());
+        .eq("status", "settled");
 
       if (error) throw error;
       return data ?? [];
@@ -238,7 +236,7 @@ export function TaxSummary() {
         .from("check_intake_items")
         .select("id, amount, deposited_at, status")
         .eq("tenant_id", tenant!.id)
-        .eq("status", "deposited")
+        .in("status", ["deposited", "funds_released"])
         .gte("deposited_at", startOfYear(new Date(year, 0, 1)).toISOString())
         .lte("deposited_at", endOfYear(new Date(year, 0, 1)).toISOString());
       if (error) throw error;
