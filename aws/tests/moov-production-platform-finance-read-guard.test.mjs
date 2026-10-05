@@ -108,6 +108,15 @@ const platformFetch = (calls) => async (url, init = {}) => {
       status: 'verified',
     }]);
   }
+  if (path.includes(`/wallets/${WALLET_ID}/transactions`)) return jsonRes([]);
+  if (path.endsWith(`/wallets/${WALLET_ID}`)) {
+    return jsonRes({
+      walletID: WALLET_ID,
+      walletType: 'default',
+      accountID: PROD_FACILITATOR,
+      availableBalance: { value: 0, currency: 'USD' },
+    });
+  }
   if (path.endsWith('/wallets')) {
     return jsonRes([{
       walletID: WALLET_ID,

@@ -59,6 +59,20 @@ export const PLATFORM_FINANCE_PRODUCTION_ENVS = Object.freeze(['production', 'pr
 /** Known ChecksOps sandbox facilitator. Forbidden when environment is production. */
 export const SANDBOX_PLATFORM_ACCOUNT_ID = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
 
+/** Verified ChecksOps production facilitator. Wallet reads pin this account's known wallet. */
+export const PRODUCTION_PLATFORM_ACCOUNT_ID = '41cb5d67-4911-4bef-aad5-d8ee9c582208';
+
+/** Known production operating wallet. Read only. Never created by this module. */
+export const PRODUCTION_PLATFORM_WALLET_ID = '72630a70-4954-4761-b652-e8beff1ad02c';
+
+export const walletReadScopes = (accountId) => [`/accounts/${accountId}/wallets.read`];
+
+export function knownProductionWalletId(accountId, environment) {
+  if (String(environment || '').toLowerCase() !== 'production') return null;
+  if (String(accountId || '') !== PRODUCTION_PLATFORM_ACCOUNT_ID) return null;
+  return PRODUCTION_PLATFORM_WALLET_ID;
+}
+
 export function isPlatformFinanceProductionEnv(checksopsEnv) {
   const env = String(checksopsEnv || '').trim().toLowerCase();
   return PLATFORM_FINANCE_PRODUCTION_ENVS.includes(env);
@@ -139,6 +153,247 @@ export function centsFromBalance(balance) {
   return Number(balance.value ?? 0);
 }
 
+export function toIsoTimestamp(value) {
+  if (value == null || value === '') return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  return null;
+}
+
+/**
+ * Year-month key from a node-pg Date, ISO string, or other parseable value.
+ * Does not mutate the source timestamp.
+ */
+export function monthOf(value) {
+  if (value == null || value === '') return 'unknown';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+  const raw = String(value).trim();
+  const isoPrefix = raw.match(/^(\d{4}-\d{2})/);
+  if (isoPrefix) return isoPrefix[1];
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+  return 'unknown';
+}
+
+export function classifyFeeCollection(fee = {}) {
+  const status = String(fee.status || '').toLowerCase();
+  if (status === 'void') return 'void';
+  const occurrenceStatus = String(fee.occurrence_status || '').toLowerCase();
+  const providerTransferId = String(fee.provider_transfer_id || '').trim();
+  if (status === 'billed' && occurrenceStatus === 'completed' && providerTransferId) {
+    return 'collected';
+  }
+  if (status === 'billed') return 'billed_processing';
+  return 'outstanding';
+}
+
+export function isCompletedProductionTransfer(transfer = {}) {
+  const environment = String(transfer.environment || '').toLowerCase();
+  const status = String(transfer.status || '').toLowerCase();
+  const providerTransferId = String(transfer.provider_transfer_id || '').trim();
+  if (environment !== 'production') return false;
+  if (status !== 'completed') return false;
+  if (!providerTransferId) return false;
+  return Boolean(toIsoTimestamp(transfer.completed_at));
+}
+
+export function hasRecordedProviderCost(transfer = {}) {
+  if (transfer.provider_fee_cents == null || transfer.provider_fee_cents === '') return false;
+  return Number.isFinite(Number(transfer.provider_fee_cents));
+}
+
+function emptyLedgerBucket() {
+  return {
+    charged_cents: 0,
+    outstanding_cents: 0,
+    billed_processing_cents: 0,
+    collected_fee_cents: 0,
+    collected_transfer_fee_cents: 0,
+    provider_cost_cents: 0,
+    provider_cost_rows: 0,
+    provider_cost_missing_rows: 0,
+    volume_cents: 0,
+    transfer_count: 0,
+  };
+}
+
+export function shapePlatformLedger(bucket = emptyLedgerBucket()) {
+  const collected = Number(bucket.collected_fee_cents || 0) + Number(bucket.collected_transfer_fee_cents || 0);
+  const hasVolume = Number(bucket.transfer_count || 0) > 0;
+  const costComplete = Number(bucket.provider_cost_missing_rows || 0) === 0;
+  const providerCostMissing = Number(bucket.provider_cost_missing_rows || 0) > 0
+    || (collected > 0 && !hasVolume);
+  const providerCostAvailable = hasVolume && costComplete;
+  let profitCents = null;
+  let profitAvailable = false;
+  if (collected === 0) {
+    profitCents = 0;
+    profitAvailable = true;
+  } else if (hasVolume && costComplete) {
+    profitCents = collected - Number(bucket.provider_cost_cents || 0);
+    profitAvailable = true;
+  }
+  return {
+    charged_cents: Number(bucket.charged_cents || 0),
+    outstanding_cents: Number(bucket.outstanding_cents || 0),
+    billed_processing_cents: Number(bucket.billed_processing_cents || 0),
+    collected_cents: collected,
+    collected_fee_cents: Number(bucket.collected_fee_cents || 0),
+    collected_transfer_fee_cents: Number(bucket.collected_transfer_fee_cents || 0),
+    revenue_cents: collected,
+    provider_cost_cents: Number(bucket.provider_cost_cents || 0),
+    provider_cost_available: providerCostAvailable,
+    provider_cost_missing: providerCostMissing,
+    profit_cents: profitCents,
+    profit_available: profitAvailable,
+    volume_cents: Number(bucket.volume_cents || 0),
+    transfer_count: Number(bucket.transfer_count || 0),
+  };
+}
+
+export function feeActivityDate(fee = {}) {
+  if (classifyFeeCollection(fee) === 'collected') {
+    return fee.occurrence_updated_at || fee.occurred_at || null;
+  }
+  return fee.occurred_at || null;
+}
+
+export function buildPlatformPnl({
+  tenants = [],
+  fees = [],
+  transfers = [],
+  since = null,
+} = {}) {
+  const nameById = new Map((tenants || []).map((row) => [row.id, row.name]));
+  const byMonth = new Map();
+  const byTenant = new Map();
+  const seenFees = new Set();
+  const seenTransfers = new Set();
+  const bump = (map, key) => {
+    if (!map.has(key)) map.set(key, emptyLedgerBucket());
+    return map.get(key);
+  };
+  const activity = [];
+
+  for (const fee of fees || []) {
+    const collection = classifyFeeCollection(fee);
+    if (collection === 'void') continue;
+    const id = fee.id || `${fee.tenant_id || 'unassigned'}:${fee.source_reference || ''}:${fee.occurred_at || ''}:${fee.amount_cents || 0}`;
+    if (seenFees.has(id)) continue;
+    seenFees.add(id);
+    const amount = Number(fee.amount_cents || 0);
+    const monthKey = monthOf(feeActivityDate(fee));
+    const tenantKey = fee.tenant_id || 'unassigned';
+    for (const bucket of [bump(byMonth, monthKey), bump(byTenant, tenantKey)]) {
+      bucket.charged_cents += amount;
+      if (collection === 'outstanding') bucket.outstanding_cents += amount;
+      if (collection === 'billed_processing') bucket.billed_processing_cents += amount;
+      if (collection === 'collected') bucket.collected_fee_cents += amount;
+    }
+    activity.push({
+      kind: 'fee',
+      id: fee.id || null,
+      tenant_id: fee.tenant_id || null,
+      tenant_name: nameById.get(fee.tenant_id) ?? (fee.tenant_id ? 'Unassigned' : 'Unassigned'),
+      fee_code: fee.fee_code || null,
+      description: fee.description || null,
+      amount_cents: amount,
+      collection_status: collection,
+      occurred_at: toIsoTimestamp(fee.occurred_at),
+      source_reference: fee.source_reference || null,
+      check_id: fee.check_id || null,
+      claim_id: fee.claim_id || null,
+      occurrence_id: fee.occurrence_id || null,
+      provider_transfer_id: fee.provider_transfer_id || null,
+    });
+  }
+
+  for (const transfer of transfers || []) {
+    if (!isCompletedProductionTransfer(transfer)) continue;
+    const id = transfer.id || `${transfer.tenant_id || 'unassigned'}:${transfer.provider_transfer_id}`;
+    if (seenTransfers.has(id)) continue;
+    seenTransfers.add(id);
+    const monthKey = monthOf(transfer.completed_at);
+    const tenantKey = transfer.tenant_id || 'unassigned';
+    const amount = Number(transfer.amount_cents || 0);
+    const transferFee = Number(transfer.platform_fee_cents || 0);
+    const recordedCost = hasRecordedProviderCost(transfer);
+    for (const bucket of [bump(byMonth, monthKey), bump(byTenant, tenantKey)]) {
+      bucket.volume_cents += amount;
+      bucket.transfer_count += 1;
+      bucket.collected_transfer_fee_cents += transferFee;
+      if (recordedCost) {
+        bucket.provider_cost_cents += Number(transfer.provider_fee_cents);
+        bucket.provider_cost_rows += 1;
+      } else {
+        bucket.provider_cost_missing_rows += 1;
+      }
+    }
+    activity.push({
+      kind: 'transfer',
+      id: transfer.id || null,
+      tenant_id: transfer.tenant_id || null,
+      tenant_name: nameById.get(transfer.tenant_id) ?? 'Unassigned',
+      amount_cents: amount,
+      platform_fee_cents: transferFee,
+      provider_fee_cents: recordedCost ? Number(transfer.provider_fee_cents) : null,
+      provider_fee_recorded: recordedCost,
+      collection_status: 'completed_production',
+      completed_at: toIsoTimestamp(transfer.completed_at),
+      provider_transfer_id: transfer.provider_transfer_id || null,
+      check_id: transfer.check_id || null,
+      claim_id: transfer.claim_id || null,
+    });
+  }
+
+  const months = [...byMonth.entries()]
+    .filter(([key]) => key !== 'unknown')
+    .sort(([left], [right]) => (left < right ? -1 : 1))
+    .map(([month, bucket]) => ({ month, ...shapePlatformLedger(bucket) }));
+  const tenantRows = [...byTenant.entries()]
+    .map(([id, bucket]) => ({
+      tenant_id: id,
+      tenant_name: nameById.get(id) ?? 'Unassigned',
+      ...shapePlatformLedger(bucket),
+      items: activity.filter((item) => (item.tenant_id || 'unassigned') === id),
+    }))
+    .sort((left, right) => right.charged_cents - left.charged_cents);
+  const totals = shapePlatformLedger([...byTenant.values()].reduce((acc, bucket) => {
+    acc.charged_cents += bucket.charged_cents;
+    acc.outstanding_cents += bucket.outstanding_cents;
+    acc.billed_processing_cents += bucket.billed_processing_cents;
+    acc.collected_fee_cents += bucket.collected_fee_cents;
+    acc.collected_transfer_fee_cents += bucket.collected_transfer_fee_cents;
+    acc.provider_cost_cents += bucket.provider_cost_cents;
+    acc.provider_cost_rows += bucket.provider_cost_rows;
+    acc.provider_cost_missing_rows += bucket.provider_cost_missing_rows;
+    acc.volume_cents += bucket.volume_cents;
+    acc.transfer_count += bucket.transfer_count;
+    return acc;
+  }, emptyLedgerBucket()));
+  return {
+    since,
+    totals,
+    months,
+    tenants: tenantRows,
+    activity,
+    definitions: {
+      charged: 'Non-void platform_fee_line_items amounts (accrued charges).',
+      outstanding: "Line items with status unbilled. Not collected.",
+      billed_processing: 'Line items with status billed that lack a completed occurrence plus provider_transfer_id.',
+      collected: 'Billed line items whose occurrence is completed and has provider_transfer_id, plus platform_fee_cents on completed production transfers.',
+      provider_cost: 'Recorded provider_fee_cents on completed production transfers only. Missing values are not treated as $0.',
+      profit: 'Collected revenue minus recorded provider cost only when cost is complete. Unbilled fees are never profit.',
+      volume: 'Completed production payment_transfers with provider_transfer_id and completed_at.',
+    },
+  };
+}
+
 function walletIdOf(wallet) {
   return wallet?.walletID ?? wallet?.walletId ?? wallet?.id ?? null;
 }
@@ -159,12 +414,22 @@ function isOperatingWallet(wallet) {
 export function selectPlatformWallet(wallets, {
   environment,
   platformAccountId,
+  knownWalletId = null,
 } = {}) {
   const env = String(environment || '').toLowerCase();
   if (env !== 'sandbox' && env !== 'production') {
     return { wallet: null, reason: 'environment_required', warning: 'Payment wallet environment is required.' };
   }
   const rows = Array.isArray(wallets) ? wallets.filter(Boolean) : [];
+  if (knownWalletId) {
+    const pinned = rows.find((wallet) => String(walletIdOf(wallet) || '') === String(knownWalletId));
+    if (pinned) return { wallet: pinned, reason: 'known_wallet', warning: null };
+    return {
+      wallet: null,
+      reason: 'known_wallet_missing',
+      warning: 'Known platform wallet was not returned by the provider.',
+    };
+  }
   const accountFiltered = rows.filter((wallet) => {
     const accountId = wallet?.accountID ?? wallet?.accountId ?? wallet?.provider_account_id ?? null;
     if (!platformAccountId || !accountId) return true;
@@ -350,49 +615,89 @@ async function loadLocalPlatformMethods(client, environment, accountId) {
   }
 }
 
-async function walletPayload({ accountId, environment, fetchImpl }) {
-  const warnings = [];
+function walletReadFailure({
+  walletId = null,
+  reason = 'read_failed',
+  warnings = [],
+  setupRequired = false,
+} = {}) {
+  return {
+    wallet_id: walletId,
+    available_cents: null,
+    pending_cents: null,
+    currency: 'USD',
+    transactions: [],
+    setup_required: setupRequired,
+    read_error: true,
+    selection_reason: reason,
+    warnings,
+  };
+}
+
+async function walletPayload({ accountId, environment, fetchImpl, knownWalletId = null }) {
   if (!accountId) {
-    return {
-      wallet_id: null,
-      available_cents: 0,
-      pending_cents: 0,
-      transactions: [],
-      setup_required: true,
+    return walletReadFailure({
+      reason: 'account_missing',
+      setupRequired: true,
       warnings: ['Platform payment account is not configured yet.'],
-    };
-  }
-  let wallets = [];
-  try {
-    wallets = await moovFetch(`/accounts/${accountId}/wallets`, {
-      scopes: scopes.accountRead(accountId),
-      fetchImpl,
     });
-  } catch (error) {
-    warnings.push(`wallets: ${error.message}`);
   }
-  const selected = selectPlatformWallet(wallets, { environment, platformAccountId: accountId });
-  if (selected.warning) warnings.push(selected.warning);
-  const wallet = selected.wallet;
-  const walletId = walletIdOf(wallet);
-  let transactions = [];
-  if (walletId) {
-    try {
-      transactions = await moovFetch(
-        `/accounts/${accountId}/wallets/${walletId}/transactions?count=25`,
-        { scopes: scopes.accountRead(accountId), fetchImpl },
-      );
-    } catch (error) {
-      warnings.push(`transactions: ${error.message}`);
+  const scopesForRead = walletReadScopes(accountId);
+  let wallet = null;
+  let selectionReason = 'selected';
+  const warnings = [];
+  try {
+    if (knownWalletId) {
+      wallet = await moovFetch(`/accounts/${accountId}/wallets/${knownWalletId}`, {
+        scopes: scopesForRead,
+        fetchImpl,
+      });
+      selectionReason = 'known_wallet';
+    } else {
+      const wallets = await moovFetch(`/accounts/${accountId}/wallets`, {
+        scopes: scopesForRead,
+        fetchImpl,
+      });
+      const selected = selectPlatformWallet(wallets, {
+        environment,
+        platformAccountId: accountId,
+      });
+      if (selected.warning) warnings.push(selected.warning);
+      wallet = selected.wallet;
+      selectionReason = selected.reason;
     }
+  } catch (error) {
+    return walletReadFailure({
+      walletId: knownWalletId,
+      reason: 'provider_forbidden_or_failed',
+      warnings: [`wallets: ${error.message}`],
+    });
+  }
+  const walletId = walletIdOf(wallet);
+  if (!walletId) {
+    return walletReadFailure({
+      walletId: knownWalletId,
+      reason: selectionReason || 'not_found',
+      warnings: warnings.length ? warnings : ['Platform wallet could not be read.'],
+    });
+  }
+  let transactions = [];
+  try {
+    transactions = await moovFetch(
+      `/accounts/${accountId}/wallets/${walletId}/transactions?count=25`,
+      { scopes: scopesForRead, fetchImpl },
+    );
+  } catch (error) {
+    warnings.push(`transactions: ${error.message}`);
   }
   return {
     wallet_id: walletId,
     available_cents: centsFromBalance(wallet?.availableBalance),
     pending_cents: centsFromBalance(wallet?.pendingBalance),
     currency: wallet?.availableBalance?.currency ?? 'USD',
-    setup_required: !walletId,
-    selection_reason: selected.reason,
+    setup_required: false,
+    read_error: false,
+    selection_reason: selectionReason,
     transactions: (transactions ?? []).map((item) => ({
       id: item.walletTransactionID ?? item.transactionID ?? null,
       type: item.transactionType ?? null,
@@ -407,17 +712,8 @@ async function walletPayload({ accountId, environment, fetchImpl }) {
 }
 
 async function pnlPayload(client) {
-  const empty = () => ({
-    fees_cents: 0,
-    transfer_fees_cents: 0,
-    provider_cost_cents: 0,
-    volume_cents: 0,
-    transfer_count: 0,
-  });
-  if (!client?.query) {
-    const totals = { ...empty(), revenue_cents: 0, profit_cents: 0 };
-    return { totals, months: [], tenants: [] };
-  }
+  const empty = buildPlatformPnl({ tenants: [], fees: [], transfers: [] });
+  if (!client?.query) return empty;
   const since = new Date();
   since.setMonth(since.getMonth() - 11);
   since.setDate(1);
@@ -430,65 +726,45 @@ async function pnlPayload(client) {
   } catch { /* optional */ }
   try {
     fees = (await client.query(
-      `SELECT tenant_id, amount_cents, occurred_at, fee_code, status
-         FROM public.platform_fee_line_items
-        WHERE occurred_at >= $1`,
+      `SELECT f.id, f.tenant_id, f.amount_cents, f.occurred_at, f.fee_code, f.status,
+              f.check_id, f.claim_id, f.source_reference, f.occurrence_id, f.description,
+              o.status AS occurrence_status, o.provider_transfer_id,
+              o.updated_at AS occurrence_updated_at
+         FROM public.platform_fee_line_items f
+         LEFT JOIN public.platform_fee_occurrences o ON o.id = f.occurrence_id
+        WHERE f.occurred_at >= $1`,
       [sinceIso],
     )).rows;
-  } catch { /* optional */ }
+  } catch {
+    try {
+      fees = (await client.query(
+        `SELECT id, tenant_id, amount_cents, occurred_at, fee_code, status,
+                check_id, claim_id, source_reference, occurrence_id, description
+           FROM public.platform_fee_line_items
+          WHERE occurred_at >= $1`,
+        [sinceIso],
+      )).rows;
+    } catch { /* optional */ }
+  }
   try {
     transfers = (await client.query(
-      `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
+      `SELECT id, tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status,
+              created_at, completed_at, environment, provider_transfer_id, check_id, claim_id
          FROM public.payment_transfers
-        WHERE created_at >= $1`,
+        WHERE COALESCE(completed_at, created_at) >= $1`,
       [sinceIso],
     )).rows;
-  } catch { /* optional */ }
-
-  const nameById = new Map((tenants || []).map((row) => [row.id, row.name]));
-  const monthOf = (iso) => (iso ? String(iso).slice(0, 7) : 'unknown');
-  const byMonth = new Map();
-  const byTenant = new Map();
-  const bump = (map, key) => {
-    if (!map.has(key)) map.set(key, empty());
-    return map.get(key);
-  };
-  for (const fee of fees || []) {
-    if (String(fee.status || '').toLowerCase() === 'void') continue;
-    const amount = Number(fee.amount_cents || 0);
-    bump(byMonth, monthOf(fee.occurred_at)).fees_cents += amount;
-    bump(byTenant, fee.tenant_id || 'unassigned').fees_cents += amount;
+  } catch {
+    try {
+      transfers = (await client.query(
+        `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
+           FROM public.payment_transfers
+          WHERE created_at >= $1`,
+        [sinceIso],
+      )).rows;
+    } catch { /* optional */ }
   }
-  for (const transfer of transfers || []) {
-    const status = String(transfer.status || '').toLowerCase();
-    if (['failed', 'cancelled', 'canceled'].includes(status)) continue;
-    for (const bucket of [bump(byMonth, monthOf(transfer.created_at)), bump(byTenant, transfer.tenant_id || 'unassigned')]) {
-      bucket.transfer_fees_cents += Number(transfer.platform_fee_cents || 0);
-      bucket.provider_cost_cents += Number(transfer.provider_fee_cents || 0);
-      bucket.volume_cents += Number(transfer.amount_cents || 0);
-      bucket.transfer_count += 1;
-    }
-  }
-  const shape = (bucket) => {
-    const revenue = bucket.fees_cents + bucket.transfer_fees_cents;
-    return { ...bucket, revenue_cents: revenue, profit_cents: revenue - bucket.provider_cost_cents };
-  };
-  const months = [...byMonth.entries()]
-    .filter(([key]) => key !== 'unknown')
-    .sort(([left], [right]) => (left < right ? -1 : 1))
-    .map(([month, bucket]) => ({ month, ...shape(bucket) }));
-  const tenantRows = [...byTenant.entries()]
-    .map(([id, bucket]) => ({ tenant_id: id, tenant_name: nameById.get(id) ?? 'Unassigned', ...shape(bucket) }))
-    .sort((left, right) => right.revenue_cents - left.revenue_cents);
-  const totals = shape([...byTenant.values()].reduce((acc, bucket) => {
-    acc.fees_cents += bucket.fees_cents;
-    acc.transfer_fees_cents += bucket.transfer_fees_cents;
-    acc.provider_cost_cents += bucket.provider_cost_cents;
-    acc.volume_cents += bucket.volume_cents;
-    acc.transfer_count += bucket.transfer_count;
-    return acc;
-  }, empty()));
-  return { since: sinceIso, totals, months, tenants: tenantRows };
+  return buildPlatformPnl({ tenants, fees, transfers, since: sinceIso });
 }
 
 async function statusPayload({ client, accountId, environment, fetchImpl }) {
@@ -555,6 +831,7 @@ async function runPlatformFinance({ client, body, ctx, fetchImpl }) {
 
   const environment = ctx.environment;
   const accountId = ctx.platformAccountId;
+  const knownWalletId = knownProductionWalletId(accountId, environment);
   if (action === 'status' || action === 'list' || action === 'get') {
     return jsonResult(await statusPayload({ client, accountId, environment, fetchImpl }));
   }
@@ -565,7 +842,7 @@ async function runPlatformFinance({ client, body, ctx, fetchImpl }) {
       platform_account_id: accountId,
       identity: 'checksops_facilitator',
       tenant_context_used: false,
-      wallet: await walletPayload({ accountId, environment, fetchImpl }),
+      wallet: await walletPayload({ accountId, environment, fetchImpl, knownWalletId }),
       liveProviderCalled: Boolean(accountId),
       ach_initiated: false,
       fee_pull: false,
@@ -584,7 +861,7 @@ async function runPlatformFinance({ client, body, ctx, fetchImpl }) {
     });
   }
   const [wallet, pnl] = await Promise.all([
-    walletPayload({ accountId, environment, fetchImpl }),
+    walletPayload({ accountId, environment, fetchImpl, knownWalletId }),
     pnlPayload(client),
   ]);
   return jsonResult({
