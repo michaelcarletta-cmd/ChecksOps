@@ -13,13 +13,21 @@ import { functionDefsMatchExactly, readFunctionDef } from './lib/function-def-lo
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL39,
+  AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_FUNCTION,
   evaluateSqlExecutorAuthorization,
   isSql39,
+  isSql40,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
+import {
+  AUTHORIZED_SYNTHETIC_FIXTURE,
+  EMPTY_FIXTURE_SHA256,
+  evaluateFixtureGuards,
+  hashFixtureSnapshot,
+} from './lib/collection-v2-synthetic-uat-cleanup.mjs';
 import {
   EXPECTED_POLICY_NAMES,
   FROZEN_FUNCTION_NAMES,
@@ -46,6 +54,7 @@ const TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE = path.join(
   'sql/20261001193100_tenant_users_can_override_check_status.sql',
 );
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
+const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const CA_CANDIDATES = [
   path.join(ROOT, 'rds-global-bundle.pem'),
   '/var/task/rds-global-bundle.pem',
@@ -132,6 +141,7 @@ export function loadPredecessorOverrideSql(sqlFile) {
 }
 
 export { hashTmpRlsCatalog, hashTmpRlsFrozen } from './lib/tmp-rls-catalog.mjs';
+export { hashFixtureSnapshot } from './lib/collection-v2-synthetic-uat-cleanup.mjs';
 
 export function isExactKnownPredecessor(live = {}, predecessorOverrideSql = '') {
   if (live?.user_can_move_tenant_checks) return false;
@@ -675,6 +685,170 @@ function sql39AfterGuards(before, after) {
   return ok({ write, job });
 }
 
+async function readSql40Fixture(client) {
+  const fixture = AUTHORIZED_SYNTHETIC_FIXTURE;
+  const tmp = (await client.query(`
+    /* sql40_tmp */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           amount_cents,
+           provider_environment,
+           status,
+           notes
+      FROM public.tenant_maintenance_payments
+     WHERE id = $1::uuid
+  `, [fixture.tmp_id])).rows[0] || null;
+  const events = (await client.query(`
+    /* sql40_events */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           provider_metadata
+      FROM public.payment_event_log
+     WHERE id = ANY ($1::uuid[])
+     ORDER BY id::text
+  `, [fixture.event_ids])).rows.map((row) => ({
+    id: row.id,
+    tenant_id: row.tenant_id,
+    provider_transfer_id: row.provider_transfer_id,
+    synthetic_uat_marker: row.provider_metadata?.synthetic_uat_marker || '',
+    harness_id: row.provider_metadata?.harness_id || '',
+    checksops_payment_id: String(row.provider_metadata?.checksops_payment_id || ''),
+  }));
+  const transfers = (await client.query(`
+    /* sql40_transfers */
+    SELECT count(*)::int AS n
+      FROM public.payment_transfers
+     WHERE provider_transfer_id = $1
+        OR coalesce(provider_metadata->>'obligation_id', '') = $2
+        OR coalesce(provider_metadata->>'harness_id', '') = $3
+        OR coalesce(provider_metadata->>'checksops_payment_id', '') = $2
+  `, [fixture.provider_transfer_id, fixture.tmp_id, fixture.harness_id])).rows[0];
+  return {
+    tmp: tmp
+      ? {
+        id: tmp.id,
+        tenant_id: tmp.tenant_id,
+        provider_transfer_id: tmp.provider_transfer_id,
+        amount_cents: Number(tmp.amount_cents),
+        provider_environment: tmp.provider_environment,
+        status: tmp.status,
+        notes: tmp.notes,
+        marker_present: String(tmp.notes || '').includes(fixture.marker),
+        harness_present: String(tmp.notes || '').includes(`harness=${fixture.harness_id}`),
+      }
+      : null,
+    events,
+    payment_transfers: Number(transfers?.n || 0),
+  };
+}
+
+async function handleSql40({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile40,
+}) {
+  const embedded = readEmbeddedSql(sqlFile40, AUTHORIZED_SQL40.source_sha256);
+  if (!embedded.ok) return embedded;
+
+  let client;
+  try {
+    client = await connect();
+    const live = await readSql40Fixture(client);
+    const liveHash = hashFixtureSnapshot(live);
+    const guards = evaluateFixtureGuards(live);
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: event.action,
+          executor_identity: identity,
+          fixture: live,
+          fixture_guards: guards,
+          expected_deletes: {
+            payment_event_log: 2,
+            tenant_maintenance_payments: 1,
+            payment_transfers: 0,
+          },
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 40 executor action ${event.action}`);
+    }
+
+    if (!guards.ok) {
+      const freedom = guards.errors.some((code) => code.includes('FORBIDDEN'));
+      return fail(
+        freedom ? CODES.UNRELATED_MUTATION : CODES.SQL_COLLISION,
+        'SQL 40 refuse: live fixture does not match the authorized exact-ID synthetic cleanup',
+        { errors: guards.errors, live_hash: liveHash },
+      );
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: liveHash,
+      live_definition: JSON.stringify(live),
+    });
+    if (!collision.ok) return collision;
+
+    await client.query(embedded.details.text);
+    const after = await readSql40Fixture(client);
+    const afterHash = hashFixtureSnapshot(after);
+    if (afterHash !== EMPTY_FIXTURE_SHA256 || afterHash !== AUTHORIZED_SQL40.intended_replacement_sha256) {
+      return fail(CODES.SQL_COLLISION, 'SQL 40 did not leave the authorized empty fixture state', {
+        after_hash: afterHash,
+        intended_replacement_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
+      });
+    }
+    if (after.tmp || after.events.length || after.payment_transfers) {
+      return fail(CODES.SQL_COLLISION, 'SQL 40 leftover synthetic rows remain', after);
+    }
+
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveHash,
+        after_hash: afterHash,
+        result: 'applied',
+        executor_identity: identity,
+        fixture_before: live,
+        fixture_after: after,
+        deleted: {
+          payment_event_log: 2,
+          tenant_maintenance_payments: 1,
+          payment_transfers: 0,
+        },
+        application_delete_granted: false,
+      },
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 async function handleSql39({
   event,
   authorization,
@@ -773,6 +947,7 @@ export function createHandler({
   sqlFile601 = TENANT_PERMISSIONS_SQL_FILE,
   sqlFile601Predecessor = TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE,
   sqlFile39 = SQL39_FILE,
+  sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
 } = {}) {
   return async function handler(event = {}) {
@@ -789,6 +964,16 @@ export function createHandler({
     if (isConsumed(event.one_use_id) && event.action === 'apply') {
       return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
         one_use_id: event.one_use_id,
+      });
+    }
+
+    if (isSql40(event)) {
+      return handleSql40({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile40,
       });
     }
 

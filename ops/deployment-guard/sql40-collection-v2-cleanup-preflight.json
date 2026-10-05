@@ -1,0 +1,36 @@
+{
+  "workstream_id": "collection-v2-uat-cleanup-sql-93da",
+  "branch": "cursor/collection-v2-uat-cleanup-sql-93da",
+  "commit": "5ae0a41db7ebe727527060139befb4ba31240144",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "deployment_type": "sql-executor-invoke",
+  "owned_components": [
+    "aws/rls/sql/40_collection_v2_synthetic_uat_cleanup.sql"
+  ],
+  "filename": "aws/rls/sql/40_collection_v2_synthetic_uat_cleanup.sql",
+  "migration_id": "40_collection_v2_synthetic_uat_cleanup",
+  "source_sha256": "9f691e72da8e3490489854f685f470884441e61e2475b91e92fec55fd80b5de8",
+  "intended_replacement_sha256": "40a486ede83069b6b640ef4c4b06b88585be2b30102673bccde22238b185405d",
+  "expected_live_definition_sha256": "48c32f695046582285a5dd97433a52da528ad8be0f6b33c2d46c3395a51e98f0",
+  "one_use_id": "sql40-collection-v2-cleanup-authorize-0001",
+  "expiry": "2026-10-06T00:00:00.000Z",
+  "action": "authorize",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "build_timestamp": "2026-10-05T19:30:00.000Z",
+  "preflight_live_fingerprint": {
+    "sql": "48c32f695046582285a5dd97433a52da528ad8be0f6b33c2d46c3395a51e98f0",
+    "filename": "aws/rls/sql/40_collection_v2_synthetic_uat_cleanup.sql",
+    "migration_id": "40_collection_v2_synthetic_uat_cleanup",
+    "source_sha256": "9f691e72da8e3490489854f685f470884441e61e2475b91e92fec55fd80b5de8",
+    "intended_replacement_sha256": "40a486ede83069b6b640ef4c4b06b88585be2b30102673bccde22238b185405d",
+    "one_use_id": "sql40-collection-v2-cleanup-authorize-0001",
+    "commit": "5ae0a41db7ebe727527060139befb4ba31240144"
+  },
+  "plan": {
+    "silent_backfill": false,
+    "mutate_unrelated_data": false,
+    "mutation_scope": "exact-id-synthetic-uat-cleanup-only"
+  }
+}

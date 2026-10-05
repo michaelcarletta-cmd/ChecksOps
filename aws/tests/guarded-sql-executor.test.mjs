@@ -10,10 +10,17 @@ import { FUNCTION_DEF_LOOKUP_SQL } from '../../scripts/deployment-guard/lib/func
 import { hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL39,
+  AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
+import {
+  AUTHORIZED_PRESENT_FIXTURE_SHA256,
+  EMPTY_FIXTURE_SHA256,
+  authorizedPresentSnapshot,
+  hashFixtureSnapshot,
+} from '../../scripts/deployment-guard/lib/collection-v2-synthetic-uat-cleanup.mjs';
 import {
   INSPECTED_JOB,
   INSPECTED_WRITE,
@@ -22,7 +29,7 @@ import {
 const EXECUTOR_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor');
 const GUARD_LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/deployment-guard/lib');
 fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
-for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs', 'tmp-rls-catalog.mjs']) {
+for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs', 'tmp-rls-catalog.mjs', 'collection-v2-synthetic-uat-cleanup.mjs']) {
   fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
 }
 const {
@@ -840,4 +847,162 @@ test('SQL 39 refuses apply when helper functions change', async () => {
   const result = await handler(sql39AuthEvent());
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.UNRELATED_MUTATION);
+});
+
+const SQL40_FILE = path.join(ROOT, AUTHORIZED_SQL40.filename);
+
+function presentSql40Fixture() {
+  return authorizedPresentSnapshot();
+}
+
+function sql40AuthEvent(overrides = {}) {
+  const expectedLive = overrides.expected_live_definition_sha256 || AUTHORIZED_PRESENT_FIXTURE_SHA256;
+  const oneUse = overrides.one_use_id || `sql40-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const base = {
+    action: 'apply',
+    workstream_id: 'collection-v2-uat-cleanup-sql-93da',
+    branch: 'cursor/collection-v2-uat-cleanup-sql-93da',
+    commit: AUTHORIZED_SQL40.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+    owned_components: [AUTHORIZED_SQL40.filename],
+    filename: AUTHORIZED_SQL40.filename,
+    migration_id: AUTHORIZED_SQL40.migration_id,
+    source_sha256: AUTHORIZED_SQL40.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: oneUse,
+    expiry: '2026-10-05T22:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T19:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL40,
+      expected_live_definition_sha256: expectedLive,
+      one_use_id: oneUse,
+    }),
+  };
+  return {
+    ...base,
+    ...overrides,
+    one_use_id: oneUse,
+    expected_live_definition_sha256: expectedLive,
+    preflight_live_fingerprint: overrides.preflight_live_fingerprint || base.preflight_live_fingerprint,
+  };
+}
+
+function mockSql40Connect({
+  before = presentSql40Fixture(),
+  after = { tmp: null, events: [], payment_transfers: 0 },
+} = {}) {
+  let applied = false;
+  const asRows = (snapshot) => ({
+    tmp: snapshot.tmp ? [{
+      id: snapshot.tmp.id,
+      tenant_id: snapshot.tmp.tenant_id,
+      provider_transfer_id: snapshot.tmp.provider_transfer_id,
+      amount_cents: snapshot.tmp.amount_cents,
+      provider_environment: snapshot.tmp.provider_environment,
+      status: snapshot.tmp.status,
+      notes: `${AUTHORIZED_SQL40.filename.includes('40') ? 'SYNTHETIC_UAT_COLLECTION_V2 harness=9ff1a038-2ea8-4d67-8082-74ffd2e79a7c' : ''}`,
+    }] : [],
+    events: (snapshot.events || []).map((row) => ({
+      id: row.id,
+      tenant_id: row.tenant_id,
+      provider_transfer_id: row.provider_transfer_id,
+      provider_metadata: {
+        synthetic_uat_marker: row.synthetic_uat_marker,
+        harness_id: row.harness_id,
+        checksops_payment_id: row.checksops_payment_id,
+      },
+    })),
+    transfers: [{ n: snapshot.payment_transfers || 0 }],
+  });
+  const client = {
+    applied() { return applied; },
+    async query(sql) {
+      const text = String(sql);
+      if (text.includes('$cleanup$') || text.includes('40_collection_v2_synthetic_uat_cleanup')) {
+        applied = true;
+        return { rows: [] };
+      }
+      const snapshot = applied ? after : before;
+      const rows = asRows(snapshot);
+      if (text.includes('sql40_tmp')) return { rows: rows.tmp };
+      if (text.includes('sql40_events')) return { rows: rows.events };
+      if (text.includes('sql40_transfers')) return { rows: rows.transfers };
+      throw new Error(`unexpected query: ${text.slice(0, 160)}`);
+    },
+    async end() {},
+  };
+  return async () => client;
+}
+
+function sql40Handler(connect, extra = {}) {
+  const consumed = path.join(os.tmpdir(), `sql-exec-40-${process.pid}-${Date.now()}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = consumed;
+  process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
+  return createHandler({
+    connect,
+    now: () => Date.parse('2026-10-05T19:00:00.000Z'),
+    sqlFile40: SQL40_FILE,
+    ...extra,
+  });
+}
+
+test('SQL 40 apply deletes only the authorized exact-ID fixture', async () => {
+  const before = presentSql40Fixture();
+  const connect = mockSql40Connect({ before });
+  const handler = sql40Handler(connect);
+  const result = await handler(sql40AuthEvent());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'applied');
+  assert.equal(result.details.receipt.before_hash, hashFixtureSnapshot(before));
+  assert.equal(result.details.receipt.after_hash, EMPTY_FIXTURE_SHA256);
+  assert.deepEqual(result.details.receipt.deleted, {
+    payment_event_log: 2,
+    tenant_maintenance_payments: 1,
+    payment_transfers: 0,
+  });
+  assert.equal(result.details.receipt.application_delete_granted, false);
+  const client = await connect();
+  assert.equal(client.applied(), true);
+});
+
+test('SQL 40 authorize reads the fixture and does not apply', async () => {
+  const connect = mockSql40Connect();
+  const handler = sql40Handler(connect);
+  const result = await handler(sql40AuthEvent({ action: 'authorize' }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'authorize');
+  assert.equal(result.details.receipt.before_hash, AUTHORIZED_PRESENT_FIXTURE_SHA256);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('SQL 40 refuses apply when live fixture hash differs', async () => {
+  const connect = mockSql40Connect();
+  const handler = sql40Handler(connect);
+  const result = await handler(sql40AuthEvent({
+    expected_live_definition_sha256: '1'.repeat(64),
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('SQL 40 refuses apply when selected rows reference Freedom IDs', async () => {
+  const before = presentSql40Fixture();
+  before.tmp.tenant_id = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+  const connect = mockSql40Connect({ before });
+  const handler = sql40Handler(connect);
+  const result = await handler(sql40AuthEvent({
+    expected_live_definition_sha256: hashFixtureSnapshot(before),
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
 });

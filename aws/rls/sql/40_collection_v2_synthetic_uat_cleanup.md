@@ -32,6 +32,8 @@ One transaction: lock/statement timeouts, fail-closed guards, DELETE the two exa
 
 `expected_live_definition_sha256` at apply time is the immediately-before live fixture hash from executor `inspect`. It must equal the present hash above if the leftover fixture is unchanged. `intended_replacement_sha256` is the empty hash.
 
+Allowlist pin (`AUTHORIZED_SQL40.commit`) is the SQL source commit `5ae0a41db7ebe727527060139befb4ba31240144`.
+
 ## 3. Fail-closed assertions
 
 Refuse (RAISE + implicit ROLLBACK) unless:

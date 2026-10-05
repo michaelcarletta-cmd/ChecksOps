@@ -12,14 +12,21 @@ import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-gu
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
 import {
   AUTHORIZED_SQL39,
+  AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   authorizationFingerprint,
   evaluateSqlExecutorAuthorization,
   isSql39,
+  isSql40,
   resolveAuthorizedMigration,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
+import {
+  AUTHORIZED_PRESENT_FIXTURE_SHA256,
+  EMPTY_FIXTURE_SHA256,
+  SQL40_SOURCE_SHA256,
+} from '../../scripts/deployment-guard/lib/collection-v2-synthetic-uat-cleanup.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-guard.mjs';
@@ -497,6 +504,91 @@ test('sql-executor-ensure packs SQL 39 and the TMP catalog helper', () => {
   const src = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/sql-executor-ensure.mjs'), 'utf8');
   assert.match(src, /39_tmp_write_policy_reconcile\.sql/);
   assert.match(src, /tmp-rls-catalog\.mjs/);
+  assert.match(src, /40_collection_v2_synthetic_uat_cleanup\.sql/);
+  assert.match(src, /collection-v2-synthetic-uat-cleanup\.mjs/);
+});
+
+test('SQL 40 source SHA matches the authorized binding and is not SQL 39 or SQL 44', () => {
+  const bytes = fs.readFileSync(path.join(ROOT, AUTHORIZED_SQL40.filename));
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  assert.equal(sha, AUTHORIZED_SQL40.source_sha256);
+  assert.equal(sha, SQL40_SOURCE_SHA256);
+  assert.equal(isSql40({ filename: AUTHORIZED_SQL40.filename }), true);
+  assert.equal(isSql39({ filename: AUTHORIZED_SQL40.filename }), false);
+  assert.equal(resolveAuthorizedMigration({ filename: AUTHORIZED_SQL40.filename }), AUTHORIZED_SQL40);
+  assert.notEqual(resolveAuthorizedMigration({ filename: AUTHORIZED_SQL40.filename }), AUTHORIZED_SQL44);
+  assert.notEqual(resolveAuthorizedMigration({ filename: AUTHORIZED_SQL40.filename }), AUTHORIZED_SQL39);
+  assert.equal(AUTHORIZED_SQL40.intended_replacement_sha256, EMPTY_FIXTURE_SHA256);
+  assert.equal(AUTHORIZED_SQL40.expected_live_fixture_sha256, AUTHORIZED_PRESENT_FIXTURE_SHA256);
+});
+
+test('SQL 40 executor authorization binds the reviewed file/commit/hash tuple', () => {
+  const pin = evaluateSqlExecutorAuthorization({
+    workstream_id: 'collection-v2-uat-cleanup-sql-93da',
+    branch: 'cursor/collection-v2-uat-cleanup-sql-93da',
+    commit: AUTHORIZED_SQL40.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_SQL40.filename],
+    filename: AUTHORIZED_SQL40.filename,
+    migration_id: AUTHORIZED_SQL40.migration_id,
+    source_sha256: AUTHORIZED_SQL40.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
+    expected_live_definition_sha256: AUTHORIZED_PRESENT_FIXTURE_SHA256,
+    one_use_id: 'sql40-apply-0001',
+    expiry: '2026-10-05T22:00:00.000Z',
+    action: 'authorize',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T19:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL40,
+      expected_live_definition_sha256: AUTHORIZED_PRESENT_FIXTURE_SHA256,
+      one_use_id: 'sql40-apply-0001',
+    }),
+  }, { now: Date.parse('2026-10-05T19:00:00.000Z') });
+  assert.equal(pin.ok, true, pin.message);
+
+  assert.equal(evaluateSqlExecutorAuthorization({
+    workstream_id: 'collection-v2-uat-cleanup-sql-93da',
+    branch: 'cursor/collection-v2-uat-cleanup-sql-93da',
+    commit: AUTHORIZED_SQL40.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_SQL40.filename],
+    filename: AUTHORIZED_SQL40.filename,
+    migration_id: AUTHORIZED_SQL40.migration_id,
+    source_sha256: AUTHORIZED_SQL40.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
+    expected_live_definition_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
+    one_use_id: 'sql40-apply-0002',
+    expiry: '2026-10-05T22:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T19:00:00.000Z',
+  }, { now: Date.parse('2026-10-05T19:00:00.000Z') }).code, CODES.INVALID_MANIFEST);
+
+  assert.equal(evaluateSqlExecutorAuthorization({
+    workstream_id: 'collection-v2-uat-cleanup-sql-93da',
+    branch: 'cursor/collection-v2-uat-cleanup-sql-93da',
+    commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_SQL40.filename],
+    filename: AUTHORIZED_SQL40.filename,
+    migration_id: AUTHORIZED_SQL40.migration_id,
+    source_sha256: AUTHORIZED_SQL40.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
+    expected_live_definition_sha256: AUTHORIZED_PRESENT_FIXTURE_SHA256,
+    one_use_id: 'sql40-apply-0003',
+    expiry: '2026-10-05T22:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T19:00:00.000Z',
+  }, { now: Date.parse('2026-10-05T19:00:00.000Z') }).code, CODES.SQL_COLLISION);
 });
 
 test('TMP catalog CAS ignores table-owner grants that the inspector omits', async () => {
