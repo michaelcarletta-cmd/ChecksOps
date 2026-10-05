@@ -73,6 +73,21 @@ test('anonymous deployment is rejected', () => {
   assert.equal(result.code, CODES.ANONYMOUS_DEPLOYMENT);
 });
 
+test('API Gateway CORS-only deployment type is accepted and unknown types remain fail-closed', () => {
+  const corsOnly = validateWorkstreamIdentity(identity({
+    deployment_type: 'apigateway-cors-update',
+  }));
+  assert.equal(corsOnly.ok, true);
+  assert.equal(corsOnly.details.deployment_type, 'apigateway-cors-update');
+
+  const unknown = validateWorkstreamIdentity(identity({
+    deployment_type: 'apigateway-cors-bypass',
+  }));
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.code, CODES.ANONYMOUS_DEPLOYMENT);
+  assert.equal(unknown.errors.some((entry) => entry.code === CODES.INVALID_MANIFEST), true);
+});
+
 test('A. Lambda non-owned member changed -> STOP', () => {
   const result = evaluateMembership({
     liveMembers: { a: '1', b: '2' },
