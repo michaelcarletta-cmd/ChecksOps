@@ -44,12 +44,30 @@ export const AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS = Object.freeze({
   ]),
 });
 
+export const AUTHORIZED_SQL39 = Object.freeze({
+  filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
+  migration_id: '39_tmp_write_policy_reconcile',
+  commit: 'f2df6f9bed6ae3ddca9fce39668aa117de796de1',
+  source_sha256: 'a3ec9922d33cf75fc554ac9bdd3e7c1b14429112f38ce23f517d64e06b9442a9',
+  intended_replacement_sha256: 'a3ec9922d33cf75fc554ac9bdd3e7c1b14429112f38ce23f517d64e06b9442a9',
+  table: 'public.tenant_maintenance_payments',
+  policy_name: 'aws_write_tenant_maintenance_payments',
+  job_policy_name: 'aws_write_tenant_maintenance_payments_job',
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  AUTHORIZED_SQL39,
 ]);
 
+export function isSql39(input = {}) {
+  return input.filename === AUTHORIZED_SQL39.filename
+    || input.migration_id === AUTHORIZED_SQL39.migration_id;
+}
+
 export function resolveAuthorizedMigration(input = {}) {
+  if (isSql39(input)) return AUTHORIZED_SQL39;
   if (
     input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
     || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id
