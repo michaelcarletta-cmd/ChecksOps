@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EXPECTED, TARGET_ORIGINS, desiredCors, normalizeSnapshot, validatePinnedSnapshot, assertOnlyCorsDelta } from '../../scripts/deployment-guard/production-cors-update.mjs';
+import { consumeReceiptOnce } from '../../scripts/deployment-guard/lib/consumed-receipts.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 function live() {
   return normalizeSnapshot({
@@ -46,4 +50,24 @@ test('post-write verifier accepts only exact CORS delta', () => {
   assert.doesNotThrow(() => assertOnlyCorsDelta(before, after));
   after.lambda.RevisionId = 'changed';
   assert.throws(() => assertOnlyCorsDelta(before, after), /post_write_non_cors_drift/);
+});
+
+
+test('receipt consumption is atomic and rejects replay', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-cors-receipt-'));
+  const receipt = {
+    mac: 'a'.repeat(64),
+    workstream_id: 'security-sh2-cors',
+    commit: 'b'.repeat(40),
+    target_environment: 'production',
+    target_component: 'production-http-api',
+    deployment_type: 'apigateway-cors-update',
+    expiry: '2099-01-01T00:00:00.000Z',
+  };
+  const first = consumeReceiptOnce(root, receipt, { now: 1, script: 'production-cors-update' });
+  assert.equal(first.ok, true);
+  const replay = consumeReceiptOnce(root, receipt, { now: 2, script: 'production-cors-update' });
+  assert.equal(replay.ok, false);
+  assert.equal(replay.code, 'RECEIPT_REUSED');
+  fs.rmSync(root, { recursive: true, force: true });
 });
