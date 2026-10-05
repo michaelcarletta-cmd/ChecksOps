@@ -148,13 +148,7 @@ export function fakeInvoiceClient(store) {
       if (text.includes('UPDATE public.moov_invoices')) {
         const row = store.invoices.find((item) => item.id === params[0] && item.tenant_id === params[params.length - 1]);
         if (!row) return { rows: [] };
-        if (text.includes('invoice_number')) {
-          row.status = params[1];
-          row.invoice_number = params[2];
-          row.payment_link_url = params[3];
-          row.sent_at = params[4];
-          row.provider_metadata = JSON.parse(params[5] || '{}');
-        } else {
+        if (text.includes('paid_amount') || text.includes('paid_at')) {
           row.status = params[1];
           row.invoice_number = params[2];
           row.total_amount = params[3];
@@ -163,6 +157,12 @@ export function fakeInvoiceClient(store) {
           row.sent_at = params[6];
           row.paid_at = params[7];
           row.provider_metadata = JSON.parse(params[8] || '{}');
+        } else if (text.includes('invoice_number')) {
+          row.status = params[1];
+          row.invoice_number = params[2];
+          row.payment_link_url = params[3];
+          row.sent_at = params[4];
+          row.provider_metadata = JSON.parse(params[5] || '{}');
         }
         return { rows: [row] };
       }
