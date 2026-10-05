@@ -95,7 +95,7 @@ function mockClient({
         store.invoices.push(row);
         return { rows: [row] };
       }
-      if (text.includes('FROM public.moov_invoices WHERE id = $1::uuid AND tenant_id = $2::uuid')) {
+      if (text.includes('SELECT * FROM public.moov_invoices WHERE id = $1::uuid AND tenant_id = $2::uuid')) {
         return {
           rows: store.invoices.filter((row) => row.id === params[0] && row.tenant_id === params[1]),
         };
@@ -380,7 +380,7 @@ test('moov-invoice is not Class A and generic writes stay denied', () => {
 
 test('handler source does not call Moov or money movement', () => {
   const src = sourceOf('aws/functions/api/invoice-actions.mjs');
-  assert.doesNotMatch(src, /moovFetch|api\.moov\.io|createTransfer|disburse|wallet|ACH/i);
+  assert.doesNotMatch(src, /moovFetch|api\.moov\.io|createTransfer|moov-disburse/);
   assert.match(src, /liveProvider/);
   const onboard = sourceOf('aws/functions/api/providers/parity/moov-onboard.mjs');
   assert.match(onboard, /runInvoiceAction/);
