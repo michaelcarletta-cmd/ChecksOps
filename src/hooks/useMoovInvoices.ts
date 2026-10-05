@@ -87,13 +87,16 @@ export function useMoovInvoices() {
         tenant_id: tenantId,
         ...input,
       }),
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       invalidate();
+      const emailed = data?.emailed === true && data?.liveProviderCalled === true && !data?.error;
       toast({
-        title: vars.send ? "Invoice issued" : "Invoice created",
+        title: vars.send ? (emailed ? "Invoice sent" : "Invoice created") : "Invoice created",
         description: vars.send
-          ? "Invoice issued. Copy or open the payment link to share it with the customer."
-          : "Saved as a draft — issue it when you're ready.",
+          ? (emailed
+            ? "The customer will receive the invoice email from the payment provider."
+            : "The invoice was saved, but the customer email was not sent.")
+          : "Saved as a draft — send it when you're ready.",
       });
     },
     onError,
@@ -102,18 +105,36 @@ export function useMoovInvoices() {
   const sendInvoice = useMutation({
     mutationFn: (invoiceId: string) =>
       callInvoiceFn({ action: "send", tenant_id: tenantId, invoice_id: invoiceId }),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       invalidate();
+      const emailed = data?.emailed === true && data?.liveProviderCalled === true && !data?.error;
       toast({
-        title: "Invoice issued",
-        description: "Invoice issued. Copy or open the payment link to share it with the customer.",
+        title: emailed ? "Invoice sent" : "Invoice not sent",
+        description: emailed
+          ? "The customer will receive the invoice email from the payment provider."
+          : (data?.error || "The payment provider did not send the customer email."),
+        variant: emailed ? "default" : "destructive",
       });
     },
     onError,
   });
 
-  // Resend stays unused in the Invoices UI until an authorized delivery path exists.
-  // The backend action remains idempotent and never sets emailed=true.
+  const resendInvoice = useMutation({
+    mutationFn: (invoiceId: string) =>
+      callInvoiceFn({ action: "resend", tenant_id: tenantId, invoice_id: invoiceId }),
+    onSuccess: (data: any) => {
+      invalidate();
+      const emailed = data?.emailed === true && data?.liveProviderCalled === true && !data?.error;
+      toast({
+        title: emailed ? "Invoice resent" : "Invoice not resent",
+        description: emailed
+          ? "The customer will receive the invoice email from the payment provider."
+          : (data?.error || "The payment provider did not send the customer email."),
+        variant: emailed ? "default" : "destructive",
+      });
+    },
+    onError,
+  });
 
   const cancelInvoice = useMutation({
     mutationFn: (invoiceId: string) =>
@@ -144,6 +165,6 @@ export function useMoovInvoices() {
     onError,
   });
 
-  return { tenantId, invoices, createInvoice, sendInvoice, cancelInvoice, deleteInvoice, syncInvoices };
+  return { tenantId, invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice, syncInvoices };
 }
 

@@ -1161,18 +1161,18 @@ export const sweepConfig = {
 };
 
 export const invoice = {
-  run: async ({ client, body, ctx }) => {
-    const { runInvoiceAction } = await import('../../invoice-actions.mjs');
-    return runInvoiceAction({
-      client,
-      body,
-      tenantId: ctx.tenantId,
-      userId: ctx.userId,
-      environment: ctx.environment || 'sandbox',
-      liveProvider: false,
-    });
+  run: async ({ client, body, ctx, fetchImpl }) => {
+    const { runProviderInvoiceAction } = await import('../../invoice-provider.mjs');
+    return runProviderInvoiceAction({ client, body, ctx, fetchImpl });
   },
 };
+
+export {
+  INVOICE_API_VERSION,
+  invoiceLineItemsTotal,
+  invoiceProviderErrorMessage,
+  normalizeInvoiceLineItems,
+} from '../../invoice-provider.mjs';
 
 export const platformBank = {
   requireAdmin: true,
