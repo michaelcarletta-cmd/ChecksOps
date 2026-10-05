@@ -16,6 +16,10 @@ import {
   settlementDateIso,
   type LedgerPaymentRow,
 } from "@/lib/payments/tenantPaymentAccuracy";
+import {
+  PAYMENT_ACCOUNTING_QUERY_KEYS,
+  updateSplitType,
+} from "@/lib/payments/paymentAccounting";
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: "text-blue-600 border-blue-500/30 bg-blue-500/10",
@@ -64,18 +68,20 @@ export function PaymentLedger() {
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
 
   const updateType = async (id: string, newType: string) => {
-    const { error } = await (supabase as any)
-      .from("disbursement_splits")
-      .update({ recipient_type: newType })
-      .eq("id", id);
-    if (error) {
+    try {
+      await updateSplitType(supabase as any, {
+        tenantId: tenant?.id,
+        splitId: id,
+        displayType: newType,
+      });
+    } catch {
       toast.error("Could not update type");
       return;
     }
     toast.success("Type updated");
-    queryClient.invalidateQueries({ queryKey: ["payment-ledger"] });
-    queryClient.invalidateQueries({ queryKey: ["recipient-report"] });
-    queryClient.invalidateQueries({ queryKey: ["tax-summary"] });
+    for (const key of PAYMENT_ACCOUNTING_QUERY_KEYS) {
+      queryClient.invalidateQueries({ queryKey: [key, tenant?.id] });
+    }
   };
 
   const dateFilters = useMemo(() => {
@@ -283,7 +289,7 @@ export function PaymentLedger() {
                           {acctLabel && <p className="text-[10px] text-muted-foreground font-mono">{acctLabel}</p>}
                         </td>
                         <td className="p-3 hidden md:table-cell">
-                          {acct || p.direction === "incoming" || p.source !== "disbursement_split" ? (
+                          {acct || p.recipient_tenant_id || p.direction === "incoming" || p.source !== "disbursement_split" ? (
                             <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[type ?? ""] ?? ""}`}>
                               {type ? (ACCOUNT_TYPE_LABELS[type] ?? type) : "—"}
                             </Badge>

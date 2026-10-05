@@ -359,6 +359,58 @@ test("tax aggregate skips A→A and keeps A→B even when names match", () => {
   assert.equal(rows[0].total, 9000);
 });
 
+test("display name/type metadata edits do not change Received, Paid, or Profit", () => {
+  const beforeSplit = {
+    id: "acct-split",
+    amount: 9000,
+    status: "settled",
+    created_at: "2026-01-15T00:00:00.000Z",
+    settled_at: "2026-01-15T00:00:00.000Z",
+    recipient_name: "Jean Lindner",
+    recipient_type: "contractor",
+    recipient_tenant_id: null,
+    moov_transfer_id: "moov-keep",
+    stakeholder_accounts: {
+      id: "11111111-1111-4111-8111-111111111111",
+      nickname: "Jean Lindner",
+      account_type: "contractor",
+      tenant_id: TENANT_A,
+    },
+  };
+  const afterSplit = {
+    ...beforeSplit,
+    stakeholder_accounts: {
+      ...beforeSplit.stakeholder_accounts,
+      nickname: "Jean L.",
+      account_type: "subcontractor",
+    },
+  };
+  const before = revenueTotals({
+    ownChecks: [checkA],
+    movements: buildTenantPaymentLedgerRows({
+      outgoingSplits: [beforeSplit],
+      incomingReceived: [],
+      payerTransfers: [],
+    }, TENANT_A),
+  });
+  const after = revenueTotals({
+    ownChecks: [checkA],
+    movements: buildTenantPaymentLedgerRows({
+      outgoingSplits: [afterSplit],
+      incomingReceived: [],
+      payerTransfers: [],
+    }, TENANT_A),
+  });
+  assert.deepEqual(after, before);
+  assert.equal(after.totalIncoming, 10000);
+  assert.equal(after.totalOutgoing, 9000);
+  assert.equal(after.profit, 1000);
+  assert.equal(
+    recipientAggregateKey({ ...afterSplit, payer_tenant_id: TENANT_A }),
+    recipientAggregateKey({ ...beforeSplit, payer_tenant_id: TENANT_A }),
+  );
+});
+
 test("recipient tiles and paid totals honor the same settlement-date window", () => {
   const rows: LedgerPaymentRow[] = buildTenantPaymentLedgerRows({
     outgoingSplits: [

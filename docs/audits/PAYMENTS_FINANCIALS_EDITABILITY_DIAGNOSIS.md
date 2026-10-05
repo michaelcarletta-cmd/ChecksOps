@@ -462,6 +462,44 @@ No staging data mutation in **this** diagnosis turn. Implementation-phase tests:
 
 ---
 
-## 11. STOP
+## 11. STOP (diagnosis turn)
 
 Diagnosis and plan only. Current live staging SPA `/assets/index-DxJGUt9C.js` and Lambda `/0Wyipd63VyUCg97uzp4ppFHAnC9RLHeqBNOJCZZth8=` were **not** modified this turn. Production was not modified. No SQL applied. No Moov. No money movement.
+
+---
+
+## 12. Source implementation status (no deploy)
+
+Authorized Class A contract is in source + tests only. Live staging SPA/Lambda are unchanged until a later guarded apply.
+
+| Control | Status |
+|---|---|
+| H1–H5 Payment History filters/CSV | WORKING |
+| H6 Payment History type Select | **IMPLEMENTED-NOT-DEPLOYED** (`update_split_type` by split UUID; hidden for stakeholder / incoming / tenant destination) |
+| H7 Incoming/stakeholder type badge | BLOCKED-BY-DESIGN |
+| H8 Amount/status/provider IDs | BLOCKED-BY-DESIGN |
+| I1 Invoice list | WORKING (read) |
+| I2–I3 Invoice form / line items | WORKING (local form) |
+| I4 Invoice Save draft | STILL-MISSING (provider/incomplete; not this work) |
+| I5–I6 Invoice Send | STILL-MISSING |
+| I7 Invoice Resend | STILL-MISSING |
+| I8 Copy payment link | WORKING |
+| I9 Open invoice page | WORKING |
+| I10 Invoice Cancel | STILL-MISSING |
+| I11 Invoice Delete | STILL-MISSING |
+| I12 Invoice Sync | STILL-MISSING |
+| I13 Invoice Branding navigation | WORKING (Settings) |
+| R1 Revenue & Profit | WORKING (read-only) |
+| B1–B5 Recipient filters/CSV | WORKING |
+| B6–B8 Edit dialog fields | WORKING (form) |
+| B9 Recipient Save | **IMPLEMENTED-NOT-DEPLOYED** (`update_recipient_display` via `aggregateKey`) |
+| B10 Cancel | WORKING |
+| T1–T2 Tax filters/export | WORKING |
+| T3 Tax-form generation | BLOCKED-BY-DESIGN |
+| T4–T6 Tax profile list/save/notes | WORKING if list succeeds (existing Class A; not changed) |
+| T7 Tax retry | WORKING |
+| P1–P2 Payroll history/memo display | WORKING (read-only) |
+| P3 Payroll form | WORKING (local form) |
+| P4 Payroll send | BLOCKED-BY-DESIGN / STILL-MISSING (money path; not this work) |
+
+`tenant:` display overlay SQL is prepared and **not applied**: `aws/payments/sql/unapplied-do-not-run/NOT_APPLIED_81_tenant_payment_recipient_overrides.sql`. Until applied, `tenant:` Save returns `overlay_table_not_applied` and does not rewrite tenant identity.
