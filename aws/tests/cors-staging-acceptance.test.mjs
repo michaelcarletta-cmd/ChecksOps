@@ -28,9 +28,11 @@ test('staging drift fails closed',()=>{
 });
 
 test('missing or failed probes fail closed',()=>{
-  for(const key of ['staging_origin_allowed','unauthorized_origin_not_privileged','prep_health_ok','authenticated_flow_ok']){
-    const x=good(); x.probes[key]=false;
-    assert.equal(validateStagingAcceptance(x).ok,false);
+  for(const key of ['staging_origin_allowed','unauthorized_origin_not_privileged','prep_health_ok','authenticated_flow_ok','no_financial_write']){
+    for(const value of [false,undefined]){
+      const x=good(); x.probes[key]=value;
+      assert.equal(validateStagingAcceptance(x).ok,false);
+    }
   }
 });
 
