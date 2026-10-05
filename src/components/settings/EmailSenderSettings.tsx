@@ -110,7 +110,7 @@ function copyText(value: string) {
   toast.success("Copied");
 }
 
-export function EmailSenderSettings() {
+export function EmailSenderSettings({ showSendingDomain = true }: { showSendingDomain?: boolean } = {}) {
   const { tenantId } = useTenantFilter();
   const { user, userRole } = useAuth();
   const qc = useQueryClient();
@@ -401,7 +401,7 @@ export function EmailSenderSettings() {
           )}
         </SectionCard>
 
-        <SectionCard
+        {showSendingDomain && <SectionCard
           title="Sending subdomain"
           icon={<Globe className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
@@ -548,7 +548,7 @@ export function EmailSenderSettings() {
               </div>
             </div>
           )}
-        </SectionCard>
+        </SectionCard>}
 
         <SectionCard
           title="Email preview"
