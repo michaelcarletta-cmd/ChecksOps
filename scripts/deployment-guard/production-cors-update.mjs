@@ -127,7 +127,7 @@ export function main(env=process.env) {
     target_environment:'production',
     target_component:'production-http-api',
     deployment_type:'apigateway-cors-update',
-    preflight_live_fingerprint:checked.fingerprint,
+    preflight_live_fingerprint:first,
     workstream_id:env.CHECKSOPS_WORKSTREAM_ID,
     commit:env.CHECKSOPS_COMMIT,
   },{env});
