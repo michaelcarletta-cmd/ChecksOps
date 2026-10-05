@@ -2,6 +2,7 @@
 
 export const STAGING_URL='https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
 export const API_PROBE_PATH='/authorization/jwks-check';
+export const PROTECTED_PROBE_PATH='/authorization/probe';
 export const ALLOWED_ORIGIN='https://staging.checksops.com';
 export const UNTRUSTED_ORIGIN='https://cors-probe.invalid';
 
@@ -18,6 +19,10 @@ export function evaluatePreflight({status,headers},origin){
   };
 }
 
+export function evaluateUnauthenticatedProtectedProbe({status}){
+  return {status,denied:status===401||status===403};
+}
+
 export async function preflight(origin,fetchImpl=fetch){
   const r=await fetchImpl(STAGING_URL+API_PROBE_PATH,{method:'OPTIONS',redirect:'manual',headers:{
     Origin:origin,
@@ -25,6 +30,11 @@ export async function preflight(origin,fetchImpl=fetch){
     'Access-Control-Request-Headers':'authorization,content-type,x-request-id',
   }});
   return {status:r.status,headers:r.headers};
+}
+
+export async function protectedWithoutAuth(fetchImpl=fetch){
+  const r=await fetchImpl(STAGING_URL+PROTECTED_PROBE_PATH,{method:'GET',redirect:'manual',headers:{Origin:UNTRUSTED_ORIGIN}});
+  return {status:r.status};
 }
 
 export async function health(fetchImpl=fetch){
@@ -37,14 +47,16 @@ async function main(){
   const workstream_id=process.env.CHECKSOPS_CORS_WORKSTREAM||'security-sh2-cors';
   const allowed=evaluatePreflight(await preflight(ALLOWED_ORIGIN),ALLOWED_ORIGIN);
   const untrusted=evaluatePreflight(await preflight(UNTRUSTED_ORIGIN),UNTRUSTED_ORIGIN);
+  const protectedProbe=evaluateUnauthenticatedProtectedProbe(await protectedWithoutAuth());
   const healthResult=await health();
   // Read-only HTTP evidence only. No authenticated or financial action is attempted.
-  // #697 still requires independent AWS before/after fingerprints and authenticated evidence.
+  // Authenticated staging UAT remains independent evidence for #697.
   const evidence={
     schema_version:1,kind:'cors-live-probe',workstream_id,commit,
     probe_url:STAGING_URL+API_PROBE_PATH,
+    protected_probe_url:STAGING_URL+PROTECTED_PROBE_PATH,
     staging_origin_allowed:allowed.reachable&&allowed.originAllowed&&allowed.getAllowed,
-    unauthorized_origin_not_privileged:untrusted.reachable,
+    unauthorized_origin_not_privileged:protectedProbe.denied,
     prep_health_ok:healthResult.ok,
     authenticated_flow_ok:false,
     no_financial_write:true,
@@ -55,6 +67,7 @@ async function main(){
       untrusted_status:untrusted.status,
       untrusted_access_control_allow_origin:untrusted.allowOrigin,
       untrusted_access_control_allow_methods:untrusted.allowMethods,
+      protected_unauthenticated_status:protectedProbe.status,
       health_status:healthResult.status,
     },
   };

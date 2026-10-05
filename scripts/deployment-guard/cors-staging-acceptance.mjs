@@ -49,7 +49,7 @@ export function validateStagingAcceptance(input={}) {
   if(probes?.unauthorized_origin_not_privileged!==true) errors.push('unauthorized_origin_probe_failed');
   if(probes?.prep_health_ok!==true) errors.push('prep_health_failed');
   if(probes?.authenticated_flow_ok!==true) errors.push('authenticated_flow_failed');
-  if(probes?.no_financial_write===false) errors.push('financial_write_forbidden');
+  if(probes?.no_financial_write!==true) errors.push('financial_write_forbidden');
   if(errors.length) return {ok:false,errors};
   const evidence={
     schema_version:1,
