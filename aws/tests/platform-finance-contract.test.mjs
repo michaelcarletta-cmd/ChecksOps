@@ -111,8 +111,12 @@ test('overview works without tenant_id', async () => {
   assert.equal(result.wallet.available_cents, 2500);
   assert.equal(result.wallet.pending_cents, 100);
   assert.equal(result.wallet.wallet_id, 'wal_op');
+  assert.equal(result.wallet.read_error, false);
+  assert.equal(result.wallet.setup_required, false);
   assert.equal(result.tenant_context_used, false);
   assert.ok(result.pnl);
+  assert.equal(result.pnl.totals.collected_cents, 0);
+  assert.equal(result.pnl.totals.outstanding_cents, 0);
 });
 
 test('tenant membership cannot select the platform account', () => {

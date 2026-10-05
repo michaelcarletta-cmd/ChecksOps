@@ -7,6 +7,19 @@
 export const PLATFORM_FINANCE_WRITE_BLOCKED_MESSAGE =
   "Platform Finance writes are disabled. Bank attach, verification, ACH, and fee collection are not available in this phase.";
 
+export const PRODUCTION_PLATFORM_ACCOUNT_ID = "41cb5d67-4911-4bef-aad5-d8ee9c582208";
+export const PRODUCTION_PLATFORM_WALLET_ID = "72630a70-4954-4761-b652-e8beff1ad02c";
+
+export function monthLabel(month: string | null | undefined) {
+  const value = String(month || "");
+  const match = value.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return value || "—";
+  return new Date(Number(match[1]), Number(match[2]) - 1, 1).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export type PlatformFinanceEnvironment = "production" | "sandbox";
 
 export type PlatformBankRow = {

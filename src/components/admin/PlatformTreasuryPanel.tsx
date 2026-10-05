@@ -1,21 +1,46 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { monthLabel } from "@/lib/payments/platformFinance";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { RefreshCw, Wallet, TrendingUp, TrendingDown, DollarSign, Landmark } from "lucide-react";
+import { RefreshCw, Wallet, TrendingUp, TrendingDown, DollarSign, Landmark, AlertTriangle } from "lucide-react";
 
-type Bucket = {
-  fees_cents: number;
-  transfer_fees_cents: number;
+type Ledger = {
+  charged_cents: number;
+  outstanding_cents: number;
+  billed_processing_cents: number;
+  collected_cents: number;
+  revenue_cents: number;
   provider_cost_cents: number;
+  provider_cost_available: boolean;
+  provider_cost_missing: boolean;
+  profit_cents: number | null;
+  profit_available: boolean;
   volume_cents: number;
   transfer_count: number;
-  revenue_cents: number;
-  profit_cents: number;
+};
+
+type ActivityItem = {
+  kind: "fee" | "transfer";
+  id: string | null;
+  tenant_id: string | null;
+  tenant_name: string;
+  fee_code?: string | null;
+  description?: string | null;
+  amount_cents: number;
+  collection_status: string;
+  occurred_at?: string | null;
+  completed_at?: string | null;
+  source_reference?: string | null;
+  check_id?: string | null;
+  claim_id?: string | null;
+  provider_transfer_id?: string | null;
+  provider_fee_cents?: number | null;
+  provider_fee_recorded?: boolean;
 };
 
 type TreasuryResponse = {
@@ -23,9 +48,10 @@ type TreasuryResponse = {
   platform_account_id: string | null;
   wallet: {
     wallet_id: string | null;
-    available_cents: number;
-    pending_cents: number;
+    available_cents: number | null;
+    pending_cents: number | null;
     setup_required?: boolean;
+    read_error?: boolean;
     warnings?: string[];
     transactions: {
       id: string | null;
@@ -38,27 +64,24 @@ type TreasuryResponse = {
     }[];
   };
   pnl: {
-    totals: Bucket;
-    months: (Bucket & { month: string })[];
-    tenants: (Bucket & { tenant_id: string; tenant_name: string })[];
+    totals: Ledger;
+    months: (Ledger & { month: string })[];
+    tenants: (Ledger & { tenant_id: string; tenant_name: string; items?: ActivityItem[] })[];
+    activity?: ActivityItem[];
   };
 };
 
-const money = (cents: number) =>
-  (Number(cents || 0) / 100).toLocaleString("en-US", {
+const money = (cents: number | null | undefined) => {
+  if (cents == null) return "—";
+  return (Number(cents) / 100).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-
-const monthLabel = (m: string) => {
-  const [y, mo] = m.split("-");
-  return new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
 };
+
+const statusLabel = (status: string) => status.replace(/_/g, " ");
 
 /**
  * The platform's own balance and profit & loss — the master-merchant mirror of
@@ -100,12 +123,12 @@ export function PlatformTreasuryPanel() {
   const wallet = data?.wallet;
   const pnl = data?.pnl;
   const totals = pnl?.totals;
-  const margin =
-    totals && totals.revenue_cents > 0 ? (totals.profit_cents / totals.revenue_cents) * 100 : 0;
+  const walletUnread = Boolean(wallet?.read_error) || wallet?.available_cents == null;
+  const activity = pnl?.activity
+    ?? (pnl?.tenants ?? []).flatMap((tenant) => tenant.items ?? []);
 
   return (
     <div className="space-y-6">
-      {/* Platform wallet */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
           <div>
@@ -123,15 +146,31 @@ export function PlatformTreasuryPanel() {
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-8">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Available</p>
-              <p className="text-2xl font-semibold">{money(wallet?.available_cents ?? 0)}</p>
+          {walletUnread ? (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-medium">Wallet balance could not be read</p>
+                <p className="text-xs text-muted-foreground">
+                  {wallet?.warnings?.length
+                    ? wallet.warnings.join(" · ")
+                    : "This is a read error, not a $0 or unprovisioned balance."}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending</p>
-              <p className="text-lg">{money(wallet?.pending_cents ?? 0)}</p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-8">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Available</p>
+                <p className="text-2xl font-semibold">{money(wallet?.available_cents)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending</p>
+                <p className="text-lg">{money(wallet?.pending_cents)}</p>
+              </div>
             </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
             <Badge variant="outline" className="capitalize">
               {data?.environment ?? "unknown"}
             </Badge>
@@ -140,16 +179,15 @@ export function PlatformTreasuryPanel() {
                 {data.platform_account_id}
               </p>
             )}
-            {wallet?.setup_required && (
+            {wallet?.wallet_id && !walletUnread && (
+              <p className="font-mono text-xs text-muted-foreground break-all">{wallet.wallet_id}</p>
+            )}
+            {wallet?.setup_required && !wallet?.read_error && (
               <Badge variant="outline" className="border-amber-500/40 text-amber-500">
                 Balance not provisioned yet
               </Badge>
             )}
           </div>
-
-          {!!wallet?.warnings?.length && (
-            <p className="text-xs text-muted-foreground">{wallet.warnings.join(" · ")}</p>
-          )}
 
           {!!wallet?.transactions?.length && (
             <>
@@ -183,26 +221,25 @@ export function PlatformTreasuryPanel() {
         </CardContent>
       </Card>
 
-      {/* Profit & loss */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{money(totals?.revenue_cents ?? 0)}</div>
-            <p className="text-xs text-muted-foreground">Platform fees billed to organizations</p>
-          </CardContent>
-        </Card>
+        <Metric title="Accrued / Charged" cents={totals?.charged_cents} hint="Fees recorded against organizations" icon={TrendingUp} />
+        <Metric title="Outstanding" cents={totals?.outstanding_cents} hint="Unbilled / not yet collected" />
+        <Metric title="Billed / Processing" cents={totals?.billed_processing_cents} hint="Billed but not completed at the provider" />
+        <Metric title="Collected" cents={totals?.collected_cents} hint="Completed occurrence with provider transfer" icon={DollarSign} emphasize />
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Provider cost</CardTitle>
             <TrendingDown className="h-4 w-4 text-rose-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{money(totals?.provider_cost_cents ?? 0)}</div>
-            <p className="text-xs text-muted-foreground">Money out to the payment rails</p>
+            <div className="text-2xl font-bold">
+              {totals?.provider_cost_available ? money(totals.provider_cost_cents) : "Unavailable"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totals?.provider_cost_available
+                ? "Recorded rail fees on completed production transfers"
+                : "No complete recorded provider-fee data"}
+            </p>
           </CardContent>
         </Card>
         <Card className="border-primary/20 bg-primary/5">
@@ -211,13 +248,12 @@ export function PlatformTreasuryPanel() {
             <DollarSign className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{money(totals?.profit_cents ?? 0)}</div>
-            <div className="mt-1 flex items-center gap-2">
-              <p className="text-xs text-muted-foreground">Revenue less rail cost</p>
-              <Badge variant="outline" className="h-4 py-0 font-mono text-[10px]">
-                {margin.toFixed(1)}%
-              </Badge>
+            <div className="text-2xl font-bold text-primary">
+              {totals?.profit_available ? money(totals.profit_cents) : "Unavailable"}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Collected revenue minus recorded provider cost
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -228,7 +264,7 @@ export function PlatformTreasuryPanel() {
           <CardContent>
             <div className="text-2xl font-bold">{money(totals?.volume_cents ?? 0)}</div>
             <p className="text-xs text-muted-foreground">
-              {totals?.transfer_count ?? 0} transfers moved
+              {totals?.transfer_count ?? 0} completed production transfers
             </p>
           </CardContent>
         </Card>
@@ -237,7 +273,7 @@ export function PlatformTreasuryPanel() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Monthly profit &amp; loss</CardTitle>
-          <CardDescription>Last 12 months of money in and money out across all organizations.</CardDescription>
+          <CardDescription>Charged, collected, and completed production volume. Dates are grouped by UTC year-month.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {pnl?.months?.length ? (
@@ -245,7 +281,9 @@ export function PlatformTreasuryPanel() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Month</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">Charged</TableHead>
+                  <TableHead className="text-right">Outstanding</TableHead>
+                  <TableHead className="text-right">Collected</TableHead>
                   <TableHead className="text-right">Provider cost</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
                   <TableHead className="text-right">Volume</TableHead>
@@ -255,12 +293,14 @@ export function PlatformTreasuryPanel() {
                 {pnl.months.map((m) => (
                   <TableRow key={m.month}>
                     <TableCell>{monthLabel(m.month)}</TableCell>
-                    <TableCell className="text-right">{money(m.revenue_cents)}</TableCell>
-                    <TableCell className="text-right">{money(m.provider_cost_cents)}</TableCell>
-                    <TableCell
-                      className={`text-right font-medium ${m.profit_cents >= 0 ? "text-emerald-500" : "text-rose-500"}`}
-                    >
-                      {money(m.profit_cents)}
+                    <TableCell className="text-right">{money(m.charged_cents)}</TableCell>
+                    <TableCell className="text-right">{money(m.outstanding_cents)}</TableCell>
+                    <TableCell className="text-right">{money(m.collected_cents)}</TableCell>
+                    <TableCell className="text-right">
+                      {m.provider_cost_available ? money(m.provider_cost_cents) : "—"}
+                    </TableCell>
+                    <TableCell className={`text-right font-medium ${m.profit_available && (m.profit_cents ?? 0) >= 0 ? "text-emerald-500" : m.profit_available ? "text-rose-500" : ""}`}>
+                      {m.profit_available ? money(m.profit_cents) : "—"}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">{money(m.volume_cents)}</TableCell>
                   </TableRow>
@@ -268,15 +308,15 @@ export function PlatformTreasuryPanel() {
               </TableBody>
             </Table>
           ) : (
-            <p className="text-sm text-muted-foreground">No billed activity in the last 12 months yet.</p>
+            <p className="text-sm text-muted-foreground">No charged or completed production activity in the last 12 months yet.</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Profit by organization</CardTitle>
-          <CardDescription>Which organizations contribute the platform's earnings.</CardDescription>
+          <CardTitle className="text-base">Organizations</CardTitle>
+          <CardDescription>Charged, outstanding, collected, and earned amounts use the same definitions as the platform totals.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {pnl?.tenants?.length ? (
@@ -284,24 +324,28 @@ export function PlatformTreasuryPanel() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Organization</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Provider cost</TableHead>
+                  <TableHead className="text-right">Charged</TableHead>
+                  <TableHead className="text-right">Outstanding</TableHead>
+                  <TableHead className="text-right">Collected</TableHead>
+                  <TableHead className="text-right">Cost</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
-                  <TableHead className="text-right">Transfers</TableHead>
+                  <TableHead className="text-right">Volume</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pnl.tenants.map((t) => (
                   <TableRow key={t.tenant_id}>
                     <TableCell className="max-w-[220px] truncate">{t.tenant_name}</TableCell>
-                    <TableCell className="text-right">{money(t.revenue_cents)}</TableCell>
-                    <TableCell className="text-right">{money(t.provider_cost_cents)}</TableCell>
-                    <TableCell
-                      className={`text-right font-medium ${t.profit_cents >= 0 ? "text-emerald-500" : "text-rose-500"}`}
-                    >
-                      {money(t.profit_cents)}
+                    <TableCell className="text-right">{money(t.charged_cents)}</TableCell>
+                    <TableCell className="text-right">{money(t.outstanding_cents)}</TableCell>
+                    <TableCell className="text-right">{money(t.collected_cents)}</TableCell>
+                    <TableCell className="text-right">
+                      {t.provider_cost_available ? money(t.provider_cost_cents) : "—"}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">{t.transfer_count}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {t.profit_available ? money(t.profit_cents) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">{money(t.volume_cents)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -311,6 +355,84 @@ export function PlatformTreasuryPanel() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Fee and transfer detail</CardTitle>
+          <CardDescription>
+            Traceability from organization to fee or completed production transfer. Missing check, claim, or request identity is left blank.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {activity.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Organization</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activity.map((item, index) => (
+                  <TableRow key={item.id ?? `${item.kind}-${index}`}>
+                    <TableCell className="max-w-[180px] truncate">{item.tenant_name}</TableCell>
+                    <TableCell className="capitalize">
+                      {item.kind === "fee" ? (item.fee_code || "fee").replace(/_/g, " ") : "transfer"}
+                    </TableCell>
+                    <TableCell className="capitalize">{statusLabel(item.collection_status)}</TableCell>
+                    <TableCell className="max-w-[240px] truncate font-mono text-xs text-muted-foreground">
+                      {item.source_reference
+                        || item.provider_transfer_id
+                        || item.check_id
+                        || item.claim_id
+                        || "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {item.occurred_at || item.completed_at
+                        ? new Date(String(item.occurred_at || item.completed_at)).toLocaleDateString()
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">{money(item.amount_cents)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">No fee lines or completed production transfers to display.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+function Metric({
+  title,
+  cents,
+  hint,
+  icon: Icon,
+  emphasize = false,
+}: {
+  title: string;
+  cents?: number;
+  hint: string;
+  icon?: typeof TrendingUp;
+  emphasize?: boolean;
+}) {
+  return (
+    <Card className={emphasize ? "border-primary/20 bg-primary/5" : undefined}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        {Icon ? <Icon className="h-4 w-4 text-muted-foreground" /> : null}
+      </CardHeader>
+      <CardContent>
+        <div className={`text-2xl font-bold ${emphasize ? "text-primary" : ""}`}>{money(cents ?? 0)}</div>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </CardContent>
+    </Card>
   );
 }
