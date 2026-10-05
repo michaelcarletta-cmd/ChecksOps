@@ -44,7 +44,16 @@ const CALLER_ID_KEYS = Object.freeze([
   'provider_transfer_id',
   'transfer_id',
   'existing_id',
+  'tenant_id',
+  'tenantId',
 ]);
+
+export const CAN_WRITE_TENANT_SQL = 'SELECT public.aws_can_write_tenant($1::uuid) AS ok';
+
+export const LIST_AUTHORIZED_WRITE_TENANTS_SQL = `SELECT t.id::text AS id
+  FROM public.tenants t
+ WHERE public.aws_can_write_tenant(t.id)
+ ORDER BY CASE WHEN t.id = $1::uuid THEN 1 ELSE 0 END, t.created_at NULLS LAST, t.id`;
 
 const denied = (error, extra = {}) => ({
   ok: false,
@@ -199,19 +208,23 @@ const generateUniqueIds = async (client, randomId) => {
   return null;
 };
 
-const pickWritableTenant = async (client) => {
-  const preferred = (await client.query(
-    `SELECT id FROM public.tenants
-      WHERE id <> $1::uuid
-      ORDER BY created_at NULLS LAST, id
-      LIMIT 1`,
+export const canWriteTenant = async (client, tenantId) => {
+  if (!tenantId || !UUID_RE.test(String(tenantId))) return false;
+  const row = (await client.query(CAN_WRITE_TENANT_SQL, [tenantId]).catch(() => ({ rows: [] }))).rows[0];
+  return row?.ok === true;
+};
+
+export const selectAuthorizedSyntheticTenant = async (client) => {
+  const candidates = (await client.query(
+    LIST_AUTHORIZED_WRITE_TENANTS_SQL,
     [FREEDOM_TENANT_ID],
-  ).catch(() => ({ rows: [] }))).rows[0];
-  if (preferred?.id) return preferred.id;
-  const any = (await client.query(
-    `SELECT id FROM public.tenants ORDER BY created_at NULLS LAST, id LIMIT 1`,
-  ).catch(() => ({ rows: [] }))).rows[0];
-  return any?.id || null;
+  ).catch(() => ({ rows: [] }))).rows
+    .map((row) => asText(row.id))
+    .filter((id) => UUID_RE.test(id));
+  for (const tenantId of candidates) {
+    if (await canWriteTenant(client, tenantId)) return tenantId;
+  }
+  return null;
 };
 
 const loadFixture = async (client, harnessId) => {
@@ -260,8 +273,8 @@ const settlementMetadata = (harnessId) => ({
 const createFixture = async ({ client, mapping, randomId }) => {
   const ids = await generateUniqueIds(client, randomId);
   if (!ids) return denied('id_collision', { statusCode: 409 });
-  const tenantId = await pickWritableTenant(client);
-  if (!tenantId) return denied('no_writable_tenant', { statusCode: 409 });
+  const tenantId = await selectAuthorizedSyntheticTenant(client);
+  if (!tenantId) return denied('no_writable_synthetic_tenant', { statusCode: 409 });
   const billingPeriod = `uat-cv2-${ids.harnessId.slice(0, 8)}`;
   const notes = harnessNotes(ids);
   const inserted = (await client.query(

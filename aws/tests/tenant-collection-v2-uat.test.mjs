@@ -9,9 +9,11 @@ import { test } from 'node:test';
 import { USER_ROLES_SQL } from '../functions/api/identity.mjs';
 import { applyBillingProviderEvent } from '../functions/api/tenant-collection-v2-settlement.mjs';
 import {
+  CAN_WRITE_TENANT_SQL,
   FORBIDDEN_OBLIGATION_ID,
   FORBIDDEN_TRANSFER_ID,
   FREEDOM_TENANT_ID,
+  LIST_AUTHORIZED_WRITE_TENANTS_SQL,
   SYNTHETIC_UAT_MARKER,
   UAT_AMOUNT_CENTS,
   UAT_COMPLETED_AT,
@@ -19,11 +21,15 @@ import {
   UAT_SETTLEMENT_FN,
   handleCollectionV2Uat,
   runCollectionV2Uat,
+  selectAuthorizedSyntheticTenant,
 } from '../functions/api/tenant-collection-v2-uat.mjs';
 
 const C1C = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const ADMIN = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const MEMBER = '11111111-1111-4111-8111-111111111111';
+const ISOLATION = 'db13cc17-547b-4ca8-806a-f3cf79eafe59';
+const UNRELATED = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const UAT_ADMIN = '75d3da03-326c-4ea0-8cd1-684d695495a3';
 const REAL_TMP = {
   id: FORBIDDEN_OBLIGATION_ID,
   tenant_id: FREEDOM_TENANT_ID,
@@ -55,8 +61,10 @@ function createUatStore({
   master = true,
   platform = true,
   tenants = [{ id: C1C, created_at: '2026-01-01' }, { id: FREEDOM_TENANT_ID, created_at: '2025-01-01' }],
+  writableTenantIds = null,
   existing = [REAL_TMP],
   eventLogGrant = true,
+  insertDenied = false,
 } = {}) {
   const obligations = existing.map((row) => ({ ...row }));
   const events = [];
@@ -73,6 +81,23 @@ function createUatStore({
       if (sql.includes('is_master_owner()') && sql.includes('is_platform_owner()')) {
         return { rows: [{ is_master: master, is_platform: platform }] };
       }
+      if (sql.includes('aws_can_write_tenant(t.id)')) {
+        const allowed = writableTenantIds || tenants.map((row) => row.id);
+        const ranked = tenants
+          .filter((row) => allowed.includes(row.id))
+          .sort((a, b) => {
+            const aFreedom = a.id === FREEDOM_TENANT_ID ? 1 : 0;
+            const bFreedom = b.id === FREEDOM_TENANT_ID ? 1 : 0;
+            if (aFreedom !== bFreedom) return aFreedom - bFreedom;
+            return String(a.created_at || '').localeCompare(String(b.created_at || ''))
+              || String(a.id).localeCompare(String(b.id));
+          });
+        return { rows: ranked.map((row) => ({ id: row.id })) };
+      }
+      if (sql.includes('aws_can_write_tenant($1')) {
+        const allowed = writableTenantIds || tenants.map((row) => row.id);
+        return { rows: [{ ok: allowed.includes(params[0]) }] };
+      }
       if (sql.includes('FROM public.tenants') && sql.includes('id <> $1')) {
         return { rows: tenants.filter((row) => row.id !== params[0]) };
       }
@@ -83,6 +108,11 @@ function createUatStore({
         return { rows: [] };
       }
       if (sql.includes('INSERT INTO public.tenant_maintenance_payments')) {
+        if (insertDenied) {
+          const error = new Error('new row violates row-level security policy for table "tenant_maintenance_payments"');
+          error.code = '42501';
+          throw error;
+        }
         const row = {
           id: params[0],
           tenant_id: params[1],
@@ -259,6 +289,8 @@ test('exports the exact production applyBillingProviderEvent implementation', ()
   assert.equal(source.includes('INSERT INTO public.payment_transfers'), false);
   assert.equal(source.includes('INSERT INTO public.payment_wallets'), false);
   assert.equal(source.includes('postTransferLedger'), false);
+  assert.match(source, /aws_can_write_tenant/);
+  assert.equal(source.includes('SELECT id FROM public.tenants\n      WHERE id <> $1::uuid'), false);
 });
 
 test('index exposes only POST /uat/collection-v2 and marks it temporary', () => {
@@ -338,6 +370,150 @@ test('caller-supplied existing IDs are refused', async () => {
     obligation_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
   });
   assert.equal(result.error, 'caller_ids_refused');
+});
+
+test('caller cannot provide or override tenant_id', async () => {
+  const store = createUatStore({
+    master: false,
+    platform: false,
+    tenants: [
+      { id: UNRELATED, created_at: '2020-01-01' },
+      { id: ISOLATION, created_at: '2026-01-01' },
+      { id: FREEDOM_TENANT_ID, created_at: '2025-01-01' },
+    ],
+    writableTenantIds: [ISOLATION],
+  });
+  const result = await run(store, {
+    action: 'create',
+    tenant_id: UNRELATED,
+  }, { userId: UAT_ADMIN });
+  assert.equal(result.error, 'caller_ids_refused');
+  assert.equal(result.refused_keys.includes('tenant_id'), true);
+  assert.equal(store.obligations.some((row) => row.notes?.includes(SYNTHETIC_UAT_MARKER)), false);
+});
+
+test('admin belonging to Tenant A selects Tenant A rather than unrelated Tenant B', async () => {
+  const store = createUatStore({
+    master: false,
+    platform: false,
+    tenants: [
+      { id: UNRELATED, created_at: '2020-01-01' },
+      { id: ISOLATION, created_at: '2026-01-01' },
+      { id: FREEDOM_TENANT_ID, created_at: '2025-01-01' },
+    ],
+    writableTenantIds: [ISOLATION],
+  });
+  const selected = await selectAuthorizedSyntheticTenant(store.client);
+  assert.equal(selected, ISOLATION);
+  const result = await run(store, { action: 'create' }, { userId: UAT_ADMIN });
+  assert.equal(result.ok, true);
+  assert.equal(result.fixture.tenant_id, ISOLATION);
+  assert.equal(result.fixture.tenant_id === UNRELATED, false);
+});
+
+test('unrelated global tenant cannot be selected', async () => {
+  const store = createUatStore({
+    master: false,
+    platform: false,
+    tenants: [
+      { id: UNRELATED, created_at: '2019-01-01' },
+      { id: C1C, created_at: '2020-01-01' },
+      { id: ISOLATION, created_at: '2026-01-01' },
+    ],
+    writableTenantIds: [ISOLATION],
+  });
+  const result = await run(store, { action: 'create' }, { userId: UAT_ADMIN });
+  assert.equal(result.fixture.tenant_id, ISOLATION);
+  assert.equal(store.client.queries.some((query) => (
+    query.sql.includes('FROM public.tenants')
+    && query.sql.includes('id <> $1')
+    && !query.sql.includes('aws_can_write_tenant')
+  )), false);
+});
+
+test('user with no writable tenant fails closed', async () => {
+  const store = createUatStore({
+    master: false,
+    platform: false,
+    writableTenantIds: [],
+  });
+  const result = await run(store, { action: 'create' }, { userId: UAT_ADMIN });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'no_writable_synthetic_tenant');
+  assert.equal(store.obligations.some((row) => row.notes?.includes(SYNTHETIC_UAT_MARKER)), false);
+});
+
+test('current UAT identity resolves to its legitimately writable isolation tenant', async () => {
+  const store = createUatStore({
+    master: false,
+    platform: false,
+    roles: ['admin'],
+    tenants: [
+      { id: C1C, created_at: '2020-01-01' },
+      { id: FREEDOM_TENANT_ID, created_at: '2021-01-01' },
+      { id: ISOLATION, created_at: '2026-01-01' },
+    ],
+    writableTenantIds: [ISOLATION],
+  });
+  const selected = await selectAuthorizedSyntheticTenant(store.client);
+  assert.equal(selected, ISOLATION);
+  const created = await run(store, { action: 'create' }, { userId: UAT_ADMIN });
+  assert.equal(created.ok, true);
+  assert.equal(created.fixture.tenant_id, ISOLATION);
+  assert.match(store.client.queries.map((query) => query.sql).join('\n'), /aws_can_write_tenant/);
+});
+
+test('master/platform selection still uses aws_can_write_tenant and does not broaden non-master access', async () => {
+  const masterStore = createUatStore({
+    master: true,
+    platform: true,
+    tenants: [
+      { id: C1C, created_at: '2026-01-01' },
+      { id: FREEDOM_TENANT_ID, created_at: '2025-01-01' },
+    ],
+    writableTenantIds: [C1C, FREEDOM_TENANT_ID],
+  });
+  const masterCreated = await run(masterStore, { action: 'create' });
+  assert.equal(masterCreated.fixture.tenant_id, C1C);
+
+  const nonMaster = createUatStore({
+    master: false,
+    platform: false,
+    tenants: [
+      { id: C1C, created_at: '2020-01-01' },
+      { id: ISOLATION, created_at: '2026-01-01' },
+      { id: FREEDOM_TENANT_ID, created_at: '2021-01-01' },
+    ],
+    writableTenantIds: [ISOLATION],
+  });
+  const isolated = await run(nonMaster, { action: 'create' }, { userId: UAT_ADMIN });
+  assert.equal(isolated.fixture.tenant_id, ISOLATION);
+  assert.equal(isolated.fixture.tenant_id === C1C, false);
+});
+
+test('RLS remains the final DB enforcement layer on INSERT', async () => {
+  const source = uatSource();
+  assert.match(source, /INSERT INTO public.tenant_maintenance_payments/);
+  assert.match(source, /aws_can_write_tenant/);
+  assert.equal(source.includes('SET row_security'), false);
+  assert.equal(source.includes('BYPASSRLS'), false);
+  assert.equal(/SET\s+ROLE/i.test(source), false);
+  assert.equal(source.includes('FORCE ROW LEVEL SECURITY'), false);
+  assert.equal(/75d3da03-326c-4ea0-8cd1-684d695495a3/.test(source), false);
+  assert.equal(/db13cc17-547b-4ca8-806a-f3cf79eafe59/.test(source), false);
+  const store = createUatStore({
+    master: false,
+    platform: false,
+    writableTenantIds: [ISOLATION],
+    tenants: [{ id: ISOLATION, created_at: '2026-01-01' }],
+    insertDenied: true,
+  });
+  await assert.rejects(
+    () => run(store, { action: 'create' }, { userId: UAT_ADMIN }),
+    (error) => error.code === '42501',
+  );
+  assert.equal(CAN_WRITE_TENANT_SQL.includes('aws_can_write_tenant'), true);
+  assert.equal(LIST_AUTHORIZED_WRITE_TENANTS_SQL.includes('aws_can_write_tenant(t.id)'), true);
 });
 
 test('non-synthetic row cannot be cleaned up', async () => {
