@@ -374,13 +374,15 @@ export function evaluateFeature(root, feature, overlay = null) {
 
 export function rejectSelfAttestation(attestation) {
   if (attestation == null) return { ok: true, finding: null };
-  const hasEvidence = Boolean(
-    attestation.test_execution
-    && GIT_SHA_RE.test(String(attestation.test_execution.candidate_commit || ''))
-    && Number.isInteger(attestation.test_execution.exit_code)
-    && /^[0-9a-f]{64}$/.test(String(attestation.test_execution.output_sha256 || ''))
-    && attestation.test_execution.test,
-  );
+  const executions = Array.isArray(attestation.test_executions)
+    ? attestation.test_executions
+    : (attestation.test_execution ? [attestation.test_execution] : []);
+  const hasEvidence = executions.length > 0 && executions.every((row) => Boolean(
+    GIT_SHA_RE.test(String(row?.candidate_commit || ''))
+    && Number.isInteger(row?.exit_code)
+    && /^[0-9a-f]{64}$/.test(String(row?.output_sha256 || ''))
+    && row?.test,
+  ));
   if (attestation.ok === true && !hasEvidence) {
     return {
       ok: false,
@@ -393,7 +395,7 @@ export function rejectSelfAttestation(attestation) {
       ),
     };
   }
-  if (attestation.ok === true && hasEvidence && attestation.test_execution.exit_code !== 0) {
+  if (attestation.ok === true && hasEvidence && executions.some((row) => row.exit_code !== 0)) {
     return {
       ok: false,
       finding: finding(CODES.ATTESTATION_REJECTED, null, null, 'attested test execution did not pass'),
