@@ -293,30 +293,57 @@ export function evaluateInvariant(root, feature, invariant, overlay = null) {
   return { ok: true, finding: null };
 }
 
-function staleSourceFindings(root, feature, overlay) {
-  if (!overlay) return [];
-  const rels = new Set([
-    ...(feature.source_paths || []),
-    ...(feature.semantic_invariants || []).map((row) => row.file).filter(Boolean),
-  ]);
+function requiredPathFindings(root, feature, overlay) {
+  return (feature.source_paths || [])
+    .filter((rel) => readRepoFile(root, rel, overlay) == null)
+    .map((rel) => finding(
+      CODES.FEATURE_MISSING,
+      feature.feature_id,
+      null,
+      `required source path is missing: ${rel}`,
+      { file: rel },
+    ));
+}
+
+function stableFeatureContract(feature) {
+  return JSON.stringify({
+    source_paths: [...(feature.source_paths || [])].sort(),
+    semantic_invariants: feature.semantic_invariants || [],
+    required_tests: [...(feature.required_tests || [])].sort(),
+    applicable_artifact_types: [...(feature.applicable_artifact_types || [])].sort(),
+  });
+}
+
+function validateBoundTestEvidence(attestation, acceptedFeatures, candidateCommit) {
+  if (attestation == null || !acceptedFeatures.length) return [];
+  const executions = Array.isArray(attestation.test_executions)
+    ? attestation.test_executions
+    : (attestation.test_execution ? [attestation.test_execution] : []);
   const findings = [];
-  for (const rel of rels) {
-    if (!Object.prototype.hasOwnProperty.call(overlay, rel)) continue;
-    const original = readRepoFile(root, rel, null);
-    const candidate = readRepoFile(root, rel, overlay);
-    if (original == null || candidate == null) continue;
-    if (sha256Text(original) !== sha256Text(candidate)) {
-      findings.push(finding(
-        CODES.STALE_SOURCE,
-        feature.feature_id,
-        null,
-        `stale or substituted source for ${rel}`,
-        {
-          file: rel,
-          original_sha256: sha256Text(original),
-          candidate_sha256: sha256Text(candidate),
-        },
-      ));
+  for (const feature of acceptedFeatures) {
+    for (const requiredTest of feature.required_tests || []) {
+      const match = executions.find((row) => row?.test === requiredTest);
+      if (!match) {
+        findings.push(finding(
+          CODES.ATTESTATION_REJECTED,
+          feature.feature_id,
+          null,
+          `missing bound execution for required test ${requiredTest}`,
+        ));
+        continue;
+      }
+      if (match.exit_code !== 0
+        || !/^[0-9a-f]{64}$/.test(String(match.output_sha256 || ''))
+        || !GIT_SHA_RE.test(String(match.candidate_commit || ''))
+        || (candidateCommit && match.candidate_commit !== candidateCommit)) {
+        findings.push(finding(
+          CODES.ATTESTATION_REJECTED,
+          feature.feature_id,
+          null,
+          `required test evidence is not bound to the candidate: ${requiredTest}`,
+          { candidate_commit: candidateCommit || null },
+        ));
+      }
     }
   }
   return findings;
@@ -330,7 +357,7 @@ export function evaluateFeature(root, feature, overlay = null) {
     ...evaluateInvariant(root, feature, invariant, overlay),
   }));
   const failing = [
-    ...staleSourceFindings(root, feature, overlay),
+    ...requiredPathFindings(root, feature, overlay),
     ...invariantResults.filter((row) => row.ok !== true).map((row) => row.finding),
   ];
   const present = presentPaths.length > 0 || invariantResults.some((row) => row.ok === true);
@@ -379,12 +406,7 @@ export function detectUnauthorizedSupersession(previousFeature, nextFeature) {
   if (!previousFeature || previousFeature.status !== ENFORCEABLE_STATUS) {
     return { ok: true, finding: null };
   }
-  const prevInv = JSON.stringify((previousFeature.semantic_invariants || []).map((row) => row.id).sort());
-  const nextInv = JSON.stringify((nextFeature.semantic_invariants || []).map((row) => row.id).sort());
-  const prevPaths = JSON.stringify([...(previousFeature.source_paths || [])].sort());
-  const nextPaths = JSON.stringify([...(nextFeature.source_paths || [])].sort());
-  const changed = prevInv !== nextInv
-    || prevPaths !== nextPaths
+  const changed = stableFeatureContract(previousFeature) !== stableFeatureContract(nextFeature)
     || previousFeature.status !== nextFeature.status;
   if (!changed) return { ok: true, finding: null };
   const history = nextFeature.supersession_history || [];
@@ -454,6 +476,11 @@ export function evaluateAcceptedFeatures({
 
   const accepted = (registry.features || []).filter((row) => row.status === ENFORCEABLE_STATUS);
   const expectedAccepted = accepted.map((row) => row.feature_id);
+  findings.push(...validateBoundTestEvidence(
+    attestation,
+    accepted,
+    composition?.candidate_commit || null,
+  ));
   const byId = Object.fromEntries(evaluated.map((row) => [row.feature_id, row]));
   const presentAccepted = expectedAccepted.filter((id) => byId[id]?.present && byId[id].failing_invariants.length === 0);
   const missingAccepted = expectedAccepted.filter((id) => !presentAccepted.includes(id));
@@ -461,7 +488,7 @@ export function evaluateAcceptedFeatures({
   findings.push(...failingInvariants);
 
   const declared = [...new Set(composition?.declared_feature_ids || [])];
-  if (expectedAccepted.length && declared.length && expectedAccepted.some((id) => !declared.includes(id))) {
+  if (composition && expectedAccepted.length && expectedAccepted.some((id) => !declared.includes(id))) {
     findings.push(finding(
       CODES.COMPOSITION_GAP,
       null,
@@ -496,6 +523,7 @@ export function evaluateAcceptedFeatures({
     findings,
     composition: {
       declared_feature_ids: declared,
+      candidate_commit: composition?.candidate_commit || null,
       boolean_flag_ignored: composition?.accepted_source_composition === true,
     },
     attestation: attestationCheck.ok ? 'not_used_or_bound' : 'rejected',
@@ -526,6 +554,7 @@ export function evaluateForDeployGuard(input = {}, ctx = {}) {
     composition: {
       accepted_source_composition: input.accepted_source_composition,
       declared_feature_ids: input.declared_feature_ids || [],
+      candidate_commit: input.candidate_commit || null,
     },
   });
   return {
