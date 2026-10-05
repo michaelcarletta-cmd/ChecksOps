@@ -4,6 +4,7 @@
  * (same split id as the payer), not a copied Tenant B transaction.
  */
 
+import { listRecipientOverlays } from "./paymentAccounting";
 import {
   buildTenantPaymentLedgerRows,
   type LedgerPaymentRow,
@@ -36,6 +37,12 @@ const PAYER_TRANSFER_SELECT = `
 type QueryClient = {
   from: (table: string) => any;
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  functions?: {
+    invoke: (
+      name: string,
+      options: { body?: Record<string, unknown> },
+    ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
 };
 
 async function readOutgoingSplits(client: QueryClient, tenantId: string): Promise<unknown[]> {
@@ -67,16 +74,27 @@ async function readPayerTransfers(client: QueryClient, tenantId: string): Promis
   return data ?? [];
 }
 
+async function readRecipientOverlays(client: QueryClient, tenantId: string): Promise<unknown[]> {
+  if (!client.functions?.invoke) return [];
+  try {
+    const payload = await listRecipientOverlays(client, { tenantId });
+    return Array.isArray(payload.overlays) ? payload.overlays : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchTenantPaymentSources(
   client: QueryClient,
   tenantId: string,
 ): Promise<TenantPaymentSources> {
-  const [outgoingSplits, incomingReceived, payerTransfers] = await Promise.all([
+  const [outgoingSplits, incomingReceived, payerTransfers, recipientOverlays] = await Promise.all([
     readOutgoingSplits(client, tenantId),
     readIncomingFundsReceived(client, tenantId),
     readPayerTransfers(client, tenantId),
+    readRecipientOverlays(client, tenantId),
   ]);
-  return { outgoingSplits, incomingReceived, payerTransfers };
+  return { outgoingSplits, incomingReceived, payerTransfers, recipientOverlays };
 }
 
 export async function fetchTenantPaymentLedgerRows(

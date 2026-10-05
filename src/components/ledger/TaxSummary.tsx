@@ -24,6 +24,8 @@ import {
   taxProfileMutationVariables,
   type TaxProfileMutationVariables,
 } from "@/lib/taxProfileMutation";
+import { listRecipientOverlays } from "@/lib/payments/paymentAccounting";
+import { applyRecipientDisplayOverlays } from "@/lib/payments/tenantPaymentAccuracy";
 import {
   TAX_PROFILES_UNAVAILABLE_HEADING,
   TAX_PROFILES_UNAVAILABLE_MESSAGE,
@@ -195,20 +197,27 @@ export function TaxSummary() {
     queryKey: ["tax-summary", tenant?.id, year],
     enabled: !!tenant?.id,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("disbursement_splits")
-        .select(`
+      const [{ data, error }, overlayPayload] = await Promise.all([
+        (supabase as any)
+          .from("disbursement_splits")
+          .select(`
           id, amount, status, created_at, settled_at,
           recipient_name, recipient_type, recipient_tenant_id, tenant_id,
           stakeholder_accounts (
             id, nickname, custname, account_type, chk_acct, tenant_id
           )
         `)
-        .eq("tenant_id", tenant!.id)
-        .eq("status", "settled");
+          .eq("tenant_id", tenant!.id)
+          .eq("status", "settled"),
+        listRecipientOverlays(supabase as any, { tenantId: tenant!.id }).catch(() => ({ overlays: [] })),
+      ]);
 
       if (error) throw error;
-      return data ?? [];
+      return applyRecipientDisplayOverlays(
+        data ?? [],
+        overlayPayload?.overlays ?? [],
+        tenant!.id,
+      );
     },
   });
 

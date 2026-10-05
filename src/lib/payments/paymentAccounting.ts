@@ -58,6 +58,16 @@ export function updateRecipientDisplay(
   });
 }
 
+export function listRecipientOverlays(
+  client: PaymentAccountingClient,
+  input: { tenantId?: string | null },
+) {
+  return invokePaymentAccounting(client, {
+    action: "list_recipient_overlays",
+    tenant_id: input.tenantId || undefined,
+  });
+}
+
 export function updateSplitType(
   client: PaymentAccountingClient,
   input: {

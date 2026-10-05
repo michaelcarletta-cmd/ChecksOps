@@ -6,10 +6,10 @@
  * Never rewrites recipient_tenant_id / destination_tenant_id.
  * Generic /data/write of financial tables stays denied.
  *
- * Actions: update_recipient_display | update_split_type
+ * Actions: update_recipient_display | update_split_type | list_recipient_overlays
  */
 
-import { parseBody, withIdentityWrite } from './data.mjs';
+import { parseBody, withIdentity, withIdentityWrite } from './data.mjs';
 import { TENANT_MEMBERSHIP_SQL } from './identity.mjs';
 
 export const PAYMENT_ACCOUNTING_FUNCTION = 'tenant-payment-accounting';
@@ -131,11 +131,20 @@ async function canWriteTenant(client, tenantId) {
   return rows[0]?.ok === true;
 }
 
+async function canAccessTenant(client, tenantId) {
+  const { rows } = await client.query(
+    'SELECT public.aws_can_access_tenant($1::uuid) AS ok',
+    [tenantId],
+  );
+  return rows[0]?.ok === true;
+}
+
 /**
  * Tenant identity comes from authenticated memberships.
- * A client tenant_id is only a selector among tenants the user can already write.
+ * A client tenant_id is only a selector among tenants the user can already
+ * write (mutations) or access (overlay list).
  */
-export async function resolveAuthorizedTenant({ client, mapping, body }) {
+export async function resolveAuthorizedTenant({ client, mapping, body, requireWrite = true }) {
   const memberships = await loadMemberships(client, mapping.application_user_id);
   const platformWriter = await isPlatformWriter(client, mapping.application_user_id);
   const claimed = String(body.tenant_id || body.tenantId || '').trim() || null;
@@ -143,26 +152,29 @@ export async function resolveAuthorizedTenant({ client, mapping, body }) {
     return deny(400, 'invalid_uuid', { field: 'tenant_id' });
   }
 
+  const checkAccess = requireWrite ? canWriteTenant : canAccessTenant;
+  const deniedCode = requireWrite ? 'tenant_write_denied' : 'cross_tenant_denied';
+
   if (claimed) {
     const member = memberships.some((row) => row.tenant_id === claimed);
     if (!member && !platformWriter) {
       return deny(403, 'forbidden', { code: 'cross_tenant_denied' });
     }
     if (!platformWriter) {
-      const writable = await canWriteTenant(client, claimed);
-      if (!writable) return deny(403, 'forbidden', { code: 'tenant_write_denied' });
+      const allowed = await checkAccess(client, claimed);
+      if (!allowed) return deny(403, 'forbidden', { code: deniedCode });
     }
     return { ok: true, tenantId: claimed, access: member ? 'tenant_member' : 'platform_writer' };
   }
 
-  const writable = [];
+  const allowed = [];
   for (const row of memberships) {
-    if (await canWriteTenant(client, row.tenant_id)) writable.push(row.tenant_id);
+    if (await checkAccess(client, row.tenant_id)) allowed.push(row.tenant_id);
   }
-  if (writable.length === 1) {
-    return { ok: true, tenantId: writable[0], access: 'tenant_member' };
+  if (allowed.length === 1) {
+    return { ok: true, tenantId: allowed[0], access: 'tenant_member' };
   }
-  if (writable.length === 0 && !platformWriter) {
+  if (allowed.length === 0 && !platformWriter) {
     return deny(403, 'forbidden', { code: 'no_tenant_membership' });
   }
   return deny(400, 'tenant_selector_required', {
@@ -349,6 +361,34 @@ async function updateTenantOverlay(client, { tenantId, parsed, displayName, disp
   }
 }
 
+async function handleListOverlays(client, { tenantId }) {
+  try {
+    const { rows } = await client.query(
+      `SELECT tenant_id::text AS tenant_id, aggregate_key, display_name, display_type
+         FROM public.tenant_payment_recipient_overrides
+        WHERE tenant_id = $1::uuid`,
+      [tenantId],
+    );
+    return {
+      ok: true,
+      statusCode: 200,
+      action: 'list_recipient_overlays',
+      overlays: rows.filter((row) => String(row.tenant_id) === tenantId),
+    };
+  } catch (error) {
+    if (error?.code === '42P01') {
+      return {
+        ok: true,
+        statusCode: 200,
+        action: 'list_recipient_overlays',
+        overlays: [],
+        overlay_table_not_applied: true,
+      };
+    }
+    throw error;
+  }
+}
+
 async function handleRecipientDisplay(client, { tenantId, body, mapping }) {
   const parsed = parseAggregateKey(body.aggregate_key || body.aggregateKey);
   if (parsed.error) return deny(400, parsed.error, { kind: parsed.kind || null });
@@ -463,12 +503,17 @@ async function dispatch({ client, mapping, body, spoof }) {
     };
   }
 
-  const authorized = await resolveAuthorizedTenant({ client, mapping, body });
+  const action = String(body.action || '').trim();
+  const authorized = await resolveAuthorizedTenant({
+    client,
+    mapping,
+    body,
+    requireWrite: action !== 'list_recipient_overlays',
+  });
   if (authorized.ok !== true) {
     return { ...authorized, spoofFieldsIgnored: spoof };
   }
 
-  const action = String(body.action || '').trim();
   let result;
   if (action === 'update_recipient_display') {
     result = await handleRecipientDisplay(client, {
@@ -482,6 +527,8 @@ async function dispatch({ client, mapping, body, spoof }) {
       body,
       mapping,
     });
+  } else if (action === 'list_recipient_overlays') {
+    result = await handleListOverlays(client, { tenantId: authorized.tenantId });
   } else {
     result = deny(400, 'unknown_action');
   }
@@ -495,8 +542,11 @@ async function dispatch({ client, mapping, body, spoof }) {
 
 export const handlePaymentAccounting = async (event, deps = {}) => {
   const body = parseBody(event);
+  const wrap = String(body.action || '').trim() === 'list_recipient_overlays'
+    ? withIdentity
+    : withIdentityWrite;
   try {
-    return await withIdentityWrite(event, async (ctx) => dispatch(ctx), deps);
+    return await wrap(event, async (ctx) => dispatch(ctx), deps);
   } catch (err) {
     const status = err.statusCode || 500;
     if (status === 401) {

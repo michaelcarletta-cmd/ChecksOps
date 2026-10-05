@@ -51,9 +51,11 @@ const sourceOf = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const mockClient = ({
   memberships = [{ tenant_id: TENANT_A, role: 'admin' }],
   canWrite = [TENANT_A],
+  canAccess = null,
   platformOwner = false,
   platformAdmin = false,
   overlayMissing = false,
+  overlayRows = [],
   stakeholder = {
     id: ACCT_ID,
     tenant_id: TENANT_A,
@@ -98,6 +100,10 @@ const mockClient = ({
       if (/aws_can_write_tenant/.test(sql)) {
         return { rows: [{ ok: canWrite.includes(String(params[0])) }] };
       }
+      if (/aws_can_access_tenant/.test(sql)) {
+        const allowed = Array.isArray(canAccess) ? canAccess : canWrite;
+        return { rows: [{ ok: allowed.includes(String(params[0])) }] };
+      }
       if (/FROM public\.stakeholder_accounts/.test(sql) && /SELECT/.test(sql)) {
         return { rows: stakeholder && String(params[0]) === stakeholder.id ? [stakeholder] : [] };
       }
@@ -127,6 +133,16 @@ const mockClient = ({
       }
       if (/UPDATE public\.disbursement_splits/.test(sql) && /recipient_type = \$1/.test(sql)) {
         return { rows: [{ id: splitRow.id, recipient_type: params[0] }] };
+      }
+      if (/FROM public\.tenant_payment_recipient_overrides/.test(sql) && /SELECT/.test(sql)) {
+        if (overlayMissing) {
+          const error = new Error('relation "tenant_payment_recipient_overrides" does not exist');
+          error.code = '42P01';
+          throw error;
+        }
+        return {
+          rows: overlayRows.filter((row) => String(row.tenant_id) === String(params[0])),
+        };
       }
       if (/INSERT INTO public\.tenant_payment_recipient_overrides/.test(sql)) {
         if (overlayMissing) {
@@ -394,7 +410,9 @@ test('handler has no Moov/provider/money path', () => {
     sourceOf('src/lib/payments/paymentAccounting.ts'),
   ].join('\n');
   assert.doesNotMatch(frontend, /\.from\(["']disbursement_splits["']\)[\s\S]{0,80}\.update/);
-  assert.match(frontend, /updateRecipientDisplay|updateSplitType/);
+  assert.match(frontend, /updateRecipientDisplay|updateSplitType|listRecipientOverlays/);
+  assert.doesNotMatch(sourceOf('aws/functions/api/allowed-tables.json'), /tenant_payment_recipient_overrides/);
+  assert.match(sourceOf('src/lib/payments/tenantPaymentAccuracyQueries.ts'), /listRecipientOverlays/);
 });
 
 test('audit entry is generated without secrets', async () => {
@@ -410,6 +428,52 @@ test('audit entry is generated without secrets', async () => {
   assert.equal(audit.params[1], 'payment_recipient_display_update');
   const blob = JSON.stringify(audit.params);
   assert.doesNotMatch(blob, /tin|routing|chk_acct|consumer_unique|moov_secret/i);
+});
+
+test('list_recipient_overlays returns payer overlay and refuses cross-tenant read', async () => {
+  const overlay = {
+    tenant_id: TENANT_A,
+    aggregate_key: `tenant:${TENANT_B}`,
+    display_name: 'Condition 1 Commercial',
+    display_type: 'contractor',
+  };
+  const owner = mockClient({ overlayRows: [overlay] });
+  const listed = await invoke({
+    action: 'list_recipient_overlays',
+    tenant_id: TENANT_A,
+  }, owner);
+  assert.equal(listed.result.ok, true);
+  assert.deepEqual(listed.result.overlays, [overlay]);
+  const select = owner.queries.find((q) => /FROM public\.tenant_payment_recipient_overrides/.test(q.sql));
+  assert.ok(select);
+  assert.equal(select.params[0], TENANT_A);
+  assert.equal(owner.queries.some((q) => /UPDATE /.test(q.sql)), false);
+  assert.equal(owner.queries.some((q) => /INSERT INTO public\.tenant_payment_recipient_overrides/.test(q.sql)), false);
+
+  const stranger = mockClient({
+    memberships: [{ tenant_id: TENANT_B, role: 'admin' }],
+    canWrite: [TENANT_B],
+    canAccess: [TENANT_B],
+    overlayRows: [overlay],
+  });
+  const denied = await invoke({
+    action: 'list_recipient_overlays',
+    tenant_id: TENANT_A,
+  }, stranger);
+  assert.equal(denied.result.statusCode, 403);
+  assert.equal(denied.result.code, 'cross_tenant_denied');
+  assert.equal(stranger.queries.some((q) => /FROM public\.tenant_payment_recipient_overrides/.test(q.sql)), false);
+});
+
+test('list_recipient_overlays fails open when the overlay table is absent', async () => {
+  const missing = mockClient({ overlayMissing: true });
+  const { result } = await invoke({
+    action: 'list_recipient_overlays',
+    tenant_id: TENANT_A,
+  }, missing);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.overlays, []);
+  assert.equal(result.overlay_table_not_applied, true);
 });
 
 test('client-supplied tenant_id is a selector only after membership is proven', async () => {
