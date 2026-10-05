@@ -28,15 +28,21 @@ test('staging drift fails closed',()=>{
 });
 
 test('missing or failed probes fail closed',()=>{
-  for(const key of ['staging_origin_allowed','unauthorized_origin_not_privileged','prep_health_ok','authenticated_flow_ok']){
+  for(const key of ['staging_origin_allowed','unauthorized_origin_not_privileged','prep_health_ok','authenticated_flow_ok','no_financial_write']){
     const x=good(); x.probes[key]=false;
     assert.equal(validateStagingAcceptance(x).ok,false);
   }
 });
 
 test('financial mutation is never accepted as UAT',()=>{
-  const x=good(); x.probes.no_financial_write=false;
-  const r=validateStagingAcceptance(x);
+  for(const value of [false,undefined,null,'yes',1]){
+    const x=good(); x.probes.no_financial_write=value;
+    const r=validateStagingAcceptance(x);
+    assert.equal(r.ok,false);
+    assert.ok(r.errors.includes('financial_write_forbidden'));
+  }
+  const omitted=good(); delete omitted.probes.no_financial_write;
+  const r=validateStagingAcceptance(omitted);
   assert.equal(r.ok,false);
   assert.ok(r.errors.includes('financial_write_forbidden'));
 });
