@@ -87,12 +87,15 @@ export function useMoovInvoices() {
         tenant_id: tenantId,
         ...input,
       }),
-    onSuccess: (_d, vars) => {
+    onSuccess: (data, vars) => {
       invalidate();
+      const emailed = data?.emailed === true;
       toast({
         title: vars.send ? "Invoice sent" : "Invoice created",
         description: vars.send
-          ? `${vars.customer_email} was emailed a secure payment link.`
+          ? emailed
+            ? `${vars.customer_email} was emailed a secure payment link.`
+            : "Invoice is ready. Copy or open the invoice page to share the payment link."
           : "Saved as a draft — send it when you're ready.",
       });
     },
@@ -102,9 +105,14 @@ export function useMoovInvoices() {
   const sendInvoice = useMutation({
     mutationFn: (invoiceId: string) =>
       callInvoiceFn({ action: "send", tenant_id: tenantId, invoice_id: invoiceId }),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       invalidate();
-      toast({ title: "Invoice sent", description: "The customer was emailed a payment link." });
+      toast({
+        title: "Invoice sent",
+        description: data?.emailed === true
+          ? "The customer was emailed a payment link."
+          : "Invoice is ready. Copy or open the invoice page to share the payment link.",
+      });
     },
     onError,
   });
@@ -112,9 +120,14 @@ export function useMoovInvoices() {
   const resendInvoice = useMutation({
     mutationFn: (invoiceId: string) =>
       callInvoiceFn({ action: "resend", tenant_id: tenantId, invoice_id: invoiceId }),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       invalidate();
-      toast({ title: "Invoice resent", description: "The payment link was emailed again." });
+      toast({
+        title: "Invoice resent",
+        description: data?.emailed === true
+          ? "The payment link was emailed again."
+          : "Invoice is ready. Copy or open the invoice page to share the payment link.",
+      });
     },
     onError,
   });
