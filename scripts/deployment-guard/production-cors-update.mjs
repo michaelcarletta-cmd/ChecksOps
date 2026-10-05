@@ -13,7 +13,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceScriptGuard } from './require-guard.mjs';
+import { enforceScriptGuard, resolveGuardRoot } from './require-guard.mjs';
+import { consumeReceiptOnce } from './lib/consumed-receipts.mjs';
 
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
@@ -122,7 +123,7 @@ export function main(env=process.env) {
   const checked=validatePinnedSnapshot(first);
   if(!checked.ok) throw new Error('preflight_drift:'+checked.errors.join(','));
 
-  enforceScriptGuard({
+  const authorized=enforceScriptGuard({
     script:import.meta.url,
     target_environment:'production',
     target_component:'production-http-api',
@@ -138,6 +139,12 @@ export function main(env=process.env) {
   if(!rechecked.ok || rechecked.fingerprint!==checked.fingerprint) {
     throw new Error('toctou_drift:'+(rechecked.errors||[]).join(','));
   }
+
+  const consumed=consumeReceiptOnce(resolveGuardRoot({},env),authorized.details.receipt,{
+    actor:env.CHECKSOPS_OPERATOR||env.USER||null,
+    script:'production-cors-update',
+  });
+  if(!consumed.ok) throw new Error('receipt_consumption_failed:'+(consumed.code||'unknown'));
 
   const desired=desiredCors(second.api.CorsConfiguration);
   awsJson(['apigatewayv2','update-api','--api-id',API_ID,'--cors-configuration',JSON.stringify(desired)],env);
