@@ -25,6 +25,68 @@ export const CANCEL_BLOCKED = new Set(['paid', 'canceled']);
 export const RESEND_BLOCKED = new Set(['paid', 'canceled']);
 export const LOCAL_MERCHANT = 'local';
 
+/** RFC 4122 UUID v4. Node `randomUUID()` is CSPRNG; variant/version bits leave 122 bits of entropy. */
+export const PUBLIC_INVOICE_TOKEN_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const PUBLIC_INVOICE_RESPONSE_KEYS = Object.freeze([
+  'id',
+  'public_token',
+  'invoice_number',
+  'customer_name',
+  'customer_email',
+  'description',
+  'line_items',
+  'total_amount',
+  'paid_amount',
+  'status',
+  'invoice_date',
+  'due_date',
+  'payment_link_url',
+  'sent_at',
+  'paid_at',
+  'created_at',
+]);
+
+export const PUBLIC_TENANT_RESPONSE_KEYS = Object.freeze([
+  'name',
+  'slug',
+  'logo_url',
+  'primary_color',
+  'secondary_color',
+  'custom_domain',
+  'invoice_letterhead_url',
+  'invoice_footer_note',
+  'invoice_default_terms',
+  'invoice_accent_color',
+  'invoice_theme',
+]);
+
+export const PUBLIC_INVOICE_FORBIDDEN_KEYS = Object.freeze([
+  'tenant_id',
+  'environment',
+  'moov_account_id',
+  'moov_invoice_id',
+  'customer_id',
+  'customer_moov_account_id',
+  'provider_metadata',
+  'created_by',
+  'last_synced_at',
+  'bank_account',
+  'routing_number',
+  'account_number',
+  'wallet_id',
+  'transfer_id',
+]);
+
+export function generatePublicToken() {
+  return randomUUID();
+}
+
+export function isPublicInvoiceToken(value) {
+  return PUBLIC_INVOICE_TOKEN_RE.test(String(value || '').trim());
+}
+
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function normalizeLineItems(raw) {
@@ -79,7 +141,7 @@ export function applySendTransition(row, { now = new Date().toISOString() } = {}
     sent_at: row.sent_at || now,
     paid_amount: Number(row.paid_amount || 0),
     paid_at: row.paid_at || null,
-    public_token: row.public_token || randomUUID(),
+    public_token: row.public_token || generatePublicToken(),
     emailed: false,
   };
 }
@@ -250,7 +312,7 @@ export async function runInvoiceAction({
     });
     const now = new Date().toISOString();
     const sendNow = action === 'create_and_send';
-    const publicToken = randomUUID();
+    const publicToken = generatePublicToken();
     const row = (await client.query(
       `INSERT INTO public.moov_invoices (
          tenant_id, environment, moov_account_id, moov_invoice_id, invoice_number,
@@ -397,12 +459,13 @@ export async function runInvoiceAction({
 export async function loadPublicInvoiceByToken(client, token) {
   const value = String(token || '').trim();
   if (!value) return fail('Invoice token is required', 400);
+  if (!isPublicInvoiceToken(value)) return fail('Invoice not found', 404);
   const invoice = (await client.query(
     `SELECT ${publicInvoiceSelect}
      FROM public.moov_invoices
-     WHERE public_token::text = $1
+     WHERE public_token = $1::uuid
      LIMIT 1`,
-    [value],
+    [value.toLowerCase()],
   )).rows[0];
   if (!invoice) return fail('Invoice not found', 404);
   const tenant = (await client.query(

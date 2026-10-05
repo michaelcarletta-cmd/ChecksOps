@@ -1408,7 +1408,7 @@ export const stakeholderResendVerification = {
 export const publicInvoice = {
   run: async ({ client, body }) => {
     const { loadPublicInvoiceByToken } = await import('../../invoice-actions.mjs');
-    return loadPublicInvoiceByToken(client, body.token || body.invoice_id);
+    return loadPublicInvoiceByToken(client, body.token);
   },
 };
 
