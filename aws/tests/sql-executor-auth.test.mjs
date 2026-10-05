@@ -498,3 +498,29 @@ test('sql-executor-ensure packs SQL 39 and the TMP catalog helper', () => {
   assert.match(src, /39_tmp_write_policy_reconcile\.sql/);
   assert.match(src, /tmp-rls-catalog\.mjs/);
 });
+
+test('TMP catalog CAS ignores table-owner grants that the inspector omits', async () => {
+  const { hashTmpRlsCatalog } = await import('../../scripts/deployment-guard/lib/tmp-rls-catalog.mjs');
+  const inspector = {
+    table: 'tenant_maintenance_payments',
+    table_catalog: { table: 'tenant_maintenance_payments', relrowsecurity: true, relforcerowsecurity: false },
+    policies: [
+      { name: 'aws_write_tenant_maintenance_payments', permissive: 'PERMISSIVE', command: 'ALL', roles: '{authenticated}', using: 'x', with_check: 'x' },
+    ],
+    grants: [
+      { grantee: 'authenticated', privilege_type: 'SELECT' },
+      { grantee: 'checksops', privilege_type: 'SELECT' },
+    ],
+    lambda_role_membership: ['authenticated'],
+  };
+  const executorShaped = {
+    ...inspector,
+    grants: [
+      ...inspector.grants,
+      { grantee: 'checksops_admin', privilege_type: 'DELETE' },
+      { grantee: 'checksops_admin', privilege_type: 'TRUNCATE' },
+    ],
+  };
+  assert.equal(hashTmpRlsCatalog(inspector), hashTmpRlsCatalog(executorShaped));
+});
+

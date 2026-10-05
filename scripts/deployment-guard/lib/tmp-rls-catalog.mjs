@@ -37,6 +37,9 @@ export const FROZEN_FUNCTION_NAMES = Object.freeze([
   'set_updated_at',
 ]);
 
+/** Inspector-visible app/Lambda roles. Table-owner grants are excluded from CAS. */
+export const CAS_GRANT_ROLES = Object.freeze(['authenticated', 'checksops', 'PUBLIC', 'anon']);
+
 export function canonicalizeTmpRlsCatalog(catalog = {}) {
   const tableCatalog = catalog.table_catalog || {};
   const policies = [...(catalog.policies || [])]
@@ -52,6 +55,7 @@ export function canonicalizeTmpRlsCatalog(catalog = {}) {
     }))
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const grants = [...(catalog.grants || [])]
+    .filter((grant) => CAS_GRANT_ROLES.includes(grant.grantee))
     .map((grant) => ({
       grantee: grant.grantee,
       privilege_type: grant.privilege_type,
