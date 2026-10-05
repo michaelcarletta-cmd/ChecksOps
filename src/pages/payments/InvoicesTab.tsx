@@ -45,7 +45,7 @@ export function InvoicesTab() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const { invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice, syncInvoices } = useMoovInvoices();
+  const { invoices, createInvoice, sendInvoice, cancelInvoice, deleteInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
   const isMobile = useIsMobile();
 
@@ -193,7 +193,7 @@ export function InvoicesTab() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile icon={Clock} title="Outstanding" value={currency(totals.outstanding)} hint={`${totals.overdue} past due`} />
         <SummaryTile icon={CheckCircle2} title="Paid" value={currency(totals.paid)} hint="Settled to your wallet" />
-        <SummaryTile icon={FileText} title="Drafts" value={String(totals.drafts)} hint="Not sent yet" />
+        <SummaryTile icon={FileText} title="Drafts" value={String(totals.drafts)} hint="Not issued yet" />
         <SummaryTile icon={Send} title="Invoices" value={String(rows.length)} hint="Last 200" />
       </div>
 
@@ -202,8 +202,7 @@ export function InvoicesTab() {
           <div className="min-w-0">
             <CardTitle className="text-base">Invoices</CardTitle>
             <CardDescription className="break-words">
-              Send an invoice with a secure payment link. Customers pay by bank transfer or card and funds
-              land directly in your wallet.
+              Issue an invoice, then copy or open the payment link to share it with the customer.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -245,7 +244,7 @@ export function InvoicesTab() {
                 <DialogHeader>
                   <DialogTitle>New invoice</DialogTitle>
                   <DialogDescription>
-                    The customer gets an emailed payment link. Payments settle into your wallet.
+                    Issue the invoice, then copy or open the payment link to share it with the customer.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -354,7 +353,7 @@ export function InvoicesTab() {
                   </Button>
                   <Button onClick={() => submit(true)} disabled={!canSubmit || createInvoice.isPending}>
                     {createInvoice.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    <span className="ml-2">Send invoice</span>
+                    <span className="ml-2">Issue invoice</span>
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -392,7 +391,6 @@ export function InvoicesTab() {
                       brandedInvoiceUrl={brandedInvoiceUrl}
                       copyLink={copyLink}
                       sendInvoice={sendInvoice}
-                      resendInvoice={resendInvoice}
                       cancelInvoice={cancelInvoice}
                       deleteInvoice={deleteInvoice}
                     />
@@ -458,7 +456,6 @@ export function InvoicesTab() {
                         brandedInvoiceUrl={brandedInvoiceUrl}
                         copyLink={copyLink}
                         sendInvoice={sendInvoice}
-                        resendInvoice={resendInvoice}
                         cancelInvoice={cancelInvoice}
                         deleteInvoice={deleteInvoice}
                       />
@@ -477,17 +474,15 @@ export function InvoicesTab() {
 }
 
 function InvoiceActions({
-  inv, brandedInvoiceUrl, copyLink, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice,
+  inv, brandedInvoiceUrl, copyLink, sendInvoice, cancelInvoice, deleteInvoice,
 }: {
   inv: any;
   brandedInvoiceUrl: (inv: any) => string;
   copyLink: (url: string) => void;
   sendInvoice: { mutate: (id: string) => void };
-  resendInvoice: { mutate: (id: string) => void };
   cancelInvoice: { mutate: (id: string) => void };
   deleteInvoice: { mutate: (id: string) => void };
 }) {
-  const canResend = !["draft", "paid", "canceled"].includes(inv.status);
   const canDelete = inv.status === "canceled" || inv.status === "draft";
   return (
     <DropdownMenu>
@@ -497,12 +492,7 @@ function InvoiceActions({
       <DropdownMenuContent align="end" className="z-50 bg-popover">
         {inv.status === "draft" && (
           <DropdownMenuItem onClick={() => sendInvoice.mutate(inv.id)}>
-            <Send className="mr-2 h-4 w-4" /> Send invoice
-          </DropdownMenuItem>
-        )}
-        {canResend && (
-          <DropdownMenuItem onClick={() => resendInvoice.mutate(inv.id)}>
-            <Send className="mr-2 h-4 w-4" /> Resend invoice
+            <Send className="mr-2 h-4 w-4" /> Issue invoice
           </DropdownMenuItem>
         )}
         {(inv.public_token || inv.payment_link_url) && (

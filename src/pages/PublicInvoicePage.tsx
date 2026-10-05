@@ -205,7 +205,7 @@ export default function PublicInvoicePage() {
                 <p className="text-sm text-muted-foreground">
                   {isPaid
                     ? `Paid on ${formatDate(invoice.paid_at)}`
-                    : `Sent on ${formatDate(invoice.sent_at || invoice.created_at)}`}
+                    : `Issued on ${formatDate(invoice.sent_at || invoice.created_at)}`}
                 </p>
               </div>
               <Badge className={`w-fit gap-1.5 px-2.5 py-1 text-xs ${statusMeta?.className || ""}`}>
