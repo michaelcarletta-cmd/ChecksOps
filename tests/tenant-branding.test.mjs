@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { shouldUseAwsChecksOpsBackendFor } from "../src/lib/backendMode.ts";
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("Freedom Claims hosts never use ChecksOps AWS backend", () => {
   const authProvider = "cognito";
@@ -60,5 +65,12 @@ test("Non-cognito auth never uses ChecksOps AWS backend", () => {
     shouldUseAwsChecksOpsBackendFor({ hostname: "checksops.com", authProvider: "supabase" }),
     false,
   );
+});
+
+test("brandingPublicUrl keeps stored URLs unless ChecksOps AWS backend is active", () => {
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/brandingPublicUrl.ts"), "utf8");
+  assert.match(src, /shouldUseAwsChecksOpsBackendFor/);
+  assert.match(src, /runtimeHostname/);
+  assert.match(src, /if\s*\(\s*!shouldRewriteBrandingToAws\(\)\s*\)\s*return raw/);
 });
 

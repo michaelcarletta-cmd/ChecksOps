@@ -1,4 +1,5 @@
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+import { runtimeHostname, shouldUseAwsChecksOpsBackendFor } from "@/lib/backendMode";
 
 const BRANDING_FIELD_BUCKETS: Record<string, string> = {
   logo_url: "tenant-logos",
@@ -8,6 +9,19 @@ const BRANDING_FIELD_BUCKETS: Record<string, string> = {
 };
 
 const BRANDING_BUCKETS = new Set(["tenant-logos", "email-assets", "company-branding"]);
+
+function viteAuthProvider(): string {
+  return typeof import.meta !== "undefined"
+    ? String((import.meta as { env?: { VITE_AUTH_PROVIDER?: string } }).env?.VITE_AUTH_PROVIDER || "")
+    : "";
+}
+
+function shouldRewriteBrandingToAws(): boolean {
+  return shouldUseAwsChecksOpsBackendFor({
+    hostname: runtimeHostname(),
+    authProvider: viteAuthProvider(),
+  });
+}
 
 function apiBase(): string {
   const configured = typeof import.meta !== "undefined"
@@ -49,8 +63,10 @@ export function rewriteSupabaseBrandingUrl(value: string, apiBaseUrl = apiBase()
 
 /**
  * Convert a stored Branding/logo value into the existing AWS
- * `/prep/storage/public` access path when the value is a branding object path
- * or a legacy Supabase public URL. Already-public HTTPS URLs pass through.
+ * `/prep/storage/public` access path when the current host uses the ChecksOps
+ * AWS backend and the value is a branding object path or a legacy Supabase
+ * public URL. Freedom Claims and custom-domain hosts keep the stored value.
+ * Already-public HTTPS URLs pass through.
  */
 export function brandingPublicUrl(
   value: unknown,
@@ -60,6 +76,7 @@ export function brandingPublicUrl(
   if (typeof value !== "string") return null;
   const raw = value.trim();
   if (!raw) return null;
+  if (!shouldRewriteBrandingToAws()) return raw;
   const rewritten = rewriteSupabaseBrandingUrl(raw, apiBaseUrl);
   if (rewritten !== raw) return rewritten;
   if (/^https?:\/\//i.test(raw) || raw.includes("/storage/public")) return raw;
