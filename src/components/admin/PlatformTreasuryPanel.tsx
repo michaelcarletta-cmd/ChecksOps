@@ -25,7 +25,7 @@ type Ledger = {
 };
 
 type ActivityItem = {
-  kind: "fee" | "transfer";
+  kind: "fee" | "transfer" | "v2_collection";
   id: string | null;
   tenant_id: string | null;
   tenant_name: string;
@@ -38,9 +38,11 @@ type ActivityItem = {
   source_reference?: string | null;
   check_id?: string | null;
   claim_id?: string | null;
+  payment_id?: string | null;
   provider_transfer_id?: string | null;
   provider_fee_cents?: number | null;
   provider_fee_recorded?: boolean;
+  collection_contract?: string | null;
 };
 
 type TreasuryResponse = {
@@ -225,7 +227,7 @@ export function PlatformTreasuryPanel() {
         <Metric title="Accrued / Charged" cents={totals?.charged_cents} hint="Fees recorded against organizations" icon={TrendingUp} />
         <Metric title="Outstanding" cents={totals?.outstanding_cents} hint="Unbilled / not yet collected" />
         <Metric title="Billed / Processing" cents={totals?.billed_processing_cents} hint="Billed but not completed at the provider" />
-        <Metric title="Collected" cents={totals?.collected_cents} hint="Completed occurrence with provider transfer" icon={DollarSign} emphasize />
+        <Metric title="Collected" cents={totals?.collected_cents} hint="Completed occurrence or settled tenant-collection-v2 with provider transfer" icon={DollarSign} emphasize />
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Provider cost</CardTitle>
@@ -237,7 +239,7 @@ export function PlatformTreasuryPanel() {
             </div>
             <p className="text-xs text-muted-foreground">
               {totals?.provider_cost_available
-                ? "Recorded rail fees on completed production transfers"
+                ? "Recorded rail fees on completed production transfers and attributable ACH collection fees"
                 : "No complete recorded provider-fee data"}
             </p>
           </CardContent>
@@ -360,7 +362,7 @@ export function PlatformTreasuryPanel() {
         <CardHeader>
           <CardTitle className="text-base">Fee and transfer detail</CardTitle>
           <CardDescription>
-            Traceability from organization to fee or completed production transfer. Missing check, claim, or request identity is left blank.
+            Traceability from organization to fee, subscription collection, or completed production transfer. Missing check, claim, or request identity is left blank.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -381,12 +383,17 @@ export function PlatformTreasuryPanel() {
                   <TableRow key={item.id ?? `${item.kind}-${index}`}>
                     <TableCell className="max-w-[180px] truncate">{item.tenant_name}</TableCell>
                     <TableCell className="capitalize">
-                      {item.kind === "fee" ? (item.fee_code || "fee").replace(/_/g, " ") : "transfer"}
+                      {item.kind === "fee"
+                        ? (item.fee_code || "fee").replace(/_/g, " ")
+                        : item.kind === "v2_collection"
+                          ? "subscription collection"
+                          : "transfer"}
                     </TableCell>
                     <TableCell className="capitalize">{statusLabel(item.collection_status)}</TableCell>
                     <TableCell className="max-w-[240px] truncate font-mono text-xs text-muted-foreground">
                       {item.source_reference
                         || item.provider_transfer_id
+                        || item.payment_id
                         || item.check_id
                         || item.claim_id
                         || "—"}
