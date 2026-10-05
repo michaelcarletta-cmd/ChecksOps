@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { evaluatePreflight } from '../../scripts/deployment-guard/cors-staging-live-probe.mjs';
+import { evaluatePreflight, evaluateUnauthenticatedProtectedProbe } from '../../scripts/deployment-guard/cors-staging-live-probe.mjs';
 
 const headers=(o={})=>new Headers(o);
 test('allowed preflight requires reachable response, origin permission, and GET',()=>{
@@ -19,4 +19,9 @@ test('missing CORS headers do not count as allowed',()=>{
 });
 test('server error is not a reachable acceptance response',()=>{
   assert.equal(evaluatePreflight({status:500,headers:headers({'access-control-allow-origin':'*','access-control-allow-methods':'GET'})},'https://staging.checksops.com').reachable,false);
+});
+test('unauthenticated protected probe passes only on explicit auth denial',()=>{
+  assert.equal(evaluateUnauthenticatedProtectedProbe({status:401}).denied,true);
+  assert.equal(evaluateUnauthenticatedProtectedProbe({status:403}).denied,true);
+  for(const status of [200,204,302,404,500]) assert.equal(evaluateUnauthenticatedProtectedProbe({status}).denied,false);
 });
