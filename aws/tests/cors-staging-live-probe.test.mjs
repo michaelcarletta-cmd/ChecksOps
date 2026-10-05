@@ -4,7 +4,14 @@ import { evaluatePreflight } from '../../scripts/deployment-guard/cors-staging-l
 
 const headers=(o={})=>new Headers(o);
 test('allowed preflight requires reachable response, origin permission, and GET',()=>{
-  assert.deepEqual(evaluatePreflight({status:204,headers:headers({'access-control-allow-origin':'https://staging.checksops.com','access-control-allow-methods':'GET,POST,OPTIONS'})},'https://staging.checksops.com'),{reachable:true,originAllowed:true,getAllowed:true});
+  assert.deepEqual(evaluatePreflight({status:204,headers:headers({'access-control-allow-origin':'https://staging.checksops.com','access-control-allow-methods':'GET,POST,OPTIONS'})},'https://staging.checksops.com'),{
+    status:204,
+    reachable:true,
+    originAllowed:true,
+    getAllowed:true,
+    allowOrigin:'https://staging.checksops.com',
+    allowMethods:'GET,POST,OPTIONS',
+  });
 });
 test('missing CORS headers do not count as allowed',()=>{
   const r=evaluatePreflight({status:204,headers:headers({})},'https://staging.checksops.com');
