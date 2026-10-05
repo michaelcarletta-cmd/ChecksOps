@@ -370,6 +370,10 @@ test('source wiring stays platform-scoped and does not reuse onboard add', () =>
   assert.match(fns, /wrapPlatformFinance/);
   assert.match(fns, /platformFinanceBank/);
   assert.match(fns, /platformFinanceTreasury/);
+  assert.match(fns, /isPlatformFinanceFunction\(name\) \? wrapPlatformFinance\(handler, name\) : wrap\(handler, name\)/);
+  assert.match(fns, /name === 'moov-sweep-config'/);
+  assert.doesNotMatch(fns, /name === 'moov-platform-bank'/);
+  assert.doesNotMatch(fns, /name === 'platform-treasury'/);
   assert.doesNotMatch(fns, /'moov-platform-bank': platformBank/);
   assert.doesNotMatch(fns, /'platform-treasury': platformTreasury/);
   assert.doesNotMatch(platform, /from ['"].*moov-onboard/);
@@ -379,7 +383,16 @@ test('source wiring stays platform-scoped and does not reuse onboard add', () =>
   assert.doesNotMatch(platform, /moov-tenant-fee-charge/);
   assert.doesNotMatch(bankPanel, /action:\s*["']add["']/);
   assert.doesNotMatch(bankPanel, /initiate_micro_deposit/);
+  assert.doesNotMatch(bankPanel, /Add bank/);
+  assert.doesNotMatch(bankPanel, /refuseWrite/);
   assert.match(bankPanel, /composePlatformBankDisplay/);
+  const providers = read('aws/functions/api/providers.mjs');
+  assert.match(providers, /isPlatformFinanceRead/);
+  assert.match(providers, /isAuthorizedMoovProductionRead/);
+  assert.match(providers, /spec\.name === 'moov-platform-bank'\) return action === 'status'/);
+  assert.match(providers, /spec\.name === 'platform-treasury'\) return action === 'overview'/);
+  assert.doesNotMatch(providers, /action === 'wallet'/);
+  assert.doesNotMatch(providers, /action === 'pnl'/);
   assert.match(treasury, /platform-treasury/);
   assert.match(admin, /<PlatformBankPanel \/>/);
   assert.equal(isPlatformFinanceFunction('moov-platform-bank'), true);

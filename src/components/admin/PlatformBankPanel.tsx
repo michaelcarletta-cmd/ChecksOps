@@ -14,7 +14,6 @@ import {
   Loader2,
   RefreshCw,
   ShieldCheck,
-  Plus,
   CheckCircle2,
   AlertTriangle,
   Copy,
@@ -101,14 +100,6 @@ export function PlatformBankPanel() {
   useEffect(() => {
     load();
   }, [load]);
-
-  function refuseWrite(title: string) {
-    toast({
-      title,
-      description: PLATFORM_FINANCE_WRITE_BLOCKED_MESSAGE,
-      variant: "destructive",
-    });
-  }
 
   if (loading && !state) {
     return (
@@ -208,16 +199,11 @@ export function PlatformBankPanel() {
 
       {/* Settlement bank accounts */}
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-          <div>
-            <CardTitle>Settlement Bank Accounts</CardTitle>
-            <CardDescription>
-              Bank accounts on the ChecksOps facilitator Moov account. This view is read-only.
-            </CardDescription>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => refuseWrite("Bank changes are unavailable")}>
-            <Plus className="h-4 w-4 mr-1" /> Add bank
-          </Button>
+        <CardHeader>
+          <CardTitle>Settlement Bank Accounts</CardTitle>
+          <CardDescription>
+            Bank accounts on the ChecksOps facilitator Moov account. This view is read-only.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {methods.length === 0 && (
