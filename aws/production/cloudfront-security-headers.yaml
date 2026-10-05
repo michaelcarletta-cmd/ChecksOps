@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ChecksOps production browser security response headers policy. Source-only
+  definition: this template does not attach the policy to any CloudFront behavior.
+
+Resources:
+  ProductionBrowserSecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: checksops-production-browser-security-headers
+        Comment: Low-risk browser security headers; CSP intentionally deferred.
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: true
+            Preload: false
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: SAMEORIGIN
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+
+Outputs:
+  ResponseHeadersPolicyId:
+    Value: !Ref ProductionBrowserSecurityHeadersPolicy
