@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  applyRecipientDisplayOverlays,
   buildTenantPaymentLedgerRows,
   computeRetainedProfit,
   dedupeFinancialMovements,
@@ -11,15 +12,26 @@ import {
   isSettledMoneyStatus,
   ownCheckReceivedTotal,
   recipientAggregateKey,
+  recipientDisplayName,
+  recipientDisplayType,
   resolveRecipientTenantId,
   revenueTotals,
   settlementDateIso,
   type LedgerPaymentRow,
 } from "../src/lib/payments/tenantPaymentAccuracy.ts";
+import { fetchTenantPaymentSources } from "../src/lib/payments/tenantPaymentAccuracyQueries.ts";
 import { aggregateRecipientRows } from "../src/lib/taxYtdSummary.ts";
 
 const TENANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const TENANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const TENANT_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const UNDERLYING_C1C = "Condition One Commercial";
+const OVERLAY_C1C = "Condition 1 Commercial";
+const TENANTS_DIRECTORY = {
+  [TENANT_B]: { id: TENANT_B, name: UNDERLYING_C1C },
+  [TENANT_A]: { id: TENANT_A, name: "Tenant A LLC" },
+  [TENANT_C]: { id: TENANT_C, name: "Other Payer LLC" },
+};
 const SPLIT_ID = "split-ab-9000";
 const PROVIDER_ID = "moov-transfer-ab-9000";
 
@@ -411,6 +423,28 @@ test("display name/type metadata edits do not change Received, Paid, or Profit",
   );
 });
 
+function c1cOutgoingSplit(overrides: Record<string, unknown> = {}) {
+  return {
+    ...splitAtoB,
+    recipient_name: UNDERLYING_C1C,
+    stakeholder_accounts: {
+      id: "stake-c1c",
+      nickname: UNDERLYING_C1C,
+      custname: UNDERLYING_C1C,
+      account_type: "contractor",
+      tenant_id: TENANT_A,
+    },
+    ...overrides,
+  };
+}
+
+const c1cPayerOverlay = {
+  tenant_id: TENANT_A,
+  aggregate_key: `tenant:${TENANT_B}`,
+  display_name: OVERLAY_C1C,
+  display_type: "contractor",
+};
+
 test("recipient tiles and paid totals honor the same settlement-date window", () => {
   const rows: LedgerPaymentRow[] = buildTenantPaymentLedgerRows({
     outgoingSplits: [
@@ -433,4 +467,157 @@ test("recipient tiles and paid totals honor the same settlement-date window", ()
   }).filter((r) => r.status === "settled");
   assert.equal(in2026.reduce((s, r) => s + r.amount, 0), 9000);
   assert.equal(in2026.length, 1);
+});
+
+test("Condition One Commercial tenant identity stays unchanged when the payer overlay is applied", () => {
+  const beforeName = TENANTS_DIRECTORY[TENANT_B].name;
+  const beforeId = TENANTS_DIRECTORY[TENANT_B].id;
+  const rows = buildTenantPaymentLedgerRows({
+    outgoingSplits: [c1cOutgoingSplit()],
+    incomingReceived: [],
+    payerTransfers: [],
+    recipientOverlays: [c1cPayerOverlay],
+  }, TENANT_A);
+  assert.equal(TENANTS_DIRECTORY[TENANT_B].name, beforeName);
+  assert.equal(TENANTS_DIRECTORY[TENANT_B].name, UNDERLYING_C1C);
+  assert.equal(TENANTS_DIRECTORY[TENANT_B].id, beforeId);
+  assert.equal(rows[0].recipient_tenant_id, TENANT_B);
+  assert.equal(rows[0].destination_tenant_id, undefined);
+  assert.equal(recipientDisplayName(rows[0]), OVERLAY_C1C);
+});
+
+test("payer overlay Condition 1 Commercial displays after refetch and refresh", () => {
+  const sources = {
+    outgoingSplits: [c1cOutgoingSplit()],
+    incomingReceived: [],
+    payerTransfers: [],
+    recipientOverlays: [c1cPayerOverlay],
+  };
+  const afterSave = buildTenantPaymentLedgerRows(sources, TENANT_A);
+  const afterRefresh = buildTenantPaymentLedgerRows(sources, TENANT_A);
+  assert.equal(recipientDisplayName(afterSave[0]), OVERLAY_C1C);
+  assert.equal(recipientDisplayType(afterSave[0]), "contractor");
+  assert.equal(recipientDisplayName(afterRefresh[0]), OVERLAY_C1C);
+  assert.deepEqual(
+    applyRecipientDisplayOverlays(afterRefresh, [c1cPayerOverlay], TENANT_A).map((row) => row.recipient_name),
+    [OVERLAY_C1C],
+  );
+});
+
+test("tenant overlay keeps tenant:<uuid> identity, one bucket, and unchanged totals", () => {
+  const before = buildTenantPaymentLedgerRows({
+    outgoingSplits: [c1cOutgoingSplit(), { ...c1cOutgoingSplit(), id: "pay-2", moov_transfer_id: "moov-2" }],
+    incomingReceived: [],
+    payerTransfers: [],
+  }, TENANT_A);
+  const after = buildTenantPaymentLedgerRows({
+    outgoingSplits: [c1cOutgoingSplit(), { ...c1cOutgoingSplit(), id: "pay-2", moov_transfer_id: "moov-2" }],
+    incomingReceived: [],
+    payerTransfers: [],
+    recipientOverlays: [c1cPayerOverlay],
+  }, TENANT_A);
+  const keys = after.map((row) => recipientAggregateKey({ ...row, payer_tenant_id: TENANT_A }));
+  assert.deepEqual(keys, [`tenant:${TENANT_B}`, `tenant:${TENANT_B}`]);
+  assert.equal(new Set(keys).size, 1);
+  assert.equal(after.length, before.length);
+  assert.deepEqual(
+    revenueTotals({ ownChecks: [checkA], movements: after }),
+    revenueTotals({ ownChecks: [checkA], movements: before }),
+  );
+  assert.equal(revenueTotals({ ownChecks: [checkA], movements: after }).totalIncoming, 10000);
+  assert.equal(revenueTotals({ ownChecks: [checkA], movements: after }).totalOutgoing, 18000);
+  assert.equal(revenueTotals({ ownChecks: [checkA], movements: after }).profit, -8000);
+});
+
+test("another payer without the overlay still sees Condition One Commercial", () => {
+  const otherPayerSplit = c1cOutgoingSplit({
+    stakeholder_accounts: {
+      id: "stake-c1c-c",
+      nickname: UNDERLYING_C1C,
+      custname: UNDERLYING_C1C,
+      account_type: "contractor",
+      tenant_id: TENANT_C,
+    },
+  });
+  const rows = buildTenantPaymentLedgerRows({
+    outgoingSplits: [otherPayerSplit],
+    incomingReceived: [],
+    payerTransfers: [],
+    recipientOverlays: [c1cPayerOverlay],
+  }, TENANT_C);
+  assert.equal(recipientDisplayName(rows[0]), UNDERLYING_C1C);
+  assert.equal(recipientAggregateKey({ ...rows[0], payer_tenant_id: TENANT_C }), `tenant:${TENANT_B}`);
+});
+
+test("cross-tenant overlay rows are ignored by the payer read model", () => {
+  const leaked = {
+    tenant_id: TENANT_C,
+    aggregate_key: `tenant:${TENANT_B}`,
+    display_name: "Stolen Overlay",
+    display_type: "vendor",
+  };
+  const rows = buildTenantPaymentLedgerRows({
+    outgoingSplits: [c1cOutgoingSplit()],
+    incomingReceived: [],
+    payerTransfers: [],
+    recipientOverlays: [leaked],
+  }, TENANT_A);
+  assert.equal(recipientDisplayName(rows[0]), UNDERLYING_C1C);
+  assert.equal(rows[0].recipient_tenant_id, TENANT_B);
+});
+
+test("tax labels use the payer overlay without changing Received/Paid/Profit", () => {
+  const payments = applyRecipientDisplayOverlays(
+    [{
+      settled_at: "2026-01-15T18:00:00.000Z",
+      amount: 9000,
+      recipient_name: UNDERLYING_C1C,
+      recipient_type: "contractor",
+      recipient_tenant_id: TENANT_B,
+      tenant_id: TENANT_A,
+      stakeholder_accounts: {
+        id: "stake-c1c",
+        nickname: UNDERLYING_C1C,
+        account_type: "contractor",
+        tenant_id: TENANT_A,
+      },
+    }],
+    [c1cPayerOverlay],
+    TENANT_A,
+  );
+  const rows = aggregateRecipientRows({ year: 2026, payments });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, `tenant:${TENANT_B}`);
+  assert.equal(rows[0].nickname, OVERLAY_C1C);
+  assert.equal(rows[0].total, 9000);
+});
+
+test("ledger fetch asks Class A for payer overlays and does not generic-write them", async () => {
+  const invoked: Array<{ name: string; body: Record<string, unknown> }> = [];
+  const client = {
+    from(table: string) {
+      return {
+        select() { return this; },
+        eq() { return this; },
+        neq() { return this; },
+        order() { return Promise.resolve({ data: [], error: null }); },
+      };
+    },
+    rpc() { return Promise.resolve({ data: [], error: null }); },
+    functions: {
+      invoke(name: string, options: { body?: Record<string, unknown> }) {
+        invoked.push({ name, body: options.body ?? {} });
+        return Promise.resolve({
+          data: { ok: true, overlays: [c1cPayerOverlay] },
+          error: null,
+        });
+      },
+    },
+  };
+  const sources = await fetchTenantPaymentSources(client as any, TENANT_A);
+  assert.deepEqual(sources.recipientOverlays, [c1cPayerOverlay]);
+  assert.equal(invoked.length, 1);
+  assert.equal(invoked[0].name, "tenant-payment-accounting");
+  assert.equal(invoked[0].body.action, "list_recipient_overlays");
+  assert.equal(invoked[0].body.tenant_id, TENANT_A);
 });

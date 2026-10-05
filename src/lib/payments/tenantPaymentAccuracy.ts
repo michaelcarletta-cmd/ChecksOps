@@ -122,6 +122,14 @@ export type TenantPaymentSources = {
   outgoingSplits?: unknown;
   incomingReceived?: unknown;
   payerTransfers?: unknown;
+  recipientOverlays?: unknown;
+};
+
+export type RecipientDisplayOverlay = {
+  tenant_id?: string | null;
+  aggregate_key?: string | null;
+  display_name?: string | null;
+  display_type?: string | null;
 };
 
 export function normalizeStatus(status: string | null | undefined): string {
@@ -327,6 +335,83 @@ export function recipientAggregateKey(row: {
   return `row:${type}|unknown`;
 }
 
+export function payerOverlayMap(
+  overlays: RecipientDisplayOverlay[] | unknown,
+  payerTenantId: string,
+): Map<string, { display_name: string; display_type: string }> {
+  const map = new Map<string, { display_name: string; display_type: string }>();
+  const payer = String(payerTenantId || "").trim();
+  if (!payer || !Array.isArray(overlays)) return map;
+  for (const raw of overlays) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as RecipientDisplayOverlay;
+    if (String(row.tenant_id ?? "").trim() !== payer) continue;
+    const key = String(row.aggregate_key ?? "").trim();
+    if (!/^tenant:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key)) {
+      continue;
+    }
+    if (key.toLowerCase() === `tenant:${payer}`.toLowerCase()) continue;
+    const displayName = String(row.display_name ?? "").trim();
+    if (!displayName) continue;
+    map.set(key, {
+      display_name: displayName,
+      display_type: String(row.display_type ?? "").trim() || "other",
+    });
+  }
+  return map;
+}
+
+export function applyRecipientDisplayOverlays<T extends {
+  recipient_name?: string | null;
+  recipient_type?: string | null;
+  recipient_tenant_id?: string | null;
+  destination_tenant_id?: string | null;
+  payer_tenant_id?: string | null;
+  stakeholder_accounts?: StakeholderAccountRef | null;
+}>(
+  rows: T[],
+  overlays: RecipientDisplayOverlay[] | unknown,
+  payerTenantId: string,
+): T[] {
+  const map = payerOverlayMap(overlays, payerTenantId);
+  if (map.size === 0) return rows;
+  return rows.map((row) => {
+    const key = recipientAggregateKey({
+      ...row,
+      payer_tenant_id: row.payer_tenant_id ?? payerTenantId,
+    });
+    const overlay = map.get(key);
+    if (!overlay) return row;
+    return {
+      ...row,
+      recipient_name: overlay.display_name,
+      recipient_type: overlay.display_type,
+      stakeholder_accounts: row.stakeholder_accounts
+        ? {
+            ...row.stakeholder_accounts,
+            nickname: overlay.display_name,
+            account_type: overlay.display_type,
+          }
+        : row.stakeholder_accounts,
+    };
+  });
+}
+
+export function recipientDisplayName(row: {
+  recipient_name?: string | null;
+  stakeholder_accounts?: StakeholderAccountRef | null;
+}): string {
+  const acct = row.stakeholder_accounts;
+  return String(acct?.nickname ?? acct?.custname ?? row.recipient_name ?? "").trim() || "—";
+}
+
+export function recipientDisplayType(row: {
+  recipient_type?: string | null;
+  stakeholder_accounts?: StakeholderAccountRef | null;
+}): string {
+  return String(row.stakeholder_accounts?.account_type ?? row.recipient_type ?? "other");
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
@@ -475,7 +560,11 @@ export function buildTenantPaymentLedgerRows(
   const transfers = (Array.isArray(sources.payerTransfers) ? sources.payerTransfers : [])
     .map((row) => mapPayerTransfer(row, tenantId))
     .filter((row): row is LedgerPaymentRow => !!row);
-  return dedupeFinancialMovements([...outgoing, ...incoming, ...transfers]);
+  return applyRecipientDisplayOverlays(
+    dedupeFinancialMovements([...outgoing, ...incoming, ...transfers]),
+    sources.recipientOverlays,
+    tenantId,
+  );
 }
 
 export function outgoingSettledRows(rows: LedgerPaymentRow[]): LedgerPaymentRow[] {

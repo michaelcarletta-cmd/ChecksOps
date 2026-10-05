@@ -16,6 +16,8 @@ import { fetchTenantPaymentLedgerRows } from "@/lib/payments/tenantPaymentAccura
 import {
   filterRowsBySettlementDate,
   recipientAggregateKey,
+  recipientDisplayName,
+  recipientDisplayType,
   type LedgerPaymentRow,
 } from "@/lib/payments/tenantPaymentAccuracy";
 import {
@@ -145,8 +147,8 @@ export function RecipientReport() {
       dateFilters,
     ).map((r) => {
       const acct = r.stakeholder_accounts;
-      const name = acct?.nickname ?? acct?.custname ?? r.recipient_name ?? "—";
-      const type = acct?.account_type ?? r.recipient_type ?? "other";
+      const name = recipientDisplayName(r);
+      const type = recipientDisplayType(r);
       const acct4 = acct?.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : (r.method === "external_check" ? "External check" : "—");
       return {
         id: r.id,

@@ -13,6 +13,8 @@ import { Download, Search, TrendingUp, TrendingDown, DollarSign } from "lucide-r
 import { fetchTenantPaymentLedgerRows } from "@/lib/payments/tenantPaymentAccuracyQueries";
 import {
   filterRowsBySettlementDate,
+  recipientDisplayName,
+  recipientDisplayType,
   settlementDateIso,
   type LedgerPaymentRow,
 } from "@/lib/payments/tenantPaymentAccuracy";
@@ -110,8 +112,8 @@ export function PaymentLedger() {
       const acct = p.stakeholder_accounts;
       const batch = p.disbursement_batches;
       const check = batch?.check_intake_items;
-      const name = acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "";
-      const type = acct?.account_type ?? p.recipient_type ?? "other";
+      const name = recipientDisplayName(p);
+      const type = recipientDisplayType(p);
 
       const matchSearch = !search ||
         name.toLowerCase().includes(search.toLowerCase()) ||
@@ -130,7 +132,7 @@ export function PaymentLedger() {
     const settled = filtered.filter((p: any) => p.status === "settled" && p.direction === "outgoing");
     const totalOut = settled.reduce((s: number, p: any) => s + Number(p.amount), 0);
     const byType = settled.reduce((acc: Record<string, number>, p: any) => {
-      const t = p.stakeholder_accounts?.account_type ?? p.recipient_type ?? "other";
+      const t = recipientDisplayType(p);
       acc[t] = (acc[t] ?? 0) + Number(p.amount);
       return acc;
     }, {});
@@ -145,7 +147,7 @@ export function PaymentLedger() {
       const check = p.disbursement_batches?.check_intake_items;
       return [
         format(new Date(settlementDateIso(p) ?? p.created_at), "MM/dd/yyyy"),
-        acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "—",
+        recipientDisplayName(p),
         ACCOUNT_TYPE_LABELS[acct?.account_type] ?? "—",
         acct?.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "—",
         check?.check_number ?? "—",
@@ -274,8 +276,8 @@ export function PaymentLedger() {
                   {filtered.map((p: any) => {
                     const acct = p.stakeholder_accounts;
                     const check = p.disbursement_batches?.check_intake_items;
-                    const name = acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "—";
-                    const type = acct?.account_type ?? p.recipient_type ?? null;
+                    const name = recipientDisplayName(p);
+                    const type = recipientDisplayType(p);
                     const acctLabel = acct?.chk_acct
                       ? `••••${acct.chk_acct.slice(-4)}`
                       : p.method === "external_check"
