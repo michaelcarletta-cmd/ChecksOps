@@ -38,7 +38,6 @@ const NEW_FILES = [
   'scripts/lib/accepted-features.mjs',
   'scripts/validate-accepted-features.mjs',
   'aws/tests/accepted-features-registry.test.mjs',
-  'package.json',
 ];
 
 function sha256(text) {
