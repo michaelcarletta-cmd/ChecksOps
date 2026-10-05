@@ -36,7 +36,7 @@ export function normalizeStagingSnapshot({api,routes,lambda,cloudfront}) {
 
 export function validateStagingAcceptance(input={}) {
   const errors=[];
-  const {before,after,probes,workstream_id,commit}=input;
+  const {before,after,probes,manual_uat,workstream_id,commit}=input;
   if(!workstream_id) errors.push('missing_workstream');
   if(!/^[0-9a-f]{40}$/.test(String(commit||''))) errors.push('missing_commit');
   if(!before||!after) errors.push('missing_snapshot');
@@ -48,7 +48,19 @@ export function validateStagingAcceptance(input={}) {
   if(probes?.staging_origin_allowed!==true) errors.push('staging_origin_probe_failed');
   if(probes?.unauthorized_origin_not_privileged!==true) errors.push('unauthorized_origin_probe_failed');
   if(probes?.prep_health_ok!==true) errors.push('prep_health_failed');
-  if(probes?.authenticated_flow_ok!==true) errors.push('authenticated_flow_failed');
+  if(probes?.authenticated_flow_ok!==true) {
+    const expectedFingerprint=before?hash(before):null;
+    if(!manual_uat
+      || manual_uat.kind!=='cors-manual-auth-uat'
+      || manual_uat.workstream_id!==workstream_id
+      || manual_uat.commit!==commit
+      || manual_uat.staging_fingerprint!==expectedFingerprint
+      || !String(manual_uat.operator||'').trim()
+      || manual_uat.authenticated_login_ok!==true
+      || manual_uat.no_financial_write!==true) {
+      errors.push('authenticated_flow_failed');
+    }
+  }
   if(probes?.no_financial_write!==true) errors.push('financial_write_forbidden');
   if(errors.length) return {ok:false,errors};
   const evidence={
@@ -64,6 +76,7 @@ export function validateStagingAcceptance(input={}) {
       unauthorized_origin_not_privileged:true,
       prep_health_ok:true,
       authenticated_flow_ok:true,
+      authenticated_flow_source:probes?.authenticated_flow_ok===true?'automated':'manual-attestation',
       no_financial_write:true,
     },
   };
