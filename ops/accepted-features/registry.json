@@ -1,0 +1,701 @@
+{
+  "version": 1,
+  "evaluate_only": true,
+  "notes": "Evaluate-only foundation. No feature is accepted. Inventory does not convert the safeguard audit matrix into enforcement. A SHA listed anywhere in this file is not restore authority. Branding records intended invariants that current origin/main fails because of the known #617 regression. Do not repair Branding from this registry.",
+  "enforcement": {
+    "enabled": false,
+    "block_merge": false,
+    "block_deploy": false,
+    "accept_self_attestation": false
+  },
+  "features": [
+    {
+      "feature_id": "branding",
+      "title": "Company, tenant Email, and Admin Branding",
+      "status": "inventory_only",
+      "workstream_id": "accepted-feature-registry-foundation",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": 617,
+        "evidence_path": "aws/tests/settings-branding-company-restore.test.mjs",
+        "restore_authority": false,
+        "notes": "Current origin/main contains the known #617 regression: tenant Branding unmounts EmailSenderSettings and the restore test encodes that as correct. merged_pr 617 is historical context only and is not restore authority. Do not treat main Branding as accepted."
+      },
+      "source_paths": [
+        "src/components/white-label/WhiteLabelSettings.tsx",
+        "src/components/settings/CompanyBrandingSettings.tsx",
+        "src/components/settings/EmailSenderSettings.tsx",
+        "src/pages/admin/AdminTenants.tsx",
+        "src/components/branding/TenantLogo.tsx"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "branding-company-mounted",
+          "kind": "source_marker",
+          "title": "Company Branding remains mounted on the tenant Branding tab",
+          "file": "src/components/white-label/WhiteLabelSettings.tsx",
+          "region_start": "<TabsContent value=\"branding\"",
+          "region_end": "<TabsContent value=\"referrals\"",
+          "must_match": "<CompanyBrandingSettings"
+        },
+        {
+          "id": "branding-tenant-email-mounted",
+          "kind": "source_marker",
+          "title": "tenant Email Branding is mounted on the tenant Branding tab",
+          "file": "src/components/white-label/WhiteLabelSettings.tsx",
+          "region_start": "<TabsContent value=\"branding\"",
+          "region_end": "<TabsContent value=\"referrals\"",
+          "must_match": "<EmailSenderSettings"
+        },
+        {
+          "id": "branding-tenant-show-sending-domain-false",
+          "kind": "source_marker",
+          "title": "tenant Email Branding mount uses showSendingDomain={false}",
+          "file": "src/components/white-label/WhiteLabelSettings.tsx",
+          "region_start": "<TabsContent value=\"branding\"",
+          "region_end": "<TabsContent value=\"referrals\"",
+          "must_match": "showSendingDomain=\\{false\\}"
+        },
+        {
+          "id": "branding-tenant-sending-subdomain-hidden",
+          "kind": "source_marker",
+          "title": "tenant Sending Subdomain controls remain hidden via showSendingDomain",
+          "file": "src/components/settings/EmailSenderSettings.tsx",
+          "must_match": "showSendingDomain"
+        },
+        {
+          "id": "branding-admin-branding-email-present",
+          "kind": "source_marker",
+          "title": "Admin Branding & Email remains present",
+          "file": "src/pages/admin/AdminTenants.tsx",
+          "must_match": "Branding & Email"
+        },
+        {
+          "id": "branding-admin-email-sender-mounted",
+          "kind": "source_marker",
+          "title": "Admin Branding & Email mounts EmailSenderSettings",
+          "file": "src/pages/admin/AdminTenants.tsx",
+          "must_match": "<EmailSenderSettings"
+        },
+        {
+          "id": "branding-public-url-resolver",
+          "kind": "source_file",
+          "title": "public Branding/logo paths use the accepted public URL resolver",
+          "file": "src/lib/brandingPublicUrl.ts",
+          "must_export": "brandingPublicUrl"
+        },
+        {
+          "id": "branding-intended-invariants",
+          "kind": "source_marker",
+          "title": "All intended Branding invariants hold together",
+          "all_of": [
+            "branding-company-mounted",
+            "branding-tenant-email-mounted",
+            "branding-tenant-show-sending-domain-false",
+            "branding-tenant-sending-subdomain-hidden",
+            "branding-admin-branding-email-present",
+            "branding-admin-email-sender-mounted",
+            "branding-public-url-resolver"
+          ]
+        }
+      ],
+      "required_tests": [
+        "aws/tests/accepted-features-registry.test.mjs",
+        "aws/tests/settings-branding-company-restore.test.mjs"
+      ],
+      "required_contracts": [],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Known failing control case against current origin/main. Evaluate-only findings must report missing tenant Email Branding mount, missing showSendingDomain={false}, missing Sending Subdomain hide contract, and missing brandingPublicUrl.ts. Do not repair Branding in the foundation PR."
+    },
+    {
+      "feature_id": "signature-requests",
+      "title": "Signature Requests",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Inventory only. Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "src/components/claim-detail/SignatureRequests.tsx",
+        "aws/tests/parity-signature-submit.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "signature-requests-source-present",
+          "kind": "source_file",
+          "title": "Signature Requests UI file exists on main",
+          "file": "src/components/claim-detail/SignatureRequests.tsx"
+        }
+      ],
+      "required_tests": ["aws/tests/parity-signature-submit.test.mjs"],
+      "required_contracts": ["signature-requests"],
+      "applicable_artifact_types": ["spa", "lambda"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "homeowner",
+      "title": "Homeowner portal and ledger",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": null,
+        "restore_authority": false,
+        "notes": "Inventory only. No historical SHA is restore authority."
+      },
+      "source_paths": [
+        "src/pages/HomeownerClaimPortal.tsx",
+        "src/pages/HomeownerCheckUpload.tsx",
+        "src/pages/HomeownerLedger.tsx"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "homeowner-portal-present",
+          "kind": "source_file",
+          "title": "Homeowner claim portal file exists on main",
+          "file": "src/pages/HomeownerClaimPortal.tsx"
+        }
+      ],
+      "required_tests": [],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "mortgage-ops",
+      "title": "Mortgage Ops library and admin",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/release-locks/locked-components.json",
+        "restore_authority": false,
+        "notes": "Release-lock SOURCE_LOCKED_NOT_ACTIVE is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "src/pages/admin/AdminMortgageOps.tsx",
+        "aws/functions/api/mortgage-library-docs.mjs",
+        "aws/rls/sql/29_mortgage_ops_library_parity.sql"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "mortgage-ops-admin-present",
+          "kind": "source_file",
+          "title": "Mortgage Ops admin page exists on main",
+          "file": "src/pages/admin/AdminMortgageOps.tsx"
+        }
+      ],
+      "required_tests": ["aws/tests/mortgage-ops-library-parity.test.mjs"],
+      "applicable_artifact_types": ["spa", "lambda", "sql"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "mortgage-agent",
+      "title": "Mortgage agent hire grants",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": null,
+        "restore_authority": false,
+        "notes": "Inventory only. SQL presence is not apply or restore authority."
+      },
+      "source_paths": [
+        "aws/identity/sql/07_hire_mortgage_agent_grants.sql"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "mortgage-agent-sql-present",
+          "kind": "sql_contract",
+          "title": "Mortgage agent hire-grants SQL file exists on main",
+          "file": "aws/identity/sql/07_hire_mortgage_agent_grants.sql"
+        }
+      ],
+      "required_tests": [],
+      "applicable_artifact_types": ["sql"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "platform-finance",
+      "title": "Platform finance API",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Inventory only. Financial write-protection contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/functions/api/financial.mjs",
+        "aws/tests/api-write.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "platform-finance-api-present",
+          "kind": "lambda_member",
+          "title": "Financial API member exists on main",
+          "file": "aws/functions/api/financial.mjs"
+        }
+      ],
+      "required_tests": ["aws/tests/api-write.test.mjs"],
+      "required_contracts": ["financial-write-protections"],
+      "applicable_artifact_types": ["lambda"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "tenant-payments",
+      "title": "Tenant payments page",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": null,
+        "restore_authority": false,
+        "notes": "Inventory only. No historical SHA is restore authority."
+      },
+      "source_paths": [
+        "src/pages/Payments.tsx"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "tenant-payments-page-present",
+          "kind": "source_file",
+          "title": "Payments page exists on main",
+          "file": "src/pages/Payments.tsx"
+        }
+      ],
+      "required_tests": [],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "walletops-moov",
+      "title": "WalletOps and Moov readiness",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Inventory only. Moov contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "src/pages/WalletOps.tsx",
+        "scripts/test-moov-file-rules.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "walletops-page-present",
+          "kind": "source_file",
+          "title": "WalletOps page exists on main",
+          "file": "src/pages/WalletOps.tsx"
+        }
+      ],
+      "required_tests": ["scripts/test-moov-file-rules.mjs"],
+      "required_contracts": ["moov"],
+      "applicable_artifact_types": ["spa", "lambda"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "claim-ledger",
+      "title": "Claim Ledger discovery and grouping",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": 539,
+        "evidence_path": "ops/deployment-guard/claim-ledger-accepted-695064-gq.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard evidence and PR number are inventory pointers only. They are not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+        "aws/tests/claim-ledger-accepted-contract.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "claim-ledger-sql-present",
+          "kind": "sql_contract",
+          "title": "Claim Ledger SQL 44 file exists on main",
+          "file": "aws/write-path/sql/44_claim_ledger_link_or_create.sql"
+        }
+      ],
+      "required_tests": ["aws/tests/claim-ledger-accepted-contract.test.mjs"],
+      "required_contracts": ["claim-ledger"],
+      "applicable_artifact_types": ["spa", "lambda", "sql"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement by this registry."
+    },
+    {
+      "feature_id": "ocr",
+      "title": "OCR Azure and Textract runtime",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/release-locks/locked-components.json",
+        "restore_authority": false,
+        "notes": "Release-lock UNVERIFIED OCR pin is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/functions/api/ocr.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "ocr-lambda-member-present",
+          "kind": "lambda_member",
+          "title": "OCR Lambda member exists on main",
+          "file": "aws/functions/api/ocr.mjs"
+        }
+      ],
+      "required_tests": ["ops/release-locks/tests/ocr-azure-invariants.test.mjs"],
+      "required_contracts": ["ocr"],
+      "applicable_artifact_types": ["lambda"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "delete-check",
+      "title": "Delete Check bridge",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": 501,
+        "evidence_path": "ops/release-locks/contracts/delete-check-contract.json",
+        "restore_authority": false,
+        "notes": "Release-lock delete-check contract remains authoritative for that lock. This registry row is inventory only and does not become restore authority."
+      },
+      "source_paths": [
+        "src/integrations/aws/deleteCheckBridge.ts"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "delete-check-bridge-present",
+          "kind": "source_file",
+          "title": "Delete Check bridge file exists on main",
+          "file": "src/integrations/aws/deleteCheckBridge.ts"
+        }
+      ],
+      "required_tests": ["aws/tests/frontend-delete-check-bridge.test.mjs"],
+      "applicable_artifact_types": ["spa", "lambda"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Release Locks remain the delete-check authority."
+    },
+    {
+      "feature_id": "check-movement-601",
+      "title": "Check-movement tenant identity helper",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": null,
+        "restore_authority": false,
+        "notes": "Inventory only. No historical SHA is restore authority."
+      },
+      "source_paths": [
+        "src/lib/tenantCheckIdentity.ts"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "check-movement-identity-present",
+          "kind": "source_file",
+          "title": "Check-movement identity helper exists on main",
+          "file": "src/lib/tenantCheckIdentity.ts"
+        }
+      ],
+      "required_tests": [],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Inventoried presence only. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "review-claim-save",
+      "title": "Review Claim # Save",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/tests/wave1-review-patches.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "review-claim-save-test-present",
+          "kind": "source_file",
+          "title": "Review Claim Save test file exists on main",
+          "file": "aws/tests/wave1-review-patches.test.mjs"
+        }
+      ],
+      "required_tests": ["aws/tests/wave1-review-patches.test.mjs"],
+      "required_contracts": ["review-claim-save"],
+      "applicable_artifact_types": ["spa", "lambda"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "check-files",
+      "title": "Check Files image contract",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/tests/check-image-invariants.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "check-files-test-present",
+          "kind": "source_file",
+          "title": "Check image invariant test exists on main",
+          "file": "aws/tests/check-image-invariants.test.mjs"
+        }
+      ],
+      "required_tests": ["aws/tests/check-image-invariants.test.mjs"],
+      "required_contracts": ["check-files"],
+      "applicable_artifact_types": ["spa", "lambda"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "check-command-center-responsive",
+      "title": "Check Command Center responsive layout",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "scripts/test-walletops-layout.mjs",
+        "src/pages/CheckCommandCenter.tsx"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "check-command-center-page-present",
+          "kind": "source_file",
+          "title": "Check Command Center page exists on main",
+          "file": "src/pages/CheckCommandCenter.tsx"
+        }
+      ],
+      "required_tests": ["scripts/test-walletops-layout.mjs"],
+      "required_contracts": ["check-command-center-responsive"],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "aws-spa-bootstrap",
+      "title": "AWS SPA bootstrap",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/tests/aws-production-spa-bootstrap.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "aws-spa-bootstrap-test-present",
+          "kind": "source_file",
+          "title": "AWS SPA bootstrap test exists on main",
+          "file": "aws/tests/aws-production-spa-bootstrap.test.mjs"
+        }
+      ],
+      "required_tests": ["aws/tests/aws-production-spa-bootstrap.test.mjs"],
+      "required_contracts": ["aws-spa-bootstrap"],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "checkalt",
+      "title": "CheckAlt deposit preflight",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/tests/checkalt-deposit-preflight.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "checkalt-preflight-test-present",
+          "kind": "source_file",
+          "title": "CheckAlt preflight test exists on main",
+          "file": "aws/tests/checkalt-deposit-preflight.test.mjs"
+        }
+      ],
+      "required_tests": ["aws/tests/checkalt-deposit-preflight.test.mjs"],
+      "required_contracts": ["checkalt"],
+      "applicable_artifact_types": ["lambda", "spa"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "tenant-isolation",
+      "title": "Tenant isolation",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/tests/tenant-security-compliance.test.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "tenant-isolation-test-present",
+          "kind": "source_file",
+          "title": "Tenant isolation test exists on main",
+          "file": "aws/tests/tenant-security-compliance.test.mjs"
+        }
+      ],
+      "required_tests": ["aws/tests/tenant-security-compliance.test.mjs"],
+      "required_contracts": ["tenant-isolation"],
+      "applicable_artifact_types": ["lambda", "sql", "spa"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "financial-write-protections",
+      "title": "Financial write protections",
+      "status": "inventory_only",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "inventory_note",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": "ops/deployment-guard/accepted-contracts.json",
+        "restore_authority": false,
+        "notes": "Deployment-guard contract listing is not accepted-feature restore authority."
+      },
+      "source_paths": [
+        "aws/tests/api-write.test.mjs",
+        "aws/functions/api/write.mjs"
+      ],
+      "semantic_invariants": [
+        {
+          "id": "financial-write-api-present",
+          "kind": "lambda_member",
+          "title": "Write API member exists on main",
+          "file": "aws/functions/api/write.mjs"
+        }
+      ],
+      "required_tests": ["aws/tests/api-write.test.mjs"],
+      "required_contracts": ["financial-write-protections"],
+      "applicable_artifact_types": ["lambda", "sql"],
+      "supersession_history": [],
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+    },
+    {
+      "feature_id": "invoice-recovery",
+      "title": "Invoice recovery",
+      "status": "missing_from_main",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "none",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": null,
+        "restore_authority": false,
+        "notes": "Not present on origin/main. Absence is inventory, not a restore SHA."
+      },
+      "source_paths": [
+        "src/features/invoice-recovery/InvoiceRecovery.tsx"
+      ],
+      "semantic_invariants": [],
+      "required_tests": [],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Recorded as missing_from_main. Do not invent restore authority."
+    },
+    {
+      "feature_id": "collection-v2",
+      "title": "Collection v2",
+      "status": "missing_from_main",
+      "workstream_id": "inventory",
+      "accepted_source_authority": {
+        "kind": "none",
+        "git_sha": null,
+        "merged_pr": null,
+        "evidence_path": null,
+        "restore_authority": false,
+        "notes": "Not present on origin/main. Absence is inventory, not a restore SHA."
+      },
+      "source_paths": [
+        "src/features/collection-v2/CollectionV2.tsx"
+      ],
+      "semantic_invariants": [],
+      "required_tests": [],
+      "applicable_artifact_types": ["spa"],
+      "supersession_history": [],
+      "notes": "Recorded as missing_from_main. Do not invent restore authority."
+    }
+  ]
+}
