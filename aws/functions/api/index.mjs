@@ -18,6 +18,7 @@ import {
   handleStorageWritesDisabled,
   handlePublicSignatureDocument,
 } from './storage.mjs';
+import * as storageApi from './storage.mjs';
 import { handlePublicEndorsement } from './check-endorsement.mjs';
 import { handlePublicSignatureSubmit } from './signature-submit.mjs';
 import { handlePublicInvoice } from './public-invoice.mjs';
@@ -225,6 +226,31 @@ export const handler = async (event) => {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && path.startsWith('/data/')) {
     const result = await handleWritesDisabled(event);
     return json(403, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+
+  const brandingLogoPath = path.replace(/^\/prep(?=\/|$)/, '') || '/';
+  const handleBrandingLogo = storageApi.handleBrandingLogo;
+  if (typeof handleBrandingLogo === 'function' && method === 'GET' && (brandingLogoPath === '/branding/logo' || /^\/branding\/logo\/[0-9a-fA-F-]{36}$/.test(brandingLogoPath))) {
+    const result = await handleBrandingLogo({ ...event, rawPath: brandingLogoPath });
+    if (result.binary && result.body) {
+      return {
+        statusCode: 200,
+        headers: {
+          'content-type': result.contentType || 'image/png',
+          'cache-control': 'public, max-age=3600',
+          'access-control-allow-origin': '*',
+        },
+        isBase64Encoded: true,
+        body: Buffer.from(result.body).toString('base64'),
+      };
+    }
+    return json(result.statusCode || 404, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
