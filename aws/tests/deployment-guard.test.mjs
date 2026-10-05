@@ -84,7 +84,7 @@ test('API Gateway CORS-only deployment type is accepted and unknown types remain
     deployment_type: 'apigateway-cors-bypass',
   }));
   assert.equal(unknown.ok, false);
-  assert.equal(unknown.code, CODES.ANONYMOUS_DEPLOYMENT);
+  assert.equal(unknown.code, CODES.INVALID_MANIFEST);
   assert.equal(unknown.errors.some((entry) => entry.code === CODES.INVALID_MANIFEST), true);
 });
 
