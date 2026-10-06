@@ -29,7 +29,13 @@ Control-plane paths: `.github/CODEOWNERS`, `.github/workflows/release-locks.yml`
 3. `STAGING_LOCKED_NOT_PRODUCTION` — verified in staging only.
 4. `UNVERIFIED` — evidence incomplete, conflicting, or stale.
 
-`production-spa` is `PRODUCTION_LOCKED` to the live production frontend. Other components stay unlocked. Documentation and merged PRs alone are not sufficient. `origin/main` is not the live SPA.
+`production-spa` is `PRODUCTION_LOCKED` to the recorded production frontend
+baseline. Other components stay unlocked. Documentation and merged PRs alone
+are not sufficient. `origin/main` is not the live SPA. If live production has
+advanced past the historical lock, ordinary deploys remain refused. An
+explicit forward-supersession candidate may replace that orphaned live
+bundle with a new proven composition; the lock then advances to that new
+composition only after verified deploy.
 
 ## Checks
 

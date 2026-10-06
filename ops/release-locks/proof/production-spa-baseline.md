@@ -44,8 +44,14 @@ Do not restore a superseded entry (`index-CTqMys28.js`, `index-BPbQUNFr.js`,
 1. Stale / older candidate than this baseline: refuse
 2. Production changed after preflight (TOCTOU): refuse
 3. Candidate missing this baseline / source lineage: refuse
-4. Lock says this SPA, live production is something else: refuse; do not auto-fix
+4. Lock says this SPA, live production is something else: ordinary deployment
+   is refused; do not auto-fix and do not restore this historical baseline
 5. Destructive frontend deploy (`s3 sync --delete` or equivalent): refuse
+6. Explicit `forward_supersession` is a separate mode. It may authorize a new
+   proven composition C over orphaned live B only with full evidence. The
+   lock advances to C after verified deploy, never to unexplained B, and
+   never before verification. `reconciled_to_production_baseline=true` is
+   not supersession.
 
 Authorized production SPA writes remain per-object `s3api put-object`
 (assets first, `index.html` last). This evidence file does not authorize any

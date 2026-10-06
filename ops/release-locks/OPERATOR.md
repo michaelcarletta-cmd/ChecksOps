@@ -104,6 +104,12 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 
 `CHECKSOPS_PRODUCTION_DEPLOY=1` fails unless a candidate fingerprint is supplied **and** the targeted components are `PRODUCTION_LOCKED`. For `production-spa`, the candidate must be the locked live baseline or a narrow overlay whose `based_on_baseline` matches that baseline. `--live` always fails.
 
+Ordinary production SPA deploys still fail closed when live ≠ locked. That drift check is not removed.
+
+An **explicit** `forward_supersession=true` candidate may authorize B → C only when every required evidence field is present: production deploy intent, the exact historical lock A, the exact fresh live B, `reconciled_against_live` matching B, a new known source composition C (git SHA/tree), accepted-feature/preservation contracts, and a valid unused receipt plus active lease. `reconciled_to_production_baseline=true` alone is not supersession. The lock must not be edited to B to make the check pass.
+
+The Release Lock advances to C only after successful guarded deployment verification. A failed deploy leaves the existing lock unchanged. The lock never advances to unexplained live B.
+
 ## Production SPA baseline
 
 `production-spa` is the authoritative live frontend at `checksops.com`
@@ -112,8 +118,10 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 
 `origin/main` is not that SPA. Do not promote main, another branch, or a
 worktree unless the candidate contains or reconciles this baseline. If live
-production no longer matches the lock, refuse deployment; do not auto-fix
-production and do not restore an older baseline.
+production no longer matches the lock, ordinary deployment is refused; do
+not auto-fix production and do not restore an older baseline. Use explicit
+forward supersession only when a new proven composition C is reconciled
+against the current live B and all required evidence is present.
 
 ## Overlap exceptions
 
