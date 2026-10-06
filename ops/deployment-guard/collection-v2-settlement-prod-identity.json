@@ -11,8 +11,7 @@
   ],
   "owned_member_ops": {
     "replace": ["providers/webhooks.mjs"],
-    "add": ["tenant-collection-v2-settlement.mjs"],
-    "remove": []
+    "add": ["tenant-collection-v2-settlement.mjs"]
   },
   "add_members": ["tenant-collection-v2-settlement.mjs"],
   "member_sources": {
