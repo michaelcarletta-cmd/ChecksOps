@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAuth } from "@/hooks/useAuth";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
+import { applyEmailPreviewLogo, brandingPublicUrl } from "@/lib/brandingPublicUrl";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -197,7 +198,8 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
     const mailFrom = settings?.mailFromRecords || [];
     return [...dkim, ...mailFrom];
   }, [settings]);
-  const logoUrl = settings?.logoUrl || tenant?.logo_url || null;
+  const storedLogo = settings?.logoUrl || tenant?.logo_url || null;
+  const logoUrl = brandingPublicUrl(storedLogo, "tenant-logos") || storedLogo;
   const primaryColor = settings?.primaryColor || tenant?.primary_color || "#1a56db";
 
   const { data: preview } = useQuery({
@@ -205,6 +207,11 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
     enabled: aws && !!tenantId,
     queryFn: () => invokeFunction<EmailPreview>("tenant-email-preview", { tenantId }),
   });
+
+  const previewHtml = useMemo(
+    () => applyEmailPreviewLogo(preview?.html || "", storedLogo, awsApiBaseUrl()),
+    [preview?.html, storedLogo],
+  );
 
   const save = useMutation({
     mutationFn: async () => {
@@ -568,12 +575,12 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
               </div>
             )}
           </div>
-          {preview?.html ? (
+          {previewHtml ? (
             <iframe
               title="ChecksOps email preview"
               className="h-[520px] w-full rounded-md border bg-white"
               sandbox=""
-              srcDoc={preview.html}
+              srcDoc={previewHtml}
             />
           ) : (
             <p className="text-xs text-muted-foreground">

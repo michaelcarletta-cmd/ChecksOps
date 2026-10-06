@@ -76,3 +76,41 @@ export function resolvePublicBrandingUrl(
 ): string | null {
   return brandingPublicUrl(value, bucket, apiBaseUrl);
 }
+
+/** SPA-host /prep/* is not the staging API; CloudFront serves index.html there. */
+export function isBrokenEmailPreviewLogoSrc(src: string): boolean {
+  const raw = String(src || "").trim();
+  if (!raw) return false;
+  if (/^(javascript|data|blob|file):/i.test(raw)) return false;
+  if (/checksops-logo\.png/i.test(raw)) return true;
+  if (isRawBrandingObjectPath(raw)) return true;
+  if (/\/prep\/branding\/logo\//i.test(raw)) return true;
+  if (/staging\.checksops\.com\/prep\//i.test(raw)) return true;
+  return false;
+}
+
+export function shouldReplacePreviewLogoSrc(src: string, resolved: string): boolean {
+  const raw = String(src || "").trim();
+  const next = String(resolved || "").trim();
+  if (!raw || !next || raw === next) return false;
+  if (/^(javascript|data|blob|file):/i.test(raw)) return false;
+  return isBrokenEmailPreviewLogoSrc(raw);
+}
+
+/**
+ * Rewrite the generated preview <img src> to the same public-storage URL
+ * the Branding page uses. Does not persist or change outbound send HTML.
+ */
+export function applyEmailPreviewLogo(
+  html: string,
+  storedLogo: unknown,
+  apiBaseUrl = apiBase(),
+): string {
+  const source = String(html || "");
+  const resolved = brandingPublicUrl(storedLogo, "tenant-logos", apiBaseUrl);
+  if (!source || !resolved) return source;
+  return source.replace(/<img(\s[^>]*?)\bsrc="([^"]*)"/i, (full, pre, src) => {
+    if (!shouldReplacePreviewLogoSrc(src, resolved)) return full;
+    return `<img${pre}src="${resolved}"`;
+  });
+}
