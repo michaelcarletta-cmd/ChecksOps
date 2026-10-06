@@ -95,6 +95,7 @@ jobs:
           echo "Live package captured in ephemeral runner storage; source contents will not be logged or uploaded."
 
       - name: Prove live source baseline and SH-2-only delta
+        id: compose
         shell: bash
         env:
           LIVE_MEMBER_SHA256: ${{ steps.preflight.outputs.live_member_sha256 }}
@@ -142,6 +143,15 @@ jobs:
             )
             COMPOSED_SHA256="$(sha256sum /tmp/sh2-compose/aws/functions/api/index.mjs | awk '{print $1}')"
             node --check /tmp/sh2-compose/aws/functions/api/index.mjs
+            if grep -Eq -- '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}' /tmp/sh2-compose/aws/functions/api/index.mjs; then
+              echo "SECRET_SCAN_FAILED: refusing to publish composed source artifact"
+              exit 2
+            fi
+            mkdir -p /tmp/sh2-reviewed-source
+            cp /tmp/sh2-compose/aws/functions/api/index.mjs /tmp/sh2-reviewed-source/index.mjs
+            printf '%s  %s\n' "$COMPOSED_SHA256" "index.mjs" > /tmp/sh2-reviewed-source/SHA256SUMS
+            echo "composed_ready=true" >> "$GITHUB_OUTPUT"
+            echo "composed_sha256=$COMPOSED_SHA256" >> "$GITHUB_OUTPUT"
             test "$COMPOSED_SHA256" != "$LIVE_MEMBER_SHA256" || {
               echo "SOURCE_RECONCILIATION_REQUIRED: SH-2 patch produced no change to live source"
               exit 2
@@ -170,7 +180,16 @@ jobs:
             echo "- Mutation: none"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload reviewed forward-composed source
+        if: ${{ steps.compose.outputs.composed_ready == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sh2-forward-composed-index-${{ github.run_id }}
+          path: /tmp/sh2-reviewed-source/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}
         shell: bash
-        run: rm -rf .deployment-guard /tmp/checksops-staging-live.zip /tmp/index-live.mjs /tmp/index-live-baseline.mjs /tmp/index-forward-composed.mjs /tmp/sh2-index.patch /tmp/sh2-compose
+        run: rm -rf .deployment-guard /tmp/checksops-staging-live.zip /tmp/index-live.mjs /tmp/index-live-baseline.mjs /tmp/index-forward-composed.mjs /tmp/sh2-index.patch /tmp/sh2-compose /tmp/sh2-reviewed-source
