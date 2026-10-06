@@ -1,0 +1,121 @@
+name: SH-2 staging source reconciliation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sh2-staging-source-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Refuse non-main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Reconciliation only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: latest
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/github-staging-lambda-overlay.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate staging OIDC inputs
+        shell: bash
+        env:
+          STAGING_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingLambdaOverlay"
+          test "$STAGING_DEPLOY_ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "Dedicated staging role missing or mismatched"; exit 2; }
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-sh2-reconcile-${{ github.run_id }}
+
+      - name: Inspect exact live index.mjs
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_STAGING_DEPLOY_MODE: inspect
+          CHECKSOPS_STAGING_OVERLAY_MEMBER: index.mjs
+        run: node scripts/deployment-guard/github-staging-lambda-overlay.mjs
+
+      - name: Prove live source baseline and SH-2-only delta
+        shell: bash
+        env:
+          LIVE_MEMBER_SHA256: ${{ steps.preflight.outputs.live_member_sha256 }}
+        run: |
+          set -euo pipefail
+          BASELINE="ef55d9218936f406dc6860fd7e2df00819cd33ee"
+          SH2_REDACTION="d96cf58dc3bdc455bb3d9a0ed1001135d8ac8e62"
+          SH2_TESTABILITY="d5066fd9005c015428f96ed4d537fc0cfa0d6b0c"
+          MEMBER="aws/functions/api/index.mjs"
+
+          git cat-file -e "$BASELINE^{commit}"
+          git show "$BASELINE:$MEMBER" > /tmp/index-live-baseline.mjs
+          BASELINE_SHA256="$(sha256sum /tmp/index-live-baseline.mjs | awk '{print $1}')"
+          CURRENT_SHA256="$(sha256sum "$MEMBER" | awk '{print $1}')"
+
+          test "$LIVE_MEMBER_SHA256" = "$BASELINE_SHA256" || {
+            echo "SOURCE_RECONCILIATION_REQUIRED: live index.mjs does not equal reviewed pre-SH-2 baseline"
+            echo "live=$LIVE_MEMBER_SHA256"
+            echo "baseline=$BASELINE_SHA256"
+            exit 2
+          }
+
+          mapfile -t TOUCHES < <(git log --format='%H' "$BASELINE..HEAD" -- "$MEMBER")
+          test "${#TOUCHES[@]}" -eq 2 || {
+            echo "SOURCE_RECONCILIATION_REQUIRED: unexpected number of post-baseline index.mjs commits"
+            printf '%s\n' "${TOUCHES[@]}"
+            exit 2
+          }
+          printf '%s\n' "${TOUCHES[@]}" | grep -Fxq "$SH2_REDACTION"
+          printf '%s\n' "${TOUCHES[@]}" | grep -Fxq "$SH2_TESTABILITY"
+
+          git diff --check "$BASELINE" HEAD -- "$MEMBER"
+
+          {
+            echo "### SH-2 staging source reconciliation — PASS"
+            printf -- '- Main commit: `%s`\n' "$GITHUB_SHA"
+            printf -- '- Live index.mjs SHA-256: `%s`\n' "$LIVE_MEMBER_SHA256"
+            printf -- '- Pre-SH-2 baseline SHA-256: `%s`\n' "$BASELINE_SHA256"
+            printf -- '- Current main index.mjs SHA-256: `%s`\n' "$CURRENT_SHA256"
+            echo "- Post-baseline index.mjs commits: exactly SH-2 redaction + SH-2 testability"
+            echo "- Mutation: none"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf .deployment-guard
