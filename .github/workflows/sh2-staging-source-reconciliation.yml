@@ -150,6 +150,25 @@ jobs:
             mkdir -p /tmp/sh2-reviewed-source
             cp /tmp/sh2-compose/aws/functions/api/index.mjs /tmp/sh2-reviewed-source/index.mjs
             printf '%s  %s\n' "$COMPOSED_SHA256" "index.mjs" > /tmp/sh2-reviewed-source/SHA256SUMS
+
+            REQUIRED_LIVE_MODULES=(
+              "public-invoice.mjs"
+              "tenant-collection-v2-uat.mjs"
+              "tenant-maintenance-payments-catalog-inspect.mjs"
+            )
+            for module in "${REQUIRED_LIVE_MODULES[@]}"; do
+              unzip -p /tmp/checksops-staging-live.zip "$module" > "/tmp/sh2-reviewed-source/$module"
+              test -s "/tmp/sh2-reviewed-source/$module" || {
+                echo "SOURCE_RECONCILIATION_REQUIRED: live package is missing required module $module"
+                exit 2
+              }
+              node --check "/tmp/sh2-reviewed-source/$module"
+              if grep -Eq -- '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}' "/tmp/sh2-reviewed-source/$module"; then
+                echo "SECRET_SCAN_FAILED: refusing to publish live dependency $module"
+                exit 2
+              fi
+              sha256sum "/tmp/sh2-reviewed-source/$module" | sed 's#  /tmp/sh2-reviewed-source/#  #' >> /tmp/sh2-reviewed-source/SHA256SUMS
+            done
             echo "composed_ready=true" >> "$GITHUB_OUTPUT"
             echo "composed_sha256=$COMPOSED_SHA256" >> "$GITHUB_OUTPUT"
             test "$COMPOSED_SHA256" != "$LIVE_MEMBER_SHA256" || {
