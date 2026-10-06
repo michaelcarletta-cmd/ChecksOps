@@ -54,6 +54,14 @@ test('protected Collection V2 members stay byte-identical to current live', () =
     sha256File('tests/fixtures/live-webhook-apply.mjs'),
     LIVE.protected_collection_v2['providers/webhook-apply.mjs'],
   );
+  assert.equal(
+    sha256File('tests/fixtures/live-webhooks.mjs'),
+    LIVE.protected_collection_v2['providers/webhooks.mjs'],
+  );
+  assert.equal(
+    sha256File('functions/api/tenant-billing-destination.mjs'),
+    LIVE.protected_collection_v2['tenant-billing-destination.mjs'],
+  );
 });
 
 test('Invoice Recovery live hashes are pinned and not owned by this overlay', () => {

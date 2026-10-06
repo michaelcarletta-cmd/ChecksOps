@@ -3,6 +3,7 @@
  * Fixtures only. No Moov, AWS, SQL apply, or historical mutation.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
@@ -510,7 +511,11 @@ test('historical reconcile stays design-only and forbids due+transfer-id inferen
 test('settlement module never moves money', () => {
   const source = readFileSync(new URL('../functions/api/tenant-collection-v2-settlement.mjs', import.meta.url), 'utf8');
   assert.equal(/moovFetch|postTransferLedger|transfersWrite|ACH debit|sourceMethodId/.test(source), false);
-  const webhooks = readFileSync(new URL('../functions/api/providers/webhooks.mjs', import.meta.url), 'utf8');
+  const webhooks = readFileSync(new URL('./fixtures/live-webhooks.mjs', import.meta.url), 'utf8');
   assert.match(webhooks, /applyCollectionV2ProviderCompletion/);
   assert.match(webhooks, /!dryRun/);
+  assert.equal(
+    createHash('sha256').update(webhooks).digest('hex'),
+    '4bd776a7766b0bd63e17ba18e790e28bb0b4fb8a7c9cceb271bf4f84280e7681',
+  );
 });
