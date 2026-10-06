@@ -1192,6 +1192,97 @@ test('add-member RevisionId drift performs no write', async () => {
   assert.equal(receiptConsumed(root, issued.receipt), false);
 });
 
+const REMOVE_OPS = {
+  replace: ['index.mjs'],
+  add: [],
+  remove: ['tenant-collection-v2-uat.mjs', 'tenant-maintenance-payments-catalog-inspect.mjs'],
+};
+
+function liveZipWithTempDiagnostics() {
+  return writeZipMembers({
+    'index.mjs': 'export const handler = "live-with-temp";\n',
+    'tenant-collection-v2-uat.mjs': 'export const harness = true;\n',
+    'tenant-maintenance-payments-catalog-inspect.mjs': 'export const inspector = true;\n',
+    'tenant-collection-v2-settlement.mjs': 'export const settlement = "keep";\n',
+    'unrelated.mjs': 'export const keep = true;\n',
+  });
+}
+
+function writeIndexOnlySource(root) {
+  const owned = path.join(root, 'aws/functions/api');
+  fs.mkdirSync(owned, { recursive: true });
+  fs.writeFileSync(path.join(owned, 'index.mjs'), 'export const handler = "forward-remove";\n');
+  return {
+    'index.mjs': 'aws/functions/api/index.mjs',
+  };
+}
+
+test('authorized remove deletes only owned temporary members', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: [
+      'index.mjs',
+      'tenant-collection-v2-uat.mjs',
+      'tenant-maintenance-payments-catalog-inspect.mjs',
+    ],
+    owned_member_ops: REMOVE_OPS,
+  });
+  const before = liveZipWithTempDiagnostics();
+  const state = createLambdaState({ zip: before });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: writeIndexOnlySource(root),
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+  const afterMembers = hashZipMembers(state.zip);
+  const beforeMembers = hashZipMembers(before);
+  assert.equal(afterMembers['tenant-collection-v2-uat.mjs'], undefined);
+  assert.equal(afterMembers['tenant-maintenance-payments-catalog-inspect.mjs'], undefined);
+  assert.equal(afterMembers['tenant-collection-v2-settlement.mjs'], beforeMembers['tenant-collection-v2-settlement.mjs']);
+  assert.equal(afterMembers['unrelated.mjs'], beforeMembers['unrelated.mjs']);
+  assert.deepEqual(result.details.removed_members, [
+    'tenant-collection-v2-uat.mjs',
+    'tenant-maintenance-payments-catalog-inspect.mjs',
+  ]);
+});
+
+test('remove member source path is refused', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root, {
+    owned: [
+      'index.mjs',
+      'tenant-collection-v2-uat.mjs',
+      'tenant-maintenance-payments-catalog-inspect.mjs',
+    ],
+    owned_member_ops: REMOVE_OPS,
+  });
+  const sources = writeIndexOnlySource(root);
+  sources['tenant-collection-v2-uat.mjs'] = 'aws/functions/api/index.mjs';
+  const state = createLambdaState({ zip: liveZipWithTempDiagnostics() });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: sources,
+  }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.INVALID_MANIFEST);
+  assert.match(result.message, /must not have a member_sources path/);
+  assert.equal(state.updates.length, 0);
+});
+
 test('duplicate live ZIP member names fail closed before overlay/rebuild', async () => {
   const root = tmpRootWithOps();
   const issued = issueOverlayReceipt(root);

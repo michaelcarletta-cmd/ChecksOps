@@ -271,14 +271,26 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
   const owned = [...classified.details.all];
   const replaceMembers = [...classified.details.replace];
   const addMembers = [...classified.details.add];
+  const removeMembers = [...(classified.details.remove || [])];
+  const removeSet = new Set(removeMembers);
   const memberSources = input.member_sources || {};
   for (const member of owned) {
+    if (removeSet.has(member)) {
+      if (memberSources[member]) {
+        return fail(
+          CODES.INVALID_MANIFEST,
+          `remove member ${member} must not have a member_sources path`,
+          { member },
+        );
+      }
+      continue;
+    }
     if (!memberSources[member]) {
       return fail(CODES.INVALID_MANIFEST, `owned ZIP member ${member} has no member_sources path`, { member });
     }
   }
   for (const member of Object.keys(memberSources)) {
-    if (!owned.includes(member)) {
+    if (!owned.includes(member) || removeSet.has(member)) {
       return fail(CODES.UNRELATED_MUTATION, 'member_sources includes a ZIP member that the receipt did not approve', {
         member,
       });
@@ -320,12 +332,14 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     liveMembers,
     replace: replaceMembers,
     add: addMembers,
+    remove: removeMembers,
   });
   if (!presence.ok) return presence;
 
   const replacements = {};
   const sourceRoot = repoRoot || guardRoot;
   for (const member of owned) {
+    if (removeSet.has(member)) continue;
     const resolved = resolveOwnedMemberSource(sourceRoot, member, memberSources[member]);
     if (!resolved.ok) return resolved;
     replacements[member] = fs.readFileSync(resolved.details.path);
@@ -333,7 +347,7 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
 
   let candidateZip;
   try {
-    candidateZip = overlayZipMembers(downloaded.details.zip, replacements);
+    candidateZip = overlayZipMembers(downloaded.details.zip, replacements, { remove: removeMembers });
   } catch (error) {
     const message = String(error?.message || error);
     return fail(CODES.DEPLOYMENT_COLLISION, 'failed to overlay live Lambda ZIP members', { error: message });
@@ -474,6 +488,7 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     owned_members: owned,
     replaced_members: replaceMembers,
     added_members: addMembers,
+    removed_members: removeMembers,
     receipt: {
       file: authorized.details.receipt_file || null,
       mac: receipt.mac,

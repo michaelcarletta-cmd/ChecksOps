@@ -140,8 +140,14 @@ export function hashZipMembers(buffer) {
   return hashes;
 }
 
-export function overlayZipMembers(liveZip, replacements) {
+export function overlayZipMembers(liveZip, replacements, options = {}) {
   const members = readZipMembers(liveZip);
+  for (const name of options.remove || []) {
+    if (!Object.prototype.hasOwnProperty.call(members, name)) {
+      throw new Error(`REMOVE_MISSING_ZIP_MEMBER: ${name}`);
+    }
+    delete members[name];
+  }
   for (const [name, data] of Object.entries(replacements || {})) {
     members[name] = Buffer.isBuffer(data) ? data : Buffer.from(data);
   }

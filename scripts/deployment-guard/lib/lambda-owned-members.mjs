@@ -49,32 +49,44 @@ export function validateOwnedMemberOps(ops, ownedComponents = []) {
     return fail(CODES.INVALID_MANIFEST, 'owned_member_ops is required when that receipt field is present');
   }
   if (!ops || typeof ops !== 'object' || Array.isArray(ops)) {
-    return fail(CODES.INVALID_MANIFEST, 'owned_member_ops must be an object with replace and add arrays');
+    return fail(CODES.INVALID_MANIFEST, 'owned_member_ops must be an object with replace, add, and optional remove arrays');
   }
-  const extraKeys = Object.keys(ops).filter((key) => key !== 'replace' && key !== 'add');
+  const extraKeys = Object.keys(ops).filter((key) => key !== 'replace' && key !== 'add' && key !== 'remove');
   if (extraKeys.length) {
-    return fail(CODES.INVALID_MANIFEST, 'owned_member_ops may only contain replace and add', {
+    return fail(CODES.INVALID_MANIFEST, 'owned_member_ops may only contain replace, add, and remove', {
       extra_keys: extraKeys,
     });
   }
   if (!Array.isArray(ops.replace) || !Array.isArray(ops.add)) {
     return fail(CODES.INVALID_MANIFEST, 'owned_member_ops.replace and owned_member_ops.add must both be arrays');
   }
+  if (ops.remove != null && !Array.isArray(ops.remove)) {
+    return fail(CODES.INVALID_MANIFEST, 'owned_member_ops.remove must be an array when present');
+  }
   const replace = uniqueStrings(ops.replace, 'owned_member_ops.replace');
   if (!replace.ok) return replace;
   const add = uniqueStrings(ops.add, 'owned_member_ops.add');
   if (!add.ok) return add;
-  const replaceSet = new Set(replace.details.members);
-  for (const member of add.details.members) {
-    if (replaceSet.has(member)) {
-      return fail(
-        CODES.INVALID_MANIFEST,
-        'owned_member_ops destination cannot be listed as both replace and add',
-        { member },
-      );
+  const remove = uniqueStrings(ops.remove || [], 'owned_member_ops.remove');
+  if (!remove.ok) return remove;
+  const seen = new Set();
+  for (const [list, members] of [
+    ['replace', replace.details.members],
+    ['add', add.details.members],
+    ['remove', remove.details.members],
+  ]) {
+    for (const member of members) {
+      if (seen.has(member)) {
+        return fail(
+          CODES.INVALID_MANIFEST,
+          'owned_member_ops destination cannot be listed in more than one of replace, add, or remove',
+          { member, list },
+        );
+      }
+      seen.add(member);
     }
   }
-  const all = [...replace.details.members, ...add.details.members];
+  const all = [...replace.details.members, ...add.details.members, ...remove.details.members];
   const owned = Array.isArray(ownedComponents) ? ownedComponents.map(String) : [];
   const ownedSet = new Set(owned);
   const allSet = new Set(all);
@@ -83,13 +95,14 @@ export function validateOwnedMemberOps(ops, ownedComponents = []) {
   if (missingFromOwned.length || missingFromOps.length) {
     return fail(
       CODES.INVALID_MANIFEST,
-      'owned_member_ops replace+add must equal receipt owned_components',
+      'owned_member_ops replace+add+remove must equal receipt owned_components',
       { missing_from_owned_components: missingFromOwned, missing_from_owned_member_ops: missingFromOps },
     );
   }
   return ok({
     replace: replace.details.members,
     add: add.details.members,
+    remove: remove.details.members,
     all,
     explicit: true,
   });
@@ -106,6 +119,7 @@ export function classifyOwnedMembers(receipt = {}) {
     return ok({
       replace: names.details.members,
       add: [],
+      remove: [],
       all: names.details.members,
       explicit: false,
     });
@@ -113,13 +127,22 @@ export function classifyOwnedMembers(receipt = {}) {
   return validateOwnedMemberOps(receipt.owned_member_ops, owned);
 }
 
-export function evaluateOwnedMemberPresence({ liveMembers = {}, replace = [], add = [] } = {}) {
+export function evaluateOwnedMemberPresence({ liveMembers = {}, replace = [], add = [], remove = [] } = {}) {
   for (const member of replace) {
     if (!Object.prototype.hasOwnProperty.call(liveMembers, member)) {
       return fail(
         CODES.DEPLOYMENT_COLLISION,
         'receipt-owned ZIP member is absent from the current live Lambda ZIP',
         { member, action: 'replace' },
+      );
+    }
+  }
+  for (const member of remove) {
+    if (!Object.prototype.hasOwnProperty.call(liveMembers, member)) {
+      return fail(
+        CODES.DEPLOYMENT_COLLISION,
+        'receipt-owned ZIP member is absent from the current live Lambda ZIP',
+        { member, action: 'remove' },
       );
     }
   }
@@ -132,5 +155,5 @@ export function evaluateOwnedMemberPresence({ liveMembers = {}, replace = [], ad
       );
     }
   }
-  return ok({ replace: [...replace], add: [...add] });
+  return ok({ replace: [...replace], add: [...add], remove: [...remove] });
 }
