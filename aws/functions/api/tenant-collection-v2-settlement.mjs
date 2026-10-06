@@ -239,23 +239,6 @@ export async function applyBillingProviderEvent(client, {
     }
   }
 
-  if (collectionLeg && mapped) {
-    const settledAt = asIso(completedAt);
-    await client.query(
-      `UPDATE public.payment_transfers SET
-         status = $2,
-         provider_status = $3,
-         completed_at = CASE
-           WHEN $2 = 'settled' THEN COALESCE(completed_at, $5::timestamptz, now())
-           ELSE completed_at
-         END,
-         failure_reason = CASE WHEN $2 IN ('failed','returned') THEN COALESCE($4, failure_reason) ELSE failure_reason END,
-         updated_at = now()
-       WHERE id = $1::uuid`,
-      [collectionLeg.id, mapped, normalized, reason, settledAt],
-    ).catch(() => {});
-  }
-
   const existing = await lookupObligation(client, { providerTransferId, collectionLeg });
   if (!existing) return { applied: false, skipped: 'no_billing_occurrence' };
   if (!isCollectionV2Obligation(existing)) {
@@ -288,6 +271,23 @@ export async function applyBillingProviderEvent(client, {
   }
   if (existing.status === 'settled' && mapped === 'failed') {
     return { applied: false, skipped: 'already_settled', occurrence: existing };
+  }
+
+  if (collectionLeg && mapped) {
+    const settledAt = asIso(completedAt);
+    await client.query(
+      `UPDATE public.payment_transfers SET
+         status = $2,
+         provider_status = $3,
+         completed_at = CASE
+           WHEN $2 = 'settled' THEN COALESCE(completed_at, $5::timestamptz, now())
+           ELSE completed_at
+         END,
+         failure_reason = CASE WHEN $2 IN ('failed','returned') THEN COALESCE($4, failure_reason) ELSE failure_reason END,
+         updated_at = now()
+       WHERE id = $1::uuid`,
+      [collectionLeg.id, mapped, normalized, reason, settledAt],
+    ).catch(() => {});
   }
 
   let nextStatus = mapped;
