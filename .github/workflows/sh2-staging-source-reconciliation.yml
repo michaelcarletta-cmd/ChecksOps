@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 concurrency:
@@ -207,6 +207,36 @@ jobs:
           path: /tmp/sh2-reviewed-source/
           if-no-files-found: error
           retention-days: 1
+
+      - name: Commit exact reviewed source to reconciliation branch
+        if: ${{ steps.compose.outputs.composed_ready == 'true' }}
+        shell: bash
+        env:
+          TARGET_BRANCH: security/sh2-forward-composed-source
+        run: |
+          set -euo pipefail
+          git fetch origin "$TARGET_BRANCH"
+          TARGET_HEAD="$(git rev-parse "origin/$TARGET_BRANCH")"
+          MAIN_HEAD="$(git rev-parse HEAD)"
+          test "$TARGET_HEAD" = "$MAIN_HEAD" || {
+            echo "SOURCE_RECONCILIATION_REQUIRED: target branch is not exactly current main"
+            exit 2
+          }
+          sha256sum -c /tmp/sh2-reviewed-source/SHA256SUMS
+          mkdir -p aws/functions/api
+          cp /tmp/sh2-reviewed-source/index.mjs aws/functions/api/index.mjs
+          cp /tmp/sh2-reviewed-source/public-invoice.mjs aws/functions/api/public-invoice.mjs
+          cp /tmp/sh2-reviewed-source/tenant-collection-v2-uat.mjs aws/functions/api/tenant-collection-v2-uat.mjs
+          cp /tmp/sh2-reviewed-source/tenant-maintenance-payments-catalog-inspect.mjs aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs
+          git diff --check
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$TARGET_BRANCH"
+          git add -- aws/functions/api/index.mjs aws/functions/api/public-invoice.mjs aws/functions/api/tenant-collection-v2-uat.mjs aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs
+          git diff --cached --quiet && { echo "No reconciliation source changes to commit"; exit 2; }
+          git commit -m "security: reconcile exact live SH-2 source composition"
+          git push --force-with-lease="refs/heads/$TARGET_BRANCH:$TARGET_HEAD" origin "HEAD:refs/heads/$TARGET_BRANCH"
 
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}
