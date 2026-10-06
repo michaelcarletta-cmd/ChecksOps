@@ -73,6 +73,26 @@ const READ_ONLY_PATHS = new Set([
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
 
+export const publicDbHealthResponse = (probe) => {
+  const healthy = probeIsHealthy(probe);
+  return {
+    statusCode: healthy ? 200 : 503,
+    body: {
+      service: 'checksops-api',
+      status: healthy ? 'ok' : 'unhealthy',
+    },
+  };
+};
+
+export const publicDbValidationResponse = (validation) => ({
+  statusCode: validation?.ok ? 200 : 503,
+  body: {
+    service: 'checksops-api',
+    status: validation?.ok ? 'ok' : 'unhealthy',
+    readOnly: true,
+  },
+});
+
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
@@ -115,10 +135,8 @@ export const handler = async (event) => {
     const healthy = probeIsHealthy(probe);
     const auth = await resolveClaims(event);
     if (!auth.ok) {
-      return json(healthy ? 200 : 503, {
-        service: 'checksops-api',
-        status: healthy ? 'ok' : 'unhealthy',
-      });
+      const publicResult = publicDbHealthResponse(probe);
+      return json(publicResult.statusCode, publicResult.body);
     }
     return json(healthy ? 200 : 503, {
       service: 'checksops-api',
@@ -132,11 +150,8 @@ export const handler = async (event) => {
     const validation = await validateReadonlyCoreTables();
     const auth = await resolveClaims(event);
     if (!auth.ok) {
-      return json(validation.ok ? 200 : 503, {
-        service: 'checksops-api',
-        status: validation.ok ? 'ok' : 'unhealthy',
-        readOnly: true,
-      });
+      const publicResult = publicDbValidationResponse(validation);
+      return json(publicResult.statusCode, publicResult.body);
     }
     return json(validation.ok ? 200 : 503, {
       service: 'checksops-api',
