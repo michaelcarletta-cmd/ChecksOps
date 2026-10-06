@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
@@ -9,10 +10,19 @@ export function consumedReceiptsDir(root) {
   return path.join(localStateDir(root), CONSUMED_RECEIPTS_DIRNAME);
 }
 
-export function consumedReceiptFile(root, receipt) {
+function receiptConsumptionToken(receipt) {
   const mac = String(receipt?.mac || '').trim();
-  if (!/^[0-9a-f]{64}$/.test(mac)) return null;
-  return path.join(consumedReceiptsDir(root), `${mac}.json`);
+  if (/^[0-9a-f]{64}$/.test(mac)) return mac;
+  const signature = String(receipt?.kms_signature || '').trim();
+  const keyArn = String(receipt?.kms_key_arn || '').trim();
+  if (!signature || !keyArn) return null;
+  return createHash('sha256').update(`${keyArn}\n${signature}`, 'utf8').digest('hex');
+}
+
+export function consumedReceiptFile(root, receipt) {
+  const token = receiptConsumptionToken(receipt);
+  if (!token) return null;
+  return path.join(consumedReceiptsDir(root), `${token}.json`);
 }
 
 export function consumeReceiptOnce(root, receipt, {
@@ -24,7 +34,7 @@ export function consumeReceiptOnce(root, receipt, {
   if (!file) {
     return failMany([errorEntry(
       CODES.INVALID_MANIFEST,
-      'receipt is missing a valid mac; cannot enforce single-use consumption',
+      'receipt is missing a valid mac or KMS signature; cannot enforce single-use consumption',
     )], CODES.INVALID_MANIFEST);
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });

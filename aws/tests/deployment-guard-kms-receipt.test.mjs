@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
+import { consumedReceiptFile, consumeReceiptOnce } from '../../scripts/deployment-guard/lib/consumed-receipts.mjs';
 import { canonicalReceiptPayload, verifyReceiptKmsSignature } from '../../scripts/deployment-guard/lib/issuer.mjs';
 import { signReceiptWithKms } from '../../scripts/deployment-guard/lib/kms-issuer.mjs';
 
@@ -70,4 +74,17 @@ test('KMS signer refuses missing config and mismatched KMS response',()=>{
     env:ENV,
     execFile:()=>JSON.stringify({KeyId:'wrong',SigningAlgorithm:'ECDSA_SHA_256',Signature:'abc'}),
   }),/did not match/);
+});
+
+test('KMS receipt without HMAC mac can be consumed once',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'checksops-kms-consume-'));
+  const kmsReceipt=locallySigned({...receipt(),expiry:'2099-01-01T00:00:00.000Z'});
+  assert.equal(kmsReceipt.mac,undefined);
+  assert.equal(Boolean(consumedReceiptFile(root,kmsReceipt)),true);
+  const first=consumeReceiptOnce(root,kmsReceipt,{now:1,script:'lambda-overlay-apply'});
+  assert.equal(first.ok,true);
+  const replay=consumeReceiptOnce(root,kmsReceipt,{now:2,script:'lambda-overlay-apply'});
+  assert.equal(replay.ok,false);
+  assert.equal(replay.code,'RECEIPT_REUSED');
+  fs.rmSync(root,{recursive:true,force:true});
 });
