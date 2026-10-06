@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, beforeEach, afterEach } from 'node:test';
-import { handler, requestPath } from '../functions/api/index.mjs';
+import { handler, requestPath, publicDbHealthResponse, publicDbValidationResponse } from '../functions/api/index.mjs';
 import {
   loadDatabaseCredentials,
   parseDatabaseSecretString,
@@ -183,6 +183,37 @@ test('refuses the checksops_admin secret ARN', async () => {
     () => loadDatabaseCredentials(async () => '{"username":"checksops_admin","password":"nope"}'),
     /checksops_admin/,
   );
+});
+
+test('public database diagnostics expose status only', () => {
+  const health = publicDbHealthResponse({
+    secretsManager: 'ok',
+    networkTls: 'ok',
+    authentication: 'ok',
+    select1: 'ok',
+    currentDatabase: 'checksops',
+    currentUser: 'checksops',
+    postgresqlVersion: '18.3',
+    connectedDatabase: 'checksops',
+    secretDatabase: 'postgres',
+  });
+  assert.equal(health.statusCode, 200);
+  assert.deepEqual(health.body, { service: 'checksops-api', status: 'ok' });
+  assert.equal(Object.hasOwn(health.body, 'currentDatabase'), false);
+  assert.equal(Object.hasOwn(health.body, 'currentUser'), false);
+  assert.equal(Object.hasOwn(health.body, 'postgresqlVersion'), false);
+
+  const validation = publicDbValidationResponse({
+    ok: true,
+    tables: [{ table: 'check_intake_items', rowCount: 182 }],
+    rlsAudit: { roles: [{ rolname: 'checksops_admin' }] },
+    catalog: { publicFunctions: 960 },
+  });
+  assert.equal(validation.statusCode, 200);
+  assert.deepEqual(validation.body, { service: 'checksops-api', status: 'ok', readOnly: true });
+  assert.equal(Object.hasOwn(validation.body, 'tables'), false);
+  assert.equal(Object.hasOwn(validation.body, 'rlsAudit'), false);
+  assert.equal(Object.hasOwn(validation.body, 'catalog'), false);
 });
 
 test('GET /db-health reports current database and user without leaking secrets', async () => {
