@@ -197,7 +197,7 @@ jobs:
               for (const item of missing) console.error(item);
               process.exit(2);
             }
-            NODE
+          NODE
             echo "composed_ready=true" >> "$GITHUB_OUTPUT"
             echo "composed_sha256=$COMPOSED_SHA256" >> "$GITHUB_OUTPUT"
             test "$COMPOSED_SHA256" != "$LIVE_MEMBER_SHA256" || {
