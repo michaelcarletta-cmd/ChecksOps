@@ -99,7 +99,7 @@ function validSupersessionRow(overrides = {}) {
     },
     source: {
       git_sha: '309d6d84f38dc8bab0374b55f8fa7315f52be6d7',
-      tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72',
+      tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72000000000000000000000000',
     },
     lease: validLease(),
     receipt: validReceipt(),
@@ -183,6 +183,14 @@ test('missing source identity is REFUSED', () => {
   const row = validSupersessionRow({ source: { git_sha: null, tree_hash: null } });
   const errors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
   assert.ok(errors.some((rowError) => /missing source identity/.test(rowError)));
+
+  const gitShaTree = compareProductionSpaCandidate(lockedComponent(), validSupersessionRow({
+    source: {
+      git_sha: '309d6d84f38dc8bab0374b55f8fa7315f52be6d7',
+      tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72',
+    },
+  }), { now: NOW });
+  assert.ok(gitShaTree.some((rowError) => /missing source identity/.test(rowError)));
 });
 
 test('missing preservation/accepted-feature evidence is REFUSED', () => {
@@ -232,7 +240,7 @@ test('successful verified supersession advances the lock to the newly deployed c
     s3_version: 'NEW.S3.VERSION',
     source: {
       git_sha: '309d6d84f38dc8bab0374b55f8fa7315f52be6d7',
-      tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72',
+      tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72000000000000000000000000',
     },
   };
   const planned = planProductionSpaLockAdvance({
@@ -274,7 +282,7 @@ test('failure before/while deploying does not advance the lock', () => {
     hash: CANDIDATE_C.spa_sha256,
     source: {
       git_sha: '309d6d84f38dc8bab0374b55f8fa7315f52be6d7',
-      tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72',
+      tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72000000000000000000000000',
     },
   };
   const failedPlan = planProductionSpaLockAdvance({
@@ -315,6 +323,25 @@ test('failure before/while deploying does not advance the lock', () => {
   });
   assert.equal(blessLive.advance, false);
   assert.ok(blessLive.errors.some((row) => /unexplained live bundle/.test(row)));
+
+  const gitShaTree = planProductionSpaLockAdvance({
+    currentComponent: current,
+    deployed: {
+      ...CANDIDATE_C,
+      hash: CANDIDATE_C.spa_sha256,
+      source: {
+        git_sha: '309d6d84f38dc8bab0374b55f8fa7315f52be6d7',
+        tree_hash: '6ea1f17295f90b28257a0b77060e5310a67e1a72',
+      },
+    },
+    liveBefore: LIVE_B,
+    verified: {
+      ok: true,
+      after_production: { ...CANDIDATE_C, s3_version: 'NEW.S3.VERSION' },
+    },
+  });
+  assert.equal(gitShaTree.advance, false);
+  assert.ok(gitShaTree.errors.some((row) => /git SHA\/tree/.test(row)));
 });
 
 test('ordinary overlay and lock/live mismatch behavior remain unchanged', () => {

@@ -282,7 +282,7 @@ function isGitShaSafe(value) {
 }
 
 function isSourceTreeHash(value) {
-  return isSha256(value || '') || isGitShaSafe(value);
+  return isSha256(value || '');
 }
 
 export function compareProductionSpaCandidate(component, row, opts = {}) {

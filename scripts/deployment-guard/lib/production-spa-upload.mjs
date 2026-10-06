@@ -12,8 +12,26 @@ import {
   PRODUCTION_SPA_ID,
   applyProductionSpaLockAdvance,
   compareProductionSpaCandidate,
+  normalizeSpaBundle,
   planProductionSpaLockAdvance,
 } from '../../lib/production-spa-baseline.mjs';
+
+function awsLivePins(fingerprint, claimedLive = null) {
+  return {
+    spa_bundle: fingerprint?.entry_bundle || null,
+    spa_sha256: claimedLive?.spa_sha256 || fingerprint?.entry_bundle_sha256 || fingerprint?.spa_sha256 || null,
+    index_html_sha256: fingerprint?.index_html_sha256 || null,
+    s3_version: fingerprint?.s3_version_id || fingerprint?.s3_version || null,
+  };
+}
+
+function authorizedCandidatePins(spaCandidate) {
+  return {
+    spa_bundle: spaCandidate?.spa_bundle || null,
+    spa_sha256: spaCandidate?.spa_sha256 || spaCandidate?.hash || null,
+    index_html_sha256: spaCandidate?.index_html_sha256 || null,
+  };
+}
 
 function sha256Text(text) {
   return createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
@@ -271,6 +289,7 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   }
 
   let lockAdvancePlan = null;
+  let awsLiveBefore = null;
   if (input.forward_supersession === true) {
     const lockComponent = input.production_spa_lock
       || input.lock_manifest?.components?.[PRODUCTION_SPA_ID]
@@ -280,6 +299,31 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
       return fail(
         CODES.INVALID_MANIFEST,
         'forward supersession requires production_spa_lock and production_spa_candidate',
+      );
+    }
+    awsLiveBefore = awsLivePins(before.details.fingerprint, spaCandidate.live_production);
+    const claimedLive = spaCandidate.live_production || {};
+    if (
+      normalizeSpaBundle(claimedLive.spa_bundle) !== normalizeSpaBundle(awsLiveBefore.spa_bundle)
+      || claimedLive.index_html_sha256 !== awsLiveBefore.index_html_sha256
+      || (claimedLive.s3_version || null) !== (awsLiveBefore.s3_version || null)
+    ) {
+      return fail(
+        CODES.DEPLOYMENT_COLLISION,
+        'forward supersession live_production does not match the fresh AWS production fingerprint',
+        { claimed: claimedLive, aws: awsLiveBefore },
+      );
+    }
+    const authorizedPins = authorizedCandidatePins(spaCandidate);
+    if (
+      normalizeSpaBundle(authorizedPins.spa_bundle) !== normalizeSpaBundle(dist.details.entry_bundle)
+      || authorizedPins.spa_sha256 !== dist.details.entry_bundle_sha256
+      || authorizedPins.index_html_sha256 !== dist.details.index_html_sha256
+    ) {
+      return fail(
+        CODES.STALE_PACKAGE,
+        'forward supersession dist does not match the authorized production_spa_candidate',
+        { authorized: authorizedPins, dist: dist.details },
       );
     }
     const compareErrors = compareProductionSpaCandidate(lockComponent, {
@@ -304,15 +348,15 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
       currentComponent: lockComponent,
       deployed: {
         ...spaCandidate,
-        hash: spaCandidate.hash || spaCandidate.spa_sha256 || dist.details.entry_bundle_sha256,
-        spa_bundle: spaCandidate.spa_bundle || dist.details.entry_bundle,
-        spa_sha256: spaCandidate.spa_sha256 || dist.details.entry_bundle_sha256,
-        index_html_sha256: spaCandidate.index_html_sha256 || dist.details.index_html_sha256,
+        hash: authorizedPins.spa_sha256,
+        spa_bundle: spaCandidate.spa_bundle,
+        spa_sha256: authorizedPins.spa_sha256,
+        index_html_sha256: spaCandidate.index_html_sha256,
         source: spaCandidate.source,
       },
-      liveBefore: spaCandidate.live_production,
+      liveBefore: awsLiveBefore,
     });
-    if (lockAdvancePlan.errors?.length && !lockAdvancePlan.component) {
+    if (lockAdvancePlan.errors?.length) {
       return failMany(
         lockAdvancePlan.errors.map((message) => errorEntry(CODES.INVALID_MANIFEST, message)),
         CODES.INVALID_MANIFEST,
@@ -418,12 +462,13 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
       : undefined,
   };
   if (input.forward_supersession === true && lockAdvancePlan) {
+    const authorizedPins = authorizedCandidatePins(input.production_spa_candidate);
     const verified = {
       ok: true,
       after_production: {
-        spa_bundle: expected.entry_bundle,
-        spa_sha256: expected.entry_bundle_sha256,
-        index_html_sha256: expected.index_html_sha256,
+        spa_bundle: hostVerify.details.entry_bundle,
+        spa_sha256: hostVerify.details.entry_bundle_sha256,
+        index_html_sha256: hostVerify.details.index_html_sha256,
         s3_version: after.details.fingerprint?.s3_version_id || input.production_spa_candidate?.s3_version || null,
       },
       recorded_at: new Date().toISOString(),
@@ -433,14 +478,17 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
         || input.lock_manifest?.components?.[PRODUCTION_SPA_ID],
       deployed: {
         ...input.production_spa_candidate,
-        hash: expected.entry_bundle_sha256,
-        spa_bundle: expected.entry_bundle,
-        spa_sha256: expected.entry_bundle_sha256,
-        index_html_sha256: expected.index_html_sha256,
+        hash: authorizedPins.spa_sha256,
+        spa_bundle: authorizedPins.spa_bundle,
+        spa_sha256: authorizedPins.spa_sha256,
+        index_html_sha256: authorizedPins.index_html_sha256,
         s3_version: verified.after_production.s3_version,
         source: input.production_spa_candidate?.source,
       },
-      liveBefore: input.production_spa_candidate?.live_production,
+      liveBefore: awsLiveBefore || awsLivePins(
+        before.details.fingerprint,
+        input.production_spa_candidate?.live_production,
+      ),
       verified,
     });
     lockAdvance = applyProductionSpaLockAdvance(

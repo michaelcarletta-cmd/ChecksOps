@@ -1202,3 +1202,117 @@ test('production SPA writer: failed supersession verify does not advance the loc
   assert.equal(lock.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
 });
 
+test('production SPA writer: unproven dist does not deploy or lock a different bundle', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-OtherDist.js', js: "console.log('other-dist');\n" });
+  const authorizedDistDir = writeDist(root + '-authorized', { entry: '/assets/index-CBOwj-7W.js', js: "console.log('candidate-c');\n" });
+  const authorizedDist = distFingerprint(authorizedDistDir);
+  const liveBefore = {
+    index_html_sha256: 'ac1dc285c0af1a6046d484bde94aff9b4e4238f52df5b4d24f5c8a9e3252820e',
+    entry_bundle: '/assets/index-Bbftik1r.js',
+    etag: 'etag-live',
+    last_modified: '2026-10-05T00:22:08.000Z',
+    s3_version_id: 'FDsQYX2a0C8ZEs_H6h.gpmNHZ314YVPf',
+  };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  const lock = lockedProductionSpa();
+  const spaCandidate = supersessionCandidate({
+    dist: authorizedDist,
+    liveBefore,
+    receipt: issued.receipt,
+    lease: issued.receipt.lease,
+  });
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results: passingContractResults(loadContractRegistry(root)),
+    forward_supersession: true,
+    production_spa_lock: lock,
+    production_spa_candidate: spaCandidate,
+    lock_manifest: { components: { [PRODUCTION_SPA_ID]: structuredClone(lock) } },
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry: createSharedReceiptRegistry(),
+    fetchImpl: fetchFromDist(distDir),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.STALE_PACKAGE);
+  assert.equal(aws.calls.filter((c) => c.method === 'putObject').length, 0);
+  assert.equal(lock.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
+});
+
+test('production SPA writer: forged live pins cannot bless the actual live bundle', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-Bbftik1r.js', js: "console.log('live-b');\n" });
+  const dist = distFingerprint(distDir);
+  const liveBefore = {
+    index_html_sha256: 'ac1dc285c0af1a6046d484bde94aff9b4e4238f52df5b4d24f5c8a9e3252820e',
+    entry_bundle: '/assets/index-Bbftik1r.js',
+    etag: 'etag-live',
+    last_modified: '2026-10-05T00:22:08.000Z',
+    s3_version_id: 'FDsQYX2a0C8ZEs_H6h.gpmNHZ314YVPf',
+  };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  const lock = lockedProductionSpa();
+  const spaCandidate = supersessionCandidate({
+    dist,
+    liveBefore: {
+      ...liveBefore,
+      entry_bundle: '/assets/index-ForgedLive.js',
+      index_html_sha256: '11'.repeat(32),
+      s3_version_id: 'FORGED.VERSION',
+    },
+    receipt: issued.receipt,
+    lease: issued.receipt.lease,
+  });
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results: passingContractResults(loadContractRegistry(root)),
+    forward_supersession: true,
+    production_spa_lock: lock,
+    production_spa_candidate: spaCandidate,
+    lock_manifest: { components: { [PRODUCTION_SPA_ID]: structuredClone(lock) } },
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry: createSharedReceiptRegistry(),
+    fetchImpl: fetchFromDist(distDir),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(aws.calls.filter((c) => c.method === 'putObject').length, 0);
+  assert.equal(lock.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
+});
+
