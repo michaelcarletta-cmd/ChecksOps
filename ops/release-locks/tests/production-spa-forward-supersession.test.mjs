@@ -23,6 +23,10 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function lockedComponent() {
   return loadJson(path.join(ROOT, 'ops/release-locks/locked-components.json')).components[PRODUCTION_SPA_ID];
 }
@@ -33,6 +37,36 @@ function lockedPins() {
     spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
     index_html_sha256: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
     s3_version: ACCEPTED_PRODUCTION_SPA.s3_version,
+  };
+}
+
+function currentPins(component = lockedComponent()) {
+  const fp = component.deployment_fingerprint || {};
+  return {
+    spa_bundle: fp.spa_bundle,
+    spa_sha256: fp.spa_sha256,
+    index_html_sha256: fp.config_hash,
+    s3_version: fp.cloudfront_deployment_fingerprint,
+  };
+}
+
+function historicalLockedComponent() {
+  const current = clone(lockedComponent());
+  return {
+    ...current,
+    artifact: {
+      ...current.artifact,
+      name: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+      hash: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+      version: ACCEPTED_PRODUCTION_SPA.s3_version,
+    },
+    deployment_fingerprint: {
+      ...current.deployment_fingerprint,
+      spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+      spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+      config_hash: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
+      cloudfront_deployment_fingerprint: ACCEPTED_PRODUCTION_SPA.s3_version,
+    },
   };
 }
 
@@ -117,17 +151,28 @@ function candidateDoc(row) {
 }
 
 test('live == locked + ordinary candidate keeps existing authorization', () => {
-  const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
-  const candidate = acceptedBaselineCandidate();
-  assert.deepEqual(compareCandidate(manifest, candidate), []);
-  assert.deepEqual(compareProductionSpaCandidate(lockedComponent(), candidate.components[PRODUCTION_SPA_ID]), []);
+  const lock = lockedComponent();
+  const pins = currentPins(lock);
+  const row = {
+    ...acceptedBaselineCandidate().components[PRODUCTION_SPA_ID],
+    hash: pins.spa_sha256,
+    spa_bundle: pins.spa_bundle,
+    index_html_sha256: pins.index_html_sha256,
+    s3_version: pins.s3_version,
+    based_on_baseline: { ...pins },
+    preflight_production: { ...pins },
+    live_production: { ...pins },
+  };
+  const manifest = { components: { [PRODUCTION_SPA_ID]: lock } };
+  assert.deepEqual(compareCandidate(manifest, { environment: 'production', approved: true, components: { [PRODUCTION_SPA_ID]: row } }), []);
+  assert.deepEqual(compareProductionSpaCandidate(lock, row), []);
 });
 
 test('live != locked + ordinary deployment is still REFUSED', () => {
   const row = acceptedBaselineCandidate().components[PRODUCTION_SPA_ID];
   row.preflight_production = { ...LIVE_B };
   row.live_production = { ...LIVE_B };
-  const errors = compareProductionSpaCandidate(lockedComponent(), row);
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row);
   assert.ok(errors.some((rowError) => /does not match locked baseline/.test(rowError)));
   assert.equal(errors.some((rowError) => /forward supersession/.test(rowError)), false);
 });
@@ -141,7 +186,7 @@ test('live != locked + only reconciled_to_production_baseline=true is REFUSED', 
     receipt: undefined,
     preservation_evidence: undefined,
   });
-  const errors = compareProductionSpaCandidate(lockedComponent(), row);
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row);
   assert.ok(errors.some((rowError) => /does not match locked baseline/.test(rowError)));
   assert.equal(errors.some((rowError) => /forward supersession authorized/.test(rowError)), false);
 });
@@ -151,7 +196,7 @@ test('live != locked + fake/stale supersession evidence is REFUSED', () => {
     receipt: { workstream_id: 'x', mac: 'not-a-mac' },
     lease: { present: true, expired: false, workstream_id: 'x' },
   });
-  const errors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row, { now: NOW });
   assert.ok(errors.some((rowError) => /receipt is invalid or forged/.test(rowError)));
 });
 
@@ -163,7 +208,7 @@ test('candidate reconciled against a different live fingerprint is REFUSED', () 
       spa_sha256: '11'.repeat(32),
     },
   });
-  const errors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row, { now: NOW });
   assert.ok(errors.some((rowError) => /reconciled against a different live fingerprint/.test(rowError)));
 });
 
@@ -175,13 +220,13 @@ test('live changes after supersession preflight is REFUSED', () => {
       s3_version: 'DRIFTED',
     },
   });
-  const errors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row, { now: NOW });
   assert.ok(errors.some((rowError) => /live changed after supersession preflight/.test(rowError)));
 });
 
 test('missing source identity is REFUSED', () => {
   const row = validSupersessionRow({ source: { git_sha: null, tree_hash: null } });
-  const errors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row, { now: NOW });
   assert.ok(errors.some((rowError) => /missing source identity/.test(rowError)));
 });
 
@@ -191,18 +236,18 @@ test('missing preservation/accepted-feature evidence is REFUSED', () => {
     required_live_behavior_preserved: false,
     preservation_evidence: { passed_contracts: [], live_only_risks: ['company branding'] },
   });
-  const errors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row, { now: NOW });
   assert.ok(errors.some((rowError) => /accepted-feature\/regression contract evidence/.test(rowError)));
   assert.ok(errors.some((rowError) => /preservation evidence/.test(rowError)));
 });
 
 test('invalid/expired/reused receipt is REFUSED', () => {
-  const expired = compareProductionSpaCandidate(lockedComponent(), validSupersessionRow({
+  const expired = compareProductionSpaCandidate(historicalLockedComponent(), validSupersessionRow({
     receipt: validReceipt({ expiry: '2026-10-06T19:00:00.000Z' }),
   }), { now: NOW });
   assert.ok(expired.some((rowError) => /receipt has expired/.test(rowError)));
 
-  const reused = compareProductionSpaCandidate(lockedComponent(), validSupersessionRow({
+  const reused = compareProductionSpaCandidate(historicalLockedComponent(), validSupersessionRow({
     receipt: validReceipt({ consumed: true }),
   }), { now: NOW });
   assert.ok(reused.some((rowError) => /already been consumed/.test(rowError)));
@@ -210,22 +255,22 @@ test('invalid/expired/reused receipt is REFUSED', () => {
 
 test('missing lease is REFUSED', () => {
   const row = validSupersessionRow({ lease: null });
-  const errors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
+  const errors = compareProductionSpaCandidate(historicalLockedComponent(), row, { now: NOW });
   assert.ok(errors.some((rowError) => /requires an active lease/.test(rowError)));
 });
 
 test('valid explicit forward supersession with all evidence is AUTHORIZED', () => {
   const row = validSupersessionRow();
-  const compareErrors = compareProductionSpaCandidate(lockedComponent(), row, { now: NOW });
+  const compareErrors = compareProductionSpaCandidate(historicalLockedComponent(), row, { now: NOW });
   assert.deepEqual(compareErrors, []);
-  const evaluated = evaluateForwardSupersession(lockedComponent(), row, { now: NOW });
+  const evaluated = evaluateForwardSupersession(historicalLockedComponent(), row, { now: NOW });
   assert.equal(evaluated.authorized, true);
-  const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
+  const manifest = { components: { [PRODUCTION_SPA_ID]: historicalLockedComponent() } };
   assert.deepEqual(compareCandidate(manifest, candidateDoc(row), { now: NOW }), []);
 });
 
 test('successful verified supersession advances the lock to the newly deployed candidate', () => {
-  const current = lockedComponent();
+  const current = historicalLockedComponent();
   const deployed = {
     ...CANDIDATE_C,
     hash: CANDIDATE_C.spa_sha256,
@@ -268,7 +313,7 @@ test('successful verified supersession advances the lock to the newly deployed c
 });
 
 test('failure before/while deploying does not advance the lock', () => {
-  const current = lockedComponent();
+  const current = historicalLockedComponent();
   const deployed = {
     ...CANDIDATE_C,
     hash: CANDIDATE_C.spa_sha256,
@@ -318,7 +363,7 @@ test('failure before/while deploying does not advance the lock', () => {
 });
 
 test('ordinary overlay and lock/live mismatch behavior remain unchanged', () => {
-  const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
+  const manifest = { components: { [PRODUCTION_SPA_ID]: historicalLockedComponent() } };
   const overlay = acceptedBaselineCandidate();
   overlay.components[PRODUCTION_SPA_ID] = {
     ...overlay.components[PRODUCTION_SPA_ID],

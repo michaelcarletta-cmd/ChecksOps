@@ -1025,8 +1025,24 @@ test('production SPA writer: invalid receipts do not get recorded as consumed', 
 });
 
 function lockedProductionSpa() {
-  return JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/release-locks/locked-components.json'), 'utf8'))
+  const current = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/release-locks/locked-components.json'), 'utf8'))
     .components[PRODUCTION_SPA_ID];
+  return {
+    ...current,
+    artifact: {
+      ...current.artifact,
+      name: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+      hash: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+      version: ACCEPTED_PRODUCTION_SPA.s3_version,
+    },
+    deployment_fingerprint: {
+      ...current.deployment_fingerprint,
+      spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+      spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+      config_hash: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
+      cloudfront_deployment_fingerprint: ACCEPTED_PRODUCTION_SPA.s3_version,
+    },
+  };
 }
 
 function lockedPins() {
