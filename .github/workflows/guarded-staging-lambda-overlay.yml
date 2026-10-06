@@ -70,6 +70,8 @@ jobs:
       - name: Run deployment safety tests
         run: |
           node --test aws/tests/github-staging-lambda-overlay.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
           node --test aws/tests/lambda-overlay-apply-writer.test.mjs
           node scripts/deployment-guard/scan-bypass.mjs
 
@@ -87,19 +89,24 @@ jobs:
           aws sts get-caller-identity
           test -n "${{ vars.CHECKSOPS_STAGING_DEPLOY_ROLE_ARN }}" || { echo "staging deploy role variable is missing"; exit 2; }
 
-      - name: Materialize existing deployment-guard issuer key
+      - name: Load staging KMS verifier
         if: ${{ inputs.mode == 'apply' }}
         shell: bash
         env:
-          ISSUER_KEY_B64: ${{ secrets.CHECKSOPS_DEPLOYMENT_GUARD_ISSUER_KEY_B64 }}
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_STAGING_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
         run: |
           set -euo pipefail
-          test -n "$ISSUER_KEY_B64" || { echo "existing issuer key secret is missing; refusing to mint a replacement"; exit 2; }
-          mkdir -p .deployment-guard
-          umask 077
-          printf '%s' "$ISSUER_KEY_B64" | base64 -d > .deployment-guard/issuer.key
-          test "$(wc -c < .deployment-guard/issuer.key)" -ge 32 || { echo "issuer key is invalid"; exit 2; }
-          chmod 600 .deployment-guard/issuer.key
+          test -n "$KMS_KEY_ARN" || { echo "staging deployment-guard KMS key ARN is missing"; exit 2; }
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:*:key/*) ;;
+            *) echo "invalid staging deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
 
       - name: Inspect and authorize exact live member
         id: preflight
