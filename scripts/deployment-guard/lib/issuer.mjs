@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, createPublicKey, randomBytes, timingSafeEqual, verify as verifySignature } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { localStateDir } from './paths.mjs';
@@ -54,7 +54,7 @@ function canonicalJson(value) {
 }
 
 export function canonicalReceiptPayload(receipt) {
-  const { mac, ...rest } = receipt || {};
+  const { mac, kms_signature, ...rest } = receipt || {};
   return canonicalJson(rest);
 }
 
@@ -71,4 +71,27 @@ export function verifyReceiptMac(root, receipt) {
   const a = Buffer.from(expected, 'hex');
   const b = Buffer.from(String(receipt.mac), 'hex');
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export function verifyReceiptKmsSignature(receipt, env = process.env) {
+  const signature = String(receipt?.kms_signature || '');
+  const expectedKeyArn = String(env.CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN || '');
+  const publicKeyB64 = String(env.CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64 || '');
+  if (!signature || !receipt?.kms_key_arn || !expectedKeyArn || !publicKeyB64) return false;
+  if (receipt.kms_key_arn !== expectedKeyArn) return false;
+  try {
+    const key = createPublicKey({
+      key: Buffer.from(publicKeyB64, 'base64'),
+      format: 'der',
+      type: 'spki',
+    });
+    return verifySignature(
+      'sha256',
+      Buffer.from(canonicalReceiptPayload(receipt)),
+      key,
+      Buffer.from(signature, 'base64'),
+    );
+  } catch {
+    return false;
+  }
 }

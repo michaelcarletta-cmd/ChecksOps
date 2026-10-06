@@ -3,7 +3,7 @@ import path from 'node:path';
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 import { receiptDir, leaseKey } from './paths.mjs';
 import { inspectLease } from './lease.mjs';
-import { signReceipt, verifyReceiptMac } from './issuer.mjs';
+import { signReceipt, verifyReceiptKmsSignature, verifyReceiptMac } from './issuer.mjs';
 import { validateOwnedMemberOps } from './lambda-owned-members.mjs';
 
 export const RECEIPT_KIND = 'deployment-guard-receipt';
@@ -62,6 +62,31 @@ function requireActiveMatchingLease(root, receipt, now = Date.now()) {
   return ok({ lease: holder });
 }
 
+export function issueReceiptWithSigner(root, input, signer, opts = {}) {
+  const unsigned = buildReceipt(input, opts);
+  const shape = validateReceiptShape(unsigned, { requireMac: false });
+  if (!shape.ok) return shape;
+  const lease = requireActiveMatchingLease(root, unsigned, opts.now);
+  if (!lease.ok) return lease;
+  let receipt;
+  try {
+    receipt = signer(unsigned);
+  } catch (error) {
+    return failMany([errorEntry(
+      CODES.RECEIPT_FORGED,
+      error?.message || 'external receipt signer failed closed',
+    )], CODES.RECEIPT_FORGED);
+  }
+  const signedShape = validateReceiptShape(receipt, { requireMac: true });
+  if (!signedShape.ok) return signedShape;
+  const file = receiptFile(root, receipt.target_environment, receipt.target_component);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(receipt, null, 2)}\n`);
+  fs.renameSync(tmp, file);
+  return ok({ receipt, file });
+}
+
 export function issueReceipt(root, input, opts = {}) {
   const unsigned = buildReceipt(input, opts);
   const shape = validateReceiptShape(unsigned, { requireMac: false });
@@ -102,7 +127,7 @@ export function loadReceipt(root, spec = {}, env = process.env) {
   return { file: null, receipt: null };
 }
 
-function validateReceiptShape(receipt, { requireMac = true } = {}) {
+export function validateReceiptShape(receipt, { requireMac = true } = {}) {
   const errors = [];
   if (!receipt || receipt.corrupt) {
     errors.push(errorEntry(CODES.DEPLOYMENT_GUARD_REQUIRED, 'deployment guard receipt is missing or corrupt'));
@@ -111,8 +136,12 @@ function validateReceiptShape(receipt, { requireMac = true } = {}) {
   if (receipt.kind !== RECEIPT_KIND) {
     errors.push(errorEntry(CODES.DEPLOYMENT_GUARD_REQUIRED, 'file is not a deployment-guard receipt'));
   }
-  if (requireMac && !/^[0-9a-f]{64}$/.test(String(receipt.mac || ''))) {
-    errors.push(errorEntry(CODES.RECEIPT_FORGED, 'receipt is missing issuer MAC; hand-written JSON is not an authorization'));
+  if (requireMac) {
+    const hasMac = /^[0-9a-f]{64}$/.test(String(receipt.mac || ''));
+    const hasKmsSignature = Boolean(receipt.kms_signature && receipt.kms_key_arn);
+    if (!hasMac && !hasKmsSignature) {
+      errors.push(errorEntry(CODES.RECEIPT_FORGED, 'receipt is missing an issuer MAC or KMS signature; hand-written JSON is not an authorization'));
+    }
   }
   if (!receipt.workstream_id) errors.push(errorEntry(CODES.ANONYMOUS_DEPLOYMENT, 'receipt missing workstream_id'));
   if (!/^[0-9a-f]{40}$/.test(String(receipt.commit || ''))) {
@@ -139,13 +168,16 @@ function validateReceiptShape(receipt, { requireMac = true } = {}) {
   return ok({ receipt });
 }
 
-export function validateReceipt(receipt, expected = {}, { now = Date.now(), root = null } = {}) {
+export function validateReceipt(receipt, expected = {}, { now = Date.now(), root = null, env = process.env } = {}) {
   const shape = validateReceiptShape(receipt, { requireMac: true });
   if (!shape.ok) return shape;
-  if (!root || !verifyReceiptMac(root, receipt)) {
+  const verified = receipt.kms_signature
+    ? verifyReceiptKmsSignature(receipt, env)
+    : Boolean(root && verifyReceiptMac(root, receipt));
+  if (!verified) {
     return failMany([errorEntry(
       CODES.RECEIPT_FORGED,
-      'receipt MAC is missing or does not match the local issuer key; hand-edited JSON is not valid',
+      'receipt signature is missing or invalid; hand-edited JSON is not valid',
     )], CODES.RECEIPT_FORGED);
   }
   const errors = [];
