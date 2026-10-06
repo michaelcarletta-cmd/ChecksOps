@@ -48,6 +48,68 @@ export const safeHttpUrl = (value, fallback = null) => (
   isSafeHttpUrl(value) ? String(value).trim() : fallback
 );
 
+const STAGING_API_PUBLIC_URL = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
+const RAW_BRANDING_PATH = /^(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+$|^[A-Za-z0-9._-]+\.(?:png|jpe?g|gif|webp|svg)$/i;
+const SUPABASE_BRANDING = /^https?:\/\/[^/]*supabase\.co\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/([^?]+)/i;
+const BRANDING_BUCKETS = new Set(['tenant-logos', 'email-assets', 'company-branding']);
+
+/**
+ * Browser-reachable API origin for /storage/public.
+ * Staging CloudFront does not proxy /prep/* to the API; those paths return SPA HTML.
+ */
+export const publicApiBaseUrl = () => {
+  const configured = String(
+    process.env.CHECKSOPS_API_PUBLIC_URL || process.env.VITE_CHECKSOPS_API_URL || '',
+  ).trim().replace(/\/$/, '');
+  if (configured && /^https?:\/\//i.test(configured) && !configured.endsWith('/prep')) {
+    return configured;
+  }
+  const env = String(process.env.CHECKSOPS_ENV || '').trim().toLowerCase();
+  if (env === 'staging' || !env) return STAGING_API_PUBLIC_URL;
+  if (configured === '/prep' || configured.endsWith('/prep')) {
+    return `${emailAssetOrigin()}/prep`;
+  }
+  if (env === 'production' || env === 'production-prep') {
+    return `${emailAssetOrigin()}/prep`;
+  }
+  return STAGING_API_PUBLIC_URL;
+};
+
+/**
+ * Display URL for a stored tenant logo. Does not persist.
+ * Raw object paths and legacy Supabase public/sign URLs become
+ * `${apiBase}/storage/public?bucket=tenant-logos&path=...`.
+ * Already-safe HTTPS URLs pass through.
+ */
+export const publicTenantLogoUrl = (value, apiBase = publicApiBaseUrl()) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^(javascript|data|blob|file):/i.test(raw) || raw.includes('..') || raw.startsWith('//')) {
+    return null;
+  }
+  const base = String(apiBase || '').replace(/\/$/, '');
+  const supabase = raw.match(SUPABASE_BRANDING);
+  if (supabase && BRANDING_BUCKETS.has(supabase[1]) && base) {
+    const path = decodeURIComponent(supabase[2]);
+    const url = `${base}/storage/public?bucket=${encodeURIComponent(supabase[1])}&path=${encodeURIComponent(path)}`;
+    return isSafeHttpUrl(url) ? url : null;
+  }
+  if (isSafeHttpUrl(raw)) return raw;
+  if (!base) return null;
+  if (raw.includes('/storage/public')) {
+    const rel = raw.startsWith('/') ? raw : `/${raw}`;
+    const abs = `${base}${rel.replace(/^\/prep(?=\/)/, '')}`;
+    return isSafeHttpUrl(abs) ? abs : null;
+  }
+  if (/\s/.test(raw) || raw.startsWith('/') || raw.includes('://') || raw.includes('?') || raw.includes('#')) {
+    return null;
+  }
+  if (!RAW_BRANDING_PATH.test(raw)) return null;
+  const path = raw.replace(/^tenant-logos\//, '');
+  const url = `${base}/storage/public?bucket=tenant-logos&path=${encodeURIComponent(path)}`;
+  return isSafeHttpUrl(url) ? url : null;
+};
+
 export { defaultReplyTo };
 
 export const parseFromHeader = (from) => {
@@ -199,7 +261,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   const primaryColor = isSafeHexColor(tenant.primary_color)
     ? String(tenant.primary_color).trim()
     : platform.primaryColor;
-  const logoUrl = safeHttpUrl(tenant.logo_url, platform.logoUrl);
+  const logoUrl = publicTenantLogoUrl(tenant.logo_url) || platform.logoUrl;
 
   if (verified) {
     return {
