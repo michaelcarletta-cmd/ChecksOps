@@ -87,12 +87,13 @@ jobs:
           BASELINE_SHA256="$(sha256sum /tmp/index-live-baseline.mjs | awk '{print $1}')"
           CURRENT_SHA256="$(sha256sum "$MEMBER" | awk '{print $1}')"
 
-          test "$LIVE_MEMBER_SHA256" = "$BASELINE_SHA256" || {
-            echo "SOURCE_RECONCILIATION_REQUIRED: live index.mjs does not equal reviewed pre-SH-2 baseline"
+          if [ "$LIVE_MEMBER_SHA256" != "$BASELINE_SHA256" ]; then
+            echo "Live staging contains an accepted composition newer/different than the repository baseline."
+            echo "Refusing to treat the old baseline as restore authority."
             echo "live=$LIVE_MEMBER_SHA256"
             echo "baseline=$BASELINE_SHA256"
-            exit 2
-          }
+            echo "FORWARD_COMPOSE_REQUIRED: preserve current live index.mjs and apply only the reviewed SH-2 delta."
+          fi
 
           mapfile -t TOUCHES < <(git log --format='%H' "$BASELINE..HEAD" -- "$MEMBER")
           test "${#TOUCHES[@]}" -eq 2 || {
@@ -104,6 +105,22 @@ jobs:
           printf '%s\n' "${TOUCHES[@]}" | grep -Fxq "$SH2_TESTABILITY"
 
           git diff --check "$BASELINE" HEAD -- "$MEMBER"
+
+          # This workflow is intentionally read-only. A live/baseline mismatch
+          # is evidence that another accepted build may be present. Do not
+          # authorize replacement from repository source in that case.
+          if [ "$LIVE_MEMBER_SHA256" != "$BASELINE_SHA256" ]; then
+            {
+              echo "### SH-2 staging source reconciliation — FORWARD COMPOSE REQUIRED"
+              printf -- '- Main commit: `%s`\n' "$GITHUB_SHA"
+              printf -- '- Live index.mjs SHA-256: `%s`\n' "$LIVE_MEMBER_SHA256"
+              printf -- '- Repository baseline SHA-256: `%s`\n' "$BASELINE_SHA256"
+              echo "- Another accepted/live composition may be present."
+              echo "- Safe action: preserve live source and compose only SH-2 changes onto it."
+              echo "- Mutation: none"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
 
           {
             echo "### SH-2 staging source reconciliation — PASS"
