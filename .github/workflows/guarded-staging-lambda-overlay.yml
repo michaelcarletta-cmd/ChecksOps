@@ -152,6 +152,7 @@ jobs:
         shell: bash
         env:
           CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
           CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
           CHECKSOPS_COMMIT: ${{ github.sha }}
           CHECKSOPS_BRANCH: main
