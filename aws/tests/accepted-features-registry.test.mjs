@@ -134,7 +134,7 @@ const ACCEPTED_WIDGET = `export function Host() {\n  return <FixtureWidget showF
 const LAMBDA_ROUTE = `export async function handleFixtureRoute(event) {\n  return { ok: true };\n}\n`;
 const SQL_CONTRACT = `CREATE OR REPLACE FUNCTION fixture_contract() RETURNS void AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql;\n`;
 
-test('live registry is evaluate-only, has no accepted features, and Branding intended invariants are satisfied', () => {
+test('live registry is evaluate-only, Branding is accepted against #713, and intended invariants are satisfied', () => {
   const live = loadRegistry(ROOT);
   const schema = validateRegistry(live);
   assert.equal(schema.ok, true, schema.errors.join('; '));
@@ -143,21 +143,33 @@ test('live registry is evaluate-only, has no accepted features, and Branding int
   assert.equal(live.enforcement.block_merge, false);
   assert.equal(live.enforcement.block_deploy, false);
   assert.equal(live.enforcement.accept_self_attestation, false);
-  assert.equal(live.features.some((row) => row.status === 'accepted'), false);
-  assert.equal(live.features.every((row) => row.accepted_source_authority.restore_authority === false), true);
+  const accepted = live.features.filter((row) => row.status === 'accepted');
+  assert.deepEqual(accepted.map((row) => row.feature_id), ['branding']);
+  for (const row of live.features) {
+    if (row.feature_id === 'branding') {
+      assert.equal(row.accepted_source_authority.kind, 'accepted_source');
+      assert.equal(row.accepted_source_authority.git_sha, '9ecde8eae66c3897c9a8ec7f8b943948c5cff9aa');
+      assert.equal(row.accepted_source_authority.merged_pr, 713);
+      assert.equal(row.accepted_source_authority.restore_authority, true);
+      assert.equal(row.accepted_source_authority.evidence_path, 'aws/tests/email-preview-logo-url.test.mjs');
+    } else {
+      assert.equal(row.accepted_source_authority.restore_authority, false);
+    }
+  }
 
   const result = evaluateRepo(ROOT);
   assert.equal(result.evaluate_only, true);
   assert.equal(result.blocking, false);
   assert.equal(result.exit_code, 0);
-  assert.deepEqual(result.expected_accepted, []);
-  assert.ok(result.inventory_only.includes('branding'));
+  assert.deepEqual(result.expected_accepted, ['branding']);
+  assert.ok(result.present_accepted.includes('branding'));
+  assert.equal(result.inventory_only.includes('branding'), false);
   assert.ok(result.missing_from_main.includes('invoice-recovery'));
   assert.ok(result.missing_from_main.includes('collection-v2'));
 
   const branding = result.features.find((row) => row.feature_id === 'branding');
   assert.ok(branding);
-  assert.equal(branding.status, 'inventory_only');
+  assert.equal(branding.status, 'accepted');
   assert.deepEqual(branding.failing_invariants, []);
   for (const id of [
     'branding-company-mounted',
@@ -199,7 +211,7 @@ test('evaluate-only CLI reports no Branding findings and cannot block, including
   assert.equal(payload.findings.some((row) => row.feature_id === 'branding'), false);
   const branding = payload.features.find((row) => row.feature_id === 'branding');
   assert.ok(branding);
-  assert.equal(branding.status, 'inventory_only');
+  assert.equal(branding.status, 'accepted');
   assert.deepEqual(branding.failing_invariants, []);
   assert.match(proc.stderr, /--enforce is ignored/);
   assert.equal(validateMain(['--json'], ROOT), 0);
@@ -647,7 +659,11 @@ test('statuses distinguish accepted, inventory_only, missing_from_main, supersed
   const statuses = new Set(live.features.map((row) => row.status));
   assert.ok(statuses.has('inventory_only'));
   assert.ok(statuses.has('missing_from_main'));
-  assert.equal(statuses.has('accepted'), false);
+  assert.equal(statuses.has('accepted'), true);
+  assert.deepEqual(
+    live.features.filter((row) => row.status === 'accepted').map((row) => row.feature_id),
+    ['branding'],
+  );
 
   const history = [{
     from_feature_id: 'fixture-old',

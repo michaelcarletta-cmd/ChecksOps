@@ -7,10 +7,10 @@ Release Locks and Deployment Guard remain authoritative and unchanged.
 
 ## What this foundation does
 
-- Inventories known features without marking them `accepted`.
-- Evaluates intended Branding invariants against current main.
+- Inventories known features. Branding is accepted evaluate-only against #713.
+- Evaluates Branding invariants against current main.
 - Reports findings. Exit code is always `0`.
-- Rejects `{ok:true}` as evidence.
+- Rejects `{ok:true}` as evidence. Enforcement stays disabled.
 
 ## What this foundation must not do
 
@@ -45,10 +45,9 @@ Only after a later activation PR exists:
 
 ## Branding
 
-Current main remains the known failing #617 control case. The inventory now
-also records the #709 Email Preview public-logo invariant. Do not “fix”
-Branding by weakening the intended invariants or by marking `branding`
-accepted.
+Branding is accepted evaluate-only against merged #713. Do not weaken the
+intended invariants, do not treat older Branding SHAs as restore authority,
+and do not enable enforcement from this guide.
 
 ## Collision
 
