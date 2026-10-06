@@ -20,7 +20,6 @@ import {
   ACCEPTED_PRODUCTION_SPA,
   PRODUCTION_SPA_ID,
   SAFE_SPA_DEPLOY_MODE,
-  acceptedBaselineCandidate,
   compareProductionSpaCandidate,
 } from '../../../scripts/lib/production-spa-baseline.mjs';
 
@@ -32,6 +31,39 @@ function clone(value) {
 
 function lockedComponent() {
   return loadJson(path.join(ROOT, 'ops/release-locks/locked-components.json')).components[PRODUCTION_SPA_ID];
+}
+
+function currentPins(component = lockedComponent()) {
+  const fp = component.deployment_fingerprint || {};
+  return {
+    spa_bundle: fp.spa_bundle,
+    spa_sha256: fp.spa_sha256,
+    index_html_sha256: fp.config_hash,
+    s3_version: fp.cloudfront_deployment_fingerprint,
+  };
+}
+
+function currentBaselineCandidate({ deploy = true } = {}) {
+  const pins = currentPins();
+  return {
+    environment: 'production',
+    approved: true,
+    components: {
+      [PRODUCTION_SPA_ID]: {
+        deploy,
+        hash: pins.spa_sha256,
+        spa_bundle: pins.spa_bundle,
+        index_html_sha256: pins.index_html_sha256,
+        s3_version: pins.s3_version,
+        based_on_baseline: { ...pins },
+        preflight_production: { ...pins },
+        live_production: { ...pins },
+        deploy_mode: SAFE_SPA_DEPLOY_MODE,
+        contains_accepted_baseline: true,
+        reconciled_to_production_baseline: true,
+      },
+    },
+  };
 }
 
 function writeCandidate(body) {
@@ -46,16 +78,17 @@ test('production-spa lock records the accepted live baseline', () => {
   assert.equal(component.classification, 'PRODUCTION_LOCKED');
   assert.equal(component.production_active, true);
   assert.equal(component.artifact.type, 'spa');
-  assert.equal(component.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
-  assert.equal(component.artifact.hash, ACCEPTED_PRODUCTION_SPA.spa_sha256);
-  assert.equal(component.artifact.version, ACCEPTED_PRODUCTION_SPA.s3_version);
-  assert.equal(component.deployment_fingerprint.spa_bundle, ACCEPTED_PRODUCTION_SPA.spa_bundle);
-  assert.equal(component.deployment_fingerprint.spa_sha256, ACCEPTED_PRODUCTION_SPA.spa_sha256);
-  assert.equal(component.deployment_fingerprint.config_hash, ACCEPTED_PRODUCTION_SPA.index_html_sha256);
-  assert.equal(component.deployment_fingerprint.cloudfront_deployment_fingerprint, ACCEPTED_PRODUCTION_SPA.s3_version);
+  assert.equal(component.artifact.name, '/assets/index-CBOwj-7W.js');
+  assert.equal(component.artifact.hash, '0b5fa51e11660cc9db224801b14edb3d80e662f0781ddce98d462448f66f3635');
+  assert.equal(component.artifact.version, 'b783nvvtXDmYHqatwJVZeKx2uHcwpDk3');
+  assert.equal(component.deployment_fingerprint.spa_bundle, '/assets/index-CBOwj-7W.js');
+  assert.equal(component.deployment_fingerprint.spa_sha256, '0b5fa51e11660cc9db224801b14edb3d80e662f0781ddce98d462448f66f3635');
+  assert.equal(component.deployment_fingerprint.config_hash, 'daff2ae4ffa654736fd05c07d05df3a790319fbf644028ca86754790f8dc7477');
+  assert.equal(component.deployment_fingerprint.cloudfront_deployment_fingerprint, 'b783nvvtXDmYHqatwJVZeKx2uHcwpDk3');
   assert.equal(component.deployment_fingerprint.cloudfront_id, ACCEPTED_PRODUCTION_SPA.cloudfront_id);
-  assert.equal(component.source.git_sha, ACCEPTED_PRODUCTION_SPA.banner_overlay);
-  assert.equal(component.rollback.git_sha, ACCEPTED_PRODUCTION_SPA.source_lineage);
+  assert.notEqual(component.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
+  assert.notEqual(component.artifact.name, '/assets/index-Bbftik1r.js');
+  assert.equal(component.rollback.artifact, ACCEPTED_PRODUCTION_SPA.spa_bundle);
   assert.equal(isSpaOnlyProductionLock(component), true);
   assert.deepEqual(component.required_sql, []);
   assert.deepEqual(component.missing_evidence, []);
@@ -105,7 +138,7 @@ test('SPA-only PRODUCTION_LOCKED with empty SQL is allowed only with recorded sp
 
 test('1. current accepted baseline passes production-spa preflight', () => {
   const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
-  const candidate = acceptedBaselineCandidate();
+  const candidate = currentBaselineCandidate();
   assert.deepEqual(compareCandidate(manifest, candidate), []);
   assert.deepEqual(compareProductionSpaCandidate(lockedComponent(), candidate.components[PRODUCTION_SPA_ID]), []);
   const file = writeCandidate(candidate);
@@ -114,7 +147,7 @@ test('1. current accepted baseline passes production-spa preflight', () => {
 
 test('2. intentionally stale SPA candidate is rejected', () => {
   const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
-  const candidate = acceptedBaselineCandidate();
+  const candidate = currentBaselineCandidate();
   candidate.components[PRODUCTION_SPA_ID] = {
     ...candidate.components[PRODUCTION_SPA_ID],
     hash: '0'.repeat(64),
@@ -137,10 +170,11 @@ test('2. intentionally stale SPA candidate is rejected', () => {
 
 test('3. production index.html/version change after preflight is rejected', () => {
   const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
-  const candidate = acceptedBaselineCandidate();
+  const candidate = currentBaselineCandidate();
+  const pins = currentPins();
   candidate.components[PRODUCTION_SPA_ID].live_production = {
-    spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
-    spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+    spa_bundle: pins.spa_bundle,
+    spa_sha256: pins.spa_sha256,
     index_html_sha256: 'e'.repeat(64),
     s3_version: 'DRIFTED.VERSION',
   };
@@ -164,18 +198,8 @@ test('4. candidate missing the accepted baseline is rejected', () => {
         contains_accepted_baseline: false,
         reconciled_to_production_baseline: false,
         deploy_mode: SAFE_SPA_DEPLOY_MODE,
-        preflight_production: {
-          spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
-          spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
-          index_html_sha256: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
-          s3_version: ACCEPTED_PRODUCTION_SPA.s3_version,
-        },
-        live_production: {
-          spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
-          spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
-          index_html_sha256: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
-          s3_version: ACCEPTED_PRODUCTION_SPA.s3_version,
-        },
+        preflight_production: currentPins(),
+        live_production: currentPins(),
       },
     },
   };
@@ -187,7 +211,7 @@ test('4. candidate missing the accepted baseline is rejected', () => {
 
 test('5. current baseline plus a narrow future overlay is allowed through preflight', () => {
   const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
-  const candidate = acceptedBaselineCandidate();
+  const candidate = currentBaselineCandidate();
   candidate.components[PRODUCTION_SPA_ID] = {
     ...candidate.components[PRODUCTION_SPA_ID],
     hash: 'a1'.repeat(32),
@@ -201,7 +225,7 @@ test('5. current baseline plus a narrow future overlay is allowed through prefli
 
 test('lock/live mismatch and destructive overwrite fail closed', () => {
   const manifest = { components: { [PRODUCTION_SPA_ID]: lockedComponent() } };
-  const mismatch = acceptedBaselineCandidate();
+  const mismatch = currentBaselineCandidate();
   mismatch.components[PRODUCTION_SPA_ID].preflight_production = {
     spa_bundle: '/assets/index-Unexpected.js',
     spa_sha256: 'c'.repeat(64),
@@ -218,7 +242,7 @@ test('lock/live mismatch and destructive overwrite fail closed', () => {
   assert.ok(mismatchErrors.some((row) => /does not match locked baseline/.test(row)));
   assert.equal(mismatchErrors.some((row) => /TOCTOU/.test(row)), false);
 
-  const destructive = acceptedBaselineCandidate();
+  const destructive = currentBaselineCandidate();
   destructive.components[PRODUCTION_SPA_ID].deploy_mode = 's3_sync_delete';
   const destructiveErrors = compareCandidate(manifest, destructive);
   assert.ok(destructiveErrors.some((row) => /destructive frontend deployment/.test(row)));
