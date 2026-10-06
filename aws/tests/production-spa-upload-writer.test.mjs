@@ -11,6 +11,10 @@ import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { loadContractRegistry, passingContractResults } from '../../scripts/deployment-guard/lib/contracts.mjs';
 import { applyProductionSpaUpload, distFingerprint } from '../../scripts/deployment-guard/lib/production-spa-upload.mjs';
+import {
+  ACCEPTED_PRODUCTION_SPA,
+  PRODUCTION_SPA_ID,
+} from '../../scripts/lib/production-spa-baseline.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -1018,5 +1022,199 @@ test('production SPA writer: invalid receipts do not get recorded as consumed', 
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.RECEIPT_EXPIRED);
   assert.equal(receiptRegistry.calls.length, 0);
+});
+
+function lockedProductionSpa() {
+  const current = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/release-locks/locked-components.json'), 'utf8'))
+    .components[PRODUCTION_SPA_ID];
+  return {
+    ...current,
+    artifact: {
+      ...current.artifact,
+      name: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+      hash: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+      version: ACCEPTED_PRODUCTION_SPA.s3_version,
+    },
+    deployment_fingerprint: {
+      ...current.deployment_fingerprint,
+      spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+      spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+      config_hash: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
+      cloudfront_deployment_fingerprint: ACCEPTED_PRODUCTION_SPA.s3_version,
+    },
+  };
+}
+
+function lockedPins() {
+  return {
+    spa_bundle: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+    spa_sha256: ACCEPTED_PRODUCTION_SPA.spa_sha256,
+    index_html_sha256: ACCEPTED_PRODUCTION_SPA.index_html_sha256,
+    s3_version: ACCEPTED_PRODUCTION_SPA.s3_version,
+  };
+}
+
+function livePinsFrom(liveBefore, spaSha = '67'.repeat(32)) {
+  return {
+    spa_bundle: liveBefore.entry_bundle,
+    spa_sha256: spaSha,
+    index_html_sha256: liveBefore.index_html_sha256,
+    s3_version: liveBefore.s3_version_id,
+  };
+}
+
+function supersessionCandidate({ dist, liveBefore, receipt, lease }) {
+  const live = livePinsFrom(liveBefore);
+  return {
+    deploy: true,
+    production_deploy_intent: true,
+    forward_supersession: true,
+    hash: dist.details.entry_bundle_sha256,
+    spa_sha256: dist.details.entry_bundle_sha256,
+    spa_bundle: dist.details.entry_bundle,
+    index_html_sha256: dist.details.index_html_sha256,
+    based_on_baseline: lockedPins(),
+    historical_locked_baseline: lockedPins(),
+    reconciled_against_live: live,
+    preflight_production: live,
+    live_production: live,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    required_live_behavior_preserved: true,
+    accepted_feature_contracts_passed: true,
+    preservation_evidence: {
+      required_live_behavior_preserved: true,
+      live_only_risks: [],
+      passed_contracts: ['aws-spa-bootstrap', 'branding-intended-invariants'],
+    },
+    source: {
+      git_sha: SHA,
+      tree_hash: '6e'.repeat(32),
+    },
+    lease: {
+      present: true,
+      expired: false,
+      workstream_id: lease?.workstream_id || 'workstream-a',
+    },
+    receipt,
+  };
+}
+
+test('production SPA writer: verified forward supersession advances lock to C not live B', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-CBOwj-7W.js', js: "console.log('candidate-c');\n" });
+  const dist = distFingerprint(distDir);
+  assert.equal(dist.ok, true);
+
+  const liveBefore = {
+    index_html_sha256: 'ac1dc285c0af1a6046d484bde94aff9b4e4238f52df5b4d24f5c8a9e3252820e',
+    entry_bundle: '/assets/index-Bbftik1r.js',
+    etag: 'etag-live',
+    last_modified: '2026-10-05T00:22:08.000Z',
+    s3_version_id: 'FDsQYX2a0C8ZEs_H6h.gpmNHZ314YVPf',
+  };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
+  const lock = lockedProductionSpa();
+  const spaCandidate = supersessionCandidate({
+    dist,
+    liveBefore,
+    receipt: issued.receipt,
+    lease: issued.receipt.lease,
+  });
+  const lockManifest = { components: { [PRODUCTION_SPA_ID]: structuredClone(lock) } };
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    operator: 'test-agent',
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    accepted_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results: passingContractResults(loadContractRegistry(root)),
+    forward_supersession: true,
+    production_spa_lock: lock,
+    production_spa_candidate: spaCandidate,
+    lock_manifest: lockManifest,
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry: createSharedReceiptRegistry(),
+    fetchImpl: fetchFromDist(distDir),
+    now: NOW,
+    script: 'test',
+  });
+
+  assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+  assert.equal(result.details.lock_advance.advanced, true);
+  assert.equal(result.details.lock_advance.component.artifact.name, '/assets/index-CBOwj-7W.js');
+  assert.notEqual(result.details.lock_advance.component.artifact.name, liveBefore.entry_bundle);
+  assert.equal(result.details.lock_advance.component.rollback.artifact, ACCEPTED_PRODUCTION_SPA.spa_bundle);
+  assert.equal(lock.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
+});
+
+test('production SPA writer: failed supersession verify does not advance the lock', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-CBOwj-7W.js', js: "console.log('candidate-c');\n" });
+  const dist = distFingerprint(distDir);
+  const liveBefore = {
+    index_html_sha256: 'ac1dc285c0af1a6046d484bde94aff9b4e4238f52df5b4d24f5c8a9e3252820e',
+    entry_bundle: '/assets/index-Bbftik1r.js',
+    etag: 'etag-live',
+    last_modified: '2026-10-05T00:22:08.000Z',
+    s3_version_id: 'FDsQYX2a0C8ZEs_H6h.gpmNHZ314YVPf',
+  };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
+  const lock = lockedProductionSpa();
+  const spaCandidate = supersessionCandidate({
+    dist,
+    liveBefore,
+    receipt: issued.receipt,
+    lease: issued.receipt.lease,
+  });
+
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results: passingContractResults(loadContractRegistry(root)),
+    forward_supersession: true,
+    production_spa_lock: lock,
+    production_spa_candidate: spaCandidate,
+    lock_manifest: { components: { [PRODUCTION_SPA_ID]: structuredClone(lock) } },
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry: createSharedReceiptRegistry(),
+    fetchImpl: fetchFromDist(distDir, { overrideIndexHtml: '<html>WRONG</html>' }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(result.details?.lock_advance?.advanced, undefined);
+  assert.equal(lock.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
 });
 

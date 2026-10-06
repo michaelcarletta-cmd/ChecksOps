@@ -25,7 +25,7 @@ import {
   compareProductionSpaCandidate,
 } from './lib/production-spa-baseline.mjs';
 
-export function compareCandidate(manifest, candidate) {
+export function compareCandidate(manifest, candidate, opts = {}) {
   const errors = [];
   if (!candidate || typeof candidate !== 'object') {
     errors.push('candidate fingerprint is missing');
@@ -43,7 +43,14 @@ export function compareCandidate(manifest, candidate) {
       continue;
     }
     if (id === PRODUCTION_SPA_ID) {
-      errors.push(...compareProductionSpaCandidate(component, row));
+      errors.push(...compareProductionSpaCandidate(component, row, {
+        now: opts.now,
+        productionIntent: opts.productionIntent === true
+          || candidate.production_deploy_intent === true
+          || row?.production_deploy_intent === true,
+        lease: row?.lease || candidate.lease,
+        receipt: row?.receipt || candidate.receipt,
+      }));
       continue;
     }
     if (!row) {
@@ -104,7 +111,10 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
       errors.push('candidate fingerprint file is missing');
     } else {
       const candidate = loadJson(path.resolve(root, candidatePath));
-      errors.push(...compareCandidate(inputs.manifest, candidate));
+      const productionIntent = env.CHECKSOPS_PRODUCTION_DEPLOY === '1'
+        || env.CHECKSOPS_PRODUCTION_DEPLOY === 'APPLY'
+        || env.CHECKSOPS_APPLY_PRODUCTION === '1';
+      errors.push(...compareCandidate(inputs.manifest, candidate, { productionIntent }));
     }
   } else if (env.CHECKSOPS_PRODUCTION_DEPLOY === '1' || env.CHECKSOPS_PRODUCTION_DEPLOY === 'APPLY') {
     errors.push('production deploy intent requires --candidate fingerprint');
