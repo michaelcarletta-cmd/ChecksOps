@@ -7,7 +7,7 @@ import {
 } from "@/lib/checkaltDepositOrchestrator";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
@@ -54,6 +54,7 @@ import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
 import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
+import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
@@ -288,6 +289,7 @@ export default function CheckCommandCenter() {
   const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const canMoveChecks = useCanMoveChecks();
+  const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [classFilter, setClassFilter] = useState<string>("all");
@@ -470,63 +472,8 @@ export default function CheckCommandCenter() {
 
   const canAccessManager = canMoveChecks;
 
-  // Admin: allow delete at any stage
-  const canDeleteAnyCheck = true;
-
-  const deleteCheckMutation = useMutation({
-    mutationFn: async (checkId: string) => {
-      // Delete all related records first (order matters for FK constraints)
-      const tables = [
-        "check_endorsement_events",
-        "check_endorsements",
-        "check_review_decisions",
-        "check_reissue_requests",
-        "check_eligibility_results",
-        "check_audit_log",
-        "check_payees",
-      ] as const;
-
-      for (const table of tables) {
-        const { error } = await supabase.from(table).delete().eq("check_id", checkId);
-        if (error) {
-          console.error(`[DELETE] Failed to delete from ${table}:`, error);
-          throw new Error(`Failed to clear ${table}: ${error.message}`);
-        }
-      }
-
-      // Remove any accounting rows and unlink any active loss draft before deleting the check
-      const { error: ccErr } = await supabase.from("claim_checks").delete().eq("check_intake_item_id", checkId);
-      if (ccErr) console.warn("[DELETE] claim_checks cleanup:", ccErr.message);
-
-      const { error: lossDraftErr } = await supabase
-        .from("loss_draft_tracking")
-        .update({ check_intake_item_id: null })
-        .eq("check_intake_item_id", checkId);
-      if (lossDraftErr) {
-        console.error("[DELETE] loss_draft_tracking unlink:", lossDraftErr);
-        throw new Error(`Failed to unlink loss draft: ${lossDraftErr.message}`);
-      }
-
-      const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
-      if (error) throw new Error(`Failed to delete check: ${error.message}`);
-    },
-    // Phase 4: drop the row from the queue immediately, restore it if the
-    // delete fails server-side.
-    onMutate: (checkId: string) => {
-      const rollback = optimisticRemove(qc, [checkId]);
-      return { rollback };
-    },
-    onSuccess: () => {
-      toast({ title: "Check deleted" });
-      setSelectedCheck(null);
-      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-    },
-    onError: (e, _vars, ctx) => {
-      ctx?.rollback?.();
-      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
-    },
-  });
+  // Admin: allow delete at any stage through the accepted Delete Check workflow.
+  const canDeleteAnyCheck = isAdmin;
 
 
   const { data: checks = [], isLoading } = useQuery({
@@ -1667,6 +1614,7 @@ export default function CheckCommandCenter() {
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
               </div>
@@ -1843,6 +1791,7 @@ export default function CheckCommandCenter() {
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
               </div>
@@ -2200,20 +2149,22 @@ export default function CheckCommandCenter() {
                                   </Button>
                                 )}
                                 {canDelete && !isShared && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (confirm("Delete this check? This cannot be undone.")) {
-                                        deleteCheckMutation.mutate(check.id);
-                                      }
-                                    }}
-                                    disabled={deleteCheckMutation.isPending}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <AdminDeleteCheckButton
+                                      checkId={check.id}
+                                      checkNumber={check.check_number}
+                                      onDeleted={() => {
+                                        optimisticRemove(qc, [check.id]);
+                                        setSelectedCheck(null);
+                                        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                                        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                                      }}
+                                      size="icon"
+                                      variant="ghost"
+                                      label=""
+                                      className="h-7 w-7"
+                                    />
+                                  </div>
                                 )}
                               </div>
                             </TableCell>
@@ -2358,6 +2309,7 @@ export default function CheckCommandCenter() {
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
               ) : (
@@ -2923,9 +2875,11 @@ function RerunOcrButton({ checkId, onSuccess }: { checkId: string; onSuccess: ()
 function CheckDetailPanel({
   checkId,
   onRefresh,
+  onDeleted,
 }: {
   checkId: string;
   onRefresh: () => void;
+  onDeleted?: () => void;
 }) {
   const { requireStepUp } = useStepUp();
   const [detailTab, setDetailTab] = useState("overview");
@@ -3279,20 +3233,6 @@ function CheckDetailPanel({
   }, [frontImageUrl]);
 
 
-
-   // Fetch reviewer profile for name display
-  const { data: reviewerProfile } = useQuery({
-    queryKey: ["reviewer-profile", check?.reviewed_by],
-    enabled: !!check?.reviewed_by,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", check!.reviewed_by!)
-        .single();
-      return data;
-    },
-  });
 
   const { data: auditLog = [] } = useQuery({
     queryKey: ["check-audit", checkId],
@@ -3927,6 +3867,21 @@ function CheckDetailPanel({
               <Share2 className="h-3 w-3" /> Share
             </Button>
           )}
+          {!isSharedView && (
+            <AdminDeleteCheckButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              onDeleted={() => {
+                onRefresh();
+                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                onDeleted?.();
+              }}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
+          )}
         </div>
 
         {/* Inline front-of-check thumbnail removed — the "View Check Images"
@@ -4325,21 +4280,6 @@ function CheckDetailPanel({
                 </div>
               )}
               <Separator />
-              {check.reviewed_by && (
-                <>
-                  <Separator />
-                  <div className="bg-muted/30 rounded-md p-2.5 space-y-1">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Reviewed By</p>
-                    <p className="text-sm font-medium">{reviewerProfile?.full_name || reviewerProfile?.email || check.reviewed_by.slice(0, 8) + "..."}</p>
-                    {check.reviewed_at && (
-                      <p className="text-xs text-muted-foreground">{format(new Date(check.reviewed_at), "MMM d, yyyy h:mm a")}</p>
-                    )}
-                    {check.review_notes && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">"{check.review_notes}"</p>
-                    )}
-                  </div>
-                </>
-               )}
               {canUndo && !isSharedView && (
                 <Button
                   size="sm"
@@ -4789,6 +4729,7 @@ function CheckDetailPanel({
                     onRefresh();
                     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
                     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                    onDeleted?.();
                   }}
                   size="sm"
                   variant="outline"

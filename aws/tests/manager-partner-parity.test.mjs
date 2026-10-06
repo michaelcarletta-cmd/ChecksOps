@@ -289,9 +289,9 @@ test('5. CheckAlt settings read omits secrets and write is platform-owner only',
   assert.equal(awsClient.includes('checkalt_config') && awsClient.includes('save_checkalt_settings'), true);
 });
 
-test('6. deposit_action allows only prepare_deposit and assign_provider', async () => {
+test('6. deposit_action allows prepare, assign, and mark_manual_deposit; provider money stays disabled', async () => {
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.deposit_action, 'safe_now_subset');
-  assert.deepEqual([...SAFE_DEPOSIT_ACTIONS].sort(), ['assign_provider', 'prepare_deposit']);
+  assert.deepEqual([...SAFE_DEPOSIT_ACTIONS].sort(), ['assign_provider', 'mark_manual_deposit', 'prepare_deposit']);
   const client = identityClient((sql, params) => {
     if (/FROM public.check_intake_items/.test(sql) && /FOR UPDATE/.test(sql)) {
       return {
@@ -306,6 +306,7 @@ test('6. deposit_action allows only prepare_deposit and assign_provider', async 
         }],
       };
     }
+    if (/FROM public.user_roles|SELECT role/.test(sql)) return { rows: [{ role: 'admin' }] };
     if (/FROM public.tenant_users/.test(sql)) return { rows: [{ '?column?': 1 }] };
     if (/FROM public.deposit_items WHERE check_id/.test(sql)) return { rows: [] };
     if (/INSERT INTO public.deposit_items/.test(sql)) return { rows: [{ id: ITEM_ID }] };
@@ -317,26 +318,34 @@ test('6. deposit_action allows only prepare_deposit and assign_provider', async 
           status: 'pending_assignment',
           amount: 25,
           check_id: CHECK_ID,
+          batch_id: null,
+          provider: null,
+          deposit_slip_number: null,
           tenant_id: FREEDOM,
+          check_status: 'approved_for_deposit',
+          check_stage: 'ready_for_deposit',
         }],
       };
     }
     if (/FROM public.deposit_provider_config/.test(sql)) return { rows: [{ '?column?': 1 }] };
     if (/INSERT INTO public.deposit_batches/.test(sql)) return { rows: [{ id: BATCH_ID }] };
     if (/UPDATE public.deposit_items/.test(sql)) {
-      assert.match(sql, /provider_assigned/);
+      assert.match(sql, /provider_assigned|manual_branch/);
       return { rows: [] };
     }
+    if (/UPDATE public.check_intake_items/.test(sql)) return { rows: [] };
     return { rows: [] };
   });
 
-  const blocked = await executeSafeWriteRpc({
+  const marked = await executeSafeWriteRpc({
     client,
     mapping: { application_user_id: APP_ID },
     name: 'deposit_action',
     args: { p_action: 'mark_manual_deposit', p_deposit_item_id: ITEM_ID },
   });
-  assert.equal(blocked.error, 'rpc_financial_disabled');
+  assert.equal(marked.error, undefined);
+  assert.equal(marked.data.success, true);
+  assert.equal(marked.data.provider_execution, false);
 
   const money = await executeSafeWriteRpc({
     client,
