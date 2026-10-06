@@ -5,7 +5,7 @@ import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
-import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
+import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled, resolveClaims } from './data.mjs';
 import { handleWrite } from './write.mjs';
 import { handleProviderRequest } from './providers.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
@@ -73,6 +73,26 @@ const READ_ONLY_PATHS = new Set([
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
 
+export const publicDbHealthResponse = (probe) => {
+  const healthy = probeIsHealthy(probe);
+  return {
+    statusCode: healthy ? 200 : 503,
+    body: {
+      service: 'checksops-api',
+      status: healthy ? 'ok' : 'unhealthy',
+    },
+  };
+};
+
+export const publicDbValidationResponse = (validation) => ({
+  statusCode: validation?.ok ? 200 : 503,
+  body: {
+    service: 'checksops-api',
+    status: validation?.ok ? 'ok' : 'unhealthy',
+    readOnly: true,
+  },
+});
+
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
@@ -112,7 +132,13 @@ export const handler = async (event) => {
 
   if (method === 'GET' && path === '/db-health') {
     const probe = await probeDatabase();
-    return json(probeIsHealthy(probe) ? 200 : 503, {
+    const healthy = probeIsHealthy(probe);
+    const auth = await resolveClaims(event);
+    if (!auth.ok) {
+      const publicResult = publicDbHealthResponse(probe);
+      return json(publicResult.statusCode, publicResult.body);
+    }
+    return json(healthy ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
@@ -122,6 +148,11 @@ export const handler = async (event) => {
 
   if (method === 'GET' && path === '/db-readonly-validate') {
     const validation = await validateReadonlyCoreTables();
+    const auth = await resolveClaims(event);
+    if (!auth.ok) {
+      const publicResult = publicDbValidationResponse(validation);
+      return json(publicResult.statusCode, publicResult.body);
+    }
     return json(validation.ok ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
