@@ -1,0 +1,172 @@
+name: Guarded staging Lambda overlay
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Inspect live staging state or apply a guarded overlay"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - apply
+      member:
+        description: "Single Lambda ZIP member to inspect/replace"
+        required: true
+        default: index.mjs
+        type: string
+      approved_commit:
+        description: "Required for apply: exact main commit approved for deployment"
+        required: false
+        default: ""
+        type: string
+      expected_live_member_sha256:
+        description: "Required for apply: exact live member SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: guarded-staging-lambda-overlay
+  cancel-in-progress: false
+
+jobs:
+  staging-overlay:
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Refuse non-main or unapproved apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging deploy only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            test -n "${{ inputs.approved_commit }}" || { echo "apply requires approved_commit"; exit 2; }
+            test "${{ inputs.approved_commit }}" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            test -n "${{ inputs.expected_live_member_sha256 }}" || { echo "apply requires expected_live_member_sha256 from inspect"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/github-staging-lambda-overlay.test.mjs
+          node --test aws/tests/lambda-overlay-apply-writer.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-overlay-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity
+          test -n "${{ vars.CHECKSOPS_STAGING_DEPLOY_ROLE_ARN }}" || { echo "staging deploy role variable is missing"; exit 2; }
+
+      - name: Materialize existing deployment-guard issuer key
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          ISSUER_KEY_B64: ${{ secrets.CHECKSOPS_DEPLOYMENT_GUARD_ISSUER_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$ISSUER_KEY_B64" || { echo "existing issuer key secret is missing; refusing to mint a replacement"; exit 2; }
+          mkdir -p .deployment-guard
+          umask 077
+          printf '%s' "$ISSUER_KEY_B64" | base64 -d > .deployment-guard/issuer.key
+          test "$(wc -c < .deployment-guard/issuer.key)" -ge 32 || { echo "issuer key is invalid"; exit 2; }
+          chmod 600 .deployment-guard/issuer.key
+
+      - name: Inspect and authorize exact live member
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_STAGING_DEPLOY_MODE: ${{ inputs.mode }}
+          CHECKSOPS_STAGING_OVERLAY_MEMBER: ${{ inputs.member }}
+          CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
+        run: node scripts/deployment-guard/github-staging-lambda-overlay.mjs
+
+      - name: Record inspected live state
+        shell: bash
+        run: |
+          {
+            echo "### Staging Lambda overlay preflight"
+            echo "- Mode: \`${{ inputs.mode }}\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Member: \`${{ steps.preflight.outputs.owned_member }}\`"
+            echo "- Live CodeSha256: \`${{ steps.preflight.outputs.live_code_sha256 }}\`"
+            echo "- Live RevisionId: \`${{ steps.preflight.outputs.live_revision_id }}\`"
+            echo "- Live member SHA-256: \`${{ steps.preflight.outputs.live_member_sha256 }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply through official receipt-gated overlay writer
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/lambda-overlay-apply.mjs --apply --input "${{ steps.preflight.outputs.overlay_input }}"
+
+      - name: Public post-deploy smoke
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const base='https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
+          async function get(path) {
+            const res=await fetch(base+path,{headers:{accept:'application/json'}});
+            const text=await res.text();
+            let body={};
+            try { body=JSON.parse(text); } catch {}
+            if (res.status !== 200) throw new Error(path+' expected 200, got '+res.status);
+            return body;
+          }
+          const health=await get('/health');
+          if (health.status !== 'ok') throw new Error('/health not ok');
+          const db=await get('/db-health');
+          if (db.status !== 'ok') throw new Error('/db-health not ok');
+          for (const key of ['currentDatabase','currentUser','postgresqlVersion','connectedDatabase','secretDatabase']) {
+            if (Object.hasOwn(db,key)) throw new Error('/db-health leaked '+key);
+          }
+          const validation=await get('/db-readonly-validate');
+          if (validation.status !== 'ok' || validation.readOnly !== true) throw new Error('/db-readonly-validate not healthy/read-only');
+          for (const key of ['tables','privileges','catalog','rlsAudit','currentDatabase','currentUser']) {
+            if (Object.hasOwn(validation,key)) throw new Error('/db-readonly-validate leaked '+key);
+          }
+          console.log(JSON.stringify({health:'ok',dbHealth:'redacted-ok',dbReadonlyValidate:'redacted-ok'}));
+          NODE
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf .deployment-guard
