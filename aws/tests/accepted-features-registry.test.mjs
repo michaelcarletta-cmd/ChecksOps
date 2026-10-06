@@ -167,10 +167,17 @@ test('live registry is evaluate-only, has no accepted features, and Branding int
     'branding-admin-branding-email-present',
     'branding-admin-email-sender-mounted',
     'branding-public-url-resolver',
+    'branding-email-preview-api-public-logo',
+    'branding-email-preview-spa-apply-logo',
+    'branding-email-preview-iframe-srcdoc',
+    'branding-email-preview-public-logo',
     'branding-intended-invariants',
   ]) {
     assert.ok(branding.passed_invariants.includes(id), id);
   }
+  const brandingFeature = live.features.find((row) => row.feature_id === 'branding');
+  assert.ok(brandingFeature.required_tests.includes('aws/tests/email-preview-logo-url.test.mjs'));
+  assert.ok(fs.existsSync(path.join(ROOT, 'aws/tests/email-preview-logo-url.test.mjs')));
   assert.equal(result.findings.some((row) => row.feature_id === 'branding'), false);
 });
 
@@ -396,6 +403,72 @@ test('candidate own tests passing cannot hide another accepted feature failure',
   assert.ok(result.present_accepted.includes('fixture-ui'));
   assert.ok(result.missing_accepted.includes('fixture-other'));
   assert.ok(result.findings.some((row) => row.feature_id === 'fixture-other'));
+});
+
+test('detects Email Preview public-logo regression of the #709 contract', () => {
+  const api = fs.readFileSync(path.join(ROOT, 'aws/functions/api/email-branding.mjs'), 'utf8');
+  const broken = api
+    .replaceAll('/storage/public?bucket=tenant-logos', '/prep/branding/logo')
+    .replace(/logoUrl = publicTenantLogoUrl\(tenant\.logo_url\) \|\| platform\.logoUrl/, 'logoUrl = `/prep/branding/logo/${tenant.id}`');
+  const result = evaluateRepo(ROOT, {
+    overlay: { 'aws/functions/api/email-branding.mjs': broken },
+  });
+  const branding = result.features.find((row) => row.feature_id === 'branding');
+  const failedIds = branding.failing_invariants.map((row) => row.invariant_id);
+  assert.ok(failedIds.includes('branding-email-preview-api-public-logo'));
+  assert.ok(failedIds.includes('branding-email-preview-public-logo'));
+  assert.ok(failedIds.includes('branding-intended-invariants'));
+  assert.ok(result.findings.some((row) => (
+    row.code === CODES.INVARIANT_FAILED && row.invariant_id === 'branding-email-preview-public-logo'
+  )));
+  assert.ok(result.findings.some((row) => (
+    row.code === CODES.INVARIANT_FAILED && row.invariant_id === 'branding-intended-invariants'
+  )));
+  assert.equal(result.evaluate_only, true);
+  assert.equal(result.blocking, false);
+  assert.equal(result.exit_code, 0);
+});
+
+test('Branding required-test binding includes email-preview-logo-url via existing evidence mechanism', () => {
+  const live = loadRegistry(ROOT);
+  const branding = live.features.find((row) => row.feature_id === 'branding');
+  assert.ok(branding.required_tests.includes('aws/tests/email-preview-logo-url.test.mjs'));
+  const acceptedClone = {
+    ...branding,
+    status: 'accepted',
+    accepted_source_authority: acceptedAuthority({
+      notes: 'test-only clone to exercise required_tests binding; not live authority',
+    }),
+  };
+  const missing = evaluateAcceptedFeatures({
+    root: ROOT,
+    registry: registry([acceptedClone]),
+    composition: { candidate_commit: SHA, declared_feature_ids: ['branding'] },
+    attestation: { ok: true, test_executions: [] },
+  });
+  assert.ok(missing.findings.some((row) => (
+    row.code === CODES.ATTESTATION_REJECTED
+    && row.feature_id === 'branding'
+    && String(row.message || '').includes('aws/tests/email-preview-logo-url.test.mjs')
+  )));
+  const bound = evaluateAcceptedFeatures({
+    root: ROOT,
+    registry: registry([acceptedClone]),
+    composition: { candidate_commit: SHA, declared_feature_ids: ['branding'] },
+    attestation: {
+      ok: true,
+      test_executions: branding.required_tests.map((testRel) => ({
+        test: testRel,
+        candidate_commit: SHA,
+        exit_code: 0,
+        output_sha256: sha256(`bound ${testRel}`),
+      })),
+    },
+  });
+  assert.equal(bound.findings.some((row) => (
+    row.code === CODES.ATTESTATION_REJECTED
+    && String(row.message || '').includes('aws/tests/email-preview-logo-url.test.mjs')
+  )), false);
 });
 
 test('required test evidence must cover every accepted feature and candidate commit', () => {

@@ -48,8 +48,12 @@ invariants are expected to fail:
 - tenant Sending Subdomain controls remain hidden
 - Admin Branding & Email remains present
 - public Branding/logo paths use `src/lib/brandingPublicUrl.ts`
+- Email Preview public-logo (`branding-email-preview-public-logo`): canonical
+  `publicTenantLogoUrl`, `/storage/public` + `tenant-logos`,
+  `applyEmailPreviewLogo`, iframe `srcDoc={previewHtml}`, and no canonical
+  generation reverting to `/prep/branding/logo`
 
-This PR does not repair Branding. The failing report is the control case.
+Branding stays `inventory_only`. This registry change does not accept Branding.
 
 ## Forward-safe protection
 
