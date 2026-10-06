@@ -112,7 +112,180 @@ export function isUnreconciledMainSource(row, { matchesLockedIdentity, basedOnLo
   return sourceRef === 'main' || sourceRef === 'origin/main' || sourceRef === 'refs/heads/main';
 }
 
-export function compareProductionSpaCandidate(component, row) {
+export function pinsComplete(pins, { requireS3Version = true } = {}) {
+  if (!pins) return false;
+  if (!pins.spa_bundle || !pins.spa_sha256 || !pins.index_html_sha256) return false;
+  if (requireS3Version && !pins.s3_version) return false;
+  return isSha256(pins.spa_sha256) && isSha256(pins.index_html_sha256);
+}
+
+export function isExplicitForwardSupersession(row) {
+  return row?.forward_supersession === true;
+}
+
+function sourceIdentity(row) {
+  const source = row?.source && typeof row.source === 'object' ? row.source : {};
+  return {
+    git_sha: source.git_sha || row?.git_sha || null,
+    tree_hash: source.tree_hash || row?.tree_hash || null,
+  };
+}
+
+function receiptEvidenceErrors(receipt, now) {
+  const prefix = PRODUCTION_SPA_ID;
+  if (!receipt || typeof receipt !== 'object') {
+    return [`${prefix}: forward supersession requires a signed deployment-guard receipt`];
+  }
+  if (receipt.consumed === true || receipt.reused === true) {
+    return [`${prefix}: forward supersession receipt has already been consumed; refuse reused receipt`];
+  }
+  if (receipt.valid === false || receipt.forged === true) {
+    return [`${prefix}: forward supersession receipt is invalid or forged`];
+  }
+  const hasMac = /^[0-9a-f]{64}$/.test(String(receipt.mac || ''));
+  const hasKms = Boolean(receipt.kms_signature && receipt.kms_key_arn);
+  if (!hasMac && !hasKms) {
+    return [`${prefix}: forward supersession receipt is invalid or forged`];
+  }
+  if (receipt.expiry && Date.parse(receipt.expiry) <= now) {
+    return [`${prefix}: forward supersession receipt has expired`];
+  }
+  if (!receipt.workstream_id) {
+    return [`${prefix}: forward supersession receipt is invalid or forged`];
+  }
+  return [];
+}
+
+function leaseEvidenceErrors(lease) {
+  const prefix = PRODUCTION_SPA_ID;
+  if (!lease || typeof lease !== 'object' || lease.present === false) {
+    return [`${prefix}: forward supersession requires an active lease`];
+  }
+  if (lease.expired === true) {
+    return [`${prefix}: forward supersession lease is expired`];
+  }
+  if (!lease.workstream_id) {
+    return [`${prefix}: forward supersession requires an active lease`];
+  }
+  return [];
+}
+
+function preservationEvidenceErrors(row) {
+  const prefix = PRODUCTION_SPA_ID;
+  const errors = [];
+  if (row.accepted_feature_contracts_passed !== true) {
+    errors.push(`${prefix}: forward supersession is missing accepted-feature/regression contract evidence`);
+  }
+  if (row.required_live_behavior_preserved !== true) {
+    errors.push(`${prefix}: forward supersession is missing preservation evidence that required live behavior is kept`);
+  }
+  const evidence = row.preservation_evidence;
+  if (!evidence || typeof evidence !== 'object') {
+    errors.push(`${prefix}: forward supersession is missing preservation evidence`);
+    return errors;
+  }
+  if (!Array.isArray(evidence.passed_contracts) || evidence.passed_contracts.length === 0) {
+    errors.push(`${prefix}: forward supersession is missing accepted-feature/regression contract evidence`);
+  }
+  if (Array.isArray(evidence.live_only_risks) && evidence.live_only_risks.length > 0) {
+    errors.push(`${prefix}: forward supersession preservation evidence reports live-only behavior that would be removed`);
+  }
+  if (evidence.required_live_behavior_preserved === false) {
+    errors.push(`${prefix}: forward supersession is missing preservation evidence that required live behavior is kept`);
+  }
+  return errors;
+}
+
+/**
+ * Explicit B → C supersession when live has advanced past historical lock A.
+ * Never inferred from reconciled_to_production_baseline or a lock-hash edit.
+ */
+export function evaluateForwardSupersession(component, row, opts = {}) {
+  const errors = [];
+  const prefix = PRODUCTION_SPA_ID;
+  const now = typeof opts.now === 'number' ? opts.now : Date.now();
+  if (!isExplicitForwardSupersession(row)) {
+    errors.push(`${prefix}: forward supersession intent is missing; ordinary deployment cannot supersede an orphaned live SPA`);
+    return { authorized: false, errors };
+  }
+  if (row.deploy !== true) {
+    errors.push(`${prefix}: forward supersession requires deploy=true`);
+  }
+  const productionIntent = row.production_deploy_intent === true || opts.productionIntent === true;
+  if (!productionIntent) {
+    errors.push(`${prefix}: forward supersession requires explicit production deployment intent`);
+  }
+
+  const locked = lockedSpaPins(component);
+  const current = candidatePins(row);
+  const live = snapshotPins(row.live_production);
+  const preflight = snapshotPins(row.preflight_production);
+  const reconciled = snapshotPins(row.reconciled_against_live);
+  const historical = snapshotPins(row.historical_locked_baseline) || snapshotPins(row.based_on_baseline);
+
+  if (!pinsComplete(locked)) {
+    errors.push(`${prefix}: forward supersession requires the current historical locked fingerprint`);
+  }
+  if (!pinsComplete(live)) {
+    errors.push(`${prefix}: forward supersession requires the exact fresh live production fingerprint`);
+  }
+  if (!pinsComplete(historical)) {
+    errors.push(`${prefix}: forward supersession requires the exact historical locked fingerprint`);
+  } else if (!pinsEqual(historical, locked)) {
+    errors.push(`${prefix}: historical_locked_baseline does not match the current Release Lock`);
+  }
+  if (!pinsComplete(reconciled)) {
+    errors.push(`${prefix}: forward supersession requires reconciled_against_live matching the fresh live fingerprint`);
+  } else if (live && !pinsEqual(reconciled, live)) {
+    errors.push(`${prefix}: candidate reconciled against a different live fingerprint; refuse deployment`);
+  }
+  if (!pinsComplete(preflight)) {
+    errors.push(`${prefix}: production SPA deploy requires preflight_production and live_production TOCTOU snapshots`);
+  } else if (live && !pinsEqual(preflight, live)) {
+    errors.push(`${prefix}: live changed after supersession preflight; refuse deployment`);
+  }
+  if (live && pinsEqual(live, locked)) {
+    errors.push(`${prefix}: live already matches the locked baseline; use ordinary deployment, not forward supersession`);
+  }
+
+  if (!pinsComplete(current, { requireS3Version: false })) {
+    errors.push(`${prefix}: forward supersession candidate is missing a new known source composition identity`);
+  } else {
+    if (live && current.spa_bundle === live.spa_bundle) {
+      errors.push(`${prefix}: forward supersession candidate must not redeploy the unexplained live bundle`);
+    }
+    if (current.spa_bundle === locked.spa_bundle) {
+      errors.push(`${prefix}: forward supersession candidate must not restore the historical locked baseline`);
+    }
+    if (isSupersededSpaBundle(current.spa_bundle)) {
+      errors.push(`${prefix}: stale SPA candidate is older than the accepted production baseline`);
+    }
+  }
+
+  const source = sourceIdentity(row);
+  if (!isGitShaSafe(source.git_sha) || !isSourceTreeHash(source.tree_hash)) {
+    errors.push(`${prefix}: forward supersession is missing source identity (git SHA/tree)`);
+  }
+  if (row.accepted_source_composition !== true) {
+    errors.push(`${prefix}: forward supersession is missing accepted source composition evidence`);
+  }
+
+  errors.push(...preservationEvidenceErrors(row));
+  errors.push(...leaseEvidenceErrors(row.lease || opts.lease));
+  errors.push(...receiptEvidenceErrors(row.receipt || opts.receipt, now));
+
+  return { authorized: errors.length === 0, errors };
+}
+
+function isGitShaSafe(value) {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/.test(value);
+}
+
+function isSourceTreeHash(value) {
+  return isSha256(value || '') || isGitShaSafe(value);
+}
+
+export function compareProductionSpaCandidate(component, row, opts = {}) {
   const errors = [];
   const prefix = PRODUCTION_SPA_ID;
   if (!row || typeof row !== 'object') {
@@ -130,6 +303,10 @@ export function compareProductionSpaCandidate(component, row) {
     && current.spa_sha256 === locked.spa_sha256,
   );
   const basedOnLocked = pinsEqual(basedOn, locked);
+  const explicitSupersession = isExplicitForwardSupersession(row);
+  const supersession = explicitSupersession
+    ? evaluateForwardSupersession(component, row, opts)
+    : { authorized: false, errors: [] };
 
   if (row.deploy === true) {
     const preflight = snapshotPins(row.preflight_production);
@@ -137,11 +314,18 @@ export function compareProductionSpaCandidate(component, row) {
     if (!preflight || !live) {
       errors.push(`${prefix}: production SPA deploy requires preflight_production and live_production TOCTOU snapshots`);
     } else {
-      if (!pinsEqual(preflight, live)) {
+      if (!pinsEqual(preflight, live) && !explicitSupersession) {
         errors.push(`${prefix}: production changed after preflight (TOCTOU); refuse deployment`);
       }
-      if (!pinsEqual(live, locked)) {
-        errors.push(`${prefix}: live production SPA does not match locked baseline; refuse deployment (do not auto-fix)`);
+      const liveMatchesLocked = pinsEqual(live, locked);
+      if (!liveMatchesLocked) {
+        if (explicitSupersession) {
+          errors.push(...supersession.errors);
+        } else {
+          errors.push(`${prefix}: live production SPA does not match locked baseline; refuse deployment (do not auto-fix)`);
+        }
+      } else if (explicitSupersession) {
+        errors.push(...supersession.errors);
       }
     }
     if (isDestructiveSpaDeploy(row)) {
@@ -151,6 +335,15 @@ export function compareProductionSpaCandidate(component, row) {
     } else if (row.deploy_mode !== SAFE_SPA_DEPLOY_MODE) {
       errors.push(`${prefix}: production SPA deploy_mode must be ${SAFE_SPA_DEPLOY_MODE}`);
     }
+  } else if (explicitSupersession) {
+    errors.push(...supersession.errors);
+  }
+
+  if (supersession.authorized) {
+    if (component.artifact?.hash && !isSha256(row.hash || row.spa_sha256 || '')) {
+      errors.push(`${prefix}: candidate omitted artifact hash`);
+    }
+    return errors;
   }
 
   if (isSupersededSpaBundle(current?.spa_bundle) || isSupersededSpaBundle(basedOn?.spa_bundle)) {
@@ -177,6 +370,162 @@ export function compareProductionSpaCandidate(component, row) {
   }
 
   return errors;
+}
+
+/**
+ * Build the lock payload for C. Never writes. Never points the lock at unexplained live B.
+ */
+export function planProductionSpaLockAdvance({
+  currentComponent,
+  deployed,
+  liveBefore,
+  verified = null,
+  failed = false,
+} = {}) {
+  const prefix = PRODUCTION_SPA_ID;
+  if (failed === true || verified?.ok === false) {
+    return {
+      advance: false,
+      component: currentComponent,
+      errors: [`${prefix}: failed deployment must not advance the Release Lock`],
+    };
+  }
+  const locked = lockedSpaPins(currentComponent);
+  const deployedPins = candidatePins(deployed);
+  const livePins = snapshotPins(liveBefore);
+  if (!pinsComplete(deployedPins, { requireS3Version: false })) {
+    return {
+      advance: false,
+      component: currentComponent,
+      errors: [`${prefix}: lock advance requires the newly deployed candidate identity`],
+    };
+  }
+  if (livePins && deployedPins.spa_bundle === livePins.spa_bundle) {
+    return {
+      advance: false,
+      component: currentComponent,
+      errors: [`${prefix}: refusing to lock the unexplained live bundle; lock may only advance to the proven candidate`],
+    };
+  }
+  if (deployedPins.spa_bundle === locked.spa_bundle) {
+    return {
+      advance: false,
+      component: currentComponent,
+      errors: [`${prefix}: lock advance requires a new composition, not the historical locked baseline`],
+    };
+  }
+  const source = sourceIdentity(deployed);
+  if (!isGitShaSafe(source.git_sha) || !isSourceTreeHash(source.tree_hash)) {
+    return {
+      advance: false,
+      component: currentComponent,
+      errors: [`${prefix}: lock advance requires the deployed candidate git SHA/tree`],
+    };
+  }
+  if (verified && verified.ok === true) {
+    const after = snapshotPins(verified.after_production || verified.live_production || verified);
+    if (after?.spa_bundle && after.spa_bundle !== deployedPins.spa_bundle) {
+      return {
+        advance: false,
+        component: currentComponent,
+        errors: [`${prefix}: verified production fingerprint does not match the deployed candidate; lock unchanged`],
+      };
+    }
+    if (after?.spa_sha256 && after.spa_sha256 !== deployedPins.spa_sha256) {
+      return {
+        advance: false,
+        component: currentComponent,
+        errors: [`${prefix}: verified production fingerprint does not match the deployed candidate; lock unchanged`],
+      };
+    }
+  } else if (verified != null && verified.ok !== true) {
+    return {
+      advance: false,
+      component: currentComponent,
+      errors: [`${prefix}: lock must not advance before successful guarded deployment verification`],
+    };
+  }
+
+  const s3Version = deployed.s3_version
+    || verified?.after_production?.s3_version
+    || verified?.s3_version
+    || null;
+  const recordedAt = verified?.recorded_at || new Date().toISOString();
+  const next = {
+    ...currentComponent,
+    source: {
+      git_sha: source.git_sha,
+      tree_hash: source.tree_hash,
+      merged: deployed.source?.merged === true,
+      merged_pr: deployed.source?.merged_pr ?? currentComponent.source?.merged_pr ?? null,
+    },
+    artifact: {
+      ...currentComponent.artifact,
+      type: 'spa',
+      name: deployedPins.spa_bundle,
+      hash: deployedPins.spa_sha256,
+      version: s3Version,
+    },
+    production_validation: {
+      ...currentComponent.production_validation,
+      completed: true,
+      environment: 'production',
+      component: PRODUCTION_SPA_ID,
+      git_sha: source.git_sha,
+      artifact_identity: deployedPins.spa_bundle,
+      recorded_at: recordedAt,
+      evidence_producer: currentComponent.production_validation?.evidence_producer || 'forward-supersession-verified-deploy',
+      evidence_type: 'forward supersession of orphaned live SPA',
+      evidence_refs: currentComponent.production_validation?.evidence_refs || [],
+    },
+    deployment_fingerprint: {
+      ...currentComponent.deployment_fingerprint,
+      recorded: true,
+      spa_bundle: deployedPins.spa_bundle,
+      spa_sha256: deployedPins.spa_sha256,
+      config_hash: deployedPins.index_html_sha256,
+      cloudfront_deployment_fingerprint: s3Version,
+      notes: `Forward-supersession lock. Previous lock ${locked.spa_bundle} is historical. Orphaned live ${livePins?.spa_bundle || 'unknown'} was the regression baseline, not lock authority.`,
+    },
+    rollback: {
+      git_sha: currentComponent.source?.git_sha || null,
+      artifact: locked.spa_bundle,
+      notes: `Immediate previous locked baseline is ${locked.spa_bundle}. Do not restore it over the new composition unless a separately authorized guarded rollback names that exact artifact. Do not lock the unexplained pre-supersession live bundle.`,
+    },
+    missing_evidence: [],
+    notes: `Authoritative production frontend baseline after verified forward supersession to ${deployedPins.spa_bundle}.`,
+  };
+  return { advance: verified?.ok === true, component: next, errors: [] };
+}
+
+export function applyProductionSpaLockAdvance(manifest, plan, { verified = null, failed = false } = {}) {
+  if (!manifest || typeof manifest !== 'object' || !manifest.components?.[PRODUCTION_SPA_ID]) {
+    return {
+      advanced: false,
+      manifest,
+      errors: [`${PRODUCTION_SPA_ID}: lock manifest is missing production-spa`],
+    };
+  }
+  if (failed === true || verified?.ok !== true || !plan?.advance || !plan.component) {
+    return {
+      advanced: false,
+      manifest,
+      component: manifest.components[PRODUCTION_SPA_ID],
+      errors: [`${PRODUCTION_SPA_ID}: failed or unverified deployment must not advance the Release Lock`],
+    };
+  }
+  return {
+    advanced: true,
+    manifest: {
+      ...manifest,
+      components: {
+        ...manifest.components,
+        [PRODUCTION_SPA_ID]: plan.component,
+      },
+    },
+    component: plan.component,
+    errors: [],
+  };
 }
 
 export function acceptedBaselineCandidate({ deploy = true } = {}) {
