@@ -45,8 +45,10 @@ Only after a later activation PR exists:
 
 ## Branding
 
-Current main is the known failing control case. Do not “fix” Branding by
-weakening the intended invariants or by marking `branding` accepted.
+Current main remains the known failing #617 control case. The inventory now
+also records the #709 Email Preview public-logo invariant. Do not “fix”
+Branding by weakening the intended invariants or by marking `branding`
+accepted.
 
 ## Collision
 

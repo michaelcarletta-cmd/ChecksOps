@@ -172,6 +172,10 @@ test('tenant Branding tab mounts Company Branding and Email Branding without Sen
   assert.match(emailSender, /showSendingDomain/);
   assert.match(emailSender, /\{showSendingDomain && <SectionCard/);
   assert.match(emailSender, /title="Sending subdomain"/);
+  assert.match(emailSender, /brandingPublicUrl\(storedLogo, "tenant-logos"\)/);
+  assert.match(emailSender, /applyEmailPreviewLogo/);
+  assert.match(emailSender, /srcDoc=\{previewHtml\}/);
+  assert.doesNotMatch(emailSender, /srcDoc=\{preview\.html\}/);
   assert.match(adminTenants, /from "@\/components\/settings\/EmailSenderSettings"/);
   assert.match(adminTenants, /<EmailSenderSettings/);
   assert.doesNotMatch(adminTenants, /showSendingDomain=\{false\}/);

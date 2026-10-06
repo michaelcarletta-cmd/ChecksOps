@@ -8,6 +8,8 @@ import {
   isSafeHttpUrl,
   isVerifiedCustomSender,
   platformBranding,
+  publicApiBaseUrl,
+  publicTenantLogoUrl,
   resolveEmailBranding,
 } from '../functions/api/email-branding.mjs';
 import { sendViaSesOrSink } from '../functions/api/email.mjs';
@@ -104,6 +106,64 @@ test('tenant logo replaces the platform logo and missing or unsafe logos fall ba
     },
   ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
   assert.match(unsafeLogo.logoUrl, /checksops-logo\.png/);
+});
+
+test('raw tenant logo object paths become execute-api public storage URLs', async () => {
+  const rawPath = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1790801891632.png';
+  const apiBase = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
+  const previous = {
+    CHECKSOPS_API_URL: process.env.CHECKSOPS_API_URL,
+    VITE_CHECKSOPS_API_URL: process.env.VITE_CHECKSOPS_API_URL,
+    CHECKSOPS_API_PUBLIC_URL: process.env.CHECKSOPS_API_PUBLIC_URL,
+    CHECKSOPS_ENV: process.env.CHECKSOPS_ENV,
+    SIGN_BASE_URL: process.env.SIGN_BASE_URL,
+  };
+  delete process.env.VITE_CHECKSOPS_API_URL;
+  delete process.env.CHECKSOPS_API_PUBLIC_URL;
+  process.env.CHECKSOPS_API_URL = apiBase;
+  process.env.CHECKSOPS_ENV = 'staging';
+  process.env.SIGN_BASE_URL = 'https://staging.checksops.com';
+  try {
+    assert.equal(publicApiBaseUrl(), apiBase);
+    assert.equal(
+      publicTenantLogoUrl(rawPath, apiBase),
+      `${apiBase}/storage/public?bucket=tenant-logos&path=${encodeURIComponent(rawPath)}`,
+    );
+    assert.equal(
+      publicTenantLogoUrl('https://cdn.acme.test/brand.png', apiBase),
+      'https://cdn.acme.test/brand.png',
+    );
+    assert.equal(publicTenantLogoUrl('javascript:alert(1)', apiBase), null);
+    assert.equal(publicTenantLogoUrl('../etc/passwd', apiBase), null);
+    assert.doesNotMatch(
+      publicTenantLogoUrl(rawPath, apiBase) || '',
+      /staging\.checksops\.com\/prep/,
+    );
+
+    const withRaw = await resolveEmailBranding(sqlClient([
+      {
+        match: (sql) => sql.includes('FROM public.tenants'),
+        result: () => ({ rows: [{
+          name: 'Freedom Adjustment',
+          is_system_tenant: false,
+          logo_url: rawPath,
+        }] }),
+      },
+    ]), { tenantId: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' });
+    assert.match(withRaw.logoUrl, /psr19uhop4\.execute-api\.us-east-1\.amazonaws\.com\/staging\/storage\/public\?bucket=tenant-logos/);
+    assert.match(withRaw.logoUrl, /logo-1790801891632\.png/);
+    assert.doesNotMatch(withRaw.logoUrl, /checksops-logo\.png/);
+    assert.doesNotMatch(withRaw.logoUrl, /\/prep\/branding\/logo\//);
+    assert.doesNotMatch(withRaw.logoUrl, /staging\.checksops\.com\/prep\//);
+    const branded = renderChecksOpsEmail({ title: 'Hi', logoUrl: withRaw.logoUrl });
+    assert.match(branded.html, /\/storage\/public\?bucket=tenant-logos/);
+    assert.doesNotMatch(branded.html, /checksops-logo\.png/);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('unsafe URL schemes are rejected or omitted from href and src', () => {

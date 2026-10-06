@@ -10,12 +10,44 @@ export const PLATFORM_PRIMARY_COLOR = '#1a56db';
 export const PLATFORM_FROM_LOCAL = 'noreply';
 export const PLATFORM_FROM_DOMAIN = 'checksops.com';
 
-export const emailAssetOrigin = () => String(
-  process.env.SIGN_BASE_URL
-  || process.env.APP_PUBLIC_URL
-  || process.env.VITE_APP_URL
-  || 'https://staging.checksops.com',
-).replace(/\/$/, '');
+const PRODUCTION_APP_ORIGIN = 'https://checksops.com';
+const STAGING_APP_ORIGIN = 'https://staging.checksops.com';
+
+const isProductionChecksopsEnv = (env = process.env.CHECKSOPS_ENV) => {
+  const value = String(env || '').trim().toLowerCase();
+  return value === 'production' || value === 'production-prep';
+};
+
+const isStagingAppHostName = (hostname) => {
+  const host = String(hostname || '').trim().toLowerCase();
+  return host === 'staging.checksops.com' || host.endsWith('.staging.checksops.com');
+};
+
+/**
+ * SPA/asset origin for platform logo and mail links.
+ * Production never falls back to staging.checksops.com (templates already
+ * set SIGN_BASE_URL=https://checksops.com).
+ */
+export const emailAssetOrigin = () => {
+  const configured = String(
+    process.env.SIGN_BASE_URL
+    || process.env.APP_PUBLIC_URL
+    || process.env.VITE_APP_URL
+    || '',
+  ).trim().replace(/\/$/, '');
+  if (configured) {
+    try {
+      const host = new URL(configured).hostname;
+      if (isProductionChecksopsEnv() && isStagingAppHostName(host)) {
+        return PRODUCTION_APP_ORIGIN;
+      }
+      return configured;
+    } catch {
+      if (isProductionChecksopsEnv()) return PRODUCTION_APP_ORIGIN;
+    }
+  }
+  return isProductionChecksopsEnv() ? PRODUCTION_APP_ORIGIN : STAGING_APP_ORIGIN;
+};
 
 export const checksOpsLogoUrl = () => `${emailAssetOrigin()}/checksops-logo.png`;
 
@@ -47,6 +79,135 @@ export const isSafeHttpUrl = (value) => {
 export const safeHttpUrl = (value, fallback = null) => (
   isSafeHttpUrl(value) ? String(value).trim() : fallback
 );
+
+const RAW_BRANDING_PATH = /^(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+$|^[A-Za-z0-9._-]+\.(?:png|jpe?g|gif|webp|svg)$/i;
+const SUPABASE_BRANDING = /^https?:\/\/[^/]*supabase\.co\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/([^?]+)/i;
+const BRANDING_BUCKETS = new Set(['tenant-logos', 'email-assets', 'company-branding']);
+const SAME_ORIGIN_API_TOKENS = new Set(['/prep', 'same-origin', 'same-origin:/prep']);
+
+const configuredApiUrl = () => String(
+  process.env.CHECKSOPS_API_URL || process.env.VITE_CHECKSOPS_API_URL || '',
+).trim();
+
+const configuredAppOrigin = () => {
+  for (const key of ['SIGN_BASE_URL', 'APP_PUBLIC_URL', 'VITE_APP_URL']) {
+    const value = String(process.env[key] || '').trim();
+    if (value) return value.replace(/\/$/, '');
+  }
+  return '';
+};
+
+const checksopsEnv = () => String(process.env.CHECKSOPS_ENV || '').trim().toLowerCase();
+
+const isProductionEnv = (env = checksopsEnv()) => isProductionChecksopsEnv(env);
+
+/**
+ * Same tokens as src/lib/awsApiBase.ts resolveAwsApiBaseUrl.
+ * Production Step 2 uses /prep | same-origin against the app origin.
+ * Staging keeps an absolute execute-api URL from CHECKSOPS_API_URL /
+ * VITE_CHECKSOPS_API_URL. Relative /prep is not browser-reachable in email.
+ */
+export const resolveRuntimeApiBaseUrl = (configured, appOrigin) => {
+  const value = String(configured || '').trim().replace(/\/$/, '');
+  const token = value.toLowerCase();
+  if (SAME_ORIGIN_API_TOKENS.has(token)) {
+    if (appOrigin) {
+      try {
+        return new URL('/prep', appOrigin).toString().replace(/\/$/, '');
+      } catch {
+        return '/prep';
+      }
+    }
+    return '/prep';
+  }
+  return value;
+};
+
+const parsedHttpUrl = (value) => {
+  if (!isSafeHttpUrl(value)) return null;
+  try {
+    return new URL(String(value).trim());
+  } catch {
+    return null;
+  }
+};
+
+const isStagingSpaHost = (url) => isStagingAppHostName(url.hostname);
+
+const isStagingExecuteApiOrigin = (url) => {
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.replace(/\/$/, '').toLowerCase();
+  return host.includes('execute-api') && path === '/staging';
+};
+
+/**
+ * Email HTML needs an absolute HTTPS API origin that browsers can fetch.
+ * Staging CloudFront /prep/* is SPA HTML, not the API. Fail closed (null)
+ * rather than emit an inaccessible /prep path or a staging URL in production.
+ */
+export const isBrowserReachableApiOrigin = (value, env = checksopsEnv()) => {
+  const url = parsedHttpUrl(value);
+  if (!url || url.protocol !== 'https:') return false;
+  if (isStagingSpaHost(url)) return false;
+  if (isProductionEnv(env) && (isStagingSpaHost(url) || isStagingExecuteApiOrigin(url))) {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Browser-reachable API origin for /storage/public.
+ * Reads the existing ChecksOps API-origin configuration:
+ *   CHECKSOPS_API_URL (scripts / Lambda)
+ *   VITE_CHECKSOPS_API_URL (SPA)
+ * then resolveAwsApiBaseUrl tokens against SIGN_BASE_URL / APP_PUBLIC_URL /
+ * VITE_APP_URL. Production may derive /prep from CHECKSOPS_ENV + app origin.
+ * Staging never falls back to a hard-coded execute-api URL.
+ */
+export const publicApiBaseUrl = () => {
+  const env = checksopsEnv();
+  const configured = configuredApiUrl();
+  const appOrigin = configuredAppOrigin();
+  const implicitProduction = !configured && isProductionEnv(env) ? '/prep' : configured;
+  const resolved = resolveRuntimeApiBaseUrl(implicitProduction, appOrigin || undefined);
+  if (!isBrowserReachableApiOrigin(resolved, env)) return null;
+  return resolved.replace(/\/$/, '');
+};
+
+/**
+ * Display URL for a stored tenant logo. Does not persist.
+ * Raw object paths and legacy Supabase public/sign URLs become
+ * `${apiBase}/storage/public?bucket=tenant-logos&path=...`.
+ * Already-safe HTTPS URLs pass through.
+ */
+export const publicTenantLogoUrl = (value, apiBase = publicApiBaseUrl()) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^(javascript|data|blob|file):/i.test(raw) || raw.includes('..') || raw.startsWith('//')) {
+    return null;
+  }
+  const base = String(apiBase || '').replace(/\/$/, '');
+  const supabase = raw.match(SUPABASE_BRANDING);
+  if (supabase && BRANDING_BUCKETS.has(supabase[1]) && base) {
+    const path = decodeURIComponent(supabase[2]);
+    const url = `${base}/storage/public?bucket=${encodeURIComponent(supabase[1])}&path=${encodeURIComponent(path)}`;
+    return isSafeHttpUrl(url) ? url : null;
+  }
+  if (isSafeHttpUrl(raw)) return raw;
+  if (!base) return null;
+  if (raw.includes('/storage/public')) {
+    const rel = raw.startsWith('/') ? raw : `/${raw}`;
+    const abs = `${base}${rel.replace(/^\/prep(?=\/)/, '')}`;
+    return isSafeHttpUrl(abs) ? abs : null;
+  }
+  if (/\s/.test(raw) || raw.startsWith('/') || raw.includes('://') || raw.includes('?') || raw.includes('#')) {
+    return null;
+  }
+  if (!RAW_BRANDING_PATH.test(raw)) return null;
+  const path = raw.replace(/^tenant-logos\//, '');
+  const url = `${base}/storage/public?bucket=tenant-logos&path=${encodeURIComponent(path)}`;
+  return isSafeHttpUrl(url) ? url : null;
+};
 
 export { defaultReplyTo };
 
@@ -199,7 +360,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   const primaryColor = isSafeHexColor(tenant.primary_color)
     ? String(tenant.primary_color).trim()
     : platform.primaryColor;
-  const logoUrl = safeHttpUrl(tenant.logo_url, platform.logoUrl);
+  const logoUrl = publicTenantLogoUrl(tenant.logo_url) || platform.logoUrl;
 
   if (verified) {
     return {
