@@ -189,9 +189,13 @@ export const publicTenantLogoUrl = (value, apiBase = publicApiBaseUrl()) => {
   const base = String(apiBase || '').replace(/\/$/, '');
   const supabase = raw.match(SUPABASE_BRANDING);
   if (supabase && BRANDING_BUCKETS.has(supabase[1]) && base) {
-    const path = decodeURIComponent(supabase[2]);
-    const url = `${base}/storage/public?bucket=${encodeURIComponent(supabase[1])}&path=${encodeURIComponent(path)}`;
-    return isSafeHttpUrl(url) ? url : null;
+    try {
+      const path = decodeURIComponent(supabase[2]);
+      const url = `${base}/storage/public?bucket=${encodeURIComponent(supabase[1])}&path=${encodeURIComponent(path)}`;
+      return isSafeHttpUrl(url) ? url : null;
+    } catch {
+      return null;
+    }
   }
   if (isSafeHttpUrl(raw)) return raw;
   if (!base) return null;
