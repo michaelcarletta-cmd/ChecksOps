@@ -155,6 +155,8 @@ jobs:
               "public-invoice.mjs"
               "invoice-actions.mjs"
               "tenant-collection-v2-uat.mjs"
+              "tenant-collection-v2.mjs"
+              "tenant-collection-v2-settlement.mjs"
               "tenant-maintenance-payments-catalog-inspect.mjs"
             )
             for module in "${REQUIRED_LIVE_MODULES[@]}"; do
@@ -232,13 +234,15 @@ jobs:
           cp /tmp/sh2-reviewed-source/public-invoice.mjs aws/functions/api/public-invoice.mjs
           cp /tmp/sh2-reviewed-source/invoice-actions.mjs aws/functions/api/invoice-actions.mjs
           cp /tmp/sh2-reviewed-source/tenant-collection-v2-uat.mjs aws/functions/api/tenant-collection-v2-uat.mjs
+          cp /tmp/sh2-reviewed-source/tenant-collection-v2.mjs aws/functions/api/tenant-collection-v2.mjs
+          cp /tmp/sh2-reviewed-source/tenant-collection-v2-settlement.mjs aws/functions/api/tenant-collection-v2-settlement.mjs
           cp /tmp/sh2-reviewed-source/tenant-maintenance-payments-catalog-inspect.mjs aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs
           git diff --check
           git status --short
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$TARGET_BRANCH"
-          git add -- aws/functions/api/index.mjs aws/functions/api/public-invoice.mjs aws/functions/api/invoice-actions.mjs aws/functions/api/tenant-collection-v2-uat.mjs aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs
+          git add -- aws/functions/api/index.mjs aws/functions/api/public-invoice.mjs aws/functions/api/invoice-actions.mjs aws/functions/api/tenant-collection-v2-uat.mjs aws/functions/api/tenant-collection-v2.mjs aws/functions/api/tenant-collection-v2-settlement.mjs aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs
           git diff --cached --quiet && { echo "No reconciliation source changes to commit"; exit 2; }
           git commit -m "security: reconcile exact live SH-2 source composition"
           git push --force-with-lease="refs/heads/$TARGET_BRANCH:$TARGET_HEAD" origin "HEAD:refs/heads/$TARGET_BRANCH"
