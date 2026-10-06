@@ -199,7 +199,6 @@ jobs:
             }
             
             NODE
-            NODE
             node /tmp/sh2-dependency-closure.mjs
             echo "composed_ready=true" >> "$GITHUB_OUTPUT"
             echo "composed_sha256=$COMPOSED_SHA256" >> "$GITHUB_OUTPUT"
