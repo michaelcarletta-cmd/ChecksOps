@@ -222,7 +222,7 @@ jobs:
             echo "SOURCE_RECONCILIATION_REQUIRED: target branch is not exactly current main"
             exit 2
           }
-          sha256sum -c /tmp/sh2-reviewed-source/SHA256SUMS
+          ( cd /tmp/sh2-reviewed-source && sha256sum -c SHA256SUMS )
           mkdir -p aws/functions/api
           cp /tmp/sh2-reviewed-source/index.mjs aws/functions/api/index.mjs
           cp /tmp/sh2-reviewed-source/public-invoice.mjs aws/functions/api/public-invoice.mjs
