@@ -1276,6 +1276,146 @@
       "reason": "PR #597 only refreshes the partner-sharing source.tree_hash after CheckCommandCenter changed. PR #600 also edits locked-components.json to refresh the production SPA baseline. This exception is limited to that single file and does not merge, close, deploy, or authorize PR #600.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 738,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 737,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 665,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 659,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 658,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 657,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 655,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 654,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 649,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 631,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 649,
+      "path": "ops/release-locks/proof/production-spa-baseline.md",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 631,
+      "path": "ops/release-locks/proof/production-spa-baseline.md",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 649,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 631,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 581,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 570,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 566,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 565,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 560,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 536,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

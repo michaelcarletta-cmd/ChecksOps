@@ -37,6 +37,14 @@ explicit forward-supersession candidate may replace that orphaned live
 bundle with a new proven composition; the lock then advances to that new
 composition only after verified deploy.
 
+Forward supersession requires explicit `forward_supersession=true` plus
+production deploy intent, exact historical lock and fresh live fingerprints,
+`reconciled_against_live` matching current live, a new known source
+composition (git SHA/tree), accepted-feature/preservation evidence, and a
+valid unused receipt plus active lease. `reconciled_to_production_baseline=true`
+or editing the lock hash to the unexplained live bundle is not supersession.
+A failed deploy leaves the existing lock unchanged.
+
 ## Checks
 
 ```bash
