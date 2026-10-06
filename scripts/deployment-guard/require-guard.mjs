@@ -73,7 +73,7 @@ export function refuseUnguardedDeploy(spec = {}, ctx = {}) {
     );
   }
 
-  const validated = validateReceipt(loaded.receipt, expected, { now: ctx.now || Date.now(), root });
+  const validated = validateReceipt(loaded.receipt, expected, { now: ctx.now || Date.now(), root, env });
   if (!validated.ok) {
     if (validated.code === CODES.RECEIPT_MISMATCH
       || validated.code === CODES.RECEIPT_EXPIRED
