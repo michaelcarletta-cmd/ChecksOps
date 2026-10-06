@@ -38,7 +38,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     receipt_path: opts.receipt || input.receipt_path,
   }, { root: guardRoot, env });
 
-  if (flags.apply !== true && input.apply !== true) {
+  if (!flags.has('apply') && input.apply !== true) {
     return printResult(fail(
       CODES.GUARD_APPLY_FORBIDDEN,
       'lambda overlay apply requires --apply plus a valid receipt',
