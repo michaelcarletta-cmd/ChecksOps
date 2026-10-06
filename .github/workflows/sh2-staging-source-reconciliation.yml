@@ -130,7 +130,7 @@ jobs:
           git diff --check "$BASELINE" HEAD -- "$MEMBER"
 
           if [ "$LIVE_MEMBER_SHA256" != "$BASELINE_SHA256" ]; then
-            git diff --binary "$BASELINE" "$SH2_TESTABILITY" -- "$MEMBER" > /tmp/sh2-index.patch
+            git diff --binary "$BASELINE" HEAD -- "$MEMBER" > /tmp/sh2-index.patch
             cp /tmp/index-live.mjs /tmp/index-forward-composed.mjs
             mkdir -p /tmp/sh2-compose/aws/functions/api
             cp /tmp/index-forward-composed.mjs /tmp/sh2-compose/aws/functions/api/index.mjs
