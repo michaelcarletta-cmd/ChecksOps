@@ -32,15 +32,15 @@ and does not block merge or deploy.
 | `superseded` | Replaced by an explicit supersession record | no |
 | `withdrawn` | Intentionally retired | no |
 
-No feature is registered as `accepted` in this foundation.
-
-A SHA that appears in inventory notes is **not** restore authority.
+`branding` is registered as `accepted` against merged #713 only. Other
+features remain `inventory_only` or `missing_from_main`. Enforcement stays
+disabled. A SHA in an inventory note is **not** restore authority.
 
 ## Branding fixture
 
-`branding` is the first semantic fixture. Current `origin/main` contains the
-known #617 regression, so its status is `inventory_only` and the intended
-invariants are expected to fail:
+`branding` is accepted evaluate-only against main `9ecde8eae66c3897c9a8ec7f8b943948c5cff9aa`
+(tree `5dd39482a77eef949b34288a7bf410a342611c6d`). Restore authority is that
+SHA only. Intended invariants:
 
 - Company Branding remains mounted
 - tenant Email Branding is mounted
@@ -53,7 +53,7 @@ invariants are expected to fail:
   `applyEmailPreviewLogo`, iframe `srcDoc={previewHtml}`, and no canonical
   generation reverting to `/prep/branding/logo`
 
-Branding stays `inventory_only`. This registry change does not accept Branding.
+Acceptance does not enable merge or deploy blocking.
 
 ## Forward-safe protection
 

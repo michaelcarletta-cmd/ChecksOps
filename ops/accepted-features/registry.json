@@ -1,7 +1,7 @@
 {
   "version": 1,
   "evaluate_only": true,
-  "notes": "Evaluate-only foundation. No feature is accepted. Inventory does not convert the safeguard audit matrix into enforcement. A SHA listed anywhere in this file is not restore authority. Branding records intended invariants that current origin/main fails because of the known #617 regression. Do not repair Branding from this registry.",
+  "notes": "Evaluate-only foundation. Enforcement remains disabled. Branding is accepted against merged #713 source only. Other features remain inventory_only or missing_from_main. Acceptance does not enable merge or deploy blocking.",
   "enforcement": {
     "enabled": false,
     "block_merge": false,
@@ -12,15 +12,15 @@
     {
       "feature_id": "branding",
       "title": "Company, tenant Email, and Admin Branding",
-      "status": "inventory_only",
-      "workstream_id": "accepted-feature-registry-foundation",
+      "status": "accepted",
+      "workstream_id": "branding-accepted-promotion",
       "accepted_source_authority": {
-        "kind": "inventory_note",
-        "git_sha": null,
-        "merged_pr": 617,
-        "evidence_path": "aws/tests/settings-branding-company-restore.test.mjs",
-        "restore_authority": false,
-        "notes": "Current origin/main contains the known #617 regression: tenant Branding unmounts EmailSenderSettings and the restore test encodes that as correct. merged_pr 617 is historical context only and is not restore authority. Do not treat main Branding as accepted."
+        "kind": "accepted_source",
+        "git_sha": "9ecde8eae66c3897c9a8ec7f8b943948c5cff9aa",
+        "merged_pr": 713,
+        "evidence_path": "aws/tests/email-preview-logo-url.test.mjs",
+        "restore_authority": true,
+        "notes": "Accepted source is the merged #713 main commit (tree 5dd39482a77eef949b34288a7bf410a342611c6d, feature head 6f5f4c6cbfd62a0d228aaa15e34167ada9851d3e). Restore authority is this SHA only. PR #617 and earlier Branding snapshots are historical and are not restore authority. Staging/UAT validated the #709 composition of this same source tree; this record does not authorize restoring a historical Lambda ZIP, SPA index.html, or other live package."
       },
       "source_paths": [
         "src/components/white-label/WhiteLabelSettings.tsx",
@@ -144,7 +144,7 @@
       "required_contracts": [],
       "applicable_artifact_types": ["spa", "lambda"],
       "supersession_history": [],
-      "notes": "Inventory only. Intended invariants now also record the #709 Email Preview public-logo contract (publicTenantLogoUrl, /storage/public tenant-logos, applyEmailPreviewLogo, srcDoc={previewHtml}, no /prep/branding/logo generation). Do not mark Branding accepted from this registry."
+      "notes": "Accepted evaluate-only. Invariants record the #708 tenant remount plus the #709 Email Preview public-logo contract. Enforcement remains disabled; acceptance does not block merge or deploy."
     },
     {
       "feature_id": "signature-requests",
