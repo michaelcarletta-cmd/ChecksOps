@@ -2,11 +2,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  LambdaClient,
-  GetFunctionCommand,
-} from '@aws-sdk/client-lambda';
-
 import { CODES, GuardError } from './lib/errors.mjs';
 import { acquireLease } from './lib/lease.mjs';
 import { issueReceipt } from './lib/receipt.mjs';
@@ -68,8 +63,17 @@ export function workflowIdentity(env = process.env) {
   };
 }
 
-async function inspectLive(member, { lambda = new LambdaClient({ region: REGION }), fetchImpl = fetch } = {}) {
-  const live = await lambda.send(new GetFunctionCommand({ FunctionName: FUNCTION_NAME }));
+async function inspectLive(member, { lambda = null, fetchImpl = fetch, loadSdk = (specifier) => import(specifier) } = {}) {
+  let client = lambda;
+  let command;
+  if (!client) {
+    const sdk = await loadSdk('@aws-sdk/client-lambda');
+    client = new sdk.LambdaClient({ region: REGION });
+    command = new sdk.GetFunctionCommand({ FunctionName: FUNCTION_NAME });
+  } else {
+    command = { operation: 'GetFunction', input: { FunctionName: FUNCTION_NAME } };
+  }
+  const live = await client.send(command);
   const codeSha256 = live?.Configuration?.CodeSha256 || null;
   const revisionId = live?.Configuration?.RevisionId || null;
   const location = live?.Code?.Location || null;
