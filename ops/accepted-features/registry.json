@@ -27,7 +27,9 @@
         "src/components/settings/CompanyBrandingSettings.tsx",
         "src/components/settings/EmailSenderSettings.tsx",
         "src/pages/admin/AdminTenants.tsx",
-        "src/components/branding/TenantLogo.tsx"
+        "src/components/branding/TenantLogo.tsx",
+        "src/lib/brandingPublicUrl.ts",
+        "aws/functions/api/email-branding.mjs"
       ],
       "semantic_invariants": [
         {
@@ -86,6 +88,39 @@
           "must_export": "brandingPublicUrl"
         },
         {
+          "id": "branding-email-preview-api-public-logo",
+          "kind": "source_marker",
+          "title": "canonical Email Preview API resolves tenant logos through publicTenantLogoUrl and /storage/public tenant-logos",
+          "file": "aws/functions/api/email-branding.mjs",
+          "must_match": "export const publicTenantLogoUrl[\\s\\S]*/storage/public\\?bucket=tenant-logos[\\s\\S]*logoUrl = publicTenantLogoUrl",
+          "must_not_match": "/prep/branding/logo"
+        },
+        {
+          "id": "branding-email-preview-spa-apply-logo",
+          "kind": "source_marker",
+          "title": "SPA Email Preview compatibility helper applyEmailPreviewLogo resolves tenant-logos",
+          "file": "src/lib/brandingPublicUrl.ts",
+          "must_match": "export function applyEmailPreviewLogo[\\s\\S]*brandingPublicUrl\\(storedLogo, \"tenant-logos\""
+        },
+        {
+          "id": "branding-email-preview-iframe-srcdoc",
+          "kind": "source_marker",
+          "title": "Email Preview iframe uses srcDoc={previewHtml} from applyEmailPreviewLogo",
+          "file": "src/components/settings/EmailSenderSettings.tsx",
+          "must_match": "applyEmailPreviewLogo[\\s\\S]*srcDoc=\\{previewHtml\\}",
+          "must_not_match": "srcDoc=\\{preview\\.html\\}"
+        },
+        {
+          "id": "branding-email-preview-public-logo",
+          "kind": "source_marker",
+          "title": "Email Preview public-logo contract holds across API resolver, SPA helper, and preview iframe",
+          "all_of": [
+            "branding-email-preview-api-public-logo",
+            "branding-email-preview-spa-apply-logo",
+            "branding-email-preview-iframe-srcdoc"
+          ]
+        },
+        {
           "id": "branding-intended-invariants",
           "kind": "source_marker",
           "title": "All intended Branding invariants hold together",
@@ -96,18 +131,20 @@
             "branding-tenant-sending-subdomain-hidden",
             "branding-admin-branding-email-present",
             "branding-admin-email-sender-mounted",
-            "branding-public-url-resolver"
+            "branding-public-url-resolver",
+            "branding-email-preview-public-logo"
           ]
         }
       ],
       "required_tests": [
         "aws/tests/accepted-features-registry.test.mjs",
-        "aws/tests/settings-branding-company-restore.test.mjs"
+        "aws/tests/settings-branding-company-restore.test.mjs",
+        "aws/tests/email-preview-logo-url.test.mjs"
       ],
       "required_contracts": [],
-      "applicable_artifact_types": ["spa"],
+      "applicable_artifact_types": ["spa", "lambda"],
       "supersession_history": [],
-      "notes": "Known failing control case against current origin/main. Evaluate-only findings must report missing tenant Email Branding mount, missing showSendingDomain={false}, missing Sending Subdomain hide contract, and missing brandingPublicUrl.ts. Do not repair Branding in the foundation PR."
+      "notes": "Inventory only. Intended invariants now also record the #709 Email Preview public-logo contract (publicTenantLogoUrl, /storage/public tenant-logos, applyEmailPreviewLogo, srcDoc={previewHtml}, no /prep/branding/logo generation). Do not mark Branding accepted from this registry."
     },
     {
       "feature_id": "signature-requests",
