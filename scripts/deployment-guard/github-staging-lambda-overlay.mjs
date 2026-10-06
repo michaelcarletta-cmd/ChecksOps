@@ -4,8 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CODES, GuardError } from './lib/errors.mjs';
 import { acquireLease } from './lib/lease.mjs';
-import { issueReceipt } from './lib/receipt.mjs';
-import { loadIssuerKey } from './lib/issuer.mjs';
+import { issueReceiptWithSigner } from './lib/receipt.mjs';
+import { signReceiptWithKms } from './lib/kms-issuer.mjs';
 import { validateZipMemberName } from './lib/lambda-owned-members.mjs';
 import { hashZipMembers } from './lib/zip-members.mjs';
 
@@ -135,13 +135,6 @@ export async function run(env = process.env, deps = {}) {
     throw new GuardError(expected.code, expected.message, expected.details || {});
   }
 
-  if (!loadIssuerKey(repoRoot)) {
-    throw new GuardError(
-      CODES.RECEIPT_FORGED,
-      'existing deployment-guard issuer key is missing; workflow must not mint a replacement key',
-    );
-  }
-
   const lease = acquireLease(repoRoot, {
     workstream_id: identity.workstreamId,
     component: FUNCTION_NAME,
@@ -153,7 +146,7 @@ export async function run(env = process.env, deps = {}) {
     throw new GuardError(lease.code, lease.message, lease.details || {});
   }
 
-  const issued = issueReceipt(repoRoot, {
+  const issued = issueReceiptWithSigner(repoRoot, {
     workstream_id: identity.workstreamId,
     branch: identity.branch,
     commit: identity.commit,
@@ -168,7 +161,7 @@ export async function run(env = process.env, deps = {}) {
       revisionId: live.revisionId,
     },
     lease: lease.details.lease,
-  });
+  }, (unsigned) => signReceiptWithKms(unsigned, { env }));
   if (!issued.ok) {
     throw new GuardError(issued.code, issued.message, issued.details || {});
   }
