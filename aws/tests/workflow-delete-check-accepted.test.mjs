@@ -116,6 +116,26 @@ test('financial delete blockers include provider and disbursement tables', () =>
   );
 });
 
+test('delete aborts when check_deletion_log insert fails', async () => {
+  const client = mockClient();
+  const originalQuery = client.query.bind(client);
+  client.query = async (sql, params) => {
+    if (/INSERT INTO public.check_deletion_log/.test(sql)) {
+      const error = new Error('check_deletion_log_insert_failed');
+      error.code = '23514';
+      throw error;
+    }
+    return originalQuery(sql, params);
+  };
+  const result = await handleDeleteCheck(
+    jwtEvent({ check_id: CHECK_ID, reason: 'duplicate intake' }),
+    depsFor(client),
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'data_query_failed');
+  assert.equal(client.queries.some((q) => /DELETE FROM public.check_intake_items/.test(q.sql)), false);
+});
+
 test('authorized delete with reason succeeds for a claim-linked check', async () => {
   const client = mockClient({ check: { ...baseCheck, claim_id: CLAIM_ID } });
   const result = await handleDeleteCheck(

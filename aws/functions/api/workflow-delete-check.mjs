@@ -375,33 +375,33 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     }
     plannedStorageKeys = planned.keys || [];
 
-    await client.query('SAVEPOINT delete_audit_snapshot');
-    try {
-      const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
-      if (exists) {
-        const row = (await client.query(
-          'SELECT * FROM public.check_intake_items WHERE id = $1::uuid',
-          [looked.check.id],
-        )).rows[0];
-        if (row) {
-          await client.query(
-            `INSERT INTO public.check_deletion_log
-              (check_id, claim_id, check_number, amount, status, reason, deleted_by, snapshot)
-             VALUES ($1::uuid, $2::uuid, $3::text, $4::numeric, $5::text, $6::text, $7::uuid, $8::jsonb)`,
-            [
-              looked.check.id,
-              row.claim_id ?? null,
-              row.check_number ?? null,
-              row.amount ?? null,
-              row.status ?? null,
-              String(reason),
-              mapping.application_user_id,
-              JSON.stringify(row),
-            ],
-          );
-        }
+    const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
+    if (exists) {
+      const row = (await client.query(
+        'SELECT * FROM public.check_intake_items WHERE id = $1::uuid',
+        [looked.check.id],
+      )).rows[0];
+      if (row) {
+        await client.query(
+          `INSERT INTO public.check_deletion_log
+            (check_id, claim_id, check_number, amount, status, reason, deleted_by, snapshot)
+           VALUES ($1::uuid, $2::uuid, $3::text, $4::numeric, $5::text, $6::text, $7::uuid, $8::jsonb)`,
+          [
+            looked.check.id,
+            row.claim_id ?? null,
+            row.check_number ?? null,
+            row.amount ?? null,
+            row.status ?? null,
+            String(reason),
+            mapping.application_user_id,
+            JSON.stringify(row),
+          ],
+        );
       }
-      if (looked.check.claim_id) {
+    }
+    if (looked.check.claim_id) {
+      await client.query('SAVEPOINT delete_claim_audit');
+      try {
         await client.query(
           `INSERT INTO public.claim_audit_log (claim_id, actor_id, event_type, event_description, event_data)
            VALUES (
@@ -419,11 +419,11 @@ export const handleDeleteCheck = async (event, deps = {}) => {
             }),
           ],
         );
+        await client.query('RELEASE SAVEPOINT delete_claim_audit');
+      } catch {
+        try { await client.query('ROLLBACK TO SAVEPOINT delete_claim_audit'); } catch { /* ignore */ }
+        try { await client.query('RELEASE SAVEPOINT delete_claim_audit'); } catch { /* ignore */ }
       }
-      await client.query('RELEASE SAVEPOINT delete_audit_snapshot');
-    } catch {
-      try { await client.query('ROLLBACK TO SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
-      try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
     }
 
     await client.query('SAVEPOINT delete_unlink_loss_draft');
