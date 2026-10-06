@@ -10,12 +10,44 @@ export const PLATFORM_PRIMARY_COLOR = '#1a56db';
 export const PLATFORM_FROM_LOCAL = 'noreply';
 export const PLATFORM_FROM_DOMAIN = 'checksops.com';
 
-export const emailAssetOrigin = () => String(
-  process.env.SIGN_BASE_URL
-  || process.env.APP_PUBLIC_URL
-  || process.env.VITE_APP_URL
-  || 'https://staging.checksops.com',
-).replace(/\/$/, '');
+const PRODUCTION_APP_ORIGIN = 'https://checksops.com';
+const STAGING_APP_ORIGIN = 'https://staging.checksops.com';
+
+const isProductionChecksopsEnv = (env = process.env.CHECKSOPS_ENV) => {
+  const value = String(env || '').trim().toLowerCase();
+  return value === 'production' || value === 'production-prep';
+};
+
+const isStagingAppHostName = (hostname) => {
+  const host = String(hostname || '').trim().toLowerCase();
+  return host === 'staging.checksops.com' || host.endsWith('.staging.checksops.com');
+};
+
+/**
+ * SPA/asset origin for platform logo and mail links.
+ * Production never falls back to staging.checksops.com (templates already
+ * set SIGN_BASE_URL=https://checksops.com).
+ */
+export const emailAssetOrigin = () => {
+  const configured = String(
+    process.env.SIGN_BASE_URL
+    || process.env.APP_PUBLIC_URL
+    || process.env.VITE_APP_URL
+    || '',
+  ).trim().replace(/\/$/, '');
+  if (configured) {
+    try {
+      const host = new URL(configured).hostname;
+      if (isProductionChecksopsEnv() && isStagingAppHostName(host)) {
+        return PRODUCTION_APP_ORIGIN;
+      }
+      return configured;
+    } catch {
+      if (isProductionChecksopsEnv()) return PRODUCTION_APP_ORIGIN;
+    }
+  }
+  return isProductionChecksopsEnv() ? PRODUCTION_APP_ORIGIN : STAGING_APP_ORIGIN;
+};
 
 export const checksOpsLogoUrl = () => `${emailAssetOrigin()}/checksops-logo.png`;
 
@@ -67,9 +99,7 @@ const configuredAppOrigin = () => {
 
 const checksopsEnv = () => String(process.env.CHECKSOPS_ENV || '').trim().toLowerCase();
 
-const isProductionEnv = (env = checksopsEnv()) => (
-  env === 'production' || env === 'production-prep'
-);
+const isProductionEnv = (env = checksopsEnv()) => isProductionChecksopsEnv(env);
 
 /**
  * Same tokens as src/lib/awsApiBase.ts resolveAwsApiBaseUrl.
@@ -102,10 +132,7 @@ const parsedHttpUrl = (value) => {
   }
 };
 
-const isStagingSpaHost = (url) => {
-  const host = url.hostname.toLowerCase();
-  return host === 'staging.checksops.com' || host.endsWith('.staging.checksops.com');
-};
+const isStagingSpaHost = (url) => isStagingAppHostName(url.hostname);
 
 const isStagingExecuteApiOrigin = (url) => {
   const host = url.hostname.toLowerCase();
