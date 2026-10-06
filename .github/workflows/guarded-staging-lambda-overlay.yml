@@ -48,14 +48,18 @@ jobs:
 
       - name: Refuse non-main or unapproved apply
         shell: bash
+        env:
+          CHECKSOPS_STAGING_DEPLOY_MODE: ${{ inputs.mode }}
+          CHECKSOPS_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging deploy only runs from main"; exit 2; }
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
-          if [ "${{ inputs.mode }}" = "apply" ]; then
-            test -n "${{ inputs.approved_commit }}" || { echo "apply requires approved_commit"; exit 2; }
-            test "${{ inputs.approved_commit }}" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
-            test -n "${{ inputs.expected_live_member_sha256 }}" || { echo "apply requires expected_live_member_sha256 from inspect"; exit 2; }
+          if [ "$CHECKSOPS_STAGING_DEPLOY_MODE" = "apply" ]; then
+            test -n "$CHECKSOPS_APPROVED_COMMIT" || { echo "apply requires approved_commit"; exit 2; }
+            test "$CHECKSOPS_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            test -n "$CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256" || { echo "apply requires expected_live_member_sha256 from inspect"; exit 2; }
           fi
 
       - name: Set up Node.js
