@@ -71,6 +71,29 @@ jobs:
           CHECKSOPS_STAGING_OVERLAY_MEMBER: index.mjs
         run: node scripts/deployment-guard/github-staging-lambda-overlay.mjs
 
+      - name: Download exact live Lambda package for read-only composition proof
+        id: live_package
+        shell: bash
+        env:
+          LIVE_MEMBER_SHA256: ${{ steps.preflight.outputs.live_member_sha256 }}
+          LIVE_CODE_SHA256: ${{ steps.preflight.outputs.live_code_sha256 }}
+          LIVE_REVISION_ID: ${{ steps.preflight.outputs.live_revision_id }}
+        run: |
+          set -euo pipefail
+          test -n "$LIVE_MEMBER_SHA256"
+          test -n "$LIVE_CODE_SHA256"
+          test -n "$LIVE_REVISION_ID"
+          LOCATION="$(aws lambda get-function --function-name checksops-staging-api --query 'Code.Location' --output text)"
+          test -n "$LOCATION" && test "$LOCATION" != "None"
+          curl --fail --silent --show-error "$LOCATION" --output /tmp/checksops-staging-live.zip
+          unzip -p /tmp/checksops-staging-live.zip index.mjs > /tmp/index-live.mjs
+          ACTUAL_LIVE_SHA256="$(sha256sum /tmp/index-live.mjs | awk '{print $1}')"
+          test "$ACTUAL_LIVE_SHA256" = "$LIVE_MEMBER_SHA256" || {
+            echo "DEPLOYMENT_COLLISION: downloaded live index.mjs does not match preflight hash"
+            exit 2
+          }
+          echo "Live package captured in ephemeral runner storage; source contents will not be logged or uploaded."
+
       - name: Prove live source baseline and SH-2-only delta
         shell: bash
         env:
@@ -106,20 +129,35 @@ jobs:
 
           git diff --check "$BASELINE" HEAD -- "$MEMBER"
 
-          # This workflow is intentionally read-only. A live/baseline mismatch
-          # is evidence that another accepted build may be present. Do not
-          # authorize replacement from repository source in that case.
           if [ "$LIVE_MEMBER_SHA256" != "$BASELINE_SHA256" ]; then
+            git diff --binary "$BASELINE" "$SH2_TESTABILITY" -- "$MEMBER" > /tmp/sh2-index.patch
+            cp /tmp/index-live.mjs /tmp/index-forward-composed.mjs
+            mkdir -p /tmp/sh2-compose/aws/functions/api
+            cp /tmp/index-forward-composed.mjs /tmp/sh2-compose/aws/functions/api/index.mjs
+            (
+              cd /tmp/sh2-compose
+              git init -q
+              git apply --check /tmp/sh2-index.patch
+              git apply /tmp/sh2-index.patch
+            )
+            COMPOSED_SHA256="$(sha256sum /tmp/sh2-compose/aws/functions/api/index.mjs | awk '{print $1}')"
+            node --check /tmp/sh2-compose/aws/functions/api/index.mjs
+            test "$COMPOSED_SHA256" != "$LIVE_MEMBER_SHA256" || {
+              echo "SOURCE_RECONCILIATION_REQUIRED: SH-2 patch produced no change to live source"
+              exit 2
+            }
             {
-              echo "### SH-2 staging source reconciliation — FORWARD COMPOSE REQUIRED"
+              echo "### SH-2 staging source reconciliation — FORWARD COMPOSE PROVED"
               printf -- '- Main commit: `%s`\n' "$GITHUB_SHA"
               printf -- '- Live index.mjs SHA-256: `%s`\n' "$LIVE_MEMBER_SHA256"
               printf -- '- Repository baseline SHA-256: `%s`\n' "$BASELINE_SHA256"
-              echo "- Another accepted/live composition may be present."
-              echo "- Safe action: preserve live source and compose only SH-2 changes onto it."
+              printf -- '- Ephemeral forward-composed SHA-256: `%s`\n' "$COMPOSED_SHA256"
+              echo "- Reviewed SH-2 patch applies cleanly to the exact live source."
+              echo "- Composed source passes Node syntax validation."
+              echo "- Live source and composed source remain ephemeral and are not uploaded."
               echo "- Mutation: none"
             } >> "$GITHUB_STEP_SUMMARY"
-            exit 3
+            exit 0
           fi
 
           {
@@ -135,4 +173,4 @@ jobs:
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}
         shell: bash
-        run: rm -rf .deployment-guard
+        run: rm -rf .deployment-guard /tmp/checksops-staging-live.zip /tmp/index-live.mjs /tmp/index-live-baseline.mjs /tmp/index-forward-composed.mjs /tmp/sh2-index.patch /tmp/sh2-compose
