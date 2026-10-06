@@ -107,10 +107,10 @@ jobs:
 
           {
             echo "### SH-2 staging source reconciliation — PASS"
-            echo "- Main commit: `$GITHUB_SHA`"
-            echo "- Live index.mjs SHA-256: `$LIVE_MEMBER_SHA256`"
-            echo "- Pre-SH-2 baseline SHA-256: `$BASELINE_SHA256`"
-            echo "- Current main index.mjs SHA-256: `$CURRENT_SHA256`"
+            echo "- Main commit: \`$GITHUB_SHA\`"
+            echo "- Live index.mjs SHA-256: \`$LIVE_MEMBER_SHA256\`"
+            echo "- Pre-SH-2 baseline SHA-256: \`$BASELINE_SHA256\`"
+            echo "- Current main index.mjs SHA-256: \`$CURRENT_SHA256\`"
             echo "- Post-baseline index.mjs commits: exactly SH-2 redaction + SH-2 testability"
             echo "- Mutation: none"
           } >> "$GITHUB_STEP_SUMMARY"
