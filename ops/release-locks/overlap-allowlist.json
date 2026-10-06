@@ -1437,6 +1437,20 @@
       "reason": "Narrow Release Guard forward-supersession repair needs an overlap exception file update. This does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 649,
+      "path": "ops/release-locks/tests/validate-release-locks.test.mjs",
+      "reason": "Verified Branding forward-supersession lock advance to CBOwj-7W must update the origin/main lock fixture. This does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 631,
+      "path": "ops/release-locks/tests/validate-release-locks.test.mjs",
+      "reason": "Verified Branding forward-supersession lock advance to CBOwj-7W must update the origin/main lock fixture. This does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
