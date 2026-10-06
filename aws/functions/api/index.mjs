@@ -5,7 +5,7 @@ import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
-import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
+import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled, resolveClaims } from './data.mjs';
 import { handleWrite } from './write.mjs';
 import { handleProviderRequest } from './providers.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
@@ -112,7 +112,15 @@ export const handler = async (event) => {
 
   if (method === 'GET' && path === '/db-health') {
     const probe = await probeDatabase();
-    return json(probeIsHealthy(probe) ? 200 : 503, {
+    const healthy = probeIsHealthy(probe);
+    const auth = await resolveClaims(event);
+    if (!auth.ok) {
+      return json(healthy ? 200 : 503, {
+        service: 'checksops-api',
+        status: healthy ? 'ok' : 'unhealthy',
+      });
+    }
+    return json(healthy ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
@@ -122,6 +130,14 @@ export const handler = async (event) => {
 
   if (method === 'GET' && path === '/db-readonly-validate') {
     const validation = await validateReadonlyCoreTables();
+    const auth = await resolveClaims(event);
+    if (!auth.ok) {
+      return json(validation.ok ? 200 : 503, {
+        service: 'checksops-api',
+        status: validation.ok ? 'ok' : 'unhealthy',
+        readOnly: true,
+      });
+    }
     return json(validation.ok ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
