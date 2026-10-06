@@ -48,31 +48,103 @@ export const safeHttpUrl = (value, fallback = null) => (
   isSafeHttpUrl(value) ? String(value).trim() : fallback
 );
 
-const STAGING_API_PUBLIC_URL = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
 const RAW_BRANDING_PATH = /^(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+$|^[A-Za-z0-9._-]+\.(?:png|jpe?g|gif|webp|svg)$/i;
 const SUPABASE_BRANDING = /^https?:\/\/[^/]*supabase\.co\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/([^?]+)/i;
 const BRANDING_BUCKETS = new Set(['tenant-logos', 'email-assets', 'company-branding']);
+const SAME_ORIGIN_API_TOKENS = new Set(['/prep', 'same-origin', 'same-origin:/prep']);
+
+const configuredApiUrl = () => String(
+  process.env.CHECKSOPS_API_URL || process.env.VITE_CHECKSOPS_API_URL || '',
+).trim();
+
+const configuredAppOrigin = () => {
+  for (const key of ['SIGN_BASE_URL', 'APP_PUBLIC_URL', 'VITE_APP_URL']) {
+    const value = String(process.env[key] || '').trim();
+    if (value) return value.replace(/\/$/, '');
+  }
+  return '';
+};
+
+const checksopsEnv = () => String(process.env.CHECKSOPS_ENV || '').trim().toLowerCase();
+
+const isProductionEnv = (env = checksopsEnv()) => (
+  env === 'production' || env === 'production-prep'
+);
+
+/**
+ * Same tokens as src/lib/awsApiBase.ts resolveAwsApiBaseUrl.
+ * Production Step 2 uses /prep | same-origin against the app origin.
+ * Staging keeps an absolute execute-api URL from CHECKSOPS_API_URL /
+ * VITE_CHECKSOPS_API_URL. Relative /prep is not browser-reachable in email.
+ */
+export const resolveRuntimeApiBaseUrl = (configured, appOrigin) => {
+  const value = String(configured || '').trim().replace(/\/$/, '');
+  const token = value.toLowerCase();
+  if (SAME_ORIGIN_API_TOKENS.has(token)) {
+    if (appOrigin) {
+      try {
+        return new URL('/prep', appOrigin).toString().replace(/\/$/, '');
+      } catch {
+        return '/prep';
+      }
+    }
+    return '/prep';
+  }
+  return value;
+};
+
+const parsedHttpUrl = (value) => {
+  if (!isSafeHttpUrl(value)) return null;
+  try {
+    return new URL(String(value).trim());
+  } catch {
+    return null;
+  }
+};
+
+const isStagingSpaHost = (url) => {
+  const host = url.hostname.toLowerCase();
+  return host === 'staging.checksops.com' || host.endsWith('.staging.checksops.com');
+};
+
+const isStagingExecuteApiOrigin = (url) => {
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.replace(/\/$/, '').toLowerCase();
+  return host.includes('execute-api') && path === '/staging';
+};
+
+/**
+ * Email HTML needs an absolute HTTPS API origin that browsers can fetch.
+ * Staging CloudFront /prep/* is SPA HTML, not the API. Fail closed (null)
+ * rather than emit an inaccessible /prep path or a staging URL in production.
+ */
+export const isBrowserReachableApiOrigin = (value, env = checksopsEnv()) => {
+  const url = parsedHttpUrl(value);
+  if (!url || url.protocol !== 'https:') return false;
+  if (isStagingSpaHost(url)) return false;
+  if (isProductionEnv(env) && (isStagingSpaHost(url) || isStagingExecuteApiOrigin(url))) {
+    return false;
+  }
+  return true;
+};
 
 /**
  * Browser-reachable API origin for /storage/public.
- * Staging CloudFront does not proxy /prep/* to the API; those paths return SPA HTML.
+ * Reads the existing ChecksOps API-origin configuration:
+ *   CHECKSOPS_API_URL (scripts / Lambda)
+ *   VITE_CHECKSOPS_API_URL (SPA)
+ * then resolveAwsApiBaseUrl tokens against SIGN_BASE_URL / APP_PUBLIC_URL /
+ * VITE_APP_URL. Production may derive /prep from CHECKSOPS_ENV + app origin.
+ * Staging never falls back to a hard-coded execute-api URL.
  */
 export const publicApiBaseUrl = () => {
-  const configured = String(
-    process.env.CHECKSOPS_API_PUBLIC_URL || process.env.VITE_CHECKSOPS_API_URL || '',
-  ).trim().replace(/\/$/, '');
-  if (configured && /^https?:\/\//i.test(configured) && !configured.endsWith('/prep')) {
-    return configured;
-  }
-  const env = String(process.env.CHECKSOPS_ENV || '').trim().toLowerCase();
-  if (env === 'staging' || !env) return STAGING_API_PUBLIC_URL;
-  if (configured === '/prep' || configured.endsWith('/prep')) {
-    return `${emailAssetOrigin()}/prep`;
-  }
-  if (env === 'production' || env === 'production-prep') {
-    return `${emailAssetOrigin()}/prep`;
-  }
-  return STAGING_API_PUBLIC_URL;
+  const env = checksopsEnv();
+  const configured = configuredApiUrl();
+  const appOrigin = configuredAppOrigin();
+  const implicitProduction = !configured && isProductionEnv(env) ? '/prep' : configured;
+  const resolved = resolveRuntimeApiBaseUrl(implicitProduction, appOrigin || undefined);
+  if (!isBrowserReachableApiOrigin(resolved, env)) return null;
+  return resolved.replace(/\/$/, '');
 };
 
 /**

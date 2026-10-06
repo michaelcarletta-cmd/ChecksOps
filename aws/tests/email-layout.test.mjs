@@ -111,10 +111,18 @@ test('tenant logo replaces the platform logo and missing or unsafe logos fall ba
 test('raw tenant logo object paths become execute-api public storage URLs', async () => {
   const rawPath = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1790801891632.png';
   const apiBase = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
-  const previousEnv = process.env.CHECKSOPS_API_PUBLIC_URL;
-  const previousChecksopsEnv = process.env.CHECKSOPS_ENV;
-  process.env.CHECKSOPS_API_PUBLIC_URL = apiBase;
+  const previous = {
+    CHECKSOPS_API_URL: process.env.CHECKSOPS_API_URL,
+    VITE_CHECKSOPS_API_URL: process.env.VITE_CHECKSOPS_API_URL,
+    CHECKSOPS_API_PUBLIC_URL: process.env.CHECKSOPS_API_PUBLIC_URL,
+    CHECKSOPS_ENV: process.env.CHECKSOPS_ENV,
+    SIGN_BASE_URL: process.env.SIGN_BASE_URL,
+  };
+  delete process.env.VITE_CHECKSOPS_API_URL;
+  delete process.env.CHECKSOPS_API_PUBLIC_URL;
+  process.env.CHECKSOPS_API_URL = apiBase;
   process.env.CHECKSOPS_ENV = 'staging';
+  process.env.SIGN_BASE_URL = 'https://staging.checksops.com';
   try {
     assert.equal(publicApiBaseUrl(), apiBase);
     assert.equal(
@@ -151,10 +159,10 @@ test('raw tenant logo object paths become execute-api public storage URLs', asyn
     assert.match(branded.html, /\/storage\/public\?bucket=tenant-logos/);
     assert.doesNotMatch(branded.html, /checksops-logo\.png/);
   } finally {
-    if (previousEnv == null) delete process.env.CHECKSOPS_API_PUBLIC_URL;
-    else process.env.CHECKSOPS_API_PUBLIC_URL = previousEnv;
-    if (previousChecksopsEnv == null) delete process.env.CHECKSOPS_ENV;
-    else process.env.CHECKSOPS_ENV = previousChecksopsEnv;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });
 
