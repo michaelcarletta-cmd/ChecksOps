@@ -172,32 +172,34 @@ jobs:
             done
             # Fail closed if any reviewed module imports a relative .mjs dependency
             # that is absent from both the reviewed live package and current source.
-            node --input-type=module <<'NODE'
-            import fs from 'node:fs';
-            import path from 'node:path';
-            const reviewedDir = '/tmp/sh2-reviewed-source';
-            const sourceDir = path.resolve('aws/functions/api');
-            const files = fs.readdirSync(reviewedDir).filter((name) => name.endsWith('.mjs'));
-            const importRe = /(?:from\s*|import\s*)['"]([^'"]+)['"]/g;
-            const missing = [];
-            for (const file of files) {
-              const text = fs.readFileSync(path.join(reviewedDir, file), 'utf8');
-              for (const match of text.matchAll(importRe)) {
-                const spec = match[1];
-                if (!spec.startsWith('.')) continue;
-                const rel = path.normalize(path.join(path.dirname(file), spec));
-                if (!rel.endsWith('.mjs')) continue;
-                const inReviewed = fs.existsSync(path.join(reviewedDir, rel));
-                const inSource = fs.existsSync(path.join(sourceDir, rel));
-                if (!inReviewed && !inSource) missing.push(`${file} -> ${spec}`);
-              }
-            }
-            if (missing.length) {
-              console.error('SOURCE_RECONCILIATION_REQUIRED: unresolved relative module dependencies');
-              for (const item of missing) console.error(item);
-              process.exit(2);
-            }
-            NODE
+            cat > /tmp/sh2-dependency-closure.mjs <<'NODE'
+import fs from 'node:fs';
+import path from 'node:path';
+const reviewedDir = '/tmp/sh2-reviewed-source';
+const sourceDir = path.resolve('aws/functions/api');
+const files = fs.readdirSync(reviewedDir).filter((name) => name.endsWith('.mjs'));
+const importRe = /(?:from\s*|import\s*)['"]([^'"]+)['"]/g;
+const missing = [];
+for (const file of files) {
+  const text = fs.readFileSync(path.join(reviewedDir, file), 'utf8');
+  for (const match of text.matchAll(importRe)) {
+    const spec = match[1];
+    if (!spec.startsWith('.')) continue;
+    const rel = path.normalize(path.join(path.dirname(file), spec));
+    if (!rel.endsWith('.mjs')) continue;
+    const inReviewed = fs.existsSync(path.join(reviewedDir, rel));
+    const inSource = fs.existsSync(path.join(sourceDir, rel));
+    if (!inReviewed && !inSource) missing.push(`${file} -> ${spec}`);
+  }
+}
+if (missing.length) {
+  console.error('SOURCE_RECONCILIATION_REQUIRED: unresolved relative module dependencies');
+  for (const item of missing) console.error(item);
+  process.exit(2);
+}
+
+NODE
+            node /tmp/sh2-dependency-closure.mjs
             echo "composed_ready=true" >> "$GITHUB_OUTPUT"
             echo "composed_sha256=$COMPOSED_SHA256" >> "$GITHUB_OUTPUT"
             test "$COMPOSED_SHA256" != "$LIVE_MEMBER_SHA256" || {
@@ -271,4 +273,4 @@ jobs:
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}
         shell: bash
-        run: rm -rf .deployment-guard /tmp/checksops-staging-live.zip /tmp/index-live.mjs /tmp/index-live-baseline.mjs /tmp/index-forward-composed.mjs /tmp/sh2-index.patch /tmp/sh2-compose /tmp/sh2-reviewed-source
+        run: rm -rf .deployment-guard /tmp/checksops-staging-live.zip /tmp/index-live.mjs /tmp/index-live-baseline.mjs /tmp/index-forward-composed.mjs /tmp/sh2-index.patch /tmp/sh2-compose /tmp/sh2-reviewed-source /tmp/sh2-dependency-closure.mjs
