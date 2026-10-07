@@ -819,6 +819,22 @@ const requireOwnTenantAdmin = async (client, userId, tenantId) => {
   return { ok: true };
 };
 
+const requireDepositManagerForTenant = async (client, userId, tenantId, roles) => {
+  if (roles.has('admin') || roles.has('staff')) return { roles };
+  if (!isUuid(tenantId)) {
+    return { error: 'invalid_uuid', field: 'tenant_id' };
+  }
+  const tenantAdmin = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND lower(role::text) IN ('admin', 'owner')`,
+    [userId, tenantId],
+  )).rows[0];
+  if (!tenantAdmin) {
+    return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
+  }
+  return { roles };
+};
+
 const canAccessTenant = async (client, userId, tenantId) => {
   if (!isUuid(tenantId)) return false;
   const member = (await client.query(
@@ -1070,9 +1086,8 @@ const executeDepositAction = async ({ client, mapping, args }) => {
       [depositItemId],
     )).rows[0];
     if (!item) return { error: 'rls_denied', message: 'Deposit item not found' };
-    if (!(await canAccessTenant(client, actorId, item.tenant_id))) {
-      return { error: 'not_authorized', message: 'Not authorized' };
-    }
+    const tenantGate = await requireDepositManagerForTenant(client, actorId, item.tenant_id, gated.roles);
+    if (tenantGate.error) return tenantGate;
     const alreadyClosed = item.status === 'succeeded'
       || item.status === 'reconciled'
       || item.check_status === 'deposited'
