@@ -1327,6 +1327,13 @@
       "review_condition": "other-PR-rebase-or-close"
     },
     {
+      "other_pr": 315,
+      "path": "aws/functions/api/providers/webhooks.mjs",
+      "reason": "PR #315 is separate AWS money-path activation work; this exact dispatcher exception preserves that review and authorizes neither merging nor deployment.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
       "other_pr": 665,
       "path": "ops/release-locks/locked-components.json",
       "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
