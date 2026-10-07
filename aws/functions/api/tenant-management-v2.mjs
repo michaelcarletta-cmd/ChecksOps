@@ -188,6 +188,35 @@ export const CHECKALT_STATE_SQL = `
   LIMIT 1
 `;
 
+export const CHECKALT_GLOBAL_STATE_SQL = `
+  SELECT COALESCE((
+    SELECT default_enabled
+    FROM public.checkalt_config
+    WHERE singleton = true
+    LIMIT 1
+  ), false) AS platform_enabled
+`;
+
+export const PROVIDER_ERRORS_SQL = `
+  SELECT
+    count(*) FILTER (WHERE provider = 'moov')::int AS moov_error_events,
+    count(*) FILTER (WHERE provider = 'checkalt')::int AS checkalt_error_events,
+    max(received_at) AS last_error_at
+  FROM (
+    SELECT 'moov'::text AS provider, received_at
+    FROM public.payment_webhook_events
+    WHERE tenant_id = $1::uuid
+      AND provider = 'moov'
+      AND processing_error IS NOT NULL
+    UNION ALL
+    SELECT 'checkalt'::text AS provider, e.received_at
+    FROM public.checkalt_webhook_events e
+    JOIN public.checkalt_deposits d ON d.checkalt_reference = e.checkalt_reference
+    WHERE d.tenant_id = $1::uuid
+      AND e.process_error IS NOT NULL
+  ) provider_errors
+`;
+
 export const OPERATIONS_SQL = `
   SELECT
     (SELECT count(*)::int FROM public.check_intake_items
@@ -418,6 +447,14 @@ export const runTenantManagementV2 = async ({
     'provider_bank_status',
   );
   const checkAltResult = await client.query(CHECKALT_STATE_SQL, [tenantId]);
+  const checkAltGlobalResult = firstRow(
+    await client.query(CHECKALT_GLOBAL_STATE_SQL),
+    'checkalt_global_state',
+  );
+  const providerErrors = firstRow(
+    await client.query(PROVIDER_ERRORS_SQL, [tenantId]),
+    'provider_errors',
+  );
   const operations = firstRow(await client.query(OPERATIONS_SQL, [tenantId]), 'operations');
   const recentActivity = (await client.query(RECENT_ACTIVITY_SQL, [tenantId])).rows;
   const auditEntries = (await client.query(ADMIN_AUDIT_SQL, [tenantId])).rows;
@@ -463,6 +500,7 @@ export const runTenantManagementV2 = async ({
     };
   });
   const checkAlt = checkAltResult.rows[0] || null;
+  const checkAltPlatformEnabled = checkAltGlobalResult.platform_enabled === true;
   const integrityResult = integritySummary(integrity);
   const fileCount = numberValue(operations.files_total, 'files_total');
   const unknownFileSizes = numberValue(operations.unknown_file_sizes, 'unknown_file_sizes');
@@ -520,13 +558,32 @@ export const runTenantManagementV2 = async ({
         disconnected: numberValue(bankConnections.disconnected, 'disconnected_bank_connections'),
       },
       checkAlt: checkAlt ? {
-        enabled: checkAlt.enabled === true,
+        enabled: checkAltPlatformEnabled && checkAlt.enabled === true,
+        tenantEnabled: checkAlt.enabled === true,
+        platformEnabled: checkAltPlatformEnabled,
         registeredAt: checkAlt.registered_at,
-        readiness: checkAlt.enabled === true && Boolean(checkAlt.registered_at)
-          ? 'configured'
-          : 'not_ready',
-      } : null,
-      providerErrors: { status: 'unavailable' },
+        readiness: !checkAltPlatformEnabled
+          ? 'disabled'
+          : checkAlt.enabled === true && Boolean(checkAlt.registered_at)
+            ? 'configured'
+            : 'not_ready',
+      } : {
+        enabled: false,
+        tenantEnabled: false,
+        platformEnabled: checkAltPlatformEnabled,
+        registeredAt: null,
+        readiness: checkAltPlatformEnabled ? 'not_configured' : 'disabled',
+      },
+      providerErrors: (() => {
+        const moov = numberValue(providerErrors.moov_error_events, 'moov_provider_errors');
+        const checkAlt = numberValue(providerErrors.checkalt_error_events, 'checkalt_provider_errors');
+        return {
+          status: moov + checkAlt > 0 ? 'errors_recorded' : 'none_recorded',
+          moov,
+          checkAlt,
+          lastErrorAt: providerErrors.last_error_at,
+        };
+      })(),
     },
     operations: {
       checksTotal: numberValue(operations.checks_total, 'checks_total'),

@@ -74,8 +74,19 @@ type TenantManagementSnapshot = {
       readiness: string;
     }>;
     moovBankConnections: { total: number; connected: number; pending: number; disconnected: number };
-    checkAlt: { enabled: boolean; registeredAt: string | null; readiness: string } | null;
-    providerErrors: { status: string };
+    checkAlt: {
+      enabled: boolean;
+      tenantEnabled: boolean;
+      platformEnabled: boolean;
+      registeredAt: string | null;
+      readiness: string;
+    };
+    providerErrors: {
+      status: string;
+      moov: number;
+      checkAlt: number;
+      lastErrorAt: string | null;
+    };
   };
   operations: {
     checksTotal: number;
@@ -251,7 +262,10 @@ export function TenantManagementV2Dashboard({ tenantId }: { tenantId: string }) 
                   Bank connections: {snapshot.providers.moovBankConnections.connected} connected, {snapshot.providers.moovBankConnections.pending} pending, {snapshot.providers.moovBankConnections.disconnected} disconnected.
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  CheckAlt: {snapshot.providers.checkAlt?.readiness ?? "Unavailable"} · Provider error details: unavailable.
+                  CheckAlt: {snapshot.providers.checkAlt.readiness} · Platform enabled: {String(snapshot.providers.checkAlt.platformEnabled)} · Tenant enabled: {String(snapshot.providers.checkAlt.tenantEnabled)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Persisted provider errors: Moov {snapshot.providers.providerErrors.moov} · CheckAlt {snapshot.providers.providerErrors.checkAlt} · Last recorded: {dateTime(snapshot.providers.providerErrors.lastErrorAt)}. Raw error details are not exposed.
                 </p>
               </CardContent>
             </Card>

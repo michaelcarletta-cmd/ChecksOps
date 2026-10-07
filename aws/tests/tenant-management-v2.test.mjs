@@ -106,6 +106,10 @@ const queryRows = (sql) => {
   if (/FROM public\.checkalt_tenant_accounts/.test(sql)) {
     return [{ enabled: true, registered_at: '2026-09-01T00:00:00Z' }];
   }
+  if (/FROM public\.checkalt_config/.test(sql)) return [{ platform_enabled: true }];
+  if (/FROM public\.payment_webhook_events/.test(sql)) {
+    return [{ moov_error_events: 1, checkalt_error_events: 2, last_error_at: '2026-10-05T00:00:00Z' }];
+  }
   if (/FROM public\.check_audit_log/.test(sql)) {
     return [{ created_at: '2026-10-06T00:00:00Z', action: 'check_deposited', actor_id: TENANT_ID }];
   }
@@ -247,6 +251,13 @@ test('reconciles billing, separates recorded and collected payments, and leaves 
   assert.equal(result.providers.moov[0].readiness, 'ready');
   assert.equal(result.providers.moovBankConnections.connected, 1);
   assert.equal(result.providers.checkAlt.readiness, 'configured');
+  assert.equal(result.providers.checkAlt.enabled, true);
+  assert.deepEqual(result.providers.providerErrors, {
+    status: 'errors_recorded',
+    moov: 1,
+    checkAlt: 2,
+    lastErrorAt: '2026-10-05T00:00:00Z',
+  });
   assert.equal(result.operations.files.bytes, 4096);
   assert.equal(result.operations.signatures.open, 1);
   assert.equal(result.operations.disbursements.total, 5);
@@ -256,6 +267,28 @@ test('reconciles billing, separates recorded and collected payments, and leaves 
   assert.equal(result.auditHistory[0].actorId, TENANT_ID);
   assert.equal(JSON.stringify(result).includes('123456'), false);
   assert.equal(JSON.stringify(result).includes('private'), false);
+});
+
+test('CheckAlt readiness fails closed when the persisted platform switch is disabled', async () => {
+  const client = makeClient();
+  const query = client.query.bind(client);
+  client.query = async (sql, params = []) => {
+    if (/FROM public\.checkalt_config/.test(sql)) {
+      client.queries.push({ sql, params });
+      return { rows: [{ platform_enabled: false }] };
+    }
+    return query(sql, params);
+  };
+  const result = await runTenantManagementV2({
+    client,
+    tenantId: TENANT_ID,
+    period: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.providers.checkAlt.enabled, false);
+  assert.equal(result.providers.checkAlt.tenantEnabled, true);
+  assert.equal(result.providers.checkAlt.platformEnabled, false);
+  assert.equal(result.providers.checkAlt.readiness, 'disabled');
 });
 
 test('marks storage bytes unavailable when source metadata has unknown sizes', async () => {
