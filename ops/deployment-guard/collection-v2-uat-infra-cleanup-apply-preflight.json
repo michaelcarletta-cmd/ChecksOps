@@ -1,0 +1,36 @@
+{
+  "workstream_id": "collection-v2-uat-infra-cleanup-apply-93da",
+  "branch": "cursor/collection-v2-uat-infra-cleanup-apply-93da",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "staging",
+  "target_component": "checksops-staging-api",
+  "deployment_type": "lambda-overlay",
+  "owned_members": [
+    "index.mjs",
+    "tenant-collection-v2-uat.mjs",
+    "tenant-maintenance-payments-catalog-inspect.mjs"
+  ],
+  "owned_member_ops": {
+    "replace": ["index.mjs"],
+    "add": [],
+    "remove": [
+      "tenant-collection-v2-uat.mjs",
+      "tenant-maintenance-payments-catalog-inspect.mjs"
+    ]
+  },
+  "add_members": [],
+  "member_sources": {
+    "index.mjs": "aws/functions/api/index.mjs"
+  },
+  "preflight": {
+    "codeSha256": "YEYAGPRlupCVeMQZ2hLZ5V2VknnKDo+22g4TaGvWTQI=",
+    "revisionId": "aadb9f6f-979b-49a6-a6b7-d14c41bdd0c9"
+  },
+  "immediately_before": {
+    "codeSha256": "YEYAGPRlupCVeMQZ2hLZ5V2VknnKDo+22g4TaGvWTQI=",
+    "revisionId": "aadb9f6f-979b-49a6-a6b7-d14c41bdd0c9"
+  },
+  "package": {
+    "origin": "fresh-live-download"
+  }
+}

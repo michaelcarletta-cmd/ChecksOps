@@ -5,7 +5,7 @@ import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
-import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled, resolveClaims } from './data.mjs';
+import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
 import { handleWrite } from './write.mjs';
 import { handleProviderRequest } from './providers.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
@@ -30,8 +30,6 @@ import {
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
-import { handleCollectionV2UatRequest } from './tenant-collection-v2-uat.mjs';
-import { handleTmpRlsCatalogInspectRequest } from './tenant-maintenance-payments-catalog-inspect.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -73,30 +71,9 @@ const READ_ONLY_PATHS = new Set([
   '/identity/session',
   '/ops/readiness',
   '/cutover/readiness',
-  '/inspect/tmp-rls-catalog',
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
-
-export const publicDbHealthResponse = (probe) => {
-  const healthy = probeIsHealthy(probe);
-  return {
-    statusCode: healthy ? 200 : 503,
-    body: {
-      service: 'checksops-api',
-      status: healthy ? 'ok' : 'unhealthy',
-    },
-  };
-};
-
-export const publicDbValidationResponse = (validation) => ({
-  statusCode: validation?.ok ? 200 : 503,
-  body: {
-    service: 'checksops-api',
-    status: validation?.ok ? 'ok' : 'unhealthy',
-    readOnly: true,
-  },
-});
 
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
@@ -137,13 +114,7 @@ export const handler = async (event) => {
 
   if (method === 'GET' && path === '/db-health') {
     const probe = await probeDatabase();
-    const healthy = probeIsHealthy(probe);
-    const auth = await resolveClaims(event);
-    if (!auth.ok) {
-      const publicResult = publicDbHealthResponse(probe);
-      return json(publicResult.statusCode, publicResult.body);
-    }
-    return json(healthy ? 200 : 503, {
+    return json(probeIsHealthy(probe) ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
@@ -153,29 +124,11 @@ export const handler = async (event) => {
 
   if (method === 'GET' && path === '/db-readonly-validate') {
     const validation = await validateReadonlyCoreTables();
-    const auth = await resolveClaims(event);
-    if (!auth.ok) {
-      const publicResult = publicDbValidationResponse(validation);
-      return json(publicResult.statusCode, publicResult.body);
-    }
     return json(validation.ok ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...validation,
-    });
-  }
-
-  // TEMPORARY staging-only TMP RLS catalog inspect. Remove with tenant-maintenance-payments-catalog-inspect.mjs.
-  const tmpRlsCatalog = await handleTmpRlsCatalogInspectRequest(event, path, method);
-  if (tmpRlsCatalog) {
-    return json(tmpRlsCatalog.statusCode || (tmpRlsCatalog.ok ? 200 : 403), {
-      service: 'checksops-api',
-      environment: process.env.CHECKSOPS_ENV || 'unknown',
-      productionSupabaseChanged: false,
-      readOnly: true,
-      writesAttempted: false,
-      ...tmpRlsCatalog,
     });
   }
 
@@ -453,18 +406,6 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
-    });
-  }
-
-  // TEMPORARY staging-only Collection V2 UAT harness. Remove with tenant-collection-v2-uat.mjs.
-  const collectionV2Uat = await handleCollectionV2UatRequest(event, path, method);
-  if (collectionV2Uat) {
-    return json(collectionV2Uat.statusCode || (collectionV2Uat.ok ? 200 : 403), {
-      service: 'checksops-api',
-      environment: process.env.CHECKSOPS_ENV || 'unknown',
-      productionSupabaseChanged: false,
-      liveProviderTransactions: false,
-      ...collectionV2Uat,
     });
   }
 
