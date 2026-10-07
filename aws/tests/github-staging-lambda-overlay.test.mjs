@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import { mock, test } from 'node:test';
 
 import {
@@ -16,6 +17,81 @@ import { issueReceipt, validateReceipt } from '../../scripts/deployment-guard/li
 import { hashZipMembers, writeZipMembers } from '../../scripts/deployment-guard/lib/zip-members.mjs';
 
 const SHA='a'.repeat(40);
+
+const workflow = fs.readFileSync(new URL('../../.github/workflows/guarded-staging-lambda-overlay.yml', import.meta.url), 'utf8');
+const smoke = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)[1];
+
+async function runPublicSmoke(overrides = {}) {
+  const logs = [];
+  const calls = [];
+  const bodies = {
+    '/health': { status: 'ok' },
+    '/db-health': { service: 'checksops-api', status: 'ok' },
+    '/db-readonly-validate': { service: 'checksops-api', status: 'ok', readOnly: true },
+  };
+  const context = vm.createContext({
+    AbortSignal,
+    console: { log: (line) => logs.push(JSON.parse(line)) },
+    fetch: async (url, options) => {
+      assert.equal(options.method, 'GET');
+      assert.equal(options.headers.accept, 'application/json');
+      assert.equal(new URL(url).origin, 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com');
+      const route = new URL(url).pathname.replace('/staging', '');
+      calls.push(route);
+      const response = overrides[route] || { body: bodies[route] };
+      return new Response(response.raw ?? JSON.stringify(response.body), { status: response.status || 200 });
+    },
+  });
+  try {
+    await new vm.Script(`(async () => {${smoke}\n})()`).runInContext(context);
+    return { logs, calls };
+  } catch (error) {
+    return { logs, calls, error };
+  }
+}
+
+test('public smoke runs in inspect mode and still requires all three healthy endpoints', async () => {
+  const step = workflow.split('- name: Public staging smoke (inspect or post-deploy)')[1].split('- name: Cleanup')[0];
+  assert.doesNotMatch(step, /if:/);
+  const result = await runPublicSmoke();
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.calls, ['/health', '/db-health', '/db-readonly-validate']);
+  assert.deepEqual(result.logs.at(-1), { health: 'ok', dbHealth: 'redacted-ok', dbReadonlyValidate: 'redacted-ok' });
+});
+
+test('public smoke rejects unhealthy, legacy, malformed, and leaking responses without logging bodies', async () => {
+  for (const route of ['/db-health', '/db-readonly-validate']) {
+    for (const response of [
+      { status: 503, body: { status: 'unhealthy', error: 'private-diagnostic-marker' } },
+      { body: { status: 'unhealthy' } },
+      { body: { ok: true, currentUser: 'private-diagnostic-marker' } },
+      { body: { service: 'checksops-api' } },
+      { body: { status: 'private-diagnostic-marker' } },
+      { body: { status: 'ok', readOnly: true, error: 'private-diagnostic-marker' } },
+      { raw: 'private-diagnostic-marker' },
+      { body: null },
+      { body: [] },
+    ]) {
+      const result = await runPublicSmoke({ [route]: response });
+      assert.ok(result.error, `${route} must reject ${JSON.stringify(response)}`);
+      assert.doesNotMatch(JSON.stringify(result.logs) + result.error.message, /private-diagnostic-marker|currentUser/);
+      const diagnostic = result.logs.at(-1);
+      assert.equal(diagnostic.path, route);
+      assert.equal(diagnostic.httpStatus, response.status || 200);
+      assert.deepEqual(Object.keys(diagnostic), ['path', 'httpStatus', 'jsonObject', 'status', 'redacted']);
+      assert.ok(['ok', 'unhealthy', 'missing', 'unexpected'].includes(diagnostic.status));
+    }
+  }
+});
+
+test('public validation smoke rejects absent or false readOnly even with status ok', async () => {
+  for (const readOnly of [undefined, false, 'true']) {
+    const result = await runPublicSmoke({
+      '/db-readonly-validate': { body: { status: 'ok', readOnly } },
+    });
+    assert.match(result.error.message, /not healthy\/read-only/);
+  }
+});
 
 test('GitHub staging overlay accepts a normal Lambda member inside aws/functions/api',()=>{
   const result=validateRequestedMember('index.mjs');
