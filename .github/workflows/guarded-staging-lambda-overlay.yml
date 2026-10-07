@@ -174,33 +174,33 @@ jobs:
           set -euo pipefail
           node scripts/deployment-guard/lambda-overlay-apply.mjs --apply --input "${{ steps.preflight.outputs.overlay_input }}"
 
-      - name: Public post-deploy smoke
-        if: ${{ inputs.mode == 'apply' }}
+      - name: Public staging smoke (inspect or post-deploy)
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           const base='https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
-          async function get(path) {
-            const res=await fetch(base+path,{headers:{accept:'application/json'}});
+          async function get(path,allowedKeys) {
+            const res=await fetch(base+path,{method:'GET',headers:{accept:'application/json'},signal:AbortSignal.timeout(20000)});
             const text=await res.text();
             let body={};
             try { body=JSON.parse(text); } catch {}
+            const jsonObject=body !== null && typeof body === 'object' && !Array.isArray(body);
+            const status=jsonObject && Object.hasOwn(body,'status')
+              ? (['ok','unhealthy'].includes(body.status) ? body.status : 'unexpected')
+              : 'missing';
+            const redacted=jsonObject && (!allowedKeys || Object.keys(body).every(key=>allowedKeys.includes(key)));
+            console.log(JSON.stringify({path,httpStatus:res.status,jsonObject,status,redacted}));
             if (res.status !== 200) throw new Error(path+' expected 200, got '+res.status);
+            if (!redacted) throw new Error(path+' unexpected response shape (body withheld)');
             return body;
           }
           const health=await get('/health');
           if (health.status !== 'ok') throw new Error('/health not ok');
-          const db=await get('/db-health');
+          const db=await get('/db-health',['service','status']);
           if (db.status !== 'ok') throw new Error('/db-health not ok');
-          for (const key of ['currentDatabase','currentUser','postgresqlVersion','connectedDatabase','secretDatabase']) {
-            if (Object.hasOwn(db,key)) throw new Error('/db-health leaked '+key);
-          }
-          const validation=await get('/db-readonly-validate');
+          const validation=await get('/db-readonly-validate',['service','status','readOnly']);
           if (validation.status !== 'ok' || validation.readOnly !== true) throw new Error('/db-readonly-validate not healthy/read-only');
-          for (const key of ['tables','privileges','catalog','rlsAudit','currentDatabase','currentUser']) {
-            if (Object.hasOwn(validation,key)) throw new Error('/db-readonly-validate leaked '+key);
-          }
           console.log(JSON.stringify({health:'ok',dbHealth:'redacted-ok',dbReadonlyValidate:'redacted-ok'}));
           NODE
 

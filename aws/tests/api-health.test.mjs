@@ -241,6 +241,65 @@ test('GET /db-health reports current database and user without leaking secrets',
   assert.equal(JSON.stringify(probe).includes('unit-test-only-not-a-real-secret'), false);
 });
 
+test('database probe failures stay unhealthy and public responses remain fully redacted', async () => {
+  const credentials = {
+    username: 'checksops',
+    password: 'unit-test-only-not-a-real-secret',
+    host: 'db.example.internal',
+    database: 'checksops',
+  };
+  for (const stage of ['secrets', 'network', 'authentication', 'select1', 'version', 'identity', 'wrongDatabase', 'wrongUser']) {
+    let ended = false;
+    const fail = (code) => { throw Object.assign(new Error('private-diagnostic-marker'), { code }); };
+    const probe = await probeDatabase({
+      loadCredentials: async () => stage === 'secrets' ? fail('AccessDeniedException') : credentials,
+      createClient: (config) => {
+        assert.match(config.options, /default_transaction_read_only=on/);
+        assert.equal(config.ssl.rejectUnauthorized, true);
+        const client = mockHealthClient();
+        return {
+          connect: async () => {
+            if (stage === 'network') fail('ETIMEDOUT');
+            if (stage === 'authentication') fail('28P01');
+          },
+          query: async (sql) => {
+            if (stage === 'select1' && sql === READ_ONLY_PROBE) return { rows: [{ ok: 0 }] };
+            if (stage === 'version' && sql === VERSION_PROBE) fail('42501');
+            if (sql === IDENTITY_PROBE) {
+              if (stage === 'identity') fail('42501');
+              if (stage === 'wrongDatabase') return { rows: [{ ...identityRow, current_database: 'unexpected-db' }] };
+              if (stage === 'wrongUser') return { rows: [{ ...identityRow, current_user: 'unexpected-role' }] };
+            }
+            return client.query(sql);
+          },
+          end: async () => { ended = true; },
+        };
+      },
+    });
+    assert.equal(probeIsHealthy(probe), false, stage);
+    assert.deepEqual(publicDbHealthResponse(probe), {
+      statusCode: 503,
+      body: { service: 'checksops-api', status: 'unhealthy' },
+    }, stage);
+    assert.equal(ended, stage !== 'secrets', stage);
+  }
+});
+
+test('failed public validation never exposes database issues, identity, or catalog', () => {
+  assert.deepEqual(publicDbValidationResponse({
+    ok: false,
+    currentDatabase: 'private-diagnostic-marker',
+    currentUser: 'private-diagnostic-marker',
+    tables: [{ error: 'private-diagnostic-marker' }],
+    issues: [{ message: 'private-diagnostic-marker' }],
+    catalog: { private: true },
+    error: 'private-diagnostic-marker',
+  }), {
+    statusCode: 503,
+    body: { service: 'checksops-api', status: 'unhealthy', readOnly: true },
+  });
+});
+
 test('TLS client config verifies certificates and stays read-only', async () => {
   const ssl = (await import('../functions/api/db-health.mjs')).tlsConfig();
   assert.equal(ssl.rejectUnauthorized, true);
