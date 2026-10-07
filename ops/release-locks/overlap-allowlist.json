@@ -1451,6 +1451,27 @@
       "reason": "Verified Branding forward-supersession lock advance to CBOwj-7W must update the origin/main lock fixture under ops/release-locks/. This does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 700,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Reviewed overlap with PR #700 is limited to distinct CheckCommandCenter changes. PR #700 must rebase onto current main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 659,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Reviewed overlap with PR #659 is limited to distinct CheckCommandCenter changes. PR #659 must rebase onto current main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 628,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "Reviewed overlap with PR #628 is limited to distinct CheckCommandCenter changes. PR #628 must rebase onto current main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
