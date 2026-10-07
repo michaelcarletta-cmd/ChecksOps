@@ -35,7 +35,7 @@ function resolveChromeBin() {
 }
 
 function entryFromIndexHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+  const match = String(html || '').match(/\/assets\/index-[^"'\s]+\.js/);
   return match ? match[0] : null;
 }
 
@@ -208,4 +208,3 @@ test('AWS production SPA build hardening: missing selector fails fast', () => {
     });
   }, /AWS frontend build misconfigured/i);
 });
-

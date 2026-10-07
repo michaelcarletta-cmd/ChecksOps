@@ -955,6 +955,10 @@ export const handleDataRpc = async (event, deps) => {
     earlyName = '';
   }
   if (earlyName) {
+    if (earlyName === 'save_claim_settlement_breakdown') {
+      const { handleClaimSettlementRpc } = await import('./claim-settlement-rpc.mjs');
+      return handleClaimSettlementRpc(event, deps);
+    }
     const { PARTNER_SHARE_RPCS, handlePartnerShareRpc } = await import('./partner-share-lifecycle.mjs');
     if (PARTNER_SHARE_RPCS.has(earlyName)) {
       return handlePartnerShareRpc(event, deps);

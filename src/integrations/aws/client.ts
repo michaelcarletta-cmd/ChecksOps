@@ -69,6 +69,26 @@ const AWS_WRITE_TABLES = new Set([
   "claims",
 ]);
 
+const CLAIM_SETTLEMENT_VALUE_COLUMNS = new Set([
+  "replacement_cost_value",
+  "recoverable_depreciation",
+  "non_recoverable_depreciation",
+  "deductible",
+  "other_structures_rcv",
+  "other_structures_recoverable_depreciation",
+  "other_structures_non_recoverable_depreciation",
+  "other_structures_deductible",
+  "pwi_rcv",
+  "pwi_recoverable_depreciation",
+  "pwi_non_recoverable_depreciation",
+  "personal_property_rcv",
+  "personal_property_recoverable_depreciation",
+  "personal_property_non_recoverable_depreciation",
+  "ale_rcv",
+  "ale_recoverable_depreciation",
+  "ale_non_recoverable_depreciation",
+]);
+
 const REVIEW_DECISION_RPCS = new Set([
   "submit_check_review_decision_safe",
   "submit_check_review_decision",
@@ -418,6 +438,97 @@ function createBuilder(table: string, store: SessionStore) {
             args: values,
           }),
         }, writeToken);
+        if (response.status === 401) {
+          store.writeStored(null);
+          store.emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return {
+            data: body.data ?? null,
+            error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")),
+            count: body.count ?? null,
+            status: response.status,
+            statusText: response.statusText,
+          };
+        }
+        return {
+          data: body.data ?? null,
+          error: null,
+          count: body.count ?? null,
+          status: 200,
+          statusText: "OK",
+        };
+      }
+      if (
+        state.table === "claim_settlements"
+        && (state.op === "insert" || state.op === "update")
+      ) {
+        const restoredSettlement = await store.restoreSession();
+        const settlementToken = restoredSettlement.session?.access_token;
+        if (!settlementToken) {
+          return {
+            data: null,
+            error: postgrestError("JWT expired", "PGRST301"),
+            count: null,
+            status: 401,
+            statusText: "Unauthorized",
+          };
+        }
+        const rows = Array.isArray(state.payload) ? state.payload : [state.payload];
+        if (rows.length !== 1 || !rows[0] || typeof rows[0] !== "object") {
+          return {
+            data: null,
+            error: postgrestError("writes_disabled", "42501"),
+            count: null,
+            status: 403,
+            statusText: "Forbidden",
+          };
+        }
+        const values = rows[0] as Record<string, unknown>;
+        const allowedKeys = new Set([...CLAIM_SETTLEMENT_VALUE_COLUMNS, "claim_id", "created_by"]);
+        if (Object.keys(values).some((key) => !allowedKeys.has(key))) {
+          return {
+            data: null,
+            error: postgrestError("writes_disabled", "42501"),
+            count: null,
+            status: 403,
+            statusText: "Forbidden",
+          };
+        }
+        const claimId = values.claim_id;
+        const idFilters = state.filters.filter((filter) => (
+          filter.column === "id" && filter.op === "eq"
+        ));
+        const unsupportedFilters = state.filters.filter((filter) => (
+          filter.column !== "id" || filter.op !== "eq"
+        ));
+        if (
+          typeof claimId !== "string"
+          || (state.op === "insert" && state.filters.length > 0)
+          || (state.op === "update" && (idFilters.length !== 1 || unsupportedFilters.length > 0))
+        ) {
+          return {
+            data: null,
+            error: postgrestError("writes_disabled", "42501"),
+            count: null,
+            status: 403,
+            statusText: "Forbidden",
+          };
+        }
+        const settlementValues = Object.fromEntries(
+          Object.entries(values).filter(([key]) => CLAIM_SETTLEMENT_VALUE_COLUMNS.has(key)),
+        );
+        const { response, body } = await apiFetch("/data/rpc", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "save_claim_settlement_breakdown",
+            args: {
+              p_claim_id: claimId,
+              p_settlement_id: state.op === "update" ? idFilters[0].value : null,
+              p_values: settlementValues,
+            },
+          }),
+        }, settlementToken);
         if (response.status === 401) {
           store.writeStored(null);
           store.emit("SIGNED_OUT", null);
