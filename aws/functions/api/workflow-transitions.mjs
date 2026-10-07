@@ -155,13 +155,6 @@ export const evaluateTransition = (action, check = {}) => {
   if (!check?.id) {
     return { ok: false, error: 'rls_denied', message: 'check not found or not writable' };
   }
-  if (check.claim_id) {
-    return {
-      ok: false,
-      error: 'claim_linked_transition_denied',
-      message: 'T5 will not change status on a claim-linked check because homeowner-ledger triggers write amounts.',
-    };
-  }
   if (isPartnerLinked(check)) {
     return {
       ok: false,

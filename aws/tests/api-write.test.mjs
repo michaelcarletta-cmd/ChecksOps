@@ -330,6 +330,13 @@ test('generic /data mutating routes stay writes_disabled; get_or_create ignores 
   assert.equal(generic.statusCode, 403);
   assert.equal(JSON.parse(generic.body).error, 'writes_disabled');
 
+  const settlement = await handler(jwtEvent('/data/claim_settlements', 'POST', {
+    claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    amount: 100,
+  }));
+  assert.equal(settlement.statusCode, 403);
+  assert.equal(JSON.parse(settlement.body).error, 'writes_disabled');
+
   const client = mockClient({
     rows: [{ id: 'pref-1', user_id: APP_ID, in_app_enabled: true, email_enabled: true, sms_enabled: false }],
   });
@@ -344,6 +351,20 @@ test('generic /data mutating routes stay writes_disabled; get_or_create ignores 
   assert.equal(result.data.user_id, APP_ID);
   const select = client.queries.find((q) => String(q.sql).includes('FROM public.notification_preferences'));
   assert.equal(select.params[0], APP_ID);
+});
+
+test('generic /data/write cannot update OCR MICR columns', async () => {
+  const client = mockClient();
+  for (const column of ['routing_number', 'account_number']) {
+    const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+      table: 'check_intake_items',
+      op: 'update',
+      values: { [column]: '111000025' },
+      filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    }), depsFor(client));
+    assert.equal(result.error, 'column_not_allowlisted');
+    assert.ok(result.columns.includes(column));
+  }
 });
 
 test('write errors roll back and do not COMMIT', async () => {
@@ -830,4 +851,3 @@ test('unrelated intake writes still use the generic allowlisted UPDATE', async (
   assert.equal(String(update.sql).includes('detected_claim_number'), false);
   assert.equal(String(update.sql).includes('claim_id'), false);
 });
-

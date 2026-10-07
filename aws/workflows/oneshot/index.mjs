@@ -149,6 +149,7 @@ export const handler = async (event) => {
     }
     const before = await financialAggregates(client);
     await client.query(readSql(SQL_DIR, '50_tranche5_write_grants.sql'));
+    await client.query(readSql(SQL_DIR, '52_verified_ocr_micr_column_grant.sql'));
     const privileges = await tablePrivileges(client);
     const ninth = await ninthWriteDenied(client);
     const after = await financialAggregates(client);

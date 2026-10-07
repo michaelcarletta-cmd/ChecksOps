@@ -308,7 +308,14 @@ export const handleCheckTransition = async (event, deps = {}) => {
       return denied(spoof, decided);
     }
     const roles = await rolesOf(client, mapping.application_user_id, looked.check.tenant_id);
-    if (!canTransition(roles)) {
+    const roleAllowed = looked.check.claim_id
+      ? decided.spec.requiredRole === 'tenant_member'
+        ? canTransition(roles)
+        : decided.spec.requiredRole === 'staff_or_tenant_admin'
+          ? roles.some((role) => TRANSITION_ROLES.has(role))
+          : false
+      : canTransition(roles);
+    if (!roleAllowed) {
       return denied(spoof, { error: 'insufficient_role', message: 'Transition requires a tenant membership role' });
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
@@ -336,12 +343,23 @@ export const handleCheckTransition = async (event, deps = {}) => {
            ocr_needs_verification = false,
            updated_at = now()
        WHERE id = $1::uuid
-         AND claim_id IS NULL
+         AND tenant_id IS NOT DISTINCT FROM $8::uuid
+         AND claim_id IS NOT DISTINCT FROM $6::uuid
+         AND status IS NOT DISTINCT FROM $7::text
          AND deposited_at IS NULL
        RETURNING *`,
-      [looked.check.id, decided.nextStatus, decided.nextStage, mapping.application_user_id, notes.value],
+      [
+        looked.check.id,
+        decided.nextStatus,
+        decided.nextStage,
+        mapping.application_user_id,
+        notes.value,
+        looked.check.claim_id,
+        looked.check.status,
+        looked.check.tenant_id,
+      ],
     )).rows;
-    if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not writable or no longer unlinked' });
+    if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not writable or no longer matches its expected state' });
     await client.query(
       `INSERT INTO public.check_audit_log (
          check_id, tenant_id, actor_id, event_type, event_description, event_data

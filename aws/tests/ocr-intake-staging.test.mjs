@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { handleCheckOcrIntake, redactOcrIntakeResponse } from '../functions/api/ocr.mjs';
 import { resetAzureDiSecretCache } from '../functions/api/azure-di-secret.mjs';
 import { redactOcrLog, safeOcrLog } from '../functions/api/azure-check-ocr.mjs';
-import { INTAKE_PROHIBITED_COLUMNS } from '../functions/api/write-allowlist.mjs';
+import { INTAKE_PROHIBITED_COLUMNS, WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
 
 const ROUTING_OK = '111000025';
 const ACCOUNT = '000111222333';
@@ -13,6 +14,24 @@ const ENDPOINT = 'https://di-test.example.test';
 const KEY = 'test-azure-key-not-real';
 const CHECK_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const RESULT = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+
+test('MICR database grant is column-scoped to the backend writer, not generic client writes', () => {
+  const grant = readFileSync(
+    new URL('../../aws/workflows/sql/52_verified_ocr_micr_column_grant.sql', import.meta.url),
+    'utf8',
+  );
+  const grantRunner = readFileSync(
+    new URL('../workflows/oneshot/index.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(grant, /GRANT UPDATE \(routing_number, account_number\)[\s\S]*TO checksops;/);
+  assert.doesNotMatch(grant, /authenticated|GRANT UPDATE ON TABLE/i);
+  assert.match(grantRunner, /readSql\(SQL_DIR, '52_verified_ocr_micr_column_grant\.sql'\)/);
+  for (const column of ['routing_number', 'account_number']) {
+    assert.equal(INTAKE_PROHIBITED_COLUMNS.has(column), true);
+    assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has(column), false);
+  }
+});
 
 const field = (value, confidence = 0.2) => ({
   valueString: value,
@@ -191,6 +210,10 @@ test('live staging path uses real secret loader and redacts banking fields', asy
   const persistBlob = JSON.stringify(update);
   assert.ok(!persistBlob.includes(ROUTING_OK));
   assert.ok(!persistBlob.includes(ACCOUNT));
+
+  const micrUpdate = persist.find((row) => /SET routing_number = CASE/.test(row.sql));
+  assert.ok(micrUpdate);
+  assert.deepEqual(micrUpdate.params, [CHECK_ID, ROUTING_OK, ACCOUNT]);
 });
 
 test('Azure VERIFIED MICR stays internal and DELETE is boolean only', async () => {

@@ -1591,6 +1591,34 @@
       "reason": "Reviewed overlap with PR #628 is limited to distinct CheckCommandCenter changes. PR #628 must rebase onto current main before any later merge.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 621,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #621 is superseded Claim Ledger diagnostic lineage; its exact settlement-intercept overlap is reconciled for #762 only. The other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 622,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #622 shares the historical settlement-intercept lineage with #623 and is superseded by #762 current-source work. The other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 623,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #623 is the promotion record for #622's same historical settlement-intercept source, superseded by #762 current-source work. The other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 658,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #658's Signature Request allowlist intent is distinct from #762's settlement RPC intercept; preserve signature_requests/signature_signers behavior. The other PR must rebase before merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
