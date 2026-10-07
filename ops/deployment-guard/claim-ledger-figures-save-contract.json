@@ -1,0 +1,21 @@
+{
+  "id": "claim-ledger-figures-save",
+  "title": "Claim Ledger figures save contract",
+  "accepted": true,
+  "enabled": true,
+  "environments": ["staging", "production"],
+  "deployment_types": ["spa-promote"],
+  "components": ["staging-frontend", "production-spa"],
+  "test": "aws/tests/claim-ledger-figures-save-contract.test.mjs",
+  "notes": "Permanent contract for Claim Ledger financial figures. claim_settlements stays out of AWS_WRITE_TABLES and WRITE_ALLOWLIST. Editor insert/update must intercept to POST /data/rpc save_claim_settlement_breakdown before the generic writes_disabled gate. Do not add a generic financial-table write. Do not change Lambda env flags. Lambda already owns write-claim-settlement.mjs on live production.",
+  "invariants": [
+    "legitimate Claim Ledger figures can be saved",
+    "values persist after refresh",
+    "calculated totals remain correct",
+    "unauthorized/cross-tenant writes remain blocked",
+    "arbitrary financial table writes remain blocked",
+    "Claim Ledger cannot create duplicate claims",
+    "existing claim-number Save still works",
+    "settlement/other financial protections are not weakened"
+  ]
+}
