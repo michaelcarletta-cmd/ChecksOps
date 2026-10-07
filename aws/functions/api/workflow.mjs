@@ -7,8 +7,6 @@ import {
   evaluateTransition,
   INTERNAL_CREATE_STAGE,
   INTERNAL_CREATE_STATUS,
-  isPartnerLinked,
-  isTerminalFinancial,
   mapReviewPath,
   TRANSITIONS,
 } from './workflow-transitions.mjs';
@@ -17,6 +15,7 @@ import {
   loadCheckEndorsements,
   loadCheckPayees,
 } from './providers/production/checkalt-eligibility.mjs';
+import { handleDeleteCheck as executeAcceptedDeleteCheck } from './workflow-delete-check.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -383,66 +382,7 @@ export const handleCheckTransition = async (event, deps = {}) => {
   }, deps);
 };
 
-const deleteChildren = async (client, checkId) => {
-  await client.query('DELETE FROM public.check_endorsement_events WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_endorsements WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_payees WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_messages WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_files WHERE check_intake_item_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_message_reads WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_audit_log WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.mortgage_handling_requests WHERE check_intake_item_id = $1::uuid', [checkId]);
-  const drafts = (await client.query(
-    'SELECT id FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid',
-    [checkId],
-  )).rows.map((row) => row.id);
-  if (drafts.length) {
-    await client.query('DELETE FROM public.loss_draft_audit_log WHERE loss_draft_id = ANY($1::uuid[])', [drafts]);
-    await client.query('DELETE FROM public.loss_draft_documents WHERE loss_draft_id = ANY($1::uuid[])', [drafts]);
-    await client.query('DELETE FROM public.loss_draft_tracking WHERE id = ANY($1::uuid[])', [drafts]);
-  }
-  await client.query('DELETE FROM public.check_review_decisions WHERE check_id = $1::uuid', [checkId]);
-};
-
-export const handleDeleteCheck = async (event, deps = {}) => {
-  const gate = requireWorkflowEnabled(event, deps);
-  if (gate.blocked) {
-    return withIdentity(event, async () => gate.blocked, deps);
-  }
-  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
-    const checkId = body.check_id || body.checkId || body.id
-      || String(event?.rawPath || '').split('/').filter(Boolean).pop();
-    const looked = await lookupWorkflowCheck(client, checkId);
-    if (looked.error) {
-      return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
-    }
-    if (looked.check.claim_id) {
-      return denied(spoof, {
-        error: 'cleanup_denied',
-        message: 'Refusing to delete a claim-linked check',
-      });
-    }
-    if (isPartnerLinked(looked.check) || isTerminalFinancial(looked.check)) {
-      return denied(spoof, {
-        error: 'cleanup_denied',
-        message: 'Refusing to delete a partner-linked or deposited check',
-      });
-    }
-    await deleteChildren(client, looked.check.id);
-    const rows = (await client.query(
-      'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',
-      [looked.check.id],
-    )).rows;
-    if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not deletable' });
-    return okResult({
-      mapping,
-      claims,
-      spoof,
-      data: { id: looked.check.id, deleted: true },
-      extra: { cleanedUp: true },
-    });
-  }, deps);
-};
+export const handleDeleteCheck = (event, deps = {}) => executeAcceptedDeleteCheck(event, deps);
 
 const looksGeneratedBack = (p) =>
   !!p && (

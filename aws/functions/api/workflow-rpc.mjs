@@ -62,7 +62,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   get_payment_direction_by_token: 'financial_sensitive',
   admin_override_check_status: 'safe_now',
   admin_delete_check: 'already_bridged', // client → DELETE /workflow/checks
-  deposit_action: 'safe_now_subset', // money / provider-sensitive actions remain disabled
+  deposit_action: 'safe_now_subset', // provider-sensitive actions remain disabled; mark_manual_deposit is the non-CheckAlt close
   assign_deposit_owner: 'financial_sensitive',
   bulk_deposit_closeout: 'financial_sensitive',
   bulk_resolve_deposit_exceptions: 'financial_sensitive',
@@ -112,10 +112,15 @@ export const SAFE_WRITE_RPCS = new Set([
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
 
-/** Deposit Ops actions that do not move money or call a provider. */
+/**
+ * Deposit Ops actions that do not call a provider.
+ * mark_manual_deposit records an out-of-band / branch deposit. It never
+ * calls CheckAlt and never fabricates a provider transaction id.
+ */
 export const SAFE_DEPOSIT_ACTIONS = new Set([
   'prepare_deposit',
   'assign_provider',
+  'mark_manual_deposit',
 ]);
 
 const CHECKALT_SETTINGS_COLUMNS = new Set([
@@ -814,6 +819,22 @@ const requireOwnTenantAdmin = async (client, userId, tenantId) => {
   return { ok: true };
 };
 
+const requireDepositManagerForTenant = async (client, userId, tenantId, roles) => {
+  if (roles.has('admin') || roles.has('staff')) return { roles };
+  if (!isUuid(tenantId)) {
+    return { error: 'invalid_uuid', field: 'tenant_id' };
+  }
+  const tenantAdmin = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND lower(role::text) IN ('admin', 'owner')`,
+    [userId, tenantId],
+  )).rows[0];
+  if (!tenantAdmin) {
+    return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
+  }
+  return { roles };
+};
+
 const canAccessTenant = async (client, userId, tenantId) => {
   if (!isUuid(tenantId)) return false;
   const member = (await client.query(
@@ -1049,6 +1070,68 @@ const executeDepositAction = async ({ client, mapping, args }) => {
       [item.id, actorId, check.amount, notes == null ? null : String(notes).slice(0, 2000)],
     );
     return { data: { success: true, deposit_item_id: item.id } };
+  }
+
+  if (action === 'mark_manual_deposit') {
+    const depositItemId = arg(args, 'p_deposit_item_id', 'deposit_item_id');
+    if (!isUuid(depositItemId)) return { error: 'invalid_uuid', field: 'p_deposit_item_id' };
+    const item = (await client.query(
+      `SELECT di.id, di.status, di.amount, di.check_id, di.batch_id, di.provider,
+              di.deposit_slip_number, ci.tenant_id, ci.status AS check_status,
+              ci.check_stage::text AS check_stage
+       FROM public.deposit_items di
+       JOIN public.check_intake_items ci ON ci.id = di.check_id
+       WHERE di.id = $1::uuid
+       FOR UPDATE OF di, ci`,
+      [depositItemId],
+    )).rows[0];
+    if (!item) return { error: 'rls_denied', message: 'Deposit item not found' };
+    const tenantGate = await requireDepositManagerForTenant(client, actorId, item.tenant_id, gated.roles);
+    if (tenantGate.error) return tenantGate;
+    const alreadyClosed = item.status === 'succeeded'
+      || item.status === 'reconciled'
+      || item.check_status === 'deposited'
+      || item.check_stage === 'deposited';
+    if (alreadyClosed) {
+      return { data: { success: true, idempotent: true, deposit_item_id: item.id } };
+    }
+    if (item.status !== 'provider_assigned' && item.status !== 'pending_assignment') {
+      return { error: 'invalid_status', message: `Invalid transition: ${item.status} -> mark_manual_deposit` };
+    }
+    const extra = args?.p_extra && typeof args.p_extra === 'object' ? args.p_extra : {};
+    const slip = extra.deposit_slip_number == null ? item.deposit_slip_number : extra.deposit_slip_number;
+    await client.query(
+      `UPDATE public.deposit_items
+       SET status = 'succeeded',
+           provider = 'manual_branch',
+           cleared_at = now(),
+           deposit_slip_number = COALESCE($2::text, deposit_slip_number),
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [depositItemId, slip == null ? null : String(slip).slice(0, 200)],
+    );
+    if (item.batch_id) {
+      await client.query(
+        `UPDATE public.deposit_batches
+         SET cleared_amount = cleared_amount + $2::numeric, updated_at = now()
+         WHERE id = $1::uuid`,
+        [item.batch_id, item.amount],
+      );
+    }
+    await client.query(
+      `UPDATE public.check_intake_items
+       SET status = 'deposited',
+           check_stage = 'deposited',
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [item.check_id],
+    );
+    await client.query(
+      `INSERT INTO public.deposit_audit_log (deposit_item_id, batch_id, action, actor_id, amount, notes)
+       VALUES ($1::uuid, $2::uuid, 'mark_manual_deposit', $3::uuid, $4::numeric, $5::text)`,
+      [depositItemId, item.batch_id || null, actorId, item.amount, notes == null ? null : String(notes).slice(0, 2000)],
+    );
+    return { data: { success: true, deposit_item_id: item.id, provider: 'manual_branch', provider_execution: false } };
   }
 
   const depositItemId = arg(args, 'p_deposit_item_id', 'deposit_item_id');
