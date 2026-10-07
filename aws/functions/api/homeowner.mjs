@@ -98,6 +98,402 @@ export const notifyStaffOfHomeownerLedgerUpload = async ({
   return { notified: true, recipient: to, uploadId: uploadId || null };
 };
 
+export const HOMEOWNER_LEDGER_DEPOSITED_STAGES = Object.freeze([
+  'deposited', 'cleared', 'funds_released', 'disbursed',
+]);
+export const HOMEOWNER_LEDGER_DEAD_STATUSES = Object.freeze([
+  'cancelled', 'canceled', 'failed', 'returned', 'voided',
+]);
+export const HOMEOWNER_LEDGER_DONE_ENDORSEMENT_STATUSES = Object.freeze([
+  'signed', 'waived', 'endorsed', 'completed', 'complete',
+]);
+export const HOMEOWNER_LEDGER_SENT_ENDORSEMENT_STATUSES = Object.freeze([
+  'sent', 'requested', 'in_progress', 'pending_signature', 'awaiting_signature',
+]);
+export const HOMEOWNER_LEDGER_PUBLIC_PAYEE_TYPES = Object.freeze([
+  'insured', 'mortgage_company',
+]);
+
+export const zeroHomeownerLedgerTotals = () => ({
+  received: 0,
+  deposited: 0,
+  released: 0,
+  remaining: 0,
+});
+
+const asMoney = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export const homeownerLedgerTotalsFromRecords = ({
+  checks = [],
+  splits = [],
+  legacyDisbursements = [],
+} = {}) => {
+  const totals = zeroHomeownerLedgerTotals();
+  for (const check of checks) {
+    const amt = asMoney(check?.amount);
+    totals.received += amt;
+    if (HOMEOWNER_LEDGER_DEPOSITED_STAGES.includes(String(check?.check_stage || '').toLowerCase())) {
+      totals.deposited += amt;
+    }
+  }
+  for (const row of [...splits, ...legacyDisbursements]) {
+    if (HOMEOWNER_LEDGER_DEAD_STATUSES.includes(String(row?.status || '').toLowerCase())) continue;
+    totals.released += asMoney(row?.amount);
+  }
+  totals.remaining = Math.max(0, totals.received - totals.released);
+  return totals;
+};
+
+const namePartsForHomeowner = (name) => String(name || '')
+  .toLowerCase()
+  .trim()
+  .split(/\s+/)
+  .filter((part) => part.length >= 3);
+
+export const isHomeownerEndorsementParty = (endorsement, homeowner = {}) => {
+  if (String(endorsement?.payee_type || '') !== 'insured') return false;
+  const email = String(homeowner.email || '').toLowerCase().trim();
+  const emailHit = email && String(endorsement?.contact_email || '').toLowerCase() === email;
+  const nameHit = namePartsForHomeowner(homeowner.name).some((part) => (
+    String(endorsement?.payee_name || '').toLowerCase().includes(part)
+  ));
+  return Boolean(emailHit || nameHit || !email);
+};
+
+const endorsementIsDone = (endorsement) => Boolean(
+  endorsement?.signed_at
+  || HOMEOWNER_LEDGER_DONE_ENDORSEMENT_STATUSES.includes(String(endorsement?.status || '').toLowerCase()),
+);
+
+const endorsementIsSent = (endorsement) => {
+  if (endorsement?.request_sent_at) return true;
+  return HOMEOWNER_LEDGER_SENT_ENDORSEMENT_STATUSES.includes(String(endorsement?.status || '').toLowerCase());
+};
+
+export const pendingEndorsementsForHomeowner = ({
+  checks = [],
+  endorsements = [],
+  homeowner = {},
+} = {}) => {
+  const checkMeta = new Map(checks.map((row) => [String(row.id), row]));
+  const byCheck = new Map();
+  for (const endorsement of endorsements) {
+    const payeeType = String(endorsement?.payee_type || '');
+    if (!HOMEOWNER_LEDGER_PUBLIC_PAYEE_TYPES.includes(payeeType)) continue;
+    if (endorsementIsDone(endorsement)) continue;
+    const isHomeowner = isHomeownerEndorsementParty(endorsement, homeowner);
+    if (!endorsementIsSent(endorsement) && !isHomeowner) continue;
+    const checkId = String(endorsement.check_id || '');
+    const meta = checkMeta.get(checkId);
+    if (!meta) continue;
+    if (!byCheck.has(checkId)) {
+      byCheck.set(checkId, {
+        check_id: checkId,
+        check_number: meta.check_number ?? null,
+        check_amount: meta.amount ?? null,
+        parties: [],
+      });
+    }
+    byCheck.get(checkId).parties.push({
+      endorsement_id: endorsement.id,
+      payee_name: endorsement.payee_name,
+      payee_type: payeeType,
+      status: endorsement.status,
+      sent_at: endorsement.request_sent_at || null,
+      is_homeowner: isHomeowner,
+      sign_url: (payeeType === 'insured' && isHomeowner && endorsement.token)
+        ? `/endorse?token=${endorsement.token}`
+        : null,
+    });
+  }
+  return Array.from(byCheck.values());
+};
+
+export const claimAuthorizedForToken = ({ claim = null, token = null, checks = [], events = [] } = {}) => {
+  if (!token?.claim_id || !token?.tenant_id) return false;
+  if (!claim || String(claim.id) !== String(token.claim_id)) return false;
+  const claimTenant = claim.org_id || claim.tenant_id || null;
+  if (claimTenant && String(claimTenant) !== String(token.tenant_id)) return false;
+  if (claimTenant && String(claimTenant) === String(token.tenant_id)) return true;
+  return checks.some((row) => String(row.tenant_id) === String(token.tenant_id)
+    && String(row.claim_id || token.claim_id) === String(token.claim_id))
+    || events.some((row) => String(row.tenant_id) === String(token.tenant_id)
+      && String(row.claim_id) === String(token.claim_id));
+};
+
+export const isThinHomeownerLedgerDoc = (doc) => {
+  if (!doc || doc.error) return true;
+  return doc.mode !== 'claim' && doc.mode !== 'pre_claim';
+};
+
+const publicHomeownerFromDoc = (doc = {}) => ({
+  name: doc.homeowner?.name ?? doc.token?.homeowner_name ?? null,
+  email: doc.homeowner?.email ?? doc.token?.homeowner_email ?? null,
+});
+
+export const normalizeHomeownerLedgerView = (doc = {}) => {
+  if (!doc || doc.error) return doc;
+  const token = doc.token && typeof doc.token === 'object' ? doc.token : null;
+  const claimLinked = Boolean(token?.claim_id || doc.claim?.id);
+  const mode = claimLinked ? 'claim' : 'pre_claim';
+  const totalsIn = doc.totals && typeof doc.totals === 'object' ? doc.totals : {};
+  return {
+    ok: true,
+    mode,
+    token: token || undefined,
+    homeowner: publicHomeownerFromDoc(doc),
+    claim: mode === 'claim' ? (doc.claim || null) : null,
+    events: Array.isArray(doc.events) ? doc.events : [],
+    totals: {
+      received: asMoney(totalsIn.received),
+      deposited: asMoney(totalsIn.deposited),
+      released: asMoney(totalsIn.released),
+      remaining: asMoney(totalsIn.remaining),
+    },
+    pending_upload_count: asMoney(doc.pending_upload_count),
+    // FOLLOW-UP SECURITY REPAIR: handleHomeownerLedgerSignLink is not
+    // token/claim scoped. Do not expose document signature links here.
+    pending_signatures: [],
+    pending_endorsements: Array.isArray(doc.pending_endorsements) ? doc.pending_endorsements : [],
+    shared_documents: [],
+    project_plan: null,
+    can_upload: true,
+    money: null,
+    allow_deductible_payment: false,
+    deductible_payments: [],
+  };
+};
+
+const stripSensitiveHomeownerLedgerKeys = (row) => {
+  if (!row || typeof row !== 'object') return row;
+  const {
+    wallet: _wallet,
+    wallet_balance: _walletBalance,
+    bank_account: _bankAccount,
+    bank_name: _bankName,
+    bank_last_four: _bankLastFour,
+    routing_number: _routing,
+    routing: _routingAlias,
+    account_number: _accountNumber,
+    provider: _provider,
+    moov: _moov,
+    plaid: _plaid,
+    actum: _actum,
+    ...safe
+  } = row;
+  return safe;
+};
+
+export const runHomeownerLedgerView = async ({ client, token, spoof }) => {
+  const doc = (await client.query(
+    'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
+    [token],
+  )).rows[0]?.doc;
+  if (!doc) {
+    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
+  }
+  if (doc.error) {
+    const status = doc.error === 'revoked' || doc.error === 'expired' ? 410 : 400;
+    return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
+  }
+
+  let working = { ...doc };
+  if (isThinHomeownerLedgerDoc(working)) {
+    const enriched = await enrichThinHomeownerLedgerDoc(client, working);
+    if (enriched?.error) {
+      const status = enriched.error === 'revoked' || enriched.error === 'expired' ? 410 : 404;
+      return { ok: false, statusCode: status, error: enriched.error, spoofFieldsIgnored: spoof };
+    }
+    working = enriched;
+  } else if (working.mode === 'claim' && working.token?.claim_id && working.token?.tenant_id) {
+    if (!claimAuthorizedForToken({
+      claim: working.claim,
+      token: working.token,
+      checks: [{ tenant_id: working.token.tenant_id, claim_id: working.token.claim_id }],
+      events: working.events,
+    }) && working.claim && (working.claim.org_id || working.claim.tenant_id)
+      && String(working.claim.org_id || working.claim.tenant_id) !== String(working.token.tenant_id)) {
+      return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
+    }
+  }
+
+  const normalized = stripSensitiveHomeownerLedgerKeys(normalizeHomeownerLedgerView(working));
+  return {
+    ...normalized,
+    ok: true,
+    statusCode: 200,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+export const enrichThinHomeownerLedgerDoc = async (client, doc) => {
+  const token = doc?.token;
+  if (!token?.id || !token?.tenant_id) {
+    return { error: 'not_found' };
+  }
+
+  const homeowner = publicHomeownerFromDoc(doc);
+  if (!token.claim_id) {
+    let pendingUploadCount = asMoney(doc.pending_upload_count);
+    try {
+      const counted = (await client.query(
+        `SELECT COUNT(*)::int AS n
+         FROM public.homeowner_ledger_check_uploads
+         WHERE token_id = $1::uuid`,
+        [token.id],
+      )).rows[0]?.n;
+      if (counted != null) pendingUploadCount = asMoney(counted);
+    } catch {
+      /* table/grant may be absent; keep the safe default */
+    }
+    return {
+      ok: true,
+      mode: 'pre_claim',
+      token,
+      homeowner,
+      claim: null,
+      events: [],
+      totals: zeroHomeownerLedgerTotals(),
+      pending_upload_count: pendingUploadCount,
+      pending_endorsements: [],
+    };
+  }
+
+  let claim = doc.claim || null;
+  try {
+    const verified = (await client.query(
+      `SELECT id, claim_number,
+              policyholder_address AS property_address,
+              loss_type, status, created_at, org_id
+       FROM public.claims
+       WHERE id = $1::uuid
+         AND (org_id IS NULL OR org_id = $2::uuid)
+       LIMIT 1`,
+      [token.claim_id, token.tenant_id],
+    )).rows[0] || null;
+    claim = verified;
+  } catch {
+    if (claim && (claim.org_id || claim.tenant_id)
+      && String(claim.org_id || claim.tenant_id) !== String(token.tenant_id)) {
+      return { error: 'not_found' };
+    }
+  }
+
+  let checks = [];
+  try {
+    checks = (await client.query(
+      `SELECT id, amount, check_stage, check_number, tenant_id, claim_id
+       FROM public.check_intake_items
+       WHERE claim_id = $1::uuid AND tenant_id = $2::uuid`,
+      [token.claim_id, token.tenant_id],
+    )).rows;
+  } catch {
+    checks = [];
+  }
+
+  let events = [];
+  try {
+    events = (await client.query(
+      `SELECT id, check_id, event_type, occurred_at, amount, actor_label, payload_json, tenant_id, claim_id
+       FROM public.homeowner_ledger_events
+       WHERE claim_id = $1::uuid AND tenant_id = $2::uuid
+       ORDER BY occurred_at DESC
+       LIMIT 500`,
+      [token.claim_id, token.tenant_id],
+    )).rows;
+  } catch {
+    events = [];
+  }
+
+  if (!claimAuthorizedForToken({ claim, token, checks, events })) {
+    return { error: 'not_found' };
+  }
+
+  let splits = [];
+  try {
+    const checkIds = checks.map((row) => row.id);
+    if (checkIds.length) {
+      splits = (await client.query(
+        `SELECT s.amount, s.status
+         FROM public.disbursement_splits s
+         JOIN public.disbursement_batches b
+           ON b.id = s.batch_id AND b.tenant_id = $2::uuid
+         JOIN public.check_intake_items i
+           ON i.id = b.check_intake_item_id
+          AND i.claim_id = $1::uuid
+          AND i.tenant_id = $2::uuid
+         WHERE s.tenant_id = $2::uuid`,
+        [token.claim_id, token.tenant_id],
+      )).rows;
+    }
+  } catch {
+    splits = [];
+  }
+
+  let legacyDisbursements = [];
+  try {
+    if (claim?.org_id && String(claim.org_id) === String(token.tenant_id)) {
+      legacyDisbursements = (await client.query(
+        `SELECT d.amount, d.status
+         FROM public.claim_disbursements d
+         WHERE d.claim_id = $1::uuid`,
+        [token.claim_id],
+      )).rows;
+    }
+  } catch {
+    legacyDisbursements = [];
+  }
+
+  let endorsements = [];
+  try {
+    const checkIds = checks.map((row) => row.id);
+    if (checkIds.length) {
+      endorsements = (await client.query(
+        `SELECT e.id, e.check_id, e.payee_name, e.payee_type, e.status, e.token,
+                e.contact_email, e.signed_at, e.request_sent_at, e.created_at
+         FROM public.check_endorsements e
+         JOIN public.check_intake_items i
+           ON i.id = e.check_id
+          AND i.claim_id = $1::uuid
+          AND i.tenant_id = $2::uuid
+         WHERE (e.tenant_id IS NULL OR e.tenant_id = $2::uuid)
+           AND e.payee_type IN ('insured', 'mortgage_company')
+         ORDER BY e.created_at ASC`,
+        [token.claim_id, token.tenant_id],
+      )).rows;
+    }
+  } catch {
+    endorsements = [];
+  }
+
+  const { org_id: _orgId, tenant_id: _tenantId, ...publicClaim } = claim;
+  return {
+    ok: true,
+    mode: 'claim',
+    token,
+    homeowner,
+    claim: {
+      id: publicClaim.id,
+      claim_number: publicClaim.claim_number ?? null,
+      property_address: publicClaim.property_address ?? null,
+      loss_type: publicClaim.loss_type ?? null,
+      status: publicClaim.status ?? null,
+      created_at: publicClaim.created_at ?? null,
+    },
+    events: events.map(({ tenant_id: _eventTenant, claim_id: _eventClaim, ...row }) => row),
+    totals: homeownerLedgerTotalsFromRecords({ checks, splits, legacyDisbursements }),
+    pending_upload_count: 0,
+    pending_endorsements: pendingEndorsementsForHomeowner({
+      checks,
+      endorsements,
+      homeowner,
+    }),
+  };
+};
+
 export const handleHomeownerLedgerView = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -111,30 +507,13 @@ export const handleHomeownerLedgerView = async (event) => {
     client = await publicDb(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const doc = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-      [token],
-    )).rows[0]?.doc;
-    if (!doc) {
+    const result = await runHomeownerLedgerView({ client, token, spoof });
+    if (!result.ok) {
       await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-    }
-    if (doc.error) {
-      await client.query('ROLLBACK');
-      const status = doc.error === 'revoked' || doc.error === 'expired' ? 410 : 400;
-      return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
+      return result;
     }
     await client.query('COMMIT');
-    return {
-      ok: true,
-      statusCode: 200,
-      ...doc,
-      // Keep money movement CTAs off
-      allow_deductible_payment: false,
-      money: null,
-      deductible_payments: [],
-      spoofFieldsIgnored: spoof,
-    };
+    return result;
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -151,6 +530,20 @@ export const handleHomeownerLedgerView = async (event) => {
       try { await client.end(); } catch { /* ignore */ }
     }
   }
+};
+
+export const assembleHomeownerLedgerView = (doc, spoof) => {
+  const normalized = normalizeHomeownerLedgerView(doc);
+  if (!normalized || normalized.error) {
+    const error = normalized?.error || 'not_found';
+    const status = error === 'revoked' || error === 'expired' ? 410 : 404;
+    return { ok: false, statusCode: status, error, spoofFieldsIgnored: spoof };
+  }
+  return {
+    ...normalized,
+    statusCode: 200,
+    spoofFieldsIgnored: spoof,
+  };
 };
 
 export const handleHomeownerClaimPortal = async (event) => {
@@ -408,6 +801,15 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
   }
 };
 
+const signLinkStatus = (error) => {
+  if (error === 'revoked' || error === 'expired') return 410;
+  if (error === 'already_signed') return 409;
+  if (error === 'mismatch' || error === 'not_your_signature' || error === 'invalid_state') return 403;
+  if (error === 'invalid_hash' || error === 'missing_fields') return 400;
+  if (error === 'signer_not_found' || error === 'not_found' || error === 'no_claim') return 404;
+  return 403;
+};
+
 export const handleHomeownerLedgerSignLink = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -421,34 +823,25 @@ export const handleHomeownerLedgerSignLink = async (event) => {
     client = await publicDb(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const doc = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-      [token],
-    )).rows[0]?.doc;
-    if (!doc?.ok) {
-      await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: doc?.error || 'not_found', spoofFieldsIgnored: spoof };
-    }
     const raw = randomBytes(32).toString('hex');
     const hash = createHash('sha256').update(raw).digest('hex');
-    const updated = (await client.query(
-      `UPDATE public.signature_signers
-       SET token_hash = $2, updated_at = now()
-       WHERE id = $1::uuid
-       RETURNING id`,
-      [signerId, hash],
-    )).rows[0];
-    if (!updated) {
+    const remint = (await client.query(
+      'SELECT public.aws_public_homeowner_ledger_remint_signer($1, $2::uuid, $3) AS doc',
+      [token, signerId, hash],
+    )).rows[0]?.doc;
+    if (!remint?.ok) {
       await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: 'signer_not_found', spoofFieldsIgnored: spoof };
+      const error = remint?.error || 'not_found';
+      return { ok: false, statusCode: signLinkStatus(error), error, spoofFieldsIgnored: spoof };
     }
     await client.query('COMMIT');
-    const origin = String(body.origin || process.env.VITE_APP_URL || 'https://staging.checksops.com').replace(/\/$/, '');
+    const origin = String(body.origin || process.env.SIGN_BASE_URL || process.env.VITE_APP_URL || 'https://checksops.com').replace(/\/$/, '');
     return {
       ok: true,
       statusCode: 200,
-      url: `${origin}/sign/${raw}`,
-      token: raw,
+      sign_url: `${origin}/sign?token=${raw}`,
+      request_id: remint.request_id || null,
+      signer_id: remint.signer_id || signerId,
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {

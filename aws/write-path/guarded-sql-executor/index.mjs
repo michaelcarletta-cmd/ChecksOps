@@ -2,6 +2,10 @@
  * Staging-only VPC SQL executor for the reviewed Claim Ledger SQL 44.
  * Fail closed. No arbitrary SQL. No create_new. No production.
  * CREATE OR REPLACE must not invoke the function.
+ *
+ * Forward-composed from the live staging executor. Preserves SQL 44,
+ * #601, membership-only, and Mortgage Ops SQL 39. Adds only SQL 71
+ * Homeowner Ledger view-contract dispatch.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -12,11 +16,17 @@ import { functionDefsMatchExactly, readFunctionDef } from './lib/function-def-lo
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
+  AUTHORIZED_SQL71,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  AUTHORIZED_MEMBERSHIP_ONLY,
   SQL_EXECUTOR_FUNCTION,
   evaluateSqlExecutorAuthorization,
+  isHomeownerLedgerViewContract,
+  isMembershipOnlyHelper,
+  isMortgageOpsAcceptComplete,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
+import { handleMortgageOpsAcceptComplete } from './mortgage-ops-sql39.mjs';
 
 export { readFunctionDef } from './lib/function-def-lookup.mjs';
 
@@ -30,6 +40,22 @@ const TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE = path.join(
   ROOT,
   'sql/20261001193100_tenant_users_can_override_check_status.sql',
 );
+const MEMBERSHIP_ONLY_SQL_FILE = path.join(
+  ROOT,
+  'sql/20261002200000_user_can_move_tenant_checks_membership_only.sql',
+);
+const MORTGAGE_OPS_SQL_FILE = path.join(
+  ROOT,
+  'sql/39_mortgage_ops_agent_accept_complete.sql',
+);
+const SQL71_FILE = path.join(ROOT, 'sql/71_homeowner_ledger_view_contract.sql');
+const SQL71_BEHAVIOR_MARKERS = [
+  "mode', 'claim'",
+  "mode', 'pre_claim'",
+  'pending_signatures',
+  "'money', NULL",
+  "payee_type IN ('insured', 'mortgage_company')",
+];
 const CA_CANDIDATES = [
   path.join(ROOT, 'rds-global-bundle.pem'),
   '/var/task/rds-global-bundle.pem',
@@ -466,12 +492,304 @@ async function handleTenantPermissions({
   }
 }
 
+function helperInspect(live = {}) {
+  const move = String(live.user_can_move_tenant_checks || '');
+  const override = String(live.admin_override_check_status || '');
+  return {
+    user_can_move_tenant_checks_sha256: move ? hashSqlDefinition(move) : null,
+    admin_override_check_status_sha256: override ? hashSqlDefinition(override) : null,
+    user_can_move_has_role: move.includes('has_role'),
+    user_can_move_membership_only: Boolean(
+      move
+      && move.includes('user_belongs_to_tenant')
+      && !move.includes('has_role'),
+    ),
+  };
+}
+
+async function handleMembershipOnlyHelper({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile,
+}) {
+  const embedded = readEmbeddedSql(sqlFile, AUTHORIZED_MEMBERSHIP_ONLY.source_sha256);
+  if (!embedded.ok) return embedded;
+  const text = embedded.details.text;
+  if (/\bGRANT\b/i.test(text) || /\bREVOKE\b/i.test(text) || /\bPOLICY\b/i.test(text)) {
+    return fail(CODES.UNRELATED_MUTATION, 'membership-only helper SQL must not change grants or RLS');
+  }
+  if (/admin_override_check_status/i.test(text)) {
+    return fail(CODES.UNRELATED_MUTATION, 'membership-only helper SQL must not replace admin_override_check_status');
+  }
+
+  let client;
+  try {
+    client = await connect();
+    const liveLookup = await readTenantPermissionDefs(client);
+    if (!liveLookup.ok) return liveLookup;
+    const live = liveLookup.details;
+    const liveHash = hashTenantPermissionLiveDefs(live);
+    const inspect = helperInspect(live);
+    if (
+      event.expected_live_definition_sha256
+      && event.expected_live_definition_sha256 !== liveHash
+    ) {
+      return fail(CODES.SQL_COLLISION, 'live tenant-permission function definitions differ from the expected baseline', {
+        expected_live_definition_sha256: event.expected_live_definition_sha256,
+        live_definition_sha256: liveHash,
+        ...inspect,
+      });
+    }
+
+    const intendedMove = extractPinnedFunctionSql(text, 'user_can_move_tenant_checks');
+    const helperExact = Boolean(
+      intendedMove
+      && live.user_can_move_tenant_checks
+      && functionDefsMatchExactly(live.user_can_move_tenant_checks, intendedMove),
+    );
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: event.action,
+          executor_identity: identity,
+          live_functions: {
+            user_can_move_tenant_checks: Boolean(live.user_can_move_tenant_checks),
+            admin_override_check_status: Boolean(live.admin_override_check_status),
+          },
+          helper_exact: helperExact,
+          ...inspect,
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported membership-only executor action ${event.action}`);
+    }
+
+    if (!live.admin_override_check_status) {
+      return fail(CODES.SQL_COLLISION, 'admin_override_check_status is missing; refuse helper-only apply');
+    }
+
+    if (helperExact) {
+      consumeOneUse(event.one_use_id);
+      return ok({
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: 'idempotent',
+          executor_identity: identity,
+          admin_override_unchanged: true,
+          ...inspect,
+        },
+      });
+    }
+
+    const overrideBefore = hashSqlDefinition(live.admin_override_check_status);
+    await client.query(text);
+    const afterLookup = await readTenantPermissionDefs(client);
+    if (!afterLookup.ok) return afterLookup;
+    const after = afterLookup.details;
+    const afterHash = hashTenantPermissionLiveDefs(after);
+    const afterInspect = helperInspect(after);
+    if (!after.user_can_move_tenant_checks || !after.admin_override_check_status) {
+      return fail(CODES.SQL_COLLISION, 'apply did not keep both #601 functions');
+    }
+    if (hashSqlDefinition(after.admin_override_check_status) !== overrideBefore) {
+      return fail(CODES.SQL_COLLISION, 'admin_override_check_status definition changed; STOP');
+    }
+    if (!functionDefsMatchExactly(after.user_can_move_tenant_checks, intendedMove)) {
+      return fail(CODES.SQL_COLLISION, 'applied helper does not match the membership-only source');
+    }
+    if (afterInspect.user_can_move_has_role || !afterInspect.user_can_move_membership_only) {
+      return fail(CODES.SQL_COLLISION, 'applied helper is not membership-only');
+    }
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveHash,
+        after_hash: afterHash,
+        result: 'applied',
+        executor_identity: identity,
+        admin_override_unchanged: true,
+        before: inspect,
+        after: afterInspect,
+      },
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
+
+function sql71DefinitionMatchesSourceBehavior(def) {
+  if (!def) return false;
+  return SQL71_BEHAVIOR_MARKERS.every((marker) => def.includes(marker));
+}
+
+async function readSql71Grants(client) {
+  const routine = await client.query(`
+    SELECT grantee, privilege_type
+    FROM information_schema.routine_privileges
+    WHERE routine_schema = 'public'
+      AND routine_name = 'aws_public_homeowner_ledger_by_token'
+    ORDER BY grantee, privilege_type
+  `);
+  return { routine: routine.rows };
+}
+
+function sql71GrantsConstrained(grants) {
+  const genericGrantees = new Set(['PUBLIC', 'authenticated', 'anon']);
+  const execute = (grants.routine || []).filter((row) => row.privilege_type === 'EXECUTE');
+  const badRoutine = execute.filter((row) => genericGrantees.has(row.grantee));
+  const hasChecksops = execute.some((row) => row.grantee === 'checksops');
+  if (badRoutine.length || !hasChecksops) {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 71 grants are not constrained', {
+      bad_routine: badRoutine,
+      checksops_execute: hasChecksops,
+    });
+  }
+  return ok({ grants_constrained: true, checksops_execute: true });
+}
+
+async function handleHomeownerLedgerViewContract({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile71,
+}) {
+  const embedded = readEmbeddedSql(sqlFile71, AUTHORIZED_SQL71.source_sha256);
+  if (!embedded.ok) return embedded;
+
+  let client;
+  try {
+    client = await connect();
+    const beforeLookup = await definitionTextOrFail(client, AUTHORIZED_SQL71.function_identity);
+    if (!beforeLookup.ok) return beforeLookup;
+    const beforeDef = beforeLookup.details.definition;
+    const beforeHash = beforeDef ? hashSqlDefinition(beforeDef) : null;
+    const sql44Lookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+    if (!sql44Lookup.ok) return sql44Lookup;
+    const sql44BeforeHash = sql44Lookup.details.definition
+      ? hashSqlDefinition(sql44Lookup.details.definition)
+      : null;
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      if (event.inspect?.token || event.verify?.token) {
+        return fail(CODES.UNRELATED_MUTATION, 'SQL 71 inspect/verify must not invoke the public token RPC');
+      }
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: beforeHash,
+          after_hash: beforeHash,
+          result: event.action,
+          executor_identity: identity,
+          function_identity: AUTHORIZED_SQL71.function_identity,
+          sql44_hash: sql44BeforeHash,
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 71 executor action ${event.action}`);
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: beforeHash,
+      live_definition: beforeDef,
+    });
+    if (!collision.ok) return collision;
+
+    await client.query(embedded.details.text);
+    const afterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL71.function_identity);
+    if (!afterLookup.ok) return afterLookup;
+    const afterDef = afterLookup.details.definition;
+    const afterHash = afterDef ? hashSqlDefinition(afterDef) : null;
+    if (!sql71DefinitionMatchesSourceBehavior(afterDef)) {
+      return fail(CODES.SQL_COLLISION, 'applied SQL 71 definition does not match intended source behavior', {
+        after_hash: afterHash,
+      });
+    }
+    if (afterHash === beforeHash) {
+      return fail(CODES.SQL_COLLISION, 'apply did not change the live SQL 71 definition');
+    }
+
+    const grants = sql71GrantsConstrained(await readSql71Grants(client));
+    if (!grants.ok) return grants;
+
+    const sql44AfterLookup = await definitionTextOrFail(client, AUTHORIZED_SQL44.function_identity);
+    if (!sql44AfterLookup.ok) return sql44AfterLookup;
+    const sql44AfterHash = sql44AfterLookup.details.definition
+      ? hashSqlDefinition(sql44AfterLookup.details.definition)
+      : null;
+    if (sql44AfterHash !== sql44BeforeHash) {
+      return fail(CODES.SQL_COLLISION, 'SQL 71 apply changed the live SQL 44 definition; STOP', {
+        expected: sql44BeforeHash,
+        live: sql44AfterHash,
+      });
+    }
+
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: beforeHash,
+        after_hash: afterHash,
+        result: 'applied',
+        executor_identity: identity,
+        function_identity: AUTHORIZED_SQL71.function_identity,
+        sql44_hash: sql44AfterHash,
+      },
+      grants: grants.details,
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function createHandler({
   connect = defaultConnect,
   now = () => Date.now(),
   sqlFile = SQL_FILE,
   sqlFile601 = TENANT_PERMISSIONS_SQL_FILE,
   sqlFile601Predecessor = TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE,
+  sqlFileMembership = MEMBERSHIP_ONLY_SQL_FILE,
+  sqlFile39 = MORTGAGE_OPS_SQL_FILE,
+  sqlFile71 = SQL71_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
 } = {}) {
   return async function handler(event = {}) {
@@ -491,6 +809,28 @@ export function createHandler({
       });
     }
 
+    if (isMortgageOpsAcceptComplete(event)) {
+      return handleMortgageOpsAcceptComplete({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile: sqlFile39,
+        readEmbeddedSql,
+        consumeOneUse,
+      });
+    }
+
+    if (isMembershipOnlyHelper(event)) {
+      return handleMembershipOnlyHelper({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile: sqlFileMembership,
+      });
+    }
+
     if (isTenantUsersSameCheckPermissions(event)) {
       return handleTenantPermissions({
         event,
@@ -499,6 +839,16 @@ export function createHandler({
         connect,
         sqlFile601,
         sqlFile601Predecessor,
+      });
+    }
+
+    if (isHomeownerLedgerViewContract(event)) {
+      return handleHomeownerLedgerViewContract({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile71,
       });
     }
 

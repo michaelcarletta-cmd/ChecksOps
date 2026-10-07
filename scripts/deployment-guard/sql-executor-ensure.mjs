@@ -40,9 +40,13 @@ export function packExecutor(root) {
   const copies = [
     ['aws/write-path/guarded-sql-executor/index.mjs', 'index.mjs'],
     ['aws/write-path/guarded-sql-executor/package.json', 'package.json'],
+    ['aws/write-path/guarded-sql-executor/mortgage-ops-sql39.mjs', 'mortgage-ops-sql39.mjs'],
     ['aws/write-path/sql/44_claim_ledger_link_or_create.sql', 'sql/44_claim_ledger_link_or_create.sql'],
+    ['aws/workflows/sql/71_homeowner_ledger_view_contract.sql', 'sql/71_homeowner_ledger_view_contract.sql'],
+    ['aws/write-path/guarded-sql-executor/sql/39_mortgage_ops_agent_accept_complete.sql', 'sql/39_mortgage_ops_agent_accept_complete.sql'],
     ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
     ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],
+    ['supabase/migrations/20261002200000_user_can_move_tenant_checks_membership_only.sql', 'sql/20261002200000_user_can_move_tenant_checks_membership_only.sql'],
     ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
     ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
     ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
@@ -76,6 +80,54 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
     workstream_id: opts['workstream-id'],
     commit: opts.commit,
   });
+
+  const composedZip = opts['composed-zip'] ? path.resolve(String(opts['composed-zip'])) : null;
+  if (composedZip) {
+    if (!fs.existsSync(composedZip)) {
+      return printResult(fail(CODES.INVALID_MANIFEST, 'composed executor zip is missing', { composed_zip: composedZip }));
+    }
+    const live = awsJson(['lambda', 'get-function-configuration', '--function-name', functionName], env);
+    const expectedSha = opts['expected-code-sha256'];
+    const expectedRev = opts['expected-revision-id'];
+    if (!expectedSha || !expectedRev) {
+      return printResult(fail(
+        CODES.INVALID_MANIFEST,
+        'composed-zip deploy requires expected-code-sha256 and expected-revision-id for CAS',
+      ));
+    }
+    if (live.CodeSha256 !== expectedSha || live.RevisionId !== expectedRev) {
+      return printResult(fail(CODES.DEPLOYMENT_COLLISION, 'live executor fingerprint changed after preflight; STOP', {
+        expected_code_sha256: expectedSha,
+        expected_revision_id: expectedRev,
+        live_code_sha256: live.CodeSha256 || null,
+        live_revision_id: live.RevisionId || null,
+      }));
+    }
+    execFileSync(AWS, [
+      '--region', REGION, 'lambda', 'update-function-code',
+      '--function-name', functionName,
+      '--zip-file', `fileb://${composedZip}`,
+      '--revision-id', expectedRev,
+    ], { encoding: 'utf8', env });
+    try {
+      execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env });
+    } catch { /* ok */ }
+    const config = awsJson(['lambda', 'get-function-configuration', '--function-name', functionName], env);
+    return printResult(ok({
+      function_name: functionName,
+      created: false,
+      composed_zip: true,
+      code_only: true,
+      configuration_untouched: true,
+      role: config.Role,
+      code_sha256: config.CodeSha256,
+      revision_id: config.RevisionId,
+      expected_code_sha256: expectedSha,
+      expected_revision_id: expectedRev,
+      staging_api_untouched: true,
+      billing_sql44_untouched: true,
+    }));
+  }
 
   const packed = packExecutor(root);
   const rehearsal = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-rehearsal-oneshot'], env);
