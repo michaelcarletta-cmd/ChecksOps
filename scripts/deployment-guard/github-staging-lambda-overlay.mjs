@@ -63,6 +63,40 @@ export function workflowIdentity(env = process.env) {
   };
 }
 
+export function buildOverlayReceiptInput(identity, live, operation, expectedMemberHash) {
+  if (!['add', 'replace'].includes(operation)) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'operation must be add or replace');
+  }
+  if (operation === 'add') {
+    if (live.memberState !== 'ABSENT' || live.memberSha256 !== null) {
+      throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'ADD requires the exact member to be absent from the current live staging Lambda ZIP', { member: live.member });
+    }
+  } else {
+    const expected = validateExpectedMemberHash(live.memberSha256, expectedMemberHash);
+    if (!expected.ok) {
+      throw new GuardError(expected.code, expected.message, expected.details || {});
+    }
+  }
+  return {
+    workstream_id: identity.workstreamId,
+    branch: identity.branch,
+    commit: identity.commit,
+    operator: identity.operator,
+    target_environment: 'staging',
+    target_component: FUNCTION_NAME,
+    deployment_type: 'lambda-overlay',
+    owned_components: [live.member],
+    owned_member_ops: {
+      replace: operation === 'replace' ? [live.member] : [],
+      add: operation === 'add' ? [live.member] : [],
+    },
+    preflight_live_fingerprint: {
+      codeSha256: live.codeSha256,
+      revisionId: live.revisionId,
+    },
+  };
+}
+
 async function inspectLive(member, { lambda = null, fetchImpl = fetch, loadSdk = (specifier) => import(specifier) } = {}) {
   let client = lambda;
   let command;
@@ -86,15 +120,14 @@ async function inspectLive(member, { lambda = null, fetchImpl = fetch, loadSdk =
   }
   const zip = Buffer.from(await response.arrayBuffer());
   const members = hashZipMembers(zip);
-  const memberSha256 = members[member] || null;
-  if (!memberSha256) {
-    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'requested member is absent from current live staging Lambda ZIP', { member });
-  }
+  const present = Object.hasOwn(members, member);
+  const memberSha256 = present ? members[member] : null;
   return {
     functionName: FUNCTION_NAME,
     codeSha256,
     revisionId,
     member,
+    memberState: present ? 'PRESENT' : 'ABSENT',
     memberSha256,
   };
 }
@@ -122,7 +155,8 @@ export async function run(env = process.env, deps = {}) {
   appendGithubOutput({
     live_code_sha256: live.codeSha256,
     live_revision_id: live.revisionId,
-    live_member_sha256: live.memberSha256,
+    live_member_state: live.memberState,
+    live_member_sha256: live.memberSha256 || '',
     owned_member: live.member,
   }, env);
 
@@ -130,10 +164,12 @@ export async function run(env = process.env, deps = {}) {
     return { ok: true, mode, identity, live, mutation: false };
   }
 
-  const expected = validateExpectedMemberHash(live.memberSha256, env.CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256);
-  if (!expected.ok) {
-    throw new GuardError(expected.code, expected.message, expected.details || {});
-  }
+  const receiptInput = buildOverlayReceiptInput(
+    identity,
+    live,
+    String(env.CHECKSOPS_STAGING_OVERLAY_OPERATION || 'replace').trim(),
+    env.CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256,
+  );
 
   const lease = acquireLease(repoRoot, {
     workstream_id: identity.workstreamId,
@@ -147,19 +183,7 @@ export async function run(env = process.env, deps = {}) {
   }
 
   const issued = issueReceiptWithSigner(repoRoot, {
-    workstream_id: identity.workstreamId,
-    branch: identity.branch,
-    commit: identity.commit,
-    operator: identity.operator,
-    target_environment: 'staging',
-    target_component: FUNCTION_NAME,
-    deployment_type: 'lambda-overlay',
-    owned_components: [live.member],
-    owned_member_ops: { replace: [live.member], add: [] },
-    preflight_live_fingerprint: {
-      codeSha256: live.codeSha256,
-      revisionId: live.revisionId,
-    },
+    ...receiptInput,
     lease: lease.details.lease,
   }, (unsigned) => signReceiptWithKms(unsigned, { env }));
   if (!issued.ok) {
