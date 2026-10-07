@@ -72,6 +72,8 @@ test('Mark as Deposited frontend reuses deposit_action and never calls CheckAlt'
   assert.match(src, /p_action: "mark_manual_deposit"/);
   const moveFn = src.slice(src.indexOf('const handleMoveToDeposited'), src.indexOf('const handleDepositWithCheckAlt'));
   assert.match(moveFn, /deposit_action/);
+  assert.doesNotMatch(moveFn, /p_action: "assign_provider"/);
+  assert.doesNotMatch(moveFn, /p_provider: "manual_branch"/);
   assert.doesNotMatch(moveFn, /runCheckAltDepositClick/);
   assert.doesNotMatch(moveFn, /checkalt-submit/);
   assert.doesNotMatch(moveFn, /checkalt_reference|provider_transaction/);
