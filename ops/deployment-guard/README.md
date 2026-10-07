@@ -63,6 +63,17 @@ node scripts/deployment-guard/wrap-legacy.mjs --input path/to/workstream.json --
 npm run test:deployment-guard
 ```
 
+The `guarded-staging-lambda-overlay.yml` workflow defaults to read-only `inspect`.
+It reports the requested repository member as `PRESENT` (with its SHA-256) or
+`ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
+deployment authorization. For `apply`, explicitly select `add` for an absent
+member or `replace` for a present member; REPLACE still requires the exact
+reviewed live member SHA-256. Both require the approved main commit, a lease,
+and a KMS-signed receipt bound to a fresh live fingerprint. The receipt owns
+exactly one member in `owned_member_ops.add` or `.replace`, never both.
+Only the official overlay writer mutates the current live ZIP, preserving all
+unrelated member contents and refusing member appearance or fingerprint drift.
+
 Never:
 
 - `aws lambda update-function-code` directly
