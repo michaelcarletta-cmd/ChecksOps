@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PLATFORM_OWNER_EMAIL, isPlatformOwner } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
+import { TenantManagementV2Dashboard } from "@/components/admin/TenantManagementV2Dashboard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
 import { useNavigate } from "react-router-dom";
@@ -344,9 +345,10 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
 
-        <Tabs defaultValue="company" className="w-full">
+        <Tabs defaultValue="overview" className="w-full">
 
           <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
+            <TabsTrigger value="overview" className="flex-1 min-w-[150px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Organization 360</TabsTrigger>
             <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
             <TabsTrigger value="branding" className="flex-1 min-w-[150px] whitespace-nowrap"><Palette className="w-4 h-4 mr-1" /> Branding & Email</TabsTrigger>
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
@@ -357,6 +359,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="overview" className="mt-6">
+            <TenantManagementV2Dashboard tenantId={tenant.id} />
+          </TabsContent>
           <TabsContent value="company" className="mt-6">
             <CompanyTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
@@ -1788,4 +1793,3 @@ function TenantNotesDialog({
     </Dialog>
   );
 }
-
