@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 test('review RPC returns saved new_stage confirmation for the review screen', async () => {
   for (const [path, fromStatus, stage] of [
@@ -18,6 +19,108 @@ test('review RPC returns saved new_stage confirmation for the review screen', as
     assert.equal(result.data.tenant_id, FREEDOM_TENANT);
     assert.equal(result.providerExecution, false);
     assert.equal(client.queries.filter(q => q.sql === 'COMMIT').length, 1);
+  }
+});
+
+test('Review to Endorsing preserves claim-linked ledger values and performs no ledger writes', async () => {
+  const ledger = {
+    claim_checks: [{ id: 'cc-1', amount: '1234.56', check_intake_item_id: CHECK_ID }],
+    claim_payments: [{ id: 'payment-1', amount: '1234.56', check_intake_item_id: CHECK_ID }],
+    homeowner_ledger_events: [{ id: 'event-1', amount: '1234.56', check_id: CHECK_ID }],
+  };
+  const before = structuredClone(ledger);
+  const check = {
+    ...createdRow,
+    status: 'needs_review',
+    claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    amount: '1234.56',
+  };
+  const client = mockClient({ check });
+  const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(client));
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.status, 'endorsements_in_progress');
+  assert.equal(result.data.check_stage, 'endorsing');
+  assert.deepEqual(ledger, before);
+  const update = client.queries.find((query) => /UPDATE public.check_intake_items/.test(query.sql));
+  assert.ok(update);
+  assert.doesNotMatch(update.sql, /\bamount\s*=/i);
+  assert.deepEqual(update.params.slice(5), [
+    check.claim_id,
+    check.status,
+    check.tenant_id,
+  ]);
+  assert.equal(client.queries.some((query) => /(?:INSERT|UPDATE|DELETE) INTO public\.(?:claim_checks|claim_payments|homeowner_ledger_events)/i.test(query.sql)), false);
+});
+
+test('Review to Endorsing allows claim-linked checks with no ledger and unlinked checks', async () => {
+  for (const check of [
+    { ...createdRow, status: 'needs_review', claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', amount: null },
+    { ...createdRow, status: 'needs_review', claim_id: null, amount: null },
+  ]) {
+    const client = mockClient({ check });
+    const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+      check_id: CHECK_ID,
+      p_deposit_path: 'endorsements_in_progress',
+    }), depsFor(client));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.check_stage, 'endorsing');
+    assert.equal(client.queries.some((query) => /(?:INSERT|UPDATE|DELETE) INTO public\.(?:claim_checks|claim_payments|homeowner_ledger_events)/i.test(query.sql)), false);
+  }
+});
+
+test('claim-linked endorsement workflow does not create an amount-bearing ledger event', () => {
+  const migration = readFileSync(
+    new URL('../../supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(migration, /WHEN 'endorsements_in_progress' THEN 'endorsements_sent'/);
+  assert.match(migration, /v_event_type <> 'endorsements_sent'/);
+  assert.match(migration, /WHEN 'approved_for_deposit'\s+THEN 'ready_for_deposit'/);
+  assert.match(migration, /WHEN 'deposited'\s+THEN 'deposited'/);
+  assert.match(migration, /NEW\.amount, 'System'/);
+  assert.doesNotMatch(migration, /DROP TRIGGER|DISABLE TRIGGER/i);
+});
+
+test('linked transitions retain tenant authorization and deposited/final-state denials', async () => {
+  const linked = {
+    ...createdRow,
+    status: 'needs_review',
+    claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  };
+  const unauthorized = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(mockClient({ check: linked, roles: [], memberships: [] })));
+  assert.equal(unauthorized.ok, false);
+  assert.equal(unauthorized.error, 'insufficient_role');
+
+  const crossTenant = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(mockClient({
+    check: { ...linked, tenant_id: C1C_TENANT },
+    roles: [],
+    memberships: [],
+  })));
+  assert.equal(crossTenant.ok, false);
+  assert.equal(crossTenant.error, 'insufficient_role');
+
+  for (const finalState of [
+    { status: 'deposited', deposited_at: '2026-10-01T00:00:00Z' },
+    { status: 'funds_released', check_stage: 'funds_released' },
+    { status: 'disbursed_externally', check_stage: 'disbursed_externally' },
+  ]) {
+    const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+      check_id: CHECK_ID,
+      p_deposit_path: 'endorsements_in_progress',
+    }), depsFor(mockClient({ check: { ...linked, ...finalState } })));
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'financial_or_provider');
+    assert.equal(result.data, undefined);
   }
 });
 
@@ -147,6 +250,12 @@ const mockClient = ({
       }
       if (/INSERT INTO public.check_intake_items/.test(sql)) return { rows };
       if (/UPDATE public.check_intake_items/.test(sql)) {
+        if (/SET status =/.test(sql)) {
+          assert.doesNotMatch(sql, /\bamount\s*=/i);
+          assert.match(sql, /tenant_id IS NOT DISTINCT FROM \$8::uuid/);
+          assert.match(sql, /claim_id IS NOT DISTINCT FROM \$6::uuid/);
+          assert.match(sql, /status IS NOT DISTINCT FROM \$7::text/);
+        }
         return { rows: [{ ...check, status: params?.[1] || check.status, check_stage: params?.[2] || check.check_stage }] };
       }
       if (/INSERT INTO public.check_audit_log/.test(sql)) return { rows: [{ id: 'audit' }] };
@@ -186,7 +295,7 @@ test('state machine allows documented T5 transitions and denies skip / provider 
   assert.equal(evaluateTransition('start_review', check).ok, true);
   assert.equal(evaluateTransition('mark_ready_for_deposit', check).error, 'invalid_transition');
   assert.equal(evaluateTransition('mark_deposited', check).error, 'financial_or_provider');
-  assert.equal(evaluateTransition('start_review', { ...check, claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).error, 'claim_linked_transition_denied');
+  assert.equal(evaluateTransition('start_review', { ...check, claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).ok, true);
   assert.equal(evaluateTransition('start_review', {
     ...check,
     external_origin: { source_app: 'freedom_crm', source_check_id: 'abc' },
