@@ -182,19 +182,17 @@ export const PROVIDER_BANK_STATUS_SQL = `
 `;
 
 export const CHECKALT_STATE_SQL = `
-  SELECT enabled, registered_at
-  FROM public.checkalt_tenant_accounts
-  WHERE tenant_id = $1::uuid
-  LIMIT 1
-`;
-
-export const CHECKALT_GLOBAL_STATE_SQL = `
-  SELECT COALESCE((
-    SELECT default_enabled
-    FROM public.checkalt_config
-    WHERE singleton = true
-    LIMIT 1
-  ), false) AS platform_enabled
+  SELECT
+    a.enabled,
+    a.registered_at,
+    COALESCE((
+      SELECT default_enabled
+      FROM public.checkalt_config
+      WHERE singleton = true
+      LIMIT 1
+    ), false) AS platform_enabled
+  FROM (SELECT $1::uuid AS tenant_id) requested
+  LEFT JOIN public.checkalt_tenant_accounts a ON a.tenant_id = requested.tenant_id
 `;
 
 export const PROVIDER_ERRORS_SQL = `
@@ -447,10 +445,7 @@ export const runTenantManagementV2 = async ({
     'provider_bank_status',
   );
   const checkAltResult = await client.query(CHECKALT_STATE_SQL, [tenantId]);
-  const checkAltGlobalResult = firstRow(
-    await client.query(CHECKALT_GLOBAL_STATE_SQL),
-    'checkalt_global_state',
-  );
+  const checkAltState = firstRow(checkAltResult, 'checkalt_state');
   const providerErrors = firstRow(
     await client.query(PROVIDER_ERRORS_SQL, [tenantId]),
     'provider_errors',
@@ -499,8 +494,8 @@ export const runTenantManagementV2 = async ({
       readiness,
     };
   });
-  const checkAlt = checkAltResult.rows[0] || null;
-  const checkAltPlatformEnabled = checkAltGlobalResult.platform_enabled === true;
+  const checkAlt = checkAltState.enabled === null ? null : checkAltState;
+  const checkAltPlatformEnabled = checkAltState.platform_enabled === true;
   const integrityResult = integritySummary(integrity);
   const fileCount = numberValue(operations.files_total, 'files_total');
   const unknownFileSizes = numberValue(operations.unknown_file_sizes, 'unknown_file_sizes');

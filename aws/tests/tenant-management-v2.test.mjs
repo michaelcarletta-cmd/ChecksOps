@@ -103,10 +103,9 @@ const queryRows = (sql) => {
   if (/FROM public\.payment_provider_methods/.test(sql)) {
     return [{ total: 2, connected: 1, pending: 1, disconnected: 0 }];
   }
-  if (/FROM public\.checkalt_tenant_accounts/.test(sql)) {
-    return [{ enabled: true, registered_at: '2026-09-01T00:00:00Z' }];
+  if (/public\.checkalt_tenant_accounts/.test(sql)) {
+    return [{ enabled: true, registered_at: '2026-09-01T00:00:00Z', platform_enabled: true }];
   }
-  if (/FROM public\.checkalt_config/.test(sql)) return [{ platform_enabled: true }];
   if (/FROM public\.payment_webhook_events/.test(sql)) {
     return [{ moov_error_events: 1, checkalt_error_events: 2, last_error_at: '2026-10-05T00:00:00Z' }];
   }
@@ -273,9 +272,9 @@ test('CheckAlt readiness fails closed when the persisted platform switch is disa
   const client = makeClient();
   const query = client.query.bind(client);
   client.query = async (sql, params = []) => {
-    if (/FROM public\.checkalt_config/.test(sql)) {
+    if (/public\.checkalt_tenant_accounts/.test(sql)) {
       client.queries.push({ sql, params });
-      return { rows: [{ platform_enabled: false }] };
+      return { rows: [{ enabled: true, registered_at: '2026-09-01T00:00:00Z', platform_enabled: false }] };
     }
     return query(sql, params);
   };
