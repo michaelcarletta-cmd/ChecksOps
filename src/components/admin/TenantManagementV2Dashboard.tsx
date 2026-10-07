@@ -189,7 +189,7 @@ export function TenantManagementV2Dashboard({ tenantId }: { tenantId: string }) 
                 <Badge variant="secondary">{snapshot.tenant.plan || "Plan unavailable"}</Badge>
               </CardTitle>
               <CardDescription>
-                /{snapshot.tenant.slug} · {snapshot.tenant.environment} · {snapshot.tenant.userCount} users · Period: {new Date(snapshot.period.start).toLocaleDateString()} – {new Date(snapshot.period.end).toLocaleDateString()} (end exclusive)
+                /{snapshot.tenant.slug} · {snapshot.tenant.environment} · {snapshot.tenant.userCount} users · Period: {new Date(snapshot.period.start).toLocaleDateString(undefined, { timeZone: "UTC" })} – {new Date(snapshot.period.end).toLocaleDateString(undefined, { timeZone: "UTC" })} (end exclusive)
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3">
