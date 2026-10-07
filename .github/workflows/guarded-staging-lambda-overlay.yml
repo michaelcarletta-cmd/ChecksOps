@@ -11,8 +11,16 @@ on:
         options:
           - inspect
           - apply
+      operation:
+        description: "Apply operation: explicitly ADD an absent member or REPLACE a reviewed live member"
+        required: true
+        default: replace
+        type: choice
+        options:
+          - replace
+          - add
       member:
-        description: "Single Lambda ZIP member to inspect/replace"
+        description: "Single repository Lambda ZIP member to inspect/add/replace"
         required: true
         default: index.mjs
         type: string
@@ -22,7 +30,7 @@ on:
         default: ""
         type: string
       expected_live_member_sha256:
-        description: "Required for apply: exact live member SHA-256 from a prior inspect run"
+        description: "Required for REPLACE apply: exact live member SHA-256 from a prior inspect run"
         required: false
         default: ""
         type: string
@@ -55,7 +63,9 @@ jobs:
           if [ "${{ inputs.mode }}" = "apply" ]; then
             test -n "${{ inputs.approved_commit }}" || { echo "apply requires approved_commit"; exit 2; }
             test "${{ inputs.approved_commit }}" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
-            test -n "${{ inputs.expected_live_member_sha256 }}" || { echo "apply requires expected_live_member_sha256 from inspect"; exit 2; }
+            if [ "${{ inputs.operation }}" = "replace" ]; then
+              test -n "${{ inputs.expected_live_member_sha256 }}" || { echo "REPLACE apply requires expected_live_member_sha256 from inspect"; exit 2; }
+            fi
           fi
 
       - name: Set up Node.js
@@ -130,6 +140,7 @@ jobs:
         shell: bash
         env:
           CHECKSOPS_STAGING_DEPLOY_MODE: ${{ inputs.mode }}
+          CHECKSOPS_STAGING_OVERLAY_OPERATION: ${{ inputs.operation }}
           CHECKSOPS_STAGING_OVERLAY_MEMBER: ${{ inputs.member }}
           CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
         run: node scripts/deployment-guard/github-staging-lambda-overlay.mjs
@@ -140,10 +151,12 @@ jobs:
           {
             echo "### Staging Lambda overlay preflight"
             echo "- Mode: \`${{ inputs.mode }}\`"
+            echo "- Operation: \`${{ inputs.operation }}\`"
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Member: \`${{ steps.preflight.outputs.owned_member }}\`"
             echo "- Live CodeSha256: \`${{ steps.preflight.outputs.live_code_sha256 }}\`"
             echo "- Live RevisionId: \`${{ steps.preflight.outputs.live_revision_id }}\`"
+            echo "- Live member state: \`${{ steps.preflight.outputs.live_member_state }}\`"
             echo "- Live member SHA-256: \`${{ steps.preflight.outputs.live_member_sha256 }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 

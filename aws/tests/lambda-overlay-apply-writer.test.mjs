@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { buildOverlayReceiptInput } from '../../scripts/deployment-guard/github-staging-lambda-overlay.mjs';
 import { createLiveAwsAdapter } from '../../scripts/deployment-guard/lib/aws-adapter.mjs';
 import { consumedReceiptFile } from '../../scripts/deployment-guard/lib/consumed-receipts.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
@@ -820,6 +821,67 @@ const ADD_OPS = {
   replace: ['admin-override-check-status.mjs'],
   add: ['tenant-check-user.mjs'],
 };
+
+test('single-member GitHub ADD receipt preserves every unrelated live member byte-for-byte', async (t) => {
+  const root = tmpRootWithOps();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const authorization = buildOverlayReceiptInput({
+    workstreamId: 'workstream-a', branch: 'main', commit: SHA, operator: 'test-agent',
+  }, {
+    member: 'tenant-check-user.mjs', memberState: 'ABSENT', memberSha256: null,
+    codeSha256: 'live-sha', revisionId: 'rev-1',
+  }, 'add');
+  const issued = issueOverlayReceipt(root, {
+    owned: authorization.owned_components,
+    owned_member_ops: authorization.owned_member_ops,
+    fingerprint: authorization.preflight_live_fingerprint,
+  });
+  const sources = writeSources(root);
+  const before = liveZipWithoutTenant();
+  const state = createLambdaState({ zip: before });
+  const result = await applyLambdaOverlay(applyOpts(root, {
+    receipt: issued.receipt,
+    member_sources: { 'tenant-check-user.mjs': sources['tenant-check-user.mjs'] },
+  }), { env: APPLY_ENV, guardRoot: root, repoRoot: root, aws: createMockAws(state), now: NOW });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(state.updates.length, 1);
+  assert.equal(state.updates[0].RevisionId, 'rev-1');
+  const after = readZipMembers(state.zip);
+  for (const [member, bytes] of Object.entries(readZipMembers(before))) {
+    assert.deepEqual(after[member], bytes, member);
+  }
+  assert.deepEqual(Object.keys(after).sort(), [...Object.keys(readZipMembers(before)), 'tenant-check-user.mjs'].sort());
+  assert.deepEqual(after['tenant-check-user.mjs'], fs.readFileSync(path.join(root, sources['tenant-check-user.mjs'])));
+});
+
+for (const scenario of ['member appeared', 'CodeSha256', 'RevisionId', 'immediately-before CAS', 'unrelated source']) {
+  test(`single-member ADD fails closed when ${scenario} changes after inspection`, async (t) => {
+    const root = tmpRootWithOps();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const issued = issueOverlayReceipt(root, {
+      owned: ['tenant-check-user.mjs'],
+      owned_member_ops: { replace: [], add: ['tenant-check-user.mjs'] },
+    });
+    const sources = writeSources(root);
+    const state = createLambdaState({ zip: scenario === 'member appeared' ? liveZip() : liveZipWithoutTenant() });
+    if (scenario === 'CodeSha256') state.codeSha256 = 'changed-code';
+    if (scenario === 'RevisionId') state.revisionId = 'changed-revision';
+    const hooks = scenario === 'immediately-before CAS' ? {
+      functionIdentity: ({ getCount }) => ({
+        CodeSha256: getCount === 1 ? 'live-sha' : 'changed-code',
+        RevisionId: getCount === 1 ? 'rev-1' : 'changed-revision',
+      }),
+    } : {};
+    const result = await applyLambdaOverlay(applyOpts(root, {
+      receipt: issued.receipt,
+      member_sources: scenario === 'unrelated source' ? sources : { 'tenant-check-user.mjs': sources['tenant-check-user.mjs'] },
+    }), { env: APPLY_ENV, guardRoot: root, repoRoot: root, aws: createMockAws(state, hooks), now: NOW });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, scenario === 'unrelated source' ? CODES.UNRELATED_MUTATION : CODES.DEPLOYMENT_COLLISION);
+    assert.equal(state.updates.length, 0);
+    assert.equal(receiptConsumed(root, issued.receipt), false);
+  });
+}
 
 test('explicitly authorized absent add member is eligible in mocked apply', async () => {
   const root = tmpRootWithOps();
