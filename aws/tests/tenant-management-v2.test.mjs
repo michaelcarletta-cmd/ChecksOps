@@ -245,6 +245,8 @@ test('reconciles billing, separates recorded and collected payments, and leaves 
     '2026-10-01T00:00:00.000Z',
     '2026-11-01T00:00:00.000Z',
   ]);
+  assert.match(paymentTotalsQuery.sql, /period_start < \$3::date/);
+  assert.match(paymentTotalsQuery.sql, /period_end >= \$2::date/);
   assert.equal(result.usage.checksReceived, 9);
   assert.equal(result.usage.remainingAllowance, 91);
   assert.equal(result.providers.moov[0].readiness, 'ready');

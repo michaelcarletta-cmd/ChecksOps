@@ -137,8 +137,8 @@ export const PAYMENT_SUMMARY_SQL = `
     COALESCE(sum(amount_cents) FILTER (WHERE status = 'cleared'), 0)::bigint AS collected_payments_cents
   FROM public.tenant_maintenance_payments
   WHERE tenant_id = $1::uuid
-    AND received_at >= $2::timestamptz
-    AND received_at < $3::timestamptz
+    AND period_start < $3::date
+    AND period_end >= $2::date
 `;
 
 export const PAYMENT_ACCOUNT_SQL = `
