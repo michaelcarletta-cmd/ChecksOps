@@ -1292,6 +1292,41 @@
       "review_condition": "other-PR-rebase-or-close"
     },
     {
+      "other_pr": 737,
+      "path": "aws/functions/api/providers/webhooks.mjs",
+      "reason": "Forward-compose the missing Collection V2 settlement call from current main; PR #737 remains historical evidence only. This exact-path exception authorizes neither merging nor deployment.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 691,
+      "path": "aws/functions/api/providers/webhooks.mjs",
+      "reason": "PR #691 is separate Collection V2 settlement work; this reconciliation carries only the missing current-main call and does not alter that PR.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 431,
+      "path": "aws/functions/api/providers/webhooks.mjs",
+      "reason": "PR #431 is separate CheckAlt webhook work; this exact-path exception preserves parallel review and authorizes neither merging nor deployment.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 388,
+      "path": "aws/functions/api/providers/webhooks.mjs",
+      "reason": "PR #388 is separate tenant-environment webhook work; this reconciliation does not copy or overwrite its source changes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 386,
+      "path": "aws/functions/api/providers/webhooks.mjs",
+      "reason": "PR #386 is separate production Moov webhook work; this reconciliation adds only the reviewed Collection V2 call from current main.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
       "other_pr": 665,
       "path": "ops/release-locks/locked-components.json",
       "reason": "Narrow Release Guard forward-supersession repair. Ordinary live!=locked deploys stay refused. This exception does not merge, close, deploy, or authorize the other PR; that PR must rebase onto current main.",
