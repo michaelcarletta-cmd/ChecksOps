@@ -70,7 +70,7 @@ export function issueReceiptWithSigner(root, input, signer, opts = {}) {
   if (!lease.ok) return lease;
   let receipt;
   try {
-    receipt = signer(unsigned);
+    receipt = signReceipt(root, signer(unsigned));
   } catch (error) {
     return failMany([errorEntry(
       CODES.RECEIPT_FORGED,
@@ -138,9 +138,8 @@ export function validateReceiptShape(receipt, { requireMac = true } = {}) {
   }
   if (requireMac) {
     const hasMac = /^[0-9a-f]{64}$/.test(String(receipt.mac || ''));
-    const hasKmsSignature = Boolean(receipt.kms_signature && receipt.kms_key_arn);
-    if (!hasMac && !hasKmsSignature) {
-      errors.push(errorEntry(CODES.RECEIPT_FORGED, 'receipt is missing an issuer MAC or KMS signature; hand-written JSON is not an authorization'));
+    if (!hasMac) {
+      errors.push(errorEntry(CODES.RECEIPT_FORGED, 'receipt is missing an issuer MAC; hand-written JSON is not an authorization'));
     }
   }
   if (!receipt.workstream_id) errors.push(errorEntry(CODES.ANONYMOUS_DEPLOYMENT, 'receipt missing workstream_id'));
@@ -171,9 +170,8 @@ export function validateReceiptShape(receipt, { requireMac = true } = {}) {
 export function validateReceipt(receipt, expected = {}, { now = Date.now(), root = null, env = process.env } = {}) {
   const shape = validateReceiptShape(receipt, { requireMac: true });
   if (!shape.ok) return shape;
-  const verified = receipt.kms_signature
-    ? verifyReceiptKmsSignature(receipt, env)
-    : Boolean(root && verifyReceiptMac(root, receipt));
+  const verified = Boolean(root && verifyReceiptMac(root, receipt))
+    && (!(receipt.kms_signature || receipt.kms_key_arn) || verifyReceiptKmsSignature(receipt, env));
   if (!verified) {
     return failMany([errorEntry(
       CODES.RECEIPT_FORGED,

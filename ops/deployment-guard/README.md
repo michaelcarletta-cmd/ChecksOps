@@ -69,7 +69,9 @@ It reports the requested repository member as `PRESENT` (with its SHA-256) or
 deployment authorization. For `apply`, explicitly select `add` for an absent
 member or `replace` for a present member; REPLACE still requires the exact
 reviewed live member SHA-256. Both require the approved main commit, a lease,
-and a KMS-signed receipt bound to a fresh live fingerprint. The receipt owns
+and a KMS-signed receipt bound to a fresh live fingerprint. Issuance also attaches
+the local issuer HMAC used as the single-use consumption key; authorization
+verifies both the HMAC and the pinned KMS signature before consumption. The receipt owns
 exactly one member in `owned_member_ops.add` or `.replace`, never both.
 Only the official overlay writer mutates the current live ZIP, preserving all
 unrelated member contents and refusing member appearance or fingerprint drift.
