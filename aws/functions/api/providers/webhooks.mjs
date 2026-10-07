@@ -6,6 +6,7 @@ import { loadProviderSecrets, webhookSecret } from '../provider-secrets.mjs';
 import { providerWebhookDryRun } from '../provider-flags.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './hmac.mjs';
 import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
+import { applyCollectionV2ProviderCompletion } from '../tenant-collection-v2-settlement.mjs';
 
 const { Client } = pg;
 
@@ -206,6 +207,13 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
     }
 
+    let collectionV2Settlement = { applied: false, skipped: 'not_attempted' };
+    if (provider === 'moov' && !dryRun) {
+      collectionV2Settlement = await applyCollectionV2ProviderCompletion(client, parsed.payload, { dryRun });
+    } else if (provider === 'moov' && dryRun) {
+      collectionV2Settlement = { applied: false, skipped: 'dry_run' };
+    }
+
     await client.query('COMMIT');
     didCommit = true;
 
@@ -225,9 +233,10 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       mapped_tenant_id: mapped.mapped_tenant_id,
       lookup: mapped.lookup,
       payload: sanitized,
-      financialTablesMutated: Boolean(applyResult.financialTablesMutated),
-      productionRecordsMutated: false,
+      financialTablesMutated: Boolean(applyResult.financialTablesMutated || collectionV2Settlement.applied),
+      productionRecordsMutated: Boolean(collectionV2Settlement.productionRecordsMutated),
       liveProviderCalled: false,
+      collection_v2_settlement: collectionV2Settlement,
     };
   } catch (error) {
     if (client && !didCommit) {
