@@ -1,0 +1,36 @@
+name: Staging DB read-only diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-db-readonly-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refuse non-main execution
+        run: test "$GITHUB_REF" = "refs/heads/main"
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Test diagnostic safety (offline)
+        run: node --test aws/tests/staging-db-readonly-diagnostic.test.mjs
+
+      - name: Diagnose existing staging validation (no writes or deployments)
+        env:
+          CHECKSOPS_STAGING_DIAGNOSTIC_REFRESH_TOKEN: ${{ secrets.CHECKSOPS_STAGING_DIAGNOSTIC_REFRESH_TOKEN }}
+        run: node scripts/staging-db-readonly-diagnostic.mjs
