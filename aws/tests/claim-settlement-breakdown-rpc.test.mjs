@@ -78,6 +78,28 @@ const depsFor = (client) => ({
   forceEnabled: true,
 });
 
+test('settlement RPC writes when application-workflow is on and generic writes stay off', async () => {
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflow = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  process.env.AWS_WRITES_ENABLED = 'false';
+  process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
+  try {
+    const client = mockClient();
+    const result = await handleDataRpc(jwtEvent('/data/rpc', {
+      name: 'save_claim_settlement_breakdown',
+      args: { p_claim_id: CLAIM_ID, p_settlement_id: null, p_values: VALUES },
+    }), { ...depsFor(client), forceEnabled: false });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.data.id, SETTLEMENT_ID);
+    assert.equal(client.queries.some((query) => query.sql === SAVE_CLAIM_SETTLEMENT_SQL), true);
+  } finally {
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflow === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflow;
+  }
+});
+
 test('dedicated save RPC is dispatched before generic RPC and persists insert/update values', async () => {
   const previous = process.env.AWS_WRITES_ENABLED;
   process.env.AWS_WRITES_ENABLED = 'true';
