@@ -98,6 +98,24 @@ test('missing or rejected staging identity fails before any API call without lea
   }
 });
 
+test('workflow entrypoint ignores the retired token secret and fails closed without network access', async () => {
+  const previous = process.env.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN;
+  process.env.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN = SENSITIVE;
+  try {
+    let output;
+    assert.equal(await main({
+      verifyToken: async () => assert.fail('must not verify a manually supplied environment token'),
+      fetchImpl: async () => assert.fail('must not call API without approved authentication'),
+      writeOutput: (text) => { output = text; },
+    }), 2);
+    assert.equal(output, '{"status":"diagnostic_failed","classification":"staging_identity_unavailable"}');
+    assert.doesNotMatch(output, new RegExp(SENSITIVE));
+  } finally {
+    if (previous === undefined) delete process.env.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN;
+    else process.env.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN = previous;
+  }
+});
+
 test('allowlists classifications and assertion counts, never copies raw payload fields', () => {
   const result = summarizeValidation(validation({
     currentDatabase: SENSITIVE, currentUser: SENSITIVE, secretDatabase: SENSITIVE,
@@ -212,11 +230,15 @@ test('workflow is manual, protected, main-only, without AWS access or configurab
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /git rev-parse HEAD.*\$GITHUB_SHA/);
-  assert.match(workflow, /secrets\.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN/);
+  assert.doesNotMatch(workflow, /secrets\.|CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN/);
+  assert.match(workflow, /secure authentication setup required/);
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/);
+  assert.match(workflow, /node scripts\/staging-db-readonly-diagnostic\.mjs/);
   assert.match(workflow, /npm ci .*--ignore-scripts/);
   assert.doesNotMatch(workflow, /id-token:|configure-aws-credentials|pull_request:|push:|inputs:|upload-artifact|continue-on-error|set -x/);
   assert.match(script, /userPoolId: 'us-east-1_vPmQ7cL1F'/);
   assert.match(script, /clientId: '71bb7a192cbl6o6s8m259tl589'/);
   assert.match(script, /tokenUse: 'id'/);
   assert.doesNotMatch(script, /process\.env\.(?:CHECKSOPS_API_URL|COGNITO_|AWS_)|\/auth\/|\/data\/|execSync|spawnSync/);
+  assert.doesNotMatch(script, /process\.env\.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN/);
 });

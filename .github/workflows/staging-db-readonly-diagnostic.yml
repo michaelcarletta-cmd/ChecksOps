@@ -38,7 +38,14 @@ jobs:
       - name: Test diagnostic offline
         run: node --test aws/tests/staging-db-readonly-diagnostic.test.mjs
 
-      - name: Diagnose staging validation (one read-only GET)
-        env:
-          CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN: ${{ secrets.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN }}
-        run: node scripts/staging-db-readonly-diagnostic.mjs
+      - name: Fail closed until secure staging authentication is approved
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### Staging diagnostic blocked: secure authentication setup required"
+            echo "No approved non-interactive staging identity is configured. No authenticated diagnostic request was sent."
+            echo "Do not extract or supply an ID token, OTP, password, or refresh token."
+            echo "See aws/README.md → Authenticated staging validation diagnostic for the investigation and required reviewed setup."
+          } >> "$GITHUB_STEP_SUMMARY"
+          node scripts/staging-db-readonly-diagnostic.mjs

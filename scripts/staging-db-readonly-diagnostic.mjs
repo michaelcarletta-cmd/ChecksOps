@@ -139,7 +139,7 @@ export const diagnose = async ({ token, fetchImpl = fetch, verifyToken = verifyS
 };
 
 export const main = async ({
-  token = process.env.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN,
+  token,
   fetchImpl, verifyToken, writeOutput = console.log,
 } = {}) => {
   try {
