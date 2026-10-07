@@ -9,14 +9,20 @@ import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { FUNCTION_DEF_LOOKUP_SQL } from '../../scripts/deployment-guard/lib/function-def-lookup.mjs';
 import { hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import {
+  AUTHORIZED_SQL39,
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
+import {
+  INSPECTED_JOB,
+  INSPECTED_WRITE,
+  hashTmpRlsCatalog,
+} from '../../scripts/deployment-guard/lib/tmp-rls-catalog.mjs';
 const EXECUTOR_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor');
 const GUARD_LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/deployment-guard/lib');
 fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
-for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs']) {
+for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs', 'tmp-rls-catalog.mjs']) {
   fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
 }
 const {
@@ -594,4 +600,244 @@ test('readFunctionDef fails closed on unexpected duplicate/ambiguous catalog row
   assert.equal(applied.code, CODES.SQL_COLLISION);
   const live = await connect();
   assert.equal(live.applied(), false);
+});
+
+const SQL39_FILE = path.join(ROOT, AUTHORIZED_SQL39.filename);
+const DRIFTED_WRITE = INSPECTED_WRITE;
+const INTENDED_WRITE = '(public.aws_can_write_tenant(tenant_id))';
+const SELECT_AUTH = '(aws_is_cross_tenant_reader() OR aws_can_access_tenant(tenant_id))';
+const SELECT_JOB = 'aws_monthly_billing_job()';
+
+function sql39Catalog({
+  writeUsing = DRIFTED_WRITE,
+  writeCheck = DRIFTED_WRITE,
+  jobUsing = INSPECTED_JOB,
+  jobCheck = INSPECTED_JOB,
+} = {}) {
+  return {
+    table: 'tenant_maintenance_payments',
+    table_catalog: {
+      table: 'tenant_maintenance_payments',
+      relrowsecurity: true,
+      relforcerowsecurity: false,
+    },
+    relrowsecurity: true,
+    relforcerowsecurity: false,
+    policies: [
+      {
+        name: 'aws_write_tenant_maintenance_payments',
+        permissive: 'PERMISSIVE',
+        command: 'ALL',
+        roles: '{authenticated}',
+        using: writeUsing,
+        with_check: writeCheck,
+      },
+      {
+        name: 'aws_write_tenant_maintenance_payments_job',
+        permissive: 'PERMISSIVE',
+        command: 'ALL',
+        roles: '{checksops}',
+        using: jobUsing,
+        with_check: jobCheck,
+      },
+      {
+        name: 'aws_select_tenant_maintenance_payments',
+        permissive: 'PERMISSIVE',
+        command: 'SELECT',
+        roles: '{authenticated}',
+        using: SELECT_AUTH,
+        with_check: null,
+      },
+      {
+        name: 'aws_select_tenant_maintenance_payments_job',
+        permissive: 'PERMISSIVE',
+        command: 'SELECT',
+        roles: '{checksops}',
+        using: SELECT_JOB,
+        with_check: null,
+      },
+    ],
+    grants: [
+      { grantee: 'authenticated', privilege_type: 'INSERT' },
+      { grantee: 'authenticated', privilege_type: 'SELECT' },
+      { grantee: 'authenticated', privilege_type: 'UPDATE' },
+      { grantee: 'checksops', privilege_type: 'INSERT' },
+      { grantee: 'checksops', privilege_type: 'SELECT' },
+      { grantee: 'checksops', privilege_type: 'UPDATE' },
+    ],
+    lambda_role_membership: ['authenticated'],
+  };
+}
+
+function sql39AuthEvent(overrides = {}) {
+  const catalog = overrides.catalog || sql39Catalog();
+  const expectedLive = overrides.expected_live_definition_sha256 || hashTmpRlsCatalog(catalog);
+  const oneUse = overrides.one_use_id || `sql39-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const base = {
+    action: 'apply',
+    workstream_id: 'tmp-rls-write-drift-repair-93da',
+    branch: 'cursor/tmp-rls-write-drift-repair-93da',
+    commit: AUTHORIZED_SQL39.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+    owned_components: [AUTHORIZED_SQL39.filename],
+    filename: AUTHORIZED_SQL39.filename,
+    migration_id: AUTHORIZED_SQL39.migration_id,
+    source_sha256: AUTHORIZED_SQL39.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL39.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: oneUse,
+    expiry: '2026-10-05T20:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T18:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL39,
+      expected_live_definition_sha256: expectedLive,
+      one_use_id: oneUse,
+    }),
+  };
+  return {
+    ...base,
+    ...overrides,
+    one_use_id: oneUse,
+    expected_live_definition_sha256: expectedLive,
+    preflight_live_fingerprint: overrides.preflight_live_fingerprint || base.preflight_live_fingerprint,
+  };
+}
+
+function mockSql39Connect({
+  before = sql39Catalog(),
+  after = sql39Catalog({ writeUsing: INTENDED_WRITE, writeCheck: INTENDED_WRITE }),
+  mutateJobOnApply = false,
+  mutateFrozenOnApply = false,
+} = {}) {
+  let applied = false;
+  const client = {
+    applied() { return applied; },
+    async query(sql) {
+      const text = String(sql);
+      if (text.includes('current_database')) return { rows: [{ d: 'checksops' }] };
+      if (text.includes('DROP POLICY IF EXISTS aws_write_tenant_maintenance_payments')) {
+        applied = true;
+        return { rows: [] };
+      }
+      if (text.includes('tmp_rls_catalog_rls')) {
+        const catalog = applied ? after : before;
+        return {
+          rows: [{
+            table: catalog.table,
+            relrowsecurity: catalog.relrowsecurity,
+            relforcerowsecurity: catalog.relforcerowsecurity,
+          }],
+        };
+      }
+      if (text.includes('tmp_rls_catalog_policies')) {
+        const catalog = applied ? after : before;
+        const policies = mutateJobOnApply && applied
+          ? catalog.policies.map((policy) => (
+            policy.name === 'aws_write_tenant_maintenance_payments_job'
+              ? { ...policy, using: 'true', with_check: 'true' }
+              : policy
+          ))
+          : catalog.policies;
+        return { rows: policies };
+      }
+      if (text.includes('tmp_rls_catalog_grants')) {
+        return { rows: (applied ? after : before).grants };
+      }
+      if (text.includes('tmp_rls_catalog_membership')) {
+        return { rows: (applied ? after : before).lambda_role_membership.map((rolname) => ({ rolname })) };
+      }
+      if (text.includes('tmp_rls_frozen_functions')) {
+        return {
+          rows: [{
+            schema: 'public',
+            name: 'aws_can_write_tenant',
+            identity_arguments: '_tenant_id uuid',
+            definition: mutateFrozenOnApply && applied ? 'CHANGED' : 'CREATE FUNCTION public.aws_can_write_tenant',
+          }],
+        };
+      }
+      if (text.includes('tmp_rls_frozen_triggers')) {
+        return {
+          rows: [{
+            name: 'tenant_maintenance_payments_set_updated_at',
+            definition: 'CREATE TRIGGER tenant_maintenance_payments_set_updated_at',
+          }],
+        };
+      }
+      throw new Error(`unexpected query: ${text.slice(0, 160)}`);
+    },
+    async end() {},
+  };
+  return async () => client;
+}
+
+function sql39Handler(connect, extra = {}) {
+  const consumed = path.join(os.tmpdir(), `sql-exec-39-${process.pid}-${Date.now()}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = consumed;
+  process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
+  return createHandler({
+    connect,
+    now: () => Date.parse('2026-10-05T18:00:00.000Z'),
+    sqlFile39: SQL39_FILE,
+    ...extra,
+  });
+}
+
+test('SQL 39 apply reconciles only the authenticated write policy', async () => {
+  const before = sql39Catalog();
+  const after = sql39Catalog({ writeUsing: INTENDED_WRITE, writeCheck: INTENDED_WRITE });
+  const connect = mockSql39Connect({ before, after });
+  const handler = sql39Handler(connect);
+  const result = await handler(sql39AuthEvent({ catalog: before }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'applied');
+  assert.equal(result.details.receipt.job_policy_intact, true);
+  assert.equal(result.details.receipt.before_hash, hashTmpRlsCatalog(before));
+  assert.equal(result.details.receipt.after_hash, hashTmpRlsCatalog(after));
+  const client = await connect();
+  assert.equal(client.applied(), true);
+});
+
+test('SQL 39 authorize reads the catalog and does not apply', async () => {
+  const connect = mockSql39Connect();
+  const handler = sql39Handler(connect);
+  const result = await handler(sql39AuthEvent({ action: 'authorize' }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.receipt.result, 'authorize');
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('SQL 39 refuses apply when live catalog hash differs', async () => {
+  const connect = mockSql39Connect();
+  const handler = sql39Handler(connect);
+  const result = await handler(sql39AuthEvent({
+    expected_live_definition_sha256: '1'.repeat(64),
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+});
+
+test('SQL 39 refuses apply when the job policy would change', async () => {
+  const connect = mockSql39Connect({ mutateJobOnApply: true });
+  const handler = sql39Handler(connect);
+  const result = await handler(sql39AuthEvent());
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  const client = await connect();
+  assert.equal(client.applied(), true);
+});
+
+test('SQL 39 refuses apply when helper functions change', async () => {
+  const connect = mockSql39Connect({ mutateFrozenOnApply: true });
+  const handler = sql39Handler(connect);
+  const result = await handler(sql39AuthEvent());
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
 });

@@ -11,11 +11,14 @@ import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
 import {
+  AUTHORIZED_SQL39,
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   authorizationFingerprint,
   evaluateSqlExecutorAuthorization,
+  isSql39,
+  resolveAuthorizedMigration,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
@@ -409,3 +412,115 @@ test('sql-executor-ensure refuses shared API and billing sql44 retarget before A
     assert.equal(fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '', '', name);
   }
 });
+
+test('SQL 39 source SHA matches the authorized binding and is not SQL 44', () => {
+  const bytes = fs.readFileSync(path.join(ROOT, AUTHORIZED_SQL39.filename));
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  assert.equal(sha, AUTHORIZED_SQL39.source_sha256);
+  assert.equal(sha, 'a3ec9922d33cf75fc554ac9bdd3e7c1b14429112f38ce23f517d64e06b9442a9');
+  assert.equal(isSql39({ filename: AUTHORIZED_SQL39.filename }), true);
+  assert.equal(resolveAuthorizedMigration({ filename: AUTHORIZED_SQL39.filename }), AUTHORIZED_SQL39);
+  assert.notEqual(resolveAuthorizedMigration({ filename: AUTHORIZED_SQL39.filename }), AUTHORIZED_SQL44);
+});
+
+test('SQL 39 executor authorization binds the reviewed file/commit/hash tuple', () => {
+  const expectedLive = createHash('sha256').update('tmp-rls-drifted-catalog').digest('hex');
+  const pin = evaluateSqlExecutorAuthorization({
+    workstream_id: 'tmp-rls-write-drift-repair-93da',
+    branch: 'cursor/tmp-rls-write-drift-repair-93da',
+    commit: AUTHORIZED_SQL39.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_SQL39.filename],
+    filename: AUTHORIZED_SQL39.filename,
+    migration_id: AUTHORIZED_SQL39.migration_id,
+    source_sha256: AUTHORIZED_SQL39.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL39.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: 'sql39-apply-0001',
+    expiry: '2026-10-05T20:00:00.000Z',
+    action: 'authorize',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T18:00:00.000Z',
+    preflight_live_fingerprint: authorizationFingerprint({
+      ...AUTHORIZED_SQL39,
+      expected_live_definition_sha256: expectedLive,
+      one_use_id: 'sql39-apply-0001',
+    }),
+  }, { now: Date.parse('2026-10-05T18:00:00.000Z') });
+  assert.equal(pin.ok, true, pin.message);
+
+  assert.equal(evaluateSqlExecutorAuthorization({
+    workstream_id: 'tmp-rls-write-drift-repair-93da',
+    branch: 'cursor/tmp-rls-write-drift-repair-93da',
+    commit: AUTHORIZED_SQL39.commit,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_SQL39.filename],
+    filename: AUTHORIZED_SQL39.filename,
+    migration_id: AUTHORIZED_SQL39.migration_id,
+    source_sha256: AUTHORIZED_SQL39.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL39.source_sha256,
+    expected_live_definition_sha256: AUTHORIZED_SQL39.source_sha256,
+    one_use_id: 'sql39-apply-0002',
+    expiry: '2026-10-05T20:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T18:00:00.000Z',
+  }, { now: Date.parse('2026-10-05T18:00:00.000Z') }).code, CODES.INVALID_MANIFEST);
+
+  assert.equal(evaluateSqlExecutorAuthorization({
+    workstream_id: 'tmp-rls-write-drift-repair-93da',
+    branch: 'cursor/tmp-rls-write-drift-repair-93da',
+    commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_SQL39.filename],
+    filename: AUTHORIZED_SQL39.filename,
+    migration_id: AUTHORIZED_SQL39.migration_id,
+    source_sha256: AUTHORIZED_SQL39.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL39.intended_replacement_sha256,
+    expected_live_definition_sha256: expectedLive,
+    one_use_id: 'sql39-apply-0003',
+    expiry: '2026-10-05T20:00:00.000Z',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-05T18:00:00.000Z',
+  }, { now: Date.parse('2026-10-05T18:00:00.000Z') }).code, CODES.SQL_COLLISION);
+});
+
+test('sql-executor-ensure packs SQL 39 and the TMP catalog helper', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/sql-executor-ensure.mjs'), 'utf8');
+  assert.match(src, /39_tmp_write_policy_reconcile\.sql/);
+  assert.match(src, /tmp-rls-catalog\.mjs/);
+});
+
+test('TMP catalog CAS ignores table-owner grants that the inspector omits', async () => {
+  const { hashTmpRlsCatalog } = await import('../../scripts/deployment-guard/lib/tmp-rls-catalog.mjs');
+  const inspector = {
+    table: 'tenant_maintenance_payments',
+    table_catalog: { table: 'tenant_maintenance_payments', relrowsecurity: true, relforcerowsecurity: false },
+    policies: [
+      { name: 'aws_write_tenant_maintenance_payments', permissive: 'PERMISSIVE', command: 'ALL', roles: '{authenticated}', using: 'x', with_check: 'x' },
+    ],
+    grants: [
+      { grantee: 'authenticated', privilege_type: 'SELECT' },
+      { grantee: 'checksops', privilege_type: 'SELECT' },
+    ],
+    lambda_role_membership: ['authenticated'],
+  };
+  const executorShaped = {
+    ...inspector,
+    grants: [
+      ...inspector.grants,
+      { grantee: 'checksops_admin', privilege_type: 'DELETE' },
+      { grantee: 'checksops_admin', privilege_type: 'TRUNCATE' },
+    ],
+  };
+  assert.equal(hashTmpRlsCatalog(inspector), hashTmpRlsCatalog(executorShaped));
+});
+
