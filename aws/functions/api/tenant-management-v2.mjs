@@ -39,6 +39,15 @@ export const USAGE_INTEGRITY_SQL = `
     SELECT id
     FROM public.check_intake_items
     WHERE tenant_id = $1::uuid
+      AND status = 'deposited'
+      AND deposited_at >= $2::timestamptz
+      AND deposited_at < $3::timestamptz
+  ),
+  non_billable_lifecycle AS (
+    SELECT count(*)::int AS excluded_checks
+    FROM public.check_intake_items
+    WHERE tenant_id = $1::uuid
+      AND status IS DISTINCT FROM 'deposited'
       AND deposited_at >= $2::timestamptz
       AND deposited_at < $3::timestamptz
   ),
@@ -72,6 +81,7 @@ export const USAGE_INTEGRITY_SQL = `
   )
   SELECT
     (SELECT count(*)::int FROM processed) AS processed_checks,
+    (SELECT excluded_checks FROM non_billable_lifecycle) AS non_billable_lifecycle_checks,
     count(*) FILTER (WHERE COALESCE(ec.event_count, 0) = 1)::int AS matched_checks,
     count(*) FILTER (WHERE COALESCE(ec.event_count, 0) = 0)::int AS missing_usage_events,
     (SELECT duplicate_events FROM duplicates) AS duplicate_billing_events,
@@ -262,10 +272,11 @@ export const RECENT_ACTIVITY_SQL = `
 `;
 
 export const ADMIN_AUDIT_SQL = `
-  SELECT id::text AS id, created_at, user_id::text AS actor_id, action, record_type,
-         old_values, new_values
+  SELECT created_at, user_id::text AS actor_id, action
   FROM public.audit_logs
-  WHERE record_id = $1
+  WHERE record_type = 'tenant_email_domain'
+    AND record_id = $1::uuid::text
+    AND metadata->>'tenant_id' = $1::uuid::text
   ORDER BY created_at DESC
   LIMIT 20
 `;
@@ -307,55 +318,42 @@ export const resolvePeriod = (query = {}, now = new Date()) => {
   return { ok: true, start: start.toISOString(), end: end.toISOString() };
 };
 
-const safeAuditFields = new Set([
-  'name',
-  'subscription_status',
-  'plan_tier',
-  'max_checks_per_month',
-  'per_check_billing_enabled',
-  'per_check_rate_cents',
-  'monthly_rate_cents',
-  'moov_environment',
+const SAFE_AUDIT_ACTIONS = new Set([
+  'created', 'updated', 'deleted', 'insert', 'update', 'delete',
+  'tenant_created', 'tenant_updated', 'tenant_deleted', 'status_changed',
+  'billing_updated', 'plan_changed', 'configuration_updated',
+  'tenant_email_domain_start', 'tenant_email_domain_start_failed',
+  'tenant_email_domain_replace', 'tenant_email_domain_check',
+  'tenant_email_domain_verify', 'tenant_email_domain_disable',
 ]);
 
-const safeAuditValue = (value) => {
-  if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) return value;
-  if (typeof value === 'string') return value.slice(0, 100);
-  return undefined;
+const SAFE_ACTIVITY_ACTIONS = new Set([
+  'check_deposited', 'check_updated', 'check_created',
+  'deposit_created', 'deposit_updated', 'deposit_submitted',
+  'deposit_succeeded', 'deposit_failed', 'deposit_returned',
+  'mortgage_ops_requested', 'mortgage_ops_in_progress',
+  'mortgage_ops_completed', 'mortgage_ops_cancelled',
+  'disbursement_pending', 'disbursement_submitted',
+  'disbursement_settled', 'disbursement_failed',
+]);
+
+const safeStatus = (value, allowed) => {
+  const status = String(value || '').toLowerCase();
+  return allowed.has(status) ? status : 'unknown';
 };
 
-export const redactAuditValues = (value) => {
-  let record = value;
-  if (typeof value === 'string') {
-    try { record = JSON.parse(value); } catch { return {}; }
-  }
-  if (!record || typeof record !== 'object' || Array.isArray(record)) return {};
-  return Object.fromEntries(
-    Object.entries(record)
-      .filter(([key]) => safeAuditFields.has(key))
-      .map(([key, entry]) => [key, key === 'name' && typeof entry === 'string'
-        && (/@/.test(entry) || /(?:password|secret|token|account|routing)/i.test(entry))
-        ? undefined
-        : safeAuditValue(entry)])
-      .filter(([, entry]) => entry !== undefined),
-  );
-};
-
-const safeLabel = (value, fallback = 'event') => {
-  const raw = String(value || '');
-  if (/(?:secret|token|password|credential|routing|account|bank|ssn|ein|email|phone|api.?key|authorization)/i.test(raw)
-    || /@|[0-9a-f]{8}-[0-9a-f-]{27,}/i.test(raw)) return fallback;
-  const label = raw.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 80);
-  return label || fallback;
-};
+const safeEnvironment = (value) => safeStatus(value, new Set([
+  'production', 'staging', 'development', 'test', 'sandbox',
+]));
 
 const safeAuditAction = (value) => {
   const action = String(value || '').toLowerCase();
-  return new Set([
-    'created', 'updated', 'deleted', 'insert', 'update', 'delete',
-    'tenant_created', 'tenant_updated', 'tenant_deleted', 'status_changed',
-    'billing_updated', 'plan_changed', 'configuration_updated',
-  ]).has(action) ? action : 'other';
+  return SAFE_AUDIT_ACTIONS.has(action) ? action : 'other';
+};
+
+const safeActivityAction = (value) => {
+  const action = String(value || '').toLowerCase();
+  return SAFE_ACTIVITY_ACTIONS.has(action) ? action : 'other_activity';
 };
 
 const safeActorId = (value) => UUID_RE.test(String(value || '')) ? String(value) : null;
@@ -363,6 +361,10 @@ const safeActorId = (value) => UUID_RE.test(String(value || '')) ? String(value)
 const integritySummary = (row) => {
   const summary = {
     processedChecks: numberValue(row.processed_checks, 'processed_checks'),
+    nonBillableLifecycleChecks: numberValue(
+      row.non_billable_lifecycle_checks,
+      'non_billable_lifecycle_checks',
+    ),
     matchedChecks: numberValue(row.matched_checks, 'matched_checks'),
     missingUsageEvents: numberValue(row.missing_usage_events, 'missing_usage_events'),
     orphanBillingEvents: numberValue(row.orphan_billing_events, 'orphan_billing_events'),
@@ -370,14 +372,30 @@ const integritySummary = (row) => {
     suspiciousBillingEvents: numberValue(row.suspicious_billing_events, 'suspicious_billing_events'),
   };
   const hasDiscrepancies = Object.entries(summary)
-    .some(([key, value]) => key !== 'processedChecks' && value > 0);
+    .some(([key, value]) => ![
+      'processedChecks',
+      'nonBillableLifecycleChecks',
+      'matchedChecks',
+    ].includes(key) && value > 0);
   return { ...summary, status: hasDiscrepancies ? 'discrepancies' : 'reconciled' };
 };
+
+const PAYMENT_STATUSES = new Set([
+  'recorded', 'pending', 'submitted', 'failed', 'returned', 'cleared',
+]);
+
+const PROVIDER_ONBOARDING_STATUSES = new Set([
+  'not_started', 'pending', 'in_progress', 'complete', 'completed', 'submitted',
+]);
+
+const PROVIDER_VERIFICATION_STATUSES = new Set([
+  'not_started', 'pending', 'verified', 'failed', 'admin_override',
+]);
 
 const paymentHistory = (rows) => rows.map((row) => ({
   id: row.id,
   amountCents: numberValue(row.amount_cents, 'payment_amount_cents'),
-  status: safeLabel(row.status, 'unknown'),
+  status: safeStatus(row.status, PAYMENT_STATUSES),
   periodStart: row.period_start,
   periodEnd: row.period_end,
   receivedAt: row.received_at,
@@ -446,9 +464,9 @@ export const runTenantManagementV2 = async ({
         ? 'ready'
         : 'not_ready';
     return {
-      environment: safeLabel(account.environment, 'unknown'),
-      onboardingStatus: safeLabel(account.onboarding_status, 'unknown'),
-      verificationStatus: safeLabel(account.verification_status, 'unknown'),
+      environment: safeEnvironment(account.environment),
+      onboardingStatus: safeStatus(account.onboarding_status, PROVIDER_ONBOARDING_STATUSES),
+      verificationStatus: safeStatus(account.verification_status, PROVIDER_VERIFICATION_STATUSES),
       capabilities: {
         receivePayments: account.can_receive_payments === true,
         sendPayments: account.can_send_payments === true,
@@ -506,7 +524,7 @@ export const runTenantManagementV2 = async ({
       outstandingStatus: 'unavailable',
       autoDebit: paymentAccount ? {
         enabled: paymentAccount.auto_debit_enabled === true,
-        verificationStatus: safeLabel(paymentAccount.verification_status, 'unknown'),
+        verificationStatus: safeStatus(paymentAccount.verification_status, PROVIDER_VERIFICATION_STATUSES),
         authorizedAt: paymentAccount.ach_authorized_at,
       } : null,
       paymentHistory: history,
@@ -560,7 +578,7 @@ export const runTenantManagementV2 = async ({
       },
       recentActivity: recentActivity.map((row) => ({
         at: row.created_at,
-        action: safeLabel(row.action),
+        action: safeActivityAction(row.action),
         actorId: safeActorId(row.actor_id),
       })),
     },
@@ -568,9 +586,7 @@ export const runTenantManagementV2 = async ({
       at: entry.created_at,
       actorId: safeActorId(entry.actor_id),
       action: safeAuditAction(entry.action),
-      recordType: safeLabel(entry.record_type, 'record'),
-      before: redactAuditValues(entry.old_values),
-      after: redactAuditValues(entry.new_values),
+      recordType: 'tenant_email_domain',
     })),
   };
 };

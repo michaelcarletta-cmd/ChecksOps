@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
-import { awsApiBaseUrl } from "@/lib/awsStaging";
+import { awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ type TenantManagementSnapshot = {
   integrity: {
     status: string;
     processedChecks: number;
+    nonBillableLifecycleChecks: number;
     matchedChecks: number;
     missingUsageEvents: number;
     orphanBillingEvents: number;
@@ -92,8 +93,6 @@ type TenantManagementSnapshot = {
     actorId: string | null;
     action: string;
     recordType: string;
-    before: Record<string, unknown>;
-    after: Record<string, unknown>;
   }>;
 };
 
@@ -122,6 +121,9 @@ export function TenantManagementV2Dashboard({ tenantId }: { tenantId: string }) 
     enabled: Boolean(tenantId),
     staleTime: 30_000,
     queryFn: async (): Promise<TenantManagementSnapshot> => {
+      if (!isAwsStaging()) {
+        throw new Error("Tenant operations require the AWS/Cognito admin session.");
+      }
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
       const token = data.session?.access_token;
@@ -202,6 +204,7 @@ export function TenantManagementV2Dashboard({ tenantId }: { tenantId: string }) 
               <CardHeader><CardTitle className="text-base">Usage Integrity</CardTitle></CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
                 <Metric label="Processed checks" value={snapshot.integrity.processedChecks} />
+                <Metric label="Other deposited lifecycle statuses (excluded)" value={snapshot.integrity.nonBillableLifecycleChecks} />
                 <Metric label="Matched billing events" value={snapshot.integrity.matchedChecks} />
                 <Metric label="Missing usage events" value={snapshot.integrity.missingUsageEvents} />
                 <Metric label="Orphan / duplicate / suspicious" value={`${snapshot.integrity.orphanBillingEvents} / ${snapshot.integrity.duplicateBillingEvents} / ${snapshot.integrity.suspiciousBillingEvents}`} />
@@ -291,7 +294,7 @@ export function TenantManagementV2Dashboard({ tenantId }: { tenantId: string }) 
 
           <div className="grid gap-4 xl:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle className="text-base">Administrative Audit History</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Tenant Email Domain Audit History</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {snapshot.auditHistory.length === 0
                   ? <p className="text-sm text-muted-foreground">No tenant-linked audit entries found.</p>
@@ -299,11 +302,6 @@ export function TenantManagementV2Dashboard({ tenantId }: { tenantId: string }) 
                     <div key={`${entry.at}-${index}`} className="border-b pb-2 text-sm last:border-0">
                       <div>{dateTime(entry.at)} · {entry.action} · {entry.recordType}</div>
                       <div className="text-xs text-muted-foreground">Actor: {entry.actorId || "Unavailable"}</div>
-                      {(Object.keys(entry.before).length > 0 || Object.keys(entry.after).length > 0) && (
-                        <pre className="mt-1 whitespace-pre-wrap break-all text-xs text-muted-foreground">
-                          {JSON.stringify({ before: entry.before, after: entry.after })}
-                        </pre>
-                      )}
                     </div>
                   ))}
               </CardContent>

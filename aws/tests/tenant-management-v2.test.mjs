@@ -5,6 +5,8 @@ import {
   handleTenantManagementV2,
   resolvePeriod,
   runTenantManagementV2,
+  ADMIN_AUDIT_SQL,
+  USAGE_INTEGRITY_SQL,
 } from '../functions/api/tenant-management-v2.mjs';
 import { handleAppServiceRequest } from '../functions/api/app-services.mjs';
 
@@ -30,6 +32,7 @@ const queryRows = (sql) => {
   if (/FROM public\.tenants t/.test(sql)) return [tenant];
   if (/WITH processed AS/.test(sql)) return [{
     processed_checks: 4,
+    non_billable_lifecycle_checks: 2,
     matched_checks: 2,
     missing_usage_events: 1,
     duplicate_billing_events: 1,
@@ -111,13 +114,9 @@ const queryRows = (sql) => {
   }
   if (/FROM public\.audit_logs/.test(sql)) {
     return [{
-      id: 'audit-1',
       created_at: '2026-10-06T00:00:00Z',
       actor_id: TENANT_ID,
       action: 'tenant updated token=example-secret',
-      record_type: 'tenant',
-      old_values: { name: 'Old Tenant', plan_tier: 'starter', account_number: '123456', token: 'private' },
-      new_values: { name: 'New Tenant', per_check_rate_cents: 300, api_key: 'private' },
     }];
   }
   throw new Error(`Unexpected query: ${sql}`);
@@ -220,6 +219,7 @@ test('reconciles billing, separates recorded and collected payments, and leaves 
   assert.equal(result.ok, true);
   assert.deepEqual(result.integrity, {
     processedChecks: 4,
+    nonBillableLifecycleChecks: 2,
     matchedChecks: 2,
     missingUsageEvents: 1,
     orphanBillingEvents: 1,
@@ -251,11 +251,92 @@ test('reconciles billing, separates recorded and collected payments, and leaves 
   assert.equal(result.operations.signatures.open, 1);
   assert.equal(result.operations.disbursements.total, 5);
   assert.equal(result.auditHistory[0].action, 'other');
-  assert.deepEqual(result.auditHistory[0].before, { name: 'Old Tenant', plan_tier: 'starter' });
-  assert.deepEqual(result.auditHistory[0].after, { name: 'New Tenant', per_check_rate_cents: 300 });
+  assert.equal(result.auditHistory[0].recordType, 'tenant_email_domain');
+  assert.equal(Object.hasOwn(result.auditHistory[0], 'before'), false);
+  assert.equal(Object.hasOwn(result.auditHistory[0], 'after'), false);
   assert.equal(result.auditHistory[0].actorId, TENANT_ID);
-  assert.equal(JSON.stringify(result).includes('123456'), false);
+  assert.equal(JSON.stringify(result).includes('example-secret'), false);
   assert.equal(JSON.stringify(result).includes('private'), false);
+  assert.equal(JSON.stringify(result).includes('account_number'), false);
+  const auditQuery = client.queries.find(({ sql }) => /FROM public\.audit_logs/.test(sql));
+  assert.deepEqual(auditQuery.params, [TENANT_ID]);
+  assert.match(auditQuery.sql, /record_type = 'tenant_email_domain'/);
+  assert.match(auditQuery.sql, /record_id = \$1::uuid::text/);
+  assert.match(auditQuery.sql, /metadata->>'tenant_id' = \$1::uuid::text/);
+});
+
+test('integrity cohort matches exact billable deposited lifecycle and scopes tenant audit records', () => {
+  assert.match(USAGE_INTEGRITY_SQL, /status = 'deposited'/);
+  assert.match(USAGE_INTEGRITY_SQL, /status IS DISTINCT FROM 'deposited'/);
+  assert.match(USAGE_INTEGRITY_SQL, /e\.event_type = 'check_processing'/);
+  assert.match(ADMIN_AUDIT_SQL, /record_type = 'tenant_email_domain'/);
+  assert.match(ADMIN_AUDIT_SQL, /record_id = \$1::uuid::text/);
+  assert.match(ADMIN_AUDIT_SQL, /metadata->>'tenant_id' = \$1::uuid::text/);
+  assert.match(ADMIN_AUDIT_SQL, /SELECT created_at, user_id::text AS actor_id, action/);
+  assert.doesNotMatch(ADMIN_AUDIT_SQL, /SELECT[^]*old_values|SELECT[^]*new_values/);
+});
+
+test('unknown provider and activity labels are reduced to fixed safe values', async () => {
+  const client = makeClient();
+  const originalQuery = client.query.bind(client);
+  client.query = async (sql, params = []) => {
+    const result = await originalQuery(sql, params);
+    if (/FROM public\.payment_provider_accounts/.test(sql)) {
+      return { rows: [{ ...result.rows[0], environment: 'account=1234', onboarding_status: 'token=private' }] };
+    }
+    if (/FROM public\.check_audit_log/.test(sql)) {
+      return { rows: [{ created_at: '2026-10-06T00:00:00Z', action: 'secret=private', actor_id: TENANT_ID }] };
+    }
+    return result;
+  };
+  const result = await runTenantManagementV2({
+    client,
+    tenantId: TENANT_ID,
+    period: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
+  });
+  assert.equal(result.providers.moov[0].environment, 'unknown');
+  assert.equal(result.providers.moov[0].onboardingStatus, 'unknown');
+  assert.equal(result.operations.recentActivity[0].action, 'other_activity');
+  assert.equal(JSON.stringify(result).includes('private'), false);
+});
+
+test('non-billable lifecycle statuses are reported without marking integrity discrepant', async () => {
+  const client = makeClient();
+  const originalQuery = client.query.bind(client);
+  client.query = async (sql, params = []) => {
+    const result = await originalQuery(sql, params);
+    if (/WITH processed AS/.test(sql)) {
+      return {
+        rows: [{
+          processed_checks: 4,
+          non_billable_lifecycle_checks: 2,
+          matched_checks: 4,
+          missing_usage_events: 0,
+          duplicate_billing_events: 0,
+          orphan_billing_events: 0,
+          suspicious_billing_events: 0,
+        }],
+      };
+    }
+    return result;
+  };
+  const result = await runTenantManagementV2({
+    client,
+    tenantId: TENANT_ID,
+    period: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
+  });
+  assert.equal(result.integrity.nonBillableLifecycleChecks, 2);
+  assert.deepEqual(result.integrity, {
+    processedChecks: 4,
+    nonBillableLifecycleChecks: 2,
+    matchedChecks: 4,
+    missingUsageEvents: 0,
+    orphanBillingEvents: 0,
+    duplicateBillingEvents: 0,
+    suspiciousBillingEvents: 0,
+    status: 'reconciled',
+  });
+  assert.equal(result.integrity.status, 'reconciled');
 });
 
 test('marks storage bytes unavailable when source metadata has unknown sizes', async () => {
@@ -299,4 +380,11 @@ test('Class A route exposes a GET-only read endpoint and no provider client is u
   assert.doesNotMatch(source, /from ['"][^'"]*(?:moov|checkalt)/i);
   assert.doesNotMatch(source, /\bfetch\s*\(/i);
   assert.doesNotMatch(source, /\bnew\s+(?:Moov|CheckAlt)/i);
+
+  const dashboard = fs.readFileSync(
+    new URL('../../src/components/admin/TenantManagementV2Dashboard.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(dashboard, /import \{ awsApiBaseUrl, isAwsStaging \} from "@\/lib\/awsStaging"/);
+  assert.ok(dashboard.indexOf('if (!isAwsStaging())') < dashboard.indexOf('supabase.auth.getSession()'));
 });
