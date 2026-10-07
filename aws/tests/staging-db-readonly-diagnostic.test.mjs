@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { generateKeyPairSync, sign } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
   createStagingVerifier, diagnose, main, summarizeValidation,
@@ -94,7 +96,7 @@ test('missing or rejected staging identity fails before any API call without lea
     assert.equal(code, 2);
     assert.doesNotMatch(output, new RegExp(SENSITIVE));
     assert.doesNotMatch(output, /offline-test-session/);
-    assert.match(output, /staging_identity_(unavailable|rejected)/);
+    assert.match(output, /staging_identity_(setup_required|unavailable|rejected)/);
   }
 });
 
@@ -203,6 +205,30 @@ test('exit codes distinguish healthy, unhealthy, and unavailable diagnostics', a
   assert.equal(await main({ token: 'not-a-jwt', writeOutput }), 2);
 });
 
+test('unconfigured authentication fails closed before verification or any network call', async () => {
+  let output;
+  assert.equal(await main({
+    verifyToken: async () => assert.fail('must not verify a manually supplied identity'),
+    fetchImpl: async () => assert.fail('must not contact API'),
+    writeOutput: (text) => { output = text; },
+  }), 2);
+  assert.equal(output, '{"status":"diagnostic_failed","classification":"staging_identity_setup_required"}');
+});
+
+test('CLI ignores the retired token secret and credential arguments without leaking them', () => {
+  const result = spawnSync(process.execPath, [
+    fileURLToPath(new URL('../../scripts/staging-db-readonly-diagnostic.mjs', import.meta.url)),
+    '--token', SENSITIVE,
+  ], {
+    env: { ...process.env, CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN: SENSITIVE },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  assert.equal(result.status, 2);
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout.trim(), '{"status":"diagnostic_failed","classification":"staging_identity_setup_required"}');
+});
+
 test('workflow is manual, protected, main-only, without AWS access or configurable targets', () => {
   const workflow = fs.readFileSync(new URL('../../.github/workflows/staging-db-readonly-diagnostic.yml', import.meta.url), 'utf8');
   const script = fs.readFileSync(new URL('../../scripts/staging-db-readonly-diagnostic.mjs', import.meta.url), 'utf8');
@@ -212,11 +238,15 @@ test('workflow is manual, protected, main-only, without AWS access or configurab
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /git rev-parse HEAD.*\$GITHUB_SHA/);
-  assert.match(workflow, /secrets\.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN/);
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/);
+  assert.match(workflow, /authentication setup required/);
+  assert.match(workflow, /run: node scripts\/staging-db-readonly-diagnostic\.mjs/);
+  assert.doesNotMatch(workflow, /secrets\.|CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN/);
   assert.match(workflow, /npm ci .*--ignore-scripts/);
   assert.doesNotMatch(workflow, /id-token:|configure-aws-credentials|pull_request:|push:|inputs:|upload-artifact|continue-on-error|set -x/);
   assert.match(script, /userPoolId: 'us-east-1_vPmQ7cL1F'/);
   assert.match(script, /clientId: '71bb7a192cbl6o6s8m259tl589'/);
   assert.match(script, /tokenUse: 'id'/);
   assert.doesNotMatch(script, /process\.env\.(?:CHECKSOPS_API_URL|COGNITO_|AWS_)|\/auth\/|\/data\/|execSync|spawnSync/);
+  assert.doesNotMatch(script, /process\.env|process\.argv\[(?:[2-9]|\d{2,})\]/);
 });

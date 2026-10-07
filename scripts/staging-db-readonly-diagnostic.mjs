@@ -139,10 +139,11 @@ export const diagnose = async ({ token, fetchImpl = fetch, verifyToken = verifyS
 };
 
 export const main = async ({
-  token = process.env.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN,
+  token,
   fetchImpl, verifyToken, writeOutput = console.log,
 } = {}) => {
   try {
+    if (token === undefined) throw new DiagnosticError('staging_identity_setup_required');
     const summary = await diagnose({ token, fetchImpl, verifyToken });
     writeOutput(JSON.stringify(summary));
     return summary.status === 'ok' ? 0 : 1;

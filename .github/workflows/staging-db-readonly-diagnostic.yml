@@ -38,7 +38,16 @@ jobs:
       - name: Test diagnostic offline
         run: node --test aws/tests/staging-db-readonly-diagnostic.test.mjs
 
-      - name: Diagnose staging validation (one read-only GET)
-        env:
-          CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN: ${{ secrets.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN }}
+      - name: Explain authentication prerequisite
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ### Staging diagnostic: authentication setup required
+          No approved non-interactive staging Cognito identity mechanism is configured.
+          This run fails closed before contacting Cognito or the diagnostic API.
+          Do not extract or supply a token, OTP, password, or refresh token.
+          Environment approval authorizes this job; it does not create a Cognito session.
+          See [secure setup and phone-only steps](https://github.com/michaelcarletta-cmd/ChecksOps/blob/main/aws/README.md#authenticated-staging-validation-diagnostic).
+          SUMMARY
+
+      - name: Fail closed until protected authentication is approved
         run: node scripts/staging-db-readonly-diagnostic.mjs
