@@ -70,6 +70,40 @@ The guarded staging Lambda overlay workflow runs this same strict public smoke i
 
 Do not point the production frontend at this API yet.
 
+### Authenticated staging validation diagnostic
+
+The manual **Staging DB read-only diagnostic** workflow is restricted to reviewed
+`main` and the protected GitHub `staging` environment. It does not assume an AWS
+role, deploy, or change runtime/configuration/database state.
+
+Authentication reuses an existing authorized staging Cognito session obtained
+through the normal staging EMAIL_OTP/passkey sign-in. An authorized environment
+maintainer must make that session's short-lived **ID token** available as the
+`CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN` staging environment secret through an
+approved secure process (never chat, workflow inputs, source, or logs). This is
+not an existing provisioned secret assumed by the workflow; if it is unavailable,
+stop. Do not create users, reset passwords, bypass MFA, or change Cognito settings
+for this diagnostic. Keep the environment restricted to approved branches and
+reviewers; remove the short-lived secret after use.
+
+After review/merge, select **Actions → Staging DB read-only diagnostic → Run
+workflow → main**, then approve the staging environment job. The script verifies
+the token's signature, expiry, ID-token use, and fixed staging pool/client before
+one `GET` to the fixed staging `/db-readonly-validate` URL. Missing/invalid/expired
+identity, redirects, public-only responses, and unexpected response contracts
+fail closed. Signature verification may read the fixed staging pool's public
+JWKS. No unauthenticated fallback, refresh/login, or other application API calls
+occur.
+
+Logs contain only HTTP status, fixed diagnostic/status classifications, failing
+issue kind/severity, allowlisted table/probe labels, and nonnegative integer
+assertion counts (row counts, trigger/FK counts; RLS visibility expects zero).
+Expected/non-failing issues, raw messages/errors, identities, DB connection
+details, token claims/tokens, full catalog/RLS data, and response bodies are never
+printed or saved as artifacts. Exit codes: `0` healthy, `1` unhealthy with safe
+classifications, `2` diagnostic unavailable/failed. A red diagnostic run does not
+authorize repairs or deployment and does not replace or weaken the public smoke.
+
 ## Next migration step
 
 Staging PostgreSQL connectivity is confirmed. Database copy tooling is in `aws/db-copy/` with the runbook in `docs/AWS_DB_COPY_RUNBOOK.md`.
