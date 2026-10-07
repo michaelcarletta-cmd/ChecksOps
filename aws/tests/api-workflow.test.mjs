@@ -109,6 +109,17 @@ test('linked transitions retain tenant authorization and deposited/final-state d
   assert.equal(crossTenant.ok, false);
   assert.equal(crossTenant.error, 'insufficient_role');
 
+  const memberOnly = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(mockClient({
+    check: linked,
+    roles: [],
+    memberships: [{ tenant_id: FREEDOM_TENANT, role: 'member', tenant_name: 'Freedom', tenant_slug: 'freedom' }],
+  })));
+  assert.equal(memberOnly.ok, false);
+  assert.equal(memberOnly.error, 'insufficient_role');
+
   for (const finalState of [
     { status: 'deposited', deposited_at: '2026-10-01T00:00:00Z' },
     { status: 'funds_released', check_stage: 'funds_released' },

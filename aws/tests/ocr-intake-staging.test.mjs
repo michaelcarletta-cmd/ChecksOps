@@ -20,8 +20,13 @@ test('MICR database grant is column-scoped to the backend writer, not generic cl
     new URL('../../aws/workflows/sql/52_verified_ocr_micr_column_grant.sql', import.meta.url),
     'utf8',
   );
+  const grantRunner = readFileSync(
+    new URL('../workflows/oneshot/index.mjs', import.meta.url),
+    'utf8',
+  );
   assert.match(grant, /GRANT UPDATE \(routing_number, account_number\)[\s\S]*TO checksops;/);
   assert.doesNotMatch(grant, /authenticated|GRANT UPDATE ON TABLE/i);
+  assert.match(grantRunner, /readSql\(SQL_DIR, '52_verified_ocr_micr_column_grant\.sql'\)/);
   for (const column of ['routing_number', 'account_number']) {
     assert.equal(INTAKE_PROHIBITED_COLUMNS.has(column), true);
     assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has(column), false);

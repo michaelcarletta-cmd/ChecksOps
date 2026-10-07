@@ -308,7 +308,14 @@ export const handleCheckTransition = async (event, deps = {}) => {
       return denied(spoof, decided);
     }
     const roles = await rolesOf(client, mapping.application_user_id, looked.check.tenant_id);
-    if (!canTransition(roles)) {
+    const roleAllowed = looked.check.claim_id
+      ? decided.spec.requiredRole === 'tenant_member'
+        ? canTransition(roles)
+        : decided.spec.requiredRole === 'staff_or_tenant_admin'
+          ? roles.some((role) => TRANSITION_ROLES.has(role))
+          : false
+      : canTransition(roles);
+    if (!roleAllowed) {
       return denied(spoof, { error: 'insufficient_role', message: 'Transition requires a tenant membership role' });
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
