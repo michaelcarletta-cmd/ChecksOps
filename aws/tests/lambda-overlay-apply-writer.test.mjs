@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,9 +10,11 @@ import { buildOverlayReceiptInput } from '../../scripts/deployment-guard/github-
 import { createLiveAwsAdapter } from '../../scripts/deployment-guard/lib/aws-adapter.mjs';
 import { consumedReceiptFile } from '../../scripts/deployment-guard/lib/consumed-receipts.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
+import { signReceipt, verifyReceiptKmsSignature, verifyReceiptMac } from '../../scripts/deployment-guard/lib/issuer.mjs';
+import { signReceiptWithKms } from '../../scripts/deployment-guard/lib/kms-issuer.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { applyLambdaOverlay } from '../../scripts/deployment-guard/lib/lambda-overlay-apply.mjs';
-import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
+import { issueReceipt, issueReceiptWithSigner } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { hashZipMembers, readZipMembers, writeZipMembers } from '../../scripts/deployment-guard/lib/zip-members.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -95,6 +97,7 @@ function issueOverlayReceipt(root, {
   owned_member_ops,
   ttlMs = 15 * 60 * 1000,
   now = NOW,
+  signer,
 } = {}) {
   const lease = acquireLease(root, {
     workstream_id,
@@ -104,7 +107,7 @@ function issueOverlayReceipt(root, {
     operator: 'test-agent',
   }, now);
   assert.equal(lease.ok, true, lease.message);
-  const issued = issueReceipt(root, {
+  const input = {
     workstream_id,
     branch: 'cursor/test',
     commit: SHA,
@@ -116,7 +119,10 @@ function issueOverlayReceipt(root, {
     ...(owned_member_ops ? { owned_member_ops } : {}),
     preflight_live_fingerprint: fingerprint,
     lease: lease.details.lease,
-  }, { now, ttlMs });
+  };
+  const issued = signer
+    ? issueReceiptWithSigner(root, input, signer, { now, ttlMs })
+    : issueReceipt(root, input, { now, ttlMs });
   assert.equal(issued.ok, true, issued.message);
   return issued.details;
 }
@@ -821,6 +827,128 @@ const ADD_OPS = {
   replace: ['admin-override-check-status.mjs'],
   add: ['tenant-check-user.mjs'],
 };
+
+function offlineKmsSigner() {
+  const keyArn = 'arn:aws:kms:us-east-1:806168576068:key/11111111-2222-3333-4444-555555555555';
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const env = {
+    ...APPLY_ENV,
+    CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN: keyArn,
+    CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
+  };
+  return {
+    env,
+    signer: (receipt) => signReceiptWithKms(receipt, {
+      env,
+      execFile: (command, args) => {
+        assert.equal(command, 'aws');
+        assert.deepEqual(args.slice(0, 2), ['kms', 'sign']);
+        assert.equal(args[args.indexOf('--key-id') + 1], keyArn);
+        assert.equal(args[args.indexOf('--signing-algorithm') + 1], 'ECDSA_SHA_256');
+        return JSON.stringify({
+          KeyId: keyArn,
+          SigningAlgorithm: 'ECDSA_SHA_256',
+          Signature: sign('sha256', Buffer.from(args[args.indexOf('--message') + 1], 'base64'), privateKey).toString('base64'),
+        });
+      },
+    }),
+  };
+}
+
+for (const operation of ['add', 'replace']) {
+  test(`KMS-backed single-member ${operation.toUpperCase()} verifies both authenticators and consumes once`, async (t) => {
+    const root = tmpRootWithOps();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const kms = offlineKmsSigner();
+    const before = operation === 'add' ? liveZipWithoutTenant() : liveZip();
+    const authorization = buildOverlayReceiptInput({
+      workstreamId: 'workstream-a', branch: 'main', commit: SHA, operator: 'test-agent',
+    }, {
+      member: 'tenant-check-user.mjs',
+      memberState: operation === 'add' ? 'ABSENT' : 'PRESENT',
+      memberSha256: operation === 'add' ? null : hashZipMembers(before)['tenant-check-user.mjs'],
+      codeSha256: 'live-sha', revisionId: 'rev-1',
+    }, operation, hashZipMembers(before)['tenant-check-user.mjs']);
+    const issued = issueOverlayReceipt(root, {
+      owned: authorization.owned_components,
+      owned_member_ops: authorization.owned_member_ops,
+      fingerprint: authorization.preflight_live_fingerprint,
+      signer: kms.signer,
+    });
+    assert.equal(verifyReceiptMac(root, issued.receipt), true);
+    assert.equal(verifyReceiptKmsSignature(issued.receipt, kms.env), true);
+    const sources = writeSources(root);
+    const input = applyOpts(root, {
+      receipt_path: issued.file,
+      member_sources: { 'tenant-check-user.mjs': sources['tenant-check-user.mjs'] },
+    });
+    const state = createLambdaState({ zip: before });
+    const ctx = {
+      env: { ...kms.env, CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: issued.file },
+      guardRoot: root, repoRoot: root, aws: createMockAws(state), now: NOW,
+    };
+    const result = await applyLambdaOverlay(input, ctx);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(receiptConsumed(root, issued.receipt), true);
+    assert.equal(state.updates.length, 1);
+    assert.equal(state.updates[0].RevisionId, 'rev-1');
+    const after = readZipMembers(state.zip);
+    for (const [member, bytes] of Object.entries(readZipMembers(before))) {
+      if (member !== 'tenant-check-user.mjs') assert.deepEqual(after[member], bytes, member);
+    }
+    assert.deepEqual(after['tenant-check-user.mjs'], fs.readFileSync(path.join(root, sources['tenant-check-user.mjs'])));
+    // Restore the mocked live CAS/presence so replay reaches the consumption check.
+    state.zip = before;
+    state.codeSha256 = 'live-sha';
+    state.revisionId = 'rev-1';
+    const reused = await applyLambdaOverlay(input, ctx);
+    assert.equal(reused.code, CODES.RECEIPT_REUSED);
+    assert.equal(state.updates.length, 1);
+  });
+}
+
+for (const scenario of [
+  'missing MAC', 'forged MAC', 'tampered content with valid MAC', 'missing KMS signature',
+  'wrong KMS key', 'lost lease', 'member appeared', 'CodeSha256', 'RevisionId',
+  'immediately-before CodeSha256', 'immediately-before RevisionId',
+]) {
+  test(`KMS-backed ADD refuses ${scenario} before consumption or write`, async (t) => {
+    const root = tmpRootWithOps();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const kms = offlineKmsSigner();
+    const issued = issueOverlayReceipt(root, {
+      owned: ['tenant-check-user.mjs'],
+      owned_member_ops: { replace: [], add: ['tenant-check-user.mjs'] },
+      signer: kms.signer,
+    });
+    let receipt = { ...issued.receipt };
+    if (scenario === 'missing MAC') delete receipt.mac;
+    if (scenario === 'forged MAC') receipt.mac = '0'.repeat(64);
+    if (scenario === 'tampered content with valid MAC') receipt = signReceipt(root, { ...receipt, operator: 'tampered' });
+    if (scenario === 'missing KMS signature') delete receipt.kms_signature;
+    if (scenario === 'wrong KMS key') kms.env.CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN += '-wrong';
+    if (scenario === 'lost lease') fs.rmSync(path.join(root, '.deployment-guard/leases/staging::checksops-staging-api.json'));
+    const sources = writeSources(root);
+    const state = createLambdaState({ zip: scenario === 'member appeared' ? liveZip() : liveZipWithoutTenant() });
+    if (scenario === 'CodeSha256') state.codeSha256 = 'changed-code';
+    if (scenario === 'RevisionId') state.revisionId = 'changed-revision';
+    const hooks = scenario.startsWith('immediately-before') ? {
+      functionIdentity: ({ getCount }) => ({
+        CodeSha256: getCount > 1 && scenario.endsWith('CodeSha256') ? 'changed-code' : 'live-sha',
+        RevisionId: getCount > 1 && scenario.endsWith('RevisionId') ? 'changed-revision' : 'rev-1',
+      }),
+    } : {};
+    const result = await applyLambdaOverlay(applyOpts(root, {
+      receipt,
+      member_sources: { 'tenant-check-user.mjs': sources['tenant-check-user.mjs'] },
+    }), { env: kms.env, guardRoot: root, repoRoot: root, aws: createMockAws(state, hooks), now: NOW });
+    assert.equal(result.ok, false);
+    const authFailure = ['missing MAC', 'forged MAC', 'tampered content with valid MAC', 'missing KMS signature', 'wrong KMS key'].includes(scenario);
+    assert.equal(result.code, authFailure ? CODES.RECEIPT_FORGED : scenario === 'lost lease' ? CODES.LEASE_EXPIRED : CODES.DEPLOYMENT_COLLISION);
+    assert.equal(state.updates.length, 0);
+    assert.equal(receiptConsumed(root, issued.receipt), false);
+  });
+}
 
 test('single-member GitHub ADD receipt preserves every unrelated live member byte-for-byte', async (t) => {
   const root = tmpRootWithOps();
