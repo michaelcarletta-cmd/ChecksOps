@@ -103,53 +103,118 @@ test('dedicated save RPC is dispatched before generic RPC and persists insert/up
 });
 
 test('dedicated settlement RPC rejects unauthorized and cross-tenant claim results', async () => {
-  const previous = process.env.AWS_WRITES_ENABLED;
-  process.env.AWS_WRITES_ENABLED = 'true';
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflowWrites = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  process.env.AWS_WRITES_ENABLED = 'false';
+  process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
   try {
     const client = mockClient({ result: { ok: false, code: 'not_authorized' } });
     const result = await handleDataRpc(jwtEvent('/data/rpc', {
       name: 'save_claim_settlement_breakdown',
       args: { p_claim_id: CLAIM_ID, p_settlement_id: null, p_values: VALUES, tenant_id: OTHER_TENANT },
-    }), depsFor(client));
+    }), { ...depsFor(client), forceEnabled: false });
     assert.equal(result.statusCode, 403);
     assert.equal(result.error, 'not_authorized');
     assert.equal(client.queries.find((query) => query.sql === SAVE_CLAIM_SETTLEMENT_SQL).params[0], CLAIM_ID);
     assert.equal(client.queries.some((query) => query.sql === 'COMMIT'), false);
   } finally {
-    if (previous === undefined) delete process.env.AWS_WRITES_ENABLED;
-    else process.env.AWS_WRITES_ENABLED = previous;
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflowWrites === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflowWrites;
   }
 });
 
 test('unmapped Cognito identity cannot invoke the settlement writer', async () => {
-  const previous = process.env.AWS_WRITES_ENABLED;
-  process.env.AWS_WRITES_ENABLED = 'true';
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflowWrites = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  process.env.AWS_WRITES_ENABLED = 'false';
+  process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
   try {
     const client = mockClient({ mapping: false });
     const result = await handleDataRpc(jwtEvent('/data/rpc', {
       name: 'save_claim_settlement_breakdown',
       args: { p_claim_id: CLAIM_ID, p_settlement_id: null, p_values: VALUES },
-    }), depsFor(client));
+    }), { ...depsFor(client), forceEnabled: false });
     assert.equal(result.statusCode, 401);
     assert.equal(result.error, 'identity_not_linked');
     assert.equal(client.queries.some((query) => query.sql === SAVE_CLAIM_SETTLEMENT_SQL), false);
   } finally {
-    if (previous === undefined) delete process.env.AWS_WRITES_ENABLED;
-    else process.env.AWS_WRITES_ENABLED = previous;
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflowWrites === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflowWrites;
+  }
+});
+
+test('dedicated settlement RPC allows application workflow writes when generic AWS writes are disabled', async () => {
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflowWrites = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  process.env.AWS_WRITES_ENABLED = 'false';
+  process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
+  try {
+    const client = mockClient();
+    const result = await handleDataRpc(jwtEvent('/data/rpc', {
+      name: 'save_claim_settlement_breakdown',
+      args: { p_claim_id: CLAIM_ID, p_settlement_id: null, p_values: VALUES },
+    }), { ...depsFor(client), forceEnabled: false });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.data.id, SETTLEMENT_ID);
+    assert.equal(client.queries.some((query) => query.sql === SAVE_CLAIM_SETTLEMENT_SQL), true);
+    assert.equal(client.queries.some((query) => query.sql === 'COMMIT'), true);
+  } finally {
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflowWrites === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflowWrites;
+  }
+});
+
+test('dedicated settlement RPC is refused when application workflow writes are disabled', async () => {
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflowWrites = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  process.env.AWS_WRITES_ENABLED = 'true';
+  process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'false';
+  try {
+    const client = mockClient();
+    const result = await handleDataRpc(jwtEvent('/data/rpc', {
+      name: 'save_claim_settlement_breakdown',
+      args: { p_claim_id: CLAIM_ID, p_settlement_id: null, p_values: VALUES },
+    }), { ...depsFor(client), forceEnabled: false });
+    assert.equal(result.statusCode, 403);
+    assert.equal(result.error, 'application_workflow_writes_disabled');
+    assert.equal(client.queries.length, 0);
+  } finally {
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflowWrites === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflowWrites;
   }
 });
 
 test('generic claim_settlements writes stay outside every table allowlist', async () => {
-  const previous = process.env.AWS_WRITES_ENABLED;
-  process.env.AWS_WRITES_ENABLED = 'true';
+  const previousWrites = process.env.AWS_WRITES_ENABLED;
+  const previousWorkflowWrites = process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+  process.env.AWS_WRITES_ENABLED = 'false';
+  process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = 'true';
   try {
     assert.equal(WRITE_ALLOWLIST.claim_settlements, undefined);
     const client = mockClient();
+    const disabled = await handleWrite(jwtEvent('/data/write', {
+      table: 'claim_settlements',
+      op: 'insert',
+      values: { claim_id: CLAIM_ID, ...VALUES },
+    }), { ...depsFor(client), forceEnabled: false });
+    assert.equal(disabled.statusCode, 403);
+    assert.equal(disabled.error, 'writes_disabled');
+    assert.equal(client.queries.some((query) => /INSERT INTO public\.claim_settlements/.test(query.sql)), false);
+
+    process.env.AWS_WRITES_ENABLED = 'true';
     const result = await handleWrite(jwtEvent('/data/write', {
       table: 'claim_settlements',
       op: 'insert',
       values: { claim_id: CLAIM_ID, ...VALUES },
-    }), depsFor(client));
+    }), { ...depsFor(client), forceEnabled: false });
     assert.equal(result.statusCode, 403);
     assert.equal(result.error, 'table_not_allowlisted');
     assert.equal(client.queries.some((query) => /INSERT INTO public\.claim_settlements/.test(query.sql)), false);
@@ -160,8 +225,10 @@ test('generic claim_settlements writes stay outside every table allowlist', asyn
     assert.match(source, /name: "save_claim_settlement_breakdown"/);
     assert.ok(source.indexOf('name: "save_claim_settlement_breakdown"') < source.indexOf('if (!AWS_WRITE_TABLES.has(state.table))'));
   } finally {
-    if (previous === undefined) delete process.env.AWS_WRITES_ENABLED;
-    else process.env.AWS_WRITES_ENABLED = previous;
+    if (previousWrites === undefined) delete process.env.AWS_WRITES_ENABLED;
+    else process.env.AWS_WRITES_ENABLED = previousWrites;
+    if (previousWorkflowWrites === undefined) delete process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED = previousWorkflowWrites;
   }
 });
 
