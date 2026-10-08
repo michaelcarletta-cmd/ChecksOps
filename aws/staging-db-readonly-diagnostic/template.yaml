@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Separate fixed staging-only DB diagnostic; does not modify the staging API stack.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: staging
+    AllowedValues:
+      - staging
+  DatabaseSecretArn:
+    Type: String
+    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:rds-db-credentials/checksops-staging/checksops/[A-Za-z0-9-]+$'
+    Description: Existing staging checksops application-secret ARN; admin secrets are rejected.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Existing private staging API subnets, verified from the live API configuration.
+  ApiLambdaSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing staging API Lambda security group; this template does not change it.
+
+Resources:
+  StagingDbReadonlyDiagnosticFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: checksops-staging-db-readonly-diagnostic
+      CodeUri: ../functions/api/
+      Handler: staging-db-readonly-diagnostic.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      Timeout: 29
+      MemorySize: 1024
+      Tracing: Active
+      Description: Fixed staging-only read-only core database diagnostic; no API routes
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApiLambdaSecurityGroupId
+        SubnetIds: !Ref SubnetIds
+      Environment:
+        Variables:
+          CHECKSOPS_ENV: !Ref Environment
+          DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
+          DATABASE_NAME: checksops
+          PROVIDER_SECRETS_ARN: ''
+          CROSS_APP_BRIDGE_SECRET: ''
+          AWS_WRITES_ENABLED: 'false'
+          AWS_CHECK_WORKFLOW_WRITES_ENABLED: 'false'
+          AWS_STORAGE_WRITES_ENABLED: 'false'
+          AWS_APPLICATION_WORKFLOW_WRITES_ENABLED: 'false'
+          AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: 'false'
+          AWS_PROVIDER_EXECUTION_ENABLED: 'false'
+          AWS_MOOV_ENABLED: 'false'
+          AWS_CHECKALT_ENABLED: 'false'
+          AWS_PLAID_ENABLED: 'false'
+          AWS_ACTUM_ENABLED: 'false'
+          AWS_QUICKBOOKS_ENABLED: 'false'
+          AWS_PROVIDER_LIVE_READS_ENABLED: 'false'
+          AWS_PROVIDER_WEBHOOK_DRY_RUN: 'true'
+          AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'false'
+          AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false'
+      Policies:
+        - VPCAccessPolicy: {}
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref DatabaseSecretArn

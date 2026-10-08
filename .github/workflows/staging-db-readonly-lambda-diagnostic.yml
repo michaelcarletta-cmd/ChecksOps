@@ -1,0 +1,76 @@
+name: Staging DB read-only Lambda diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: staging-db-readonly-lambda-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Require reviewed main and configured exact target
+        shell: bash
+        env:
+          STAGING_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN }}
+          DIAGNOSTIC_TARGET_ARN: ${{ vars.CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Diagnostic requires reviewed main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          test "$STAGING_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnostic" || { echo "Dedicated staging diagnostic role is not configured"; exit 2; }
+          [[ "$DIAGNOSTIC_TARGET_ARN" =~ ^arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-db-readonly-diagnostic:[1-9][0-9]*$ ]] || { echo "Exact published staging diagnostic version is not configured"; exit 2; }
+          echo "CHECKSOPS_STAGING_DIAGNOSTIC_VERSION=${DIAGNOSTIC_TARGET_ARN##*:}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Install locked diagnostic dependencies without lifecycle scripts
+        run: npm ci --prefix aws/functions/api --ignore-scripts --no-audit --no-fund
+
+      - name: Test diagnostic output contract offline
+        run: node --test aws/tests/staging-db-readonly-lambda-diagnostic.test.mjs
+
+      - name: Configure exact-target staging invocation through OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-db-diagnostic-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["lambda:InvokeFunction"],"Resource":"${{ vars.CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN }}"}]}
+
+      - name: Invoke only the published staging diagnostic version
+        shell: bash
+        env:
+          DIAGNOSTIC_TARGET_ARN: ${{ vars.CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN }}
+        run: |
+          set -euo pipefail
+          if ! aws lambda invoke \
+            --function-name "$DIAGNOSTIC_TARGET_ARN" \
+            --invocation-type RequestResponse \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
+            "$RUNNER_TEMP/diagnostic-payload.json" \
+            > "$RUNNER_TEMP/diagnostic-metadata.json" \
+            2> "$RUNNER_TEMP/diagnostic-invoke-error"; then
+            echo '{"status":"diagnostic_failed","classification":"invoke_failed"}'
+            exit 2
+          fi
+          node scripts/staging-db-readonly-lambda-invocation.mjs \
+            "$RUNNER_TEMP/diagnostic-metadata.json" \
+            "$RUNNER_TEMP/diagnostic-payload.json"
