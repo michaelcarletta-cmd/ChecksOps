@@ -406,6 +406,53 @@ function approvedLambdaCodeLocation(location) {
     && (virtualHost || pathStyleBucket);
 }
 
+function lambdaCodeLocationDiagnostics(location) {
+  let url;
+  try {
+    url = new URL(location);
+  } catch {
+    return {
+      hostname: '[unparseable]',
+      path_classification: 'unparseable',
+      scheme_classification: 'invalid',
+      validator_rejection_reason: 'untrusted_code_location',
+    };
+  }
+  const hostname = url.hostname.toLowerCase();
+  const awsOwnedHostname = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:amazonaws\.com|amazonaws\.com\.cn)$/.test(hostname);
+  const bucketNames = [`awslambda-${REGION}`, `awslambda-${REGION}-tasks`];
+  const knownVirtualHost = bucketNames.some((bucket) => [
+    `${bucket}.s3.${REGION}.amazonaws.com`,
+    `${bucket}.s3.amazonaws.com`,
+    `${bucket}.s3.dualstack.${REGION}.amazonaws.com`,
+    `${bucket}.s3-${REGION}.amazonaws.com`,
+  ].includes(hostname));
+  const pathStyleHost = [`s3.${REGION}.amazonaws.com`, 's3.amazonaws.com'].includes(hostname);
+  const pathStyleBucket = bucketNames.find((bucket) => url.pathname.startsWith(`/${bucket}/`));
+  const s3Hostname = awsOwnedHostname
+    && (hostname.startsWith('s3.') || hostname.startsWith('s3-') || hostname.includes('.s3.') || hostname.includes('.s3-'));
+  const pathClassification = knownVirtualHost
+    ? 'virtual-hosted-lambda-bucket'
+    : pathStyleHost && pathStyleBucket
+      ? `path-style-lambda-bucket:${pathStyleBucket}`
+      : pathStyleHost && url.pathname !== '/'
+        ? 'path-style-s3-candidate'
+        : s3Hostname && url.pathname !== '/'
+          ? 'virtual-hosted-s3-candidate'
+          : 'unclassified';
+  const schemeClassification = url.protocol === 'https:'
+    ? 'https'
+    : url.protocol === 'http:'
+      ? 'http'
+      : 'other';
+  return {
+    hostname: awsOwnedHostname ? hostname : '[untrusted-host]',
+    path_classification: pathClassification,
+    scheme_classification: schemeClassification,
+    validator_rejection_reason: 'untrusted_code_location',
+  };
+}
+
 async function downloadLambdaPackage(location, fetchImpl) {
   if (!approvedLambdaCodeLocation(location)) {
     throw new LambdaPackageError('location_validation', 'untrusted_code_location');
@@ -871,6 +918,9 @@ export async function inspectProduction({
         status: `${failureStage}_failed`,
         failure_stage: failureStage,
         failure_reason: failureReason,
+        ...(failureStage === 'location_validation'
+          ? lambdaCodeLocationDiagnostics(lambdaPackageResponse.Code?.Location)
+          : {}),
         code_sha256: packageCodeHash,
         revision_id: packageRevisionId,
         members: [],
@@ -1038,7 +1088,8 @@ export function buildInspectionSummary(report) {
         ...pick(report.lambda.package, [
           'status', 'code_sha256', 'package_sha256', 'code_sha256_matches_configuration',
           'revision_id', 'revision_id_matches_configuration', 'total_uncompressed_bytes',
-          'failure_stage', 'failure_reason',
+          'failure_stage', 'failure_reason', 'hostname', 'path_classification',
+          'scheme_classification', 'validator_rejection_reason',
         ]),
         members: (report.lambda.package.members || []).map((member) => pick(member, [
           'path', 'size_bytes', 'sha256',
