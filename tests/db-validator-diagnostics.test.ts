@@ -85,3 +85,9 @@ test("Review/Endorsing sources do not reference the validator", () => {
     assert.ok(!readFileSync(new URL(f, import.meta.url), "utf8").includes("db-readonly-validate"));
   }
 });
+
+test("App route remains wired for the staging admin page", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.ok(app.includes('path="/admin/db-validator"'));
+  assert.ok(app.includes("AdminDbValidator"));
+});

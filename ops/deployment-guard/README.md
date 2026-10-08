@@ -63,6 +63,15 @@ node scripts/deployment-guard/wrap-legacy.mjs --input path/to/workstream.json --
 npm run test:deployment-guard
 ```
 
+Staging `/admin/db-validator` SPA (issue #809) is a **spa-promote** of
+`staging-frontend` only. Evaluate with
+`scripts/deployment-guard/lib/staging-db-validator-spa.mjs` and
+`scripts/deployment-guard/db-validator-staging-probe.mjs`. Procedure,
+authorization contract, and blockers:
+`ops/deployment-guard/STAGING_SPA_DB_VALIDATOR.md`. Do not reclaim staging,
+compose over another workstream, overlay Lambda, apply SQL, or target
+production from that follow-up.
+
 The `guarded-staging-lambda-overlay.yml` workflow defaults to read-only `inspect`.
 It reports the requested repository member as `PRESENT` (with its SHA-256) or
 `ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
