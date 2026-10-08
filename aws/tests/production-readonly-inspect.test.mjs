@@ -427,6 +427,10 @@ test('refuses non-AWS Lambda code locations without following them', async () =>
   assert.equal(report.lambda.package.status, 'location_validation_failed');
   assert.equal(report.lambda.package.failure_stage, 'location_validation');
   assert.equal(report.lambda.package.failure_reason, 'untrusted_code_location');
+  assert.equal(report.lambda.package.hostname, '[untrusted-host]');
+  assert.equal(report.lambda.package.path_classification, 'unclassified');
+  assert.equal(report.lambda.package.scheme_classification, 'https');
+  assert.equal(report.lambda.package.validator_rejection_reason, 'untrusted_code_location');
   assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('attacker.example'), false);
 });
 
@@ -459,10 +463,10 @@ test('accepts AWS Lambda S3 code-location host and path-style variants', async (
 test('rejects Lambda code-location credentials, explicit ports, and unapproved S3 lookalikes', async () => {
   let packageFetches = 0;
   for (const location of [
-    'https://inspector@awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?token=must-not-leak',
-    'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com:443/package.zip?token=must-not-leak',
-    'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com.attacker.example/package.zip?token=must-not-leak',
-    'http://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?token=must-not-leak',
+    `https://${['inspector', 'private-password'].join(':')}@awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/private-path/package.zip?X-Amz-Signature=private-signature`,
+    'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com:443/private-path/package.zip?X-Amz-Signature=private-signature',
+    'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com.attacker.example/private-path/package.zip?X-Amz-Signature=private-signature',
+    'http://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/private-path/package.zip?X-Amz-Signature=private-signature',
   ]) {
     const report = await inspectProduction({
       runAws: mockAws([], {
@@ -478,6 +482,11 @@ test('rejects Lambda code-location credentials, explicit ports, and unapproved S
     });
     assert.equal(report.lambda.package.status, 'location_validation_failed');
     assert.equal(report.lambda.package.failure_reason, 'untrusted_code_location');
+    const output = JSON.stringify({ report, evidence: buildInspectionSummary(report) });
+    for (const sensitiveValue of ['inspector', 'private-password', 'private-path', 'private-signature', 'X-Amz-Signature']) {
+      assert.equal(output.includes(sensitiveValue), false, sensitiveValue);
+    }
+    assert.equal(output.includes('awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com.attacker.example'), false);
   }
   assert.equal(packageFetches, 0);
 });
@@ -798,6 +807,7 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     { Effect: 'Allow', Action: ['apigateway:GET'] },
     { Effect: 'Allow', Action: ['cloudfront:GetDistribution'] },
     { Effect: 'Allow', Action: ['secretsmanager:DescribeSecret'] },
+    { Effect: 'Allow', Action: ['rds:DescribeDBInstances'] },
   ]);
   assert.deepEqual(policy.Statement.map(({ Resource }) => Resource), [
     '*',
@@ -806,13 +816,15 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     [`arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}`, `arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}/stages/${PRODUCTION_PINS.api_stage}`, `arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}/integrations`],
     `arn:aws:cloudfront::${PRODUCTION_PINS.account_id}:distribution/${PRODUCTION_PINS.cloudfront_id}`,
     PERSISTENCE_SECRET_ARN,
+    '*',
   ]);
   assert.match(workflow, /s3:GetObject/);
   assert.match(workflow, /lambda:GetFunctionConfiguration/);
   assert.match(workflow, /cloudfront:GetDistribution/);
   assert.match(workflow, /apigateway:GET/);
   assert.match(workflow, /secretsmanager:DescribeSecret/);
-  assert.doesNotMatch(workflow, /rds:DescribeDBInstances|secretsmanager:GetSecretValue|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
+  assert.match(workflow, /rds:DescribeDBInstances/);
+  assert.doesNotMatch(workflow, /rds:(?:Create|Modify|Delete|Reboot|Start|Stop|Restore|Failover|Promote|Reset|Add|Remove|Authorize|Revoke)|rds-db:connect|secretsmanager:GetSecretValue|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
   assert.doesNotMatch(workflow, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /npm ci|PostgreSQL inspection dependency/i);
   assert.match(docs, /refused_unproven_aws_production_target/);
