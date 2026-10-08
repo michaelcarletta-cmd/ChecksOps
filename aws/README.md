@@ -104,6 +104,124 @@ printed or saved as artifacts. Exit codes: `0` healthy, `1` unhealthy with safe
 classifications, `2` diagnostic unavailable/failed. A red diagnostic run does not
 authorize repairs or deployment and does not replace or weaken the public smoke.
 
+### Existing in-AWS diagnostic path investigation (#783)
+
+**Decision: blocked; no existing safe, Cognito-free diagnostic path is
+established by the repository.** This is an investigation-only result, not
+authorization to invoke an executor, provision infrastructure, or deploy. No
+runtime, workflow, IAM, database, or expected-count changes were made. #777 is
+design evidence only; neither its proposed role nor its private runner is an
+established prerequisite.
+
+Scope: repository source and workflow definitions, plus the #777 proposal.
+The reported `/health` and `/db-health` 200 and `/db-readonly-validate` 503 are
+issue evidence, not fresh probes. No live AWS inventory, effective IAM policy
+inspection, Lambda invocation, or DB connection was performed. Repo definitions
+and historical reports do not prove current deployed code, permissions, or
+network state. In the references below, paths are relative to the repository
+root `/home/runner/work/ChecksOps/ChecksOps`.
+
+#### Execution surfaces inspected
+
+| Surface and source evidence | Private staging RDS connectivity | Read-only reuse without broadening authority |
+| --- | --- | --- |
+| `checksops-staging-api`: `aws/template.yaml:158-225,292-318`; `aws/functions/api/index.mjs:154-167` | Defined in the existing RDS VPC/subnets, with Lambda-SG-to-RDS-SG TCP 5432 ingress/egress. Reported DB health supports connectivity, but current configuration was not inventoried. | Validator uses the application secret, verified RDS TLS, connection default read-only, `BEGIN READ ONLY`, savepoints and rollback (`db-health.mjs:68-82`, `db-readonly-validate.mjs:97-129` and its cleanup). However, the handler returns detailed validation only after `resolveClaims`; an IAM invoke does not supply a legitimate Cognito identity. No dedicated IAM diagnostic entrypoint is established. Do not fabricate authorizer claims or change `index.mjs`/repaired modules. |
+| Temporary `/inspect/tmp-rls-catalog`: `aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs` | Runs within the same API Lambda, not a separate execution surface. | Fixed catalog checks for one table, with identity gating via `withIdentity`; not equivalent to the core validator and not a Cognito-free entrypoint. Do not widen it. |
+| `checksops-staging-guarded-sql-executor`: `scripts/deployment-guard/sql-executor-ensure.mjs:80-129`; `aws/write-path/guarded-sql-executor/index.mjs:147-185,477-666` | Creation code copies API VPC configuration. Existing-function update code does not establish current VPC configuration; deployed state is unverified. | Admin secret and mutation-capable `apply` branch. Its inspect/verify modes concern pinned migrations/functions, not the core validator; inspect can execute a business RPC and return its result. No session default read-only/`BEGIN READ ONLY` boundary is established. A fixed caller payload or after-the-fact count comparison is not a hard read-only boundary; reject reuse. |
+| Legacy `checksops-staging-sql44-2d41` | Named as a protected, forbidden retargeting target in `scripts/deployment-guard/sql-executor-ensure.mjs:21-26`. Current code, VPC and role not established. | No inspected repo-backed core-validation/read-only interface or exact invocation authority; reject reuse, never replace or restore it. |
+| `checksops-staging-rehearsal-oneshot`: `aws/write-path/scripts/run-parity-schema-rehearsal.mjs:104-175`; `aws/db-copy/rehearsal/oneshot-apply/index.mjs` | Provisioning code copies API VPC configuration; current existence/configuration is unverified. | Admin-secret executor supports database creation/drop, restore/data changes and schema applies. Some inspect steps do not make the executor read-only; bootstrap scripts also update IAM/code/config before inspection. Reject invocation and bootstrap. |
+| RLS, identity, write-path and workflows one-shots: `aws/rls/oneshot/index.mjs`, `aws/identity/oneshot/index.mjs`, `aws/write-path/oneshot/index.mjs`, `aws/workflows/oneshot/index.mjs` | DB clients target staging RDS using the admin secret. Source clients alone do not prove deployed VPC connectivity or current existence. | Grant/DDL/RLS, identity linking, write probes and cleanup branches exist; outputs can include rows, identities or raw errors. Rolled-back writes still violate this task. None establishes an isolated core-validation read-only interface. Reject reuse. |
+| Restore one-shot: `aws/db-copy/POST_RESTORE_CLEANUP.md:5-11` | Historical private-RDS executor; cleanup records Lambda and role deleted. | Not an existing reusable surface. Do not recreate historical infrastructure. |
+| Step Functions, ECS and SSM | No staging DB diagnostic state machine, task, or SSM document/authorized target found in inspected repo infrastructure/workflows/scripts. `docs/AWS_DB_COPY_RUNBOOK.md:138` mentions bastion/SSM/VPC as network prerequisites, not provisioned diagnostics. | No repo-backed safe execution or permission evidence; do not assume account-wide absence or invent a target. |
+| Existing GitHub diagnostics/inspectors | Hosted `ubuntu-latest` jobs are not evidence of private RDS access. SPA and Lambda package inspection use AWS control-plane reads, not DB execution. | Cognito diagnostic requires token handoff; SPA inspect only reads S3; overlay/reconciliation inspect downloads Lambda source without executing the validator. Production inspector is separately production-pinned and out of scope; never retarget it. |
+
+The application role is **not assumed to be globally read-only**: the current
+template enables application write flags (`aws/template.yaml:114-129`), and
+historical SELECT-only grant/validation reports are not current privilege proof.
+The validator's fixed-query, read-only session/transaction boundary is the
+relevant mechanism. `/db-health` passing proves neither the validator's catalog,
+RLS, privilege and expected-count assertions nor its diagnostic authorization.
+
+#### Exact IAM/OIDC evidence and gaps
+
+- API execution role: `aws/template.yaml:309-318` declares SAM
+  `S3ReadPolicy` and `S3WritePolicy` on `PrivateFilesBucket`, `VPCAccessPolicy`,
+  and `AWSSecretsManagerGetSecretValuePolicy` on both `ProviderSecrets` and
+  `DatabaseSecretArn`. The application secret parameter is
+  `arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn`
+  (`aws/template.yaml:24-27`), not the admin secret. These are execution-role
+  policy templates, not GitHub invocation authority or a captured effective
+  IAM policy. Expanded/live policies, boundaries and SCPs are not established.
+- SPA OIDC role:
+  `arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingSpaInspect`.
+  `.github/workflows/inspect-staging-spa.yml:6-8,25-52` requires reviewed
+  `main`, exact checkout SHA and staging identity; its inline session policy
+  allows **only** `s3:GetObject` on
+  `arn:aws:s3:::checksops-staging-frontend-c48b/index.html`.
+  It grants neither `lambda:InvokeFunction` nor `secretsmanager:GetSecretValue`.
+- Overlay/reconciliation OIDC role:
+  `arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingLambdaOverlay`
+  (`.github/workflows/guarded-staging-lambda-overlay.yml:92-118`,
+  `.github/workflows/sh2-staging-source-reconciliation.yml:50-72`).
+  Inspect code requests `lambda:GetFunction` on
+  `arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-api`
+  (`scripts/deployment-guard/github-staging-lambda-overlay.mjs:100-132`).
+  Apply workflow also requests `kms:GetPublicKey` and uses the receipt-gated
+  overlay writer. These are operations requested by code, **not** proof of the
+  role's exact grants. No checked-in base/trust policy establishes diagnostic
+  `lambda:InvokeFunction`, app-secret access, or permission to assume another role.
+- Both staging AWS workflows use GitHub `id-token: write` and the pinned
+  configure-credentials action for STS web-identity authentication. This does
+  not itself grant AWS permissions. Live trust policies (including exact
+  `aud`/`sub` conditions), attached/inline policies and effective restrictions
+  are not captured here. A future authorized policy review must verify
+  `sts:AssumeRoleWithWebIdentity`, audience `sts.amazonaws.com`, and staging
+  subject `repo:michaelcarletta-cmd/ChecksOps:environment:staging`; these are
+  required conditions to verify, not asserted existing conditions. Protected
+  environment reviewer/branch settings also require verification.
+- Rehearsal role provisioning declares Lambda service trust
+  (`sts:AssumeRole`, principal `lambda.amazonaws.com`),
+  `AWSLambdaVPCAccessExecutionRole`, `secretsmanager:GetSecretValue` on the
+  selected admin secret, and `s3:GetObject`, `s3:PutObject`, `s3:ListBucket`
+  on the staging private-files bucket and its `Migration/*` prefix
+  (`aws/write-path/scripts/run-parity-schema-rehearsal.mjs:104-137`).
+  The guarded executor defaults to that role (`sql-executor-ensure.mjs:84-94`).
+  Neither is a GitHub diagnostic-role grant or a read-only DB boundary.
+- Current Cognito diagnostic has only GitHub `contents: read`, no AWS OIDC
+  session (`.github/workflows/staging-db-readonly-diagnostic.yml:6-7,41-44`).
+  Cursor web-identity bootstrap in rehearsal scripts is not existing GitHub
+  staging authorization. Production roles/inspector permissions are excluded.
+
+#### Minimum prerequisite and smallest next design
+
+**Stop here.** First obtain an authorized, sanitized inventory of current staging
+function entrypoints/versions/VPC connectivity and the above OIDC roles' effective
+policies/trust, boundaries and relevant denies. Do not publish environment values,
+secret contents, presigned package URLs, raw function results or DB errors.
+This evidence must identify an already deployed fixed, read-only entrypoint and
+legitimate invocation authority; neither is currently established.
+
+If such an entrypoint exists, the smallest subsequent reviewed PR is a manual
+`main` workflow with protected staging approval, exact-SHA checks before OIDC,
+a short-lived session restricted to that entrypoint, fixed invocation payload,
+and allowlisted diagnostic classifications only. Pin an immutable version and
+verify accepted live composition/configuration before and after execution; stop
+on drift (`DEPLOYMENT_COLLISION`). Do not use arbitrary SQL, fake Cognito claims,
+admin executors, provider actions, credentials in GitHub, or raw response artifacts.
+Preserve Release Locks and Deployment Guard; a diagnostic grants no apply receipt.
+
+If inventory confirms the inspected API handler is the only viable environment,
+it cannot provide this path unchanged. A separately authorized, reviewed
+forward-composed AWS read-only entrypoint and narrowly scoped invocation access
+would be prerequisites, not work authorized by this issue. Do not modify the
+repaired composition during diagnosis. A new IAM grant is needed **only if**
+effective existing authority lacks invocation of that safe entrypoint; new
+infrastructure is needed **only if** no existing safe entrypoint can be reused.
+Neither necessity can be concluded from role names or source definitions alone.
+Existing API VPC connectivity means a private GitHub runner is not inherently
+required for in-AWS execution. Do not extend/merge #777 or provision a workaround
+on the present evidence.
+
 ## Next migration step
 
 Staging PostgreSQL connectivity is confirmed. Database copy tooling is in `aws/db-copy/` with the runbook in `docs/AWS_DB_COPY_RUNBOOK.md`.
