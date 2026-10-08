@@ -21,7 +21,7 @@
     },
     "workflow-rpc.mjs": {
       "live_sha256": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
-      "reconciled_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+      "reconciled_sha256": "11d80f91a6941e65fe4a88b63bd1bf5702b8923a271480eeb2dbbc7c69fd073d",
       "changed": true
     },
     "data.mjs": {

@@ -712,7 +712,8 @@ export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
   }
 
   const check = (await client.query(
-    `SELECT id, tenant_id, claim_id, deposited_at, amount, status
+    `SELECT id, tenant_id, claim_id, deposited_at, amount, status,
+            check_stage::text AS check_stage
        FROM public.check_intake_items
       WHERE id = $1::uuid`,
     [checkId],
@@ -729,7 +730,11 @@ export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
     return { error: 'not_authorized', message: 'Check is not in the caller tenant' };
   }
 
-  if (check.deposited_at) {
+  if (
+    check.deposited_at
+    || check.status === 'deposited'
+    || check.check_stage === 'deposited'
+  ) {
     return { error: 'already_deposited', message: 'claim_id cannot change after deposit' };
   }
 
@@ -754,7 +759,7 @@ export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
         WHERE id = $1::uuid`,
       [newClaimId],
     )).rows[0];
-    if (claim && String(claim.tenant_id) !== String(check.tenant_id)) {
+    if (!claim || String(claim.tenant_id) !== String(check.tenant_id)) {
       return { error: 'cross_tenant_denied', message: 'Target claim is not in the check tenant' };
     }
   }
@@ -1227,6 +1232,7 @@ const executeDepositAction = async ({ client, mapping, args }) => {
       `UPDATE public.check_intake_items
        SET status = 'deposited',
            check_stage = 'deposited',
+           deposited_at = COALESCE(deposited_at, now()),
            updated_at = now()
        WHERE id = $1::uuid`,
       [item.check_id],
