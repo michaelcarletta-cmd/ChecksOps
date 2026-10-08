@@ -49,13 +49,17 @@ test('production refs, accounts, regions, roles, and environments are hard-block
     assert.throws(() => validateDeployContext(validContext(context)));
   }
   assert.throws(() => validateAwsIdentity({
-    account: '123456789012',
-    arn: 'arn:aws:sts::123456789012:assumed-role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy/run',
+    Account: '123456789012',
+    Arn: 'arn:aws:sts::123456789012:assumed-role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy/run',
   }), /aws_account_or_role_rejected/);
   assert.throws(() => validateAwsIdentity({
-    account: DEPLOYMENT.account,
-    arn: 'arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingLambdaOverlay/run',
+    Account: DEPLOYMENT.account,
+    Arn: 'arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingLambdaOverlay/run',
   }), /aws_account_or_role_rejected/);
+  assert.equal(validateAwsIdentity({
+    Account: DEPLOYMENT.account,
+    Arn: 'arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy/run',
+  }), true);
 });
 
 test('deployment requires exact reviewed main and checked-out SHA', () => {

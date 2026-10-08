@@ -55,9 +55,9 @@ export function validateDeployContext({
   return true;
 }
 
-export function validateAwsIdentity({ account, arn }) {
-  if (account !== DEPLOYMENT.account
-      || !new RegExp(`^arn:aws:sts::${DEPLOYMENT.account}:assumed-role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy/[^/]+$`).test(arn || '')) {
+export function validateAwsIdentity({ Account, Arn }) {
+  if (Account !== DEPLOYMENT.account
+      || !new RegExp(`^arn:aws:sts::${DEPLOYMENT.account}:assumed-role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy/[^/]+$`).test(Arn || '')) {
     throw new Error('aws_account_or_role_rejected');
   }
   return true;
@@ -86,7 +86,7 @@ function run(command, args, { cwd = ROOT, json = false } = {}) {
     const output = execFileSync(command, args, {
       cwd,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 20 * 1024 * 1024,
     }).trim();
     return json ? JSON.parse(output) : output;
