@@ -22,7 +22,7 @@ import { hashZipMembers, writeZipMembers } from '../../scripts/deployment-guard/
 const SHA='a'.repeat(40);
 
 const workflow = fs.readFileSync(new URL('../../.github/workflows/guarded-staging-lambda-overlay.yml', import.meta.url), 'utf8');
-const smoke = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)[1];
+const smoke = workflow.match(/- name: Public staging smoke[\s\S]*?node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)[1];
 
 async function runPublicSmoke(overrides = {}, env = {}) {
   const logs = [];
