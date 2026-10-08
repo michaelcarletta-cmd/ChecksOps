@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { summarizeInvocation } from '../aws/functions/api/staging-db-readonly-diagnostic-output.mjs';
+import { projectPublicTriggerInventory } from './staging-db-readonly-diagnostic.mjs';
 
 const readJson = (path) => JSON.parse(fs.readFileSync(path, 'utf8'));
 
@@ -20,6 +21,8 @@ export const main = ({
       payload: fs.readFileSync(payloadPath, 'utf8'),
       expectedVersion,
     });
+    const triggerInventory = projectPublicTriggerInventory(summary.catalog || {});
+    if (triggerInventory) summary = { ...summary, triggerInventory };
   } catch {
     summary = {
       schema: 'checksops-staging-db-readonly-diagnostic/v1',
