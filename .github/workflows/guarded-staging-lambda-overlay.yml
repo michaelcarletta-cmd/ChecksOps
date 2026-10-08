@@ -254,6 +254,11 @@ jobs:
             console.log(JSON.stringify({health:'ok',dbHealth:'redacted-ok',dbReadonlyValidate:'redacted-ok'}));
           }
           NODE
+          {
+            echo "### Public staging smoke"
+            echo "- /health and /db-health still required HTTP 200"
+            echo "- An accepted public validator 503 is \`known-unhealthy-diagnostic\`, not a healthy database"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}
