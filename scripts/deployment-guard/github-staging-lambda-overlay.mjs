@@ -12,6 +12,69 @@ import { hashZipMembers } from './lib/zip-members.mjs';
 const FUNCTION_NAME = 'checksops-staging-api';
 const REGION = 'us-east-1';
 const HEX64 = /^[0-9a-f]{64}$/i;
+export const DIAGNOSTIC_VALIDATOR_MEMBER = 'db-readonly-validate.mjs';
+export const DIAGNOSTIC_VALIDATOR_OPERATION = 'replace';
+export const DIAGNOSTIC_VALIDATOR_FUNCTION = FUNCTION_NAME;
+const PUBLIC_VALIDATOR_UNHEALTHY_KEYS = Object.freeze(['readOnly', 'service', 'status']);
+
+function parseExplicitBoolean(value) {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false' || value == null || value === '') return false;
+  return null;
+}
+
+export function validateAcceptPublicValidatorUnhealthy({
+  accept,
+  member,
+  operation,
+  functionName = FUNCTION_NAME,
+} = {}) {
+  const parsed = parseExplicitBoolean(accept);
+  if (parsed === null) {
+    return {
+      ok: false,
+      code: CODES.INVALID_MANIFEST,
+      message: 'accept_public_validator_unhealthy must be an explicit boolean and is never inferred',
+      details: { accept },
+    };
+  }
+  if (parsed !== true) {
+    return { ok: true, details: { accept: false } };
+  }
+  if (
+    member !== DIAGNOSTIC_VALIDATOR_MEMBER
+    || operation !== DIAGNOSTIC_VALIDATOR_OPERATION
+    || functionName !== DIAGNOSTIC_VALIDATOR_FUNCTION
+  ) {
+    return {
+      ok: false,
+      code: CODES.UNRELATED_MUTATION,
+      message: 'accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api',
+      details: { member: member || null, operation: operation || null, functionName },
+    };
+  }
+  return {
+    ok: true,
+    details: {
+      accept: true,
+      member,
+      operation,
+      functionName,
+    },
+  };
+}
+
+export function isAcceptedPublicValidatorUnhealthy(httpStatus, body) {
+  if (Number(httpStatus) !== 503 || body == null || typeof body !== 'object' || Array.isArray(body)) {
+    return false;
+  }
+  const keys = Object.keys(body).sort();
+  if (keys.length !== PUBLIC_VALIDATOR_UNHEALTHY_KEYS.length
+    || keys.some((key, index) => key !== PUBLIC_VALIDATOR_UNHEALTHY_KEYS[index])) {
+    return false;
+  }
+  return body.service === 'checksops-api' && body.status === 'unhealthy' && body.readOnly === true;
+}
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 

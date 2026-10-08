@@ -34,6 +34,11 @@ on:
         required: false
         default: ""
         type: string
+      accept_public_validator_unhealthy:
+        description: "Owner-selected only. Default false. Accept the known redacted public /db-readonly-validate HTTP 503 while replacing db-readonly-validate.mjs. Never inferred. Does not mark the database healthy."
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -67,11 +72,37 @@ jobs:
               test -n "${{ inputs.expected_live_member_sha256 }}" || { echo "REPLACE apply requires expected_live_member_sha256 from inspect"; exit 2; }
             fi
           fi
+          if [ "${{ inputs.accept_public_validator_unhealthy }}" = "true" ]; then
+            test "${{ inputs.member }}" = "db-readonly-validate.mjs" || { echo "accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api"; exit 2; }
+            test "${{ inputs.operation }}" = "replace" || { echo "accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api"; exit 2; }
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22"
+
+      - name: Refuse unscoped validator-unhealthy exception
+        shell: bash
+        env:
+          CHECKSOPS_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: ${{ inputs.accept_public_validator_unhealthy }}
+          CHECKSOPS_STAGING_OVERLAY_MEMBER: ${{ inputs.member }}
+          CHECKSOPS_STAGING_OVERLAY_OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { validateAcceptPublicValidatorUnhealthy } from './scripts/deployment-guard/github-staging-lambda-overlay.mjs';
+          const result = validateAcceptPublicValidatorUnhealthy({
+            accept: process.env.CHECKSOPS_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY,
+            member: process.env.CHECKSOPS_STAGING_OVERLAY_MEMBER,
+            operation: process.env.CHECKSOPS_STAGING_OVERLAY_OPERATION,
+            functionName: 'checksops-staging-api',
+          });
+          if (!result.ok) {
+            console.error(result.message);
+            process.exit(2);
+          }
+          NODE
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
@@ -158,6 +189,7 @@ jobs:
             echo "- Live RevisionId: \`${{ steps.preflight.outputs.live_revision_id }}\`"
             echo "- Live member state: \`${{ steps.preflight.outputs.live_member_state }}\`"
             echo "- Live member SHA-256: \`${{ steps.preflight.outputs.live_member_sha256 }}\`"
+            echo "- Accept public validator unhealthy: \`${{ inputs.accept_public_validator_unhealthy }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Apply through official receipt-gated overlay writer
@@ -176,11 +208,22 @@ jobs:
 
       - name: Public staging smoke (inspect or post-deploy)
         shell: bash
+        env:
+          CHECKSOPS_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: ${{ inputs.accept_public_validator_unhealthy }}
+          CHECKSOPS_STAGING_OVERLAY_MEMBER: ${{ inputs.member }}
+          CHECKSOPS_STAGING_OVERLAY_OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           const base='https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
-          async function get(path,allowedKeys) {
+          const acceptRequested=process.env.CHECKSOPS_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY === 'true';
+          const overlayMember=process.env.CHECKSOPS_STAGING_OVERLAY_MEMBER || '';
+          const overlayOperation=process.env.CHECKSOPS_STAGING_OVERLAY_OPERATION || '';
+          if (acceptRequested && (overlayMember !== 'db-readonly-validate.mjs' || overlayOperation !== 'replace')) {
+            throw new Error('accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api');
+          }
+          const acceptUnhealthy=acceptRequested && overlayMember === 'db-readonly-validate.mjs' && overlayOperation === 'replace';
+          async function get(path,allowedKeys,options={}) {
             const res=await fetch(base+path,{method:'GET',headers:{accept:'application/json'},signal:AbortSignal.timeout(20000)});
             const text=await res.text();
             let body={};
@@ -191,18 +234,31 @@ jobs:
               : 'missing';
             const redacted=jsonObject && (!allowedKeys || Object.keys(body).every(key=>allowedKeys.includes(key)));
             console.log(JSON.stringify({path,httpStatus:res.status,jsonObject,status,redacted}));
+            const exactUnhealthy=options.allowUnhealthy === true && res.status === 503 && redacted
+              && jsonObject && Object.keys(body).length === 3
+              && body.service === 'checksops-api' && body.status === 'unhealthy' && body.readOnly === true;
+            if (exactUnhealthy) return { body, knownUnhealthyDiagnostic: true };
             if (res.status !== 200) throw new Error(path+' expected 200, got '+res.status);
             if (!redacted) throw new Error(path+' unexpected response shape (body withheld)');
-            return body;
+            return { body, knownUnhealthyDiagnostic: false };
           }
           const health=await get('/health');
-          if (health.status !== 'ok') throw new Error('/health not ok');
+          if (health.body.status !== 'ok') throw new Error('/health not ok');
           const db=await get('/db-health',['service','status']);
-          if (db.status !== 'ok') throw new Error('/db-health not ok');
-          const validation=await get('/db-readonly-validate',['service','status','readOnly']);
-          if (validation.status !== 'ok' || validation.readOnly !== true) throw new Error('/db-readonly-validate not healthy/read-only');
-          console.log(JSON.stringify({health:'ok',dbHealth:'redacted-ok',dbReadonlyValidate:'redacted-ok'}));
+          if (db.body.status !== 'ok') throw new Error('/db-health not ok');
+          const validation=await get('/db-readonly-validate',['service','status','readOnly'],{allowUnhealthy:acceptUnhealthy});
+          if (validation.knownUnhealthyDiagnostic) {
+            console.log(JSON.stringify({health:'ok',dbHealth:'redacted-ok',dbReadonlyValidate:'known-unhealthy-diagnostic'}));
+          } else {
+            if (validation.body.status !== 'ok' || validation.body.readOnly !== true) throw new Error('/db-readonly-validate not healthy/read-only');
+            console.log(JSON.stringify({health:'ok',dbHealth:'redacted-ok',dbReadonlyValidate:'redacted-ok'}));
+          }
           NODE
+          {
+            echo "### Public staging smoke"
+            echo "- /health and /db-health still required HTTP 200"
+            echo "- An accepted public validator 503 is \`known-unhealthy-diagnostic\`, not a healthy database"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}

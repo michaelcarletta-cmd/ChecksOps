@@ -7,7 +7,10 @@ import { mock, test } from 'node:test';
 
 import {
   buildOverlayReceiptInput,
+  DIAGNOSTIC_VALIDATOR_MEMBER,
+  isAcceptedPublicValidatorUnhealthy,
   run,
+  validateAcceptPublicValidatorUnhealthy,
   validateExpectedMemberHash,
   validateRequestedMember,
   workflowIdentity,
@@ -19,9 +22,9 @@ import { hashZipMembers, writeZipMembers } from '../../scripts/deployment-guard/
 const SHA='a'.repeat(40);
 
 const workflow = fs.readFileSync(new URL('../../.github/workflows/guarded-staging-lambda-overlay.yml', import.meta.url), 'utf8');
-const smoke = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)[1];
+const smoke = workflow.match(/- name: Public staging smoke[\s\S]*?node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)[1];
 
-async function runPublicSmoke(overrides = {}) {
+async function runPublicSmoke(overrides = {}, env = {}) {
   const logs = [];
   const calls = [];
   const bodies = {
@@ -31,6 +34,7 @@ async function runPublicSmoke(overrides = {}) {
   };
   const context = vm.createContext({
     AbortSignal,
+    process: { env: { ...env } },
     console: { log: (line) => logs.push(JSON.parse(line)) },
     fetch: async (url, options) => {
       assert.equal(options.method, 'GET');
@@ -49,6 +53,17 @@ async function runPublicSmoke(overrides = {}) {
     return { logs, calls, error };
   }
 }
+
+const acceptedUnhealthy = {
+  status: 503,
+  body: { service: 'checksops-api', status: 'unhealthy', readOnly: true },
+};
+
+const diagnosticAcceptEnv = {
+  CHECKSOPS_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: 'true',
+  CHECKSOPS_STAGING_OVERLAY_MEMBER: DIAGNOSTIC_VALIDATOR_MEMBER,
+  CHECKSOPS_STAGING_OVERLAY_OPERATION: 'replace',
+};
 
 test('public smoke runs in inspect mode and still requires all three healthy endpoints', async () => {
   const step = workflow.split('- name: Public staging smoke (inspect or post-deploy)')[1].split('- name: Cleanup')[0];
@@ -91,6 +106,120 @@ test('public validation smoke rejects absent or false readOnly even with status 
     });
     assert.match(result.error.message, /not healthy\/read-only/);
   }
+});
+
+test('accept_public_validator_unhealthy defaults false and is never inferred by the workflow', () => {
+  assert.match(workflow, /accept_public_validator_unhealthy:\n        description:.*\n        required: true\n        default: false\n        type: boolean/);
+  assert.match(workflow, /Refuse unscoped validator-unhealthy exception/);
+  assert.match(workflow, /accept_public_validator_unhealthy is limited to replace db-readonly-validate\.mjs on checksops-staging-api/);
+  assert.doesNotMatch(workflow, /CHECKSOPS_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: ['"]true['"]/);
+});
+
+test('default smoke still rejects the known redacted validator 503', async () => {
+  const result = await runPublicSmoke({ '/db-readonly-validate': acceptedUnhealthy });
+  assert.match(result.error.message, /expected 200, got 503/);
+  assert.notEqual(result.logs.at(-1)?.dbReadonlyValidate, 'known-unhealthy-diagnostic');
+  assert.notEqual(result.logs.at(-1)?.dbReadonlyValidate, 'redacted-ok');
+});
+
+test('owner-selected exception accepts only the exact redacted validator 503 as a known diagnostic', async () => {
+  const result = await runPublicSmoke({ '/db-readonly-validate': acceptedUnhealthy }, diagnosticAcceptEnv);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.calls, ['/health', '/db-health', '/db-readonly-validate']);
+  assert.deepEqual(result.logs.at(-1), {
+    health: 'ok',
+    dbHealth: 'redacted-ok',
+    dbReadonlyValidate: 'known-unhealthy-diagnostic',
+  });
+  assert.notEqual(result.logs.at(-1).dbReadonlyValidate, 'redacted-ok');
+});
+
+test('owner-selected exception still requires healthy /health and /db-health', async () => {
+  for (const [route, response] of [
+    ['/health', { status: 503, body: { status: 'unhealthy' } }],
+    ['/db-health', { status: 503, body: { service: 'checksops-api', status: 'unhealthy' } }],
+  ]) {
+    const result = await runPublicSmoke({
+      [route]: response,
+      '/db-readonly-validate': acceptedUnhealthy,
+    }, diagnosticAcceptEnv);
+    assert.ok(result.error, `${route} must still fail closed`);
+    assert.match(result.error.message, /expected 200, got 503|not ok/);
+  }
+});
+
+test('owner-selected exception rejects leaking, healthy-looking, and inexact validator failures', async () => {
+  for (const response of [
+    { status: 503, body: { service: 'checksops-api', status: 'unhealthy', readOnly: true, error: 'private-diagnostic-marker' } },
+    { status: 503, body: { service: 'checksops-api', status: 'unhealthy' } },
+    { status: 503, body: { service: 'other', status: 'unhealthy', readOnly: true } },
+    { status: 503, body: { service: 'checksops-api', status: 'ok', readOnly: true } },
+    { status: 200, body: { service: 'checksops-api', status: 'unhealthy', readOnly: true } },
+    { status: 500, body: { service: 'checksops-api', status: 'unhealthy', readOnly: true } },
+    { status: 503, body: { service: 'checksops-api', status: 'unhealthy', readOnly: 'true' } },
+  ]) {
+    const result = await runPublicSmoke({ '/db-readonly-validate': response }, diagnosticAcceptEnv);
+    assert.ok(result.error, `must reject ${JSON.stringify(response)}`);
+    assert.doesNotMatch(JSON.stringify(result.logs) + result.error.message, /private-diagnostic-marker/);
+    assert.notEqual(result.logs.at(-1)?.dbReadonlyValidate, 'known-unhealthy-diagnostic');
+    assert.notEqual(result.logs.at(-1)?.dbReadonlyValidate, 'redacted-ok');
+  }
+});
+
+test('owner-selected exception still reports a later healthy validator as redacted-ok, not diagnostic', async () => {
+  const result = await runPublicSmoke({}, diagnosticAcceptEnv);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.logs.at(-1), { health: 'ok', dbHealth: 'redacted-ok', dbReadonlyValidate: 'redacted-ok' });
+});
+
+test('exception env is ignored unless replacing db-readonly-validate.mjs', async () => {
+  for (const env of [
+    { ...diagnosticAcceptEnv, CHECKSOPS_STAGING_OVERLAY_MEMBER: 'index.mjs' },
+    { ...diagnosticAcceptEnv, CHECKSOPS_STAGING_OVERLAY_OPERATION: 'add' },
+    { CHECKSOPS_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: 'true' },
+  ]) {
+    const result = await runPublicSmoke({ '/db-readonly-validate': acceptedUnhealthy }, env);
+    assert.ok(result.error);
+    assert.match(result.error.message, /limited to replace db-readonly-validate\.mjs|expected 200, got 503/);
+  }
+});
+
+test('validateAcceptPublicValidatorUnhealthy never auto-enables and is member-scoped', () => {
+  assert.equal(validateAcceptPublicValidatorUnhealthy().ok, true);
+  assert.equal(validateAcceptPublicValidatorUnhealthy({ accept: false }).details.accept, false);
+  assert.equal(validateAcceptPublicValidatorUnhealthy({ accept: 'false' }).details.accept, false);
+  assert.equal(validateAcceptPublicValidatorUnhealthy({ accept: '1' }).ok, false);
+  assert.equal(validateAcceptPublicValidatorUnhealthy({
+    accept: true,
+    member: 'index.mjs',
+    operation: 'replace',
+  }).code, 'UNRELATED_MUTATION');
+  assert.equal(validateAcceptPublicValidatorUnhealthy({
+    accept: true,
+    member: DIAGNOSTIC_VALIDATOR_MEMBER,
+    operation: 'add',
+  }).code, 'UNRELATED_MUTATION');
+  assert.equal(validateAcceptPublicValidatorUnhealthy({
+    accept: true,
+    member: DIAGNOSTIC_VALIDATOR_MEMBER,
+    operation: 'replace',
+    functionName: 'checksops-production-prep-api',
+  }).code, 'UNRELATED_MUTATION');
+  const allowed = validateAcceptPublicValidatorUnhealthy({
+    accept: 'true',
+    member: DIAGNOSTIC_VALIDATOR_MEMBER,
+    operation: 'replace',
+    functionName: 'checksops-staging-api',
+  });
+  assert.equal(allowed.ok, true);
+  assert.equal(allowed.details.accept, true);
+});
+
+test('accepted public validator unhealthy contract is exact and redacted', () => {
+  assert.equal(isAcceptedPublicValidatorUnhealthy(503, acceptedUnhealthy.body), true);
+  assert.equal(isAcceptedPublicValidatorUnhealthy(200, acceptedUnhealthy.body), false);
+  assert.equal(isAcceptedPublicValidatorUnhealthy(503, { ...acceptedUnhealthy.body, extra: true }), false);
+  assert.equal(isAcceptedPublicValidatorUnhealthy(503, { service: 'checksops-api', status: 'unhealthy' }), false);
 });
 
 test('GitHub staging overlay accepts a normal Lambda member inside aws/functions/api',()=>{
