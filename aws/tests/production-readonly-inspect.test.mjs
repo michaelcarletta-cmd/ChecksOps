@@ -491,6 +491,27 @@ test('rejects Lambda code-location credentials, explicit ports, and unapproved S
   assert.equal(packageFetches, 0);
 });
 
+test('records only safe endpoint and path-style diagnostics for rejected AWS-owned URLs', async () => {
+  const location = 'https://s3.us-east-1.amazonaws.com/unapproved-bucket/private-path/package.zip?X-Amz-Signature=private-signature';
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunction': () => ({
+        Configuration: { CodeSha256: LAMBDA_CODE_SHA, RevisionId: 'live-revision' },
+        Code: { Location: location },
+      }),
+    }),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.lambda.package.status, 'location_validation_failed');
+  assert.equal(report.lambda.package.hostname, 's3.us-east-1.amazonaws.com');
+  assert.equal(report.lambda.package.path_classification, 'path-style-s3-candidate');
+  assert.equal(report.lambda.package.scheme_classification, 'https');
+  const output = JSON.stringify({ report, evidence: buildInspectionSummary(report) });
+  for (const sensitiveValue of ['unapproved-bucket', 'private-path', 'private-signature', 'X-Amz-Signature']) {
+    assert.equal(output.includes(sensitiveValue), false, sensitiveValue);
+  }
+});
+
 test('rejects Lambda package redirects and reports only a redacted download-stage cause', async () => {
   const report = await inspectProduction({
     runAws: mockAws([], {
