@@ -149,6 +149,7 @@ test('existing validator enforces TLS/session/transaction read-only and never di
       ] };
       if (sql.includes("c.relname = 'users'")) return { rows: [{ present: true }] };
       if (sql.includes('pg_constraint')) return { rows: [{ fk_count: 0 }] };
+      if (sql.includes('pg_get_triggerdef')) return { rows: [] };
       if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 165 }] };
       if (sql.includes('prokind')) return { rows: [{
         function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
