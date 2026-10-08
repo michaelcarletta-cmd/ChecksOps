@@ -213,3 +213,31 @@ guarded entrypoints. They do not write AWS.
   says otherwise.
 
 This PR does not change IAM.
+
+## Staging DB diagnostic approval stop
+
+`.github/workflows/staging-db-readonly-diagnostic-deploy.yml` is disabled with a
+false job condition until an independent approval boundary is configured and
+verified. Do not dispatch it or deploy this diagnostic. Its `approved_commit`
+input only compares a caller-supplied value with `GITHUB_SHA`; it is not an
+approval record.
+
+An issue-comment/API verifier in this repository would not be an independent
+gate: a principal able to change `main` can change or remove the verifier in
+the same commit. Comment records also do not provide an atomic one-time claim
+that prevents concurrent or replayed deployment attempts. The Deployment Guard
+lease and receipt prevent target collisions; they do not establish human
+approval or make the workflow verifier immutable.
+
+Resume only after an authorized administrator establishes and independently
+verifies enforcement outside this mutable workflow. Acceptable options include
+a supported protected GitHub environment with required independent reviewers
+and bypass disabled, or an external promotion controller with a separately
+controlled verifier, atomic single-use authorization, and AWS OIDC trust bound
+to that controller. Also restrict who can update `main` and the enforcement
+configuration, and prevent self-approval. Before enabling any deployment,
+independently review and test rejection of a wrong SHA, unapproved/self-
+approving actor, replay, branch or tag mismatch, changed verifier/workflow,
+missing GitHub permission, and concurrent attempts. Re-verify live staging and
+AWS role policies, then separately authorize a single deployment; this
+source-only change performs none of those actions.

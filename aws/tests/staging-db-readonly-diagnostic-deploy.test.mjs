@@ -102,11 +102,13 @@ test('deployment publishes and emits only the immutable version ARN and matching
   }, CODE_SHA256), /published_version_contract_rejected/);
 });
 
-test('workflow uses protected main-only staging OIDC and no API or production target', () => {
+test('workflow fails closed pending an independent approval boundary', () => {
   const workflow = fs.readFileSync(new URL('../../.github/workflows/staging-db-readonly-diagnostic-deploy.yml', import.meta.url), 'utf8');
   const runner = fs.readFileSync(new URL('../../scripts/staging-db-readonly-diagnostic-deploy.mjs', import.meta.url), 'utf8');
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /if: \$\{\{ false \}\}/);
+  assert.doesNotMatch(workflow, /id-token:\s*write/);
   assert.match(workflow, /GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /APPROVED_COMMIT" = "\$GITHUB_SHA"/);
   assert.match(workflow, /CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN/);
