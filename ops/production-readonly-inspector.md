@@ -9,14 +9,13 @@ account and assumed role, and pins region `us-east-1`, API `kiqojucc02` / stage
 staging, wildcard, or drifted targets are refused.
 
 The `production-readonly` GitHub environment must be configured with required
-reviewers before this workflow is enabled. Its database connection secret is
-`CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL`; it must identify a read-only
-database role and the pinned direct endpoint
-`db.nbcqwpysqgyxrrbgtmkw.supabase.co:5432/postgres` with
-`sslmode=verify-full`. The URL is never printed or fetched from AWS Secrets
-Manager. The inspector requires a non-superuser connection with
-`default_transaction_read_only=on`, and executes only its fixed catalog SELECT
-statements.
+reviewers before this workflow is enabled. Current accepted AWS production
+metadata does not identify a production database target: the production API
+template declares no VPC/RDS attachment, and the production release lock has no
+database evidence record. The inspector therefore reports
+`refused_unproven_aws_production_target` and does not accept a database
+connection string, contact a database, read a database secret, or inspect
+historical migration paths. The staging RDS target is not a production target.
 
 The OIDC role ARN variable must be
 `CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN` =
@@ -30,10 +29,6 @@ also permit these reads, or the report lists the missing permission:
   `checksops-production-prep-api`.
 - `apigateway:GET` on only API `kiqojucc02`, its `prep` stage, and integrations.
 - `cloudfront:GetDistribution` on only `E1B0ZWWO5559U5`.
-- A direct database role with only the catalog/introspection SELECT access
-  needed for `current_user`, `pg_catalog` routine/trigger metadata, and the
-  `checksops` column/function privilege checks.
-
 No S3 listing or writes, Lambda code/config updates or publishing, CloudFront
 configuration changes or invalidations, Secrets Manager access, SQL mutation,
 migrations, provider/payment calls, or application-data reads/writes are
@@ -45,7 +40,9 @@ The production release lock currently has no Lambda `CodeSha256` pin. The
 inspector reports the live Lambda code fingerprint, workflow flags, source
 evidence, and the merged PR #762/#772 commit references, but marks live status
 unverified until an accepted production code-hash pin exists; it does not infer
-that either PR is deployed from a flag or a source-only match.
+that either PR is deployed from a flag or a source-only match. Source lineage
+is limited to current AWS source files; historical migration files are not
+treated as live production evidence.
 
 Invoking the workflow is a read-only production inspection. It does not
 authorize or perform a deployment, SQL apply, Lambda update, or production

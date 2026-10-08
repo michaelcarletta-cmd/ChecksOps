@@ -226,7 +226,8 @@ test('marks resource identity drift instead of reporting a successful inspection
 
 test('refuses Supabase database targets and has no database connection path', async () => {
   const supabaseHost = ['db', 'unapproved-project', 'supabase', 'co'].join('.');
-  const supabaseUrl = `******${supabaseHost}:5432/postgres`;
+  const supabaseUrl = ['postgresql:', '', `${supabaseHost}:5432/postgres`].join('/');
+  assert.equal(new URL(supabaseUrl).hostname, supabaseHost);
   assert.throws(() => assertProductionTarget({ ...PRODUCTION_TARGET, databaseHost: supabaseHost }), /unexpected production target field/);
   assert.throws(() => assertProductionTarget({ ...PRODUCTION_TARGET, databaseUrl: supabaseUrl }), /unexpected production target field/);
 
@@ -245,11 +246,12 @@ test('refuses Supabase database targets and has no database connection path', as
   assert.equal(connected, false);
 
   const inspector = fs.readFileSync(new URL('../../scripts/deployment-guard/production-readonly-inspect.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(inspector, /CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|import\(['"]pg['"]\)|createDatabaseClient/);
+  assert.doesNotMatch(inspector, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|postgres(?:ql)?:\/\/|import\(['"]pg['"]\)|createDatabaseClient/i);
 });
 
 test('read workflow is manually dispatched, uses protected environment and no mutation or secret-read IAM actions', () => {
   const workflow = fs.readFileSync(new URL('../../.github/workflows/inspect-production-readonly.yml', import.meta.url), 'utf8');
+  const docs = fs.readFileSync(new URL('../../ops/production-readonly-inspector.md', import.meta.url), 'utf8');
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /environment: production-readonly/);
   assert.match(workflow, /contents: read/);
@@ -260,5 +262,8 @@ test('read workflow is manually dispatched, uses protected environment and no mu
   assert.match(workflow, /apigateway:GET/);
   assert.doesNotMatch(workflow, /secretsmanager:GetSecretValue|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
   assert.doesNotMatch(workflow, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
+  assert.doesNotMatch(workflow, /npm ci|PostgreSQL inspection dependency/i);
+  assert.match(docs, /refused_unproven_aws_production_target/);
+  assert.doesNotMatch(docs, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /\b(?:put-object|sync\s+--delete|delete-object|create-invalidation|update-function-code|update-function-configuration|provider|payment)\b/i);
 });

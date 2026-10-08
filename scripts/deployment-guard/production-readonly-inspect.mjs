@@ -197,7 +197,6 @@ function redactText(value) {
   return String(value)
     .replace(/\b(Authorization|Bearer|password|passwd|secret|token|api[_-]?key|access[_-]?key|connection[_-]?string)\b(\s*(?::=|=>|=|:)\s*)(['"][^'"]*['"]|[^,\s;]+)/gi, '$1$2[REDACTED]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, '[REDACTED]')
-    .replace(/\b(postgres(?:ql)?:\/\/)[^@\s'"]+@/gi, '$1[REDACTED]@')
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED]')
     .replace(/\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\b/g, '[REDACTED]');
 }
