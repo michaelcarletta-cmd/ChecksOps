@@ -1,13 +1,19 @@
 /**
  * Source contract for GET /db-readonly-validate details.
- * Matches aws/functions/api/index.mjs. Does not deploy or connect to AWS/DB.
+ * Matches aws/functions/api/index.mjs and db-validator-access.mjs.
+ * Does not deploy or connect to AWS/DB.
  *
- * UI admin (`user_roles.admin`) is enforced in the staging page only.
- * The API authorizes detailed results with Cognito claims (`resolveClaims`).
- * An application-role check is intentionally not required here: the existing
- * staging DB diagnostic workflow authenticates with a Cognito ID token and
- * changing that contract needs a reviewed Lambda overlay, not this SPA plan.
+ * Staging details require Cognito resolveClaims plus application user_roles
+ * admin. Unauthenticated callers stay on the public redaction path.
+ * Authenticated non-admins get 403 {error:not_authorized}. Production
+ * authenticated callers stay resolveClaims-only. The gate is source-only
+ * until a separately approved staging Lambda overlay.
  */
+
+import {
+  authorizeDbValidatorDetails,
+  dbValidatorHttpResponse,
+} from '../../../aws/functions/api/db-validator-access.mjs';
 
 export const DB_VALIDATOR_ROUTE = '/db-readonly-validate';
 export const DB_VALIDATOR_UI_PATH = '/admin/db-validator';
@@ -15,26 +21,27 @@ export const DB_VALIDATOR_STAGING_HOSTNAME = 'staging.checksops.com';
 export const DB_VALIDATOR_STAGING_ORIGIN = 'https://staging.checksops.com';
 export const DB_VALIDATOR_STAGING_API = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
 export const PUBLIC_DB_VALIDATOR_FIELDS = Object.freeze(['service', 'status', 'readOnly']);
+export const FORBIDDEN_DETAIL_FIELDS = Object.freeze(['issues', 'tables', 'catalog', 'currentUser', 'message']);
 
-const HANDLER_BLOCK_RE = /if \(method === 'GET' && path === '\/db-readonly-validate'\) \{[\s\S]*?\n  \}/;
-
-export function detailedDbValidationAuthorized(auth) {
-  return Boolean(auth && auth.ok === true);
+export function detailedDbValidationAuthorized(access) {
+  return Boolean(access && access.ok === true);
 }
 
-export function selectDbValidationResponse(validation, auth, publicDbValidationResponse) {
-  if (!detailedDbValidationAuthorized(auth)) {
-    return publicDbValidationResponse(validation);
-  }
-  return {
-    statusCode: validation?.ok ? 200 : 503,
-    body: {
-      service: 'checksops-api',
-      environment: validation?.environment || 'unknown',
-      productionSupabaseChanged: false,
-      ...validation,
-    },
-  };
+export function selectDbValidationResponse(validation, access, publicDbValidationResponse) {
+  return dbValidatorHttpResponse({
+    access,
+    validation,
+    publicResponse: publicDbValidationResponse,
+    details: (result) => ({
+      statusCode: result?.ok ? 200 : 503,
+      body: {
+        service: 'checksops-api',
+        environment: result?.environment || 'unknown',
+        productionSupabaseChanged: false,
+        ...result,
+      },
+    }),
+  });
 }
 
 export function publicBodyIsRedacted(body) {
@@ -46,21 +53,33 @@ export function publicBodyIsRedacted(body) {
     && body.readOnly === true;
 }
 
+export function forbiddenDetailsAbsent(body) {
+  if (!body || typeof body !== 'object') return false;
+  return FORBIDDEN_DETAIL_FIELDS.every((key) => !Object.hasOwn(body, key));
+}
+
 export function extractDbValidatorHandler(source) {
-  const match = String(source || '').match(HANDLER_BLOCK_RE);
-  return match ? match[0] : '';
+  const text = String(source || '');
+  const named = text.match(/export const handleDbReadonlyValidateRequest[\s\S]*?\n\};/);
+  if (named) return named[0];
+  const route = text.match(/if \(method === 'GET' && path === '\/db-readonly-validate'\) \{[\s\S]*?\n  \}/);
+  return route ? route[0] : '';
 }
 
 export function handlerEnforcesCognitoDetailsGate(source) {
-  const block = extractDbValidatorHandler(source);
+  const text = String(source || '');
+  const block = extractDbValidatorHandler(text);
   return Boolean(block)
-    && block.includes('const auth = await resolveClaims(event)')
-    && block.includes('if (!auth.ok)')
-    && block.includes('publicDbValidationResponse(validation)')
-    && /return json\(validation\.ok \? 200 : 503/.test(block);
+    && text.includes('handleDbReadonlyValidateRequest')
+    && block.includes('resolveAuth')
+    && block.includes('authorizeDetails')
+    && block.includes('dbValidatorHttpResponse');
 }
 
-export function handlerUsesAppAdminRole(source) {
-  const block = extractDbValidatorHandler(source);
-  return /has_role|isAdmin|user_roles|HAS_ADMIN|app_role/.test(block);
+export function handlerUsesAppAdminRole(source, accessSource = '') {
+  const combined = `${source}\n${accessSource}`;
+  return combined.includes('authorizeDbValidatorDetails')
+    && /user_roles|isDbValidatorAdmin/.test(combined);
 }
+
+export { authorizeDbValidatorDetails, dbValidatorHttpResponse };

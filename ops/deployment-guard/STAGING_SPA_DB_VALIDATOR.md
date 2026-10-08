@@ -15,15 +15,14 @@ runs against current live `index.html`.
 | Layer | Gate | Details returned |
 |---|---|---|
 | Public `GET /db-readonly-validate` | none | `service`, `status`, `readOnly` only |
-| API details | Cognito `resolveClaims` (`auth.ok`) | full validator payload |
+| Staging API details | Cognito `resolveClaims` **and** application `user_roles` `admin` (`db-validator-access.mjs`) | full validator payload |
+| Staging authenticated non-admin | Cognito ok, not admin | `403 {error:not_authorized}` (no issues/tables/catalog) |
+| Production authenticated API | Cognito `resolveClaims` only | full validator payload |
 | Staging UI | `isAdmin` **and** `VITE_AUTH_PROVIDER=cognito` **and** host `staging.checksops.com` | sanitized issue kind/severity/SQLSTATE/table/probe |
 
-The Lambda handler does **not** check `user_roles.admin`. That is intentional
-for this follow-up: the existing staging DB diagnostic workflow uses a Cognito
-ID token, not an application-role probe. Tightening the API to app-admin would
-be a separate reviewed Lambda overlay (`SOURCE_RECONCILIATION_REQUIRED` if
-`index.mjs` already differs from live). Do not change that contract from a SPA
-workstream.
+The staging admin API gate is source-only until a separately approved Lambda
+overlay. This SPA workstream must not overlay `checksops-staging-api`. Do not
+change that contract from a frontend promote.
 
 UI 401/403 handling and sanitizer tests remain in
 `tests/db-validator-diagnostics.test.ts`.

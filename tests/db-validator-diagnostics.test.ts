@@ -91,3 +91,10 @@ test("App route remains wired for the staging admin page", () => {
   assert.ok(app.includes('path="/admin/db-validator"'));
   assert.ok(app.includes("AdminDbValidator"));
 });
+
+test("AWS adapter exposes the Cognito ID token as session access_token", () => {
+  const src = readFileSync(new URL("../src/integrations/aws/client.ts", import.meta.url), "utf8");
+  assert.ok(src.includes("access_token: String(tokens.idToken || \"\")"));
+  const page = readFileSync(new URL("../src/pages/admin/AdminDbValidator.tsx", import.meta.url), "utf8");
+  assert.ok(page.includes("session?.access_token"));
+});

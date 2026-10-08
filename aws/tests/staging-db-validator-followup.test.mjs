@@ -31,6 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const NOW = '2026-10-08T16:00:00.000Z';
 const handlerSource = fs.readFileSync(path.join(ROOT, 'aws/functions/api/index.mjs'), 'utf8');
+const accessSource = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-validator-access.mjs'), 'utf8');
 const template = fs.readFileSync(path.join(ROOT, 'aws/template.yaml'), 'utf8');
 const appSource = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf8');
 const pageSource = fs.readFileSync(path.join(ROOT, 'src/pages/admin/AdminDbValidator.tsx'), 'utf8');
@@ -65,16 +66,20 @@ function spaInput(overrides = {}) {
   };
 }
 
-test('handler source gates detailed validation on Cognito resolveClaims', () => {
+test('handler source gates staging details on Cognito plus application admin', () => {
   assert.equal(handlerEnforcesCognitoDetailsGate(handlerSource), true);
-  assert.equal(handlerUsesAppAdminRole(handlerSource), false);
-  assert.match(extractDbValidatorHandler(handlerSource), /resolveClaims/);
+  assert.equal(handlerUsesAppAdminRole(handlerSource, accessSource), true);
+  assert.match(extractDbValidatorHandler(handlerSource), /authorizeDetails/);
 });
 
 test('unauthenticated callers receive only the public redacted body', () => {
-  assert.equal(detailedDbValidationAuthorized({ ok: false }), false);
+  assert.equal(detailedDbValidationAuthorized({ ok: false, reason: 'unauthenticated' }), false);
   assert.equal(detailedDbValidationAuthorized({}), false);
-  const publicResult = selectDbValidationResponse(validation, { ok: false }, publicDbValidationResponse);
+  const publicResult = selectDbValidationResponse(
+    validation,
+    { ok: false, reason: 'unauthenticated' },
+    publicDbValidationResponse,
+  );
   assert.equal(publicResult.statusCode, 503);
   assert.deepEqual(publicResult.body, { service: 'checksops-api', status: 'unhealthy', readOnly: true });
   assert.equal(publicBodyIsRedacted(publicResult.body), true);
@@ -83,11 +88,11 @@ test('unauthenticated callers receive only the public redacted body', () => {
   assert.equal(JSON.stringify(publicResult.body).includes('db.internal'), false);
 });
 
-test('Cognito-authorized callers receive detailed validation fields', () => {
-  assert.equal(detailedDbValidationAuthorized({ ok: true, claims: { sub: 'user' } }), true);
+test('staging admin callers receive detailed validation fields; non-admins get 403', () => {
+  assert.equal(detailedDbValidationAuthorized({ ok: true, reason: 'staging_admin' }), true);
   const detailed = selectDbValidationResponse(
     { ...validation, environment: 'staging' },
-    { ok: true, claims: { sub: 'user' } },
+    { ok: true, reason: 'staging_admin' },
     publicDbValidationResponse,
   );
   assert.equal(detailed.statusCode, 503);
@@ -95,6 +100,15 @@ test('Cognito-authorized callers receive detailed validation fields', () => {
   assert.equal(detailed.body.readOnly, true);
   assert.equal(detailed.body.issues.length, 1);
   assert.equal(publicBodyIsRedacted(detailed.body), false);
+
+  const denied = selectDbValidationResponse(
+    validation,
+    { ok: false, reason: 'not_admin', statusCode: 403 },
+    publicDbValidationResponse,
+  );
+  assert.equal(denied.statusCode, 403);
+  assert.deepEqual(denied.body, { error: 'not_authorized' });
+  assert.equal(Object.hasOwn(denied.body, 'issues'), false);
 });
 
 test('OPTIONS /db-readonly-validate advertises GET and authorization CORS', async () => {

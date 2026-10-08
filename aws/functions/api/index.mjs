@@ -1,7 +1,8 @@
 import { databaseSecretConfigured } from './secrets.mjs';
 import { probeDatabase, probeIsHealthy } from './db-health.mjs';
 import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
-import { handleIdentityMe } from './identity.mjs';
+import { authorizeDbValidatorDetails, dbValidatorHttpResponse } from './db-validator-access.mjs';
+import { handleIdentityMe, resolveIdentitySession } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
@@ -98,6 +99,33 @@ export const publicDbValidationResponse = (validation) => ({
   },
 });
 
+export const handleDbReadonlyValidateRequest = async (event, {
+  validate = validateReadonlyCoreTables,
+  resolveAuth = resolveClaims,
+  authorizeDetails = (opts) => authorizeDbValidatorDetails({
+    ...opts,
+    resolveIdentity: opts.resolveIdentity || resolveIdentitySession,
+  }),
+} = {}) => {
+  const validation = await validate();
+  const auth = await resolveAuth(event);
+  const access = await authorizeDetails({ auth });
+  return dbValidatorHttpResponse({
+    access,
+    validation,
+    publicResponse: publicDbValidationResponse,
+    details: (result) => ({
+      statusCode: result.ok ? 200 : 503,
+      body: {
+        service: 'checksops-api',
+        environment: process.env.CHECKSOPS_ENV || 'unknown',
+        productionSupabaseChanged: false,
+        ...result,
+      },
+    }),
+  });
+};
+
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
@@ -152,18 +180,8 @@ export const handler = async (event) => {
   }
 
   if (method === 'GET' && path === '/db-readonly-validate') {
-    const validation = await validateReadonlyCoreTables();
-    const auth = await resolveClaims(event);
-    if (!auth.ok) {
-      const publicResult = publicDbValidationResponse(validation);
-      return json(publicResult.statusCode, publicResult.body);
-    }
-    return json(validation.ok ? 200 : 503, {
-      service: 'checksops-api',
-      environment: process.env.CHECKSOPS_ENV || 'unknown',
-      productionSupabaseChanged: false,
-      ...validation,
-    });
+    const result = await handleDbReadonlyValidateRequest(event);
+    return json(result.statusCode, result.body);
   }
 
   // TEMPORARY staging-only TMP RLS catalog inspect. Remove with tenant-maintenance-payments-catalog-inspect.mjs.
