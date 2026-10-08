@@ -235,23 +235,23 @@ provision a network workaround.** The remaining prerequisites are:
 2. A proven hard read-only diagnostic entrypoint/boundary: accepted deployed
    source/version evidence for a fixed validator or equivalent checks using the
    application role, verified TLS, read-only connection/transaction enforcement,
-   no mutation/provider dispatch, and allowlisted output. The repository proves
-   read-only validator logic, not a Cognito-free, isolated invocation contract;
-   the observed admin executors do not supply that boundary.
+   no mutation/provider dispatch, and allowlisted output. Existing deployed source
+   proves read-only validator logic, not an accepted Cognito-free isolated
+   invocation contract; the observed admin executors do not supply that boundary.
+   The separate source design below is not deployed or live-verified.
 
 Obtain only the missing evidence through an authorized read-only inspection.
 Do not publish environment values, secret contents, presigned package URLs,
 raw function results or DB errors. The source-only follow-up design below does
 not claim that either live prerequisite is established or authorize invocation.
 
-If such an entrypoint exists, the smallest subsequent reviewed PR is a manual
-`main` workflow with protected staging approval, exact-SHA checks before OIDC,
-a short-lived session restricted to that entrypoint, fixed invocation payload,
-and allowlisted diagnostic classifications only. Pin an immutable version and
-verify accepted live composition/configuration before and after execution; stop
-on drift (`DEPLOYMENT_COLLISION`). Do not use arbitrary SQL, fake Cognito claims,
-admin executors, provider actions, credentials in GitHub, or raw response artifacts.
-Preserve Release Locks and Deployment Guard; a diagnostic grants no apply receipt.
+The separate source design below is the proposed implementation, not proof of a
+deployed safe entrypoint or authorization to invoke it. Before any execution,
+pin an immutable published version to accepted source/configuration and verify
+that exact version; stop on drift (`DEPLOYMENT_COLLISION`). Do not use arbitrary
+SQL, fake Cognito claims, admin executors, provider actions, credentials in
+GitHub, or raw response artifacts. Preserve Release Locks and Deployment Guard;
+a diagnostic grants no apply receipt.
 
 The confirmed API environment is the smallest reuse candidate for private
 execution; the inspected handler cannot provide this path unchanged. A
@@ -264,14 +264,20 @@ a workaround on the present evidence.
 
 #### Source-only fixed Lambda follow-up
 
-This source adds a separate `checksops-staging-db-readonly-diagnostic` Lambda
-resource and handler; it does not deploy or provision it. It calls only the
+This source adds a separate SAM template at
+`aws/staging-db-readonly-diagnostic/template.yaml` and a
+`checksops-staging-db-readonly-diagnostic` handler; it does not deploy or
+provision it. The template requires the existing app secret ARN, private API
+subnets, and API Lambda security group as explicit inputs, so an owner must
+verify those values from accepted live configuration. It calls only the
 fixed `validateReadonlyCoreTables()` implementation, ignores the invocation
 payload, uses the staging application DB secret, and has no provider/business
 dispatch imports or API route. Its execution role is limited in the template to
 VPC access and `secretsmanager:GetSecretValue` for `DatabaseSecretArn`; inherited
-provider/Cognito secret environment values are blanked. The shared DB client
-verifies RDS TLS, sets `default_transaction_read_only=on`, and starts
+provider secret environment values are blanked and business-write/provider/
+financial execution flags are explicitly disabled. The existing `aws/template.yaml`
+and API composition remain unchanged. The shared DB client verifies RDS TLS,
+sets `default_transaction_read_only=on`, and starts
 `BEGIN READ ONLY`; the validator always rolls back and closes the connection.
 Results are reconstructed from fixed check/table labels, status classifications,
 booleans, and validated nonnegative integer counts. Raw errors, identities,
@@ -303,9 +309,11 @@ These are not proven by this repository or configured by this change. The
 diagnostic function's own execution role must separately have only the staging
 application-secret read and required VPC execution access, with no provider,
 database-write, deployment, or other secret permissions. Do not create/change
-these AWS roles or policies under this PR. Any later resource deployment must
-use the existing Release Locks and Deployment Guard authorization process; this
-read-only workflow creates no lease, receipt, or deployment authority.
+these AWS roles or policies under this PR. The new standalone template/target is
+not yet registered as a deployment target in the existing Deployment Guard;
+before any provisioning, separately review and authorize its target registration
+and source composition under Release Locks/Deployment Guard. This diagnostic
+workflow creates no lease, receipt, or deployment authority.
 
 ## Next migration step
 

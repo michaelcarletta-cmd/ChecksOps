@@ -13,7 +13,7 @@ const KINDS = new Set([
 ]);
 const CHECKS = new Set([
   'database_identity', 'application_role', 'row_count', 'table_presence',
-  'table_query', 'privileges', 'sentinel', 'schema_usage', 'auth_users',
+  'rls_visibility', 'table_query', 'privileges', 'sentinel', 'schema_usage', 'auth_users',
   'auth_users_fks', 'triggers', 'functions', 'auth_uid_privilege',
   'auth.uid()', 'unclassified',
 ]);
@@ -22,6 +22,19 @@ const RLS_MODES = new Set(['off', 'on', 'partial']);
 const safeCount = (value) => Number.isSafeInteger(value) && value >= 0;
 const safeBoolean = (value) => typeof value === 'boolean' ? value : null;
 const countOrNull = (value) => safeCount(value) ? value : null;
+const validProjectedIssue = (item) => item
+  && CHECKS.has(item.check)
+  && KINDS.has(item.classification)
+  && ['fail', 'expected'].includes(item.status)
+  && (item.table === undefined || TABLES.has(item.table))
+  && (item.expectedCount === undefined || safeCount(item.expectedCount))
+  && (item.actualCount === undefined || safeCount(item.actualCount));
+const validProjectedTable = (row, index) => row?.table === CORE_TABLES[index]
+  && ['pass', 'fail'].includes(row.status)
+  && typeof row.present === 'boolean'
+  && typeof row.countMatches === 'boolean'
+  && safeCount(row.expectedCount)
+  && (row.actualCount === null || safeCount(row.actualCount));
 
 const issueCheck = (item) => {
   if (CHECKS.has(item.probe)) return item.probe;
@@ -30,6 +43,8 @@ const issueCheck = (item) => {
   if (item.kind === 'missing_relation') return TABLES.has(item.table) ? 'table_presence' : 'sentinel';
   if (item.kind === 'trigger') return 'triggers';
   if (item.kind === 'missing_fk') return 'auth_users_fks';
+  if (item.kind === 'permission' && TABLES.has(item.table)
+      && safeCount(item.rowCount) && safeCount(item.expectedCount)) return 'rls_visibility';
   if (item.kind === 'permission') return 'privileges';
   return 'unclassified';
 };
@@ -44,22 +59,24 @@ const projectIssues = (issues) => (Array.isArray(issues) ? issues : [])
       status: item.severity === 'error' ? 'fail' : 'expected',
     };
     if (TABLES.has(item.table)) result.table = item.table;
-    if (result.check === 'row_count' && result.table
+    if (['row_count', 'rls_visibility'].includes(result.check) && result.table
         && safeCount(item.expectedCount) && safeCount(item.rowCount)) {
-      result.expectedCount = item.expectedCount;
+      result.expectedCount = result.check === 'rls_visibility' ? 0 : item.expectedCount;
       result.actualCount = item.rowCount;
     }
     return result;
   });
 
-const projectTables = (tables) => CORE_TABLES.map((table) => {
+const projectTables = (tables, rlsMode) => CORE_TABLES.map((table) => {
   const row = Array.isArray(tables) ? tables.find((item) => item?.table === table) : null;
   return {
     table,
     status: row?.present === true && row?.countMatches === true && !row?.error ? 'pass' : 'fail',
     present: row?.present === true,
     countMatches: row?.countMatches === true,
-    expectedCount: safeCount(row?.expectedCount) ? row.expectedCount : EXPECTED_ROW_COUNTS[table],
+    expectedCount: rlsMode === 'on'
+      ? 0
+      : safeCount(row?.expectedCount) ? row.expectedCount : EXPECTED_ROW_COUNTS[table],
     actualCount: countOrNull(row?.rowCount),
   };
 });
@@ -116,7 +133,7 @@ export const projectValidation = (validation = {}) => {
   if (validation.ok === false && !issues.some((item) => item.status === 'fail')) {
     issues.push({ check: 'unclassified', classification: 'unknown', status: 'fail' });
   }
-  const tables = projectTables(validation.tables);
+  const tables = projectTables(validation.tables, validation.rlsMode);
   const ok = validation.ok === true
     && tables.every((row) => row.status === 'pass')
     && !issues.some((item) => item.status === 'fail');
@@ -159,8 +176,10 @@ export const summarizeInvocation = ({ metadata, payload, expectedVersion }) => {
       || response.readOnly !== true || response.writesAttempted !== false
       || !Array.isArray(response.issues) || !Array.isArray(response.tables)
       || response.tables.length !== CORE_TABLES.length
-      || !response.tables.every((row, index) => row?.table === CORE_TABLES[index])
-      || response.issues.length > 512) {
+      || !response.tables.every(validProjectedTable)
+      || response.issues.length > 512
+      || !response.issues.every(validProjectedIssue)
+      || (response.status === 'ok' && response.issues.some((item) => item.status === 'fail'))) {
     return {
       schema: 'checksops-staging-db-readonly-diagnostic/v1',
       environment: 'staging',

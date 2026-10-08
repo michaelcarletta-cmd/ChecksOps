@@ -89,7 +89,7 @@ test('projection contains only allowlisted diagnostic labels, booleans, and safe
     ],
     tables: CORE_TABLES.map((table) => ({
       table, present: true, countMatches: true,
-      rowCount: EXPECTED_ROW_COUNTS[table], expectedCount: EXPECTED_ROW_COUNTS[table], error: SENSITIVE,
+      rowCount: 0, expectedCount: EXPECTED_ROW_COUNTS[table], error: SENSITIVE,
     })),
     privileges: [{
       table: 'claims', canSelect: true, canInsert: false, canUpdate: false,
@@ -111,6 +111,9 @@ test('projection contains only allowlisted diagnostic labels, booleans, and safe
   });
   assert.equal(result.catalog.publicTriggers, 164);
   assert.equal(result.privileges.length, 1);
+  assert.deepEqual(result.tables.find((row) => row.table === 'claims'), {
+    table: 'claims', status: 'fail', present: true, countMatches: true, expectedCount: 0, actualCount: 0,
+  });
   assert.doesNotMatch(JSON.stringify(result), new RegExp(SENSITIVE));
   assert.doesNotMatch(JSON.stringify(result), /currentDatabase|currentUser|secretDatabase|authUidResult|matrix/);
 });
@@ -186,6 +189,9 @@ test('invocation summary checks published version and reconstructs only safe out
     metadata: { ExecutedVersion: '13' }, payload: result, expectedVersion: '12',
   }).classification, 'target_version_mismatch');
   assert.equal(summarizeInvocation({
+    metadata, payload: { ...result, status: 'ok', issues: [{ message: SENSITIVE }] }, expectedVersion: '12',
+  }).classification, 'response_contract_mismatch');
+  assert.equal(summarizeInvocation({
     metadata, payload: { ...result, unexpected: SENSITIVE }, expectedVersion: '12',
   }).status, 'unhealthy');
   assert.doesNotMatch(JSON.stringify(summary), new RegExp(SENSITIVE));
@@ -193,7 +199,8 @@ test('invocation summary checks published version and reconstructs only safe out
 
 test('workflow and SAM target are staging-only, exact-version, isolated, and do not weaken deployment guards', () => {
   const workflow = fs.readFileSync(new URL('../../.github/workflows/staging-db-readonly-lambda-diagnostic.yml', import.meta.url), 'utf8');
-  const template = fs.readFileSync(new URL('../template.yaml', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../staging-db-readonly-diagnostic/template.yaml', import.meta.url), 'utf8');
+  const apiTemplate = fs.readFileSync(new URL('../template.yaml', import.meta.url), 'utf8');
   const handler = fs.readFileSync(new URL('../functions/api/staging-db-readonly-diagnostic.mjs', import.meta.url), 'utf8');
   const invocation = fs.readFileSync(new URL('../../scripts/staging-db-readonly-lambda-invocation.mjs', import.meta.url), 'utf8');
   const output = fs.readFileSync(new URL('../functions/api/staging-db-readonly-diagnostic-output.mjs', import.meta.url), 'utf8');
@@ -203,16 +210,24 @@ test('workflow and SAM target are staging-only, exact-version, isolated, and do 
   assert.match(workflow, /git rev-parse HEAD.*\$GITHUB_SHA/);
   assert.match(workflow, /CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN/);
   assert.match(workflow, /CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN/);
+  assert.match(workflow, /CHECKSOPS_STAGING_DIAGNOSTIC_VERSION=/);
   assert.match(workflow, /lambda:InvokeFunction/);
   assert.match(workflow, /--function-name "\$DIAGNOSTIC_TARGET_ARN"/);
   assert.match(output, /ExecutedVersion/);
   assert.doesNotMatch(workflow, /production|CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN|secrets\./i);
   assert.doesNotMatch(workflow, /CHECKSOPS_[A-Z_]*TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY/);
   assert.doesNotMatch(workflow, /pull_request:|push:|upload-artifact|continue-on-error|set -x/);
-  assert.match(template, /FunctionName: !Sub checksops-\$\{Environment\}-db-readonly-diagnostic/);
+  assert.match(template, /FunctionName: checksops-staging-db-readonly-diagnostic/);
   assert.match(template, /Handler: staging-db-readonly-diagnostic\.handler/);
   assert.match(template, /AWSSecretsManagerGetSecretValuePolicy:[\s\S]*?SecretArn: !Ref DatabaseSecretArn/);
   assert.match(template, /PROVIDER_SECRETS_ARN: ''/);
+  assert.doesNotMatch(apiTemplate, /StagingDbReadonlyDiagnosticFunction/);
+  for (const flag of [
+    'AWS_WRITES_ENABLED', 'AWS_CHECK_WORKFLOW_WRITES_ENABLED', 'AWS_STORAGE_WRITES_ENABLED',
+    'AWS_APPLICATION_WORKFLOW_WRITES_ENABLED', 'AWS_PROVIDER_EXECUTION_ENABLED',
+    'AWS_PROVIDER_LIVE_READS_ENABLED', 'AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED',
+    'AWS_FINANCIAL_PERMISSIONS_ACTIVATED',
+  ]) assert.match(template, new RegExp(`${flag}: 'false'`));
   assert.match(handler, /validateReadonlyCoreTables/);
   assert.doesNotMatch(handler, /providers\.mjs|workflow\.mjs|financial\.mjs|storage\.mjs|process\.env\.[A-Z_]*TOKEN/);
 });

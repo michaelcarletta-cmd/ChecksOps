@@ -33,7 +33,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
           test "$STAGING_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnostic" || { echo "Dedicated staging diagnostic role is not configured"; exit 2; }
           [[ "$DIAGNOSTIC_TARGET_ARN" =~ ^arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-db-readonly-diagnostic:[1-9][0-9]*$ ]] || { echo "Exact published staging diagnostic version is not configured"; exit 2; }
-          echo "DIAGNOSTIC_VERSION=${DIAGNOSTIC_TARGET_ARN##*:}" >> "$GITHUB_ENV"
+          echo "CHECKSOPS_STAGING_DIAGNOSTIC_VERSION=${DIAGNOSTIC_TARGET_ARN##*:}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
