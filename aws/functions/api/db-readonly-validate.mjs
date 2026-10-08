@@ -52,6 +52,56 @@ export const EXPECTED_ROW_COUNTS = {
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
 export const EXPECTED_PUBLIC_TRIGGERS = 165;
+export const PUBLIC_TRIGGER_INVENTORY_LIMIT = 256;
+export const PUBLIC_TRIGGER_DEFINITION_MAX = 2048;
+export const PUBLIC_TRIGGER_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const PUBLIC_TRIGGER_ENABLED = new Set(['O', 'D', 'R', 'A']);
+export const PUBLIC_TRIGGER_DEFINITION_RE = /^CREATE (CONSTRAINT )?TRIGGER /;
+
+export const PUBLIC_TRIGGER_INVENTORY_SQL = `SELECT c.relname AS table_name,
+       t.tgname AS trigger_name,
+       t.tgenabled AS enabled,
+       p.proname AS function_name,
+       pg_get_triggerdef(t.oid) AS definition
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_proc p ON p.oid = t.tgfoid
+WHERE n.nspname = 'public' AND NOT t.tgisinternal
+ORDER BY c.relname, t.tgname
+LIMIT ${PUBLIC_TRIGGER_INVENTORY_LIMIT + 1}`;
+
+export const sanitizePublicTriggerRow = (row = {}) => {
+  const table = String(row.table_name || '');
+  const trigger = String(row.trigger_name || '');
+  const enabled = String(row.enabled || '');
+  const functionName = String(row.function_name || '');
+  if (!PUBLIC_TRIGGER_IDENT_RE.test(table)
+      || !PUBLIC_TRIGGER_IDENT_RE.test(trigger)
+      || !PUBLIC_TRIGGER_ENABLED.has(enabled)
+      || !PUBLIC_TRIGGER_IDENT_RE.test(functionName)) {
+    return null;
+  }
+  const result = { table, trigger, enabled, functionName };
+  const definition = String(row.definition || '');
+  if (definition
+      && definition.length <= PUBLIC_TRIGGER_DEFINITION_MAX
+      && PUBLIC_TRIGGER_DEFINITION_RE.test(definition)) {
+    result.definition = definition;
+  }
+  return result;
+};
+
+export const projectPublicTriggerInventory = (rows = []) => {
+  const list = Array.isArray(rows) ? rows : [];
+  const truncated = list.length > PUBLIC_TRIGGER_INVENTORY_LIMIT;
+  const inventory = [];
+  for (const row of list.slice(0, PUBLIC_TRIGGER_INVENTORY_LIMIT)) {
+    const sanitized = sanitizePublicTriggerRow(row);
+    if (sanitized) inventory.push(sanitized);
+  }
+  return { inventory, truncated };
+};
 
 const issue = (kind, severity, message, extra = {}) => ({
   kind,
@@ -298,6 +348,8 @@ export const validateReadonlyCoreTables = async ({
       restoredAuthUsersForeignKeys: null,
       skippedAuthUsersForeignKeysExpected: EXPECTED_SKIPPED_AUTH_USERS_FKS,
       publicTriggers: null,
+      publicTriggerInventory: [],
+      publicTriggerInventoryTruncated: false,
       publicFunctions: null,
       supabaseAuthUidFunctions: null,
       supabaseNetFunctions: null,
@@ -412,6 +464,15 @@ export const validateReadonlyCoreTables = async ({
               `public trigger count ${catalog.publicTriggers} != expected ${EXPECTED_PUBLIC_TRIGGERS}`,
             ));
           }
+        },
+      },
+      {
+        key: 'trigger_inventory',
+        sql: PUBLIC_TRIGGER_INVENTORY_SQL,
+        applyMany: (rows) => {
+          const projected = projectPublicTriggerInventory(rows);
+          catalog.publicTriggerInventory = projected.inventory;
+          catalog.publicTriggerInventoryTruncated = projected.truncated;
         },
       },
       {

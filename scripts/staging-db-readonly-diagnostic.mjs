@@ -1,5 +1,9 @@
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import {
+  comparePublicTriggerInventory,
+  sanitizePublicTriggerRow,
+} from './lib/justified-public-triggers.mjs';
 
 const ENDPOINT = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/db-readonly-validate';
 const TABLES = new Set([
@@ -34,6 +38,34 @@ export const createStagingVerifier = () => {
 const verifyStagingToken = (token) => createStagingVerifier().verify(token);
 
 const safeCount = (value) => Number.isSafeInteger(value) && value >= 0;
+const INVENTORY_LIMIT = 256;
+const EXPECTED_PUBLIC_TRIGGERS = 165;
+
+export const projectPublicTriggerInventory = (catalog = {}) => {
+  if (!Array.isArray(catalog.publicTriggerInventory)) return null;
+  const inventory = [];
+  for (const row of catalog.publicTriggerInventory.slice(0, INVENTORY_LIMIT)) {
+    const sanitized = sanitizePublicTriggerRow({
+      table_name: row?.table,
+      trigger_name: row?.trigger,
+      enabled: row?.enabled,
+      function_name: row?.functionName,
+      definition: row?.definition,
+    });
+    if (sanitized) inventory.push(sanitized);
+  }
+  const comparison = comparePublicTriggerInventory(inventory);
+  return {
+    expectedCount: EXPECTED_PUBLIC_TRIGGERS,
+    actualCount: safeCount(catalog.publicTriggers) ? catalog.publicTriggers : inventory.length,
+    truncated: catalog.publicTriggerInventoryTruncated === true
+      || catalog.publicTriggerInventory.length > INVENTORY_LIMIT,
+    added: comparison.added,
+    missing: comparison.missing,
+    changed: comparison.changed,
+    inventory,
+  };
+};
 
 // Messages are matched only to fixed assertion labels, never copied to output.
 const assertionProbe = (item) => {
@@ -83,7 +115,7 @@ export const summarizeValidation = (body, httpStatus) => {
       entry.actualCount = item.rowCount;
     }
     if (entry.probe === 'triggers' && safeCount(body.catalog?.publicTriggers)) {
-      entry.expectedCount = 165;
+      entry.expectedCount = EXPECTED_PUBLIC_TRIGGERS;
       entry.actualCount = body.catalog.publicTriggers;
     }
     if (entry.probe === 'auth_users_fks' && safeCount(item.restored)) {
@@ -106,7 +138,10 @@ export const summarizeValidation = (body, httpStatus) => {
   if (!body.ok && !issues.length) {
     issues.push({ kind: 'unclassified', severity: 'error', probe: 'validation_contract' });
   }
-  return { httpStatus, status: body.ok ? 'ok' : 'unhealthy', issues };
+  const summary = { httpStatus, status: body.ok ? 'ok' : 'unhealthy', issues };
+  const triggerInventory = projectPublicTriggerInventory(body.catalog || {});
+  if (triggerInventory) summary.triggerInventory = triggerInventory;
+  return summary;
 };
 
 export const diagnose = async ({ token, fetchImpl = fetch, verifyToken = verifyStagingToken } = {}) => {

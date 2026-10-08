@@ -397,6 +397,9 @@ const mockValidateClient = ({
       if (sql.includes('pg_constraint')) {
         return { rows: [{ fk_count: authUsersFkCount }] };
       }
+      if (sql.includes('pg_get_triggerdef')) {
+        return { rows: [] };
+      }
       if (sql.includes('pg_trigger')) {
         return { rows: [{ trigger_count: triggerCount }] };
       }
