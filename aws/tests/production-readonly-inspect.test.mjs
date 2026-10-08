@@ -43,6 +43,8 @@ const LAMBDA_CODE_SHA = createHash('sha256').update(LAMBDA_ZIP).digest('base64')
 const LAMBDA_CODE_LOCATION = 'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?temporary-token=must-not-leak';
 const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw';
 const RDS_INSTANCE_ARN = 'arn:aws:rds:us-east-1:806168576068:db:production-db';
+const OTHER_RDS_ARN = 'arn:aws:rds:us-east-1:806168576068:db:other-instance';
+const NAMED_PRODUCTION_RDS_ARN = 'arn:aws:rds:us-east-1:806168576068:db:checksops-production';
 const PRODUCTION_TARGET = {
   environment: 'production',
   accountId: '806168576068',
@@ -96,6 +98,22 @@ function projectLambdaConfiguration(configuration, target = {}) {
         .filter((name) => Object.hasOwn(variables, name))
         .map((name) => [name, variables[name]])),
     },
+  };
+}
+
+function persistenceConfigOverrides(rdsResponse, extra = {}) {
+  return {
+    'lambda:GetFunctionConfiguration': () => ({
+      ...lambdaConfig,
+      Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+    }),
+    'secretsmanager:DescribeSecret': (target) => ({
+      ARN: target.secretArn,
+      Name: 'rds-db-credentials/checksops-production/checksops',
+      OwningService: null,
+    }),
+    'rds:DescribeDBInstances': () => rdsResponse,
+    ...extra,
   };
 }
 
@@ -225,9 +243,14 @@ test('allowlists only pinned AWS read operations and refuses mutations or arbitr
   assert.throws(() => buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: '*' }));
   const rdsArgs = buildAwsArgs('rds:DescribeDBInstances', { secretArn: PERSISTENCE_SECRET_ARN });
   assert.deepEqual(rdsArgs.slice(0, 2), ['rds', 'describe-db-instances']);
-  assert.ok(rdsArgs.at(-1).includes(`MasterUserSecret.SecretArn=='${PERSISTENCE_SECRET_ARN}'`));
+  assert.ok(rdsArgs.at(-1).includes('DBInstances:DBInstances[].'));
   assert.ok(rdsArgs.at(-1).includes('DBInstanceArn:DBInstanceArn'));
+  assert.ok(rdsArgs.at(-1).includes('SecretArn:MasterUserSecret.SecretArn'));
+  assert.ok(rdsArgs.at(-1).includes('VpcId:DBSubnetGroup.VpcId'));
+  assert.ok(rdsArgs.at(-1).includes('VpcSecurityGroupIds:VpcSecurityGroups[].VpcSecurityGroupId'));
   assert.ok(rdsArgs.at(-1).includes('ObservedInstanceCount:length(DBInstances)'));
+  assert.equal(rdsArgs.at(-1).includes('Endpoint'), false);
+  assert.equal(rdsArgs.at(-1).includes('MasterUserSecret.SecretArn=='), false);
   const secretArgs = buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: PERSISTENCE_SECRET_ARN });
   assert.ok(secretArgs.at(-1).includes('OwningService:OwningService'));
   assert.equal(secretArgs.at(-1).includes('Description'), false);
@@ -303,6 +326,7 @@ test('proves the live RDS target through the exact runtime secret association wi
   assert.deepEqual(report.database.candidate_resources, [{
     reference_type: 'rds-instance',
     resource_arn: RDS_INSTANCE_ARN,
+    association: 'master-user-secret',
   }]);
   assert.ok(report.lambda.package.source_comparisons.some((item) => (
     item.repository_path === 'aws/functions/api/secrets.mjs' && item.matches
@@ -685,6 +709,7 @@ test('inspects only exact secret-reference metadata and keeps persistence fail-c
   assert.deepEqual(report.database.candidate_resources, [{
     reference_type: 'rds-instance',
     resource_arn: RDS_INSTANCE_ARN,
+    association: 'master-user-secret',
   }]);
   assert.equal(report.database.status, 'refused_unproven_aws_production_target');
   assert.equal(report.database.unresolved_references.some((reference) => reference.reference_type === 'ssm'
@@ -774,6 +799,162 @@ test('reports cluster metadata as the next safe read only for RDS-owned secrets'
   assert.equal(report.database.unresolved_references[0].owning_service_is_rds, true);
   assert.equal(calls.some(({ action }) => action === 'rds:DescribeDBClusters'), false);
   assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('GetSecretValue'), false);
+});
+
+test('proves exactly one RDS target from exclusive live Lambda VPC membership', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, persistenceConfigOverrides({
+      DBInstances: [
+        {
+          DBInstanceArn: RDS_INSTANCE_ARN,
+          VpcId: 'vpc-production',
+          SubnetIds: ['subnet-production'],
+          VpcSecurityGroupIds: ['sg-rds-app'],
+        },
+        {
+          DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
+          VpcId: 'vpc-other',
+          SubnetIds: ['subnet-other'],
+          VpcSecurityGroupIds: ['sg-other'],
+          Endpoint: { Address: 'checksops-production.example.rds.amazonaws.com', Port: 5432 },
+        },
+      ],
+      ObservedInstanceCount: 2,
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'complete');
+  assert.equal(report.database.reason, 'live Lambda VPC membership independently binds exactly one observed RDS instance through AWS metadata');
+  assert.deepEqual(report.database.candidate_resources, [{
+    reference_type: 'rds-instance',
+    resource_arn: RDS_INSTANCE_ARN,
+    association: 'exclusive-vpc',
+  }]);
+  assert.deepEqual(report.database.unresolved_references, []);
+  assert.equal(calls.some(({ action }) => /GetSecretValue|ssm:GetParameter|ec2:DescribeSecurityGroups|rds:DescribeDBClusters|ExecuteStatement|rds-data/.test(action)), false);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('other-instance'), false);
+  assert.equal(evidence.includes('rds.amazonaws.com'), false);
+  assert.ok(evidence.includes(RDS_INSTANCE_ARN));
+});
+
+test('proves exactly one RDS target from exclusive live Lambda security-group intersection', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], persistenceConfigOverrides({
+      DBInstances: [
+        {
+          DBInstanceArn: RDS_INSTANCE_ARN,
+          VpcId: 'vpc-production',
+          VpcSecurityGroupIds: ['sg-production', 'sg-rds-app'],
+        },
+        {
+          DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
+          VpcId: 'vpc-production',
+          VpcSecurityGroupIds: ['sg-other'],
+        },
+      ],
+      ObservedInstanceCount: 2,
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'complete');
+  assert.equal(report.database.reason, 'live Lambda security groups independently bind exactly one observed RDS instance through AWS metadata');
+  assert.deepEqual(report.database.candidate_resources, [{
+    reference_type: 'rds-instance',
+    resource_arn: RDS_INSTANCE_ARN,
+    association: 'exclusive-security-group',
+  }]);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.ok(evidence.includes(RDS_INSTANCE_ARN));
+});
+
+test('refuses to guess when two RDS instances share the live Lambda VPC', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, persistenceConfigOverrides({
+      DBInstances: [
+        {
+          DBInstanceArn: RDS_INSTANCE_ARN,
+          VpcId: 'vpc-production',
+          VpcSecurityGroupIds: ['sg-rds-a'],
+        },
+        {
+          DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
+          VpcId: 'vpc-production',
+          VpcSecurityGroupIds: ['sg-rds-b'],
+        },
+      ],
+      ObservedInstanceCount: 2,
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].required_permission, 'ec2:DescribeSecurityGroups');
+  assert.equal(
+    report.database.unresolved_references[0].required_permission_resource,
+    'arn:aws:ec2:us-east-1:806168576068:security-group/sg-production',
+  );
+  assert.equal(report.database.unresolved_references[0].vpc_match_count, 2);
+  assert.equal(report.database.unresolved_references[0].security_group_match_count, 0);
+  assert.equal(report.database.unresolved_references[0].master_user_association_count, 0);
+  assert.equal(report.database.unresolved_references[0].observed_db_instance_count, 2);
+  assert.match(report.database.unresolved_references[0].reason, /multiple instances in the live Lambda VPC/);
+  assert.equal(calls.some(({ action }) => action === 'ec2:DescribeSecurityGroups'), false);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.ok(evidence.includes('ec2:DescribeSecurityGroups'));
+});
+
+test('refuses a zero-target network association even when an instance name contains production', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], persistenceConfigOverrides({
+      DBInstances: [
+        {
+          DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
+          VpcId: 'vpc-other',
+          VpcSecurityGroupIds: ['sg-other'],
+        },
+        {
+          DBInstanceArn: OTHER_RDS_ARN,
+          VpcId: 'vpc-staging',
+          VpcSecurityGroupIds: ['sg-staging'],
+        },
+      ],
+      ObservedInstanceCount: 2,
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].required_permission, null);
+  assert.equal(report.database.unresolved_references[0].vpc_match_count, 0);
+  assert.equal(report.database.unresolved_references[0].observed_db_instance_count, 2);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes(OTHER_RDS_ARN), false);
+});
+
+test('does not call unauthorized metadata or data-plane APIs while proving RDS network membership', async () => {
+  const calls = [];
+  await inspectProduction({
+    runAws: mockAws(calls, persistenceConfigOverrides({
+      DBInstances: [
+        { DBInstanceArn: RDS_INSTANCE_ARN, VpcId: 'vpc-production', VpcSecurityGroupIds: ['sg-rds-app'] },
+        { DBInstanceArn: OTHER_RDS_ARN, VpcId: 'vpc-other', VpcSecurityGroupIds: ['sg-other'] },
+      ],
+      ObservedInstanceCount: 2,
+    })),
+    fetchImpl: mockFetch,
+  });
+  const actions = calls.map(({ action }) => action);
+  assert.equal(actions.includes('rds:DescribeDBInstances'), true);
+  assert.equal(actions.includes('secretsmanager:DescribeSecret'), true);
+  assert.equal(actions.some((action) => /GetSecretValue|ssm:GetParameter|ec2:|rds:DescribeDBClusters|ExecuteStatement|rds-data|UpdateFunction|PutObject|CreateInvalidation/.test(action)), false);
 });
 
 test('fails closed and reports the unscoped RDS metadata action when metadata is denied', async () => {
