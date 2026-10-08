@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   CORE_TABLES,
+  EXPECTED_PUBLIC_TRIGGERS,
   EXPECTED_ROW_COUNTS,
   validateReadonlyCoreTables,
 } from '../functions/api/db-readonly-validate.mjs';
@@ -16,6 +17,7 @@ import {
   summarizeInvocation,
 } from '../functions/api/staging-db-readonly-diagnostic-output.mjs';
 import { IDENTITY_PROBE } from '../functions/api/db-health.mjs';
+import { loadJustifiedPublicTriggers } from '../../scripts/lib/justified-public-triggers.mjs';
 
 const STAGING_ENV = {
   CHECKSOPS_ENV: 'staging',
@@ -116,6 +118,41 @@ test('projection contains only allowlisted diagnostic labels, booleans, and safe
   });
   assert.doesNotMatch(JSON.stringify(result), new RegExp(SENSITIVE));
   assert.doesNotMatch(JSON.stringify(result), /currentDatabase|currentUser|secretDatabase|authUidResult|matrix/);
+  assert.equal(Object.hasOwn(result.catalog, 'publicTriggerInventory'), false);
+});
+
+test('Lambda projection keeps sanitized trigger names and drops definitions or invalid rows', () => {
+  const extra = {
+    table: 'user_passkeys',
+    trigger: 'trg_user_passkeys_updated_at',
+    enabled: 'O',
+    functionName: 'set_updated_at_generic',
+    definition: 'CREATE TRIGGER trg_user_passkeys_updated_at BEFORE UPDATE ON public.user_passkeys FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_generic()',
+  };
+  const result = projectValidation(validValidation({
+    issues: [{ kind: 'trigger', severity: 'error', message: SENSITIVE }],
+    catalog: {
+      publicTriggers: 172,
+      publicTriggerInventory: [
+        extra,
+        { table: SENSITIVE, trigger: 'trg_bad', enabled: 'O', functionName: 'set_updated_at_generic' },
+        { table: 'claims', trigger: 'bad-name', enabled: 'O', functionName: 'set_updated_at_generic' },
+      ],
+      publicTriggerInventoryTruncated: false,
+      authUidResult: SENSITIVE,
+    },
+  }));
+  assert.equal(result.catalog.publicTriggers, 172);
+  assert.equal(result.catalog.expectedPublicTriggers, EXPECTED_PUBLIC_TRIGGERS);
+  assert.deepEqual(result.catalog.publicTriggerInventory, [{
+    table: extra.table,
+    trigger: extra.trigger,
+    enabled: extra.enabled,
+    functionName: extra.functionName,
+  }]);
+  assert.equal(result.catalog.publicTriggerInventoryTruncated, false);
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(SENSITIVE));
+  assert.doesNotMatch(JSON.stringify(result), /CREATE TRIGGER|definition/);
 });
 
 test('existing validator enforces TLS/session/transaction read-only and never dispatches writes', async () => {
@@ -216,6 +253,9 @@ test('workflow and SAM target are staging-only, exact-version, isolated, and do 
   assert.match(workflow, /lambda:InvokeFunction/);
   assert.match(workflow, /--function-name "\$DIAGNOSTIC_TARGET_ARN"/);
   assert.match(output, /ExecutedVersion/);
+  const deploy = fs.readFileSync(new URL('../../.github/workflows/staging-db-readonly-diagnostic-deploy.yml', import.meta.url), 'utf8');
+  assert.match(deploy, /if: \$\{\{ false \}\}/);
+  assert.doesNotMatch(output, /from ['"].*scripts\/lib\//);
   assert.doesNotMatch(workflow, /production|CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN|secrets\./i);
   assert.doesNotMatch(workflow, /CHECKSOPS_[A-Z_]*TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY/);
   assert.doesNotMatch(workflow, /pull_request:|push:|upload-artifact|continue-on-error|set -x/);
@@ -232,6 +272,8 @@ test('workflow and SAM target are staging-only, exact-version, isolated, and do 
   ]) assert.match(template, new RegExp(`${flag}: 'false'`));
   assert.match(handler, /validateReadonlyCoreTables/);
   assert.doesNotMatch(handler, /providers\.mjs|workflow\.mjs|financial\.mjs|storage\.mjs|process\.env\.[A-Z_]*TOKEN/);
+  assert.match(invocation, /projectPublicTriggerInventory/);
+  assert.doesNotMatch(invocation, /CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN/);
 });
 
 test('CLI invocation summary never writes raw invocation metadata or payload', async () => {
@@ -251,6 +293,65 @@ test('CLI invocation summary never writes raw invocation metadata or payload', a
     });
     assert.equal(status, 1);
     assert.doesNotMatch(output, new RegExp(SENSITIVE));
+    assert.equal(Object.hasOwn(JSON.parse(output), 'triggerInventory'), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI names added public triggers from the sanitized Lambda inventory', async () => {
+  const extras = [
+    { table: 'user_passkeys', trigger: 'trg_user_passkeys_updated_at', functionName: 'set_updated_at_generic' },
+    { table: 'user_passkeys', trigger: 'trg_user_passkeys_created_at', functionName: 'set_updated_at_generic' },
+    { table: 'audit_events', trigger: 'trg_audit_events_updated_at', functionName: 'set_updated_at_generic' },
+    { table: 'audit_events', trigger: 'trg_audit_events_created_at', functionName: 'set_updated_at_generic' },
+    { table: 'session_revocations', trigger: 'trg_session_revocations_updated_at', functionName: 'set_updated_at_generic' },
+    { table: 'session_revocations', trigger: 'trg_session_revocations_created_at', functionName: 'set_updated_at_generic' },
+    { table: 'operator_notes', trigger: 'trg_operator_notes_updated_at', functionName: 'set_updated_at_generic' },
+  ];
+  const inventory = [
+    ...loadJustifiedPublicTriggers().map((row) => ({
+      table: row.table,
+      trigger: row.trigger,
+      enabled: 'O',
+      functionName: row.functionName,
+    })),
+    ...extras.map((row) => ({ ...row, enabled: 'O' })),
+  ];
+  const validation = projectValidation(validValidation({
+    issues: [{ kind: 'trigger', severity: 'error', message: SENSITIVE }],
+    catalog: {
+      publicTriggers: 172,
+      publicTriggerInventory: inventory.map((row) => ({
+        ...row,
+        definition: `CREATE TRIGGER ${row.trigger} BEFORE UPDATE ON public.${row.table} FOR EACH ROW EXECUTE FUNCTION public.${row.functionName}()`,
+      })),
+      publicTriggerInventoryTruncated: false,
+    },
+  }));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-diagnostic-'));
+  try {
+    const metadataPath = path.join(dir, 'metadata.json');
+    const payloadPath = path.join(dir, 'payload.json');
+    fs.writeFileSync(metadataPath, JSON.stringify({ ExecutedVersion: '12' }));
+    fs.writeFileSync(payloadPath, JSON.stringify({ ...validation, rawError: SENSITIVE }));
+    const { main } = await import('../../scripts/staging-db-readonly-lambda-invocation.mjs');
+    let output;
+    const status = main({
+      metadataPath, payloadPath, expectedVersion: '12', writeOutput: (value) => { output = value; },
+    });
+    const summary = JSON.parse(output);
+    assert.equal(status, 1);
+    assert.equal(summary.triggerInventory.expectedCount, 165);
+    assert.equal(summary.triggerInventory.actualCount, 172);
+    assert.equal(summary.triggerInventory.added.length, 7);
+    assert.deepEqual(
+      summary.triggerInventory.added.map((row) => `${row.table}.${row.trigger}`),
+      extras.map((row) => `${row.table}.${row.trigger}`).sort(),
+    );
+    assert.equal(summary.triggerInventory.missing.length, 0);
+    assert.doesNotMatch(output, new RegExp(SENSITIVE));
+    assert.doesNotMatch(output, /CREATE TRIGGER|definition/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

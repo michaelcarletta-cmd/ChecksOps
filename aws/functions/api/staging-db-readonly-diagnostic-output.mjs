@@ -3,6 +3,8 @@ import {
   EXPECTED_ROW_COUNTS,
   EXPECTED_PUBLIC_TRIGGERS,
   EXPECTED_SKIPPED_AUTH_USERS_FKS,
+  PUBLIC_TRIGGER_INVENTORY_LIMIT,
+  sanitizePublicTriggerRow,
 } from '../api/db-readonly-validate.mjs';
 
 const TABLES = new Set(CORE_TABLES);
@@ -94,9 +96,35 @@ const projectPrivileges = (privileges) => (Array.isArray(privileges) ? privilege
     rlsForced: safeBoolean(row.rlsForced),
   }));
 
+const projectTriggerInventory = (catalog = {}) => {
+  if (!Array.isArray(catalog.publicTriggerInventory)) return null;
+  const inventory = [];
+  for (const row of catalog.publicTriggerInventory.slice(0, PUBLIC_TRIGGER_INVENTORY_LIMIT)) {
+    const sanitized = sanitizePublicTriggerRow({
+      table_name: row?.table || row?.table_name,
+      trigger_name: row?.trigger || row?.trigger_name,
+      enabled: row?.enabled,
+      function_name: row?.functionName || row?.function_name,
+    });
+    if (!sanitized) continue;
+    inventory.push({
+      table: sanitized.table,
+      trigger: sanitized.trigger,
+      enabled: sanitized.enabled,
+      functionName: sanitized.functionName,
+    });
+  }
+  return {
+    publicTriggerInventory: inventory,
+    publicTriggerInventoryTruncated: catalog.publicTriggerInventoryTruncated === true
+      || catalog.publicTriggerInventory.length > PUBLIC_TRIGGER_INVENTORY_LIMIT,
+  };
+};
+
 const projectCatalog = (validation) => {
   const catalog = validation.catalog || {};
   const summary = validation.rlsAudit?.summary || {};
+  const triggerInventory = projectTriggerInventory(catalog);
   return {
     sentinelPresent: safeBoolean(catalog.sentinelPresent),
     schemaUsage: Object.fromEntries(SCHEMAS.map((schema) => [
@@ -108,6 +136,7 @@ const projectCatalog = (validation) => {
     expectedSkippedAuthUsersForeignKeys: EXPECTED_SKIPPED_AUTH_USERS_FKS,
     publicTriggers: countOrNull(catalog.publicTriggers),
     expectedPublicTriggers: EXPECTED_PUBLIC_TRIGGERS,
+    ...(triggerInventory || {}),
     publicFunctions: countOrNull(catalog.publicFunctions),
     supabaseAuthUidFunctions: countOrNull(catalog.supabaseAuthUidFunctions),
     supabaseNetFunctions: countOrNull(catalog.supabaseNetFunctions),

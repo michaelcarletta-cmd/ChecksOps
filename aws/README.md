@@ -294,7 +294,12 @@ protected `staging` GitHub environment, supplies an STS session policy allowing
 only `lambda:InvokeFunction` on that exact version ARN, invokes with a fixed
 empty payload, and checks Lambda's `ExecutedVersion` before reporting output.
 There are no workflow inputs, Cognito tokens, arbitrary SQL, artifacts, or AWS
-deployment actions.
+deployment actions. After a separately authorized deploy of this reviewed
+source, the invocation summarizer adds `triggerInventory` with sanitized public
+trigger names and the added/missing/changed comparison against the 165-name
+baseline. Trigger definitions, raw catalog rows, identities, and Cognito tokens
+are not printed. The HTTP `/db-readonly-validate` Cognito admin gate is
+unchanged. This source change does not enable the disabled deploy workflow.
 
 Before enabling invocation, an owner must establish outside this PR that the
 dedicated role exists; its GitHub OIDC trust is restricted to
