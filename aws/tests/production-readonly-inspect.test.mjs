@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {
-  assertAllowedInspectionSql,
   assertProductionTarget,
   buildAwsArgs,
-  INSPECTION_SQL,
   inspectProduction,
   PRODUCTION_PINS,
 } from '../../scripts/deployment-guard/production-readonly-inspect.mjs';
@@ -14,7 +12,6 @@ import {
 const SHA = (value) => createHash('sha256').update(value).digest('hex');
 const INDEX_HTML = '<script type="module" src="/assets/index-test_bundle.js"></script>';
 const BUNDLE = 'read-only test bundle';
-const DB_URL = `postgres:${'/'}${'/'}checksops_readonly:unit-test-password@db.nbcqwpysqgyxrrbgtmkw.supabase.co:5432/postgres?sslmode=verify-full`;
 const PRODUCTION_TARGET = {
   environment: 'production',
   accountId: '806168576068',
@@ -97,72 +94,6 @@ function mockFetch(url, options) {
   return Promise.resolve(new Response(BUNDLE, { status: 200 }));
 }
 
-const databaseRows = (sql) => {
-  if (sql === INSPECTION_SQL.sessionPosture) {
-    return [{
-      database_name: 'postgres',
-      database_user: 'checksops_readonly',
-      is_superuser: false,
-      can_create_role: false,
-      can_create_database: false,
-      can_replicate: false,
-      bypasses_rls: false,
-      default_transaction_read_only: 'on',
-    }];
-  }
-  if (sql === INSPECTION_SQL.micrColumnGrants) {
-    return [
-      { column_name: 'routing_number', checksops_role_exists: true, checksops_update: true },
-      { column_name: 'account_number', checksops_role_exists: true, checksops_update: true },
-    ];
-  }
-  if (sql === INSPECTION_SQL.settlementFunction) {
-    return [{
-      definition: "CREATE FUNCTION save_claim_settlement_breakdown() SECURITY DEFINER AS $$ BEGIN password := 'routine-secret-value'; END $$",
-      signature: 'p_claim_id uuid, p_settlement_id uuid, p_values jsonb',
-      result_type: 'jsonb',
-      owner: 'postgres',
-      security_definer: true,
-      function_settings: ['search_path=pg_catalog, public', 'row_security=off'],
-      checksops_can_execute: true,
-      authenticated_can_execute: false,
-      anon_can_execute: false,
-      public_can_execute: false,
-    }];
-  }
-  if (sql === INSPECTION_SQL.homeownerLedgerFunction) {
-    return [{
-      definition: "CREATE FUNCTION sync_homeowner_ledger_from_check() AS $$ v_event_type <> 'endorsements_sent' $$",
-      signature: '',
-      owner: 'postgres',
-      security_definer: true,
-      function_settings: ['search_path=public'],
-    }];
-  }
-  if (sql === INSPECTION_SQL.homeownerLedgerTriggers) {
-    return [{
-      table_schema: 'public',
-      table_name: 'check_intake_items',
-      trigger_name: 'trg_sync_homeowner_ledger_upd',
-      definition: 'CREATE TRIGGER trg_sync_homeowner_ledger_upd AFTER UPDATE ON public.check_intake_items',
-      enabled_state: 'O',
-    }];
-  }
-  assert.fail('Unexpected SQL was executed');
-};
-
-function mockDatabaseClient(queries = []) {
-  return {
-    connect: async () => {},
-    query: async (sql) => {
-      assertAllowedInspectionSql(sql);
-      queries.push(sql);
-      return { rows: databaseRows(sql) };
-    },
-    end: async () => {},
-  };
-}
-
 test('pins the production environment, account, region, and exact AWS resources', () => {
   assert.equal(assertProductionTarget(PRODUCTION_TARGET), true);
   for (const target of [
@@ -195,45 +126,19 @@ test('allowlists only pinned AWS read operations and refuses mutations or arbitr
   assert.throws(() => buildAwsArgs('cloudfront:GetDistribution', { distributionId: '*' }));
 });
 
-test('accepts only fixed catalog SELECTs and rejects mutation, DDL, DCL, CALL, and multi-statement SQL', () => {
-  for (const sql of Object.values(INSPECTION_SQL)) assert.equal(assertAllowedInspectionSql(sql), true);
-  for (const sql of [
-    'UPDATE public.check_intake_items SET status = $1',
-    'DELETE FROM public.check_intake_items',
-    'INSERT INTO public.check_intake_items DEFAULT VALUES',
-    'CREATE TABLE public.inspector_write(id int)',
-    'ALTER TABLE public.check_intake_items ADD COLUMN forbidden int',
-    'DROP TABLE public.check_intake_items',
-    'GRANT UPDATE ON public.check_intake_items TO checksops',
-    'REVOKE SELECT ON public.check_intake_items FROM checksops',
-    'CALL public.save_claim_settlement_breakdown()',
-    'SELECT 1; DELETE FROM public.check_intake_items',
-    'SELECT pg_catalog.pg_sleep(1)',
-  ]) {
-    assert.throws(() => assertAllowedInspectionSql(sql), /not an allowlisted single catalog SELECT/);
-  }
-});
-
-test('inspects pinned production reads and reports SPA locks, Lambda flags, SQL state, and merged PR evidence safely', async () => {
+test('inspects pinned production AWS reads and reports SPA locks, Lambda flags, and merged PR evidence safely', async () => {
   const awsCalls = [];
-  const sqlCalls = [];
   const report = await inspectProduction({
     env: {
       AWS_REGION: 'us-east-1',
       CHECKSOPS_INSPECTOR_ENVIRONMENT: 'production',
       CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN: PRODUCTION_PINS.readonly_role_arn,
-      CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL: DB_URL,
     },
     runAws: mockAws(awsCalls),
     fetchImpl: mockFetch,
-    createDatabaseClient: (options) => {
-      assert.equal(options.ssl.rejectUnauthorized, true);
-      assert.equal(options.options, '-c default_transaction_read_only=on');
-      return mockDatabaseClient(sqlCalls);
-    },
   });
 
-  assert.equal(report.status, 'complete', JSON.stringify({ read_errors: report.read_errors, database: report.database }));
+  assert.equal(report.status, 'partial', JSON.stringify({ read_errors: report.read_errors, database: report.database }));
   assert.equal(report.aws_identity.account_id, PRODUCTION_PINS.account_id);
   assert.equal(report.spa.entry_bundle, '/assets/index-test_bundle.js');
   assert.equal(report.spa.index_html_sha256, SHA(INDEX_HTML));
@@ -245,18 +150,10 @@ test('inspects pinned production reads and reports SPA locks, Lambda flags, SQL 
   assert.equal(report.lambda.workflow_flags.AWS_PROVIDER_EXECUTION_ENABLED, false);
   assert.equal(report.lambda.merged_pr_live_evidence.pr_762_backend.live_status, 'unverified_no_accepted_production_code_hash');
   assert.equal(report.lambda.merged_pr_live_evidence.pr_772_workflow_gate.live_workflow_flag, false);
-  assert.equal(report.database.sql52_routing_account_column_grants.length, 2);
-  assert.equal(report.database.sql53_save_claim_settlement_breakdown.security_definer, true);
-  assert.equal(report.database.sql53_save_claim_settlement_breakdown.checksops_can_execute, true);
-  assert.equal(report.database.sync_homeowner_ledger_from_check.endorsement_event_suppression_observed, true);
-  assert.equal(report.database.sync_homeowner_ledger_from_check.triggers[0].enabled_state, 'O');
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
   assert.equal(awsCalls.some(({ action }) => /provider|payment|update|put|delete|publish|invalidate/i.test(action)), false);
-  assert.equal(sqlCalls.length, Object.values(INSPECTION_SQL).length);
   assert.equal(JSON.stringify(report).includes('database-password-must-not-leak'), false);
   assert.equal(JSON.stringify(report).includes('aws-secret-must-not-leak'), false);
-  assert.equal(JSON.stringify(report).includes('sample-password'), false);
-  assert.equal(JSON.stringify(report).includes('routine-secret-value'), false);
-  assert.match(report.database.sql53_save_claim_settlement_breakdown.definition, /\[REDACTED\]/);
 });
 
 test('rejects a non-production caller identity before any AWS or HTTPS read', async () => {
@@ -327,26 +224,28 @@ test('marks resource identity drift instead of reporting a successful inspection
   assert.equal(report.status, 'target_drift');
 });
 
-test('rejects alternate DB hosts, pooler targets, unverified TLS, and injected URL options before connecting', async () => {
-  for (const url of [
-    DB_URL.replace('db.nbcqwpysqgyxrrbgtmkw.supabase.co', 'db.other-project.supabase.co'),
-    DB_URL.replace(':5432/', ':6543/'),
-    DB_URL.replace('sslmode=verify-full', 'sslmode=require'),
-    `${DB_URL}&options=-c%20default_transaction_read_only%3Doff`,
-  ]) {
-    let connected = false;
-    const report = await inspectProduction({
-      env: { CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL: url },
-      runAws: mockAws(),
-      fetchImpl: mockFetch,
-      createDatabaseClient: () => {
-        connected = true;
-        return mockDatabaseClient();
-      },
-    });
-    assert.equal(report.database.status, 'refused_unexpected_database_target');
-    assert.equal(connected, false);
-  }
+test('refuses Supabase database targets and has no database connection path', async () => {
+  const supabaseHost = ['db', 'unapproved-project', 'supabase', 'co'].join('.');
+  const supabaseUrl = `******${supabaseHost}:5432/postgres`;
+  assert.throws(() => assertProductionTarget({ ...PRODUCTION_TARGET, databaseHost: supabaseHost }), /unexpected production target field/);
+  assert.throws(() => assertProductionTarget({ ...PRODUCTION_TARGET, databaseUrl: supabaseUrl }), /unexpected production target field/);
+
+  let connected = false;
+  const report = await inspectProduction({
+    env: { CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL: supabaseUrl },
+    runAws: mockAws(),
+    fetchImpl: mockFetch,
+    createDatabaseClient: () => {
+      connected = true;
+      throw new Error('database access must not be attempted');
+    },
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.equal(report.database.host, undefined);
+  assert.equal(connected, false);
+
+  const inspector = fs.readFileSync(new URL('../../scripts/deployment-guard/production-readonly-inspect.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(inspector, /CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|import\(['"]pg['"]\)|createDatabaseClient/);
 });
 
 test('read workflow is manually dispatched, uses protected environment and no mutation or secret-read IAM actions', () => {
@@ -360,5 +259,6 @@ test('read workflow is manually dispatched, uses protected environment and no mu
   assert.match(workflow, /cloudfront:GetDistribution/);
   assert.match(workflow, /apigateway:GET/);
   assert.doesNotMatch(workflow, /secretsmanager:GetSecretValue|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
+  assert.doesNotMatch(workflow, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /\b(?:put-object|sync\s+--delete|delete-object|create-invalidation|update-function-code|update-function-configuration|provider|payment)\b/i);
 });

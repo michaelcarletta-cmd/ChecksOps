@@ -16,8 +16,6 @@ const API_ID = 'kiqojucc02';
 const API_STAGE = 'prep';
 const API_HOST = 'kiqojucc02.execute-api.us-east-1.amazonaws.com';
 const SPA_HOST = 'checksops.com';
-const DATABASE_HOST = 'db.nbcqwpysqgyxrrbgtmkw.supabase.co';
-const DATABASE_NAME = 'postgres';
 const FUNCTION_NAME = 'checksops-production-prep-api';
 const BUCKET = 'checksops-production-frontend-806168576068';
 const DISTRIBUTION_ID = 'E1B0ZWWO5559U5';
@@ -73,99 +71,8 @@ export const PRODUCTION_PINS = Object.freeze({
   bucket: BUCKET,
   cloudfront_id: DISTRIBUTION_ID,
   spa_host: SPA_HOST,
-  database_host: DATABASE_HOST,
-  database_name: DATABASE_NAME,
   readonly_role_arn: EXPECTED_ROLE_ARN,
 });
-
-export const INSPECTION_SQL = Object.freeze({
-  sessionPosture: `
-    SELECT current_database() AS database_name,
-           current_user AS database_user,
-           r.rolsuper AS is_superuser,
-           r.rolcreaterole AS can_create_role,
-           r.rolcreatedb AS can_create_database,
-           r.rolreplication AS can_replicate,
-           r.rolbypassrls AS bypasses_rls,
-           current_setting('default_transaction_read_only') AS default_transaction_read_only
-      FROM pg_catalog.pg_roles r
-     WHERE r.rolname = current_user
-  `.trim(),
-  micrColumnGrants: `
-    SELECT c.column_name,
-           grantee.rolname IS NOT NULL AS checksops_role_exists,
-           COALESCE(pg_catalog.has_column_privilege(
-             grantee.oid, 'public.check_intake_items', c.column_name, 'UPDATE'
-           ), false) AS checksops_update
-      FROM (VALUES ('routing_number'), ('account_number')) AS c(column_name)
-      LEFT JOIN pg_catalog.pg_roles grantee ON grantee.rolname = 'checksops'
-  `.trim(),
-  settlementFunction: `
-    SELECT pg_catalog.pg_get_functiondef(p.oid) AS definition,
-           pg_catalog.pg_get_function_identity_arguments(p.oid) AS signature,
-           pg_catalog.pg_get_function_result(p.oid) AS result_type,
-           owner.rolname AS owner,
-           p.prosecdef AS security_definer,
-           p.proconfig AS function_settings,
-           COALESCE((
-             SELECT pg_catalog.has_function_privilege(grantee.oid, p.oid, 'EXECUTE')
-               FROM pg_catalog.pg_roles grantee
-              WHERE grantee.rolname = 'checksops'
-           ), false) AS checksops_can_execute,
-           COALESCE((
-             SELECT pg_catalog.has_function_privilege(grantee.oid, p.oid, 'EXECUTE')
-               FROM pg_catalog.pg_roles grantee
-              WHERE grantee.rolname = 'authenticated'
-           ), false) AS authenticated_can_execute,
-           COALESCE((
-             SELECT pg_catalog.has_function_privilege(grantee.oid, p.oid, 'EXECUTE')
-               FROM pg_catalog.pg_roles grantee
-              WHERE grantee.rolname = 'anon'
-           ), false) AS anon_can_execute,
-           EXISTS (
-             SELECT 1
-               FROM pg_catalog.aclexplode(COALESCE(p.proacl, pg_catalog.acldefault('f', p.proowner))) acl
-              WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
-           ) AS public_can_execute
-      FROM pg_catalog.pg_proc p
-      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-      JOIN pg_catalog.pg_roles owner ON owner.oid = p.proowner
-     WHERE n.nspname = 'public'
-       AND p.proname = 'save_claim_settlement_breakdown'
-       AND pg_catalog.pg_get_function_identity_arguments(p.oid)
-           = 'p_claim_id uuid, p_settlement_id uuid, p_values jsonb'
-  `.trim(),
-  homeownerLedgerFunction: `
-    SELECT pg_catalog.pg_get_functiondef(p.oid) AS definition,
-           pg_catalog.pg_get_function_identity_arguments(p.oid) AS signature,
-           owner.rolname AS owner,
-           p.prosecdef AS security_definer,
-           p.proconfig AS function_settings
-      FROM pg_catalog.pg_proc p
-      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-      JOIN pg_catalog.pg_roles owner ON owner.oid = p.proowner
-     WHERE n.nspname = 'public'
-       AND p.proname = 'sync_homeowner_ledger_from_check'
-  `.trim(),
-  homeownerLedgerTriggers: `
-    SELECT trigger_ns.nspname AS table_schema,
-           relation.relname AS table_name,
-           t.tgname AS trigger_name,
-           pg_catalog.pg_get_triggerdef(t.oid) AS definition,
-           t.tgenabled AS enabled_state
-      FROM pg_catalog.pg_trigger t
-      JOIN pg_catalog.pg_class relation ON relation.oid = t.tgrelid
-      JOIN pg_catalog.pg_namespace trigger_ns ON trigger_ns.oid = relation.relnamespace
-      JOIN pg_catalog.pg_proc fn ON fn.oid = t.tgfoid
-      JOIN pg_catalog.pg_namespace function_ns ON function_ns.oid = fn.pronamespace
-     WHERE function_ns.nspname = 'public'
-       AND fn.proname = 'sync_homeowner_ledger_from_check'
-       AND NOT t.tgisinternal
-     ORDER BY trigger_ns.nspname, relation.relname, t.tgname
-  `.trim(),
-});
-
-const APPROVED_SQL = new Set(Object.values(INSPECTION_SQL));
 
 const AWS_ACTIONS = Object.freeze({
   'sts:GetCallerIdentity': '*',
@@ -246,16 +153,6 @@ export function buildAwsArgs(action, target = {}) {
     default:
       throw new Error('AWS operation is not allowlisted');
   }
-}
-
-export function assertAllowedInspectionSql(sql) {
-  if (typeof sql !== 'string' || !APPROVED_SQL.has(sql) || /;/.test(sql)) {
-    throw new Error('SQL is not an allowlisted single catalog SELECT');
-  }
-  if (!/^\s*SELECT\b/i.test(sql)) {
-    throw new Error('SQL is not an allowlisted single catalog SELECT');
-  }
-  return true;
 }
 
 function isApprovedSpaKey(key) {
@@ -353,7 +250,6 @@ function sourceEvidence() {
     sql52_micr_column_grant: ['aws/workflows/sql/52_verified_ocr_micr_column_grant.sql', /GRANT UPDATE \(routing_number, account_number\)[\s\S]*TO checksops/],
     pr_762_claim_settlement_rpc: ['aws/functions/api/claim-settlement-rpc.mjs', /save_claim_settlement_breakdown/],
     pr_762_settlement_sql: ['aws/workflows/sql/53_claim_settlement_breakdown.sql', /SECURITY DEFINER[\s\S]*GRANT EXECUTE/],
-    pr_762_endorsement_migration: ['supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql', /v_event_type <> 'endorsements_sent'/],
     pr_772_workflow_gate: ['aws/functions/api/workflow-flags.mjs', /AWS_APPLICATION_WORKFLOW_WRITES_ENABLED/],
   };
   return Object.fromEntries(Object.entries(sources).map(([key, [relativePath, marker]]) => {
@@ -389,7 +285,7 @@ function prEvidence(lambda, flags) {
     pr_762_backend: evidence(
       762,
       '28c796f4fbcaec44b8dfae6d1d7a57197b478658',
-      ['pr_762_claim_settlement_rpc', 'sql52_micr_column_grant', 'pr_762_settlement_sql', 'pr_762_endorsement_migration'],
+      ['pr_762_claim_settlement_rpc', 'sql52_micr_column_grant', 'pr_762_settlement_sql'],
     ),
     pr_772_workflow_gate: evidence(
       772,
@@ -398,98 +294,6 @@ function prEvidence(lambda, flags) {
       flags.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED,
     ),
   };
-}
-
-function databaseTarget(connectionString) {
-  let url;
-  try {
-    url = new URL(connectionString);
-  } catch {
-    throw new Error('invalid production database connection target');
-  }
-  const queryKeys = [...url.searchParams.keys()];
-  if (
-    !['postgres:', 'postgresql:'].includes(url.protocol)
-    || url.hostname !== DATABASE_HOST
-    || url.port !== '5432'
-    || url.pathname !== `/${DATABASE_NAME}`
-    || !url.username || !url.password
-    || url.searchParams.getAll('sslmode').length !== 1
-    || url.searchParams.get('sslmode') !== 'verify-full'
-    || queryKeys.some((key) => key !== 'sslmode')
-    || url.hash
-  ) {
-    throw new Error('unexpected production database target');
-  }
-  return true;
-}
-
-async function readDatabase(connectionString, { createClient } = {}) {
-  databaseTarget(connectionString);
-  const options = {
-    connectionString,
-    ssl: { rejectUnauthorized: true },
-    options: '-c default_transaction_read_only=on',
-    connectionTimeoutMillis: 10_000,
-    query_timeout: 10_000,
-  };
-  let client;
-  if (createClient) {
-    client = createClient(options);
-  } else {
-    const pgModule = await import('pg');
-    client = new (pgModule.Client || pgModule.default.Client)(options);
-  }
-  try {
-    await client.connect();
-    const results = {};
-    for (const [name, sql] of Object.entries(INSPECTION_SQL)) {
-      assertAllowedInspectionSql(sql);
-      results[name] = (await client.query(sql)).rows;
-    }
-    const posture = results.sessionPosture[0] || null;
-    const readOnlyRole = Boolean(
-      posture
-      && posture.database_name === DATABASE_NAME
-      && posture.default_transaction_read_only === 'on'
-      && posture.is_superuser === false
-      && posture.can_create_role === false
-      && posture.can_create_database === false
-      && posture.can_replicate === false
-      && posture.bypasses_rls === false
-    );
-    if (!readOnlyRole) {
-      return {
-        status: 'refused_unsafe_database_role',
-        host: DATABASE_HOST,
-        database: DATABASE_NAME,
-        session_posture: posture,
-        missing_read_permissions: [],
-      };
-    }
-    const settlement = results.settlementFunction[0] || null;
-    const homeowner = results.homeownerLedgerFunction[0] || null;
-    return redact({
-      status: 'complete',
-      host: DATABASE_HOST,
-      database: DATABASE_NAME,
-      session_posture: posture,
-      sql52_routing_account_column_grants: results.micrColumnGrants,
-      sql53_save_claim_settlement_breakdown: settlement && {
-        ...settlement,
-        definition_sha256: safeHash(settlement.definition),
-      },
-      sync_homeowner_ledger_from_check: homeowner && {
-        ...homeowner,
-        definition_sha256: safeHash(homeowner.definition),
-        endorsement_event_suppression_observed: /v_event_type\s*<>\s*'endorsements_sent'/i.test(homeowner.definition),
-        triggers: results.homeownerLedgerTriggers,
-      },
-      missing_read_permissions: [],
-    });
-  } finally {
-    await client.end().catch(() => {});
-  }
 }
 
 async function fetchLiveSpa(fetchImpl) {
@@ -542,7 +346,6 @@ export async function inspectProduction({
   env = process.env,
   runAws = (action, target) => awsJson(action, target, { env }),
   fetchImpl = fetch,
-  createDatabaseClient,
 } = {}) {
   assertProductionTarget({
     environment: 'production',
@@ -629,31 +432,10 @@ export async function inspectProduction({
     ...liveSpa,
     cloudfront_id: distribution?.Id || null,
   };
-  const databaseUrl = env.CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL;
-  let database;
-  if (!databaseUrl) {
-    database = {
-      status: 'not_configured',
-      required_configuration: ['CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL'],
-      missing_read_permissions: [],
-    };
-  } else {
-    try {
-      database = await readDatabase(databaseUrl, { createClient: createDatabaseClient });
-    } catch (error) {
-      const reason = /unexpected production database target|invalid production database connection target/.test(error.message)
-        ? 'target_rejected'
-        : permissionFailure(error);
-      database = {
-        status: reason === 'target_rejected' ? 'refused_unexpected_database_target' : 'read_failed',
-        host: DATABASE_HOST,
-        missing_read_permissions: reason === 'permission_denied'
-          ? ['catalog/introspection SELECT privileges for current_user, pg_catalog, and the inspected routine/table metadata']
-          : [],
-        error: reason,
-      };
-    }
-  }
+  const database = {
+    status: 'refused_unproven_aws_production_target',
+    reason: 'current accepted AWS production metadata does not identify a database target',
+  };
 
   const comparison = releaseLockComparison(spa, distribution);
   const report = {
