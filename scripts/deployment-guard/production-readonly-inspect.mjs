@@ -2,6 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -39,7 +40,19 @@ const FLAG_NAMES = [
   'AWS_FINANCIAL_PERMISSIONS_ACTIVATED',
   'AWS_COGNITO_MFA_PREFERRED',
 ];
-const LAMBDA_QUERY = `{FunctionName:FunctionName,Version:Version,CodeSha256:CodeSha256,LastModified:LastModified,State:State,RevisionId:RevisionId,Environment:{Variables:{${FLAG_NAMES.map((name) => `${name}:Environment.Variables.${name}`).join(',')}}}}`;
+const LAMBDA_QUERY = `{FunctionName:FunctionName,Version:Version,CodeSha256:CodeSha256,LastModified:LastModified,State:State,RevisionId:RevisionId,Role:Role,Runtime:Runtime,Handler:Handler,VpcConfig:{VpcId:VpcConfig.VpcId,SubnetIds:VpcConfig.SubnetIds,SecurityGroupIds:VpcConfig.SecurityGroupIds},Environment:{VariableNames:keys(Environment.Variables),Variables:{${FLAG_NAMES.map((name) => `${name}:Environment.Variables.${name}`).join(',')}}}}`;
+const LAMBDA_CODE_QUERY = '{Configuration:{FunctionName:Configuration.FunctionName,CodeSha256:Configuration.CodeSha256,RevisionId:Configuration.RevisionId},Code:{Location:Code.Location}}';
+const LAMBDA_PACKAGE_MAX_BYTES = 50 * 1024 * 1024;
+const LAMBDA_PACKAGE_MAX_FILES = 10_000;
+const LAMBDA_PACKAGE_MAX_MEMBER_BYTES = 64 * 1024 * 1024;
+const LAMBDA_PACKAGE_MAX_TOTAL_BYTES = 250 * 1024 * 1024;
+const CURRENT_SOURCE_MEMBERS = [
+  'aws/functions/api/claim-settlement-rpc.mjs',
+  'aws/functions/api/workflow-flags.mjs',
+  'aws/functions/api/workflow-rpc.mjs',
+  'aws/functions/api/check-ocr-provider.mjs',
+  'aws/functions/api/ocr.mjs',
+];
 const SOURCE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const RELEASE_LOCKS = JSON.parse(fs.readFileSync(path.join(SOURCE_ROOT, 'ops/release-locks/locked-components.json'), 'utf8'));
 const SPA_LOCK = RELEASE_LOCKS.components?.['production-spa'];
@@ -78,6 +91,8 @@ const AWS_ACTIONS = Object.freeze({
   'sts:GetCallerIdentity': '*',
   's3:HeadObject': `s3:GetObject on arn:aws:s3:::${BUCKET}/index.html and ${BUCKET}/assets/index-*.js`,
   'lambda:GetFunctionConfiguration': `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`,
+  'lambda:GetFunction': `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`,
+  'secretsmanager:DescribeSecret': `the exact production secret ARN referenced by ${FUNCTION_NAME}`,
   'apigateway:GET': `arn:aws:apigateway:${REGION}::/apis/${API_ID}/*`,
   'cloudfront:GetDistribution': `arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${DISTRIBUTION_ID}`,
 });
@@ -120,13 +135,33 @@ export function buildAwsArgs(action, target = {}) {
         '--query', '{VersionId:VersionId,ETag:ETag,LastModified:LastModified,ContentLength:ContentLength}',
       ];
     }
-    case 'lambda:GetFunctionConfiguration':
+    case 'lambda:GetFunctionConfiguration': {
+      if (target.functionName !== FUNCTION_NAME
+          || Object.keys(target).some((key) => !['functionName', 'variableNames'].includes(key))
+          || ![1, 2].includes(Object.keys(target).length)) {
+        throw new Error('unexpected production Lambda target');
+      }
+      const query = target.variableNames === undefined ? LAMBDA_QUERY : referenceQuery(target.variableNames);
+      return [
+        'lambda', 'get-function-configuration', '--function-name', FUNCTION_NAME,
+        '--query', query,
+      ];
+    }
+    case 'lambda:GetFunction':
       if (Object.keys(target).length !== 1 || target.functionName !== FUNCTION_NAME) {
         throw new Error('unexpected production Lambda target');
       }
       return [
-        'lambda', 'get-function-configuration', '--function-name', FUNCTION_NAME,
-        '--query', LAMBDA_QUERY,
+        'lambda', 'get-function', '--function-name', FUNCTION_NAME,
+        '--query', LAMBDA_CODE_QUERY,
+      ];
+    case 'secretsmanager:DescribeSecret':
+      if (Object.keys(target).length !== 1 || !isProductionSecretArn(target.secretArn)) {
+        throw new Error('unexpected production persistence secret');
+      }
+      return [
+        'secretsmanager', 'describe-secret', '--secret-id', target.secretArn,
+        '--query', "Tags[?Key=='aws:rds:primaryDBInstanceArn'||Key=='aws:rds:primaryDBClusterArn'].{Key:Key,Value:Value}",
       ];
     case 'apigateway:GET':
       if (target.apiId !== API_ID || !['api', 'stage', 'integrations'].includes(target.resource)
@@ -193,6 +228,186 @@ function safeHash(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function isProductionSecretArn(value) {
+  return typeof value === 'string'
+    && new RegExp(`^arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:[A-Za-z0-9/_+=.@-]+$`).test(value);
+}
+
+function isProductionSsmArn(value) {
+  return typeof value === 'string'
+    && new RegExp(`^arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/[A-Za-z0-9_./+=@-]+$`).test(value);
+}
+
+function isPersistenceReferenceVariable(name) {
+  return typeof name === 'string'
+    && /(?:DB|DATABASE|RDS|POSTGRES|PERSISTENCE)/i.test(name)
+    && /(?:_SECRET_(?:ARN|REF|REFERENCE|NAME|ID)|_SSM_PARAM(?:ETER)?(?:_ARN|_REF|_NAME|_ID)?|_PARAM(?:ETER)?(?:_ARN|_REF|_NAME|_ID)?|_DATABASE_ARN)$/i.test(name);
+}
+
+function referenceQuery(variableNames) {
+  if (!Array.isArray(variableNames) || variableNames.length === 0
+      || variableNames.length > 100
+      || variableNames.some((name) => !isPersistenceReferenceVariable(name))
+      || new Set(variableNames).size !== variableNames.length) {
+    throw new Error('unexpected production persistence variable allowlist');
+  }
+  const variables = [...variableNames].sort().map((name) => `${name}:Environment.Variables.${name}`).join(',');
+  return `{Environment:{Variables:{${variables}}}}`;
+}
+
+function persistenceReferences(config) {
+  const variables = config?.Environment?.Variables || {};
+  const references = [];
+  for (const [name, value] of Object.entries(variables)) {
+    if (typeof value !== 'string') continue;
+    let referenceType = null;
+    let identifier = null;
+    let exactResourceArn = false;
+    const secretArn = value.match(/^(arn:aws:secretsmanager:[^:]+:\d{12}:secret:[A-Za-z0-9/_+=.@-]+)$/)?.[1];
+    const ssmArn = value.match(/^(arn:aws:ssm:[^:]+:\d{12}:parameter\/[A-Za-z0-9_./+=@-]+)$/)?.[1];
+    const dynamicSecret = value.match(/^\{\{resolve:secretsmanager:(.+?):SecretString(?::[^{}]*)?\}\}$/)?.[1];
+    const dynamicSsm = value.match(/^\{\{resolve:ssm(?:-secure)?:([^}:]+)(?::\d+)?\}\}$/)?.[1];
+    if (secretArn) {
+      referenceType = 'secretsmanager';
+      identifier = secretArn;
+      exactResourceArn = isProductionSecretArn(secretArn);
+    } else if (dynamicSecret) {
+      referenceType = 'secretsmanager';
+      identifier = dynamicSecret;
+      exactResourceArn = isProductionSecretArn(dynamicSecret);
+    } else if (ssmArn) {
+      referenceType = 'ssm';
+      identifier = ssmArn;
+      exactResourceArn = isProductionSsmArn(ssmArn);
+    } else if (dynamicSsm) {
+      referenceType = 'ssm';
+      identifier = dynamicSsm;
+      exactResourceArn = isProductionSsmArn(dynamicSsm);
+    }
+    if (referenceType) {
+      references.push({
+        variable_name: /^[A-Z][A-Z0-9_]{0,79}$/.test(name) ? name : '[OMITTED]',
+        reference_type: referenceType,
+        identifier,
+        exact_resource_arn: exactResourceArn,
+      });
+    }
+  }
+  return references;
+}
+
+function persistenceTarget(secretMetadata) {
+  const targets = (secretMetadata?.Tags || [])
+    .filter(({ Key, Value }) => ['aws:rds:primaryDBInstanceArn', 'aws:rds:primaryDBClusterArn'].includes(Key)
+      && typeof Value === 'string'
+      && new RegExp(`^arn:aws:rds:${REGION}:${ACCOUNT_ID}:(?:db|cluster):[A-Za-z0-9-]+$`).test(Value));
+  if (targets.length !== 1) return null;
+  return {
+    reference_type: targets[0].Key.endsWith('ClusterArn') ? 'rds-cluster' : 'rds-instance',
+    resource_arn: targets[0].Value,
+  };
+}
+
+function zipEntryCount(zip) {
+  if (zip.length < 22) return null;
+  const start = Math.max(0, zip.length - 22 - 0xffff);
+  for (let offset = zip.length - 22; offset >= start; offset -= 1) {
+    if (zip.readUInt32LE(offset) !== 0x06054b50) continue;
+    const commentLength = zip.readUInt16LE(offset + 20);
+    if (offset + 22 + commentLength !== zip.length) continue;
+    const disk = zip.readUInt16LE(offset + 4);
+    const centralDisk = zip.readUInt16LE(offset + 6);
+    const diskEntries = zip.readUInt16LE(offset + 8);
+    const entries = zip.readUInt16LE(offset + 10);
+    if (disk || centralDisk || diskEntries !== entries || entries === 0xffff) return null;
+    return entries;
+  }
+  return null;
+}
+
+async function responseBytes(response, maxBytes) {
+  const chunks = [];
+  let size = 0;
+  if (response.body && Symbol.asyncIterator in response.body) {
+    for await (const chunk of response.body) {
+      const bytes = Buffer.from(chunk);
+      size += bytes.length;
+      if (size > maxBytes) throw new Error('response size limit exceeded');
+      chunks.push(bytes);
+    }
+  } else {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxBytes) throw new Error('response size limit exceeded');
+    chunks.push(bytes);
+    size = bytes.length;
+  }
+  return Buffer.concat(chunks, size);
+}
+
+async function downloadLambdaPackage(location, fetchImpl) {
+  const url = new URL(location);
+  if (
+    url.protocol !== 'https:'
+    || !new RegExp(`^awslambda-${REGION}(?:-tasks)?\\.s3\\.${REGION}\\.amazonaws\\.com$`).test(url.hostname)
+    || url.port
+    || url.username
+    || url.password
+    || !url.pathname
+  ) {
+    throw new Error('unexpected AWS Lambda code location');
+  }
+  const response = await fetchImpl(url, {
+    method: 'GET',
+    redirect: 'error',
+    cache: 'no-store',
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error('Lambda package download failed');
+  return responseBytes(response, LAMBDA_PACKAGE_MAX_BYTES);
+}
+
+function inventoryLambdaPackage(zip) {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-live-lambda-'));
+  const archivePath = path.join(temp, 'package.zip');
+  try {
+    fs.writeFileSync(archivePath, zip, { mode: 0o600 });
+    const listing = execFileSync('unzip', ['-Z1', archivePath], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    const names = listing.endsWith('\n') ? listing.slice(0, -1).split('\n') : listing.split('\n');
+    if (zipEntryCount(zip) !== names.length
+        || names.length > LAMBDA_PACKAGE_MAX_FILES
+        || names.some((name) => !name || /[\r\0]/.test(name))) {
+      throw new Error('invalid Lambda package member list');
+    }
+    const files = names.filter((name) => !name.endsWith('/'));
+    if (new Set(files).size !== files.length) throw new Error('duplicate Lambda package members');
+    let totalBytes = 0;
+    const members = files.map((name) => {
+      if (name.startsWith('-') || ['*', '?', '[', ']', '\\'].some((character) => name.includes(character))
+          || path.posix.isAbsolute(name) || path.posix.normalize(name) !== name
+          || name === '..' || name.startsWith('../')) {
+        throw new Error('unsafe Lambda package member path');
+      }
+      const bytes = execFileSync('unzip', ['-p', archivePath, name], {
+        encoding: 'buffer',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: LAMBDA_PACKAGE_MAX_MEMBER_BYTES,
+      });
+      totalBytes += bytes.length;
+      if (bytes.length > LAMBDA_PACKAGE_MAX_MEMBER_BYTES || totalBytes > LAMBDA_PACKAGE_MAX_TOTAL_BYTES) {
+        throw new Error('Lambda package expansion limit exceeded');
+      }
+      return { path: name, size_bytes: bytes.length, sha256: safeHash(bytes) };
+    }).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    return { members, total_uncompressed_bytes: totalBytes };
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+}
+
 function redactText(value) {
   return String(value)
     .replace(/\b(Authorization|Bearer|password|passwd|secret|token|api[_-]?key|access[_-]?key|connection[_-]?string)\b(\s*(?::=|=>|=|:)\s*)(['"][^'"]*['"]|[^,\s;]+)/gi, '$1$2[REDACTED]')
@@ -202,6 +417,12 @@ function redactText(value) {
 }
 
 function redact(value, key = '') {
+  if (typeof value === 'string' && ['identifier', 'resource', 'resource_arn'].includes(key)
+      && (isProductionSecretArn(value)
+        || isProductionSsmArn(value)
+        || new RegExp(`^arn:aws:rds:${REGION}:${ACCOUNT_ID}:(?:db|cluster):[A-Za-z0-9-]+$`).test(value))) {
+    return value;
+  }
   if (/(?:password|passwd|secret|token|credential|authorization|api[_-]?key|access[_-]?key|private[_-]?key|connection[_-]?string|database[_-]?url)/i.test(key)) {
     return value == null ? null : '[REDACTED]';
   }
@@ -327,11 +548,10 @@ async function fetchLiveSpa(fetchImpl) {
   };
 }
 
-async function safeRead(readErrors, action, target, invoke) {
+async function safeRead(readErrors, action, target, invoke, resource = AWS_ACTIONS[action]) {
   try {
     return await invoke(action, target);
   } catch (error) {
-    const resource = AWS_ACTIONS[action];
     readErrors.push({
       action,
       resource,
@@ -378,15 +598,24 @@ export async function inspectProduction({
     throw new Error('production account identity check failed');
   }
 
-  const [indexHead, lambda, api, stage, integrations, cloudfront] = await Promise.all([
+  const [indexHead, lambda, lambdaPackageResponse, api, stage, integrations, cloudfront] = await Promise.all([
     safeRead(readErrors, 's3:HeadObject', { bucket: BUCKET, key: 'index.html' }, runAws),
     safeRead(readErrors, 'lambda:GetFunctionConfiguration', { functionName: FUNCTION_NAME }, runAws),
+    safeRead(readErrors, 'lambda:GetFunction', { functionName: FUNCTION_NAME }, runAws),
     safeRead(readErrors, 'apigateway:GET', { apiId: API_ID, resource: 'api' }, runAws),
     safeRead(readErrors, 'apigateway:GET', { apiId: API_ID, resource: 'stage', stage: API_STAGE }, runAws),
     safeRead(readErrors, 'apigateway:GET', { apiId: API_ID, resource: 'integrations' }, runAws),
     safeRead(readErrors, 'cloudfront:GetDistribution', { distributionId: DISTRIBUTION_ID }, runAws),
   ]);
 
+  const persistenceVariableNames = [...new Set(lambda?.Environment?.VariableNames || [])].sort();
+  const referenceVariableNames = persistenceVariableNames.filter(isPersistenceReferenceVariable);
+  const referenceConfig = referenceVariableNames.length
+    ? await safeRead(readErrors, 'lambda:GetFunctionConfiguration', {
+      functionName: FUNCTION_NAME,
+      variableNames: referenceVariableNames,
+    }, runAws)
+    : null;
   const config = lambda && {
     FunctionName: lambda.FunctionName,
     Version: lambda.Version,
@@ -394,9 +623,137 @@ export async function inspectProduction({
     LastModified: lambda.LastModified,
     State: lambda.State,
     RevisionId: lambda.RevisionId,
-    Environment: { Variables: lambda.Environment?.Variables || {} },
+    Role: lambda.Role,
+    Runtime: lambda.Runtime,
+    Handler: lambda.Handler,
+    VpcConfig: lambda.VpcConfig,
+    Environment: {
+      Variables: {
+        ...(lambda.Environment?.Variables || {}),
+        ...(referenceConfig?.Environment?.Variables || {}),
+      },
+    },
   };
   const flags = flagsFromConfiguration(config);
+  const persistenceRefs = persistenceReferences(config);
+  const unresolvedVariableNames = persistenceVariableNames
+    .filter((name) => /(?:DB|DATABASE|RDS|POSTGRES|PERSISTENCE)/i.test(name)
+      && (!referenceVariableNames.includes(name) || !referenceConfig))
+    .map((name) => /^[A-Z][A-Z0-9_]{0,79}$/.test(name) ? name : '[OMITTED]')
+    .sort();
+  const describedSecrets = await Promise.all(persistenceRefs
+    .filter((reference) => reference.reference_type === 'secretsmanager' && reference.exact_resource_arn)
+    .map(async (reference) => ({
+      reference,
+      metadata: await safeRead(
+        readErrors,
+        'secretsmanager:DescribeSecret',
+        { secretArn: reference.identifier },
+        runAws,
+        reference.identifier,
+      ),
+    })));
+  const persistenceTargets = describedSecrets
+    .map(({ metadata }) => persistenceTarget(metadata))
+    .filter(Boolean);
+  const referencedTargets = [...new Map(persistenceTargets.map((item) => [item.resource_arn, item])).values()];
+  const database = {
+    status: 'refused_unproven_aws_production_target',
+    reason: !config
+      ? 'live Lambda configuration is unavailable; production persistence target remains unproven'
+      : persistenceRefs.length
+        ? 'live AWS references do not independently prove the function persistence target'
+        : 'live Lambda configuration provides no recognized AWS persistence reference',
+    references: persistenceRefs.map(({ variable_name, reference_type, identifier, exact_resource_arn }) => ({
+      variable_name,
+      reference_type,
+      identifier,
+      exact_resource_arn,
+    })),
+    unresolved_variables: unresolvedVariableNames,
+    candidate_resources: referencedTargets,
+    unresolved_references: persistenceRefs.flatMap((reference) => {
+      if (reference.reference_type === 'ssm') {
+        return [{
+          variable_name: reference.variable_name,
+          reference_type: reference.reference_type,
+          identifier: reference.identifier,
+          required_permission: null,
+          reason: 'no metadata-only SSM read proves the referenced parameter value',
+        }];
+      }
+      if (!reference.exact_resource_arn) {
+        const foreignArn = reference.identifier.startsWith('arn:');
+        return [{
+          variable_name: reference.variable_name,
+          reference_type: reference.reference_type,
+          identifier: reference.identifier,
+          required_permission: foreignArn ? null : 'secretsmanager:DescribeSecret',
+          reason: foreignArn
+            ? 'reference is outside the pinned production resource scope; no cross-account read is attempted'
+            : 'exact production secret ARN is required for least-privilege metadata access',
+        }];
+      }
+      const metadata = describedSecrets.find(({ reference: described }) => described.identifier === reference.identifier)?.metadata;
+      return metadata && persistenceTarget(metadata) ? [] : [{
+        variable_name: reference.variable_name,
+        reference_type: reference.reference_type,
+        identifier: reference.identifier,
+        required_permission: metadata ? null : 'secretsmanager:DescribeSecret',
+        reason: metadata
+          ? 'secret metadata does not independently bind this reference to a persistence resource'
+          : 'secret metadata permission is required; no secret value is read',
+      }];
+    }),
+  };
+  const packageEvidence = await (async () => {
+    if (!lambdaPackageResponse) {
+      return { status: 'unavailable', members: [], source_comparisons: [] };
+    }
+    const packageCodeHash = lambdaPackageResponse.Configuration?.CodeSha256 || null;
+    const packageRevisionId = lambdaPackageResponse.Configuration?.RevisionId || null;
+    try {
+      const zip = await downloadLambdaPackage(lambdaPackageResponse.Code?.Location, fetchImpl);
+      const packageHash = createHash('sha256').update(zip).digest('base64');
+      const inventory = inventoryLambdaPackage(zip);
+      const membersByPath = new Map(inventory.members.map((member) => [member.path, member]));
+      const sourceComparisons = CURRENT_SOURCE_MEMBERS.map((relativePath) => {
+        const expectedSha256 = safeHash(fs.readFileSync(path.join(SOURCE_ROOT, relativePath)));
+        const live = membersByPath.get(relativePath);
+        return {
+          repository_path: relativePath,
+          member_path: live?.path || null,
+          current_main_sha256: expectedSha256,
+          live_member_sha256: live?.sha256 || null,
+          matches: live ? live.sha256 === expectedSha256 : false,
+        };
+      });
+      const codeHashMatches = lambda ? Boolean(packageCodeHash && packageCodeHash === lambda.CodeSha256) : null;
+      const revisionIdMatches = lambda ? Boolean(packageRevisionId && packageRevisionId === lambda.RevisionId) : null;
+      let status = 'complete';
+      if (!packageCodeHash || !packageRevisionId) status = 'identity_incomplete';
+      else if (!lambda) status = 'configuration_unavailable';
+      else if (!codeHashMatches || !revisionIdMatches) status = 'identity_mismatch';
+      return {
+        status,
+        code_sha256: packageCodeHash,
+        package_sha256: packageHash,
+        code_sha256_matches_configuration: codeHashMatches,
+        revision_id: packageRevisionId,
+        revision_id_matches_configuration: revisionIdMatches,
+        ...inventory,
+        source_comparisons: sourceComparisons,
+      };
+    } catch {
+      return {
+        status: 'download_or_inventory_failed',
+        code_sha256: packageCodeHash,
+        revision_id: packageRevisionId,
+        members: [],
+        source_comparisons: [],
+      };
+    }
+  })();
   const distribution = cloudfront?.Distribution || null;
   const apiIntegrations = integrations?.Items || [];
   const expectedIntegrationArn = `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`;
@@ -408,6 +765,9 @@ export async function inspectProduction({
   );
   const targetDrift = Boolean(
     (lambda?.FunctionName && lambda.FunctionName !== FUNCTION_NAME)
+    || (lambdaPackageResponse?.Configuration?.FunctionName
+      && lambdaPackageResponse.Configuration.FunctionName !== FUNCTION_NAME)
+    || (packageEvidence.status === 'identity_mismatch')
     || (api?.ApiId && api.ApiId !== API_ID)
     || (stage?.StageName && stage.StageName !== API_STAGE)
     || (integrations && (!apiIntegrations.length || apiIntegrations.some((item) => item.IntegrationUri !== expectedIntegrationArn)))
@@ -431,11 +791,6 @@ export async function inspectProduction({
     ...liveSpa,
     cloudfront_id: distribution?.Id || null,
   };
-  const database = {
-    status: 'refused_unproven_aws_production_target',
-    reason: 'current accepted AWS production metadata does not identify a database target',
-  };
-
   const comparison = releaseLockComparison(spa, distribution);
   const report = {
     status: targetDrift ? 'target_drift' : readErrors.length || database.status !== 'complete' ? 'partial' : 'complete',
@@ -474,6 +829,15 @@ export async function inspectProduction({
       revision_id: config.RevisionId,
       last_modified: config.LastModified,
       state: config.State,
+      role_arn: config.Role || null,
+      runtime: config.Runtime || null,
+      handler: config.Handler || null,
+      vpc: {
+        vpc_id: config.VpcConfig?.VpcId || null,
+        subnet_ids: config.VpcConfig?.SubnetIds || [],
+        security_group_ids: config.VpcConfig?.SecurityGroupIds || [],
+      },
+      package: packageEvidence,
       release_lock_code_sha256: SPA_LOCK.deployment_fingerprint.lambda_code_hash || null,
       release_lock_revision_id: SPA_LOCK.deployment_fingerprint.lambda_version || null,
       code_sha256_matches_release_lock: SPA_LOCK.deployment_fingerprint.lambda_code_hash && config.CodeSha256
@@ -524,7 +888,22 @@ export function buildInspectionSummary(report) {
       integration_lambda_arns: report.api?.integration_lambda_arns ?? [],
     },
     lambda: report.lambda ? {
-      ...pick(report.lambda, ['function_name', 'version', 'code_sha256', 'revision_id']),
+      ...pick(report.lambda, [
+        'function_name', 'version', 'code_sha256', 'revision_id', 'last_modified', 'state',
+        'role_arn', 'runtime', 'handler', 'vpc',
+      ]),
+      package: report.lambda.package ? {
+        ...pick(report.lambda.package, [
+          'status', 'code_sha256', 'package_sha256', 'code_sha256_matches_configuration',
+          'revision_id', 'revision_id_matches_configuration', 'total_uncompressed_bytes',
+        ]),
+        members: (report.lambda.package.members || []).map((member) => pick(member, [
+          'path', 'size_bytes', 'sha256',
+        ])),
+        source_comparisons: (report.lambda.package.source_comparisons || []).map((comparison) => pick(comparison, [
+          'repository_path', 'member_path', 'current_main_sha256', 'live_member_sha256', 'matches',
+        ])),
+      } : null,
       workflow_flags: Object.fromEntries(FLAG_NAMES.map((name) => [
         name, typeof report.lambda.workflow_flags?.[name] === 'boolean' ? report.lambda.workflow_flags[name] : null,
       ])),
@@ -535,7 +914,19 @@ export function buildInspectionSummary(report) {
         } : null,
       ])),
     } : null,
-    database: pick(report.database, ['status', 'reason']),
+    database: report.database ? {
+      ...pick(report.database, ['status', 'reason']),
+      references: (report.database.references || []).map((reference) => pick(reference, [
+        'variable_name', 'reference_type', 'identifier', 'exact_resource_arn',
+      ])),
+      unresolved_variables: report.database.unresolved_variables || [],
+      candidate_resources: (report.database.candidate_resources || []).map((resource) => pick(resource, [
+        'reference_type', 'resource_arn',
+      ])),
+      unresolved_references: (report.database.unresolved_references || []).map((reference) => pick(reference, [
+        'variable_name', 'reference_type', 'identifier', 'required_permission', 'reason',
+      ])),
+    } : null,
     missing_read_permissions: errors(report.missing_read_permissions),
     read_errors: errors(report.read_errors),
   });
