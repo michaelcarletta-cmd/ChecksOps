@@ -368,7 +368,9 @@ test('inspects only exact secret-reference metadata and keeps persistence fail-c
           Variables: {
             ...lambdaConfig.Environment.Variables,
             DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN,
+            DB_SECRET_NAME: 'production/app-db',
             DB_PARAMETER: '{{resolve:ssm-secure:/production/db-secret:1}}',
+            DB_PARAMETER_NAME: '/production/db-host',
             DATABASE_URL: '******private-host/db',
           },
         },
@@ -379,7 +381,9 @@ test('inspects only exact secret-reference metadata and keeps persistence fail-c
   assert.ok(calls.some(({ action, target }) => action === 'secretsmanager:DescribeSecret'
     && target.secretArn === PERSISTENCE_SECRET_ARN));
   assert.deepEqual(calls.find(({ action, target }) => action === 'lambda:GetFunctionConfiguration'
-    && target.variableNames)?.target.variableNames, ['DATABASE_SECRET_ARN', 'DB_PARAMETER']);
+    && target.variableNames)?.target.variableNames, [
+    'DATABASE_SECRET_ARN', 'DB_PARAMETER', 'DB_PARAMETER_NAME', 'DB_SECRET_NAME',
+  ]);
   assert.equal(calls.some(({ action }) => /GetSecretValue|ssm:GetParameter/.test(action)), false);
   assert.deepEqual(report.database.references, [
     {
@@ -394,6 +398,18 @@ test('inspects only exact secret-reference metadata and keeps persistence fail-c
       identifier: '/production/db-secret',
       exact_resource_arn: false,
     },
+    {
+      variable_name: 'DB_PARAMETER_NAME',
+      reference_type: 'ssm',
+      identifier: '/production/db-host',
+      exact_resource_arn: false,
+    },
+    {
+      variable_name: 'DB_SECRET_NAME',
+      reference_type: 'secretsmanager',
+      identifier: 'production/app-db',
+      exact_resource_arn: false,
+    },
   ]);
   assert.deepEqual(report.database.unresolved_variables, ['DATABASE_URL', 'DB_PASSWORD']);
   assert.deepEqual(report.database.candidate_resources, [{
@@ -403,6 +419,8 @@ test('inspects only exact secret-reference metadata and keeps persistence fail-c
   assert.equal(report.database.status, 'refused_unproven_aws_production_target');
   assert.equal(report.database.unresolved_references.some((reference) => reference.reference_type === 'ssm'
     && reference.required_permission === null), true);
+  assert.equal(report.database.unresolved_references.some((reference) => reference.variable_name === 'DB_SECRET_NAME'
+    && reference.required_permission === 'secretsmanager:DescribeSecret'), true);
   const evidence = JSON.stringify(buildInspectionSummary(report));
   for (const value of ['private-user', 'private-password', 'private-host', 'package.zip?temporary-token']) {
     assert.equal(evidence.includes(value), false, value);

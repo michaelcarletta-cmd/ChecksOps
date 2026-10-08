@@ -244,6 +244,10 @@ function isPersistenceReferenceVariable(name) {
     && /(?:_SECRET_(?:ARN|REF|REFERENCE|NAME|ID)|_SSM_PARAM(?:ETER)?(?:_ARN|_REF|_NAME|_ID)?|_PARAM(?:ETER)?(?:_ARN|_REF|_NAME|_ID)?|_DATABASE_ARN)$/i.test(name);
 }
 
+function isSafeReferenceName(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9/_+=.@-]{1,512}$/.test(value);
+}
+
 function referenceQuery(variableNames) {
   if (!Array.isArray(variableNames) || variableNames.length === 0
       || variableNames.length > 100
@@ -283,6 +287,13 @@ function persistenceReferences(config) {
       referenceType = 'ssm';
       identifier = dynamicSsm;
       exactResourceArn = isProductionSsmArn(dynamicSsm);
+    } else if (/_SECRET_(?:NAME|ID|REF|REFERENCE)$/i.test(name) && isSafeReferenceName(value)) {
+      referenceType = 'secretsmanager';
+      identifier = value;
+    } else if (/(?:_SSM_PARAM(?:ETER)?|_PARAM(?:ETER)?)(?:_NAME|_ID|_REF)?$/i.test(name)
+        && isSafeReferenceName(value)) {
+      referenceType = 'ssm';
+      identifier = value;
     }
     if (referenceType) {
       references.push({
