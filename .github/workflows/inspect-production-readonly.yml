@@ -62,38 +62,27 @@ jobs:
           node scripts/deployment-guard/production-readonly-inspect.mjs > "$RUNNER_TEMP/production-readonly-inspection.json"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
+          import { buildInspectionSummary } from './scripts/deployment-guard/production-readonly-inspect.mjs';
           const report = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/production-readonly-inspection.json`, 'utf8'));
-          const summary = {
-            status: report.status,
-            target: report.target,
-            spa: {
-              entry_bundle: report.spa?.entry_bundle ?? null,
-              index_html_sha256: report.spa?.index_html_sha256 ?? null,
-              bundle_sha256: report.spa?.bundle_sha256 ?? null,
-              cloudfront: report.spa?.cloudfront ?? null,
-              production_spa_lock_comparison: report.spa?.production_spa_lock_comparison ?? null,
-            },
-            api: report.api,
-            lambda: report.lambda && {
-              function_name: report.lambda.function_name,
-              version: report.lambda.version,
-              code_sha256: report.lambda.code_sha256,
-              revision_id: report.lambda.revision_id,
-              workflow_flags: report.lambda.workflow_flags,
-              merged_pr_live_evidence: report.lambda.merged_pr_live_evidence,
-            },
-            database: { status: report.database.status, reason: report.database.reason },
-            missing_read_permissions: report.missing_read_permissions,
-            read_errors: report.read_errors,
-          };
+          const evidence = JSON.stringify(buildInspectionSummary(report), null, 2);
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/production-readonly-evidence.json`, `${evidence}\n`, { mode: 0o600 });
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
             '# Production inspection (read-only)',
             '',
-            'Definition text is intentionally omitted from this summary; the inspector hashes and secret-redacts it in its JSON report.',
+            'Redacted fingerprints only; no function code, definitions, credentials, or database data.',
             '',
             '```json',
-            JSON.stringify(summary, null, 2),
+            evidence,
             '```',
             '',
           ].join('\n'));
           NODE
+
+      - name: Preserve redacted production inspection evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: production-readonly-evidence-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/production-readonly-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+          include-hidden-files: false

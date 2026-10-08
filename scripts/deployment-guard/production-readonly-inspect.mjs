@@ -492,6 +492,55 @@ export async function inspectProduction({
   return redact(report);
 }
 
+export function buildInspectionSummary(report) {
+  const pick = (value, fields) => value == null ? null
+    : Object.fromEntries(fields.map((field) => [field, value[field] ?? null]));
+  const comparison = report.spa?.production_spa_lock_comparison;
+  const fingerprints = ['entry_bundle', 'bundle_sha256', 'index_html_sha256', 's3_version', 'cloudfront_id'];
+  const prFields = [
+    'pr', 'merged', 'merged_head_sha', 'live_lambda_code_sha256',
+    'accepted_lambda_code_sha256', 'code_hash_matches_accepted_pin',
+    'live_workflow_flag', 'live_status',
+  ];
+  const prEvidence = report.lambda?.merged_pr_live_evidence;
+  const errors = (items) => (items || []).map((item) => pick(item, ['action', 'resource', 'reason']));
+  return redact({
+    status: report.status,
+    target: PRODUCTION_PINS,
+    spa: {
+      entry_bundle: report.spa?.entry_bundle ?? null,
+      index_html_sha256: report.spa?.index_html_sha256 ?? null,
+      bundle_sha256: report.spa?.bundle_sha256 ?? null,
+      cloudfront: pick(report.spa?.cloudfront, ['id', 'arn', 'status', 'domain_name', 'last_modified', 'etag']),
+      production_spa_lock_comparison: comparison ? {
+        ...pick(comparison, ['matches', 'locked_source_git_sha', 'locked_source_pr', 'lock_recorded_at']),
+        expected: pick(comparison.expected, fingerprints),
+        actual: pick(comparison.actual, fingerprints),
+      } : null,
+    },
+    api: {
+      ...pick(report.api, ['pinned_api_id', 'observed_api_id', 'target_matches_pinned_lambda']),
+      stage: pick(report.api?.stage, ['stage_name', 'deployment_id', 'auto_deploy']),
+      integration_lambda_arns: report.api?.integration_lambda_arns ?? [],
+    },
+    lambda: report.lambda ? {
+      ...pick(report.lambda, ['function_name', 'version', 'code_sha256', 'revision_id']),
+      workflow_flags: Object.fromEntries(FLAG_NAMES.map((name) => [
+        name, typeof report.lambda.workflow_flags?.[name] === 'boolean' ? report.lambda.workflow_flags[name] : null,
+      ])),
+      merged_pr_live_evidence: Object.fromEntries(['pr_762_backend', 'pr_772_workflow_gate'].map((name) => [
+        name, prEvidence?.[name] ? {
+          ...pick(prEvidence[name], prFields),
+          current_source: (prEvidence[name].current_source || []).map((source) => pick(source, ['repository_path', 'sha256', 'marker_present'])),
+        } : null,
+      ])),
+    } : null,
+    database: pick(report.database, ['status', 'reason']),
+    missing_read_permissions: errors(report.missing_read_permissions),
+    read_errors: errors(report.read_errors),
+  });
+}
+
 export async function main({
   env = process.env,
   writeOutput = console.log,

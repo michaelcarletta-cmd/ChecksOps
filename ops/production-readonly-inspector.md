@@ -50,3 +50,22 @@ treated as live production evidence.
 Invoking the workflow is a read-only production inspection. It does not
 authorize or perform a deployment, SQL apply, Lambda update, or production
 application-data change.
+
+## Retrieve redacted evidence
+
+After a successful dispatch on `main`, open the workflow run's **Artifacts**
+section and download
+`production-readonly-evidence-<commit SHA>-<run ID>-<attempt>`. It is retained
+for 30 days and contains only `production-readonly-evidence.json`, the same
+deliberately field-allowlisted, redacted JSON shown in the run summary. No raw
+report or other runner temporary files are uploaded. Access follows repository
+Actions artifact permissions; download before expiry for longer retention.
+
+Compare the SPA entry/index/bundle hashes and CloudFront/lock comparison,
+API identity/integrations, Lambda code SHA/revision and boolean workflow flags,
+and merged PR #762/#772 live evidence between runs. A successful workflow can
+still report `partial` (including database refusal or missing read permissions)
+or `target_drift`; neither success nor source evidence proves the repairs are
+deployed. Database refusal and sanitized read errors are preserved. No database
+connectivity, AWS write permissions, release authorization, or deployment is
+added by artifact collection.
