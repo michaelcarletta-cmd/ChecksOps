@@ -1,0 +1,128 @@
+name: Inspect production (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: inspect-production-readonly
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    environment: production-readonly
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+
+      - name: Refuse unexpected ref, role, or checkout
+        shell: bash
+        env:
+          ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Inspection is only permitted from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect"
+          test "$ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "Unexpected production read-only role"; exit 2; }
+
+      - name: Install locked PostgreSQL inspection dependency
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Configure pinned production read-only AWS session through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-production-readonly-inspect-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sts:GetCallerIdentity"],"Resource":"*"},{"Effect":"Allow","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::checksops-production-frontend-806168576068/index.html","arn:aws:s3:::checksops-production-frontend-806168576068/assets/index-*.js"]},{"Effect":"Allow","Action":["lambda:GetFunctionConfiguration"],"Resource":"arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"},{"Effect":"Allow","Action":["apigateway:GET"],"Resource":["arn:aws:apigateway:us-east-1::/apis/kiqojucc02","arn:aws:apigateway:us-east-1::/apis/kiqojucc02/stages/prep","arn:aws:apigateway:us-east-1::/apis/kiqojucc02/integrations"]},{"Effect":"Allow","Action":["cloudfront:GetDistribution"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"}]}
+
+      - name: Verify assumed production AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ACCOUNT" = "806168576068" || { echo "Unexpected AWS account"; exit 2; }
+          EXPECTED_ARN="arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionReadOnlyInspect/checksops-production-readonly-inspect-$GITHUB_RUN_ID"
+          test "$ARN" = "$EXPECTED_ARN" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Collect pinned read-only production evidence
+        shell: bash
+        env:
+          CHECKSOPS_INSPECTOR_ENVIRONMENT: production
+          CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN }}
+          CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL: ${{ secrets.CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/production-readonly-inspect.mjs > "$RUNNER_TEMP/production-readonly-inspection.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const report = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/production-readonly-inspection.json`, 'utf8'));
+          const summary = {
+            status: report.status,
+            target: report.target,
+            spa: {
+              entry_bundle: report.spa?.entry_bundle ?? null,
+              index_html_sha256: report.spa?.index_html_sha256 ?? null,
+              bundle_sha256: report.spa?.bundle_sha256 ?? null,
+              cloudfront: report.spa?.cloudfront ?? null,
+              production_spa_lock_comparison: report.spa?.production_spa_lock_comparison ?? null,
+            },
+            api: report.api,
+            lambda: report.lambda && {
+              function_name: report.lambda.function_name,
+              version: report.lambda.version,
+              code_sha256: report.lambda.code_sha256,
+              revision_id: report.lambda.revision_id,
+              workflow_flags: report.lambda.workflow_flags,
+              merged_pr_live_evidence: report.lambda.merged_pr_live_evidence,
+            },
+            database: report.database && {
+              status: report.database.status,
+              host: report.database.host,
+              missing_read_permissions: report.database.missing_read_permissions,
+              sql52_routing_account_column_grants: report.database.sql52_routing_account_column_grants,
+              sql53_save_claim_settlement_breakdown: report.database.sql53_save_claim_settlement_breakdown && {
+                signature: report.database.sql53_save_claim_settlement_breakdown.signature,
+                result_type: report.database.sql53_save_claim_settlement_breakdown.result_type,
+                owner: report.database.sql53_save_claim_settlement_breakdown.owner,
+                security_definer: report.database.sql53_save_claim_settlement_breakdown.security_definer,
+                function_settings: report.database.sql53_save_claim_settlement_breakdown.function_settings,
+                checksops_can_execute: report.database.sql53_save_claim_settlement_breakdown.checksops_can_execute,
+                authenticated_can_execute: report.database.sql53_save_claim_settlement_breakdown.authenticated_can_execute,
+                anon_can_execute: report.database.sql53_save_claim_settlement_breakdown.anon_can_execute,
+                public_can_execute: report.database.sql53_save_claim_settlement_breakdown.public_can_execute,
+                definition_sha256: report.database.sql53_save_claim_settlement_breakdown.definition_sha256,
+              },
+              sync_homeowner_ledger_from_check: report.database.sync_homeowner_ledger_from_check && {
+                signature: report.database.sync_homeowner_ledger_from_check.signature,
+                owner: report.database.sync_homeowner_ledger_from_check.owner,
+                security_definer: report.database.sync_homeowner_ledger_from_check.security_definer,
+                definition_sha256: report.database.sync_homeowner_ledger_from_check.definition_sha256,
+                endorsement_event_suppression_observed: report.database.sync_homeowner_ledger_from_check.endorsement_event_suppression_observed,
+                triggers: report.database.sync_homeowner_ledger_from_check.triggers,
+              },
+            },
+            missing_read_permissions: report.missing_read_permissions,
+            read_errors: report.read_errors,
+          };
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            '# Production inspection (read-only)',
+            '',
+            'Definition text is intentionally omitted from this summary; the inspector hashes and secret-redacts it in its JSON report.',
+            '',
+            '```json',
+            JSON.stringify(summary, null, 2),
+            '```',
+            '',
+          ].join('\n'));
+          NODE
