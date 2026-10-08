@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: staging-db-readonly-diagnostic-deploy
@@ -18,6 +17,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ false }}
     environment: staging
     runs-on: ubuntu-24.04
     timeout-minutes: 20
