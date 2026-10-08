@@ -15,6 +15,10 @@ const DISTRIBUTION_ID = 'E1B0ZWWO5559U5';
 const API_ID = 'kiqojucc02';
 const API_STAGE = 'prep';
 const API_FUNCTION = 'checksops-production-prep-api';
+const API_TARGET_ID = 'checksops-production-prep-api';
+const PRODUCTION_SPA_TARGET_ID = 'production-spa';
+const PRODUCTION_API_GATEWAY_TARGET_ID = 'production-http-api';
+const PRODUCTION_TARGETS_PATH = 'ops/deployment-guard/protected-targets.json';
 const DB_HOST = 'db.nbcqwpysqgyxrrbgtmkw.supabase.co';
 const DB_USER = 'checksops_prod_inspector';
 const DB_SECRET_ENV = 'CHECKSOPS_PRODUCTION_INSPECT_DATABASE_URL';
@@ -224,6 +228,18 @@ export const READ_ONLY_AWS_OPERATIONS = Object.freeze([
   'cloudfront.get-distribution',
   's3api.head-object',
 ]);
+export const REQUIRED_AWS_READ_PERMISSIONS = Object.freeze({
+  'lambda.get-function': 'lambda:GetFunction',
+  'lambda.get-function-configuration': 'lambda:GetFunctionConfiguration',
+  'lambda.list-aliases': 'lambda:ListAliases',
+  'apigatewayv2.get-api': 'apigateway:GET',
+  'apigatewayv2.get-stages': 'apigateway:GET',
+  'apigatewayv2.get-routes': 'apigateway:GET',
+  'apigatewayv2.get-integrations': 'apigateway:GET',
+  'cloudfront.get-distribution': 'cloudfront:GetDistribution',
+  's3api.head-object': 's3:GetObject',
+});
+const ALLOWED_INSPECTION_SQL = new Set(Object.values(DATABASE_READ_ONLY_SQL));
 
 export const ACCEPTANCE_REQUIRED_BEFORE_PROMOTION = Object.freeze([
   'Claim Ledger save persists and refreshes without writes_disabled or historical 42501.',
@@ -377,6 +393,64 @@ export function verifyInspectionWorkflowIdentity(env, headSha, fetchedMainSha) {
   return env.GITHUB_SHA;
 }
 
+export function validateProductionTargetMetadata(metadata) {
+  const production = metadata?.environments?.production;
+  const targets = Array.isArray(metadata?.targets) ? metadata.targets : [];
+  const lambda = targets.find((target) => target.id === API_TARGET_ID);
+  const spa = targets.find((target) => target.id === PRODUCTION_SPA_TARGET_ID);
+  const api = targets.find((target) => target.id === PRODUCTION_API_GATEWAY_TARGET_ID);
+  if (metadata?.fail_closed !== true
+    || production?.requires_lease !== true
+    || production?.requires_explicit_approval !== true
+    || production?.requires_staging_acceptance !== true
+    || production?.requires_second_fingerprint_before_write !== true
+    || lambda?.kind !== 'lambda'
+    || lambda?.environment !== 'production'
+    || lambda?.function_name !== API_FUNCTION
+    || lambda?.region !== REGION
+    || lambda?.overlay_required !== true
+    || lambda?.full_replace_forbidden !== true
+    || lambda?.revision_id_cas !== true
+    || spa?.kind !== 'spa'
+    || spa?.environment !== 'production'
+    || spa?.host !== SPA_ORIGIN
+    || spa?.s3_bucket !== SPA_BUCKET
+    || spa?.cloudfront_id !== DISTRIBUTION_ID
+    || spa?.index_toctou !== true
+    || spa?.s3_sync_delete_forbidden !== true
+    || api?.kind !== 'apigateway'
+    || api?.environment !== 'production'
+    || api?.api_id !== API_ID) {
+    throw new Error('Production inspection targets do not match accepted fail-closed guard metadata.');
+  }
+  return true;
+}
+
+export function validateReadOnlyInspectionQuery(query) {
+  if (typeof query !== 'string' || !ALLOWED_INSPECTION_SQL.has(query)) {
+    throw new Error('Refusing SQL outside the fixed production catalog SELECT allowlist.');
+  }
+  return query;
+}
+
+export function safeInspectionFailure(error) {
+  const message = String(error?.message || '');
+  if (/^Required production read permission denied: [A-Za-z0-9:]+$/.test(message)) {
+    return message;
+  }
+  return 'Live production inspection unavailable.';
+}
+
+export function classifyAwsReadFailure(operation, error) {
+  const permission = REQUIRED_AWS_READ_PERMISSIONS[operation];
+  if (!permission) throw new Error('Cannot classify a non-allowlisted AWS operation.');
+  const detail = `${error?.message || ''}\n${error?.stderr || ''}`;
+  if (/AccessDenied|UnauthorizedOperation|not authorized|is not authorized/i.test(detail)) {
+    return `Required production read permission denied: ${permission}`;
+  }
+  return `Production read operation failed: ${operation}`;
+}
+
 function awsEnv(env) {
   return {
     ...Object.fromEntries(
@@ -388,28 +462,45 @@ function awsEnv(env) {
   };
 }
 
+function assertInputKeys(input, allowedKeys) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some((key) => !allowedKeys.includes(key))) {
+    throw new Error('Refusing unexpected production inspection command parameters.');
+  }
+}
+
 export function commandFor(operation, input = {}) {
   switch (operation) {
     case 'lambda.get-function':
+      assertInputKeys(input, ['qualifier']);
       return ['lambda', 'get-function', '--function-name', API_FUNCTION,
         ...(input.qualifier ? ['--qualifier', safeQualifier(input.qualifier)] : [])];
     case 'lambda.get-function-configuration':
+      assertInputKeys(input, ['qualifier']);
       return ['lambda', 'get-function-configuration', '--function-name', API_FUNCTION,
         ...(input.qualifier ? ['--qualifier', safeQualifier(input.qualifier)] : [])];
     case 'lambda.list-aliases':
+      assertInputKeys(input, []);
       return ['lambda', 'list-aliases', '--function-name', API_FUNCTION];
     case 'apigatewayv2.get-api':
+      assertInputKeys(input, []);
       return ['apigatewayv2', 'get-api', '--api-id', API_ID];
     case 'apigatewayv2.get-stages':
+      assertInputKeys(input, []);
       return ['apigatewayv2', 'get-stages', '--api-id', API_ID];
     case 'apigatewayv2.get-routes':
+      assertInputKeys(input, []);
       return ['apigatewayv2', 'get-routes', '--api-id', API_ID];
     case 'apigatewayv2.get-integrations':
+      assertInputKeys(input, []);
       return ['apigatewayv2', 'get-integrations', '--api-id', API_ID];
     case 'cloudfront.get-distribution':
+      assertInputKeys(input, []);
       return ['cloudfront', 'get-distribution', '--id', DISTRIBUTION_ID];
     case 's3api.head-object':
-      if (!/^index\.html$|^assets\/index-[A-Za-z0-9_-]+\.js$/.test(String(input.key || ''))) {
+      assertInputKeys(input, ['key']);
+      if (typeof input.key !== 'string'
+        || !/^index\.html$|^assets\/index-[A-Za-z0-9_-]+\.js$/.test(input.key)) {
         throw new Error('Refusing an unexpected production SPA object key.');
       }
       return ['s3api', 'head-object', '--bucket', SPA_BUCKET, '--key', input.key];
@@ -420,11 +511,16 @@ export function commandFor(operation, input = {}) {
 
 function runAwsJson(operation, input = {}, env = process.env) {
   const args = commandFor(operation, input);
-  const output = execFileSync('aws', ['--no-cli-pager', '--region', REGION, '--output', 'json', ...args], {
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-    env: awsEnv(env),
-  });
+  let output;
+  try {
+    output = execFileSync('aws', ['--no-cli-pager', '--region', REGION, '--output', 'json', ...args], {
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+      env: awsEnv(env),
+    });
+  } catch (error) {
+    throw new Error(classifyAwsReadFailure(operation, error));
+  }
   return JSON.parse(output || '{}');
 }
 
@@ -684,11 +780,11 @@ export async function inspectDatabase({ root = ROOT, env = process.env, createCl
     await client.query('BEGIN READ ONLY');
     transactionStarted = true;
     const [identity, micr, settlement, endorsement, settlementWrites] = await Promise.all([
-      client.query(DATABASE_READ_ONLY_SQL.identity),
-      client.query(DATABASE_READ_ONLY_SQL.micr),
-      client.query(DATABASE_READ_ONLY_SQL.settlement),
-      client.query(DATABASE_READ_ONLY_SQL.endorsement),
-      client.query(DATABASE_READ_ONLY_SQL.settlement_write_privileges),
+      client.query(validateReadOnlyInspectionQuery(DATABASE_READ_ONLY_SQL.identity)),
+      client.query(validateReadOnlyInspectionQuery(DATABASE_READ_ONLY_SQL.micr)),
+      client.query(validateReadOnlyInspectionQuery(DATABASE_READ_ONLY_SQL.settlement)),
+      client.query(validateReadOnlyInspectionQuery(DATABASE_READ_ONLY_SQL.endorsement)),
+      client.query(validateReadOnlyInspectionQuery(DATABASE_READ_ONLY_SQL.settlement_write_privileges)),
     ]);
     const role = identity.rows[0] || {};
     const readOnlyRole = role.role_name === DB_USER
@@ -805,11 +901,14 @@ export async function inspectProduction({
   const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   const fetchedMainSha = execFileSync('git', ['rev-parse', 'FETCH_HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   const mainSha = verifyInspectionWorkflowIdentity(env, headSha, fetchedMainSha);
+  const targetMetadata = JSON.parse(fs.readFileSync(path.join(root, PRODUCTION_TARGETS_PATH), 'utf8'));
+  validateProductionTargetMetadata(targetMetadata);
   const report = {
     generated_at: now().toISOString(),
     current_main_sha: mainSha,
     safety_scope: 'READ_ONLY_INSPECTION_ONLY',
     acceptance_required_before_promotion: ACCEPTANCE_REQUIRED_BEFORE_PROMOTION,
+    required_aws_read_permissions: REQUIRED_AWS_READ_PERMISSIONS,
     spa: { status: 'unavailable' },
     api_lambda: { status: 'unavailable' },
     database: { status: 'unavailable' },
@@ -828,7 +927,7 @@ export async function inspectProduction({
       report.drift.push('Live production SPA does not contain the Claim Settlement RPC client marker.');
     }
     report.spa.proof_drift = proofDriftFromLock(locked, report.spa.proof_reference);
-  } else report.spa.error = 'Live production SPA inspection unavailable.';
+  } else report.spa.error = safeInspectionFailure(spaResult.reason);
   if (lambdaResult.status === 'fulfilled') {
     report.api_lambda = lambdaResult.value;
     if (report.api_lambda.api.lambda_integrations.length === 0) {
@@ -848,7 +947,7 @@ export async function inspectProduction({
     if (report.api_lambda.flags.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED !== 'true') {
       report.drift.push('The application-workflow write gate is not enabled in the live Lambda configuration.');
     }
-  } else report.api_lambda.error = 'Live production API/Lambda inspection unavailable.';
+  } else report.api_lambda.error = safeInspectionFailure(lambdaResult.reason);
   if (databaseResult.status === 'fulfilled') {
     report.database = databaseResult.value;
     for (const [key, label] of [
@@ -891,6 +990,7 @@ export async function main(env = process.env) {
       safety_scope: 'READ_ONLY_INSPECTION_ONLY',
       status: 'refused',
       current_main_sha: env.GITHUB_SHA || null,
+      required_aws_read_permissions: REQUIRED_AWS_READ_PERMISSIONS,
       error: error?.message || 'Production inspection was refused.',
       'SAFE-TO-AUTHORIZE': 'NO',
     }, null, 2)}\n`);

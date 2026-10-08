@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { test } from 'node:test';
 import {
   commandFor,
+  classifyAwsReadFailure,
   compareSpaToLock,
   DATABASE_READ_ONLY_SQL,
   databaseConnectionOptions,
@@ -12,8 +13,12 @@ import {
   normalizeFlags,
   normalizeSqlBody,
   READ_ONLY_AWS_OPERATIONS,
+  REQUIRED_AWS_READ_PERMISSIONS,
+  safeInspectionFailure,
   sqlFunctionBody,
   validateLambdaCodeLocation,
+  validateProductionTargetMetadata,
+  validateReadOnlyInspectionQuery,
   verifyInspectionWorkflowIdentity,
 } from '../../scripts/deployment-guard/production-readonly-inspect.mjs';
 
@@ -81,6 +86,18 @@ test('feature flag report allowlists only non-secret flags and normalizes values
 
 test('production AWS operation map contains reads only and rejects retargeting', () => {
   assert.ok(READ_ONLY_AWS_OPERATIONS.every((operation) => /^(lambda\.get-|lambda\.list-|apigatewayv2\.get-|cloudfront\.get-|s3api\.(head|get)-)/.test(operation)));
+  assert.deepEqual(Object.keys(REQUIRED_AWS_READ_PERMISSIONS).sort(), [...READ_ONLY_AWS_OPERATIONS].sort());
+  assert.equal(
+    classifyAwsReadFailure('s3api.head-object', new Error('AccessDenied: leaked-secret-value')),
+    'Required production read permission denied: s3:GetObject',
+  );
+  assert.equal(
+    classifyAwsReadFailure('lambda.get-function', new Error('network timeout')),
+    'Production read operation failed: lambda.get-function',
+  );
+  assert.throws(() => classifyAwsReadFailure('lambda.invoke', new Error('AccessDenied')));
+  assert.equal(safeInspectionFailure(new Error('Required production read permission denied: s3:GetObject')), 'Required production read permission denied: s3:GetObject');
+  assert.equal(safeInspectionFailure(new Error('******')), 'Live production inspection unavailable.');
   assert.deepEqual(commandFor('lambda.get-function', { qualifier: '17' }).slice(0, 4), [
     'lambda', 'get-function', '--function-name', 'checksops-production-prep-api',
   ]);
@@ -88,6 +105,27 @@ test('production AWS operation map contains reads only and rejects retargeting',
   assert.throws(() => commandFor('lambda.get-function', { qualifier: 'prod;update' }));
   assert.throws(() => commandFor('s3api.head-object', { key: '../other-bucket/object' }));
   assert.throws(() => commandFor('s3api.head-object', { key: 'assets/unhashed.js' }));
+  assert.throws(() => commandFor('lambda.get-function', { functionName: 'attacker-function' }));
+  assert.throws(() => commandFor('apigatewayv2.get-api', { apiId: 'attacker-api' }));
+  assert.throws(() => commandFor('cloudfront.get-distribution', { id: '*' }));
+  assert.throws(() => commandFor('s3api.head-object', { bucket: 'attacker-bucket', key: 'index.html' }));
+  for (const operation of [
+    'lambda.invoke',
+    'lambda.update-function-code',
+    'lambda.update-function-configuration',
+    'lambda.publish-version',
+    's3api.put-object',
+    's3api.delete-object',
+    's3api.copy-object',
+    'cloudfront.create-invalidation',
+    'secretsmanager.put-secret-value',
+    'ssm.put-parameter',
+    'states.start-execution',
+    'payments.execute',
+    'provider.invoke',
+  ]) {
+    assert.throws(() => commandFor(operation));
+  }
 });
 
 test('Lambda ZIP download is limited to HTTPS AWS S3 URLs', () => {
@@ -118,10 +156,20 @@ test('database connection is pinned to the dedicated read-only production role a
 
 test('every database inspection statement is a fixed SELECT with no application function calls', () => {
   for (const query of Object.values(DATABASE_READ_ONLY_SQL)) {
+    assert.equal(validateReadOnlyInspectionQuery(query), query);
     assert.match(query, /^\s*SELECT\b/i);
     const sqlCode = query.replace(/'(?:''|[^'])*'/g, "''");
     assert.doesNotMatch(sqlCode, /\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|ALTER|CREATE|DROP|GRANT|REVOKE|CALL)\b/i);
     assert.doesNotMatch(sqlCode, /save_claim_settlement_breakdown\s*\(/i);
+  }
+  for (const query of [
+    `${DATABASE_READ_ONLY_SQL.identity}; DELETE FROM public.claim_settlements`,
+    `${DATABASE_READ_ONLY_SQL.identity} /* ; SELECT pg_sleep(60) */`,
+    'SELECT 1; SELECT pg_catalog.pg_sleep(60)',
+    'WITH changed AS (DELETE FROM public.claim_settlements RETURNING *) SELECT * FROM changed',
+    "SELECT 'safe'; CALL public.mutating_function()",
+  ]) {
+    assert.throws(() => validateReadOnlyInspectionQuery(query));
   }
   assert.match(DATABASE_READ_ONLY_SQL.endorsement, /trg_sync_homeowner_ledger_upd/);
   assert.match(DATABASE_READ_ONLY_SQL.endorsement, /status_column\.attnum = ANY\(t\.tgattr\)/);
@@ -129,10 +177,25 @@ test('every database inspection statement is a fixed SELECT with no application 
   assert.match(workflow, /environment:\s*production-readonly/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /checksops-staging|lambda invoke|update-function|s3api (put|delete|copy)|cloudfront (create|update)/i);
+  assert.doesNotMatch(workflow, /provider\.example|payments\/|invoke-provider|financial-execution/i);
   assert.match(workflow, /CHECKSOPS_PRODUCTION_INSPECT_DATABASE_URL/);
   assert.doesNotMatch(read('aws/functions/api/write-allowlist.mjs'), /\bclaim_settlements\b/);
   assert.ok(ACCEPTANCE_REQUIRED_BEFORE_PROMOTION.some((item) => item.includes('Delete Check, Signature Requests')));
   assert.ok(ACCEPTANCE_REQUIRED_BEFORE_PROMOTION.some((item) => item.includes('Payee and issue-date')));
+});
+
+test('production inspection identifiers must match accepted fail-closed guard metadata', () => {
+  const metadata = JSON.parse(read('ops/deployment-guard/protected-targets.json'));
+  assert.equal(validateProductionTargetMetadata(metadata), true);
+  const wrongEnvironment = structuredClone(metadata);
+  wrongEnvironment.targets.find((target) => target.id === 'checksops-production-prep-api').environment = 'staging';
+  assert.throws(() => validateProductionTargetMetadata(wrongEnvironment));
+  const wrongBucket = structuredClone(metadata);
+  wrongBucket.targets.find((target) => target.id === 'production-spa').s3_bucket = 'checksops-staging-bucket';
+  assert.throws(() => validateProductionTargetMetadata(wrongBucket));
+  const missingApproval = structuredClone(metadata);
+  missingApproval.environments.production.requires_explicit_approval = false;
+  assert.throws(() => validateProductionTargetMetadata(missingApproval));
 });
 
 test('production workflow has only scoped read actions and a protected manual environment', () => {
@@ -151,7 +214,10 @@ test('production workflow has only scoped read actions and a protected manual en
   ].sort());
   assert.match(workflow, /environment:\s*production-readonly/);
   assert.match(workflow, /name:\s*Production read-only fingerprint inspection/);
-  assert.doesNotMatch(workflow, /secretsmanager:|ssm:|lambda:Invoke|lambda:Update|lambda:Publish|s3:Put|s3:Delete|cloudfront:Create|cloudfront:Update/i);
+  assert.doesNotMatch(workflow, /secretsmanager:|ssm:|lambda:Invoke|lambda:Update|lambda:Publish|s3:Put|s3:Delete|s3:Copy|cloudfront:Create|cloudfront:Update/i);
+  const inspector = read('scripts/deployment-guard/production-readonly-inspect.mjs');
+  assert.doesNotMatch(inspector, /lambda\.invoke|InvokeFunction|put-object|delete-object|copy-object|create-invalidation|UpdateFunctionCode|UpdateFunctionConfiguration|provider\.execute|payment\.execute/i);
+  assert.match(workflow, /Required AWS read permissions/);
 });
 
 test('database inspection pins a READ ONLY transaction and rolls back without executing writes', async () => {
@@ -236,6 +302,7 @@ test('database inspection pins a READ ONLY transaction and rolls back without ex
   assert.equal(calls.at(-1), 'END');
   assert.ok(calls.slice(2, -2).every((query) => /^\s*SELECT\b/i.test(query)));
   assert.ok(!JSON.stringify(report).includes('example-password'));
+  assert.ok(!JSON.stringify(report).includes('checksops_prod_inspector:'));
 });
 
 test('the endorsement source body comparator normalizes whitespace only', () => {

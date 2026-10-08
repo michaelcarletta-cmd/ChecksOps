@@ -11,6 +11,11 @@ objects, CloudFront distribution, API Gateway identity/routes, and the
 `checksops-production-prep-api` function and aliases. The role variable must
 be exactly
 `CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN=arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect`.
+Its identity policy must grant only the reads needed by the workflow:
+`lambda:GetFunction`, `lambda:GetFunctionConfiguration`, `lambda:ListAliases`,
+`apigateway:GET`, `cloudfront:GetDistribution`, and `s3:GetObject` for the
+pinned SPA index and hashed index bundles. If AWS denies one, the report names
+the missing read permission; do not broaden the role as a workaround.
 No application Lambda is invoked. Lambda code is read via `GetFunction` and
 the returned temporary download URL; only hashes of the relevant ZIP members
 are reported. Secrets and all non-allowlisted Lambda environment values are
