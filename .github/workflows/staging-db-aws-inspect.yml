@@ -1,0 +1,75 @@
+name: Inspect staging DB validation (AWS read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-db-aws-inspect
+  cancel-in-progress: false
+
+jobs:
+  prerequisites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Refuse non-main and unapproved infrastructure
+        shell: bash
+        env:
+          READY: ${{ vars.CHECKSOPS_STAGING_DB_INSPECT_READY }}
+          ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_DB_INSPECT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "michaelcarletta-cmd/ChecksOps" || exit 2
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Inspection requires reviewed main"; exit 2; }
+          test "$READY" = "true" || { echo "Owner-approved IAM and private runner prerequisites remain"; exit 2; }
+          test "$ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbInspect" || { echo "Unexpected staging role"; exit 2; }
+
+  inspect:
+    needs: prerequisites
+    environment: staging
+    runs-on: [self-hosted, linux, x64, checksops-staging-db-readonly]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out exact reviewed workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact source before AWS authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || exit 2
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Install existing validator dependencies without lifecycle scripts
+        run: npm ci --prefix aws/functions/api --ignore-scripts --no-audit --no-fund
+
+      - name: Test inspector offline before AWS authentication
+        run: node --test aws/tests/staging-db-aws-inspect.test.mjs
+
+      - name: Assume staging-only read-only role through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbInspect
+          aws-region: us-east-1
+          role-session-name: checksops-staging-db-inspect-${{ github.run_id }}
+          role-duration-seconds: 900
+          allowed-account-ids: '806168576068'
+          unset-current-credentials: true
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"secretsmanager:GetSecretValue","Resource":"arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn"}]}
+
+      - name: Inspect using unchanged validator and emit only safe classifications
+        run: node scripts/staging-db-aws-inspect.mjs

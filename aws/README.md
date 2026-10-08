@@ -70,39 +70,101 @@ The guarded staging Lambda overlay workflow runs this same strict public smoke i
 
 Do not point the production frontend at this API yet.
 
-### Authenticated staging validation diagnostic
+### AWS-authenticated staging validation inspector
 
-The manual **Staging DB read-only diagnostic** workflow is restricted to reviewed
-`main` and the protected GitHub `staging` environment. It does not assume an AWS
-role, deploy, or change runtime/configuration/database state.
+Use **Inspect staging DB validation (AWS read-only)**, not the legacy Cognito
+token diagnostic. No user token, password handoff, login, refresh, or Cognito
+change is required. The new workflow is manual, reviewed-`main` only, exact-SHA
+checked before AWS authentication, and protected by the `staging` environment.
+It does not deploy or change Lambda composition, configuration, or database state.
 
-Authentication reuses an existing authorized staging Cognito session obtained
-through the normal staging EMAIL_OTP/passkey sign-in. An authorized environment
-maintainer must make that session's short-lived **ID token** available as the
-`CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN` staging environment secret through an
-approved secure process (never chat, workflow inputs, source, or logs). This is
-not an existing provisioned secret assumed by the workflow; if it is unavailable,
-stop. Do not create users, reset passwords, bypass MFA, or change Cognito settings
-for this diagnostic. Keep the environment restricted to approved branches and
-reviewers; remove the short-lived secret after use.
+Authentication follows the existing pinned GitHub OIDC action pattern in
+`inspect-staging-spa.yml`: GitHub OIDC → STS `AssumeRoleWithWebIdentity` →
+`ChecksOpsGitHubStagingDbInspect` (900-second session). The script verifies the
+fixed account, role, and run-specific session using `sts:GetCallerIdentity`,
+reads exactly one staging application secret into memory, rejects any other
+host/user/port/database, then connects over verified RDS TLS as `checksops` to
+database `checksops`. The secret's historical `dbname=postgres` is not changed;
+the connection uses the same `checksops` database override as the staging API.
+Neither secret values nor AWS responses are logged or written to disk.
 
-After review/merge, select **Actions → Staging DB read-only diagnostic → Run
-workflow → main**, then approve the staging environment job. The script verifies
-the token's signature, expiry, ID-token use, and fixed staging pool/client before
-one `GET` to the fixed staging `/db-readonly-validate` URL. Missing/invalid/expired
-identity, redirects, public-only responses, and unexpected response contracts
-fail closed. Signature verification may read the fixed staging pool's public
-JWKS. No unauthenticated fallback, refresh/login, or other application API calls
-occur.
+**Infrastructure prerequisite remains; nothing is provisioned by this PR.**
+Repository evidence does not establish a GitHub role with DB-secret access or
+a private-network diagnostic runner. The SPA role permits only one S3 object;
+the overlay role is not a least-privilege DB diagnostic role. Existing VPC SQL
+executors are migration-bound and are not a general validation entry point.
+Do not broaden those roles, invoke mutation executors, open public DB ingress,
+or deploy a diagnostic Lambda to work around this blocker.
 
-Logs contain only HTTP status, fixed diagnostic/status classifications, failing
-issue kind/severity, allowlisted table/probe labels, and nonnegative integer
-assertion counts (row counts, trigger/FK counts; RLS visibility expects zero).
-Expected/non-failing issues, raw messages/errors, identities, DB connection
-details, token claims/tokens, full catalog/RLS data, and response bodies are never
-printed or saved as artifacts. Exit codes: `0` healthy, `1` unhealthy with safe
-classifications, `2` diagnostic unavailable/failed. A red diagnostic run does not
-authorize repairs or deployment and does not replace or weaken the public smoke.
+Owner approval must separately authorize:
+
+- A dedicated role `arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbInspect`,
+  using the existing GitHub OIDC provider. Its trust allows only
+  `sts:AssumeRoleWithWebIdentity` with `StringEquals` conditions
+  `token.actions.githubusercontent.com:aud = sts.amazonaws.com` and
+  `token.actions.githubusercontent.com:sub =
+  repo:michaelcarletta-cmd/ChecksOps:environment:staging`.
+  Preserve staging required reviewers, prevent self-review, and restrict that
+  environment to protected `main`. The environment OIDC subject itself does not
+  encode a branch, so those rules and the workflow's SHA/main checks are required.
+- Only `secretsmanager:GetSecretValue` on
+  `arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn`.
+  Verify that recorded ARN against owner inventory before enabling. No wildcard,
+  admin/production/provider secrets, Lambda invoke/deploy, IAM, RDS management,
+  SSM, or S3 permissions. `GetCallerIdentity` needs no permission grant.
+  The inline session policy restricts the session to the same one-secret read.
+  If the secret uses a customer-managed KMS key, stop: a separately reviewed
+  exact-key `kms:Decrypt`, restricted by `kms:ViaService =
+  secretsmanager.us-east-1.amazonaws.com` and encryption context `SecretARN`
+  matching the above ARN, must also be included in both role and session policy.
+  This PR does not grant or assume that permission.
+- An isolated, ephemeral staging-only runner labeled
+  `self-hosted, linux, x64, checksops-staging-db-readonly`, restricted by runner
+  group to this workflow on reviewed main (never PR/untrusted jobs). It needs
+  Node 22, npm, AWS CLI, GitHub/STS/Secrets Manager connectivity and existing
+  private TLS access to `checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com:5432`.
+  No instance profile, ambient AWS credentials, production connectivity, shared
+  workspace/cache, or retained logs/dumps. If existing approved private access
+  is unavailable, networking/runner approval is a separate prerequisite; this
+  workflow must not mutate security groups or runtime infrastructure.
+- Only after approval and verification, repository variables
+  `CHECKSOPS_STAGING_DB_INSPECT_ROLE_ARN` (the exact role above) and
+  `CHECKSOPS_STAGING_DB_INSPECT_READY=true`. Missing/mismatched prerequisites
+  fail on a hosted preflight job before allocating the private runner.
+
+Read-only operations reuse `validateReadonlyCoreTables` unchanged from reviewed
+source, not the Lambda handler: default transaction read-only, `BEGIN READ ONLY`,
+database/user identity, core-table existence and `count(*)`, table/schema/function
+privileges, RLS flags, restore-sentinel existence, auth.users catalog existence,
+FK/trigger counts, function dependency aggregate counts, `auth.uid()`, and
+role/table/policy RLS catalog reads. Catalog probes use savepoints; cleanup is
+`ROLLBACK` and disconnect. No arbitrary SQL or identity inputs, row retrieval,
+writes, DDL, migrations, grants, security-setting changes, or provider actions.
+These results diagnose reviewed-source validation and do not attest that live
+Lambda source is identical; the existing read-only composition inspection is
+separate. Expected counts and DB security settings remain unchanged.
+
+Logs and the run summary contain only `status` (`ok`, `unhealthy`, or
+`inspection_failed`), fixed failure `classification` when unavailable, and failing
+`issues`: allowlisted `kind`, `severity=error`, `probe`, optional core-table `table`,
+and nonnegative integer `expectedCount`/`actualCount` for count, zero-visibility,
+trigger, or FK assertions. Probe labels identify database/application-role,
+table presence/query/count, SELECT/write privileges, FORCE/RLS enablement or
+visibility, public/storage schema usage, sentinel, auth catalog/FKs/uid,
+triggers/functions, or an unclassified failure. No raw errors, SQL result bodies,
+rows, identities, credential fields, tokens, PII, claim/check data, function
+definitions, or full catalog/RLS matrices are emitted; no artifacts are uploaded.
+Exit codes: `0` healthy, `1` unhealthy with safe classifications, `2` inspection
+unavailable/failed. A red run never authorizes repairs or weakens public validation.
+
+**Phone-only steps (after separate review/merge and prerequisite approval):**
+In GitHub mobile's repository Actions view (or the phone browser if the app does
+not expose dispatch), select **Inspect staging DB validation (AWS read-only) →
+Run workflow → main → Run workflow**. Open the run, verify its exact reviewed
+commit SHA, then **Review deployments → staging → Approve and deploy** (GitHub's
+button label; this job does not deploy). An authorized required reviewer must
+approve. Read the run summary's safe JSON classifications. Do not supply tokens
+or credentials, rerun a deployment, change counts, or repair DB settings.
 
 ## Next migration step
 
