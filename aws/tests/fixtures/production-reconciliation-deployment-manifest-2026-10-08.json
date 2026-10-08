@@ -1,0 +1,131 @@
+{
+  "workstream_id": "prod-source-reconciliation-3bc9",
+  "authorization": "source-only",
+  "deploy_authorized": false,
+  "sql_apply_authorized": false,
+  "live_lambda": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "DMcCoF3dpIiULPe530F8DJ8vC1wL1BP7ayqr+e8SCyI=",
+    "revision_id": "fb17cb70-7b50-468d-a0a6-59a020c43f8c",
+    "last_modified": "2026-10-06T20:29:23.000+0000",
+    "inspect_run": 37812416526
+  },
+  "notes": "Forward-composed source only. Do not replace a ZIP or restore a historical build. Overlay one member per official receipt after a later apply authorization.",
+  "sql_order": [
+    {
+      "order": 1,
+      "path": "aws/workflows/sql/52_verified_ocr_micr_column_grant.sql",
+      "sha256": "7bc17fac816724ce7f1231b205686c6ac4cf5ef877a566ad7e66081e92750273",
+      "required_before": [],
+      "required": "conditional",
+      "reason": "Apply only if verified MICR persist fails with a missing-column privilege. OCR overlay is not part of this compose."
+    },
+    {
+      "order": 2,
+      "path": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+      "sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+      "required_before": ["claim-settlement-rpc.mjs"],
+      "required": true,
+      "reason": "Must exist before ADD/call of claim-settlement-rpc.mjs."
+    },
+    {
+      "order": 3,
+      "path": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+      "sha256": "1a9e6d54c67d2068ba9497f10fcf6956c1699b3005e679b72c3cc3bf2e37878b",
+      "required_before": ["workflow-transitions.mjs"],
+      "required": true,
+      "reason": "Must exist before REPLACE of workflow-transitions.mjs. This compose does not overlay that member yet."
+    }
+  ],
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
+      "accepted_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+      "operation": "replace",
+      "required_imports": ["data.mjs", "identity.mjs", "workflow-flags.mjs", "write-allowlist.mjs", "workflow-transitions.mjs"]
+    },
+    "workflow-rpc.mjs": {
+      "live_sha256": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
+      "accepted_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+      "operation": "replace",
+      "required_imports": ["write-claim-settlement.mjs", "data.mjs", "identity.mjs", "workflow-flags.mjs", "write-allowlist.mjs", "admin-override-check-status.mjs"]
+    },
+    "data.mjs": {
+      "live_sha256": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+      "accepted_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+      "operation": "replace",
+      "required_imports": ["claim-settlement-rpc.mjs"]
+    },
+    "ocr.mjs": {
+      "live_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+      "accepted_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+      "repo_sha256": "2e69e2eace4c555036606565c35f4e76d3169ab5a36110269389f7387979cac8",
+      "operation": "keep",
+      "reason": "Live production already has the accepted persist and deposited payee lock. This PR does not rewrite the ocr-azure protected file. Do not overlay main ocr.mjs over live."
+    },
+    "check-deposited.mjs": {
+      "live_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+      "accepted_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+      "operation": "keep_or_add",
+      "required_imports": ["financial-remaining.mjs"],
+      "reason": "Live OCR import. Restore exact live bytes. Do not modify."
+    },
+    "write-claim-settlement.mjs": {
+      "live_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+      "accepted_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+      "operation": "keep_or_add",
+      "reason": "Production-only settlement writer imported by live workflow-rpc.mjs. Exact live bytes. Do not modify."
+    },
+    "financial-remaining.mjs": {
+      "live_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
+      "accepted_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
+      "operation": "keep_or_add",
+      "reason": "Live check-deposited.mjs import. Exact live bytes. Do not modify."
+    },
+    "claim-settlement-rpc.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+      "operation": "add",
+      "required": true,
+      "sql_before": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+      "reason": "Required new module for the accepted Claim Ledger SQL RPC path. Already on main."
+    },
+    "workflow-transitions.mjs": {
+      "live_sha256": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
+      "accepted_sha256": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
+      "operation": "replace_after_sql",
+      "sql_before": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+      "reason": "Approved claim-linked deny removal is already on main. Do not overlay before its SQL dependency."
+    },
+    "workflow-delete-check.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "c815b2100d221e06a54894dced2fc4dc1ddbeda9edf05b1a8bfce0d771173fab",
+      "operation": "add_unused",
+      "reason": "Present on main. Live workflow.mjs keeps inlined Delete Check and must not import this module."
+    }
+  },
+  "overlay_sequence_when_authorized": [
+    "write-claim-settlement.mjs",
+    "financial-remaining.mjs",
+    "check-deposited.mjs",
+    "workflow.mjs",
+    "workflow-rpc.mjs",
+    "data.mjs",
+    "claim-settlement-rpc.mjs"
+  ],
+  "do_not_overlay_until_sql": [
+    "workflow-transitions.mjs"
+  ],
+  "do_not_overlay": [
+    "ocr.mjs"
+  ],
+  "remaining_dependencies": [
+    "SQL 53 before claim-settlement-rpc ADD/call",
+    "SQL 20261007193200 before workflow-transitions REPLACE",
+    "SQL 52 only if verified MICR persist lacks column privilege",
+    "Staging SPA composed candidate for CheckCommandCenter.tsx + client.ts",
+    "Official product-file overlay smoke blocked by /db-readonly-validate HTTP 503; Cursor owns that correction separately",
+    "Merge to main before official overlay apply",
+    "This-workstream production approval plus staging acceptance reference"
+  ]
+}
