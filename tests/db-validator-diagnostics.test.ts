@@ -85,3 +85,10 @@ test("Review/Endorsing sources do not reference the validator", () => {
     assert.ok(!readFileSync(new URL(f, import.meta.url), "utf8").includes("db-readonly-validate"));
   }
 });
+
+test("AWS adapter exposes the Cognito ID token as session access_token", () => {
+  const src = readFileSync(new URL("../src/integrations/aws/client.ts", import.meta.url), "utf8");
+  assert.ok(src.includes("access_token: String(tokens.idToken || \"\")"));
+  const page = readFileSync(new URL("../src/pages/admin/AdminDbValidator.tsx", import.meta.url), "utf8");
+  assert.ok(page.includes("session?.access_token"));
+});
