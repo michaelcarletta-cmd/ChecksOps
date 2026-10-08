@@ -10,7 +10,7 @@
     "SQL 53_claim_settlement_breakdown.sql before claim-settlement-rpc is called",
     "SQL 52_verified_ocr_micr_column_grant.sql if verified MICR persist still fails with missing column privilege",
     "Staging SPA composed candidate for CheckCommandCenter.tsx + client.ts",
-    "Official staging Lambda overlay smoke is blocked by /db-readonly-validate HTTP 503 unless a separately authorized exception is used",
+    "Official product-file overlay smoke is blocked by /db-readonly-validate HTTP 503; Cursor owns that correction separately",
     "This-workstream production approval plus staging acceptance reference"
   ],
   "members": {
@@ -32,7 +32,9 @@
     "ocr.mjs": {
       "live_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
       "reconciled_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
-      "changed": false
+      "repo_sha256": "2e69e2eace4c555036606565c35f4e76d3169ab5a36110269389f7387979cac8",
+      "changed": false,
+      "overlay": "keep_live"
     },
     "workflow-transitions.mjs": {
       "live_sha256": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",

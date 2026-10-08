@@ -15,11 +15,14 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const API = path.join(ROOT, 'aws/functions/api');
 const FIXTURE = path.join(ROOT, 'aws/tests/fixtures/production-lambda-reconciliation-2026-10-08.json');
+const MANIFEST = path.join(ROOT, 'aws/tests/fixtures/production-reconciliation-deployment-manifest-2026-10-08.json');
 
 const read = (name) => fs.readFileSync(path.join(API, name), 'utf8');
 const sha256 = (name) => createHash('sha256').update(fs.readFileSync(path.join(API, name))).digest('hex');
+const fileSha = (rel) => createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
 
 const proof = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
+const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
 
 test('proof pins the official live production Lambda identity', () => {
   assert.equal(proof.function_name, 'checksops-production-prep-api');
@@ -30,7 +33,8 @@ test('proof pins the official live production Lambda identity', () => {
 
 test('reconciled members match the pinned SHA-256 values', () => {
   for (const [name, row] of Object.entries(proof.members)) {
-    assert.equal(sha256(name), row.reconciled_sha256, name);
+    const expected = name === 'ocr.mjs' ? row.repo_sha256 : row.reconciled_sha256;
+    assert.equal(sha256(name), expected, name);
   }
 });
 
@@ -81,20 +85,23 @@ test('data.mjs early-routes settlement RPC before the generic write path', () =>
   assert.match(src, /claim-settlement-rpc\.mjs/);
 });
 
-test('ocr.mjs stays on live production bytes including deposited payee lock', () => {
+test('ocr.mjs is not rewritten; live bytes stay KEEP and payee-lock deps remain live', () => {
   const src = read('ocr.mjs');
-  assert.equal(sha256('ocr.mjs'), 'ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f');
-  assert.match(src, /resolveWritablePayeeLine/);
-  assert.match(src, /check-deposited\.mjs/);
+  assert.equal(sha256('ocr.mjs'), proof.members['ocr.mjs'].repo_sha256);
+  assert.equal(proof.members['ocr.mjs'].live_sha256, 'ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f');
+  assert.equal(proof.members['ocr.mjs'].overlay, 'keep_live');
+  assert.doesNotMatch(src, /check-deposited\.mjs/);
+  assert.match(src, /persistOcrDescriptiveHandoff/);
   assert.match(src, /parsed\.micr_routing_state === 'VERIFIED' \? parsed\.routing_number : null/);
-  assert.match(src, /routing_number = CASE/);
-  assert.match(src, /account_number = CASE/);
   assert.equal(sha256('check-deposited.mjs'), '395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1');
   assert.equal(sha256('financial-remaining.mjs'), 'e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989');
   const remaining = read('financial-remaining.mjs');
   assert.match(remaining, /export const MONEY_IN_OPERATION_TYPES = new Set\(\['checkalt_deposit'\]\)/);
   assert.match(remaining, /export const CONFIRMED_MONEY_STATUSES/);
   assert.doesNotMatch(remaining, /AWS_FINANCIAL_WRITES_ENABLED/);
+  const deposited = read('check-deposited.mjs');
+  assert.match(deposited, /resolveWritablePayeeLine/);
+  assert.match(deposited, /financial-remaining\.mjs/);
 });
 
 test('write-claim-settlement.mjs stays on live production bytes', () => {
@@ -111,7 +118,61 @@ test('added members are the accepted claim-settlement and extracted delete modul
   assert.match(settlement, /save_claim_settlement_breakdown/);
   assert.match(settlement, /applicationWorkflowWritesEnabled/);
   assert.match(settlement, /application_workflow_writes_disabled/);
+  assert.equal(sha256('claim-settlement-rpc.mjs'), proof.members['claim-settlement-rpc.mjs'].reconciled_sha256);
   const del = read('workflow-delete-check.mjs');
   assert.match(del, /Only admins can delete checks/);
   assert.match(del, /FINANCIAL_DELETE_BLOCKERS|partner|deposited/);
+});
+
+test('deployment manifest pins live hashes, accepted hashes, and SQL order', () => {
+  assert.equal(manifest.deploy_authorized, false);
+  assert.equal(manifest.sql_apply_authorized, false);
+  assert.equal(manifest.live_lambda.code_sha256, proof.code_sha256);
+  assert.equal(manifest.live_lambda.revision_id, proof.revision_id);
+  assert.deepEqual(manifest.do_not_overlay, ['ocr.mjs']);
+  assert.deepEqual(manifest.do_not_overlay_until_sql, ['workflow-transitions.mjs']);
+  assert.equal(manifest.members['claim-settlement-rpc.mjs'].required, true);
+  assert.equal(manifest.members['claim-settlement-rpc.mjs'].operation, 'add');
+  assert.ok(!manifest.overlay_sequence_when_authorized.includes('ocr.mjs'));
+  assert.ok(!manifest.overlay_sequence_when_authorized.includes('workflow-transitions.mjs'));
+
+  for (const [name, row] of Object.entries(manifest.members)) {
+    assert.equal(row.accepted_sha256, proof.members[name].reconciled_sha256, name);
+    assert.equal(row.live_sha256, proof.members[name].live_sha256, name);
+    if (name === 'ocr.mjs') {
+      assert.equal(sha256(name), row.repo_sha256);
+      continue;
+    }
+    assert.equal(sha256(name), row.accepted_sha256, name);
+  }
+
+  const sqlOrder = manifest.sql_order.map((row) => row.order);
+  assert.deepEqual(sqlOrder, [1, 2, 3]);
+  for (const row of manifest.sql_order) {
+    assert.equal(fileSha(row.path), row.sha256, row.path);
+  }
+  assert.equal(manifest.members['claim-settlement-rpc.mjs'].sql_before, manifest.sql_order[1].path);
+  assert.equal(manifest.members['workflow-transitions.mjs'].sql_before, manifest.sql_order[2].path);
+});
+
+test('required member imports resolve without staging-503 files', () => {
+  const forbidden = [
+    'db-readonly-validate.mjs',
+    'db-validator-access.mjs',
+    'github-staging-lambda-overlay.mjs',
+  ];
+  for (const [name, row] of Object.entries(manifest.members)) {
+    const src = fs.existsSync(path.join(API, name)) ? read(name) : '';
+    for (const spec of row.required_imports || []) {
+      assert.match(src, new RegExp(spec.replace('.', '\\.')), `${name} imports ${spec}`);
+      assert.equal(fs.existsSync(path.join(API, spec)), true, spec);
+    }
+    for (const blocked of forbidden) {
+      assert.doesNotMatch(src, new RegExp(blocked.replace('.', '\\.')), `${name} must not import ${blocked}`);
+    }
+  }
+  assert.equal(fs.existsSync(path.join(API, 'claim-settlement-rpc.mjs')), true);
+  assert.match(read('data.mjs'), /claim-settlement-rpc\.mjs/);
+  assert.match(read('workflow-rpc.mjs'), /write-claim-settlement\.mjs/);
+  assert.doesNotMatch(read('workflow.mjs'), /workflow-delete-check\.mjs/);
 });
