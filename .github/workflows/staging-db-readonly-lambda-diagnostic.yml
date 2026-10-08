@@ -39,6 +39,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install locked diagnostic dependencies without lifecycle scripts
+        run: npm ci --prefix aws/functions/api --ignore-scripts --no-audit --no-fund
+
       - name: Test diagnostic output contract offline
         run: node --test aws/tests/staging-db-readonly-lambda-diagnostic.test.mjs
 

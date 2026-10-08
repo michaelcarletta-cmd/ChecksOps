@@ -211,6 +211,7 @@ test('workflow and SAM target are staging-only, exact-version, isolated, and do 
   assert.match(workflow, /CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN/);
   assert.match(workflow, /CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN/);
   assert.match(workflow, /CHECKSOPS_STAGING_DIAGNOSTIC_VERSION=/);
+  assert.match(workflow, /npm ci --prefix aws\/functions\/api --ignore-scripts/);
   assert.match(workflow, /lambda:InvokeFunction/);
   assert.match(workflow, /--function-name "\$DIAGNOSTIC_TARGET_ARN"/);
   assert.match(output, /ExecutedVersion/);
