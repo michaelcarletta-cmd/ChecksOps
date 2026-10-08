@@ -9,16 +9,14 @@ account and assumed role, and pins region `us-east-1`, API `kiqojucc02` / stage
 staging, wildcard, or drifted targets are refused.
 
 The `production-readonly` GitHub environment must be configured with required
-reviewers before this workflow is enabled. Current accepted AWS production
-metadata does not identify a production database target: the production API
-template declares no VPC/RDS attachment, and the production release lock has no
-database evidence record. The inspector therefore reports
-`refused_unproven_aws_production_target` and does not accept a database
-connection string, contact a database, read a database secret, or inspect
-historical migration paths. The separate
-`aws/production/api-execution-role.yaml` template's staging-secret default does
-not establish a production database target; staging RDS is not a production
-target.
+reviewers before this workflow is enabled. Until a fresh successful read-only
+run independently binds the live production API/function configuration to its
+AWS persistence resource, the inspector reports
+`refused_unproven_aws_production_target`. Templates, prior reports, staging
+resources, source history, and inferred names/hosts are not accepted as live
+production persistence evidence. The inspector never accepts a database
+connection string, contacts a database, reads a database secret value, or
+inspects historical migration paths.
 
 The OIDC role ARN variable must be
 `CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN` =
@@ -28,16 +26,63 @@ also permit these reads, or the report lists the missing permission:
 
 - `sts:GetCallerIdentity` (`Resource: *`, required by STS identity checks).
 - `s3:GetObject` on only the production `index.html` and `assets/index-*.js`.
-- `lambda:GetFunctionConfiguration` on only
-  `checksops-production-prep-api`.
+- `lambda:GetFunctionConfiguration` and `lambda:GetFunction` on only
+  `checksops-production-prep-api`. `GetFunction` is used only to retrieve the
+  AWS-provided package URL and the function's CodeSha256/RevisionId. The URL is
+  fetched without redirects, is never recorded, and the package is hashed and
+  inventoried in memory without extracting or recording source contents.
 - `apigateway:GET` on only API `kiqojucc02`, its `prep` stage, and integrations.
 - `cloudfront:GetDistribution` on only `E1B0ZWWO5559U5`.
 No S3 listing or writes, Lambda code/config updates or publishing, CloudFront
-configuration changes or invalidations, Secrets Manager access, SQL mutation,
-migrations, provider/payment calls, or application-data reads/writes are
-included. The SPA fingerprint is fetched using HTTPS GET from the pinned
-`checksops.com` host. The report compares the live entry, index/bundle hashes,
-S3 version, and CloudFront identity with the production SPA lock.
+configuration changes or invalidations, Secrets Manager value reads, SQL
+mutation, migrations, provider/payment calls, or application-data reads/writes
+are included. If the live Lambda configuration contains an exact production
+Secrets Manager ARN reference, the inspector attempts only
+`secretsmanager:DescribeSecret` on that exact ARN and reports a missing
+permission if it is not authorized. It reads only the RDS resource-ARN tag
+metadata; it never calls `GetSecretValue`. That permission is not in the
+workflow session policy until a live reference establishes the exact resource
+and reviewers explicitly authorize that additional read. SSM parameter values
+are never fetched; metadata alone is treated as insufficient to prove the
+parameter's persistence target. No persistence target is accepted unless live
+AWS configuration and resource metadata independently establish the complete
+binding; otherwise the report remains
+`refused_unproven_aws_production_target`.
+
+The SPA fingerprint is fetched using HTTPS GET from the pinned `checksops.com`
+host. The report compares the live entry, index/bundle hashes, S3 version, and
+CloudFront identity with the production SPA lock. Lambda package evidence
+records CodeSha256, RevisionId, package hash, member paths/sizes/hashes, and
+exact-path comparisons for the reviewed current-main API sources. It does not
+record the presigned URL, ZIP bytes, environment values, or source contents.
+Lambda environment inspection returns variable names and the existing
+allowlisted boolean workflow flags; values are requested only for approved
+database-reference variable names (secret/parameter ARN, name, or reference
+suffixes). Other database-like names are recorded as unresolved names only,
+without fetching their values.
+
+## IAM change boundary
+
+The repository workflow's temporary session policy now adds only
+`lambda:GetFunction` to the existing exact Lambda ARN. Before that workflow can
+succeed, the existing read-only role's identity policy must receive the same
+single-action delta, subject to explicit AWS authorization:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "lambda:GetFunction",
+  "Resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
+}
+```
+
+No AWS/IAM policy is changed by this repository update. No persistence metadata
+permission is proposed without a fresh live reference: if a production secret
+reference is observed, request `secretsmanager:DescribeSecret` only on that
+exact ARN after separate review; do not grant `GetSecretValue`, wildcard
+Secrets Manager access, SSM value reads, or RDS discovery access by inference.
+Until the live reference and its required metadata reads are authorized, the
+persistence target remains unproven and all SQL activity is blocked.
 
 The production release lock currently has no Lambda `CodeSha256` pin. The
 inspector reports the live Lambda code fingerprint, workflow flags, source

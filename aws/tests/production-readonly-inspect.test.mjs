@@ -16,6 +16,32 @@ import {
 const SHA = (value) => createHash('sha256').update(value).digest('hex');
 const INDEX_HTML = '<script type="module" src="/assets/index-test_bundle.js"></script>';
 const BUNDLE = 'read-only test bundle';
+const LAMBDA_SOURCE_PATHS = [
+  'aws/functions/api/claim-settlement-rpc.mjs',
+  'aws/functions/api/workflow-flags.mjs',
+  'aws/functions/api/workflow-rpc.mjs',
+  'aws/functions/api/check-ocr-provider.mjs',
+  'aws/functions/api/ocr.mjs',
+];
+const LAMBDA_ZIP = (() => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'production-readonly-lambda-fixture-'));
+  try {
+    for (const relativePath of LAMBDA_SOURCE_PATHS) {
+      const target = path.join(temp, relativePath);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(new URL(`../../${relativePath}`, import.meta.url), target);
+    }
+    const archive = path.join(temp, 'package.zip');
+    execFileSync('zip', ['-q', '-r', archive, ...LAMBDA_SOURCE_PATHS], { cwd: temp });
+    return fs.readFileSync(archive);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+})();
+const LAMBDA_CODE_SHA = createHash('sha256').update(LAMBDA_ZIP).digest('base64');
+const LAMBDA_CODE_LOCATION = 'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?temporary-token=must-not-leak';
+const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:production/app-db-AbCdEf';
+const RDS_INSTANCE_ARN = 'arn:aws:rds:us-east-1:806168576068:db:production-db';
 const PRODUCTION_TARGET = {
   environment: 'production',
   accountId: '806168576068',
@@ -30,10 +56,14 @@ const PRODUCTION_TARGET = {
 const lambdaConfig = {
   FunctionName: PRODUCTION_PINS.function_name,
   Version: '$LATEST',
-  CodeSha256: 'live-code-fingerprint',
+  CodeSha256: LAMBDA_CODE_SHA,
   LastModified: '2026-10-08T00:00:00.000+0000',
   State: 'Active',
   RevisionId: 'live-revision',
+  Role: 'arn:aws:iam::806168576068:role/checksops-production-api-execution',
+  Runtime: 'nodejs22.x',
+  Handler: 'index.handler',
+  VpcConfig: { VpcId: 'vpc-production', SubnetIds: ['subnet-production'], SecurityGroupIds: ['sg-production'] },
   Environment: {
     Variables: {
       AWS_WRITES_ENABLED: 'false',
@@ -45,10 +75,38 @@ const lambdaConfig = {
   },
 };
 
+function projectLambdaConfiguration(configuration, target = {}) {
+  const variables = configuration.Environment?.Variables || {};
+  if (target.variableNames) {
+    return {
+      Environment: {
+        Variables: Object.fromEntries(target.variableNames
+          .filter((name) => Object.hasOwn(variables, name))
+          .map((name) => [name, variables[name]])),
+      },
+    };
+  }
+  const flagNames = ['AWS_WRITES_ENABLED', 'AWS_APPLICATION_WORKFLOW_WRITES_ENABLED', 'AWS_PROVIDER_EXECUTION_ENABLED'];
+  return {
+    ...configuration,
+    Environment: {
+      VariableNames: Object.keys(variables),
+      Variables: Object.fromEntries(flagNames
+        .filter((name) => Object.hasOwn(variables, name))
+        .map((name) => [name, variables[name]])),
+    },
+  };
+}
+
 function mockAws(calls = [], overrides = {}) {
   return async (action, target) => {
     calls.push({ action, target });
-    if (overrides[action]) return overrides[action](target);
+    if (overrides[action]) {
+      const response = await overrides[action](target);
+      return action === 'lambda:GetFunctionConfiguration'
+        ? projectLambdaConfiguration(response, target)
+        : response;
+    }
     switch (action) {
       case 'sts:GetCallerIdentity':
         return {
@@ -58,7 +116,18 @@ function mockAws(calls = [], overrides = {}) {
       case 's3:HeadObject':
         return { VersionId: 'b783nvvtXDmYHqatwJVZeKx2uHcwpDk3', ETag: '"index-etag"', LastModified: '2026-10-07T00:00:00Z' };
       case 'lambda:GetFunctionConfiguration':
-        return lambdaConfig;
+        return projectLambdaConfiguration(lambdaConfig, target);
+      case 'lambda:GetFunction':
+        return {
+          Configuration: {
+            FunctionName: PRODUCTION_PINS.function_name,
+            CodeSha256: LAMBDA_CODE_SHA,
+            RevisionId: 'live-revision',
+          },
+          Code: { Location: LAMBDA_CODE_LOCATION },
+        };
+      case 'secretsmanager:DescribeSecret':
+        return { Tags: [{ Key: 'aws:rds:primaryDBInstanceArn', Value: RDS_INSTANCE_ARN }] };
       case 'apigateway:GET':
         if (target.resource === 'api') return { ApiId: 'kiqojucc02', Name: 'checksops-production-prep-http', ProtocolType: 'HTTP' };
         if (target.resource === 'stage') return { StageName: 'prep', DeploymentId: 'deployment-1', AutoDeploy: true };
@@ -81,9 +150,13 @@ function mockAws(calls = [], overrides = {}) {
 }
 
 function mockFetch(url, options) {
-  assert.equal(new URL(url).hostname, 'checksops.com');
   assert.equal(options.method, 'GET');
   assert.equal(options.redirect, 'error');
+  if (new URL(url).hostname === 'awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com') {
+    assert.equal(url.toString().includes('temporary-token=must-not-leak'), true);
+    return Promise.resolve(new Response(LAMBDA_ZIP, { status: 200 }));
+  }
+  assert.equal(new URL(url).hostname, 'checksops.com');
   if (url.endsWith('/index.html')) {
     return Promise.resolve(new Response(INDEX_HTML, {
       status: 200,
@@ -125,6 +198,24 @@ test('allowlists only pinned AWS read operations and refuses mutations or arbitr
   assert.throws(() => buildAwsArgs('s3:HeadObject', { bucket: PRODUCTION_PINS.bucket, key: 'index.html', extra: 'target' }));
   assert.throws(() => buildAwsArgs('lambda:UpdateFunctionCode', { functionName: PRODUCTION_PINS.function_name }));
   assert.throws(() => buildAwsArgs('lambda:GetFunctionConfiguration', { functionName: '*' }));
+  const refQueryArgs = buildAwsArgs('lambda:GetFunctionConfiguration', {
+    functionName: PRODUCTION_PINS.function_name,
+    variableNames: ['DATABASE_SECRET_ARN'],
+  });
+  assert.ok(refQueryArgs.at(-1).includes('DATABASE_SECRET_ARN:Environment.Variables.DATABASE_SECRET_ARN'));
+  assert.throws(() => buildAwsArgs('lambda:GetFunctionConfiguration', {
+    functionName: PRODUCTION_PINS.function_name,
+    variableNames: ['AWS_SECRET_ACCESS_KEY'],
+  }));
+  assert.deepEqual(buildAwsArgs('lambda:GetFunction', { functionName: PRODUCTION_PINS.function_name }).slice(0, 4), [
+    'lambda', 'get-function', '--function-name', PRODUCTION_PINS.function_name,
+  ]);
+  assert.throws(() => buildAwsArgs('lambda:GetFunction', { functionName: '*' }));
+  assert.deepEqual(buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: PERSISTENCE_SECRET_ARN }).slice(0, 4), [
+    'secretsmanager', 'describe-secret', '--secret-id', PERSISTENCE_SECRET_ARN,
+  ]);
+  assert.throws(() => buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: 'arn:aws:secretsmanager:us-west-2:806168576068:secret:other' }));
+  assert.throws(() => buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: '*' }));
   assert.throws(() => buildAwsArgs('apigateway:GET', { apiId: PRODUCTION_PINS.api_id, resource: 'stage', stage: 'staging' }));
   assert.throws(() => buildAwsArgs('cloudfront:CreateInvalidation', { distributionId: PRODUCTION_PINS.cloudfront_id }));
   assert.throws(() => buildAwsArgs('cloudfront:GetDistribution', { distributionId: '*' }));
@@ -152,6 +243,15 @@ test('inspects pinned production AWS reads and reports SPA locks, Lambda flags, 
   assert.equal(report.api.target_matches_pinned_lambda, true);
   assert.equal(report.lambda.workflow_flags.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED, false);
   assert.equal(report.lambda.workflow_flags.AWS_PROVIDER_EXECUTION_ENABLED, false);
+  assert.equal(report.lambda.package.status, 'complete');
+  assert.equal(report.lambda.package.code_sha256, LAMBDA_CODE_SHA);
+  assert.equal(report.lambda.package.code_sha256_matches_configuration, true);
+  assert.equal(report.lambda.package.revision_id_matches_configuration, true);
+  assert.equal(report.lambda.package.members.length, LAMBDA_SOURCE_PATHS.length);
+  assert.ok(report.lambda.package.source_comparisons.every((comparison) => comparison.matches));
+  assert.equal(JSON.stringify(report).includes('temporary-token=must-not-leak'), false);
+  assert.equal(report.lambda.role_arn, lambdaConfig.Role);
+  assert.deepEqual(report.lambda.vpc.security_group_ids, ['sg-production']);
   assert.equal(report.lambda.merged_pr_live_evidence.pr_762_backend.live_status, 'unverified_no_accepted_production_code_hash');
   assert.equal(report.lambda.merged_pr_live_evidence.pr_772_workflow_gate.live_workflow_flag, false);
   assert.equal(report.database.status, 'refused_unproven_aws_production_target');
@@ -220,6 +320,136 @@ test('reports missing read permissions without leaking AWS error details', async
   assert.deepEqual(summary.database, report.database);
 });
 
+test('reports the exact read-only Lambda package permission when GetFunction is denied', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunction': () => {
+        const error = new Error('AccessDenied: hidden package URL');
+        error.stderr = 'AccessDeniedException: hidden package URL';
+        throw error;
+      },
+    }),
+    fetchImpl: mockFetch,
+  });
+  assert.ok(report.missing_read_permissions.some((item) => item.action === 'lambda:GetFunction'
+    && item.resource === `arn:aws:lambda:${PRODUCTION_PINS.region}:${PRODUCTION_PINS.account_id}:function:${PRODUCTION_PINS.function_name}`));
+  assert.equal(report.lambda.package.status, 'unavailable');
+  assert.equal(JSON.stringify(report).includes('hidden package URL'), false);
+});
+
+test('refuses non-AWS Lambda code locations without following them', async () => {
+  let contactedUntrustedHost = false;
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunction': () => ({
+        Configuration: { CodeSha256: LAMBDA_CODE_SHA, RevisionId: 'live-revision' },
+        Code: { Location: 'https://attacker.example/package.zip' },
+      }),
+    }),
+    fetchImpl: (url, options) => {
+      if (new URL(url).hostname !== 'checksops.com') {
+        contactedUntrustedHost = true;
+        return Promise.reject(new Error('must not contact an untrusted host'));
+      }
+      return mockFetch(url, options);
+    },
+  });
+  assert.equal(contactedUntrustedHost, false);
+  assert.equal(report.lambda.package.status, 'download_or_inventory_failed');
+});
+
+test('inspects only exact secret-reference metadata and keeps persistence fail-closed', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        Environment: {
+          Variables: {
+            ...lambdaConfig.Environment.Variables,
+            DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN,
+            DB_SECRET_NAME: 'production/app-db',
+            DB_PARAMETER: '{{resolve:ssm-secure:/production/db-secret:1}}',
+            DB_PARAMETER_NAME: '/production/db-host',
+            DATABASE_URL: '******private-host/db',
+          },
+        },
+      }),
+    }),
+    fetchImpl: mockFetch,
+  });
+  assert.ok(calls.some(({ action, target }) => action === 'secretsmanager:DescribeSecret'
+    && target.secretArn === PERSISTENCE_SECRET_ARN));
+  assert.deepEqual(calls.find(({ action, target }) => action === 'lambda:GetFunctionConfiguration'
+    && target.variableNames)?.target.variableNames, [
+    'DATABASE_SECRET_ARN', 'DB_PARAMETER', 'DB_PARAMETER_NAME', 'DB_SECRET_NAME',
+  ]);
+  assert.equal(calls.some(({ action }) => /GetSecretValue|ssm:GetParameter/.test(action)), false);
+  assert.deepEqual(report.database.references, [
+    {
+      variable_name: 'DATABASE_SECRET_ARN',
+      reference_type: 'secretsmanager',
+      identifier: PERSISTENCE_SECRET_ARN,
+      exact_resource_arn: true,
+    },
+    {
+      variable_name: 'DB_PARAMETER',
+      reference_type: 'ssm',
+      identifier: '/production/db-secret',
+      exact_resource_arn: false,
+    },
+    {
+      variable_name: 'DB_PARAMETER_NAME',
+      reference_type: 'ssm',
+      identifier: '/production/db-host',
+      exact_resource_arn: false,
+    },
+    {
+      variable_name: 'DB_SECRET_NAME',
+      reference_type: 'secretsmanager',
+      identifier: 'production/app-db',
+      exact_resource_arn: false,
+    },
+  ]);
+  assert.deepEqual(report.database.unresolved_variables, ['DATABASE_URL', 'DB_PASSWORD']);
+  assert.deepEqual(report.database.candidate_resources, [{
+    reference_type: 'rds-instance',
+    resource_arn: RDS_INSTANCE_ARN,
+  }]);
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.equal(report.database.unresolved_references.some((reference) => reference.reference_type === 'ssm'
+    && reference.required_permission === null), true);
+  assert.equal(report.database.unresolved_references.some((reference) => reference.variable_name === 'DB_SECRET_NAME'
+    && reference.required_permission === 'secretsmanager:DescribeSecret'), true);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  for (const value of ['private-user', 'private-password', 'private-host', 'package.zip?temporary-token']) {
+    assert.equal(evidence.includes(value), false, value);
+  }
+  assert.ok(evidence.includes(PERSISTENCE_SECRET_ARN));
+  assert.ok(evidence.includes(RDS_INSTANCE_ARN));
+});
+
+test('reports the exact metadata-only permission missing for a live secret reference', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+      }),
+      'secretsmanager:DescribeSecret': () => {
+        const error = new Error('AccessDenied: secret value must not leak');
+        error.stderr = 'AccessDeniedException: secret value must not leak';
+        throw error;
+      },
+    }),
+    fetchImpl: mockFetch,
+  });
+  assert.ok(report.missing_read_permissions.some((item) => item.action === 'secretsmanager:DescribeSecret'
+    && item.resource === PERSISTENCE_SECRET_ARN));
+  assert.equal(report.database.unresolved_references[0].required_permission, 'secretsmanager:DescribeSecret');
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('secret value must not leak'), false);
+});
+
 test('evidence summary allowlists nested fields and flags and excludes secret-like values', async () => {
   const report = await inspectProduction({ runAws: mockAws(), fetchImpl: mockFetch });
   const secret = 'opaque-secret-must-not-be-persisted';
@@ -240,6 +470,8 @@ test('evidence summary allowlists nested fields and flags and excludes secret-li
   report.lambda.merged_pr_live_evidence.unapproved = secret;
   report.lambda.merged_pr_live_evidence.pr_762_backend.definition = secret;
   report.lambda.merged_pr_live_evidence.pr_762_backend.current_source[0].content = secret;
+  report.lambda.package.code_location = secret;
+  report.lambda.package.members[0].content = secret;
   report.database.data = secret;
   report.read_errors = [{
     action: 'lambda:GetFunctionConfiguration', resource: PRODUCTION_PINS.function_name,
@@ -258,10 +490,18 @@ test('evidence summary allowlists nested fields and flags and excludes secret-li
   assert.equal(evidence.spa.bundle_sha256, SHA(BUNDLE));
   assert.equal(evidence.api.target_matches_pinned_lambda, true);
   assert.equal(evidence.lambda.code_sha256, lambdaConfig.CodeSha256);
+  assert.equal(evidence.lambda.package.package_sha256, LAMBDA_CODE_SHA);
   assert.equal(evidence.lambda.workflow_flags.AWS_WRITES_ENABLED, null);
   assert.ok(Object.values(evidence.lambda.workflow_flags).every((value) => value === null || typeof value === 'boolean'));
   assert.equal(evidence.lambda.merged_pr_live_evidence.pr_772_workflow_gate.live_status, 'unverified_no_accepted_production_code_hash');
-  assert.deepEqual(evidence.database, { status: report.database.status, reason: report.database.reason });
+  assert.deepEqual(evidence.database, {
+    status: report.database.status,
+    reason: report.database.reason,
+    references: [],
+    unresolved_variables: ['DB_PASSWORD'],
+    candidate_resources: [],
+    unresolved_references: [],
+  });
   assert.equal(evidence.read_errors[0].stderr, undefined);
 });
 
@@ -351,7 +591,7 @@ test('read workflow is manually dispatched, uses protected environment and no mu
   assert.deepEqual(policy.Statement.map(({ Effect, Action }) => ({ Effect, Action })), [
     { Effect: 'Allow', Action: ['sts:GetCallerIdentity'] },
     { Effect: 'Allow', Action: ['s3:GetObject'] },
-    { Effect: 'Allow', Action: ['lambda:GetFunctionConfiguration'] },
+    { Effect: 'Allow', Action: ['lambda:GetFunctionConfiguration', 'lambda:GetFunction'] },
     { Effect: 'Allow', Action: ['apigateway:GET'] },
     { Effect: 'Allow', Action: ['cloudfront:GetDistribution'] },
   ]);
