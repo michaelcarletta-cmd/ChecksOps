@@ -22,6 +22,7 @@ const LAMBDA_SOURCE_PATHS = [
   'aws/functions/api/workflow-rpc.mjs',
   'aws/functions/api/check-ocr-provider.mjs',
   'aws/functions/api/ocr.mjs',
+  'aws/functions/api/secrets.mjs',
 ];
 const LAMBDA_ZIP = (() => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'production-readonly-lambda-fixture-'));
@@ -40,7 +41,7 @@ const LAMBDA_ZIP = (() => {
 })();
 const LAMBDA_CODE_SHA = createHash('sha256').update(LAMBDA_ZIP).digest('base64');
 const LAMBDA_CODE_LOCATION = 'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?temporary-token=must-not-leak';
-const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:production/app-db-AbCdEf';
+const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw';
 const RDS_INSTANCE_ARN = 'arn:aws:rds:us-east-1:806168576068:db:production-db';
 const PRODUCTION_TARGET = {
   environment: 'production',
@@ -127,7 +128,13 @@ function mockAws(calls = [], overrides = {}) {
           Code: { Location: LAMBDA_CODE_LOCATION },
         };
       case 'secretsmanager:DescribeSecret':
-        return { Tags: [{ Key: 'aws:rds:primaryDBInstanceArn', Value: RDS_INSTANCE_ARN }] };
+        return {
+          ARN: target.secretArn,
+          Name: 'rds-db-credentials/checksops-production/checksops',
+          Description: 'Production RDS application credential',
+        };
+      case 'rds:DescribeDBInstances':
+        return [{ DBInstanceArn: RDS_INSTANCE_ARN, SecretArn: target.secretArn }];
       case 'apigateway:GET':
         if (target.resource === 'api') return { ApiId: 'kiqojucc02', Name: 'checksops-production-prep-http', ProtocolType: 'HTTP' };
         if (target.resource === 'stage') return { StageName: 'prep', DeploymentId: 'deployment-1', AutoDeploy: true };
@@ -152,8 +159,8 @@ function mockAws(calls = [], overrides = {}) {
 function mockFetch(url, options) {
   assert.equal(options.method, 'GET');
   assert.equal(options.redirect, 'error');
-  if (new URL(url).hostname === 'awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com') {
-    assert.equal(url.toString().includes('temporary-token=must-not-leak'), true);
+  if (new URL(url).hostname !== 'checksops.com') {
+    assert.equal(url.toString().includes('must-not-leak'), true);
     return Promise.resolve(new Response(LAMBDA_ZIP, { status: 200 }));
   }
   assert.equal(new URL(url).hostname, 'checksops.com');
@@ -216,6 +223,11 @@ test('allowlists only pinned AWS read operations and refuses mutations or arbitr
   ]);
   assert.throws(() => buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: 'arn:aws:secretsmanager:us-west-2:806168576068:secret:other' }));
   assert.throws(() => buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: '*' }));
+  const rdsArgs = buildAwsArgs('rds:DescribeDBInstances', { secretArn: PERSISTENCE_SECRET_ARN });
+  assert.deepEqual(rdsArgs.slice(0, 2), ['rds', 'describe-db-instances']);
+  assert.ok(rdsArgs.at(-1).includes(`MasterUserSecret.SecretArn=='${PERSISTENCE_SECRET_ARN}'`));
+  assert.ok(rdsArgs.at(-1).includes('DBInstanceArn:DBInstanceArn'));
+  assert.throws(() => buildAwsArgs('rds:DescribeDBInstances', { secretArn: 'arn:aws:secretsmanager:us-west-2:806168576068:secret:other' }));
   assert.throws(() => buildAwsArgs('apigateway:GET', { apiId: PRODUCTION_PINS.api_id, resource: 'stage', stage: 'staging' }));
   assert.throws(() => buildAwsArgs('cloudfront:CreateInvalidation', { distributionId: PRODUCTION_PINS.cloudfront_id }));
   assert.throws(() => buildAwsArgs('cloudfront:GetDistribution', { distributionId: '*' }));
@@ -258,6 +270,63 @@ test('inspects pinned production AWS reads and reports SPA locks, Lambda flags, 
   assert.equal(awsCalls.some(({ action }) => /provider|payment|update|put|delete|publish|invalidate/i.test(action)), false);
   assert.equal(JSON.stringify(report).includes('database-password-must-not-leak'), false);
   assert.equal(JSON.stringify(report).includes('aws-secret-must-not-leak'), false);
+});
+
+test('proves the live RDS target through the exact runtime secret association without secret tags or values', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+      }),
+      'secretsmanager:DescribeSecret': (target) => ({
+        ARN: target.secretArn,
+        Name: 'rds-db-credentials/checksops-production/checksops',
+        Description: 'Production RDS application credential',
+        Tags: [],
+      }),
+      'rds:DescribeDBInstances': (target) => [{
+        DBInstanceArn: RDS_INSTANCE_ARN,
+        SecretArn: target.secretArn,
+      }],
+    }),
+    fetchImpl: mockFetch,
+  });
+
+  assert.equal(report.database.status, 'complete');
+  assert.equal(report.database.reason, 'live Lambda configuration and package bind its secret reference to one RDS instance through AWS metadata');
+  assert.deepEqual(report.database.candidate_resources, [{
+    reference_type: 'rds-instance',
+    resource_arn: RDS_INSTANCE_ARN,
+  }]);
+  assert.ok(report.lambda.package.source_comparisons.some((item) => (
+    item.repository_path === 'aws/functions/api/secrets.mjs' && item.matches
+  )));
+  assert.ok(calls.some(({ action, target }) => action === 'rds:DescribeDBInstances'
+    && target.secretArn === PERSISTENCE_SECRET_ARN));
+  assert.equal(calls.some(({ action }) => /GetSecretValue|ssm:GetParameter/.test(action)), false);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes('Tags'), false);
+  assert.equal(evidence.includes('Production RDS application credential'), false);
+  assert.equal(evidence.includes('1790081257144-A2Z4bw'), true);
+  assert.equal(evidence.includes('database-password-must-not-leak'), false);
+});
+
+test('does not infer an RDS target from the production secret name without a live AWS association', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+      }),
+      'rds:DescribeDBInstances': () => [],
+    }),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].reason, 'RDS metadata does not link this secret to a production DB instance');
 });
 
 test('rejects a non-production caller identity before any AWS or HTTPS read', async () => {
@@ -355,7 +424,114 @@ test('refuses non-AWS Lambda code locations without following them', async () =>
     },
   });
   assert.equal(contactedUntrustedHost, false);
-  assert.equal(report.lambda.package.status, 'download_or_inventory_failed');
+  assert.equal(report.lambda.package.status, 'location_validation_failed');
+  assert.equal(report.lambda.package.failure_stage, 'location_validation');
+  assert.equal(report.lambda.package.failure_reason, 'untrusted_code_location');
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('attacker.example'), false);
+});
+
+test('accepts AWS Lambda S3 code-location host and path-style variants', async () => {
+  const locations = [
+    'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?token=must-not-leak',
+    'https://awslambda-us-east-1.s3.amazonaws.com/package.zip?token=must-not-leak',
+    'https://awslambda-us-east-1-tasks.s3.dualstack.us-east-1.amazonaws.com/package.zip?token=must-not-leak',
+    'https://s3.us-east-1.amazonaws.com/awslambda-us-east-1-tasks/package.zip?token=must-not-leak',
+  ];
+  for (const location of locations) {
+    const report = await inspectProduction({
+      runAws: mockAws([], {
+        'lambda:GetFunction': () => ({
+          Configuration: {
+            FunctionName: PRODUCTION_PINS.function_name,
+            CodeSha256: LAMBDA_CODE_SHA,
+            RevisionId: 'live-revision',
+          },
+          Code: { Location: location },
+        }),
+      }),
+      fetchImpl: mockFetch,
+    });
+    assert.equal(report.lambda.package.status, 'complete', location);
+    assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('must-not-leak'), false);
+  }
+});
+
+test('rejects Lambda code-location credentials, explicit ports, and unapproved S3 lookalikes', async () => {
+  let packageFetches = 0;
+  for (const location of [
+    'https://inspector@awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?token=must-not-leak',
+    'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com:443/package.zip?token=must-not-leak',
+    'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com.attacker.example/package.zip?token=must-not-leak',
+    'http://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?token=must-not-leak',
+  ]) {
+    const report = await inspectProduction({
+      runAws: mockAws([], {
+        'lambda:GetFunction': () => ({
+          Configuration: { CodeSha256: LAMBDA_CODE_SHA, RevisionId: 'live-revision' },
+          Code: { Location: location },
+        }),
+      }),
+      fetchImpl: (url, options) => {
+        if (new URL(url).hostname !== 'checksops.com') packageFetches += 1;
+        return mockFetch(url, options);
+      },
+    });
+    assert.equal(report.lambda.package.status, 'location_validation_failed');
+    assert.equal(report.lambda.package.failure_reason, 'untrusted_code_location');
+  }
+  assert.equal(packageFetches, 0);
+});
+
+test('rejects Lambda package redirects and reports only a redacted download-stage cause', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunction': () => ({
+        Configuration: { CodeSha256: LAMBDA_CODE_SHA, RevisionId: 'live-revision' },
+        Code: { Location: LAMBDA_CODE_LOCATION },
+      }),
+    }),
+    fetchImpl: (url, options) => {
+      assert.equal(options.redirect, 'error');
+      if (new URL(url).hostname !== 'checksops.com') {
+        return Promise.resolve({
+          ok: true,
+          redirected: true,
+          url: 'https://attacker.example/package.zip?token=must-not-leak',
+          body: null,
+        });
+      }
+      return mockFetch(url, options);
+    },
+  });
+  assert.equal(report.lambda.package.status, 'download_failed');
+  assert.equal(report.lambda.package.failure_stage, 'download');
+  assert.equal(report.lambda.package.failure_reason, 'redirect_rejected');
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes('attacker.example'), false);
+  assert.equal(evidence.includes('must-not-leak'), false);
+});
+
+test('reports malformed ZIP inventory failures separately without exposing the signed URL', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunction': () => ({
+        Configuration: { CodeSha256: LAMBDA_CODE_SHA, RevisionId: 'live-revision' },
+        Code: { Location: LAMBDA_CODE_LOCATION },
+      }),
+    }),
+    fetchImpl: (url, options) => {
+      if (new URL(url).hostname !== 'checksops.com') {
+        assert.equal(options.redirect, 'error');
+        return Promise.resolve(new Response('not a zip'));
+      }
+      return mockFetch(url, options);
+    },
+  });
+  assert.equal(report.lambda.package.status, 'inventory_failed');
+  assert.equal(report.lambda.package.failure_stage, 'inventory');
+  assert.equal(report.lambda.package.failure_reason, 'invalid_member_list');
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes('temporary-token=must-not-leak'), false);
 });
 
 test('inspects only exact secret-reference metadata and keeps persistence fail-closed', async () => {
@@ -448,6 +624,33 @@ test('reports the exact metadata-only permission missing for a live secret refer
     && item.resource === PERSISTENCE_SECRET_ARN));
   assert.equal(report.database.unresolved_references[0].required_permission, 'secretsmanager:DescribeSecret');
   assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('secret value must not leak'), false);
+});
+
+test('fails closed and reports the unscoped RDS metadata action without adding it to the workflow policy', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+      }),
+      'rds:DescribeDBInstances': () => {
+        const error = new Error('AccessDenied: unscoped RDS metadata');
+        error.stderr = 'AccessDeniedException: unscoped RDS metadata';
+        throw error;
+      },
+    }),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.equal(report.database.candidate_resources.length, 0);
+  assert.ok(report.database.unresolved_references.some((reference) => (
+    reference.required_permission === 'rds:DescribeDBInstances'
+      && reference.required_permission_resource === '*'
+  )));
+  assert.ok(report.missing_read_permissions.some((permission) => (
+    permission.action === 'rds:DescribeDBInstances' && permission.resource === '*'
+  )));
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('unscoped RDS metadata'), false);
 });
 
 test('evidence summary allowlists nested fields and flags and excludes secret-like values', async () => {
@@ -594,6 +797,7 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     { Effect: 'Allow', Action: ['lambda:GetFunctionConfiguration', 'lambda:GetFunction'] },
     { Effect: 'Allow', Action: ['apigateway:GET'] },
     { Effect: 'Allow', Action: ['cloudfront:GetDistribution'] },
+    { Effect: 'Allow', Action: ['secretsmanager:DescribeSecret'] },
   ]);
   assert.deepEqual(policy.Statement.map(({ Resource }) => Resource), [
     '*',
@@ -601,12 +805,14 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     `arn:aws:lambda:${PRODUCTION_PINS.region}:${PRODUCTION_PINS.account_id}:function:${PRODUCTION_PINS.function_name}`,
     [`arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}`, `arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}/stages/${PRODUCTION_PINS.api_stage}`, `arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}/integrations`],
     `arn:aws:cloudfront::${PRODUCTION_PINS.account_id}:distribution/${PRODUCTION_PINS.cloudfront_id}`,
+    PERSISTENCE_SECRET_ARN,
   ]);
   assert.match(workflow, /s3:GetObject/);
   assert.match(workflow, /lambda:GetFunctionConfiguration/);
   assert.match(workflow, /cloudfront:GetDistribution/);
   assert.match(workflow, /apigateway:GET/);
-  assert.doesNotMatch(workflow, /secretsmanager:GetSecretValue|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
+  assert.match(workflow, /secretsmanager:DescribeSecret/);
+  assert.doesNotMatch(workflow, /rds:DescribeDBInstances|secretsmanager:GetSecretValue|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
   assert.doesNotMatch(workflow, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /npm ci|PostgreSQL inspection dependency/i);
   assert.match(docs, /refused_unproven_aws_production_target/);

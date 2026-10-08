@@ -52,6 +52,7 @@ const CURRENT_SOURCE_MEMBERS = [
   'aws/functions/api/workflow-rpc.mjs',
   'aws/functions/api/check-ocr-provider.mjs',
   'aws/functions/api/ocr.mjs',
+  'aws/functions/api/secrets.mjs',
 ];
 const SOURCE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const RELEASE_LOCKS = JSON.parse(fs.readFileSync(path.join(SOURCE_ROOT, 'ops/release-locks/locked-components.json'), 'utf8'));
@@ -93,6 +94,7 @@ const AWS_ACTIONS = Object.freeze({
   'lambda:GetFunctionConfiguration': `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`,
   'lambda:GetFunction': `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`,
   'secretsmanager:DescribeSecret': `the exact production secret ARN referenced by ${FUNCTION_NAME}`,
+  'rds:DescribeDBInstances': '*',
   'apigateway:GET': `arn:aws:apigateway:${REGION}::/apis/${API_ID}/*`,
   'cloudfront:GetDistribution': `arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${DISTRIBUTION_ID}`,
 });
@@ -161,7 +163,15 @@ export function buildAwsArgs(action, target = {}) {
       }
       return [
         'secretsmanager', 'describe-secret', '--secret-id', target.secretArn,
-        '--query', "Tags[?Key=='aws:rds:primaryDBInstanceArn'||Key=='aws:rds:primaryDBClusterArn'].{Key:Key,Value:Value}",
+        '--query', '{ARN:ARN,Name:Name,Description:Description}',
+      ];
+    case 'rds:DescribeDBInstances':
+      if (Object.keys(target).length !== 1 || !isProductionSecretArn(target.secretArn)) {
+        throw new Error('unexpected production RDS metadata target');
+      }
+      return [
+        'rds', 'describe-db-instances',
+        '--query', `DBInstances[?MasterUserSecret.SecretArn=='${target.secretArn}'].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn}`,
       ];
     case 'apigateway:GET':
       if (target.apiId !== API_ID || !['api', 'stage', 'integrations'].includes(target.resource)
@@ -307,16 +317,16 @@ function persistenceReferences(config) {
   return references;
 }
 
-function persistenceTarget(secretMetadata) {
-  const targets = (secretMetadata?.Tags || [])
-    .filter(({ Key, Value }) => ['aws:rds:primaryDBInstanceArn', 'aws:rds:primaryDBClusterArn'].includes(Key)
-      && typeof Value === 'string'
-      && new RegExp(`^arn:aws:rds:${REGION}:${ACCOUNT_ID}:(?:db|cluster):[A-Za-z0-9-]+$`).test(Value));
-  if (targets.length !== 1) return null;
-  return {
-    reference_type: targets[0].Key.endsWith('ClusterArn') ? 'rds-cluster' : 'rds-instance',
-    resource_arn: targets[0].Value,
-  };
+function rdsInstanceTargets(metadata, secretArn) {
+  const instances = Array.isArray(metadata) ? metadata : metadata?.DBInstances || [];
+  return instances
+    .filter((instance) => (instance?.MasterUserSecret?.SecretArn || instance?.SecretArn) === secretArn
+      && typeof instance.DBInstanceArn === 'string'
+      && new RegExp(`^arn:aws:rds:${REGION}:${ACCOUNT_ID}:db:[A-Za-z0-9-]+$`).test(instance.DBInstanceArn))
+    .map((instance) => ({
+      reference_type: 'rds-instance',
+      resource_arn: instance.DBInstanceArn,
+    }));
 }
 
 function zipEntryCount(zip) {
@@ -355,29 +365,79 @@ async function responseBytes(response, maxBytes) {
   return Buffer.concat(chunks, size);
 }
 
-async function downloadLambdaPackage(location, fetchImpl) {
-  const url = new URL(location);
-  if (
-    url.protocol !== 'https:'
-    || !new RegExp(`^awslambda-${REGION}(?:-tasks)?\\.s3\\.${REGION}\\.amazonaws\\.com$`).test(url.hostname)
-    || url.port
-    || url.username
-    || url.password
-    || !url.pathname
-  ) {
-    throw new Error('unexpected AWS Lambda code location');
+class LambdaPackageError extends Error {
+  constructor(stage, reason) {
+    super(reason);
+    this.stage = stage;
+    this.reason = reason;
   }
-  const response = await fetchImpl(url, {
-    method: 'GET',
-    redirect: 'error',
-    cache: 'no-store',
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error('Lambda package download failed');
-  return responseBytes(response, LAMBDA_PACKAGE_MAX_BYTES);
+}
+
+function approvedLambdaCodeLocation(location) {
+  if (typeof location !== 'string') return false;
+  let url;
+  try {
+    url = new URL(location);
+  } catch {
+    return false;
+  }
+  const authority = location.match(/^https:\/\/([^/?#]*)/i)?.[1];
+  const bucketNames = [`awslambda-${REGION}`, `awslambda-${REGION}-tasks`];
+  const virtualHosts = new Set(bucketNames.flatMap((bucket) => [
+    `${bucket}.s3.${REGION}.amazonaws.com`,
+    `${bucket}.s3.amazonaws.com`,
+    `${bucket}.s3.dualstack.${REGION}.amazonaws.com`,
+    `${bucket}.s3-${REGION}.amazonaws.com`,
+  ]));
+  const pathStyleHosts = new Set([
+    `s3.${REGION}.amazonaws.com`,
+    's3.amazonaws.com',
+  ]);
+  const virtualHost = virtualHosts.has(url.hostname);
+  const pathStyleBucket = pathStyleHosts.has(url.hostname)
+    && bucketNames.some((bucket) => url.pathname.startsWith(`/${bucket}/`));
+  return url.protocol === 'https:'
+    && authority?.toLowerCase() === url.hostname
+    && !url.port
+    && !url.username
+    && !url.password
+    && !url.hash
+    && url.pathname !== '/'
+    && (virtualHost || pathStyleBucket);
+}
+
+async function downloadLambdaPackage(location, fetchImpl) {
+  if (!approvedLambdaCodeLocation(location)) {
+    throw new LambdaPackageError('location_validation', 'untrusted_code_location');
+  }
+  const url = new URL(location);
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      redirect: 'error',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw new LambdaPackageError('download', 'request_failed');
+  }
+  if (response.redirected || (response.url && response.url !== url.href)) {
+    throw new LambdaPackageError('download', 'redirect_rejected');
+  }
+  if (!response.ok) throw new LambdaPackageError('download', 'http_status_not_ok');
+  try {
+    return await responseBytes(response, LAMBDA_PACKAGE_MAX_BYTES);
+  } catch (error) {
+    throw new LambdaPackageError(
+      'download',
+      error?.message === 'response size limit exceeded' ? 'package_size_limit_exceeded' : 'body_read_failed',
+    );
+  }
 }
 
 function inventoryLambdaPackage(zip) {
+  if (zipEntryCount(zip) === null) throw new Error('invalid Lambda package member list');
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-live-lambda-'));
   const archivePath = path.join(temp, 'package.zip');
   try {
@@ -652,29 +712,28 @@ export async function inspectProduction({
       && (!referenceVariableNames.includes(name) || !referenceConfig))
     .map((name) => /^[A-Z][A-Z0-9_]{0,79}$/.test(name) ? name : '[OMITTED]')
     .sort();
-  const describedSecrets = await Promise.all(persistenceRefs
+  const unresolvedTargetVariableNames = unresolvedVariableNames
+    .filter((name) => /(?:_HOST|_URL|_ENDPOINT|_INSTANCE(?:_ARN|_ID|_NAME)?|_CLUSTER(?:_ARN|_ID|_NAME)?)$/i.test(name));
+  const exactSecretReferences = [...new Map(persistenceRefs
     .filter((reference) => reference.reference_type === 'secretsmanager' && reference.exact_resource_arn)
-    .map(async (reference) => ({
-      reference,
-      metadata: await safeRead(
-        readErrors,
-        'secretsmanager:DescribeSecret',
-        { secretArn: reference.identifier },
-        runAws,
-        reference.identifier,
-      ),
-    })));
+    .map((reference) => [reference.identifier, reference])).values()];
+  const describedSecrets = await Promise.all(exactSecretReferences
+    .map(async (reference) => {
+      const target = { secretArn: reference.identifier };
+      const [metadata, instances] = await Promise.all([
+        safeRead(readErrors, 'secretsmanager:DescribeSecret', target, runAws, reference.identifier),
+        safeRead(readErrors, 'rds:DescribeDBInstances', target, runAws),
+      ]);
+      return { reference, metadata, instances };
+    }));
   const persistenceTargets = describedSecrets
-    .map(({ metadata }) => persistenceTarget(metadata))
-    .filter(Boolean);
+    .flatMap(({ reference, metadata, instances }) => metadata?.ARN === reference.identifier
+      ? rdsInstanceTargets(instances, reference.identifier)
+      : []);
   const referencedTargets = [...new Map(persistenceTargets.map((item) => [item.resource_arn, item])).values()];
   const database = {
     status: 'refused_unproven_aws_production_target',
-    reason: !config
-      ? 'live Lambda configuration is unavailable; production persistence target remains unproven'
-      : persistenceRefs.length
-        ? 'live AWS references do not independently prove the function persistence target'
-        : 'live Lambda configuration provides no recognized AWS persistence reference',
+    reason: 'live AWS references do not independently prove the function persistence target',
     references: persistenceRefs.map(({ variable_name, reference_type, identifier, exact_resource_arn }) => ({
       variable_name,
       reference_type,
@@ -683,39 +742,77 @@ export async function inspectProduction({
     })),
     unresolved_variables: unresolvedVariableNames,
     candidate_resources: referencedTargets,
-    unresolved_references: persistenceRefs.flatMap((reference) => {
-      if (reference.reference_type === 'ssm') {
-        return [{
+    unresolved_references: [
+      ...unresolvedTargetVariableNames.map((variable_name) => ({
+        variable_name,
+        reference_type: 'unresolved',
+        identifier: null,
+        required_permission: null,
+        reason: 'live configuration contains an unresolved persistence endpoint reference',
+      })),
+      ...persistenceRefs.flatMap((reference) => {
+        if (reference.reference_type === 'ssm') {
+          return [{
+            variable_name: reference.variable_name,
+            reference_type: reference.reference_type,
+            identifier: reference.identifier,
+            required_permission: null,
+            reason: 'no metadata-only SSM read proves the referenced parameter value',
+          }];
+        }
+        if (!reference.exact_resource_arn) {
+          const foreignArn = reference.identifier.startsWith('arn:');
+          return [{
+            variable_name: reference.variable_name,
+            reference_type: reference.reference_type,
+            identifier: reference.identifier,
+            required_permission: foreignArn ? null : 'secretsmanager:DescribeSecret',
+            reason: foreignArn
+              ? 'reference is outside the pinned production resource scope; no cross-account read is attempted'
+              : 'exact production secret ARN is required for least-privilege metadata access',
+          }];
+        }
+        const secret = describedSecrets.find(({ reference: described }) => described.identifier === reference.identifier);
+        if (!secret?.metadata) {
+          return [{
+            variable_name: reference.variable_name,
+            reference_type: reference.reference_type,
+            identifier: reference.identifier,
+            required_permission: 'secretsmanager:DescribeSecret',
+            reason: 'exact secret metadata permission is required; no secret value is read',
+          }];
+        }
+        if (secret.metadata.ARN !== reference.identifier) {
+          return [{
+            variable_name: reference.variable_name,
+            reference_type: reference.reference_type,
+            identifier: reference.identifier,
+            required_permission: null,
+            reason: 'secret metadata does not match the exact live Lambda reference',
+          }];
+        }
+        if (secret.instances == null) {
+          return [{
+            variable_name: reference.variable_name,
+            reference_type: reference.reference_type,
+            identifier: reference.identifier,
+            required_permission: 'rds:DescribeDBInstances',
+            required_permission_resource: '*',
+            reason: 'RDS secret association metadata is unavailable; DescribeDBInstances is not resource-scoped',
+          }];
+        }
+        const linkedTargets = rdsInstanceTargets(secret.instances, reference.identifier);
+        return linkedTargets.length === 1 ? [] : [{
           variable_name: reference.variable_name,
           reference_type: reference.reference_type,
           identifier: reference.identifier,
           required_permission: null,
-          reason: 'no metadata-only SSM read proves the referenced parameter value',
+          reason: linkedTargets.length
+            ? 'RDS metadata links the secret to multiple production instances'
+            : 'RDS metadata does not link this secret to a production DB instance',
         }];
-      }
-      if (!reference.exact_resource_arn) {
-        const foreignArn = reference.identifier.startsWith('arn:');
-        return [{
-          variable_name: reference.variable_name,
-          reference_type: reference.reference_type,
-          identifier: reference.identifier,
-          required_permission: foreignArn ? null : 'secretsmanager:DescribeSecret',
-          reason: foreignArn
-            ? 'reference is outside the pinned production resource scope; no cross-account read is attempted'
-            : 'exact production secret ARN is required for least-privilege metadata access',
-        }];
-      }
-      const metadata = describedSecrets.find(({ reference: described }) => described.identifier === reference.identifier)?.metadata;
-      return metadata && persistenceTarget(metadata) ? [] : [{
-        variable_name: reference.variable_name,
-        reference_type: reference.reference_type,
-        identifier: reference.identifier,
-        required_permission: metadata ? null : 'secretsmanager:DescribeSecret',
-        reason: metadata
-          ? 'secret metadata does not independently bind this reference to a persistence resource'
-          : 'secret metadata permission is required; no secret value is read',
-      }];
-    }),
+      }),
+    ],
   };
   const packageEvidence = await (async () => {
     if (!lambdaPackageResponse) {
@@ -723,11 +820,14 @@ export async function inspectProduction({
     }
     const packageCodeHash = lambdaPackageResponse.Configuration?.CodeSha256 || null;
     const packageRevisionId = lambdaPackageResponse.Configuration?.RevisionId || null;
+    let stage = 'inventory';
     try {
       const zip = await downloadLambdaPackage(lambdaPackageResponse.Code?.Location, fetchImpl);
       const packageHash = createHash('sha256').update(zip).digest('base64');
+      stage = 'inventory';
       const inventory = inventoryLambdaPackage(zip);
       const membersByPath = new Map(inventory.members.map((member) => [member.path, member]));
+      stage = 'source_comparison';
       const sourceComparisons = CURRENT_SOURCE_MEMBERS.map((relativePath) => {
         const expectedSha256 = safeHash(fs.readFileSync(path.join(SOURCE_ROOT, relativePath)));
         const live = membersByPath.get(relativePath);
@@ -755,9 +855,22 @@ export async function inspectProduction({
         ...inventory,
         source_comparisons: sourceComparisons,
       };
-    } catch {
+    } catch (error) {
+      const failureStage = error instanceof LambdaPackageError ? error.stage : stage;
+      const failureReason = error instanceof LambdaPackageError
+        ? error.reason
+        : failureStage === 'inventory'
+          ? ({
+            'invalid Lambda package member list': 'invalid_member_list',
+            'duplicate Lambda package members': 'duplicate_members',
+            'unsafe Lambda package member path': 'unsafe_member_path',
+            'Lambda package expansion limit exceeded': 'expansion_limit_exceeded',
+          }[error?.message] || 'archive_inventory_failed')
+          : 'source_comparison_failed';
       return {
-        status: 'download_or_inventory_failed',
+        status: `${failureStage}_failed`,
+        failure_stage: failureStage,
+        failure_reason: failureReason,
         code_sha256: packageCodeHash,
         revision_id: packageRevisionId,
         members: [],
@@ -765,6 +878,24 @@ export async function inspectProduction({
       };
     }
   })();
+  const runtimeSecretSourceMatches = packageEvidence.source_comparisons
+    .some((comparison) => comparison.repository_path === 'aws/functions/api/secrets.mjs' && comparison.matches);
+  const packageProvesRuntimeReference = packageEvidence.status === 'complete'
+    && packageEvidence.code_sha256_matches_configuration === true
+    && packageEvidence.revision_id_matches_configuration === true
+    && runtimeSecretSourceMatches;
+  if (packageProvesRuntimeReference
+      && referencedTargets.length === 1
+      && database.unresolved_references.length === 0) {
+    database.status = 'complete';
+    database.reason = 'live Lambda configuration and package bind its secret reference to one RDS instance through AWS metadata';
+  } else if (!config) {
+    database.reason = 'live Lambda configuration is unavailable; production persistence target remains unproven';
+  } else if (!persistenceRefs.length) {
+    database.reason = 'live Lambda configuration provides no recognized AWS persistence reference';
+  } else if (!packageProvesRuntimeReference) {
+    database.reason = 'live Lambda package identity and runtime secret-reference source are not both verified';
+  }
   const distribution = cloudfront?.Distribution || null;
   const apiIntegrations = integrations?.Items || [];
   const expectedIntegrationArn = `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`;
@@ -907,6 +1038,7 @@ export function buildInspectionSummary(report) {
         ...pick(report.lambda.package, [
           'status', 'code_sha256', 'package_sha256', 'code_sha256_matches_configuration',
           'revision_id', 'revision_id_matches_configuration', 'total_uncompressed_bytes',
+          'failure_stage', 'failure_reason',
         ]),
         members: (report.lambda.package.members || []).map((member) => pick(member, [
           'path', 'size_bytes', 'sha256',
@@ -935,7 +1067,8 @@ export function buildInspectionSummary(report) {
         'reference_type', 'resource_arn',
       ])),
       unresolved_references: (report.database.unresolved_references || []).map((reference) => pick(reference, [
-        'variable_name', 'reference_type', 'identifier', 'required_permission', 'reason',
+        'variable_name', 'reference_type', 'identifier', 'required_permission',
+        'required_permission_resource', 'reason',
       ])),
     } : null,
     missing_read_permissions: errors(report.missing_read_permissions),

@@ -37,17 +37,20 @@ No S3 listing or writes, Lambda code/config updates or publishing, CloudFront
 configuration changes or invalidations, Secrets Manager value reads, SQL
 mutation, migrations, provider/payment calls, or application-data reads/writes
 are included. If the live Lambda configuration contains an exact production
-Secrets Manager ARN reference, the inspector attempts only
-`secretsmanager:DescribeSecret` on that exact ARN and reports a missing
-permission if it is not authorized. It reads only the RDS resource-ARN tag
-metadata; it never calls `GetSecretValue`. That permission is not in the
-workflow session policy until a live reference establishes the exact resource
-and reviewers explicitly authorize that additional read. SSM parameter values
-are never fetched; metadata alone is treated as insufficient to prove the
-parameter's persistence target. No persistence target is accepted unless live
-AWS configuration and resource metadata independently establish the complete
-binding; otherwise the report remains
-`refused_unproven_aws_production_target`.
+Secrets Manager ARN reference, the inspector attempts `secretsmanager:DescribeSecret`
+on that exact ARN and `rds:DescribeDBInstances` filtered to an exact RDS-managed
+secret association. It does not rely on optional secret tags, and it never calls
+`GetSecretValue`. The exact-secret `DescribeSecret` read is authorized in the
+workflow session policy. `DescribeDBInstances` is not resource-scoped by AWS and
+would require `Resource: "*"`, so it is deliberately not authorized by the
+workflow; the report lists that exact missing metadata action and resource, and
+persistence remains fail-closed until separately reviewed and authorized.
+RDS metadata can prove a target only when it independently reports the same
+secret ARN as the live Lambda reference. SSM parameter values are never fetched;
+metadata alone is treated as insufficient to prove their persistence target.
+No persistence target is accepted unless live AWS configuration, the verified
+runtime package, and AWS resource metadata independently establish the complete
+binding; otherwise the report remains `refused_unproven_aws_production_target`.
 
 The SPA fingerprint is fetched using HTTPS GET from the pinned `checksops.com`
 host. The report compares the live entry, index/bundle hashes, S3 version, and
@@ -55,6 +58,9 @@ CloudFront identity with the production SPA lock. Lambda package evidence
 records CodeSha256, RevisionId, package hash, member paths/sizes/hashes, and
 exact-path comparisons for the reviewed current-main API sources. It does not
 record the presigned URL, ZIP bytes, environment values, or source contents.
+Lambda package downloads accept only the pinned-region AWS Lambda S3 virtual-
+hosted or bucket-path endpoints, reject redirects and URL credentials/ports, and
+report only a redacted failure stage and reason.
 Lambda environment inspection returns variable names and the existing
 allowlisted boolean workflow flags; values are requested only for approved
 database-reference variable names (secret/parameter ARN, name, or reference
@@ -76,13 +82,14 @@ single-action delta, subject to explicit AWS authorization:
 }
 ```
 
-No AWS/IAM policy is changed by this repository update. No persistence metadata
-permission is proposed without a fresh live reference: if a production secret
-reference is observed, request `secretsmanager:DescribeSecret` only on that
-exact ARN after separate review; do not grant `GetSecretValue`, wildcard
-Secrets Manager access, SSM value reads, or RDS discovery access by inference.
-Until the live reference and its required metadata reads are authorized, the
-persistence target remains unproven and all SQL activity is blocked.
+No AWS/IAM policy is changed by this repository update. No
+`rds:DescribeDBInstances` permission is added: AWS requires `Resource: "*"` for
+that action, which is not an exact-resource grant. The inspector may report that
+precise remaining metadata permission, but does not authorize it. Do not grant
+`GetSecretValue`, wildcard Secrets Manager access, SSM value reads, or RDS
+discovery access by inference. Until the metadata read is separately authorized
+and an exact RDS association is observed, the persistence target remains
+unproven and all SQL activity is blocked.
 
 The production release lock currently has no Lambda `CodeSha256` pin. The
 inspector reports the live Lambda code fingerprint, workflow flags, source
