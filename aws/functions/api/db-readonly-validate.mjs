@@ -348,7 +348,7 @@ export const validateReadonlyCoreTables = async ({
       restoredAuthUsersForeignKeys: null,
       skippedAuthUsersForeignKeysExpected: EXPECTED_SKIPPED_AUTH_USERS_FKS,
       publicTriggers: null,
-      publicTriggerInventory: [],
+      publicTriggerInventory: null,
       publicTriggerInventoryTruncated: false,
       publicFunctions: null,
       supabaseAuthUidFunctions: null,

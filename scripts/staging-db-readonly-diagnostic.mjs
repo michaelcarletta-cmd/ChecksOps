@@ -20,7 +20,7 @@ const KINDS = new Set([
 ]);
 const PROBES = new Set([
   'privileges', 'sentinel', 'schema_usage', 'auth_users', 'auth_users_fks',
-  'triggers', 'functions', 'auth_uid_privilege', 'auth.uid()',
+  'triggers', 'trigger_inventory', 'functions', 'auth_uid_privilege', 'auth.uid()',
 ]);
 
 class DiagnosticError extends Error {}

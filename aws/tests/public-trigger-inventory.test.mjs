@@ -208,3 +208,76 @@ test('diagnostic omits inventory when the live catalog has not been expanded yet
     kind: 'trigger', severity: 'error', probe: 'triggers', expectedCount: 165, actualCount: 172,
   });
 });
+
+test('failed inventory probe stays uncollected and is labeled trigger_inventory', async () => {
+  const identity = {
+    current_database: 'checksops', current_user: 'checksops',
+    transaction_read_only: 'on', default_transaction_read_only: 'on',
+  };
+  const result = await validateReadonlyCoreTables({
+    loadCredentials: async () => ({
+      username: 'checksops', password: SENSITIVE, host: 'db.example.internal',
+      database: 'checksops', secretDatabase: 'checksops',
+    }),
+    createClient: () => ({
+      connect: async () => {},
+      query: async (sql, params) => {
+        if (sql === IDENTITY_PROBE) return { rows: [identity] };
+        if (sql === 'BEGIN READ ONLY' || sql === 'ROLLBACK'
+            || sql.startsWith('SAVEPOINT ') || sql.startsWith('RELEASE SAVEPOINT ')
+            || sql.startsWith('ROLLBACK TO SAVEPOINT ')) return { rows: [] };
+        if (sql.startsWith('SELECT to_regclass($1)')) return { rows: [{ regclass: params[0] }] };
+        if (sql.startsWith('SELECT count(*)::bigint AS row_count')) {
+          const table = sql.match(/public\."([^"]+)"/)[1];
+          return { rows: [{ row_count: EXPECTED_ROW_COUNTS[table] }] };
+        }
+        if (sql.includes('has_table_privilege')) return { rows: CORE_TABLES.map((table) => ({
+          table_name: table, can_select: true, can_insert: false, can_update: false,
+          can_delete: false, rls_enabled: false, rls_forced: false,
+        })) };
+        if (sql.includes('_checksops_restore_complete')) return { rows: [{ present: true }] };
+        if (sql.includes('has_schema_privilege')) return { rows: [
+          { schema_name: 'public', can_usage: true },
+        ] };
+        if (sql.includes("c.relname = 'users'")) return { rows: [{ present: false }] };
+        if (sql.includes('pg_constraint')) return { rows: [{ fk_count: 0 }] };
+        if (sql.includes('pg_get_triggerdef')) {
+          throw Object.assign(new Error('permission denied for function pg_get_triggerdef'), { code: '42501' });
+        }
+        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 172 }] };
+        if (sql.includes('prokind')) return { rows: [{
+          function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
+          vault_functions: 0, pgmq_functions: 0,
+        }] };
+        if (sql.includes('has_function_privilege')) return { rows: [{ can_execute: false }] };
+        if (sql.includes('SELECT auth.uid()')) throw Object.assign(new Error('permission denied'), { code: '42501' });
+        if (sql.includes('FROM pg_roles') || sql.includes('relrowsecurity') || sql.includes('FROM pg_policies')) {
+          return { rows: [] };
+        }
+        return { rows: [] };
+      },
+      end: async () => {},
+    }),
+  });
+  assert.equal(result.catalog.publicTriggers, 172);
+  assert.equal(result.catalog.publicTriggerInventory, null);
+  assert.ok(result.issues.some((item) => item.probe === 'trigger_inventory' && item.kind === 'permission'));
+
+  const summary = summarizeValidation({
+    service: 'checksops-api',
+    environment: 'staging',
+    ok: false,
+    readOnly: true,
+    writesAttempted: false,
+    tables: [],
+    issues: [{ kind: 'permission', severity: 'error', probe: 'trigger_inventory', message: SENSITIVE }],
+    catalog: {
+      publicTriggers: 172,
+      publicTriggerInventory: result.catalog.publicTriggerInventory,
+    },
+  }, 503);
+  assert.equal(Object.hasOwn(summary, 'triggerInventory'), false);
+  assert.deepEqual(summary.issues[0], {
+    kind: 'permission', severity: 'error', probe: 'trigger_inventory',
+  });
+});
