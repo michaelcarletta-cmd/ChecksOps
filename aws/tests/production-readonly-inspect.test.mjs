@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {
   assertProductionTarget,
   buildAwsArgs,
+  buildInspectionSummary,
   inspectProduction,
   PRODUCTION_PINS,
 } from '../../scripts/deployment-guard/production-readonly-inspect.mjs';
@@ -209,6 +213,90 @@ test('reports missing read permissions without leaking AWS error details', async
   assert.ok(report.missing_read_permissions.some((item) => item.action === 'lambda:GetFunctionConfiguration'));
   assert.equal(JSON.stringify(report).includes('hidden-policy-detail'), false);
   assert.equal(JSON.stringify(report).includes('secret account detail'), false);
+  const summary = buildInspectionSummary(report);
+  assert.equal(summary.lambda, null);
+  assert.deepEqual(summary.missing_read_permissions, report.missing_read_permissions);
+  assert.deepEqual(summary.read_errors, report.read_errors);
+  assert.deepEqual(summary.database, report.database);
+});
+
+test('evidence summary allowlists nested fields and flags and excludes secret-like values', async () => {
+  const report = await inspectProduction({ runAws: mockAws(), fetchImpl: mockFetch });
+  const secret = 'opaque-secret-must-not-be-persisted';
+  report.raw_credentials = secret;
+  report.aws_identity.session_token = secret;
+  report.target = { ...report.target, database_url: secret };
+  report.spa.s3_index_metadata.raw = secret;
+  report.spa.cloudfront.DistributionConfig = secret;
+  report.spa.production_spa_lock_comparison.evidence_refs = [secret];
+  report.spa.production_spa_lock_comparison.expected.raw = secret;
+  report.api.name = secret;
+  report.api.stage.raw = secret;
+  report.api.definitions = secret;
+  report.lambda.Environment = { Variables: { DB_PASSWORD: secret } };
+  report.lambda.code = secret;
+  report.lambda.workflow_flags.AWS_SECRET_ACCESS_KEY = secret;
+  report.lambda.workflow_flags.AWS_WRITES_ENABLED = secret;
+  report.lambda.merged_pr_live_evidence.unapproved = secret;
+  report.lambda.merged_pr_live_evidence.pr_762_backend.definition = secret;
+  report.lambda.merged_pr_live_evidence.pr_762_backend.current_source[0].content = secret;
+  report.database.data = secret;
+  report.read_errors = [{
+    action: 'lambda:GetFunctionConfiguration', resource: PRODUCTION_PINS.function_name,
+    reason: 'read_failed', stderr: secret,
+  }];
+  report.lambda.version = ['Bearer', 'known-token-must-not-leak'].join(' ');
+
+  const evidence = buildInspectionSummary(report);
+  const json = JSON.stringify(evidence);
+  for (const value of [secret, 'known-token-must-not-leak', 'database-password-must-not-leak', 'aws-secret-must-not-leak']) {
+    assert.equal(json.includes(value), false, value);
+  }
+  assert.deepEqual(Object.keys(evidence), [
+    'status', 'target', 'spa', 'api', 'lambda', 'database', 'missing_read_permissions', 'read_errors',
+  ]);
+  assert.equal(evidence.spa.bundle_sha256, SHA(BUNDLE));
+  assert.equal(evidence.api.target_matches_pinned_lambda, true);
+  assert.equal(evidence.lambda.code_sha256, lambdaConfig.CodeSha256);
+  assert.equal(evidence.lambda.workflow_flags.AWS_WRITES_ENABLED, null);
+  assert.ok(Object.values(evidence.lambda.workflow_flags).every((value) => value === null || typeof value === 'boolean'));
+  assert.equal(evidence.lambda.merged_pr_live_evidence.pr_772_workflow_gate.live_status, 'unverified_no_accepted_production_code_hash');
+  assert.deepEqual(evidence.database, { status: report.database.status, reason: report.database.reason });
+  assert.equal(evidence.read_errors[0].stderr, undefined);
+});
+
+test('workflow writes only the redacted evidence JSON and uses identical JSON in the run summary', async () => {
+  const workflow = fs.readFileSync(new URL('../../.github/workflows/inspect-production-readonly.yml', import.meta.url), 'utf8');
+  const inlineScript = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)[1]
+    .replace(/^          /gm, '');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'production-readonly-evidence-'));
+  try {
+    const report = await inspectProduction({ runAws: mockAws(), fetchImpl: mockFetch });
+    report.raw_secret = 'runner-secret-must-not-be-uploaded';
+    fs.writeFileSync(path.join(temp, 'production-readonly-inspection.json'), JSON.stringify(report));
+    const summaryPath = path.join(temp, 'step-summary');
+    execFileSync(process.execPath, ['--input-type=module'], {
+      input: inlineScript,
+      cwd: new URL('../../', import.meta.url),
+      env: { ...process.env, RUNNER_TEMP: temp, GITHUB_STEP_SUMMARY: summaryPath },
+    });
+    const artifactPath = path.join(temp, 'production-readonly-evidence.json');
+    const evidence = fs.readFileSync(artifactPath, 'utf8');
+    assert.deepEqual(JSON.parse(evidence), buildInspectionSummary(report));
+    assert.equal(evidence.includes('runner-secret-must-not-be-uploaded'), false);
+    assert.ok(fs.readFileSync(summaryPath, 'utf8').includes(evidence.trim()));
+    assert.equal(fs.statSync(artifactPath).mode & 0o777, 0o600);
+    assert.match(workflow, /uses: actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
+    assert.match(workflow, /name: production-readonly-evidence-\$\{\{ github.sha \}\}-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
+    assert.match(workflow, /path: \$\{\{ runner.temp \}\}\/production-readonly-evidence\.json\n/);
+    assert.match(workflow, /if-no-files-found: error\n/);
+    assert.match(workflow, /retention-days: 30\n/);
+    assert.match(workflow, /include-hidden-files: false\n/);
+    assert.equal((workflow.match(/uses: actions\/upload-artifact@/g) || []).length, 1);
+    assert.doesNotMatch(workflow, /if:.*always\(\)|overwrite: true/);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });
 
 test('marks resource identity drift instead of reporting a successful inspection', async () => {
@@ -256,6 +344,24 @@ test('read workflow is manually dispatched, uses protected environment and no mu
   assert.match(workflow, /environment: production-readonly/);
   assert.match(workflow, /contents: read/);
   assert.match(workflow, /id-token: write/);
+  assert.equal((workflow.match(/permissions:/g) || []).length, 1);
+  assert.equal(workflow.match(/^permissions:\n([\s\S]*?)\n\n/m)[1], '  contents: read\n  id-token: write');
+  assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  const policy = JSON.parse(workflow.match(/inline-session-policy: >-\n\s+(\{[^\n]+\})/)[1]);
+  assert.deepEqual(policy.Statement.map(({ Effect, Action }) => ({ Effect, Action })), [
+    { Effect: 'Allow', Action: ['sts:GetCallerIdentity'] },
+    { Effect: 'Allow', Action: ['s3:GetObject'] },
+    { Effect: 'Allow', Action: ['lambda:GetFunctionConfiguration'] },
+    { Effect: 'Allow', Action: ['apigateway:GET'] },
+    { Effect: 'Allow', Action: ['cloudfront:GetDistribution'] },
+  ]);
+  assert.deepEqual(policy.Statement.map(({ Resource }) => Resource), [
+    '*',
+    [`arn:aws:s3:::${PRODUCTION_PINS.bucket}/index.html`, `arn:aws:s3:::${PRODUCTION_PINS.bucket}/assets/index-*.js`],
+    `arn:aws:lambda:${PRODUCTION_PINS.region}:${PRODUCTION_PINS.account_id}:function:${PRODUCTION_PINS.function_name}`,
+    [`arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}`, `arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}/stages/${PRODUCTION_PINS.api_stage}`, `arn:aws:apigateway:${PRODUCTION_PINS.region}::/apis/${PRODUCTION_PINS.api_id}/integrations`],
+    `arn:aws:cloudfront::${PRODUCTION_PINS.account_id}:distribution/${PRODUCTION_PINS.cloudfront_id}`,
+  ]);
   assert.match(workflow, /s3:GetObject/);
   assert.match(workflow, /lambda:GetFunctionConfiguration/);
   assert.match(workflow, /cloudfront:GetDistribution/);
