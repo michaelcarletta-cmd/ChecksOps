@@ -90,6 +90,20 @@ test('ocr.mjs stays on live production bytes including deposited payee lock', ()
   assert.match(src, /routing_number = CASE/);
   assert.match(src, /account_number = CASE/);
   assert.equal(sha256('check-deposited.mjs'), '395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1');
+  assert.equal(sha256('financial-remaining.mjs'), 'e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989');
+  const remaining = read('financial-remaining.mjs');
+  assert.match(remaining, /export const MONEY_IN_OPERATION_TYPES = new Set\(\['checkalt_deposit'\]\)/);
+  assert.match(remaining, /export const CONFIRMED_MONEY_STATUSES/);
+  assert.doesNotMatch(remaining, /AWS_FINANCIAL_WRITES_ENABLED/);
+});
+
+test('write-claim-settlement.mjs stays on live production bytes', () => {
+  assert.equal(sha256('write-claim-settlement.mjs'), 'ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d');
+  const src = read('write-claim-settlement.mjs');
+  assert.match(src, /export const executeClaimSettlementBreakdownWrite/);
+  assert.match(src, /must not be added to AWS_WRITE_TABLES/);
+  assert.match(src, /FOR UPDATE/);
+  assert.doesNotMatch(src, /save_claim_settlement_breakdown\(/);
 });
 
 test('added members are the accepted claim-settlement and extracted delete modules', () => {

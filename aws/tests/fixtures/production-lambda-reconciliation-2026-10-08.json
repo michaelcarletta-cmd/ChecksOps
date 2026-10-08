@@ -4,7 +4,7 @@
   "revision_id": "fb17cb70-7b50-468d-a0a6-59a020c43f8c",
   "last_modified": "2026-10-06T20:29:23.000+0000",
   "inspect_run": 37812416526,
-  "notes": "Forward-composed from live production members. Preserve write-claim-settlement.mjs and inlined Delete Check. Do not restore a historical ZIP.",
+  "notes": "Forward-composed from live production members. Preserve write-claim-settlement.mjs, financial-remaining.mjs, check-deposited.mjs, and inlined Delete Check. Do not restore a historical ZIP.",
   "remaining_dependencies": [
     "SQL 20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql before workflow-transitions overlay",
     "SQL 53_claim_settlement_breakdown.sql before claim-settlement-rpc is called",
@@ -42,6 +42,16 @@
     "check-deposited.mjs": {
       "live_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
       "reconciled_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+      "changed": false
+    },
+    "write-claim-settlement.mjs": {
+      "live_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+      "reconciled_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+      "changed": false
+    },
+    "financial-remaining.mjs": {
+      "live_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
+      "reconciled_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
       "changed": false
     },
     "claim-settlement-rpc.mjs": {
