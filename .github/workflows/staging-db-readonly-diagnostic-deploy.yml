@@ -1,0 +1,123 @@
+name: Staging DB read-only diagnostic deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      approved_commit:
+        description: Exact reviewed main SHA approved for this deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: staging-db-readonly-diagnostic-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      AWS_REGION: us-east-1
+      CHECKSOPS_DEPLOY_ENVIRONMENT: staging
+      CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN: arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy
+      APPROVED_COMMIT: ${{ inputs.approved_commit }}
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Require reviewed main and exact approved SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Deployment requires reviewed main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          test "$APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "Approved SHA must match this run"; exit 2; }
+          test "$CHECKSOPS_DEPLOY_ENVIRONMENT" = staging
+          test "$AWS_REGION" = us-east-1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Install locked diagnostic dependencies without lifecycle scripts
+        run: npm ci --prefix aws/functions/api --ignore-scripts --no-audit --no-fund
+
+      - name: Run deployment and accepted-contract tests
+        run: |
+          node --test aws/tests/staging-db-readonly-diagnostic-deploy.test.mjs
+          node --test aws/tests/staging-db-readonly-lambda-diagnostic.test.mjs
+          node --test aws/tests/tenant-security-compliance.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Prepare Deployment Guard lease and receipt
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const manifest = {
+            workstream_id: 'staging-db-readonly-diagnostic',
+            branch: 'main',
+            commit: process.env.GITHUB_SHA,
+            operator: process.env.GITHUB_ACTOR,
+            target_environment: 'staging',
+            target_component: 'checksops-staging-db-readonly-diagnostic',
+            deployment_type: 'cloudformation',
+            owned_components: [
+              'aws/staging-db-readonly-diagnostic/template.yaml',
+              'aws/functions/api/staging-db-readonly-diagnostic.mjs',
+              'aws/functions/api/staging-db-readonly-diagnostic-output.mjs',
+              'aws/functions/api/db-readonly-validate.mjs',
+            ],
+            preflight_live_fingerprint: { stack_state: 'must-be-absent' },
+            build_timestamp: new Date().toISOString(),
+            contract_results: {
+              'staging-db-readonly-diagnostic': true,
+              'tenant-isolation': true,
+            },
+          };
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/diagnostic-deploy-manifest.json`, JSON.stringify(manifest));
+          NODE
+          node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input "$RUNNER_TEMP/diagnostic-deploy-manifest.json" > "$RUNNER_TEMP/preflight.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const result = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/preflight.json`, 'utf8'));
+          if (result.ok !== true || typeof result.details?.receipt !== 'string') {
+            console.error('Deployment Guard preflight refused the target');
+            process.exit(2);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `receipt_path=${result.details.receipt}\n`);
+          NODE
+
+      - name: Configure dedicated staging AWS role through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy
+          aws-region: us-east-1
+          role-session-name: checksops-diagnostic-deploy-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[
+              {"Effect":"Allow","Action":["cloudformation:CreateStack","cloudformation:DescribeStacks"],"Resource":"arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-staging-db-readonly-diagnostic/*"},
+              {"Effect":"Allow","Action":["iam:PassRole"],"Resource":"arn:aws:iam::806168576068:role/ChecksOpsStagingDbReadonlyDiagnosticCloudFormationExecution","Condition":{"StringEquals":{"iam:PassedToService":"cloudformation.amazonaws.com"}}},
+              {"Effect":"Allow","Action":["s3:GetBucketLocation","s3:ListBucket"],"Resource":"arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068"},
+              {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],"Resource":"arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/*"},
+              {"Effect":"Allow","Action":["lambda:GetFunctionConfiguration","lambda:PublishVersion"],"Resource":"arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-db-readonly-diagnostic"}
+            ]}
+
+      - name: Deploy the fixed staging diagnostic and publish an immutable version
+        id: deployment
+        env:
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.guard.outputs.receipt_path }}
+        run: node scripts/staging-db-readonly-diagnostic-deploy.mjs
+
+      - name: Remove ephemeral guard state
+        if: always()
+        run: rm -rf .deployment-guard

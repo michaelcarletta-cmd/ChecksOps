@@ -9,7 +9,11 @@ import { evaluateDeployment } from './lib/guard.mjs';
 import { inspectLease } from './lib/lease.mjs';
 import { CODES, GuardError, fail, ok } from './lib/errors.mjs';
 import { loadReceipt, validateReceipt } from './lib/receipt.mjs';
-import { lookupSharedBucket, lookupSharedLambda } from './lib/shared-targets.mjs';
+import {
+  lookupSharedBucket,
+  lookupSharedLambda,
+  lookupSharedStack,
+} from './lib/shared-targets.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
 
 export function resolveGuardRoot(ctx = {}, env = process.env) {
@@ -133,6 +137,24 @@ export function enforceS3Target(spec = {}, ctx = {}) {
       CODES.DEPLOYMENT_GUARD_REQUIRED,
       'S3 write to an unregistered shared/production bucket is refused; register the target or use the guard',
       { bucket: spec.bucket },
+    );
+  }
+  return enforceScriptGuard({
+    script: spec.script,
+    ...shared,
+    workstream_id: spec.workstream_id,
+    commit: spec.commit,
+    live_fingerprint: spec.live_fingerprint,
+  }, ctx);
+}
+
+export function enforceSharedStackTarget(spec = {}, ctx = {}) {
+  const shared = lookupSharedStack(spec.stackName);
+  if (!shared || shared.deployment_type !== 'cloudformation') {
+    return fail(
+      CODES.DEPLOYMENT_GUARD_REQUIRED,
+      'CloudFormation write to an unregistered stack is refused',
+      { stack_name: spec.stackName || null },
     );
   }
   return enforceScriptGuard({
