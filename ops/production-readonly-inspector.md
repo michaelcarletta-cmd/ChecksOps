@@ -39,24 +39,31 @@ configuration changes or invalidations, Secrets Manager value reads, SQL
 mutation, migrations, provider/payment calls, or application-data reads/writes
 are included. If the live Lambda configuration contains an exact production
 Secrets Manager ARN reference, the inspector attempts `secretsmanager:DescribeSecret`
-on that exact ARN and `rds:DescribeDBInstances` filtered to an exact RDS-managed
-`MasterUserSecret` association. It does not rely on optional secret tags, secret
-names, descriptions, staging, or docs, and it never calls
+on that exact ARN and `rds:DescribeDBInstances` for account RDS network/secret
+metadata. It does not rely on optional secret tags, secret names, descriptions,
+staging, docs, or a single naming coincidence, and it never calls
 `GetSecretValue`. The exact-secret `DescribeSecret` read is authorized in the
 workflow session policy. `DescribeDBInstances` is authorized as a read-only
-metadata action with `Resource: "*"`. The inspector filters its returned
-metadata to the exact live `DATABASE_SECRET_ARN` `MasterUserSecret` association
-before considering an RDS instance; zero or multiple matches remain fail-closed.
-An authorized empty `MasterUserSecret` match is not proof that production RDS
-does not exist: application credentials may be separately managed. In that case
-the report stays `refused_unproven_aws_production_target` and records sanitized
-association counts plus the minimum additional safe metadata evidence required.
-RDS metadata can prove a target only when it independently reports the same
-secret ARN as the live Lambda reference. SSM parameter values are never fetched;
-metadata alone is treated as insufficient to prove their persistence target.
-No persistence target is accepted unless live AWS configuration, the verified
-runtime package, and AWS resource metadata independently establish the complete
-binding; otherwise the report remains `refused_unproven_aws_production_target`.
+metadata action with `Resource: "*"`. The query returns only instance ARN,
+optional `MasterUserSecret` ARN, VPC id, subnet ids, and VPC security-group ids;
+endpoints, identifiers used as names, and unmatched instance ARNs are not
+persisted. A target is proven only by an exact live `DATABASE_SECRET_ARN`
+`MasterUserSecret` association, or by exclusive membership of exactly one
+observed instance in the live Lambda VPC, or by an exclusive security-group
+intersection with the live Lambda security groups. Zero or multiple matches
+remain fail-closed. An authorized empty `MasterUserSecret` match is not proof
+that production RDS does not exist: application credentials may be separately
+managed. If two observed instances share the live Lambda VPC without an
+exclusive security-group association, the report stays
+`refused_unproven_aws_production_target` and records sanitized association
+counts plus the minimum additional read-only evidence
+`ec2:DescribeSecurityGroups` on the live Lambda security groups. That
+permission is not added by this inspector. SSM parameter values are never
+fetched; metadata alone is treated as insufficient to prove their persistence
+target. No persistence target is accepted unless live AWS configuration, the
+verified runtime package, and AWS resource metadata independently establish the
+complete binding; otherwise the report remains
+`refused_unproven_aws_production_target`.
 
 The SPA fingerprint is fetched using HTTPS GET from the pinned `checksops.com`
 host. The report compares the live entry, index/bundle hashes, S3 version, and
@@ -104,11 +111,12 @@ exact-resource Lambda `GetFunction` read:
 
 The production read-only role's identity policy separately authorizes this
 read. No AWS/IAM identity policy is changed by this repository update. Do not
-grant `GetSecretValue`, wildcard Secrets Manager access, SSM value reads, or RDS
-mutation/data-plane access. Do not expand `rds:DescribeDBInstances` further
-without separate authorization. Persistence remains unproven unless metadata
-independently links the exact live secret ARN to exactly one production RDS
-instance and the live package proves the runtime secret source.
+grant `GetSecretValue`, wildcard Secrets Manager access, SSM value reads,
+`ec2:DescribeSecurityGroups`, or RDS mutation/data-plane access. Do not expand
+`rds:DescribeDBInstances` further without separate authorization. Persistence
+remains unproven unless metadata independently binds the live Lambda to exactly
+one production RDS instance and the live package proves the runtime secret
+source.
 
 The production release lock currently has no Lambda `CodeSha256` pin. The
 inspector reports the live Lambda code fingerprint, workflow flags, source

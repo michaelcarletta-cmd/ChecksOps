@@ -171,7 +171,7 @@ export function buildAwsArgs(action, target = {}) {
       }
       return [
         'rds', 'describe-db-instances',
-        '--query', `{DBInstances:DBInstances[?MasterUserSecret.SecretArn=='${target.secretArn}'].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn},ObservedInstanceCount:length(DBInstances)}`,
+        '--query', '{DBInstances:DBInstances[].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn,VpcId:DBSubnetGroup.VpcId,SubnetIds:DBSubnetGroup.Subnets[].SubnetIdentifier,VpcSecurityGroupIds:VpcSecurityGroups[].VpcSecurityGroupId},ObservedInstanceCount:length(DBInstances)}',
       ];
     case 'apigateway:GET':
       if (target.apiId !== API_ID || !['api', 'stage', 'integrations'].includes(target.resource)
@@ -332,35 +332,144 @@ function rdsDescribePayload(metadata) {
   };
 }
 
-function rdsInstanceTargets(metadata, secretArn) {
-  const instances = rdsDescribePayload(metadata).instances;
-  return instances
-    .filter((instance) => (instance?.MasterUserSecret?.SecretArn || instance?.SecretArn) === secretArn
-      && typeof instance.DBInstanceArn === 'string'
-      && new RegExp(`^arn:aws:rds:${REGION}:${ACCOUNT_ID}:db:[A-Za-z0-9-]+$`).test(instance.DBInstanceArn))
-    .map((instance) => ({
-      reference_type: 'rds-instance',
-      resource_arn: instance.DBInstanceArn,
-    }));
+function isProductionRdsInstanceArn(value) {
+  return typeof value === 'string'
+    && new RegExp(`^arn:aws:rds:${REGION}:${ACCOUNT_ID}:db:[A-Za-z0-9-]+$`).test(value);
 }
 
-function rdsMasterUserSecretUnresolved(reference, secret) {
+function asResourceIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => {
+    if (typeof item === 'string') return item;
+    return item?.SubnetIdentifier || item?.VpcSecurityGroupId || null;
+  }).filter((item) => typeof item === 'string' && item.length > 0))];
+}
+
+function normalizeRdsInstance(instance) {
+  if (!isProductionRdsInstanceArn(instance?.DBInstanceArn)) return null;
+  return {
+    resource_arn: instance.DBInstanceArn,
+    secret_arn: instance.MasterUserSecret?.SecretArn || instance.SecretArn || null,
+    vpc_id: instance.DBSubnetGroup?.VpcId || instance.VpcId || null,
+    subnet_ids: asResourceIds(instance.DBSubnetGroup?.Subnets || instance.SubnetIds),
+    security_group_ids: asResourceIds(instance.VpcSecurityGroups || instance.VpcSecurityGroupIds),
+  };
+}
+
+function rdsInstanceRecords(metadata) {
+  return rdsDescribePayload(metadata).instances.map(normalizeRdsInstance).filter(Boolean);
+}
+
+function rdsTarget(instance, association) {
+  return {
+    reference_type: 'rds-instance',
+    resource_arn: instance.resource_arn,
+    association,
+  };
+}
+
+function rdsInstanceTargets(metadata, secretArn) {
+  return rdsInstanceRecords(metadata)
+    .filter((instance) => instance.secret_arn === secretArn)
+    .map((instance) => rdsTarget(instance, 'master-user-secret'));
+}
+
+function lambdaNetwork(config) {
+  return {
+    vpc_id: config?.VpcConfig?.VpcId || null,
+    subnet_ids: asResourceIds(config?.VpcConfig?.SubnetIds),
+    security_group_ids: asResourceIds(config?.VpcConfig?.SecurityGroupIds),
+  };
+}
+
+function rdsNetworkBinding(metadata, network) {
+  const records = rdsInstanceRecords(metadata);
+  const vpcMatches = network.vpc_id
+    ? records.filter((instance) => instance.vpc_id === network.vpc_id)
+    : [];
+  const securityGroupMatches = vpcMatches.filter((instance) => instance.security_group_ids
+    .some((id) => network.security_group_ids.includes(id)));
+  let association = null;
+  let matches = [];
+  if (securityGroupMatches.length === 1) {
+    association = 'exclusive-security-group';
+    matches = securityGroupMatches;
+  } else if (vpcMatches.length === 1) {
+    association = 'exclusive-vpc';
+    matches = vpcMatches;
+  }
+  return {
+    targets: matches.map((instance) => rdsTarget(instance, association)),
+    association,
+    vpc_match_count: vpcMatches.length,
+    security_group_match_count: securityGroupMatches.length,
+  };
+}
+
+function lambdaSecurityGroupResources(network) {
+  const ids = network.security_group_ids.filter((id) => /^sg-[A-Za-z0-9]+$/.test(id));
+  return ids.length
+    ? ids.map((id) => `arn:aws:ec2:${REGION}:${ACCOUNT_ID}:security-group/${id}`).join(',')
+    : `arn:aws:ec2:${REGION}:${ACCOUNT_ID}:security-group/*`;
+}
+
+function rdsPersistenceBinding(secret, network) {
   const payload = rdsDescribePayload(secret.instances);
-  const owningServiceIsRds = secret.metadata?.OwningService === 'rds';
-  const linkedTargets = rdsInstanceTargets(payload.instances, reference.identifier);
-  const associationCount = linkedTargets.length;
-  if (associationCount === 1) return [];
-  if (associationCount > 1) {
+  const secretMetadataMatches = secret.metadata?.ARN === secret.reference.identifier;
+  const secretTargets = secretMetadataMatches
+    ? rdsInstanceTargets(secret.instances, secret.reference.identifier)
+    : [];
+  const networkBinding = secret.instances == null ? null : rdsNetworkBinding(secret.instances, network);
+  let targets = [];
+  if (secretMetadataMatches && secretTargets.length === 1) targets = secretTargets;
+  else if (secretMetadataMatches && secretTargets.length === 0 && networkBinding?.targets.length === 1) {
+    targets = networkBinding.targets;
+  }
+  return {
+    ...secret,
+    payload,
+    secretTargets,
+    networkBinding,
+    targets,
+  };
+}
+
+function rdsBindingUnresolved(binding, network) {
+  const reference = binding.reference;
+  const owningServiceIsRds = binding.metadata?.OwningService === 'rds';
+  const observed = binding.payload.observedInstanceCount;
+  const vpcMatchCount = binding.networkBinding?.vpc_match_count ?? 0;
+  const securityGroupMatchCount = binding.networkBinding?.security_group_match_count ?? 0;
+  if (binding.targets.length === 1) return [];
+  if (binding.secretTargets.length > 1) {
     return [{
       variable_name: reference.variable_name,
       reference_type: reference.reference_type,
       identifier: reference.identifier,
       required_permission: null,
       required_evidence: null,
-      master_user_association_count: associationCount,
-      observed_db_instance_count: payload.observedInstanceCount,
+      master_user_association_count: binding.secretTargets.length,
+      observed_db_instance_count: observed,
+      vpc_match_count: vpcMatchCount,
+      security_group_match_count: securityGroupMatchCount,
       owning_service_is_rds: owningServiceIsRds,
       reason: 'RDS metadata links the secret to multiple production instances',
+    }];
+  }
+  if (vpcMatchCount > 1) {
+    return [{
+      variable_name: reference.variable_name,
+      reference_type: reference.reference_type,
+      identifier: reference.identifier,
+      required_permission: 'ec2:DescribeSecurityGroups',
+      required_permission_resource: lambdaSecurityGroupResources(network),
+      required_evidence: 'security-group ingress from the live Lambda security groups to exactly one production RDS instance; MasterUserSecret and exclusive VPC/SG membership were checked; secret values, SQL, and additional IAM expansion are not authorized',
+      master_user_association_count: 0,
+      observed_db_instance_count: observed,
+      vpc_match_count: vpcMatchCount,
+      security_group_match_count: securityGroupMatchCount,
+      owning_service_is_rds: owningServiceIsRds,
+      reason: 'authorized RDS and Lambda network metadata leaves multiple instances in the live Lambda VPC without an exclusive security-group association',
     }];
   }
   return [{
@@ -369,13 +478,15 @@ function rdsMasterUserSecretUnresolved(reference, secret) {
     identifier: reference.identifier,
     required_permission: owningServiceIsRds ? 'rds:DescribeDBClusters' : null,
     required_permission_resource: owningServiceIsRds ? '*' : null,
-    required_evidence: 'independent AWS metadata associating this exact live secret ARN with exactly one production RDS instance or cluster; MasterUserSecret was checked; secret values, SQL, and additional IAM expansion are not authorized',
+    required_evidence: 'independent AWS metadata associating this exact live secret ARN with exactly one production RDS instance or cluster; MasterUserSecret and exclusive VPC/SG membership were checked; secret values, SQL, and additional IAM expansion are not authorized',
     master_user_association_count: 0,
-    observed_db_instance_count: payload.observedInstanceCount,
+    observed_db_instance_count: observed,
+    vpc_match_count: vpcMatchCount,
+    security_group_match_count: securityGroupMatchCount,
     owning_service_is_rds: owningServiceIsRds,
     reason: owningServiceIsRds
-      ? 'authorized rds:DescribeDBInstances found no instance MasterUserSecret association for this RDS-owned secret; cluster metadata is not authorized and absence of instance association does not prove no production RDS'
-      : 'authorized rds:DescribeDBInstances found no MasterUserSecret association for this live application secret; separately managed credentials are not an RDS-managed master-user secret and do not prove absence of production RDS',
+      ? 'authorized rds:DescribeDBInstances found no instance MasterUserSecret or exclusive VPC/SG association for this RDS-owned secret; cluster metadata is not authorized and absence of instance association does not prove no production RDS'
+      : 'authorized rds:DescribeDBInstances found no MasterUserSecret or exclusive VPC/SG association for this live application secret; separately managed credentials are not an RDS-managed master-user secret and do not prove absence of production RDS',
   }];
 }
 
@@ -820,6 +931,7 @@ export async function inspectProduction({
   const exactSecretReferences = [...new Map(persistenceRefs
     .filter((reference) => reference.reference_type === 'secretsmanager' && reference.exact_resource_arn)
     .map((reference) => [reference.identifier, reference])).values()];
+  const network = lambdaNetwork(config);
   const describedSecrets = await Promise.all(exactSecretReferences
     .map(async (reference) => {
       const target = { secretArn: reference.identifier };
@@ -827,13 +939,11 @@ export async function inspectProduction({
         safeRead(readErrors, 'secretsmanager:DescribeSecret', target, runAws, reference.identifier),
         safeRead(readErrors, 'rds:DescribeDBInstances', target, runAws),
       ]);
-      return { reference, metadata, instances };
+      return rdsPersistenceBinding({ reference, metadata, instances }, network);
     }));
-  const persistenceTargets = describedSecrets
-    .flatMap(({ reference, metadata, instances }) => metadata?.ARN === reference.identifier
-      ? rdsInstanceTargets(instances, reference.identifier)
-      : []);
-  const referencedTargets = [...new Map(persistenceTargets.map((item) => [item.resource_arn, item])).values()];
+  const referencedTargets = [...new Map(describedSecrets
+    .flatMap((secret) => secret.targets)
+    .map((item) => [item.resource_arn, item])).values()];
   const database = {
     status: 'refused_unproven_aws_production_target',
     reason: 'live AWS references do not independently prove the function persistence target',
@@ -905,7 +1015,7 @@ export async function inspectProduction({
             reason: 'RDS secret association metadata is unavailable; DescribeDBInstances is not resource-scoped',
           }];
         }
-        return rdsMasterUserSecretUnresolved(reference, secret);
+        return rdsBindingUnresolved(secret, network);
       }),
     ],
   };
@@ -982,11 +1092,17 @@ export async function inspectProduction({
     && packageEvidence.code_sha256_matches_configuration === true
     && packageEvidence.revision_id_matches_configuration === true
     && runtimeSecretSourceMatches;
+  const persistenceReason = {
+    'master-user-secret': 'live Lambda configuration and package bind its secret reference to one RDS instance through AWS metadata',
+    'exclusive-vpc': 'live Lambda VPC membership independently binds exactly one observed RDS instance through AWS metadata',
+    'exclusive-security-group': 'live Lambda security groups independently bind exactly one observed RDS instance through AWS metadata',
+  };
   if (packageProvesRuntimeReference
       && referencedTargets.length === 1
       && database.unresolved_references.length === 0) {
     database.status = 'complete';
-    database.reason = 'live Lambda configuration and package bind its secret reference to one RDS instance through AWS metadata';
+    database.reason = persistenceReason[referencedTargets[0].association]
+      || persistenceReason['master-user-secret'];
   } else if (!config) {
     database.reason = 'live Lambda configuration is unavailable; production persistence target remains unproven';
   } else if (!persistenceRefs.length) {
@@ -1168,12 +1284,13 @@ export function buildInspectionSummary(report) {
       ])),
       unresolved_variables: report.database.unresolved_variables || [],
       candidate_resources: (report.database.candidate_resources || []).map((resource) => pick(resource, [
-        'reference_type', 'resource_arn',
+        'reference_type', 'resource_arn', 'association',
       ])),
       unresolved_references: (report.database.unresolved_references || []).map((reference) => pick(reference, [
         'variable_name', 'reference_type', 'identifier', 'required_permission',
         'required_permission_resource', 'required_evidence',
         'master_user_association_count', 'observed_db_instance_count',
+        'vpc_match_count', 'security_group_match_count',
         'owning_service_is_rds', 'reason',
       ])),
     } : null,
