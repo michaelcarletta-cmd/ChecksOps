@@ -15,7 +15,10 @@ template declares no VPC/RDS attachment, and the production release lock has no
 database evidence record. The inspector therefore reports
 `refused_unproven_aws_production_target` and does not accept a database
 connection string, contact a database, read a database secret, or inspect
-historical migration paths. The staging RDS target is not a production target.
+historical migration paths. The separate
+`aws/production/api-execution-role.yaml` template's staging-secret default does
+not establish a production database target; staging RDS is not a production
+target.
 
 The OIDC role ARN variable must be
 `CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN` =
