@@ -37,6 +37,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const RecipientPaymentSetup = lazy(() => import("./pages/RecipientPaymentSetup"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
+const AdminDbValidator = lazy(() => import("./pages/admin/AdminDbValidator"));
 const AdminMortgageOps = lazy(() => import("./pages/admin/AdminMortgageOps"));
 const AdminFinancialModel = lazy(() => import("./pages/admin/AdminFinancialModel"));
 const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
@@ -103,6 +104,7 @@ function CheckOpsRoutes() {
       <Route path="/terms" element={<Suspense fallback={<PageLoader />}><Terms /></Suspense>} />
       <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
+      <Route path="/admin/db-validator" element={<Suspense fallback={<PageLoader />}><AdminDbValidator /></Suspense>} />
       <Route path="/admin/mortgage-ops" element={<Suspense fallback={<PageLoader />}><AdminMortgageOps /></Suspense>} />
       <Route path="/admin/financial-model" element={<Suspense fallback={<PageLoader />}><AdminFinancialModel /></Suspense>} />
       <Route path="/find-a-pro" element={<Suspense fallback={<PageLoader />}><FindAPro /></Suspense>} />
