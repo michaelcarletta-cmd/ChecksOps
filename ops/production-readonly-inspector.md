@@ -40,12 +40,17 @@ mutation, migrations, provider/payment calls, or application-data reads/writes
 are included. If the live Lambda configuration contains an exact production
 Secrets Manager ARN reference, the inspector attempts `secretsmanager:DescribeSecret`
 on that exact ARN and `rds:DescribeDBInstances` filtered to an exact RDS-managed
-secret association. It does not rely on optional secret tags, and it never calls
+`MasterUserSecret` association. It does not rely on optional secret tags, secret
+names, descriptions, staging, or docs, and it never calls
 `GetSecretValue`. The exact-secret `DescribeSecret` read is authorized in the
 workflow session policy. `DescribeDBInstances` is authorized as a read-only
 metadata action with `Resource: "*"`. The inspector filters its returned
-metadata to the exact live `DATABASE_SECRET_ARN` association before considering
-an RDS instance; zero or multiple matches remain fail-closed.
+metadata to the exact live `DATABASE_SECRET_ARN` `MasterUserSecret` association
+before considering an RDS instance; zero or multiple matches remain fail-closed.
+An authorized empty `MasterUserSecret` match is not proof that production RDS
+does not exist: application credentials may be separately managed. In that case
+the report stays `refused_unproven_aws_production_target` and records sanitized
+association counts plus the minimum additional safe metadata evidence required.
 RDS metadata can prove a target only when it independently reports the same
 secret ARN as the live Lambda reference. SSM parameter values are never fetched;
 metadata alone is treated as insufficient to prove their persistence target.
@@ -60,12 +65,18 @@ records CodeSha256, RevisionId, package hash, member paths/sizes/hashes, and
 exact-path comparisons for the reviewed current-main API sources. It does not
 record the presigned URL, ZIP bytes, environment values, or source contents.
 Lambda package downloads accept only the pinned-region AWS Lambda S3 virtual-
-hosted or bucket-path endpoints, reject redirects and URL credentials/ports, and
-report only a redacted failure stage and reason. A rejected location also
+hosted or bucket-path endpoints for `awslambda-us-east-1` / `awslambda-us-east-1-tasks`,
+plus the observed production Lambda service artifact host
+`prod-04-2014-tasks.s3.us-east-1.amazonaws.com`. Arbitrary `.s3`, `amazonaws`, or
+unrelated bucket hosts are rejected. Downloads remain HTTPS-only, reject
+redirects, URL credentials, explicit ports, fragments, and unsafe ZIP members,
+and report only a redacted failure stage and reason. A rejected location also
 records sanitized hostname, path-style classification, scheme classification,
 and validator rejection reason; non-AWS hostnames and unrecognized path data
 are redacted. Query strings, credentials, full URLs, and fragments are never
-recorded. These diagnostics do not expand the download allowlist.
+recorded. These diagnostics do not expand the download allowlist. Package
+inventory and current-source comparisons, including `secrets.mjs`, run only after
+the location is accepted; live matches are not claimed from fixtures.
 Lambda environment inspection returns variable names and the existing
 allowlisted boolean workflow flags; values are requested only for approved
 database-reference variable names (secret/parameter ARN, name, or reference
@@ -94,7 +105,8 @@ exact-resource Lambda `GetFunction` read:
 The production read-only role's identity policy separately authorizes this
 read. No AWS/IAM identity policy is changed by this repository update. Do not
 grant `GetSecretValue`, wildcard Secrets Manager access, SSM value reads, or RDS
-mutation/data-plane access. Persistence remains unproven unless metadata
+mutation/data-plane access. Do not expand `rds:DescribeDBInstances` further
+without separate authorization. Persistence remains unproven unless metadata
 independently links the exact live secret ARN to exactly one production RDS
 instance and the live package proves the runtime secret source.
 

@@ -163,7 +163,7 @@ export function buildAwsArgs(action, target = {}) {
       }
       return [
         'secretsmanager', 'describe-secret', '--secret-id', target.secretArn,
-        '--query', '{ARN:ARN,Name:Name,Description:Description}',
+        '--query', '{ARN:ARN,Name:Name,OwningService:OwningService}',
       ];
     case 'rds:DescribeDBInstances':
       if (Object.keys(target).length !== 1 || !isProductionSecretArn(target.secretArn)) {
@@ -171,7 +171,7 @@ export function buildAwsArgs(action, target = {}) {
       }
       return [
         'rds', 'describe-db-instances',
-        '--query', `DBInstances[?MasterUserSecret.SecretArn=='${target.secretArn}'].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn}`,
+        '--query', `{DBInstances:DBInstances[?MasterUserSecret.SecretArn=='${target.secretArn}'].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn},ObservedInstanceCount:length(DBInstances)}`,
       ];
     case 'apigateway:GET':
       if (target.apiId !== API_ID || !['api', 'stage', 'integrations'].includes(target.resource)
@@ -317,8 +317,23 @@ function persistenceReferences(config) {
   return references;
 }
 
+function rdsDescribePayload(metadata) {
+  if (metadata == null) {
+    return { available: false, instances: [], observedInstanceCount: null };
+  }
+  if (Array.isArray(metadata)) {
+    return { available: true, instances: metadata, observedInstanceCount: null };
+  }
+  const observed = metadata.ObservedInstanceCount;
+  return {
+    available: true,
+    instances: Array.isArray(metadata.DBInstances) ? metadata.DBInstances : [],
+    observedInstanceCount: Number.isInteger(observed) ? observed : null,
+  };
+}
+
 function rdsInstanceTargets(metadata, secretArn) {
-  const instances = Array.isArray(metadata) ? metadata : metadata?.DBInstances || [];
+  const instances = rdsDescribePayload(metadata).instances;
   return instances
     .filter((instance) => (instance?.MasterUserSecret?.SecretArn || instance?.SecretArn) === secretArn
       && typeof instance.DBInstanceArn === 'string'
@@ -327,6 +342,41 @@ function rdsInstanceTargets(metadata, secretArn) {
       reference_type: 'rds-instance',
       resource_arn: instance.DBInstanceArn,
     }));
+}
+
+function rdsMasterUserSecretUnresolved(reference, secret) {
+  const payload = rdsDescribePayload(secret.instances);
+  const owningServiceIsRds = secret.metadata?.OwningService === 'rds';
+  const linkedTargets = rdsInstanceTargets(payload.instances, reference.identifier);
+  const associationCount = linkedTargets.length;
+  if (associationCount === 1) return [];
+  if (associationCount > 1) {
+    return [{
+      variable_name: reference.variable_name,
+      reference_type: reference.reference_type,
+      identifier: reference.identifier,
+      required_permission: null,
+      required_evidence: null,
+      master_user_association_count: associationCount,
+      observed_db_instance_count: payload.observedInstanceCount,
+      owning_service_is_rds: owningServiceIsRds,
+      reason: 'RDS metadata links the secret to multiple production instances',
+    }];
+  }
+  return [{
+    variable_name: reference.variable_name,
+    reference_type: reference.reference_type,
+    identifier: reference.identifier,
+    required_permission: owningServiceIsRds ? 'rds:DescribeDBClusters' : null,
+    required_permission_resource: owningServiceIsRds ? '*' : null,
+    required_evidence: 'independent AWS metadata associating this exact live secret ARN with exactly one production RDS instance or cluster; MasterUserSecret was checked; secret values, SQL, and additional IAM expansion are not authorized',
+    master_user_association_count: 0,
+    observed_db_instance_count: payload.observedInstanceCount,
+    owning_service_is_rds: owningServiceIsRds,
+    reason: owningServiceIsRds
+      ? 'authorized rds:DescribeDBInstances found no instance MasterUserSecret association for this RDS-owned secret; cluster metadata is not authorized and absence of instance association does not prove no production RDS'
+      : 'authorized rds:DescribeDBInstances found no MasterUserSecret association for this live application secret; separately managed credentials are not an RDS-managed master-user secret and do not prove absence of production RDS',
+  }];
 }
 
 function zipEntryCount(zip) {
@@ -373,6 +423,27 @@ class LambdaPackageError extends Error {
   }
 }
 
+const OBSERVED_LAMBDA_ARTIFACT_HOST = `prod-04-2014-tasks.s3.${REGION}.amazonaws.com`;
+
+function lambdaCodeLocationHosts() {
+  const bucketNames = [`awslambda-${REGION}`, `awslambda-${REGION}-tasks`];
+  const virtualHosts = new Set(bucketNames.flatMap((bucket) => [
+    `${bucket}.s3.${REGION}.amazonaws.com`,
+    `${bucket}.s3.amazonaws.com`,
+    `${bucket}.s3.dualstack.${REGION}.amazonaws.com`,
+    `${bucket}.s3-${REGION}.amazonaws.com`,
+  ]));
+  virtualHosts.add(OBSERVED_LAMBDA_ARTIFACT_HOST);
+  return {
+    bucketNames,
+    virtualHosts,
+    pathStyleHosts: new Set([
+      `s3.${REGION}.amazonaws.com`,
+      's3.amazonaws.com',
+    ]),
+  };
+}
+
 function approvedLambdaCodeLocation(location) {
   if (typeof location !== 'string') return false;
   let url;
@@ -382,17 +453,7 @@ function approvedLambdaCodeLocation(location) {
     return false;
   }
   const authority = location.match(/^https:\/\/([^/?#]*)/i)?.[1];
-  const bucketNames = [`awslambda-${REGION}`, `awslambda-${REGION}-tasks`];
-  const virtualHosts = new Set(bucketNames.flatMap((bucket) => [
-    `${bucket}.s3.${REGION}.amazonaws.com`,
-    `${bucket}.s3.amazonaws.com`,
-    `${bucket}.s3.dualstack.${REGION}.amazonaws.com`,
-    `${bucket}.s3-${REGION}.amazonaws.com`,
-  ]));
-  const pathStyleHosts = new Set([
-    `s3.${REGION}.amazonaws.com`,
-    's3.amazonaws.com',
-  ]);
+  const { bucketNames, virtualHosts, pathStyleHosts } = lambdaCodeLocationHosts();
   const virtualHost = virtualHosts.has(url.hostname);
   const pathStyleBucket = pathStyleHosts.has(url.hostname)
     && bucketNames.some((bucket) => url.pathname.startsWith(`/${bucket}/`));
@@ -420,14 +481,9 @@ function lambdaCodeLocationDiagnostics(location) {
   }
   const hostname = url.hostname.toLowerCase();
   const awsOwnedHostname = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:amazonaws\.com|amazonaws\.com\.cn)$/.test(hostname);
-  const bucketNames = [`awslambda-${REGION}`, `awslambda-${REGION}-tasks`];
-  const knownVirtualHost = bucketNames.some((bucket) => [
-    `${bucket}.s3.${REGION}.amazonaws.com`,
-    `${bucket}.s3.amazonaws.com`,
-    `${bucket}.s3.dualstack.${REGION}.amazonaws.com`,
-    `${bucket}.s3-${REGION}.amazonaws.com`,
-  ].includes(hostname));
-  const pathStyleHost = [`s3.${REGION}.amazonaws.com`, 's3.amazonaws.com'].includes(hostname);
+  const { bucketNames, virtualHosts, pathStyleHosts } = lambdaCodeLocationHosts();
+  const knownVirtualHost = virtualHosts.has(hostname);
+  const pathStyleHost = pathStyleHosts.has(hostname);
   const pathStyleBucket = bucketNames.find((bucket) => url.pathname.startsWith(`/${bucket}/`));
   const s3Hostname = awsOwnedHostname
     && (hostname.startsWith('s3.') || hostname.startsWith('s3-') || hostname.includes('.s3.') || hostname.includes('.s3-'));
@@ -845,19 +901,11 @@ export async function inspectProduction({
             identifier: reference.identifier,
             required_permission: 'rds:DescribeDBInstances',
             required_permission_resource: '*',
+            required_evidence: null,
             reason: 'RDS secret association metadata is unavailable; DescribeDBInstances is not resource-scoped',
           }];
         }
-        const linkedTargets = rdsInstanceTargets(secret.instances, reference.identifier);
-        return linkedTargets.length === 1 ? [] : [{
-          variable_name: reference.variable_name,
-          reference_type: reference.reference_type,
-          identifier: reference.identifier,
-          required_permission: null,
-          reason: linkedTargets.length
-            ? 'RDS metadata links the secret to multiple production instances'
-            : 'RDS metadata does not link this secret to a production DB instance',
-        }];
+        return rdsMasterUserSecretUnresolved(reference, secret);
       }),
     ],
   };
@@ -945,6 +993,11 @@ export async function inspectProduction({
     database.reason = 'live Lambda configuration provides no recognized AWS persistence reference';
   } else if (!packageProvesRuntimeReference) {
     database.reason = 'live Lambda package identity and runtime secret-reference source are not both verified';
+  } else if (referencedTargets.length !== 1) {
+    const rdsUnresolved = database.unresolved_references.find((item) => (
+      item.reference_type === 'secretsmanager' && item.master_user_association_count !== undefined
+    ));
+    if (rdsUnresolved?.reason) database.reason = rdsUnresolved.reason;
   }
   const distribution = cloudfront?.Distribution || null;
   const apiIntegrations = integrations?.Items || [];
@@ -1119,7 +1172,9 @@ export function buildInspectionSummary(report) {
       ])),
       unresolved_references: (report.database.unresolved_references || []).map((reference) => pick(reference, [
         'variable_name', 'reference_type', 'identifier', 'required_permission',
-        'required_permission_resource', 'reason',
+        'required_permission_resource', 'required_evidence',
+        'master_user_association_count', 'observed_db_instance_count',
+        'owning_service_is_rds', 'reason',
       ])),
     } : null,
     missing_read_permissions: errors(report.missing_read_permissions),
