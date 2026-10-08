@@ -51,6 +51,11 @@ export const SHARED_CLOUDFRONT = Object.freeze({
 });
 
 export const SHARED_STACKS = Object.freeze({
+  'checksops-staging-db-readonly-diagnostic': {
+    target_environment: 'staging',
+    target_component: 'checksops-staging-db-readonly-diagnostic',
+    deployment_type: 'cloudformation',
+  },
   'checksops-production-cloudtrail': {
     target_environment: 'production',
     target_component: 'production-cloudtrail',
@@ -70,4 +75,8 @@ export function lookupSharedBucket(name) {
 export function lookupSharedCloudFront(distributionId) {
   const key = String(distributionId || '').trim();
   return SHARED_CLOUDFRONT[key] || null;
+}
+
+export function lookupSharedStack(name) {
+  return SHARED_STACKS[String(name || '').trim()] || null;
 }

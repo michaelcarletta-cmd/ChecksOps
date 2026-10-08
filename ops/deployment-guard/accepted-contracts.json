@@ -150,6 +150,21 @@
       "deployment_types": ["lambda-overlay", "sql-apply", "sql-executor-invoke"],
       "test": "aws/tests/api-write.test.mjs",
       "invariants": ["financial writes stay gated; no inferred production money-flag enablement"]
+    },
+    {
+      "id": "staging-db-readonly-diagnostic",
+      "title": "Staging DB read-only diagnostic",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging"],
+      "components": ["checksops-staging-db-readonly-diagnostic"],
+      "deployment_types": ["cloudformation"],
+      "test": "aws/tests/staging-db-readonly-diagnostic-deploy.test.mjs",
+      "invariants": [
+        "deployment is limited to the staging diagnostic stack and fixed function",
+        "database diagnostic stays read-only and emits no sensitive data",
+        "deployment publishes only an immutable version ARN and code fingerprint"
+      ]
     }
   ]
 }

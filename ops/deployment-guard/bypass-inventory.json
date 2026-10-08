@@ -260,6 +260,13 @@
       "shared_target": true,
       "scanner_allow_mention": true,
       "note": "Library used by guarded Gate 3D CLIs and unit tests with injected AWS. Not a direct CLI."
+    },
+    {
+      "path": "scripts/staging-db-readonly-diagnostic-deploy.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["cloudformation", "lambda-publish-version"],
+      "shared_target": true,
+      "note": "Creates only the registered new staging DB diagnostic stack; requires the Deployment Guard receipt and publishes an immutable diagnostic version."
     }
   ],
   "migration": {

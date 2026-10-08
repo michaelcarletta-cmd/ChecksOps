@@ -21,7 +21,7 @@ export const SCAN_PATTERNS = Object.freeze([
 
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', '.aws-sam', '.deployment-guard', '.cursor']);
 const SKIP_EXT = new Set(['.md', '.mdc', '.mdx', '.yml', '.yaml', '.json', '.sql', '.txt']);
-const HOOK_RE = /enforceScriptGuard|enforceSharedLambdaTarget|enforceS3Target|refuseUnguardedDeploy/;
+const HOOK_RE = /enforceScriptGuard|enforceSharedLambdaTarget|enforceSharedStackTarget|enforceS3Target|refuseUnguardedDeploy/;
 
 function walk(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
