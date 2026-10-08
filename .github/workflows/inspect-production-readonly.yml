@@ -33,9 +33,6 @@ jobs:
           EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect"
           test "$ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "Unexpected production read-only role"; exit 2; }
 
-      - name: Install locked PostgreSQL inspection dependency
-        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-
       - name: Configure pinned production read-only AWS session through GitHub OIDC
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
         with:
@@ -60,7 +57,6 @@ jobs:
         env:
           CHECKSOPS_INSPECTOR_ENVIRONMENT: production
           CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_READONLY_INSPECT_ROLE_ARN }}
-          CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL: ${{ secrets.CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL }}
         run: |
           set -euo pipefail
           node scripts/deployment-guard/production-readonly-inspect.mjs > "$RUNNER_TEMP/production-readonly-inspection.json"
@@ -86,32 +82,7 @@ jobs:
               workflow_flags: report.lambda.workflow_flags,
               merged_pr_live_evidence: report.lambda.merged_pr_live_evidence,
             },
-            database: report.database && {
-              status: report.database.status,
-              host: report.database.host,
-              missing_read_permissions: report.database.missing_read_permissions,
-              sql52_routing_account_column_grants: report.database.sql52_routing_account_column_grants,
-              sql53_save_claim_settlement_breakdown: report.database.sql53_save_claim_settlement_breakdown && {
-                signature: report.database.sql53_save_claim_settlement_breakdown.signature,
-                result_type: report.database.sql53_save_claim_settlement_breakdown.result_type,
-                owner: report.database.sql53_save_claim_settlement_breakdown.owner,
-                security_definer: report.database.sql53_save_claim_settlement_breakdown.security_definer,
-                function_settings: report.database.sql53_save_claim_settlement_breakdown.function_settings,
-                checksops_can_execute: report.database.sql53_save_claim_settlement_breakdown.checksops_can_execute,
-                authenticated_can_execute: report.database.sql53_save_claim_settlement_breakdown.authenticated_can_execute,
-                anon_can_execute: report.database.sql53_save_claim_settlement_breakdown.anon_can_execute,
-                public_can_execute: report.database.sql53_save_claim_settlement_breakdown.public_can_execute,
-                definition_sha256: report.database.sql53_save_claim_settlement_breakdown.definition_sha256,
-              },
-              sync_homeowner_ledger_from_check: report.database.sync_homeowner_ledger_from_check && {
-                signature: report.database.sync_homeowner_ledger_from_check.signature,
-                owner: report.database.sync_homeowner_ledger_from_check.owner,
-                security_definer: report.database.sync_homeowner_ledger_from_check.security_definer,
-                definition_sha256: report.database.sync_homeowner_ledger_from_check.definition_sha256,
-                endorsement_event_suppression_observed: report.database.sync_homeowner_ledger_from_check.endorsement_event_suppression_observed,
-                triggers: report.database.sync_homeowner_ledger_from_check.triggers,
-              },
-            },
+            database: { status: report.database.status, reason: report.database.reason },
             missing_read_permissions: report.missing_read_permissions,
             read_errors: report.read_errors,
           };
