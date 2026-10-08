@@ -334,3 +334,7 @@ After an approved copy and reconciliation:
 2. reconcile AWS results against Supabase
 
 Only after read parity is proven do we begin moving writes or provider webhooks.
+
+## Staging admin UI for `/db-readonly-validate` details (source-only)
+
+`/admin/db-validator` (admin + `VITE_AUTH_PROVIDER=cognito` + host `staging.checksops.com` only) issues one body-less `GET /db-readonly-validate` with the Cognito `Authorization` header from the existing session and renders only allowlisted issue kind/severity/SQLSTATE/table/probe values. `aws/template.yaml` `ChecksOpsApi` CORS already allows `GET` and the `authorization` header from any origin, so no gateway change is needed; if the live gateway differs from the template, the smallest fix is to add `GET` and `authorization` to its CORS config (not applied here). Prerequisites before use: approved staging SPA build/deploy via the deployment guard and an admin Cognito login. Tests: `node --experimental-strip-types --test tests/db-validator-diagnostics.test.ts`.
