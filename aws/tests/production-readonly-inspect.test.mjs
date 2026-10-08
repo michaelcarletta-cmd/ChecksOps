@@ -656,7 +656,7 @@ test('reports the exact metadata-only permission missing for a live secret refer
   assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('secret value must not leak'), false);
 });
 
-test('fails closed and reports the unscoped RDS metadata action without adding it to the workflow policy', async () => {
+test('fails closed and reports the unscoped RDS metadata action when metadata is denied', async () => {
   const report = await inspectProduction({
     runAws: mockAws([], {
       'lambda:GetFunctionConfiguration': () => ({
