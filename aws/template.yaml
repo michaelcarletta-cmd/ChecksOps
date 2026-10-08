@@ -330,6 +330,38 @@ Resources:
             Path: /{proxy+}
             Method: ANY
 
+  StagingDbReadonlyDiagnosticFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - SecretsManagerVpcEndpoint
+      - RdsFromLambdaIngress
+      - LambdaToSecretsEndpointEgress
+      - SecretsEndpointFromLambdaIngress
+    Properties:
+      FunctionName: !Sub checksops-${Environment}-db-readonly-diagnostic
+      CodeUri: functions/api/
+      Handler: staging-db-readonly-diagnostic.handler
+      Description: Fixed staging-only read-only core database diagnostic; no API routes
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApiLambdaSecurityGroup
+        SubnetIds: !Ref SubnetIds
+      Environment:
+        Variables:
+          CHECKSOPS_ENV: !Ref Environment
+          DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
+          DATABASE_NAME: checksops
+          PROVIDER_SECRETS_ARN: ''
+          CROSS_APP_BRIDGE_SECRET: ''
+          AWS_MOOV_WEBHOOK_SECRET: ''
+          AWS_CHECKALT_WEBHOOK_SECRET: ''
+          AWS_PLAID_WEBHOOK_SECRET: ''
+          CHECKSOPS_SANDBOX_SECRET_EPOCH: ''
+      Policies:
+        - VPCAccessPolicy: {}
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref DatabaseSecretArn
+
   PrivateFilesBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
