@@ -13,8 +13,14 @@ import {
 } from '../../scripts/staging-db-readonly-diagnostic-independent-approval.mjs';
 import {
   ARTIFACT_OBJECT_ARN,
+  ACCOUNT_ROOT_ARN,
   AWS_CONDITION_KEYS,
   CONSUMED_OBJECT_ARN,
+  EXAMPLE_OWNER_IAM_USER_ARN,
+  GITHUB_OIDC_PROVIDER_ARN,
+  OWNER_ASSUME_ALLOW,
+  OWNER_ASSUME_DENY,
+  OWNER_PRINCIPAL_REQUIRED_INPUT,
   OWNER_SIGNER_ROLE_ARN,
   PROPOSED_KMS_ALIAS,
   SOURCE_ONLY_APPLY_REFUSED,
@@ -22,8 +28,10 @@ import {
   WRITE_ONCE_NOT_DENIED,
   evaluateLedgerPolicies,
   evaluateOwnerApproverTrust,
+  evaluateOwnerAssumeRequest,
   evaluatePackagingIsolation,
   evaluateWriteOnceRequest,
+  materializeOwnerApproverTrust,
   githubOidcContract,
   guardedApplyPlan,
   loadLedgerPolicies,
@@ -107,9 +115,57 @@ test('owner approver role is proposed only and cannot be GitHub OIDC', () => {
   assert.equal(trust.ok, true);
   assert.equal(trust.role_exists, false);
   assert.equal(trust.operational, false);
+  assert.equal(trust.fail_closed, true);
+  assert.equal(trust.owner_principal_specified, false);
+  assert.equal(trust.required_input, OWNER_PRINCIPAL_REQUIRED_INPUT);
   assert.equal(trust.proposed_role_arn, OWNER_SIGNER_ROLE_ARN);
   assert.equal(OWNER_EVIDENCE.independent_approval_signer_role, 'not_evidenced_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.independent_approval_owner_principal, 'unspecified_fail_closed_2026-10-09');
+  assert.equal(policies.ownerRequiredInput.owner_iam_user_arn, null);
+  assert.doesNotMatch(JSON.stringify(policies.ownerTrust), /arn:aws:iam::806168576068:root/);
   assert.doesNotMatch(JSON.stringify(policies.ownerTrust.Statement[0]), /token\.actions\.githubusercontent\.com:sub/);
+  assert.equal(
+    evaluateOwnerAssumeRequest({
+      policy: policies.ownerTrust,
+      principalArn: EXAMPLE_OWNER_IAM_USER_ARN,
+      mfaPresent: true,
+    }),
+    OWNER_ASSUME_DENY,
+  );
+});
+
+test('named owner IAM user with MFA can assume; root, OIDC, deploy, CFN, and other users cannot', () => {
+  assert.throws(() => materializeOwnerApproverTrust({}), /ledger_policy_invalid/);
+  assert.throws(() => materializeOwnerApproverTrust({ ownerIamUserArn: ACCOUNT_ROOT_ARN }), /ledger_policy_invalid/);
+  assert.throws(() => materializeOwnerApproverTrust({
+    ownerIamUserArn: CREATE_APPROVAL_TARGET.deployRoleArn,
+  }), /ledger_policy_invalid/);
+  const { policy } = materializeOwnerApproverTrust({ ownerIamUserArn: EXAMPLE_OWNER_IAM_USER_ARN });
+  const assume = (principalArn, extra = {}) => evaluateOwnerAssumeRequest({
+    policy,
+    principalArn,
+    ...extra,
+  });
+  assert.equal(assume(EXAMPLE_OWNER_IAM_USER_ARN, { mfaPresent: true }), OWNER_ASSUME_ALLOW);
+  assert.equal(assume(EXAMPLE_OWNER_IAM_USER_ARN, { mfaPresent: false }), OWNER_ASSUME_DENY);
+  assert.equal(assume(`arn:aws:iam::${CREATE_APPROVAL_TARGET.account}:user/unrelated-operator`, {
+    mfaPresent: true,
+  }), OWNER_ASSUME_DENY);
+  assert.equal(assume(ACCOUNT_ROOT_ARN, { mfaPresent: true }), OWNER_ASSUME_DENY);
+  assert.equal(assume(CREATE_APPROVAL_TARGET.deployRoleArn, { mfaPresent: true }), OWNER_ASSUME_DENY);
+  assert.equal(assume(CREATE_APPROVAL_TARGET.executionRoleArn, { mfaPresent: true }), OWNER_ASSUME_DENY);
+  assert.equal(assume(
+    `arn:aws:sts::${CREATE_APPROVAL_TARGET.account}:assumed-role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy/github`,
+    { mfaPresent: true },
+  ), OWNER_ASSUME_DENY);
+  assert.equal(assume(GITHUB_OIDC_PROVIDER_ARN, {
+    mfaPresent: true,
+    federatedIssuer: 'token.actions.githubusercontent.com',
+  }), OWNER_ASSUME_DENY);
+  assert.equal(assume(EXAMPLE_OWNER_IAM_USER_ARN, {
+    mfaPresent: true,
+    federatedIssuer: 'token.actions.githubusercontent.com',
+  }), OWNER_ASSUME_DENY);
 });
 
 test('KMS policy is owner-only Sign and denies deploy and CloudFormation roles', () => {
@@ -180,6 +236,7 @@ test('read-only preflight records Oct 9 evidence and does not authorize apply', 
   assert.equal(OWNER_EVIDENCE.artifact_bucket_policy, 'none_2026-10-09');
   assert.equal(OWNER_EVIDENCE.independent_approval_kms_key, 'unknown');
   assert.deepEqual(result.remaining_blockers, remainingBlockers());
+  assert.ok(result.remaining_blockers.includes('owner_iam_user_arn_unspecified'));
   assert.ok(result.remaining_blockers.includes('owner_approver_role_not_evidenced'));
   assert.ok(result.blast_radius.out_of_scope.includes('SQL'));
   assert.match(result.rollback.owner_recovery, /PutBucketPolicy/);
@@ -228,10 +285,24 @@ test('widening write-once resources or allowing deploy Sign fails closed', () =>
   noted.deployIam.Note = 'not an IAM field';
   assert.throws(() => evaluateLedgerPolicies(noted), /ledger_policy_invalid/);
   const oidcTrust = structuredClone(policies);
-  oidcTrust.ownerTrust.Statement[0].Principal = {
-    Federated: 'arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com',
-  };
+  oidcTrust.ownerTrust.Statement.push({
+    Sid: 'NamedOwnerIamUserMfaAssumeOnly',
+    Effect: 'Allow',
+    Principal: {
+      Federated: 'arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com',
+    },
+    Action: 'sts:AssumeRole',
+  });
   assert.throws(() => evaluateLedgerPolicies(oidcTrust), /ledger_policy_invalid/);
+  const rootTrust = structuredClone(policies);
+  rootTrust.ownerTrust.Statement.push({
+    Sid: 'NamedOwnerIamUserMfaAssumeOnly',
+    Effect: 'Allow',
+    Principal: { AWS: ACCOUNT_ROOT_ARN },
+    Action: 'sts:AssumeRole',
+    Condition: { Bool: { 'aws:MultiFactorAuthPresent': 'true' } },
+  });
+  assert.throws(() => evaluateLedgerPolicies(rootTrust), /ledger_policy_invalid/);
 });
 
 test('CLI preflight is source-only and never invokes aws', () => {

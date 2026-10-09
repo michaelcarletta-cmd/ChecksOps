@@ -116,7 +116,7 @@ Oct 9 inventory confirmed the GitHub deploy role and CloudFormation execution ro
 Separately administered creation (outside this PR):
 
 - Name: `ChecksOpsOwnerDiagnosticCreateApprover` in account `806168576068`.
-- Trust: `aws/staging-db-readonly-diagnostic/policies/owner-approver-role-trust.json`. MFA-present IAM **user** assume via account root; Deny GitHub OIDC and the diagnostic deploy/execution roles. Do not use `token.actions.githubusercontent.com` as a trust principal. Owner may later replace the root principal with a named IAM user ARN; keep MFA.
+- Trust: `aws/staging-db-readonly-diagnostic/policies/owner-approver-role-trust.json` is **fail-closed**. There is no Allow principal until `CHECKSOPS_STAGING_DB_DIAGNOSTIC_OWNER_IAM_USER_ARN` names one existing, independently controlled IAM **user** ARN (`arn:aws:iam::806168576068:user/...`). Do not use account-root delegation, `PrincipalType=User` over the account, the deploy role, the CloudFormation role, GitHub OIDC, or any other IAM user. Materialize with `materializeOwnerApproverTrust` only after that input is known; keep MFA. See `owner-approver-required-input.json`.
 - Permissions: none beyond assuming into `kms:Sign` / `kms:GetPublicKey` / `kms:DescribeKey` on the approval key (from the key policy). No S3 delete, no `s3:PutBucketPolicy`, no CloudFormation, no staging API.
 - Not assumable by the disabled GitHub job. Creating this role does not enable the workflow.
 
@@ -161,7 +161,7 @@ GitHub OIDC: the disabled job still has `permissions: contents: read` and **no**
 1. Do not merge, deploy, or enable the diagnostic workflow.
 2. Confirm `if: false` and `contents: read` only (no `id-token: write`).
 3. Confirm package prefix is SHA/run, not `create-approvals/consumed/`.
-4. Separately create `ChecksOpsOwnerDiagnosticCreateApprover` with the proposed MFA user trust. It is not evidenced live.
+4. Separately create `ChecksOpsOwnerDiagnosticCreateApprover` only after naming one owner IAM user ARN. Committed trust is fail-closed. It is not evidenced live.
 5. Create the P-256 SIGN_VERIFY key with the source key policy; only that owner role may `kms:Sign`.
 6. Publish the SPKI public key and key ARN as staging secrets jobs cannot change.
 7. Put the consumed-prefix bucket policy. Do not enable versioning here.

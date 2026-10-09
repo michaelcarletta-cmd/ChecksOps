@@ -16,6 +16,15 @@ export const PROPOSED_KMS_ALIAS = 'alias/checksops-staging-db-readonly-diagnosti
 export const IAM_IDENTITY_POLICY_KEYS = Object.freeze(['Version', 'Id', 'Statement']);
 export const WRITE_ONCE_NOT_DENIED = 'NotDeniedByThisPolicy';
 export const WRITE_ONCE_DENY = 'Deny';
+export const OWNER_ASSUME_ALLOW = 'Allow';
+export const OWNER_ASSUME_DENY = 'Deny';
+export const OWNER_PRINCIPAL_REQUIRED_INPUT = 'CHECKSOPS_STAGING_DB_DIAGNOSTIC_OWNER_IAM_USER_ARN';
+export const EXAMPLE_OWNER_IAM_USER_ARN = `arn:aws:iam::${CREATE_APPROVAL_TARGET.account}:user/example-owner-not-live`;
+export const ACCOUNT_ROOT_ARN = `arn:aws:iam::${CREATE_APPROVAL_TARGET.account}:root`;
+export const GITHUB_OIDC_PROVIDER_ARN = `arn:aws:iam::${CREATE_APPROVAL_TARGET.account}:oidc-provider/token.actions.githubusercontent.com`;
+export const OWNER_IAM_USER_ARN_RE = new RegExp(
+  `^arn:aws:iam::${CREATE_APPROVAL_TARGET.account}:user/[A-Za-z0-9+=,.@_-]{1,64}$`,
+);
 
 // Real AWS IAM condition keys (S3 conditional writes, Nov 2024; KMS Sign).
 export const AWS_CONDITION_KEYS = Object.freeze({
@@ -61,6 +70,7 @@ export function loadLedgerPolicies({ dir = POLICIES_DIR } = {}) {
     bucketPolicy: JSON.parse(fs.readFileSync(path.join(dir, 's3-consumed-approvals-bucket-policy.json'), 'utf8')),
     deployIam: JSON.parse(fs.readFileSync(path.join(dir, 'deploy-role-consumed-ledger-iam.json'), 'utf8')),
     ownerTrust: JSON.parse(fs.readFileSync(path.join(dir, 'owner-approver-role-trust.json'), 'utf8')),
+    ownerRequiredInput: JSON.parse(fs.readFileSync(path.join(dir, 'owner-approver-required-input.json'), 'utf8')),
   };
 }
 
@@ -120,18 +130,22 @@ export function evaluateWriteOnceRequest({
   return WRITE_ONCE_NOT_DENIED;
 }
 
-export function evaluateOwnerApproverTrust(policy) {
-  const rows = statements(policy);
-  const allow = rows.find((row) => row.Sid === 'OwnerIamUserMfaAssumeOnly');
-  const deny = rows.find((row) => row.Sid === 'DenyGitHubOidcAndDiagnosticRoles');
-  const denyArns = JSON.stringify(deny?.Condition?.StringLike?.['aws:PrincipalArn'] || []);
-  if (allow?.Effect !== 'Allow'
-      || allow.Action !== 'sts:AssumeRole'
-      || allow.Principal?.AWS !== `arn:aws:iam::${CREATE_APPROVAL_TARGET.account}:root`
-      || allow.Condition?.Bool?.['aws:MultiFactorAuthPresent'] !== 'true'
-      || allow.Condition?.StringEquals?.['aws:PrincipalType'] !== 'User') {
-    fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_allow' });
+export function namedOwnerIamUserArn(arn) {
+  const value = String(arn || '');
+  if (!OWNER_IAM_USER_ARN_RE.test(value)) return null;
+  if (value === ACCOUNT_ROOT_ARN
+      || value.includes(':role/')
+      || value.includes(':assumed-role/')
+      || value.includes('oidc-provider')
+      || value.includes('*')) {
+    return null;
   }
+  return value;
+}
+
+function requireOwnerTrustDeniesDeployCfnOidc(policy) {
+  const deny = statements(policy).find((row) => row.Sid === 'DenyGitHubOidcAndDiagnosticRoles');
+  const denyArns = JSON.stringify(deny?.Condition?.StringLike?.['aws:PrincipalArn'] || []);
   if (deny?.Effect !== 'Deny'
       || deny.Action !== 'sts:AssumeRole'
       || !denyArns.includes(CREATE_APPROVAL_TARGET.deployRoleArn)
@@ -139,20 +153,154 @@ export function evaluateOwnerApproverTrust(policy) {
       || !denyArns.includes('token.actions.githubusercontent.com')) {
     fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_deny' });
   }
-  if (jsonIncludes(policy, 'token.actions.githubusercontent.com:sub')
-      || jsonIncludes(allow.Principal, CREATE_APPROVAL_TARGET.deployRoleArn)) {
+  return deny;
+}
+
+function rejectBroadOwnerTrustPrincipals(policy) {
+  for (const row of statements(policy)) {
+    const principal = JSON.stringify(row.Principal || {});
+    if (row.Effect !== 'Allow') continue;
+    if (principal.includes(':root')
+        || principal.includes('*')
+        || principal.includes('"Federated"')
+        || principal.includes('token.actions.githubusercontent.com')
+        || principal.includes(CREATE_APPROVAL_TARGET.deployRoleArn)
+        || principal.includes(CREATE_APPROVAL_TARGET.executionRoleArn)
+        || principal.includes(':role/')) {
+      fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_broad_or_oidc' });
+    }
+  }
+  if (jsonIncludes(policy, 'token.actions.githubusercontent.com:sub')) {
     fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_oidc' });
+  }
+}
+
+export function evaluateOwnerApproverTrust(policy) {
+  const rows = statements(policy);
+  const failClosed = rows.find((row) => row.Sid === 'FailClosedUntilNamedOwnerIamUserArn');
+  const allow = rows.find((row) => row.Sid === 'NamedOwnerIamUserMfaAssumeOnly');
+  requireOwnerTrustDeniesDeployCfnOidc(policy);
+  rejectBroadOwnerTrustPrincipals(policy);
+
+  const specified = namedOwnerIamUserArn(allow?.Principal?.AWS);
+  if (!specified) {
+    if (failClosed?.Effect !== 'Deny'
+        || failClosed.Principal !== '*'
+        || failClosed.Action !== 'sts:AssumeRole'
+        || failClosed.Condition) {
+      fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_not_fail_closed' });
+    }
+    if (rows.some((row) => row.Effect === 'Allow')) {
+      fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_allow_without_named_user' });
+    }
+    return {
+      ok: true,
+      role_exists: false,
+      operational: false,
+      fail_closed: true,
+      owner_principal_specified: false,
+      required_input: OWNER_PRINCIPAL_REQUIRED_INPUT,
+      proposed_role_arn: OWNER_SIGNER_ROLE_ARN,
+    };
+  }
+
+  if (failClosed) fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_fail_closed_with_named_allow' });
+  if (allow.Effect !== 'Allow'
+      || allow.Action !== 'sts:AssumeRole'
+      || allow.Condition?.Bool?.['aws:MultiFactorAuthPresent'] !== 'true') {
+    fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_named_allow' });
   }
   return {
     ok: true,
     role_exists: false,
     operational: false,
+    fail_closed: false,
+    owner_principal_specified: true,
+    owner_iam_user_arn: specified,
+    required_input: OWNER_PRINCIPAL_REQUIRED_INPUT,
     proposed_role_arn: OWNER_SIGNER_ROLE_ARN,
   };
 }
 
+export function materializeOwnerApproverTrust({
+  ownerIamUserArn,
+  policy,
+} = {}) {
+  const named = namedOwnerIamUserArn(ownerIamUserArn);
+  if (!named) fail(LEDGER_POLICY_INVALID, { reason: 'owner_iam_user_arn_required' });
+  const base = policy ?? loadLedgerPolicies().ownerTrust;
+  const closed = evaluateOwnerApproverTrust(base);
+  if (!closed.fail_closed) fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_base_not_fail_closed' });
+  const deny = requireOwnerTrustDeniesDeployCfnOidc(base);
+  const materialized = {
+    Version: '2012-10-17',
+    Id: base.Id,
+    Statement: [
+      {
+        Sid: 'NamedOwnerIamUserMfaAssumeOnly',
+        Effect: 'Allow',
+        Principal: { AWS: named },
+        Action: 'sts:AssumeRole',
+        Condition: {
+          Bool: { 'aws:MultiFactorAuthPresent': 'true' },
+        },
+      },
+      deny,
+      {
+        Sid: 'DenyNotNamedOwnerPrincipal',
+        Effect: 'Deny',
+        Principal: '*',
+        Action: 'sts:AssumeRole',
+        Condition: {
+          StringNotEqualsIfExists: { 'aws:PrincipalArn': named },
+        },
+      },
+      {
+        Sid: 'DenyAssumeWithoutMfa',
+        Effect: 'Deny',
+        Principal: '*',
+        Action: 'sts:AssumeRole',
+        Condition: {
+          BoolIfExists: { 'aws:MultiFactorAuthPresent': 'false' },
+        },
+      },
+    ],
+  };
+  return {
+    policy: materialized,
+    evaluation: evaluateOwnerApproverTrust(materialized),
+  };
+}
+
+export function evaluateOwnerAssumeRequest({
+  policy,
+  principalArn,
+  mfaPresent = false,
+  federatedIssuer,
+} = {}) {
+  const trust = evaluateOwnerApproverTrust(policy);
+  if (trust.fail_closed || !trust.owner_principal_specified) return OWNER_ASSUME_DENY;
+  if (String(federatedIssuer || '').includes('token.actions.githubusercontent.com')) {
+    return OWNER_ASSUME_DENY;
+  }
+  const principal = String(principalArn || '');
+  if (!principal
+      || principal === ACCOUNT_ROOT_ARN
+      || principal === GITHUB_OIDC_PROVIDER_ARN
+      || principal === CREATE_APPROVAL_TARGET.deployRoleArn
+      || principal === CREATE_APPROVAL_TARGET.executionRoleArn
+      || principal.includes('ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy')
+      || principal.includes('ChecksOpsStagingDbReadonlyDiagnosticCloudFormationExecution')) {
+    return OWNER_ASSUME_DENY;
+  }
+  if (principal !== trust.owner_iam_user_arn) return OWNER_ASSUME_DENY;
+  if (mfaPresent !== true) return OWNER_ASSUME_DENY;
+  return OWNER_ASSUME_ALLOW;
+}
+
 export function remainingBlockers() {
   return Object.freeze([
+    'owner_iam_user_arn_unspecified',
     'owner_approver_role_not_evidenced',
     'kms_create_approval_key_not_evidenced',
     'consumed_prefix_bucket_policy_absent',
@@ -267,6 +415,12 @@ export function evaluateLedgerPolicies(policies = loadLedgerPolicies()) {
   requireConsumedWriteOnce(policies.bucketPolicy, { allowPrincipalStar: true });
   requireConsumedWriteOnce(policies.deployIam);
   const ownerTrust = evaluateOwnerApproverTrust(policies.ownerTrust);
+  if (policies.ownerRequiredInput
+      && (policies.ownerRequiredInput.required_input !== OWNER_PRINCIPAL_REQUIRED_INPUT
+        || policies.ownerRequiredInput.owner_iam_user_arn !== null
+        || policies.ownerRequiredInput.status !== 'unspecified_fail_closed')) {
+    fail(LEDGER_POLICY_INVALID, { reason: 'owner_required_input' });
+  }
   return {
     ok: true,
     consumedObjectArn: CONSUMED_OBJECT_ARN,
@@ -274,6 +428,7 @@ export function evaluateLedgerPolicies(policies = loadLedgerPolicies()) {
     ownerSignerRoleArn: OWNER_SIGNER_ROLE_ARN,
     proposedKmsAlias: PROPOSED_KMS_ALIAS,
     ownerTrust,
+    ownerRequiredInput: OWNER_PRINCIPAL_REQUIRED_INPUT,
     iam_put_object_covers: [
       'PutObject',
       'CopyObject',
@@ -382,7 +537,7 @@ export function phoneFriendlyChecklist() {
     '1. Do not merge, deploy, or enable the diagnostic workflow.',
     '2. Confirm jobs.deploy.if is false and permissions have contents:read only (no id-token:write).',
     '3. Confirm artifact uploads use SHA/run prefix, not create-approvals/consumed/.',
-    '4. Owner: separately create ChecksOpsOwnerDiagnosticCreateApprover (not evidenced live); MFA IAM user trust; no GitHub OIDC.',
+    '4. Owner: separately create ChecksOpsOwnerDiagnosticCreateApprover (not evidenced live). Trust stays fail-closed until CHECKSOPS_STAGING_DB_DIAGNOSTIC_OWNER_IAM_USER_ARN names one IAM user. No account-root, deploy, CFN, OIDC, or unrelated users.',
     '5. Owner: create ECC_NIST_P256 SIGN_VERIFY key with the source key policy; only that owner role kms:Sign.',
     '6. Owner: publish SPKI public key and key ARN as staging env secrets jobs cannot change.',
     '7. Owner: put the consumed-prefix bucket policy; do not version the bucket in this change.',

@@ -46,6 +46,7 @@ export const OWNER_EVIDENCE = Object.freeze({
   independent_approval_kms_alias: 'none_found_does_not_prove_key_absence_2026-10-09',
   independent_approval_signer: 'unknown',
   independent_approval_signer_role: 'not_evidenced_2026-10-09',
+  independent_approval_owner_principal: 'unspecified_fail_closed_2026-10-09',
   independent_approval_public_key: 'unknown',
   independent_approval_consume_ledger: 'unknown',
   independent_approval_consume_ledger_delete_denied: 'iam_omits_delete_no_bucket_deny_2026-10-09',
