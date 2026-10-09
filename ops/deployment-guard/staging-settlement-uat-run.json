@@ -1,0 +1,217 @@
+{
+  "id": "staging-settlement-uat-run",
+  "authorization": "staging-settlement-uat-execution",
+  "target_environment": "staging",
+  "production_changes": false,
+  "sql_migrations": false,
+  "lambda_or_spa_deployments": false,
+  "release_lock_changes": false,
+  "cognito_or_permission_changes": false,
+  "provider_invocations": false,
+  "c1c_cross_tenant_test_executed": false,
+  "write_authorized": true,
+  "writes_attempted": true,
+  "writes_committed": true,
+  "verdict": "PASS",
+  "stopped": null,
+  "reserved_claim_number": "AWS SETTLEMENT UAT",
+  "synthetic_claim_id": "38eb9c7d-fbd5-4d39-9937-40fe995c8b9e",
+  "settlement_id": "685fe136-0376-490d-8155-11d6c2fe4844",
+  "check_id": "fd3ad3c0-a764-4f78-9160-ac1eb1699d17",
+  "executed_at": "2026-10-09T20:09:00.000Z",
+  "post_run_reconfirm_at": "2026-10-09T20:15:35.514Z",
+  "actor": {
+    "email": "mcarletta@freedomadj.com",
+    "application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "tenant_name": "Freedom",
+    "tenant_role": "admin",
+    "user_roles": ["admin"],
+    "is_master_owner": false,
+    "auth_method": "EMAIL_OTP"
+  },
+  "forbidden_claims_unused": [
+    "695064-GQ",
+    "any customer or homeowner claim"
+  ],
+  "preflight": {
+    "identity_me": {
+      "httpStatus": 200,
+      "applicationUserId": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+      "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_role": "admin",
+      "roles": ["admin"],
+      "isMasterOwner": false,
+      "environment": "staging"
+    },
+    "workflow_status": {
+      "httpStatus": 200,
+      "environment": "staging",
+      "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": true,
+      "AWS_PROVIDER_EXECUTION_ENABLED": false,
+      "AWS_CHECKALT_ENABLED": false,
+      "AWS_MOOV_ENABLED": false,
+      "productionWebhooksRedirected": false
+    },
+    "sql53": {
+      "identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+      "exists": true,
+      "definitionSha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52"
+    },
+    "aws_can_write_claim": {
+      "definitionSha256": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf"
+    },
+    "live_lambda": {
+      "function_name": "checksops-staging-api",
+      "CodeSha256": "qo8at+HVvSWazJPUF/A9owFtOey8MNhzISLOMC+bMdw=",
+      "RevisionId": "3e8c95ca-9e28-46c8-b2bf-b43b633145d6",
+      "claim_settlement_rpc_present": true,
+      "claim_settlement_rpc_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64"
+    }
+  },
+  "tests": [
+    { "name": "pre-write /identity/me", "ok": true, "detail": "user=7dbb3009-f059-4767-b5dc-1c5c72379330 master=false env=staging" },
+    { "name": "providers disabled", "ok": true, "detail": "providers=false" },
+    { "name": "inspect AWS SETTLEMENT UAT claims", "ok": true, "detail": "status=200 rows=0" },
+    { "name": "create unlinked synthetic check", "ok": true, "detail": "status=200 id=fd3ad3c0-a764-4f78-9160-ac1eb1699d17 claim_id=null ocr=false provider=false" },
+    { "name": "create_new AWS SETTLEMENT UAT claim", "ok": true, "detail": "status=200 claim_id=38eb9c7d-fbd5-4d39-9937-40fe995c8b9e code=created" },
+    { "name": "pre-settlement ledger is zero", "ok": true, "detail": "hle=0" },
+    { "name": "settlement insert", "ok": true, "detail": "status=200 id=685fe136-0376-490d-8155-11d6c2fe4844" },
+    { "name": "insert count is 1", "ok": true, "detail": "settlements=1" },
+    { "name": "insert created no ledger/payments", "ok": true, "detail": "hle=0 payments=0" },
+    { "name": "all 17 coverage values persist", "ok": true, "detail": "rcv=15000 os=400 pwi=300" },
+    { "name": "settlement update", "ok": true, "detail": "status=200 id=685fe136-0376-490d-8155-11d6c2fe4844" },
+    { "name": "update is idempotent and keeps other structures", "ok": true, "detail": "count=1 rcv=17500 os=400" },
+    { "name": "update created no ledger/payments", "ok": true, "detail": "hle=0" },
+    { "name": "invalid invalid_uuid", "ok": true, "detail": "status=400 error=invalid_uuid" },
+    { "name": "invalid pwi_deductible", "ok": true, "detail": "status=400 error=invalid_settlement_values" },
+    { "name": "invalid negative RCV", "ok": true, "detail": "status=400 error=invalid_settlement_values" },
+    { "name": "invalid tests did not add rows", "ok": true, "detail": "settlements=1 hle=0" },
+    { "name": "synthetic check has no financial blockers", "ok": true, "detail": "blockers=0,0,0,0" },
+    { "name": "delete synthetic check", "ok": true, "detail": "status=200" }
+  ],
+  "passed": 19,
+  "failed": 0,
+  "mutations": [
+    { "table": "check_intake_items", "op": "insert", "id": "fd3ad3c0-a764-4f78-9160-ac1eb1699d17" },
+    { "table": "claims", "op": "insert", "id": "38eb9c7d-fbd5-4d39-9937-40fe995c8b9e" },
+    { "table": "claim_settlements", "op": "insert", "id": "685fe136-0376-490d-8155-11d6c2fe4844" },
+    { "table": "check_intake_items", "op": "delete", "id": "fd3ad3c0-a764-4f78-9160-ac1eb1699d17" }
+  ],
+  "counts": {
+    "before": {
+      "claims": 1,
+      "claim_settlements": 0,
+      "homeowner_ledger_events": 0,
+      "claim_payments": 0,
+      "check_intake_items": 1,
+      "deposit_items": 0,
+      "checkalt_deposits": 0,
+      "disbursement_batches": 0
+    },
+    "after_insert": {
+      "claims": 1,
+      "claim_settlements": 1,
+      "homeowner_ledger_events": 0,
+      "claim_payments": 0,
+      "check_intake_items": 1,
+      "deposit_items": 0,
+      "checkalt_deposits": 0,
+      "disbursement_batches": 0
+    },
+    "after_update": {
+      "claims": 1,
+      "claim_settlements": 1,
+      "homeowner_ledger_events": 0,
+      "claim_payments": 0,
+      "check_intake_items": 1,
+      "deposit_items": 0,
+      "checkalt_deposits": 0,
+      "disbursement_batches": 0
+    },
+    "after_invalid": {
+      "claims": 1,
+      "claim_settlements": 1,
+      "homeowner_ledger_events": 0,
+      "claim_payments": 0,
+      "check_intake_items": 1,
+      "deposit_items": 0,
+      "checkalt_deposits": 0,
+      "disbursement_batches": 0
+    },
+    "after_cleanup": {
+      "claims": 1,
+      "claim_settlements": 1,
+      "homeowner_ledger_events": 0,
+      "claim_payments": 0,
+      "check_intake_items": 0,
+      "deposit_items": 0,
+      "checkalt_deposits": 0,
+      "disbursement_batches": 0
+    }
+  },
+  "persisted_settlement": {
+    "id": "685fe136-0376-490d-8155-11d6c2fe4844",
+    "claim_id": "38eb9c7d-fbd5-4d39-9937-40fe995c8b9e",
+    "after_insert": {
+      "replacement_cost_value": 15000,
+      "recoverable_depreciation": 500,
+      "non_recoverable_depreciation": 1000,
+      "deductible": 1500,
+      "other_structures_rcv": 400,
+      "other_structures_recoverable_depreciation": 10,
+      "other_structures_non_recoverable_depreciation": 20,
+      "other_structures_deductible": 30,
+      "pwi_rcv": 300,
+      "pwi_recoverable_depreciation": 10,
+      "pwi_non_recoverable_depreciation": 20,
+      "personal_property_rcv": 200,
+      "personal_property_recoverable_depreciation": 10,
+      "personal_property_non_recoverable_depreciation": 20,
+      "ale_rcv": 100,
+      "ale_recoverable_depreciation": 5,
+      "ale_non_recoverable_depreciation": 10
+    },
+    "after_update": {
+      "replacement_cost_value": 17500,
+      "other_structures_rcv": 400
+    }
+  },
+  "financial_operations_disabled": true,
+  "unexpected_ledger_or_financial_activity": false,
+  "cleanup": {
+    "synthetic_check_deleted": true,
+    "claim_retained": true,
+    "settlement_retained": true,
+    "claim_number": "AWS SETTLEMENT UAT",
+    "org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "policyholder_name": null,
+    "status": "tracking"
+  },
+  "post_run_reconfirm": {
+    "identity_match": true,
+    "environment": "staging",
+    "providers_disabled": true,
+    "labeled_claim_count": 1,
+    "settlement_count": 1,
+    "same_settlement_id": true,
+    "replacement_cost_value": 17500,
+    "other_structures_rcv": 400,
+    "pwi_rcv": 300,
+    "homeowner_ledger_events": 0,
+    "claim_payments": 0,
+    "synthetic_check_count": 0
+  },
+  "out_of_scope": [
+    "C1C cross-tenant deny",
+    "production endpoints",
+    "SQL migrations",
+    "Lambda or SPA overlay",
+    "Cognito or permission changes",
+    "Release Locks",
+    "Moov / CheckAlt / provider enablement"
+  ],
+  "issues_requiring_correction": [],
+  "production_ready": false,
+  "notes": "Authorized Freedom-only synthetic staging UAT completed. Claim and settlement retained for review. Synthetic check deleted after financial-blocker check. No customer claims, including 695064-GQ, were used. Financial provider execution remained disabled. Production was not started."
+}
