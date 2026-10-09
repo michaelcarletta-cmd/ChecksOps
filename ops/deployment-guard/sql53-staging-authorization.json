@@ -1,0 +1,39 @@
+{
+  "id": "sql53-staging-authorization",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "owned_components": [
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preserved_function_identities": [
+    "public.sync_homeowner_ledger_from_check()",
+    "public.aws_can_write_claim(uuid)",
+    "public.hle_on_check_intake_insert()"
+  ],
+  "post_apply_verification": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_name": "Staging DB read-only diagnostic",
+    "ref": "main",
+    "expected_inspect": {
+      "identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+      "exists": true,
+      "definitionSha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52"
+    }
+  },
+  "notes": "Evaluate-only pin for the missing staging settlement RPC. Independent apply authorization and a short-lived sql-apply receipt are still required. This package does not execute SQL, invoke the VPC executor, apply 20261007193200, apply the one-writer migration, or modify SQL 44."
+}
