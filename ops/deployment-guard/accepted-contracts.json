@@ -163,7 +163,8 @@
       "invariants": [
         "deployment is limited to the staging diagnostic stack and fixed function",
         "database diagnostic stays read-only and emits no sensitive data",
-        "deployment publishes only an immutable version ARN and code fingerprint"
+        "deployment publishes only an immutable version ARN and code fingerprint",
+        "create-only deploy stays disabled until independently administered AWS KMS approval is evidenced"
       ]
     }
   ]

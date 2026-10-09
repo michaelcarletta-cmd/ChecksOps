@@ -266,7 +266,7 @@
       "classification": "GUARDED",
       "capabilities": ["cloudformation", "lambda-publish-version"],
       "shared_target": true,
-      "note": "Creates only the registered new staging DB diagnostic stack; requires the Deployment Guard receipt and publishes an immutable diagnostic version."
+      "note": "Creates only the registered new staging DB diagnostic stack; requires independently administered AWS KMS create-approval plus a Deployment Guard receipt and publishes an immutable diagnostic version. Workflow remains disabled."
     }
   ],
   "migration": {
