@@ -1,0 +1,202 @@
+{
+  "id": "staging-settlement-rpc-add",
+  "verdict": "GO",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "deploy": false,
+  "target_environment": "staging",
+  "target_component": "checksops-staging-api",
+  "deployment_type": "lambda-overlay",
+  "operation": "add",
+  "member": "claim-settlement-rpc.mjs",
+  "source_path": "aws/functions/api/claim-settlement-rpc.mjs",
+  "source_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+  "approved_commit_at_review": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+  "apply_approved_commit_rule": "Must equal the live main SHA at apply time. Re-hash claim-settlement-rpc.mjs; GO holds only while source_sha256 is unchanged.",
+  "owned_components": [
+    "claim-settlement-rpc.mjs"
+  ],
+  "owned_member_ops": {
+    "replace": [],
+    "add": [
+      "claim-settlement-rpc.mjs"
+    ]
+  },
+  "live_member_state": "ABSENT",
+  "live_fingerprint": {
+    "function_name": "checksops-staging-api",
+    "codeSha256": "+U2BumLiTZSNZe4N9rAkMinxS4k/UyOvfcyYdMrOuu4=",
+    "revisionId": "455f7685-97d1-4dc0-a7bc-b58ce7ba4e93",
+    "lastModified": "2026-10-09T10:22:57.000+0000",
+    "refreshed_at": "2026-10-09T18:52:00Z"
+  },
+  "preserve_live_members": {
+    "data.mjs": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+    "workflow.mjs": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+    "workflow-rpc.mjs": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+    "workflow-transitions.mjs": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
+    "workflow-flags.mjs": "a5c05d84ca847dc09c8f35e143a033f9af881e5f4491cf278810bb45857f1892"
+  },
+  "origin_main_source_members": {
+    "claim-settlement-rpc.mjs": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+    "data.mjs": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+    "workflow.mjs": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+    "workflow-rpc.mjs": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+    "workflow-transitions.mjs": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
+    "workflow-flags.mjs": "a5c05d84ca847dc09c8f35e143a033f9af881e5f4491cf278810bb45857f1892"
+  },
+  "do_not_overlay": [
+    "workflow.mjs",
+    "workflow-rpc.mjs",
+    "data.mjs",
+    "workflow-transitions.mjs"
+  ],
+  "compatibility": {
+    "data_exports_parseBody": true,
+    "data_exports_withIdentityWrite": true,
+    "data_early_routes_settlement": true,
+    "data_dynamic_imports_rpc": true,
+    "data_matches_accepted_main": true,
+    "workflow_flags_present": true,
+    "workflow_flags_export": "applicationWorkflowWritesEnabled",
+    "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": "true",
+    "claim_settlement_rpc_absent": true,
+    "sql_calls": "SELECT public.save_claim_settlement_breakdown($1::uuid, $2::uuid, $3::jsonb)",
+    "value_column_count": 17
+  },
+  "sql53": {
+    "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+    "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+    "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+    "exists": true,
+    "definitionSha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+    "settlement_columns": "17/17",
+    "ledger_triggers": "3/3",
+    "public_triggers": "172/172",
+    "value_columns": [
+      "replacement_cost_value",
+      "recoverable_depreciation",
+      "non_recoverable_depreciation",
+      "deductible",
+      "other_structures_rcv",
+      "other_structures_recoverable_depreciation",
+      "other_structures_non_recoverable_depreciation",
+      "other_structures_deductible",
+      "pwi_rcv",
+      "pwi_recoverable_depreciation",
+      "pwi_non_recoverable_depreciation",
+      "personal_property_rcv",
+      "personal_property_recoverable_depreciation",
+      "personal_property_non_recoverable_depreciation",
+      "ale_rcv",
+      "ale_recoverable_depreciation",
+      "ale_non_recoverable_depreciation"
+    ],
+    "preserved_function_hashes": {
+      "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+      "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf",
+      "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+    }
+  },
+  "post_apply_diagnostic": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_name": "Staging DB read-only diagnostic",
+    "workflow_run": 37973071977,
+    "url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/37973071977",
+    "ref": "main",
+    "head_sha": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+    "event": "workflow_dispatch",
+    "created_at": "2026-10-09T18:24:38Z",
+    "conclusion": "success",
+    "http_status": 200,
+    "status": "ok"
+  },
+  "official_workflow": {
+    "path": ".github/workflows/guarded-staging-lambda-overlay.yml",
+    "workflow_name": "Guarded staging Lambda overlay",
+    "ref": "main",
+    "inspect": {
+      "mode": "inspect",
+      "operation": "add",
+      "member": "claim-settlement-rpc.mjs",
+      "approved_commit": "",
+      "expected_live_member_sha256": "",
+      "accept_public_validator_unhealthy": false
+    },
+    "apply": {
+      "mode": "apply",
+      "operation": "add",
+      "member": "claim-settlement-rpc.mjs",
+      "approved_commit": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+      "expected_live_member_sha256": "",
+      "accept_public_validator_unhealthy": false
+    },
+    "stop_on": [
+      "live CodeSha256 drift from +U2BumLiTZSNZe4N9rAkMinxS4k/UyOvfcyYdMrOuu4=",
+      "live RevisionId drift from 455f7685-97d1-4dc0-a7bc-b58ce7ba4e93",
+      "claim-settlement-rpc.mjs PRESENT",
+      "main SHA does not match approved_commit",
+      "source SHA of claim-settlement-rpc.mjs is not 4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64"
+    ]
+  },
+  "expected_after_add": {
+    "member": "claim-settlement-rpc.mjs",
+    "member_state": "PRESENT",
+    "member_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+    "preserved_members": {
+      "data.mjs": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+      "workflow.mjs": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+      "workflow-rpc.mjs": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+      "workflow-transitions.mjs": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
+      "workflow-flags.mjs": "a5c05d84ca847dc09c8f35e143a033f9af881e5f4491cf278810bb45857f1892"
+    },
+    "codeSha256": "unknown_until_apply",
+    "revisionId": "unknown_until_apply",
+    "public_smoke": [
+      "/health HTTP 200 status=ok",
+      "/db-health HTTP 200 status=ok",
+      "/db-readonly-validate HTTP 200 status=ok readOnly=true"
+    ]
+  },
+  "forbidden": {
+    "production": true,
+    "sql_execution": true,
+    "migrations": true,
+    "unrelated_lambda_modifications": true,
+    "production_spa": true,
+    "release_lock_changes": true,
+    "replace_workflow": true,
+    "replace_workflow_rpc": true,
+    "replace_data": true,
+    "replace_workflow_transitions": true,
+    "apply_20261007193200": true,
+    "apply_one_writer": true,
+    "modify_sql_44": true
+  },
+  "forbidden_owned_components": [
+    "workflow.mjs",
+    "workflow-rpc.mjs",
+    "data.mjs",
+    "workflow-transitions.mjs",
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "release_locks": {
+    "production-spa": "PRODUCTION_LOCKED",
+    "production_spa_artifact": "/assets/index-CBOwj-7W.js",
+    "database-rls_tree_hash": "22152a19e8d153e915c086fdf72e2046e26f76ebb8537c368b10856c2c934306"
+  },
+  "remaining_dependencies": [
+    "Independent owner authorization to dispatch official Guarded staging Lambda overlay inspect, then apply, from main",
+    "Fresh inspect must still show ABSENT plus the pinned CodeSha256/RevisionId, or STOP with DEPLOYMENT_COLLISION",
+    "If main moves, pass the new main SHA as approved_commit only while claim-settlement-rpc.mjs remains 4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+    "Post-add public smoke and staging UAT of save_claim_settlement_breakdown",
+    "Production SQL 53 and production claim-settlement-rpc ADD remain separately authorized",
+    "Do not overlay workflow-transitions.mjs this turn",
+    "Do not apply 20261007193200, one-writer, or SQL 44",
+    "This pin PR is evidence only; overlay source already exists on main"
+  ],
+  "notes": "Evaluate-only GO pin for an ADD-only staging overlay of the missing claim-settlement-rpc.mjs. SQL 53 is already installed. Live data.mjs already early-routes the RPC. This package does not deploy, issue a receipt, execute SQL, modify production, change Release Locks, or overlay workflow.mjs, workflow-rpc.mjs, data.mjs, or workflow-transitions.mjs."
+}
