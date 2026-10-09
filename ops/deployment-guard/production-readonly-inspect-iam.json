@@ -1,0 +1,157 @@
+{
+  "id": "production-readonly-inspect-iam",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "dispatch_authorized": false,
+  "iam_mutation_authorized": false,
+  "target_environment": "production",
+  "target_component": "production-readonly-inspect-iam",
+  "target_account_id": "806168576068",
+  "target_region": "us-east-1",
+  "target_role_name": "ChecksOpsGitHubProductionReadOnlyInspect",
+  "target_role_arn": "arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect",
+  "required_permission": "ec2:DescribeSecurityGroups",
+  "required_permission_resource": "*",
+  "proposed_inline_policy_name": "ChecksOpsProductionReadOnlyInspectDescribeSecurityGroups",
+  "proposed_policy_path": "ops/deployment-guard/policies/checksops-production-readonly-inspect-ec2-sg.json",
+  "merged_inspector": {
+    "pr": 853,
+    "merged": true,
+    "merged_at": "2026-10-09T22:11:08Z",
+    "merge_commit_sha": "1097ece82f24863440634ddf061fe884f2156add",
+    "present_on_origin_main": true,
+    "workflow": ".github/workflows/inspect-production-readonly.yml",
+    "inspector": "scripts/deployment-guard/production-readonly-inspect.mjs",
+    "session_policy_already_allows_describe_security_groups": true,
+    "code_queries_only_observed_group_ids": true,
+    "code_rejects_filters_names_and_mutations": true
+  },
+  "authorized_read_identities": {
+    "in_this_environment": [
+      {
+        "kind": "cursor_oidc_assume",
+        "role_name": "ChecksOpsCursorCloudStaging",
+        "can_read_inspect_role": false,
+        "broadened": false
+      }
+    ],
+    "absent_from_this_environment": [
+      "CURSOR_AWS_SECURITY_HARDENING_ROLE_ARN",
+      "CURSOR_AWS_CLOUDTRAIL_CWLOGS_ROLE_ARN"
+    ],
+    "do_not_recreate": [
+      "ChecksOpsCursorSecurityHardeningTemp",
+      "ChecksOpsCursorCloudTrailCwLogsTemp"
+    ],
+    "default_environment_keys": "InvalidClientTokenId",
+    "official_inspect_workflow": {
+      "can_assume_target_role": true,
+      "can_read_iam_configuration": false,
+      "dispatch_authorized_in_this_package": false,
+      "note": "Session policy has no iam:GetRole/List*/Simulate. Dispatch would not inventory the identity policy."
+    },
+    "approved_owner_procedure": "Account 806168576068 administrator or any existing IAM principal that already has iam:GetRole, iam:ListRolePolicies, iam:ListAttachedRolePolicies, iam:GetRolePolicy, iam:GetPolicy, iam:GetPolicyVersion, and iam:SimulatePrincipalPolicy on this role. Use AWS Console IAM or AWS CLI. Do not grant those actions to ChecksOpsCursorCloudStaging."
+  },
+  "live_iam_read": {
+    "inspected_at": "2026-10-09T23:44:04.024Z",
+    "mode": "read-only",
+    "mutations_attempted": false,
+    "workflow_dispatch_attempted": false,
+    "staging_permissions_changed": false,
+    "caller_account": "806168576068",
+    "caller_arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/checksops-prod-inspector-iam-preflight",
+    "get_role": "AccessDenied",
+    "list_role_policies": "AccessDenied",
+    "list_attached_role_policies": "AccessDenied",
+    "get_role_policy_proposed_name": "AccessDenied",
+    "simulate_principal_policy": "AccessDenied",
+    "organizations_describe": "AccessDenied",
+    "organizations_list_scps": "AccessDenied",
+    "get_account_authorization_details": "AccessDenied",
+    "trust_policy_verified": false,
+    "permissions_boundary": "unreadable",
+    "proposed_inline_policy_exists": "unknown",
+    "existing_grant_of_describe_security_groups": "unknown",
+    "note": "AccessDenied is not NoSuchEntity. Official inspect run 37821736928 assumed this role, so the role exists. ChecksOpsCursorCloudStaging cannot read the trust policy, inline policies, attached policies, permissions boundary, organization SCPs, or simulate the principal. Staging was not broadened."
+  },
+  "official_inspect_evidence": {
+    "run_id": 37821736928,
+    "ref": "main",
+    "head_sha": "0040bd5548192657d665be82d7fc1211d446adbc",
+    "recorded_at": "2026-10-08T18:06:34Z",
+    "workflow_assumed_role_successfully": true,
+    "missing_read_permissions": [],
+    "database_status": "refused_unproven_aws_production_target",
+    "master_user_association_count": 0,
+    "observed_db_instance_count": 2,
+    "vpc_match_count": 2,
+    "security_group_match_count": 0,
+    "required_permission": "ec2:DescribeSecurityGroups",
+    "observed_lambda_security_group_ids": [
+      "sg-0bc4695a666baf49b",
+      "sg-0fe2698f236959353"
+    ],
+    "describe_security_groups_called": false,
+    "note": "Pre-#853 inspector named the permission and did not call it. Identity-policy presence of ec2:DescribeSecurityGroups therefore remains unproven. Successful assume proves existence and a GitHub OIDC trust that accepted repo michaelcarletta-cmd/ChecksOps environment production-readonly; the live trust document was not retrieved."
+  },
+  "smallest_safe_change": {
+    "kind": "additive_inline_policy",
+    "preserve_trust_policy": true,
+    "preserve_existing_inline_policies": true,
+    "preserve_existing_attached_policies": true,
+    "do_not_replace_unknown_existing_policy_document": true,
+    "do_not_pin_live_security_group_ids": true,
+    "necessary": "unknown",
+    "safe_without_owner_inventory": false,
+    "reason_resource_star": "Live RDS security-group IDs cannot be pinned. The merged inspector still queries only already-observed sg-[hex] GroupIds via --group-ids."
+  },
+  "forbidden_actions": [
+    "ec2:AuthorizeSecurityGroupIngress",
+    "ec2:RevokeSecurityGroupIngress",
+    "ec2:CreateSecurityGroup",
+    "ec2:DeleteSecurityGroup",
+    "ec2:ModifySecurityGroupRules",
+    "secretsmanager:GetSecretValue",
+    "ssm:GetParameter",
+    "rds-db:connect"
+  ],
+  "owner_preflight_before_apply": [
+    "aws sts get-caller-identity",
+    "aws iam get-role --role-name ChecksOpsGitHubProductionReadOnlyInspect",
+    "Confirm Role.Arn equals arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect",
+    "Confirm trust is GitHub OIDC for repo michaelcarletta-cmd/ChecksOps and environment production-readonly",
+    "Record PermissionsBoundary if present",
+    "aws iam list-role-policies --role-name ChecksOpsGitHubProductionReadOnlyInspect",
+    "aws iam list-attached-role-policies --role-name ChecksOpsGitHubProductionReadOnlyInspect",
+    "aws iam get-role-policy --role-name ChecksOpsGitHubProductionReadOnlyInspect --policy-name <each inline name>",
+    "aws iam get-role-policy --role-name ChecksOpsGitHubProductionReadOnlyInspect --policy-name ChecksOpsProductionReadOnlyInspectDescribeSecurityGroups",
+    "aws iam get-policy / get-policy-version for each attached policy",
+    "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect --action-names ec2:DescribeSecurityGroups ec2:AuthorizeSecurityGroupIngress secretsmanager:GetSecretValue",
+    "If in an AWS Organization, inspect applicable SCPs for ec2:DescribeSecurityGroups Deny",
+    "STOP if any document already Allows ec2:DescribeSecurityGroups, ec2:Describe*, ec2:*, or Action *",
+    "STOP if the proposed inline policy name already exists",
+    "STOP if the role ARN, account, or trust policy is not the GitHub OIDC inspect role",
+    "Do not PutRolePolicy, AttachRolePolicy, or UpdateAssumeRolePolicy in this workstream",
+    "Do not grant iam:GetRole on this inspect role to ChecksOpsCursorCloudStaging",
+    "Do not recreate ChecksOpsCursorSecurityHardeningTemp or ChecksOpsCursorCloudTrailCwLogsTemp"
+  ],
+  "owner_apply_after_separate_approval": {
+    "authorized_in_this_package": false,
+    "command": "aws iam put-role-policy --role-name ChecksOpsGitHubProductionReadOnlyInspect --policy-name ChecksOpsProductionReadOnlyInspectDescribeSecurityGroups --policy-document file://ops/deployment-guard/policies/checksops-production-readonly-inspect-ec2-sg.json"
+  },
+  "rollback": {
+    "command": "aws iam delete-role-policy --role-name ChecksOpsGitHubProductionReadOnlyInspect --policy-name ChecksOpsProductionReadOnlyInspectDescribeSecurityGroups",
+    "scope": "only the new inline policy name",
+    "do_not_delete_other_policies": true,
+    "do_not_update_trust": true
+  },
+  "verdict": {
+    "preflight": "NO-GO",
+    "prep": "GO",
+    "apply": "NO-GO",
+    "dispatch_official_inspect": "NO-GO",
+    "broaden_staging": "NO-GO",
+    "owner_apply_after_live_policy_inventory": "CONDITIONAL",
+    "reason": "Required IAM read permissions are unavailable to every identity this environment can assume. ChecksOpsCursorCloudStaging received AccessDenied for GetRole, ListRolePolicies, ListAttachedRolePolicies, GetRolePolicy, and SimulatePrincipalPolicy. Existing grant of ec2:DescribeSecurityGroups remains unknown. The proposed additive policy is the minimum source change if the owner inventory proves the permission absent, but it is not safe to apply without that inventory. Do not broaden staging. Do not dispatch inspect. Do not apply IAM until the owner returns the live documents."
+  }
+}
