@@ -28,24 +28,29 @@ export const CREATE_APPROVAL_TARGET = Object.freeze({
 export const OWNER_EVIDENCE = Object.freeze({
   diagnostic_lambda: 'absent_2026-10-09',
   diagnostic_stack: 'absent_2026-10-09',
-  github_oidc_deploy_role: 'reported_exists_2026-10-09',
+  github_oidc_deploy_role: 'exists_create_stack_s3_get_put_no_delete_2026-10-09',
   github_oidc_trust: 'reported_repo_staging_aud_sts_2026-10-09',
   github_oidc_inline_policy: 'reported_diagnostic_only_create_describe_2026-10-09',
-  cloudformation_execution_role_trust: 'unknown',
-  cloudformation_execution_role_policy: 'unknown',
-  artifact_bucket_encryption: 'unknown',
-  artifact_bucket_public_access: 'unknown',
-  artifact_bucket_ownership: 'unknown',
+  cloudformation_execution_role_trust: 'reported_cfn_service_trust_2026-10-09',
+  cloudformation_execution_role_policy: 'reported_diagnostic_only_2026-10-09',
+  artifact_bucket_encryption: 'aes256_2026-10-09',
+  artifact_bucket_public_access: 'full_block_2026-10-09',
+  artifact_bucket_ownership: 'bucket_owner_enforced_2026-10-09',
+  artifact_bucket_policy: 'none_2026-10-09',
+  artifact_bucket_versioning: 'unset_2026-10-09',
   staging_environment_required_reviewers: 'unverified',
   staging_environment_prevent_self_review: 'unverified',
   exact_aws_role_permissions: 'pending_owner_evidence',
   diagnostic_package_dependencies: 'pending_owner_evidence',
   independent_approval_kms_key: 'unknown',
+  independent_approval_kms_alias: 'none_found_does_not_prove_key_absence_2026-10-09',
   independent_approval_signer: 'unknown',
+  independent_approval_signer_role: 'not_evidenced_2026-10-09',
+  independent_approval_owner_principal: 'unspecified_fail_closed_2026-10-09',
   independent_approval_public_key: 'unknown',
   independent_approval_consume_ledger: 'unknown',
-  independent_approval_consume_ledger_delete_denied: 'unknown',
-  independent_approval_consume_if_none_match: 'unknown',
+  independent_approval_consume_ledger_delete_denied: 'iam_omits_delete_no_bucket_deny_2026-10-09',
+  independent_approval_consume_if_none_match: 'unknown_no_bucket_policy_2026-10-09',
 });
 
 export const CREATE_APPROVAL_LEDGER = Object.freeze({
@@ -210,8 +215,13 @@ export function requireCreateOnlyLedgerPutObjectArgs(args = []) {
   const matchIndex = list.indexOf('--if-none-match');
   const body = bodyIndex >= 0 ? list[bodyIndex + 1] : '';
   const match = matchIndex >= 0 ? list[matchIndex + 1] : '';
+  const bucket = list[list.indexOf('--bucket') + 1] || '';
+  const key = list[list.indexOf('--key') + 1] || '';
   if (list[0] !== 's3api'
       || list[1] !== 'put-object'
+      || bucket !== CREATE_APPROVAL_LEDGER.bucket
+      || !key.startsWith(`${CREATE_APPROVAL_LEDGER.prefix}/`)
+      || !key.endsWith('.json')
       || !body
       || body.startsWith('{')
       || !fs.existsSync(body)

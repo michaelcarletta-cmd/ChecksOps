@@ -168,11 +168,17 @@ test('expired, over-TTL, reused nonce, and tampered signatures fail closed', () 
 
 test('missing owner KMS authority and reused guard-receipt key fail closed as the documented blocker', () => {
   assert.equal(OWNER_EVIDENCE.independent_approval_kms_key, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_signer, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_signer_role, 'not_evidenced_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.independent_approval_owner_principal, 'unspecified_fail_closed_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.independent_approval_kms_alias, 'none_found_does_not_prove_key_absence_2026-10-09');
   assert.equal(OWNER_EVIDENCE.independent_approval_consume_ledger, 'unknown');
-  assert.equal(OWNER_EVIDENCE.independent_approval_consume_ledger_delete_denied, 'unknown');
-  assert.equal(OWNER_EVIDENCE.independent_approval_consume_if_none_match, 'unknown');
-  assert.equal(OWNER_EVIDENCE.cloudformation_execution_role_trust, 'unknown');
-  assert.equal(OWNER_EVIDENCE.artifact_bucket_encryption, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_consume_ledger_delete_denied, 'iam_omits_delete_no_bucket_deny_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.independent_approval_consume_if_none_match, 'unknown_no_bucket_policy_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.cloudformation_execution_role_trust, 'reported_cfn_service_trust_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.artifact_bucket_encryption, 'aes256_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.artifact_bucket_policy, 'none_2026-10-09');
+  assert.equal(OWNER_EVIDENCE.artifact_bucket_versioning, 'unset_2026-10-09');
   assert.equal(OWNER_EVIDENCE.staging_environment_required_reviewers, 'unverified');
   assert.equal(INDEPENDENT_APPROVAL_BLOCKER, 'owner_controlled_aws_kms_approval_authority_unverified');
   assert.throws(() => requireApproval(signedApproval(), {
@@ -392,7 +398,9 @@ test('create-only workflow stays disabled and does not treat approved_commit as 
   assert.match(runner, /createS3CreateApprovalLedger/);
   assert.match(docs, /If-None-Match/);
   assert.match(docs, /fresh runner/);
-  assert.doesNotMatch(workflow, /s3:DeleteObject/);
+  assert.match(workflow, /DenyDeleteConsumedApprovals/);
+  assert.match(workflow, /s3:DeleteObject/);
+  assert.match(workflow, /s3:if-none-match/);
   assert.match(workflow, /s3:PutObject/);
   assert.doesNotMatch(runner, /'update-stack'/);
   assert.doesNotMatch(runner, /'delete-stack'/);

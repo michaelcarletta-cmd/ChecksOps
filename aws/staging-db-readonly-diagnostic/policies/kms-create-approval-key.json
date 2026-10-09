@@ -1,0 +1,28 @@
+{
+  "Description": "Independently administered ChecksOps staging DB diagnostic create-approval signer. Asymmetric ECDSA P-256. Owner-only kms:Sign. Not the deployment-guard receipt key.",
+  "KeyUsage": "SIGN_VERIFY",
+  "KeySpec": "ECC_NIST_P256",
+  "Origin": "AWS_KMS",
+  "MultiRegion": false,
+  "BypassPolicyLockoutSafetyCheck": false,
+  "Tags": [
+    {
+      "TagKey": "checksops:workstream",
+      "TagValue": "staging-db-readonly-diagnostic"
+    },
+    {
+      "TagKey": "checksops:purpose",
+      "TagValue": "create-approval-signer"
+    },
+    {
+      "TagKey": "checksops:environment",
+      "TagValue": "staging"
+    }
+  ],
+  "ProposedAlias": "alias/checksops-staging-db-readonly-diagnostic-create-approval",
+  "SigningAlgorithm": "ECDSA_SHA_256",
+  "Account": "806168576068",
+  "Region": "us-east-1",
+  "SourceOnly": true,
+  "DoNotCreateFromThisRepository": true
+}

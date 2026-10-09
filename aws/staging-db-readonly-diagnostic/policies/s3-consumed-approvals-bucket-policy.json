@@ -1,0 +1,52 @@
+{
+  "Version": "2012-10-17",
+  "Id": "checksops-staging-db-readonly-diagnostic-consumed-approvals-write-once",
+  "Statement": [
+    {
+      "Sid": "DenyDeleteConsumedCreateApprovals",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*"
+    },
+    {
+      "Sid": "DenyPutConsumedCreateApprovalsIfNoneMatchAbsent",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*",
+      "Condition": {
+        "Null": {
+          "s3:if-none-match": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyPutConsumedCreateApprovalsUnlessIfNoneMatchStar",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:if-none-match": "*"
+        }
+      }
+    },
+    {
+      "Sid": "DenyCopyOntoConsumedCreateApprovals",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-copy-source": "false"
+        }
+      }
+    }
+  ]
+}

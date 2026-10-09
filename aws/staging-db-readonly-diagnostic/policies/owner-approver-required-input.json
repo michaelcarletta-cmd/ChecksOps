@@ -1,0 +1,13 @@
+{
+  "required_input": "CHECKSOPS_STAGING_DB_DIAGNOSTIC_OWNER_IAM_USER_ARN",
+  "owner_iam_user_arn": null,
+  "status": "unspecified_fail_closed",
+  "accepted_form": "arn:aws:iam::806168576068:user/<independently-controlled-owner>",
+  "not_accepted": [
+    "arn:aws:iam::806168576068:root",
+    "any MFA-authenticated IAM user in the account",
+    "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy",
+    "arn:aws:iam::806168576068:role/ChecksOpsStagingDbReadonlyDiagnosticCloudFormationExecution",
+    "arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com"
+  ]
+}
