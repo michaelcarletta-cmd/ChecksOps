@@ -1,0 +1,88 @@
+{
+  "Version": "2012-10-17",
+  "Id": "checksops-staging-db-readonly-diagnostic-create-approval-kms",
+  "Statement": [
+    {
+      "Sid": "RootBreakGlassManageNotSign",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::806168576068:root"
+      },
+      "Action": [
+        "kms:CreateAlias",
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetPublicKey",
+        "kms:ListAliases",
+        "kms:ListKeyPolicies",
+        "kms:ListResourceTags",
+        "kms:PutKeyPolicy",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:UpdateAlias"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "OwnerSignEcdsaSha256Only",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::806168576068:role/ChecksOpsOwnerDiagnosticCreateApprover"
+      },
+      "Action": [
+        "kms:Sign",
+        "kms:Verify"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:SigningAlgorithm": "ECDSA_SHA_256"
+        }
+      }
+    },
+    {
+      "Sid": "OwnerReadPublicKey",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::806168576068:role/ChecksOpsOwnerDiagnosticCreateApprover"
+      },
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetPublicKey"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyDeployAndCloudFormationSignAndAdmin",
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": [
+          "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy",
+          "arn:aws:iam::806168576068:role/ChecksOpsStagingDbReadonlyDiagnosticCloudFormationExecution"
+        ]
+      },
+      "Action": [
+        "kms:Sign",
+        "kms:Verify",
+        "kms:CreateGrant",
+        "kms:RetireGrant",
+        "kms:RevokeGrant",
+        "kms:PutKeyPolicy",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
+        "kms:DisableKey",
+        "kms:EnableKey",
+        "kms:ImportKeyMaterial",
+        "kms:DeleteImportedKeyMaterial",
+        "kms:CreateAlias",
+        "kms:DeleteAlias",
+        "kms:UpdateAlias",
+        "kms:ReplicateKey",
+        "kms:UpdatePrimaryRegion"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -74,16 +74,77 @@ Recorded 2026-10-09, account `806168576068`, `us-east-1`:
 | --- | --- |
 | Lambda `checksops-staging-db-readonly-diagnostic` | absent |
 | CloudFormation stack `checksops-staging-db-readonly-diagnostic` | absent |
-| GitHub OIDC role `ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy` | reported exists; staging env trust + `aud=sts.amazonaws.com` |
+| GitHub OIDC role `ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy` | exists; CreateStack + S3 GetObject/PutObject on diagnostic prefix; **no DeleteObject** |
 | Inline policy `DiagnosticOnly` | reported CreateStack/DescribeStacks, PassRole, artifact prefix, GetFunctionConfiguration/PublishVersion |
-| CloudFormation execution-role trust/policy | **unknown** |
-| Artifact bucket encryption, public-access block, ownership | **unknown** |
+| CloudFormation execution-role trust/policy | reported exists; CFN service trust; diagnostic-only policy |
+| Artifact bucket encryption | AES256 |
+| Artifact bucket public-access block | full block |
+| Artifact bucket ownership | BucketOwnerEnforced |
+| Artifact bucket policy | **none** |
+| Artifact bucket versioning | **unset** |
 | Staging environment required reviewers / prevent self-review | **unverified** |
 | Exact live AWS role permission set | **pending owner evidence** |
 | Diagnostic package/lockfile vs live dependencies | **pending owner evidence** |
-| Independent approval KMS key, signer, public key | **unknown** |
-| Persistent create-approval consume ledger (S3 If-None-Match) | **unknown** |
-| Deploy-role DeleteObject denied on consume prefix | **unknown** |
+| Independent approval KMS key / signer / public key | **unknown** (alias search found none; does not prove key absence) |
+| Persistent create-approval consume ledger (S3 If-None-Match) | **unknown** (no bucket policy) |
+| Deploy-role DeleteObject denied on consume prefix | IAM omits DeleteObject; **no bucket Deny** so an alternate path can still delete |
+
+### Source-only KMS signer and write-once S3 ledger (do not apply)
+
+Exact proposed JSON lives in `aws/staging-db-readonly-diagnostic/policies/`. Evaluate with:
+
+```bash
+node scripts/staging-db-readonly-diagnostic-kms-s3-ledger.mjs
+```
+
+`--apply` always exits `source_only_kms_s3_ledger_apply_refused`. It never calls `aws kms create-key`, `put-key-policy`, `put-bucket-policy`, `put-role-policy`, or workflow enablement. `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1` is not a bypass.
+
+KMS (asymmetric ECDSA, independently administered):
+
+- `KeySpec=ECC_NIST_P256`, `KeyUsage=SIGN_VERIFY`, `ECDSA_SHA_256` only.
+- Proposed alias `alias/checksops-staging-db-readonly-diagnostic-create-approval`.
+- Owner role `ChecksOpsOwnerDiagnosticCreateApprover` is the only `kms:Sign` principal, conditioned on `kms:SigningAlgorithm=ECDSA_SHA_256`.
+- Deploy and CloudFormation execution roles are denied `kms:Sign` and key admin. Do not grant those roles `kms:GetPublicKey`; the SPKI public key is a separately controlled staging-environment secret.
+- Account root may manage (not sign) for break-glass. No `kms:*`. This is not the deployment-guard receipt key.
+
+S3 write-once consumed ledger (minimum scoped):
+
+- Resource is only
+  `arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*`.
+- Real AWS keys: `s3:if-none-match` and `s3:x-amz-copy-source` (S3 conditional writes). `StringNotEquals` alone does not deny a missing header, so a `Null=true` Deny is required as well.
+- Principal `*` Deny delete (`s3:DeleteObject`, `s3:DeleteObjectVersion`) and overwrite (PutObject unless `If-None-Match: *`; PutObject when copy-source is present).
+- CloudFormation `package` PutObject stays under
+  `checksops-staging-db-readonly-diagnostic/<40-hex-sha>/<run>-<attempt>/`, which cannot collide with `create-approvals/consumed/`.
+- Consume command remains `aws s3api put-object --body <temp file> --if-none-match '*'`. Inline JSON `--body` is refused. Replay is HTTP 412.
+
+IAM: additive Deny statements only. Do not replace live DiagnosticOnly. Live GetObject/PutObject on the diagnostic prefix is required for packaging and must not gain an If-None-Match requirement.
+
+GitHub OIDC: the disabled job still has `permissions: contents: read` and **no** `id-token: write`. That absence is intentional. Do not add `id-token: write` or enable `jobs.deploy.if` from this PR. Session policy Deny on the consumed prefix is source-only and inactive while the job is disabled.
+
+#### Blast radius
+
+- New KMS key is unused until the owner signs one approval. No existing Lambda, API, or guard receipt verifies with it.
+- Bucket policy Deny is prefix-limited. Artifact uploads, other buckets, staging API, production, SQL, Cognito, and CORS are out of scope.
+- Additive IAM Deny cannot grant new access. Versioning stays unset.
+
+#### Rollback (owner only; not this PR)
+
+1. Delete the new bucket policy (Oct 9 live state had none).
+2. Remove only the additive consumed-prefix IAM Deny statements.
+3. Cancel the proposed alias and schedule-delete the unused signing key if created.
+4. Leave the workflow disabled. Do not add `id-token: write` as rollback.
+
+#### Phone-friendly owner checklist
+
+1. Do not merge, deploy, or enable the diagnostic workflow.
+2. Confirm `if: false` and `contents: read` only (no `id-token: write`).
+3. Confirm package prefix is SHA/run, not `create-approvals/consumed/`.
+4. Create the P-256 SIGN_VERIFY key with the source key policy; only the owner role may `kms:Sign`.
+5. Publish the SPKI public key and key ARN as staging secrets jobs cannot change.
+6. Put the consumed-prefix bucket policy. Do not enable versioning here.
+7. Add the additive deploy-role Deny for delete/overwrite of consumed objects.
+8. Prove `put-object --body FILE --if-none-match '*'`, then replay 412. Never `delete-object`.
+9. Do not touch staging API, production, SQL, Cognito, CORS, or other workstreams.
 
 ### Separate non-blocking issues (do not weaken security to "fix")
 

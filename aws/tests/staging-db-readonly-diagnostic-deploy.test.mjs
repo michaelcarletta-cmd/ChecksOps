@@ -126,6 +126,8 @@ test('workflow fails closed pending an independent approval boundary', () => {
   assert.match(workflow, /environment: staging/);
   assert.match(workflow, /if: \$\{\{ false \}\}/);
   assert.doesNotMatch(workflow, /id-token:\s*write/);
+  assert.match(workflow, /s3:if-none-match/);
+  assert.match(workflow, /DenyDeleteConsumedApprovals/);
   assert.match(workflow, /GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /APPROVED_COMMIT" = "\$GITHUB_SHA"/);
   assert.match(workflow, /CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN/);

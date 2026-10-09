@@ -1,0 +1,49 @@
+{
+  "Version": "2012-10-17",
+  "Id": "checksops-staging-db-readonly-diagnostic-deploy-consumed-ledger-minimum",
+  "Note": "Additive identity-policy statements only. Do not replace DiagnosticOnly. Do not attach from this repository. Artifact GetObject/PutObject on the diagnostic prefix stays as already scoped live; these statements constrain the consumed-approvals prefix.",
+  "Statement": [
+    {
+      "Sid": "DenyDeployDeleteConsumedCreateApprovals",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*"
+    },
+    {
+      "Sid": "DenyDeployPutConsumedIfNoneMatchAbsent",
+      "Effect": "Deny",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*",
+      "Condition": {
+        "Null": {
+          "s3:if-none-match": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyDeployPutConsumedUnlessIfNoneMatchStar",
+      "Effect": "Deny",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:if-none-match": "*"
+        }
+      }
+    },
+    {
+      "Sid": "DenyDeployCopyOntoConsumedCreateApprovals",
+      "Effect": "Deny",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-copy-source": "false"
+        }
+      }
+    }
+  ]
+}
