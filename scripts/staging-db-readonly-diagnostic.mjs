@@ -39,7 +39,7 @@ const verifyStagingToken = (token) => createStagingVerifier().verify(token);
 
 const safeCount = (value) => Number.isSafeInteger(value) && value >= 0;
 const INVENTORY_LIMIT = 256;
-const EXPECTED_PUBLIC_TRIGGERS = 165;
+const EXPECTED_PUBLIC_TRIGGERS = 172;
 
 export const projectPublicTriggerInventory = (catalog = {}) => {
   if (!Array.isArray(catalog.publicTriggerInventory)) return null;
@@ -55,8 +55,11 @@ export const projectPublicTriggerInventory = (catalog = {}) => {
     if (sanitized) inventory.push(sanitized);
   }
   const comparison = comparePublicTriggerInventory(inventory);
+  if (comparison.expectedCount !== EXPECTED_PUBLIC_TRIGGERS) {
+    throw new DiagnosticError('response_contract_mismatch');
+  }
   return {
-    expectedCount: EXPECTED_PUBLIC_TRIGGERS,
+    expectedCount: comparison.expectedCount,
     actualCount: safeCount(catalog.publicTriggers) ? catalog.publicTriggers : inventory.length,
     truncated: catalog.publicTriggerInventoryTruncated === true
       || catalog.publicTriggerInventory.length > INVENTORY_LIMIT,
