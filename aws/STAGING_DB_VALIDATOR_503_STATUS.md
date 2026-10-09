@@ -58,7 +58,7 @@ Do not use staff/owner/manager privileged roles. Do not add Cognito groups.
 - `missing_relation` (any of 16 `CORE_TABLES`, or restore sentinel)
 - `count_mismatch` **only when RLS is off** and `rowCount !== EXPECTED_ROW_COUNTS` — possible, **not assumed**
 - `permission` (SELECT denied, unexpected writes, FORCE RLS, partial RLS, fail-closed visibility when RLS is on, schema USAGE)
-- `trigger` (public trigger count ≠ 165)
+- `trigger` (public trigger count ≠ 172, or named membership drift)
 - `function` / `missing_fk` / generic `query`
 
 `/health` and `/db-health` 200 only prove the API process and a read-only `SELECT 1`. They do not identify which validator assertion fails.

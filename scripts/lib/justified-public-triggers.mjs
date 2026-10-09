@@ -32,11 +32,66 @@ const CLASSIFIED_PATH = fileURLToPath(new URL(
   import.meta.url,
 ));
 
+export const RESTORE_PUBLIC_TRIGGER_COUNT = 164;
+
 export const STEPUP_TRIGGER = Object.freeze({
   table: 'financial_stepup_log',
   trigger: 'trg_financial_stepup_log_updated_at',
   functionName: 'set_updated_at_generic',
 });
+
+export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
+  Object.freeze({
+    table: 'check_endorsements',
+    trigger: 'trg_advance_on_endorsement_complete',
+    functionName: 'advance_check_on_endorsement_complete',
+  }),
+]);
+
+export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
+  Object.freeze({
+    table: 'check_intake_items',
+    trigger: 'trg_guard_check_claim_link',
+    functionName: 'trg_guard_check_claim_link',
+  }),
+  Object.freeze({
+    table: 'identity_accounts',
+    trigger: 'identity_protect_production_cognito',
+    functionName: 'identity_protect_production_cognito',
+  }),
+  Object.freeze({
+    table: 'identity_production_cognito_locks',
+    trigger: 'identity_protect_production_cognito_locks',
+    functionName: 'identity_protect_production_cognito_locks',
+  }),
+  Object.freeze({
+    table: 'mortgage_agent_compensation_entries',
+    trigger: 'tr_protect_mortgage_agent_compensation_facts',
+    functionName: 'tg_protect_mortgage_agent_compensation_facts',
+  }),
+  Object.freeze({
+    table: 'mortgage_handling_requests',
+    trigger: 'tr_accrue_mortgage_ops_billing',
+    functionName: 'tg_accrue_mortgage_ops_billing',
+  }),
+  Object.freeze({
+    table: 'mortgage_handling_requests',
+    trigger: 'tr_earn_mortgage_agent_compensation',
+    functionName: 'tg_earn_mortgage_agent_compensation',
+  }),
+  Object.freeze({
+    table: 'mortgage_handling_requests',
+    trigger: 'tr_reject_inactive_mortgage_agent_accept',
+    functionName: 'tg_reject_inactive_mortgage_agent_accept',
+  }),
+  Object.freeze({
+    table: 'tenants',
+    trigger: 'trg_apply_tenant_moov_ga_defaults',
+    functionName: 'apply_tenant_moov_ga_defaults',
+  }),
+]);
+
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 172;
 
 const unqualified = (value) => {
   const text = String(value || '');
@@ -46,17 +101,31 @@ const unqualified = (value) => {
 
 const triggerKey = (row) => `${row.table}\0${row.trigger}`;
 
-export const loadJustifiedPublicTriggers = () => {
+export const loadRestorePublicTriggers = () => {
   const classified = JSON.parse(readFileSync(CLASSIFIED_PATH, 'utf8'));
-  const restore = (classified.public || []).map((row) => ({
+  return (classified.public || []).map((row) => ({
     table: row.table,
     trigger: row.trigger,
     functionName: unqualified(row.function),
   }));
-  const keys = new Set(restore.map(triggerKey));
-  const stepupKey = triggerKey(STEPUP_TRIGGER);
-  const justified = keys.has(stepupKey) ? restore : [...restore, { ...STEPUP_TRIGGER }];
+};
+
+export const loadJustifiedPublicTriggers = () => {
+  const restore = loadRestorePublicTriggers();
+  const removed = new Set(SUPERSEDED_PUBLIC_TRIGGERS.map(triggerKey));
+  const justified = restore.filter((row) => !removed.has(triggerKey(row)));
+  const keys = new Set(justified.map(triggerKey));
+  for (const row of [...POST_RESTORE_PUBLIC_TRIGGERS, STEPUP_TRIGGER]) {
+    const key = triggerKey(row);
+    if (keys.has(key)) continue;
+    justified.push({ ...row });
+    keys.add(key);
+  }
   justified.sort((a, b) => triggerKey(a).localeCompare(triggerKey(b)));
+  if (justified.length !== JUSTIFIED_PUBLIC_TRIGGER_COUNT
+    || new Set(justified.map(triggerKey)).size !== JUSTIFIED_PUBLIC_TRIGGER_COUNT) {
+    throw new Error(`justified public trigger catalog ${justified.length} != ${JUSTIFIED_PUBLIC_TRIGGER_COUNT}`);
+  }
   return justified;
 };
 

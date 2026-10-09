@@ -51,7 +51,67 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 165;
+export const EXPECTED_PUBLIC_TRIGGERS = 172;
+
+export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
+  Object.freeze({
+    table: 'check_endorsements',
+    trigger: 'trg_advance_on_endorsement_complete',
+    functionName: 'advance_check_on_endorsement_complete',
+  }),
+]);
+
+export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
+  Object.freeze({
+    table: 'check_intake_items',
+    trigger: 'trg_guard_check_claim_link',
+    functionName: 'trg_guard_check_claim_link',
+  }),
+  Object.freeze({
+    table: 'identity_accounts',
+    trigger: 'identity_protect_production_cognito',
+    functionName: 'identity_protect_production_cognito',
+  }),
+  Object.freeze({
+    table: 'identity_production_cognito_locks',
+    trigger: 'identity_protect_production_cognito_locks',
+    functionName: 'identity_protect_production_cognito_locks',
+  }),
+  Object.freeze({
+    table: 'mortgage_agent_compensation_entries',
+    trigger: 'tr_protect_mortgage_agent_compensation_facts',
+    functionName: 'tg_protect_mortgage_agent_compensation_facts',
+  }),
+  Object.freeze({
+    table: 'mortgage_handling_requests',
+    trigger: 'tr_accrue_mortgage_ops_billing',
+    functionName: 'tg_accrue_mortgage_ops_billing',
+  }),
+  Object.freeze({
+    table: 'mortgage_handling_requests',
+    trigger: 'tr_earn_mortgage_agent_compensation',
+    functionName: 'tg_earn_mortgage_agent_compensation',
+  }),
+  Object.freeze({
+    table: 'mortgage_handling_requests',
+    trigger: 'tr_reject_inactive_mortgage_agent_accept',
+    functionName: 'tg_reject_inactive_mortgage_agent_accept',
+  }),
+  Object.freeze({
+    table: 'tenants',
+    trigger: 'trg_apply_tenant_moov_ga_defaults',
+    functionName: 'apply_tenant_moov_ga_defaults',
+  }),
+]);
+
+export const REQUIRED_PUBLIC_TRIGGERS = Object.freeze([
+  ...POST_RESTORE_PUBLIC_TRIGGERS,
+  Object.freeze({
+    table: 'financial_stepup_log',
+    trigger: 'trg_financial_stepup_log_updated_at',
+    functionName: 'set_updated_at_generic',
+  }),
+]);
 export const PUBLIC_TRIGGER_INVENTORY_LIMIT = 256;
 export const PUBLIC_TRIGGER_DEFINITION_MAX = 2048;
 export const PUBLIC_TRIGGER_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -101,6 +161,49 @@ export const projectPublicTriggerInventory = (rows = []) => {
     if (sanitized) inventory.push(sanitized);
   }
   return { inventory, truncated };
+};
+
+const triggerKey = (row) => `${row.table}\0${row.trigger}`;
+
+export const evaluatePublicTriggerMembership = ({
+  publicTriggers,
+  inventory,
+  truncated,
+} = {}) => {
+  const issues = [];
+  if (!Array.isArray(inventory) || inventory.length === 0) return issues;
+  const keys = new Set(inventory.map((row) => triggerKey(row)));
+  for (const row of REQUIRED_PUBLIC_TRIGGERS) {
+    if (!keys.has(triggerKey(row))) {
+      issues.push(issue(
+        'trigger',
+        'error',
+        `required public trigger ${row.table}.${row.trigger} is missing`,
+      ));
+    }
+  }
+  for (const row of SUPERSEDED_PUBLIC_TRIGGERS) {
+    if (keys.has(triggerKey(row))) {
+      issues.push(issue(
+        'trigger',
+        'error',
+        `superseded public trigger ${row.table}.${row.trigger} is present`,
+      ));
+    }
+  }
+  if (
+    truncated !== true
+    && Number.isSafeInteger(publicTriggers)
+    && publicTriggers >= 0
+    && inventory.length !== publicTriggers
+  ) {
+    issues.push(issue(
+      'trigger',
+      'error',
+      `public trigger inventory ${inventory.length} != count ${publicTriggers}`,
+    ));
+  }
+  return issues;
 };
 
 const issue = (kind, severity, message, extra = {}) => ({
@@ -473,6 +576,13 @@ export const validateReadonlyCoreTables = async ({
           const projected = projectPublicTriggerInventory(rows);
           catalog.publicTriggerInventory = projected.inventory;
           catalog.publicTriggerInventoryTruncated = projected.truncated;
+          for (const item of evaluatePublicTriggerMembership({
+            publicTriggers: catalog.publicTriggers,
+            inventory: projected.inventory,
+            truncated: projected.truncated,
+          })) {
+            result.issues.push(item);
+          }
         },
       },
       {

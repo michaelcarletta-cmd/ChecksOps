@@ -187,7 +187,7 @@ test('existing validator enforces TLS/session/transaction read-only and never di
       if (sql.includes("c.relname = 'users'")) return { rows: [{ present: true }] };
       if (sql.includes('pg_constraint')) return { rows: [{ fk_count: 0 }] };
       if (sql.includes('pg_get_triggerdef')) return { rows: [] };
-      if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 165 }] };
+      if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 172 }] };
       if (sql.includes('prokind')) return { rows: [{
         function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
         vault_functions: 0, pgmq_functions: 0,
@@ -321,7 +321,7 @@ test('CLI names added public triggers from the sanitized Lambda inventory', asyn
   const validation = projectValidation(validValidation({
     issues: [{ kind: 'trigger', severity: 'error', message: SENSITIVE }],
     catalog: {
-      publicTriggers: 172,
+      publicTriggers: 179,
       publicTriggerInventory: inventory.map((row) => ({
         ...row,
         definition: `CREATE TRIGGER ${row.trigger} BEFORE UPDATE ON public.${row.table} FOR EACH ROW EXECUTE FUNCTION public.${row.functionName}()`,
@@ -342,8 +342,8 @@ test('CLI names added public triggers from the sanitized Lambda inventory', asyn
     });
     const summary = JSON.parse(output);
     assert.equal(status, 1);
-    assert.equal(summary.triggerInventory.expectedCount, 165);
-    assert.equal(summary.triggerInventory.actualCount, 172);
+    assert.equal(summary.triggerInventory.expectedCount, 172);
+    assert.equal(summary.triggerInventory.actualCount, 179);
     assert.equal(summary.triggerInventory.added.length, 7);
     assert.deepEqual(
       summary.triggerInventory.added.map((row) => `${row.table}.${row.trigger}`),
