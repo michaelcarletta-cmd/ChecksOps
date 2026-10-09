@@ -1,0 +1,83 @@
+{
+  "id": "staging-settlement-uat-identity",
+  "authorization": "read-only-investigation",
+  "write_authorized": false,
+  "writes_attempted": false,
+  "writes_committed": false,
+  "create_claim_authorized": false,
+  "save_settlement_authorized": false,
+  "production_changes": false,
+  "cognito_user_changes": false,
+  "mapping_changes": false,
+  "verdict": "NO-GO",
+  "freedom_only_uat_can_proceed": false,
+  "c1c_gated_separately": true,
+  "inspected_at": "2026-10-09T19:52:05.000Z",
+  "reserved_claim_number": "AWS SETTLEMENT UAT",
+  "correct_uat_actor": {
+    "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+    "role": "staff",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "tenant_name": "Freedom",
+    "live_verified_this_turn": false,
+    "reason": "That UUID is the accepted Freedom staff tester. Live EMAIL_OTP for it was not completable from the connected mailbox."
+  },
+  "verified_identity": {
+    "email": "claims@freedomadj.com",
+    "cognito_sub": "047824f8-b0b1-7018-c5e3-c0350a6c8a40",
+    "application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "auth_uid": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "is_master_owner": false,
+    "roles": ["mortgage_agent"],
+    "tenants": [],
+    "mapping_status": "active",
+    "identity_source": "identity_accounts",
+    "safe_for_settlement_uat": false,
+    "unsafe_reason": "No Freedom tenant membership. aws_can_write_claim cannot succeed. Historical role is mortgage_agent."
+  },
+  "live_cognito": {
+    "checksops-tester@freedomadj.com": {
+      "sub": "04d85458-1041-7017-a8e8-b2f3f0a5b75b",
+      "status": "CONFIRMED",
+      "created": "2026-09-10T19:01:03.642Z",
+      "historical_sub": "c4386408-60e1-70e2-abb6-e6194e8e635f",
+      "identity_me": "not_completed"
+    },
+    "mcarletta@freedomadj.com": {
+      "sub": "c4386408-60e1-70e2-abb6-e6194e8e635f",
+      "status": "CONFIRMED",
+      "created": "2026-09-02T14:08:09.700Z",
+      "identity_me": "not_completed",
+      "note": "This is the original tester Cognito user. Email was later changed from checksops-tester@ to mcarletta@."
+    },
+    "claims@freedomadj.com": {
+      "sub": "047824f8-b0b1-7018-c5e3-c0350a6c8a40",
+      "status": "CONFIRMED",
+      "created": "2026-09-23T21:28:50.165Z",
+      "historical_sub": "2498c4b8-f0a1-701b-da4b-a1f5c79f675a",
+      "historical_sub_exists": false,
+      "identity_me": "verified"
+    },
+    "staging-master@checksops.invalid": {
+      "sub": "54a8b4c8-60d1-7028-cfbb-0eb2baee5592",
+      "status": "CONFIRMED",
+      "used": false
+    }
+  },
+  "mismatch_reason": "The UAT plan still uses the Sept 2 onboard snapshot: checksops-tester@ + sub c4386408 → abd3c2a0. Master UAT on Sept 4 moved mcarletta@ onto that same Cognito user so EMAIL_OTP could reach Michael while keeping sub c4386408. A replacement checksops-tester@ user was created Sept 10 with a new sub 04d85458. Lookup is by cognito_sub, not email, so the plan email and historical sub are no longer the same login. A later dual-env fixture (Sept 22) records mcarletta@ / staging sub c4386408 → master UUID 7dbb3009. That live mapping was not reconfirmed this turn.",
+  "safe_auth_procedure": [
+    "Use POST /auth/passwordless/start + /auth/passwordless/verify only. Do not call POST /auth/login.",
+    "Do not use staging-master@checksops.invalid or the master UAT password secret.",
+    "Owner completes EMAIL_OTP as mcarletta@freedomadj.com, then GET /identity/me.",
+    "Accept that login for Freedom settlement UAT only if applicationUserId is abd3c2a0-6dc0-4680-92dd-a013e1141c91, Freedom tenant 2eff5f1a-929d-4ce3-9a8b-cd96b98df42a is present, and isMasterOwner is false.",
+    "If /identity/me is 7dbb3009 or isMasterOwner is true, stop. Then complete EMAIL_OTP as checksops-tester@freedomadj.com and accept only abd3c2a0 + Freedom + not master.",
+    "claims@freedomadj.com is verified and must not be used for settlement UAT.",
+    "C1C deny remains separately gated and is not required for Freedom-only tests."
+  ],
+  "mutations": [],
+  "owner_action_required": [
+    "Complete EMAIL_OTP for mcarletta@freedomadj.com and report /identity/me applicationUserId, tenants, roles, and isMasterOwner",
+    "If that login is the master principal, complete EMAIL_OTP for checksops-tester@freedomadj.com and report the same fields",
+    "Do not remap Cognito users, identity_accounts, or tenant memberships to unblock this"
+  ]
+}
