@@ -134,8 +134,12 @@ The exact additive identity-policy document, live-read evidence, and rollback
 are in `ops/deployment-guard/production-readonly-inspect-iam.json` and
 `ops/deployment-guard/policies/checksops-production-readonly-inspect-ec2-sg.json`.
 Create a new inline policy of that name only after a live inventory shows the
-permission is absent. Do not replace an unknown existing policy document. Do
-not dispatch the official inspector from this package.
+permission is absent. The 2026-10-09T23:44:04Z preflight from
+`ChecksOpsCursorCloudStaging` received AccessDenied for GetRole, List*,
+GetRolePolicy, and SimulatePrincipalPolicy, so existing-grant status remains
+unknown. Do not replace an unknown existing policy document. Do not broaden
+`ChecksOpsCursorCloudStaging`. Do not dispatch the official inspector from this
+package.
 Do not grant `GetSecretValue`, wildcard Secrets Manager access, SSM value
 reads, `ec2:AuthorizeSecurityGroupIngress`, `ec2:RevokeSecurityGroupIngress`,
 `ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, or RDS mutation/data-plane

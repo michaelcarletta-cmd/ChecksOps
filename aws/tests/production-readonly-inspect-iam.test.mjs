@@ -62,6 +62,10 @@ test('PR #853 is recorded on main and the evidence package stays evaluate-only',
   assert.equal(EVIDENCE.verdict.apply, 'NO-GO');
   assert.equal(EVIDENCE.verdict.dispatch_official_inspect, 'NO-GO');
   assert.equal(EVIDENCE.verdict.prep, 'GO');
+  assert.equal(EVIDENCE.verdict.preflight, 'NO-GO');
+  assert.equal(EVIDENCE.verdict.broaden_staging, 'NO-GO');
+  assert.equal(EVIDENCE.smallest_safe_change.necessary, 'unknown');
+  assert.equal(EVIDENCE.smallest_safe_change.safe_without_owner_inventory, false);
 });
 
 test('proposed identity policy is only additive DescribeSecurityGroups', () => {
@@ -125,4 +129,13 @@ test('this package does not apply IAM or dispatch the official inspector', () =>
   assert.equal(EVIDENCE.owner_apply_after_separate_approval.authorized_in_this_package, false);
   assert.equal(EVIDENCE.live_iam_read.existing_grant_of_describe_security_groups, 'unknown');
   assert.equal(EVIDENCE.live_iam_read.get_role, 'AccessDenied');
+  assert.equal(EVIDENCE.live_iam_read.get_role_policy_proposed_name, 'AccessDenied');
+  assert.equal(EVIDENCE.live_iam_read.proposed_inline_policy_exists, 'unknown');
+  assert.equal(EVIDENCE.live_iam_read.trust_policy_verified, false);
+  assert.equal(EVIDENCE.live_iam_read.mutations_attempted, false);
+  assert.equal(EVIDENCE.live_iam_read.staging_permissions_changed, false);
+  assert.equal(EVIDENCE.authorized_read_identities.in_this_environment[0].can_read_inspect_role, false);
+  assert.equal(EVIDENCE.authorized_read_identities.in_this_environment[0].broadened, false);
+  assert.ok(EVIDENCE.owner_preflight_before_apply.some((item) => String(item).includes('simulate-principal-policy')));
+  assert.ok(EVIDENCE.owner_preflight_before_apply.some((item) => String(item).includes(EVIDENCE.proposed_inline_policy_name)));
 });
