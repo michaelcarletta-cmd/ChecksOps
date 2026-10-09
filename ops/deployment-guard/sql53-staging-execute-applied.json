@@ -1,0 +1,103 @@
+{
+  "id": "sql53-staging-execute-applied",
+  "verdict": "BLOCKED",
+  "verdict_reason": "official post-apply staging-db-readonly-diagnostic could not be rerun",
+  "sql_committed": true,
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "deployment_type": "sql-executor-invoke",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "commit": "8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1",
+  "pack_commit": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_replacement_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "production_changes": false,
+  "lambda_code_updated": false,
+  "release_lock_changes": false,
+  "phase2_authorized": false,
+  "unrelated_sql": false,
+  "receipt_issued": true,
+  "receipt_kind": "deployment-guard-receipt",
+  "receipt_deployment_type": "sql-executor-invoke",
+  "receipt_has_issuer_mac": true,
+  "one_use_id": "sql53-staging-apply-3bc9-2026-10-09T1816",
+  "one_use_consumed_on_commit": true,
+  "pre_apply_http_diagnostic": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_run": 37969902795,
+    "head_sha": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+    "event": "workflow_dispatch",
+    "created_at": "2026-10-09T17:57:22Z",
+    "http_status": 200,
+    "exists": false,
+    "public_triggers": "172/172",
+    "settlement_columns": "17/17",
+    "ledger_triggers": "3/3",
+    "still_latest_success_after_apply": true
+  },
+  "contracts": {
+    "runner": "node --experimental-strip-types --test",
+    "tests": 48,
+    "fail": 0,
+    "claim-ledger": true,
+    "tenant-isolation": true,
+    "financial-write-protections": true
+  },
+  "live_executor": {
+    "before": {
+      "CodeSha256": "oqbZHB8JUyKpLgsfv96gudtHAZKKZkHUSnPFfDkCz24=",
+      "RevisionId": "983b80cd-ef8c-43a7-99c4-d3f9a5334a7d",
+      "LastModified": "2026-10-09T17:47:48.000+0000"
+    },
+    "after": {
+      "CodeSha256": "oqbZHB8JUyKpLgsfv96gudtHAZKKZkHUSnPFfDkCz24=",
+      "RevisionId": "983b80cd-ef8c-43a7-99c4-d3f9a5334a7d",
+      "LastModified": "2026-10-09T17:47:48.000+0000",
+      "unchanged": true
+    }
+  },
+  "inspect_before": {
+    "exists": false,
+    "live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "apply": {
+    "ok": true,
+    "result": "applied",
+    "before_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "after_hash": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+    "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+    "executor_identity": "checksops-staging-guarded-sql-executor"
+  },
+  "inspect_after": {
+    "exists": true,
+    "live_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+    "matches_intended": true
+  },
+  "preserved_hashes_after": {
+    "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+    "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf",
+    "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+  },
+  "sql53_ddl": {
+    "alter_table": false,
+    "drop": false,
+    "create_trigger": false,
+    "create_table": false,
+    "create_or_replace_function_only": true
+  },
+  "post_apply_http_diagnostic": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "ran": false,
+    "workflow_dispatch": "HTTP 403 Resource not accessible by integration",
+    "script_classification": "staging_identity_unavailable",
+    "token_present": false,
+    "latest_successful_run_still": 37969902795,
+    "columns_and_triggers_post_apply": "unconfirmed_by_official_http_diagnostic"
+  },
+  "owner_action_required": "Dispatch Staging DB read-only diagnostic on main to confirm 17 settlement columns and 3 ledger triggers after the committed staging apply.",
+  "notes": "Official preflight issued a short-lived sql-executor-invoke receipt. SQL 53 was applied only through checksops-staging-guarded-sql-executor. No production, unrelated SQL, Lambda code, Release Lock, or Phase 2 changes. EXECUTED_AND_VERIFIED is withheld until the official HTTP diagnostic reruns."
+}
