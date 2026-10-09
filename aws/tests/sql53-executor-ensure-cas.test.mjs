@@ -103,6 +103,14 @@ exit 1
   return { log, bin };
 }
 
+function parsePayload(result) {
+  const text = `${result.stdout || ''}\n${result.stderr || ''}`;
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  assert.ok(start >= 0 && end > start, `ensure produced no JSON: ${text}`);
+  return JSON.parse(text.slice(start, end + 1));
+}
+
 function runEnsure(dir, extraArgs, mode = 'ok') {
   const { log, bin } = writeFakeAws(dir, mode);
   const result = spawnSync(process.execPath, [ENSURE, ...extraArgs], {
@@ -129,7 +137,7 @@ test('sql-executor-ensure refuses to write without expected fingerprint CAS', ()
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-ens-cas-'));
   const { result, log } = runEnsure(dir, APPROVED_ARGS);
   assert.notEqual(result.status, 0);
-  const payload = JSON.parse(result.stderr || result.stdout);
+  const payload = parsePayload(result);
   assert.equal(payload.code, CODES.DEPLOYMENT_COLLISION);
   assert.match(payload.message, /expected CodeSha256 and RevisionId CAS/);
   assert.equal(log, '');
@@ -143,7 +151,7 @@ test('sql-executor-ensure stops on live fingerprint drift before packing or upda
     '--expected-revision-id', EXPECTED_REV,
   ], 'mismatch');
   assert.notEqual(result.status, 0);
-  const payload = JSON.parse(result.stderr || result.stdout);
+  const payload = parsePayload(result);
   assert.equal(payload.code, CODES.DEPLOYMENT_COLLISION);
   assert.match(payload.message, /fingerprint changed after preflight/);
   assert.match(log, /get-function-configuration/);
@@ -159,7 +167,7 @@ test('failed update-function-code never falls through to create-function', () =>
     '--expected-revision-id', EXPECTED_REV,
   ], 'code-fail');
   assert.notEqual(result.status, 0);
-  const payload = JSON.parse(result.stderr || result.stdout);
+  const payload = parsePayload(result);
   assert.equal(payload.code, CODES.DEPLOYMENT_COLLISION);
   assert.match(log, /update-function-code/);
   assert.match(log, new RegExp(`--revision-id ${EXPECTED_REV}`));
@@ -174,7 +182,7 @@ test('successful ensure passes RevisionId CAS on code and configuration updates'
     '--expected-revision-id', EXPECTED_REV,
   ], 'ok');
   assert.equal(result.status, 0, `${result.stderr}${result.stdout}`);
-  const payload = JSON.parse(result.stdout);
+  const payload = parsePayload(result);
   assert.equal(payload.ok, true);
   assert.equal(payload.details.created, false);
   assert.equal(payload.details.invoked, false);

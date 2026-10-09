@@ -35,6 +35,7 @@ function awsJson(args, env = process.env) {
   const out = execFileSync(AWS, ['--region', REGION, '--output', 'json', ...args], {
     encoding: 'utf8',
     env,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
   return out.trim() ? JSON.parse(out) : {};
 }
@@ -183,7 +184,7 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
       '--function-name', functionName,
       '--zip-file', `fileb://${packed.zip}`,
       '--revision-id', expectedRevisionId,
-    ], { encoding: 'utf8', env });
+    ], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (error) {
     return printResult(fail(
       CODES.DEPLOYMENT_COLLISION,
@@ -192,7 +193,7 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
     ));
   }
   try {
-    execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env });
+    execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch { /* ok */ }
 
   let afterCode;
@@ -221,7 +222,7 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
       '--memory-size', '256',
       '--environment', JSON.stringify(environment),
       '--revision-id', afterCode.RevisionId,
-    ], { encoding: 'utf8', env });
+    ], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (error) {
     return printResult(fail(
       CODES.DEPLOYMENT_COLLISION,
@@ -233,7 +234,7 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
     ));
   }
   try {
-    execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env });
+    execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch { /* ok */ }
 
   const config = awsJson(['lambda', 'get-function-configuration', '--function-name', functionName], env);
