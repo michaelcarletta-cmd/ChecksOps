@@ -5,9 +5,42 @@ import { test } from 'node:test';
 import {
   createStagingVerifier, diagnose, main, summarizeValidation,
 } from '../../scripts/staging-db-readonly-diagnostic.mjs';
+import {
+  PINNED_FUNCTION_LOOKUPS,
+  REQUIRED_LEDGER_TRIGGERS,
+  REQUIRED_SETTLEMENT_COLUMNS,
+  hashFunctionDefinition,
+} from '../functions/api/db-readonly-validate.mjs';
+import { handleDbReadonlyValidateRequest, publicDbValidationResponse } from '../functions/api/index.mjs';
 
 const TOKEN = 'offline-test-session';
 const SENSITIVE = 'sensitive-fixture-must-not-appear';
+const SECRET_BODY = 'CREATE FUNCTION public.aws_can_write_claim(uuid) RETURNS boolean AS $$ SELECT true $$';
+const SECRET_PASSWORD = 'unit-test-only-not-a-real-secret';
+const INSPECT_HASH = hashFunctionDefinition(SECRET_BODY);
+const leakedInspect = () => ({
+  readOnly: false,
+  functions: [{
+    identity: 'public.aws_can_write_claim(uuid)',
+    exists: true,
+    definitionSha256: INSPECT_HASH,
+    definition: SECRET_BODY,
+    password: SECRET_PASSWORD,
+  }],
+  settlementColumns: [{
+    table: 'claim_settlements',
+    column: 'other_structures_rcv',
+    exists: true,
+    definition: SECRET_BODY,
+  }],
+  ledgerTriggers: [{
+    table: 'check_intake_items',
+    trigger: 'trg_hle_check_intake_insert',
+    exists: true,
+    definition: SECRET_BODY,
+  }],
+  connectionString: SENSITIVE,
+});
 const validation = (overrides = {}) => ({
   service: 'checksops-api', environment: 'staging',
   ok: false, readOnly: true, writesAttempted: false,
@@ -215,8 +248,97 @@ test('workflow is manual, protected, main-only, without AWS access or configurab
   assert.match(workflow, /secrets\.CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN/);
   assert.match(workflow, /npm ci .*--ignore-scripts/);
   assert.doesNotMatch(workflow, /id-token:|configure-aws-credentials|pull_request:|push:|inputs:|upload-artifact|continue-on-error|set -x/);
+  assert.doesNotMatch(workflow, /actions:\s*write|contents:\s*write/);
+  assert.match(workflow, /Resource not accessible by integration/);
   assert.match(script, /userPoolId: 'us-east-1_vPmQ7cL1F'/);
   assert.match(script, /clientId: '71bb7a192cbl6o6s8m259tl589'/);
   assert.match(script, /tokenUse: 'id'/);
   assert.doesNotMatch(script, /process\.env\.(?:CHECKSOPS_API_URL|COGNITO_|AWS_)|\/auth\/|\/data\/|execSync|spawnSync/);
+});
+
+test('authorized HTTP diagnostic extracts allowlisted inspect and never copies SQL bodies', () => {
+  const result = summarizeValidation(validation({
+    inspect: leakedInspect(),
+    currentDatabase: SENSITIVE,
+    issues: [{ kind: 'trigger', severity: 'error', message: SENSITIVE }],
+    catalog: { publicTriggers: 164 },
+  }), 503);
+  assert.equal(result.status, 'unhealthy');
+  assert.deepEqual(result.inspect.functions.find((row) => row.identity === 'public.aws_can_write_claim(uuid)'), {
+    identity: 'public.aws_can_write_claim(uuid)',
+    exists: true,
+    definitionSha256: INSPECT_HASH,
+  });
+  assert.equal(result.inspect.functions.length, PINNED_FUNCTION_LOOKUPS.length);
+  assert.equal(result.inspect.settlementColumns.length, REQUIRED_SETTLEMENT_COLUMNS.length);
+  assert.equal(result.inspect.ledgerTriggers.length, REQUIRED_LEDGER_TRIGGERS.length);
+  assert.equal(result.inspect.settlementColumns.find((row) => row.column === 'other_structures_rcv').exists, true);
+  assert.equal(result.inspect.ledgerTriggers.find((row) => row.trigger === 'trg_hle_check_intake_insert').exists, true);
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(`${SENSITIVE}|${SECRET_BODY}|${SECRET_PASSWORD}|${TOKEN}`));
+  assert.doesNotMatch(JSON.stringify(result), /"definition":|"password":|connectionString/);
+});
+
+test('HTTP diagnostic omits inspect when absent and fails closed on a non-object inspect', () => {
+  const omitted = summarizeValidation(validation({
+    issues: [{ kind: 'trigger', severity: 'error' }],
+  }), 503);
+  assert.equal(Object.hasOwn(omitted, 'inspect'), false);
+
+  assert.throws(
+    () => summarizeValidation(validation({ inspect: SECRET_BODY, issues: [{ kind: 'trigger', severity: 'error' }] }), 503),
+    /response_contract_mismatch/,
+  );
+  assert.throws(
+    () => summarizeValidation(validation({ inspect: [leakedInspect()], issues: [{ kind: 'trigger', severity: 'error' }] }), 503),
+    /response_contract_mismatch/,
+  );
+});
+
+test('public HTTP output stays redacted and API auth still withholds inspect from non-admins', async () => {
+  const validationResult = {
+    ok: true,
+    readOnly: true,
+    writesAttempted: false,
+    issues: [],
+    tables: [],
+    inspect: leakedInspect(),
+  };
+  const publicResult = publicDbValidationResponse(validationResult);
+  assert.deepEqual(publicResult.body, { service: 'checksops-api', status: 'ok', readOnly: true });
+  assert.equal(Object.hasOwn(publicResult.body, 'inspect'), false);
+
+  const unauthenticated = await handleDbReadonlyValidateRequest({}, {
+    validate: async () => validationResult,
+    resolveAuth: async () => ({ ok: false }),
+    authorizeDetails: async () => ({ ok: false, reason: 'unauthenticated' }),
+  });
+  assert.deepEqual(unauthenticated.body, { service: 'checksops-api', status: 'ok', readOnly: true });
+  assert.equal(Object.hasOwn(unauthenticated.body, 'inspect'), false);
+
+  const forbidden = await handleDbReadonlyValidateRequest({}, {
+    validate: async () => validationResult,
+    resolveAuth: async () => ({ ok: true, claims: { sub: 'cognito-sub' } }),
+    authorizeDetails: async () => ({ ok: false, reason: 'not_admin', statusCode: 403 }),
+  });
+  assert.deepEqual(forbidden, { statusCode: 403, body: { error: 'not_authorized' } });
+  assert.doesNotMatch(JSON.stringify(forbidden), new RegExp(`${SECRET_BODY}|${SECRET_PASSWORD}|${INSPECT_HASH}`));
+
+  const allowed = await handleDbReadonlyValidateRequest({}, {
+    validate: async () => validationResult,
+    resolveAuth: async () => ({ ok: true, claims: { sub: 'cognito-sub' } }),
+    authorizeDetails: async () => ({ ok: true, reason: 'staging_admin' }),
+  });
+  assert.equal(allowed.body.inspect.functions.find((row) => row.identity === 'public.aws_can_write_claim(uuid)').definitionSha256, INSPECT_HASH);
+  assert.doesNotMatch(JSON.stringify(allowed), new RegExp(`${SECRET_BODY}|${SECRET_PASSWORD}`));
+});
+
+test('HTTP diagnostic main never prints inspect from a public or malformed payload', async () => {
+  let output;
+  assert.equal(await main(offlineOptions({
+    fetchImpl: async () => response({ service: 'checksops-api', status: 'ok', readOnly: true, inspect: leakedInspect() }, 200),
+    writeOutput: (text) => { output = text; },
+  })), 2);
+  assert.match(output, /response_contract_mismatch/);
+  assert.doesNotMatch(output, new RegExp(`${SECRET_BODY}|${SECRET_PASSWORD}|${INSPECT_HASH}`));
+  assert.doesNotMatch(output, /"inspect"/);
 });

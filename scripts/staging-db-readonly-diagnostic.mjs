@@ -4,6 +4,7 @@ import {
   comparePublicTriggerInventory,
   sanitizePublicTriggerRow,
 } from './lib/justified-public-triggers.mjs';
+import { redactFunctionDefInspect } from '../aws/functions/api/db-readonly-validate.mjs';
 
 const ENDPOINT = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/db-readonly-validate';
 const TABLES = new Set([
@@ -144,6 +145,12 @@ export const summarizeValidation = (body, httpStatus) => {
   const summary = { httpStatus, status: body.ok ? 'ok' : 'unhealthy', issues };
   const triggerInventory = projectPublicTriggerInventory(body.catalog || {});
   if (triggerInventory) summary.triggerInventory = triggerInventory;
+  if (Object.hasOwn(body, 'inspect')) {
+    if (!body.inspect || typeof body.inspect !== 'object' || Array.isArray(body.inspect)) {
+      throw new DiagnosticError('response_contract_mismatch');
+    }
+    summary.inspect = redactFunctionDefInspect(body.inspect);
+  }
   return summary;
 };
 
