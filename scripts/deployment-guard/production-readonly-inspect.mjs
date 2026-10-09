@@ -95,6 +95,7 @@ const AWS_ACTIONS = Object.freeze({
   'lambda:GetFunction': `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`,
   'secretsmanager:DescribeSecret': `the exact production secret ARN referenced by ${FUNCTION_NAME}`,
   'rds:DescribeDBInstances': '*',
+  'ec2:DescribeSecurityGroups': '*',
   'apigateway:GET': `arn:aws:apigateway:${REGION}::/apis/${API_ID}/*`,
   'cloudfront:GetDistribution': `arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${DISTRIBUTION_ID}`,
 });
@@ -173,6 +174,22 @@ export function buildAwsArgs(action, target = {}) {
         'rds', 'describe-db-instances',
         '--query', '{DBInstances:DBInstances[].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn,VpcId:DBSubnetGroup.VpcId,SubnetIds:DBSubnetGroup.Subnets[].SubnetIdentifier,VpcSecurityGroupIds:VpcSecurityGroups[].VpcSecurityGroupId},ObservedInstanceCount:length(DBInstances)}',
       ];
+    case 'ec2:DescribeSecurityGroups': {
+      if (Object.keys(target).length !== 1 || !Array.isArray(target.groupIds)) {
+        throw new Error('unexpected production security-group target');
+      }
+      const groupIds = target.groupIds;
+      if (groupIds.length === 0 || groupIds.length > 32
+          || groupIds.some((id) => !isApprovedSecurityGroupId(id))
+          || new Set(groupIds).size !== groupIds.length) {
+        throw new Error('unexpected production security-group target');
+      }
+      return [
+        'ec2', 'describe-security-groups',
+        '--group-ids', ...[...groupIds].sort(),
+        '--query', '{SecurityGroups:SecurityGroups[].{GroupId:GroupId,IpPermissions:IpPermissions[].{IpProtocol:IpProtocol,FromPort:FromPort,ToPort:ToPort,UserIdGroupPairs:UserIdGroupPairs[].{GroupId:GroupId,UserId:UserId}}}}',
+      ];
+    }
     case 'apigateway:GET':
       if (target.apiId !== API_ID || !['api', 'stage', 'integrations'].includes(target.resource)
           || Object.keys(target).some((key) => !['apiId', 'resource', 'stage'].includes(key))) {
@@ -241,6 +258,14 @@ function safeHash(value) {
 function isProductionSecretArn(value) {
   return typeof value === 'string'
     && new RegExp(`^arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:[A-Za-z0-9/_+=.@-]+$`).test(value);
+}
+
+function isApprovedSecurityGroupId(value) {
+  return typeof value === 'string' && /^sg-[a-f0-9]{8,17}$/i.test(value);
+}
+
+function uniqueApprovedSecurityGroupIds(values) {
+  return [...new Set((values || []).filter(isApprovedSecurityGroupId))].sort();
 }
 
 function isProductionSsmArn(value) {
@@ -406,11 +431,119 @@ function rdsNetworkBinding(metadata, network) {
   };
 }
 
-function lambdaSecurityGroupResources(network) {
-  const ids = network.security_group_ids.filter((id) => /^sg-[A-Za-z0-9]+$/.test(id));
-  return ids.length
-    ? ids.map((id) => `arn:aws:ec2:${REGION}:${ACCOUNT_ID}:security-group/${id}`).join(',')
-    : `arn:aws:ec2:${REGION}:${ACCOUNT_ID}:security-group/*`;
+function permissionCoversPostgres(permission) {
+  const protocol = String(permission?.IpProtocol ?? '').toLowerCase();
+  if (protocol === '-1') return true;
+  if (protocol !== 'tcp' && protocol !== '6') return false;
+  const from = Number.isInteger(permission.FromPort) ? permission.FromPort : null;
+  const to = Number.isInteger(permission.ToPort) ? permission.ToPort : null;
+  if (from == null || to == null) return false;
+  return from <= 5432 && to >= 5432;
+}
+
+function permissionHasLambdaGroupIngress(permission, lambdaSecurityGroupIds) {
+  if (!permissionCoversPostgres(permission)) return false;
+  const pairs = Array.isArray(permission.UserIdGroupPairs) ? permission.UserIdGroupPairs : [];
+  return pairs.some((pair) => (
+    isApprovedSecurityGroupId(pair?.GroupId)
+    && lambdaSecurityGroupIds.includes(pair.GroupId)
+    && (pair.UserId == null || pair.UserId === ACCOUNT_ID)
+  ));
+}
+
+function securityGroupHasLambdaPostgresIngress(group, lambdaSecurityGroupIds) {
+  const permissions = Array.isArray(group?.IpPermissions) ? group.IpPermissions : [];
+  return permissions.some((permission) => permissionHasLambdaGroupIngress(permission, lambdaSecurityGroupIds));
+}
+
+function securityGroupRecords(payload) {
+  const groups = Array.isArray(payload?.SecurityGroups)
+    ? payload.SecurityGroups
+    : Array.isArray(payload)
+      ? payload
+      : [];
+  return groups.filter((group) => isApprovedSecurityGroupId(group?.GroupId));
+}
+
+function rdsIngressBinding(metadata, network, securityGroups) {
+  const byId = new Map(securityGroupRecords(securityGroups).map((group) => [group.GroupId, group]));
+  const lambdaSecurityGroupIds = uniqueApprovedSecurityGroupIds(network.security_group_ids);
+  const vpcMatches = network.vpc_id
+    ? rdsInstanceRecords(metadata).filter((instance) => instance.vpc_id === network.vpc_id)
+    : [];
+  const matches = vpcMatches.filter((instance) => instance.security_group_ids.some((id) => {
+    const group = byId.get(id);
+    return group ? securityGroupHasLambdaPostgresIngress(group, lambdaSecurityGroupIds) : false;
+  }));
+  return {
+    targets: matches.length === 1
+      ? matches.map((instance) => rdsTarget(instance, 'exclusive-security-group-ingress'))
+      : [],
+    match_count: matches.length,
+  };
+}
+
+function needsSecurityGroupIngress(binding) {
+  return Boolean(
+    binding.metadata?.ARN === binding.reference.identifier
+    && binding.targets.length !== 1
+    && binding.secretTargets.length === 0
+    && binding.instances != null
+    && binding.networkBinding?.vpc_match_count > 1
+    && binding.networkBinding?.targets.length !== 1
+  );
+}
+
+function observedIngressSecurityGroupIds(secrets, network) {
+  return uniqueApprovedSecurityGroupIds([
+    ...network.security_group_ids,
+    ...secrets.flatMap((secret) => rdsInstanceRecords(secret.instances)
+      .filter((instance) => instance.vpc_id && instance.vpc_id === network.vpc_id)
+      .flatMap((instance) => instance.security_group_ids)),
+  ]);
+}
+
+async function describeObservedSecurityGroups({ secrets, network, readErrors, runAws }) {
+  const needing = secrets.filter(needsSecurityGroupIngress);
+  if (!needing.length) {
+    return { payload: null, groupIds: [], attempted: false };
+  }
+  const groupIds = observedIngressSecurityGroupIds(needing, network);
+  if (!groupIds.length) {
+    return { payload: null, groupIds: [], attempted: false };
+  }
+  const payload = await safeRead(
+    readErrors,
+    'ec2:DescribeSecurityGroups',
+    { groupIds },
+    runAws,
+  );
+  return { payload, groupIds, attempted: true };
+}
+
+function applySecurityGroupIngress(binding, network, describeResult) {
+  if (!needsSecurityGroupIngress(binding)) return binding;
+  const { payload, attempted } = describeResult;
+  if (!attempted || payload == null) {
+    return {
+      ...binding,
+      networkBinding: {
+        ...binding.networkBinding,
+        security_group_ingress_status: attempted ? 'unavailable' : 'not_attempted',
+        security_group_ingress_match_count: 0,
+      },
+    };
+  }
+  const ingress = rdsIngressBinding(binding.instances, network, payload);
+  return {
+    ...binding,
+    networkBinding: {
+      ...binding.networkBinding,
+      security_group_ingress_status: 'described',
+      security_group_ingress_match_count: ingress.match_count,
+    },
+    targets: ingress.targets.length === 1 ? ingress.targets : binding.targets,
+  };
 }
 
 function rdsPersistenceBinding(secret, network) {
@@ -440,6 +573,8 @@ function rdsBindingUnresolved(binding, network) {
   const observed = binding.payload.observedInstanceCount;
   const vpcMatchCount = binding.networkBinding?.vpc_match_count ?? 0;
   const securityGroupMatchCount = binding.networkBinding?.security_group_match_count ?? 0;
+  const ingressMatchCount = binding.networkBinding?.security_group_ingress_match_count ?? 0;
+  const ingressStatus = binding.networkBinding?.security_group_ingress_status || null;
   if (binding.targets.length === 1) return [];
   if (binding.secretTargets.length > 1) {
     return [{
@@ -452,24 +587,33 @@ function rdsBindingUnresolved(binding, network) {
       observed_db_instance_count: observed,
       vpc_match_count: vpcMatchCount,
       security_group_match_count: securityGroupMatchCount,
+      security_group_ingress_match_count: ingressMatchCount,
       owning_service_is_rds: owningServiceIsRds,
       reason: 'RDS metadata links the secret to multiple production instances',
     }];
   }
   if (vpcMatchCount > 1) {
+    const described = ingressStatus === 'described';
     return [{
       variable_name: reference.variable_name,
       reference_type: reference.reference_type,
       identifier: reference.identifier,
-      required_permission: 'ec2:DescribeSecurityGroups',
-      required_permission_resource: lambdaSecurityGroupResources(network),
-      required_evidence: 'security-group ingress from the live Lambda security groups to exactly one production RDS instance; MasterUserSecret and exclusive VPC/SG membership were checked; secret values, SQL, and additional IAM expansion are not authorized',
+      required_permission: described ? null : 'ec2:DescribeSecurityGroups',
+      required_permission_resource: described ? null : '*',
+      required_evidence: described
+        ? 'security-group ingress from the live Lambda security groups did not bind exactly one production RDS instance; MasterUserSecret and exclusive VPC/SG membership were checked; secret values, SQL, and additional IAM expansion are not authorized'
+        : 'security-group ingress from the live Lambda security groups to exactly one production RDS instance; MasterUserSecret and exclusive VPC/SG membership were checked; secret values, SQL, and additional IAM expansion are not authorized',
       master_user_association_count: 0,
       observed_db_instance_count: observed,
       vpc_match_count: vpcMatchCount,
       security_group_match_count: securityGroupMatchCount,
+      security_group_ingress_match_count: ingressMatchCount,
       owning_service_is_rds: owningServiceIsRds,
-      reason: 'authorized RDS and Lambda network metadata leaves multiple instances in the live Lambda VPC without an exclusive security-group association',
+      reason: described
+        ? (ingressMatchCount === 0
+          ? 'authorized security-group ingress metadata does not bind the live Lambda security groups to exactly one production RDS instance'
+          : 'authorized security-group ingress metadata binds the live Lambda security groups to multiple production RDS instances')
+        : 'authorized RDS and Lambda network metadata leaves multiple instances in the live Lambda VPC without an exclusive security-group association',
     }];
   }
   return [{
@@ -483,6 +627,7 @@ function rdsBindingUnresolved(binding, network) {
     observed_db_instance_count: observed,
     vpc_match_count: vpcMatchCount,
     security_group_match_count: securityGroupMatchCount,
+    security_group_ingress_match_count: ingressMatchCount,
     owning_service_is_rds: owningServiceIsRds,
     reason: owningServiceIsRds
       ? 'authorized rds:DescribeDBInstances found no instance MasterUserSecret or exclusive VPC/SG association for this RDS-owned secret; cluster metadata is not authorized and absence of instance association does not prove no production RDS'
@@ -932,7 +1077,7 @@ export async function inspectProduction({
     .filter((reference) => reference.reference_type === 'secretsmanager' && reference.exact_resource_arn)
     .map((reference) => [reference.identifier, reference])).values()];
   const network = lambdaNetwork(config);
-  const describedSecrets = await Promise.all(exactSecretReferences
+  const describedSecretsInitial = await Promise.all(exactSecretReferences
     .map(async (reference) => {
       const target = { secretArn: reference.identifier };
       const [metadata, instances] = await Promise.all([
@@ -941,6 +1086,15 @@ export async function inspectProduction({
       ]);
       return rdsPersistenceBinding({ reference, metadata, instances }, network);
     }));
+  const securityGroupDescribe = await describeObservedSecurityGroups({
+    secrets: describedSecretsInitial,
+    network,
+    readErrors,
+    runAws,
+  });
+  const describedSecrets = describedSecretsInitial.map((secret) => (
+    applySecurityGroupIngress(secret, network, securityGroupDescribe)
+  ));
   const referencedTargets = [...new Map(describedSecrets
     .flatMap((secret) => secret.targets)
     .map((item) => [item.resource_arn, item])).values()];
@@ -1096,6 +1250,7 @@ export async function inspectProduction({
     'master-user-secret': 'live Lambda configuration and package bind its secret reference to one RDS instance through AWS metadata',
     'exclusive-vpc': 'live Lambda VPC membership independently binds exactly one observed RDS instance through AWS metadata',
     'exclusive-security-group': 'live Lambda security groups independently bind exactly one observed RDS instance through AWS metadata',
+    'exclusive-security-group-ingress': 'live Lambda security-group ingress independently binds exactly one observed RDS instance through AWS metadata',
   };
   if (packageProvesRuntimeReference
       && referencedTargets.length === 1
@@ -1291,6 +1446,7 @@ export function buildInspectionSummary(report) {
         'required_permission_resource', 'required_evidence',
         'master_user_association_count', 'observed_db_instance_count',
         'vpc_match_count', 'security_group_match_count',
+        'security_group_ingress_match_count',
         'owning_service_is_rds', 'reason',
       ])),
     } : null,
