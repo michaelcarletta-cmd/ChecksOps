@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   DEPLOYMENT,
   isMissingStackError,
+  requireAbsentStack,
   safeVersionRecord,
   validateAwsIdentity,
   validateDeployContext,
@@ -68,6 +69,7 @@ test('deployment requires exact reviewed main and checked-out SHA', () => {
     { githubSha: 'b'.repeat(40) },
     { checkedOutSha: 'b'.repeat(40) },
     { approvedSha: 'b'.repeat(40) },
+    { approvedSha: undefined },
     { githubSha: 'invalid-sha' },
   ]) {
     assert.throws(() => validateDeployContext(validContext(context)), /unreviewed_source/);
@@ -78,6 +80,21 @@ test('only a missing new stack is accepted as deployment precondition', () => {
   assert.equal(isMissingStackError('ValidationError: Stack with id checksops-staging-db-readonly-diagnostic does not exist'), true);
   assert.equal(isMissingStackError('AccessDenied: not authorized to perform DescribeStacks'), false);
   assert.equal(isMissingStackError('Stack is UPDATE_IN_PROGRESS'), false);
+});
+
+test('existing target and live-state drift fail closed before create', () => {
+  assert.throws(() => requireAbsentStack(() => ({ StackName: DEPLOYMENT.stackName })), /target_stack_already_exists/);
+  assert.doesNotThrow(() => requireAbsentStack(() => {
+    const error = new Error('deployment_command_failed');
+    error.missingStack = true;
+    throw error;
+  }));
+  for (const error of [
+    Object.assign(new Error('deployment_command_failed'), { missingStack: false }),
+    new Error('deployment_command_failed'),
+  ]) {
+    assert.throws(() => requireAbsentStack(() => { throw error; }), /deployment_command_failed/);
+  }
 });
 
 test('deployment publishes and emits only the immutable version ARN and matching code fingerprint', () => {
