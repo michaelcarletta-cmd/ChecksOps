@@ -22,37 +22,34 @@ export function isSql53StagingApply(input = {}) {
 }
 
 const liveHashOf = (input = {}) => {
+  if (input.live_definition != null) return hashSqlDefinition(input.live_definition);
   if (SHA256_RE.test(String(input.live_definition_sha256 || ''))) {
     return input.live_definition_sha256;
   }
-  if (input.live_definition != null) return hashSqlDefinition(input.live_definition);
   return null;
 };
 
 export function classifySql53LivePrerequisite(input = {}, pin = loadSql53Pin(input.root)) {
   const liveHash = liveHashOf(input);
-  const exists = input.exists === true
-    || (input.exists !== false && SHA256_RE.test(String(liveHash || '')) && liveHash !== pin.absent_live_definition_sha256);
+  const hasLiveHash = SHA256_RE.test(String(liveHash || ''));
+  const absentHash = pin.absent_live_definition_sha256;
+  const provenPresent = hasLiveHash && liveHash !== absentHash;
 
-  if (!exists) {
-    return ok({
-      state: 'absent',
-      apply_allowed: true,
-      live_definition_sha256: pin.absent_live_definition_sha256,
-      expected_live_definition_sha256: pin.absent_live_definition_sha256,
-    });
-  }
-  if (!SHA256_RE.test(String(liveHash || ''))) {
+  if (provenPresent) {
+    if (liveHash === pin.intended_definition_sha256) {
+      return fail(
+        CODES.UNRELATED_MUTATION,
+        'settlement function already matches the intended definition; refuse replace',
+        {
+          function_identity: pin.function_identity,
+          live_definition_sha256: liveHash,
+          intended_definition_sha256: pin.intended_definition_sha256,
+        },
+      );
+    }
     return fail(
       CODES.SQL_COLLISION,
-      'existing settlement function did not return a definition hash; refuse apply',
-      { function_identity: pin.function_identity },
-    );
-  }
-  if (liveHash === pin.intended_definition_sha256) {
-    return fail(
-      CODES.UNRELATED_MUTATION,
-      'settlement function already matches the intended definition; refuse replace',
+      'settlement function exists with an unexpected definition; refuse replace',
       {
         function_identity: pin.function_identity,
         live_definition_sha256: liveHash,
@@ -60,13 +57,29 @@ export function classifySql53LivePrerequisite(input = {}, pin = loadSql53Pin(inp
       },
     );
   }
+  if (input.exists === true) {
+    return fail(
+      CODES.SQL_COLLISION,
+      'existing settlement function did not return a definition hash; refuse apply',
+      { function_identity: pin.function_identity },
+    );
+  }
+  if (input.exists === false && liveHash === absentHash) {
+    return ok({
+      state: 'absent',
+      apply_allowed: true,
+      live_definition_sha256: absentHash,
+      expected_live_definition_sha256: absentHash,
+    });
+  }
   return fail(
     CODES.SQL_COLLISION,
-    'settlement function exists with an unexpected definition; refuse replace',
+    'SQL 53 create requires exists: false and the absent-function live hash immediately before apply',
     {
       function_identity: pin.function_identity,
+      exists: input.exists === true ? true : input.exists === false ? false : null,
       live_definition_sha256: liveHash,
-      intended_definition_sha256: pin.intended_definition_sha256,
+      absent_live_definition_sha256: absentHash,
     },
   );
 }
@@ -195,8 +208,15 @@ export function evaluateSql53StagingApply(input = {}, ctx = {}) {
   const live = classifySql53LivePrerequisite(input, pin);
   if (!live.ok) return live;
 
-  const expectedLive = input.expected_live_definition_sha256 || live.details.expected_live_definition_sha256;
-  const observedLive = input.live_definition_sha256 || live.details.live_definition_sha256;
+  const expectedLive = input.expected_live_definition_sha256 || null;
+  const observedLive = liveHashOf(input);
+  if (!expectedLive || !observedLive) {
+    return fail(
+      CODES.SQL_COLLISION,
+      'SQL apply requires expected and live definition hashes immediately before apply; preflight alone is not sufficient',
+      { filename: pin.filename, migration_id: pin.migration_id },
+    );
+  }
   if (expectedLive !== pin.absent_live_definition_sha256 || observedLive !== pin.absent_live_definition_sha256) {
     return fail(
       CODES.SQL_COLLISION,
@@ -216,8 +236,8 @@ export function evaluateSql53StagingApply(input = {}, ctx = {}) {
     filename: pin.filename,
     migration_id: pin.migration_id,
     source_sha256: pin.source_sha256,
-    expected_live_definition_sha256: pin.absent_live_definition_sha256,
-    live_definition_sha256: pin.absent_live_definition_sha256,
+    expected_live_definition_sha256: expectedLive,
+    live_definition_sha256: observedLive,
     owned_components: [pin.filename],
     plan: { silent_backfill: false, mutate_unrelated_data: false, mutation_scope: 'declared-objects-only' },
   });

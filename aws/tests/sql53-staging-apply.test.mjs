@@ -74,7 +74,10 @@ test('SQL 53 source creates only the settlement RPC and does not touch ledger SQ
 });
 
 test('absent live settlement function is ready for later independent apply', () => {
-  const live = classifySql53LivePrerequisite({ exists: false }, PIN);
+  const live = classifySql53LivePrerequisite({
+    exists: false,
+    live_definition_sha256: PIN.absent_live_definition_sha256,
+  }, PIN);
   assert.equal(live.ok, true, live.message);
   assert.equal(live.details.state, 'absent');
   const ready = evaluateSql53StagingApply(authorizeInput(), { root: ROOT });
@@ -86,6 +89,46 @@ test('absent live settlement function is ready for later independent apply', () 
   assert.equal(ready.details.executor_invoke_forbidden, true);
   assert.equal(ready.details.intended_definition_sha256, PIN.intended_definition_sha256);
   assert.equal(isSql53StagingApply(authorizeInput()), true);
+});
+
+test('omitted live hashes and exists:false with a live body fail closed', () => {
+  const missing = classifySql53LivePrerequisite({}, PIN);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, CODES.SQL_COLLISION);
+
+  const existsOnly = classifySql53LivePrerequisite({ exists: false }, PIN);
+  assert.equal(existsOnly.ok, false);
+  assert.equal(existsOnly.code, CODES.SQL_COLLISION);
+
+  const bodyOverridesAbsent = classifySql53LivePrerequisite({
+    exists: false,
+    live_definition: 'CREATE FUNCTION public.save_claim_settlement_breakdown() RETURNS void AS $$ SELECT 1 $$',
+  }, PIN);
+  assert.equal(bodyOverridesAbsent.ok, false);
+  assert.equal(bodyOverridesAbsent.code, CODES.SQL_COLLISION);
+
+  const omitted = evaluateSql53StagingApply(authorizeInput({
+    exists: undefined,
+    expected_live_definition_sha256: undefined,
+    live_definition_sha256: undefined,
+  }), { root: ROOT });
+  assert.equal(omitted.ok, false);
+  assert.equal(omitted.code, CODES.SQL_COLLISION);
+  assert.notEqual(omitted.details.sql53_authorization_ready, true);
+
+  const expectedOnly = evaluateSql53StagingApply(authorizeInput({
+    live_definition_sha256: undefined,
+  }), { root: ROOT });
+  assert.equal(expectedOnly.ok, false);
+  assert.equal(expectedOnly.code, CODES.SQL_COLLISION);
+  assert.notEqual(expectedOnly.details.sql53_authorization_ready, true);
+
+  const liveBody = evaluateSql53StagingApply(authorizeInput({
+    live_definition: 'CREATE FUNCTION public.save_claim_settlement_breakdown() RETURNS void AS $$ SELECT 1 $$',
+  }), { root: ROOT });
+  assert.equal(liveBody.ok, false);
+  assert.equal(liveBody.code, CODES.SQL_COLLISION);
+  assert.notEqual(liveBody.details.sql53_authorization_ready, true);
 });
 
 test('unexpected existing settlement definition fails closed', () => {
