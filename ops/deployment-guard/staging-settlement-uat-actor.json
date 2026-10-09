@@ -1,0 +1,86 @@
+{
+  "id": "staging-settlement-uat-actor",
+  "authorization": "read-only-actor-review",
+  "execute": false,
+  "write_authorized": false,
+  "create_claim_authorized": false,
+  "save_settlement_authorized": false,
+  "production_changes": false,
+  "auth_weakened": false,
+  "mapping_changes": false,
+  "verdict": "GO",
+  "execution_verdict": "NO-GO",
+  "actor_requirement": "historical_fixture",
+  "freedom_admin_eligible": true,
+  "inspected_at": "2026-10-09T20:02:00.000Z",
+  "verified_actor": {
+    "email": "mcarletta@freedomadj.com",
+    "cognito_sub": "c4386408-60e1-70e2-abb6-e6194e8e635f",
+    "application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "tenant_role": "admin",
+    "user_roles": ["admin"],
+    "is_master_owner": false,
+    "cross_tenant_reader": false
+  },
+  "historical_fixture": {
+    "email": "checksops-tester@freedomadj.com",
+    "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+    "user_roles": ["staff"],
+    "why_pinned": "T1/T5 password-login fixture. Settlement RPC and SQL 53 do not mention this UUID."
+  },
+  "authorization_rules": {
+    "settlement_rpc": "POST /data/rpc save_claim_settlement_breakdown → public.aws_can_write_claim(p_claim_id)",
+    "aws_can_write_claim": "true when claim.org_id is writable by auth.uid()",
+    "aws_can_write_tenant": "authenticated tenant member plus user_roles admin or staff, or platform owner",
+    "is_master_owner": "alias of is_platform_owner(); true only for checksopsadmin@gmail.com, not UUID 7dbb3009",
+    "no_uuid_allowlist": true,
+    "admin_and_staff_equivalent_for_claim_write": true
+  },
+  "why_admin_is_safe": [
+    "Live isMasterOwner is false, so this actor is not a cross-tenant writer",
+    "Freedom tenant membership plus user_roles admin satisfies aws_can_write_claim for Freedom org_id only",
+    "claim_ledger_link_or_create accepts admin or staff or tenant member",
+    "DELETE /workflow/checks requires admin, so this actor can clean up the synthetic check",
+    "SQL 53 and claim-settlement-rpc.mjs have no staff-only branch and no abd3c2a0 check"
+  ],
+  "pre_write_reconfirm": {
+    "method": "GET /identity/me",
+    "accept_only_if": [
+      "applicationUserId is 7dbb3009-f059-4767-b5dc-1c5c72379330",
+      "Freedom tenant 2eff5f1a-929d-4ce3-9a8b-cd96b98df42a is present",
+      "isMasterOwner is false"
+    ],
+    "stop_if": "isMasterOwner is true or Freedom membership is missing"
+  },
+  "revised_uat_plan": {
+    "actor": "verified Freedom administrator 7dbb3009 via EMAIL_OTP as mcarletta@freedomadj.com",
+    "scope": "synthetic claim_number AWS SETTLEMENT UAT on Freedom only",
+    "writes": [
+      "optional T5 unlinked check with amount=null and claim_id=null",
+      "claim_ledger_link_or_create create_new",
+      "save_claim_settlement_breakdown insert/update/invalid on that claim only"
+    ],
+    "forbidden": [
+      "customer claims",
+      "695064-GQ",
+      "C1C tenant writes",
+      "provider calls",
+      "password login",
+      "staging-master password"
+    ]
+  },
+  "remaining_tests": {
+    "required_before_execution": [
+      "separate owner authorization to execute Freedom-only synthetic writes",
+      "reconfirm /identity/me immediately before the first write"
+    ],
+    "separately_gated": [
+      "C1C cross-tenant deny using payments@condition1commercial.com"
+    ],
+    "optional_deferred": [
+      "staff EMAIL_OTP as checksops-tester@freedomadj.com only if /identity/me is abd3c2a0 plus Freedom and not master. This preserves staff-path coverage. It is not required for settlement functional UAT because admin and staff are equivalent in aws_can_write_claim."
+    ]
+  },
+  "mutations": []
+}
