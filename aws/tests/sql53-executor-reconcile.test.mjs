@@ -48,9 +48,14 @@ function zipSourceMembers(zipPath) {
   return members;
 }
 
+const PACK_SQL39 = 'aws/write-path/guarded-sql-executor/sql/39_tmp_write_policy_reconcile.sql';
+const PACK_SQL40 = 'aws/write-path/guarded-sql-executor/sql/40_collection_v2_synthetic_uat_cleanup.sql';
+
 test('composed source pins keep live SQL 39/40 bytes and merged SQL 53', () => {
-  assert.equal(sha256File(path.join(ROOT, AUTHORIZED_SQL39.filename)), LIVE_SHA.sql39);
-  assert.equal(sha256File(path.join(ROOT, AUTHORIZED_SQL40.filename)), LIVE_SHA.sql40);
+  assert.equal(AUTHORIZED_SQL39.filename, 'aws/rls/sql/39_tmp_write_policy_reconcile.sql');
+  assert.equal(AUTHORIZED_SQL40.filename, 'aws/rls/sql/40_collection_v2_synthetic_uat_cleanup.sql');
+  assert.equal(sha256File(path.join(ROOT, PACK_SQL39)), LIVE_SHA.sql39);
+  assert.equal(sha256File(path.join(ROOT, PACK_SQL40)), LIVE_SHA.sql40);
   assert.equal(sha256File(path.join(ROOT, AUTHORIZED_SQL53.filename)), LIVE_SHA.sql53);
   assert.equal(
     sha256File(path.join(ROOT, 'scripts/deployment-guard/lib/collection-v2-synthetic-uat-cleanup.mjs')),
@@ -62,6 +67,8 @@ test('composed source pins keep live SQL 39/40 bytes and merged SQL 53', () => {
   );
   assert.equal(AUTHORIZED_SQL39.source_sha256, LIVE_SHA.sql39);
   assert.equal(AUTHORIZED_SQL40.source_sha256, LIVE_SHA.sql40);
+  assert.equal(fs.existsSync(path.join(ROOT, AUTHORIZED_SQL39.filename)), false);
+  assert.equal(fs.existsSync(path.join(ROOT, AUTHORIZED_SQL40.filename)), false);
 });
 
 test('packExecutor retains live-only members and adds SQL 53', () => {

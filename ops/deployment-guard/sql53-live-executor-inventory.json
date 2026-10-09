@@ -83,6 +83,17 @@
     "transactional handleSql53",
     "live SQL 39/40 inspect and apply handlers"
   ],
+  "sql39_40_repo_paths": {
+    "pin_filenames": [
+      "aws/rls/sql/39_tmp_write_policy_reconcile.sql",
+      "aws/rls/sql/40_collection_v2_synthetic_uat_cleanup.sql"
+    ],
+    "pack_sources": [
+      "aws/write-path/guarded-sql-executor/sql/39_tmp_write_policy_reconcile.sql",
+      "aws/write-path/guarded-sql-executor/sql/40_collection_v2_synthetic_uat_cleanup.sql"
+    ],
+    "note": "Pack sources stay outside the protected database-rls tree so this workstream does not overwrite PRs #702/#704 or retarget the database-rls lock."
+  },
   "untouched": [
     "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
     "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
