@@ -264,25 +264,30 @@ test('diagnostic omits inventory when the live catalog has not been expanded yet
 
 test('membership rejects a 172-count inventory that still has the superseded Ready trigger', () => {
   const justified = loadJustifiedPublicTriggers();
-  const inventory = [
-    ...justified.slice(1).map((row) => ({
-      table: row.table,
-      trigger: row.trigger,
-      functionName: row.functionName,
-    })),
-    {
-      table: 'check_endorsements',
-      trigger: 'trg_advance_on_endorsement_complete',
-      functionName: 'advance_check_on_endorsement_complete',
-    },
-  ];
-  const issues = evaluatePublicTriggerMembership({
+  const dumpRow = justified.find((row) => (
+    !REQUIRED_PUBLIC_TRIGGERS.some((required) => triggerKey(required) === triggerKey(row))
+  ));
+  const inventory = justified.map((row) => (
+    triggerKey(row) === triggerKey(dumpRow)
+      ? {
+        table: 'check_endorsements',
+        trigger: 'trg_advance_on_endorsement_complete',
+        functionName: 'advance_check_on_endorsement_complete',
+      }
+      : row
+  ));
+  const superseded = evaluatePublicTriggerMembership({
     publicTriggers: 172,
     inventory,
     truncated: false,
   });
-  assert.ok(issues.some((item) => String(item.message || '').includes('trg_advance_on_endorsement_complete')));
-  assert.ok(issues.some((item) => String(item.message || '').includes('required public trigger')));
+  assert.ok(superseded.some((item) => String(item.message || '').includes('trg_advance_on_endorsement_complete')));
+  const missingRequired = evaluatePublicTriggerMembership({
+    publicTriggers: 172,
+    inventory: justified.filter((row) => row.trigger !== STEPUP_TRIGGER.trigger),
+    truncated: false,
+  });
+  assert.ok(missingRequired.some((item) => String(item.message || '').includes('trg_financial_stepup_log_updated_at')));
 });
 
 test('validator accepts the exact 172-name justified inventory and no other 172-set', async () => {
