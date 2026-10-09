@@ -45,6 +45,10 @@ const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:se
 const RDS_INSTANCE_ARN = 'arn:aws:rds:us-east-1:806168576068:db:production-db';
 const OTHER_RDS_ARN = 'arn:aws:rds:us-east-1:806168576068:db:other-instance';
 const NAMED_PRODUCTION_RDS_ARN = 'arn:aws:rds:us-east-1:806168576068:db:checksops-production';
+const LAMBDA_SG_ID = 'sg-0aaaaaaaaaaaaaaaa';
+const RDS_SG_A = 'sg-0bbbbbbbbbbbbbbbb';
+const RDS_SG_B = 'sg-0cccccccccccccccc';
+const ACCOUNT_ID = '806168576068';
 const PRODUCTION_TARGET = {
   environment: 'production',
   accountId: '806168576068',
@@ -114,6 +118,52 @@ function persistenceConfigOverrides(rdsResponse, extra = {}) {
     }),
     'rds:DescribeDBInstances': () => rdsResponse,
     ...extra,
+  };
+}
+
+function hexVpcPersistenceOverrides(rdsResponse, extra = {}) {
+  return persistenceConfigOverrides(rdsResponse, {
+    'lambda:GetFunctionConfiguration': () => ({
+      ...lambdaConfig,
+      VpcConfig: {
+        VpcId: 'vpc-production',
+        SubnetIds: ['subnet-production'],
+        SecurityGroupIds: [LAMBDA_SG_ID],
+      },
+      Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+    }),
+    ...extra,
+  });
+}
+
+function twoVpcRdsInstances() {
+  return {
+    DBInstances: [
+      {
+        DBInstanceArn: RDS_INSTANCE_ARN,
+        VpcId: 'vpc-production',
+        VpcSecurityGroupIds: [RDS_SG_A],
+      },
+      {
+        DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
+        VpcId: 'vpc-production',
+        VpcSecurityGroupIds: [RDS_SG_B],
+        Endpoint: { Address: 'checksops-production.example.rds.amazonaws.com', Port: 5432 },
+      },
+    ],
+    ObservedInstanceCount: 2,
+  };
+}
+
+function lambdaPostgresIngress(groupId = LAMBDA_SG_ID, extras = {}) {
+  return {
+    IpProtocol: extras.protocol ?? 'tcp',
+    FromPort: extras.from ?? 5432,
+    ToPort: extras.to ?? 5432,
+    UserIdGroupPairs: [{
+      GroupId: extras.sourceGroupId ?? groupId,
+      UserId: extras.userId === undefined ? ACCOUNT_ID : extras.userId,
+    }],
   };
 }
 
@@ -255,6 +305,27 @@ test('allowlists only pinned AWS read operations and refuses mutations or arbitr
   assert.ok(secretArgs.at(-1).includes('OwningService:OwningService'));
   assert.equal(secretArgs.at(-1).includes('Description'), false);
   assert.throws(() => buildAwsArgs('rds:DescribeDBInstances', { secretArn: 'arn:aws:secretsmanager:us-west-2:806168576068:secret:other' }));
+  const sgArgs = buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: [RDS_SG_B, LAMBDA_SG_ID] });
+  assert.deepEqual(sgArgs.slice(0, 2), ['ec2', 'describe-security-groups']);
+  assert.ok(sgArgs.includes('--group-ids'));
+  assert.ok(sgArgs.includes(LAMBDA_SG_ID));
+  assert.ok(sgArgs.includes(RDS_SG_B));
+  assert.ok(sgArgs.at(-1).includes('GroupId:GroupId'));
+  assert.ok(sgArgs.at(-1).includes('UserIdGroupPairs'));
+  assert.ok(sgArgs.at(-1).includes('IpProtocol:IpProtocol'));
+  assert.equal(sgArgs.at(-1).includes('CidrIp'), false);
+  assert.equal(sgArgs.at(-1).includes('GroupName'), false);
+  assert.equal(sgArgs.at(-1).includes('Description'), false);
+  assert.equal(sgArgs.at(-1).includes('Tags'), false);
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: [] }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: ['sg-production'] }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupNames: ['checksops-production'] }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', {
+    groupIds: [LAMBDA_SG_ID],
+    filters: [{ Name: 'group-name', Values: ['production'] }],
+  }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: [LAMBDA_SG_ID, LAMBDA_SG_ID] }));
+  assert.throws(() => buildAwsArgs('ec2:AuthorizeSecurityGroupIngress', { groupIds: [LAMBDA_SG_ID] }));
   assert.throws(() => buildAwsArgs('apigateway:GET', { apiId: PRODUCTION_PINS.api_id, resource: 'stage', stage: 'staging' }));
   assert.throws(() => buildAwsArgs('cloudfront:CreateInvalidation', { distributionId: PRODUCTION_PINS.cloudfront_id }));
   assert.throws(() => buildAwsArgs('cloudfront:GetDistribution', { distributionId: '*' }));
@@ -841,8 +912,9 @@ test('proves exactly one RDS target from exclusive live Lambda VPC membership', 
 });
 
 test('proves exactly one RDS target from exclusive live Lambda security-group intersection', async () => {
+  const calls = [];
   const report = await inspectProduction({
-    runAws: mockAws([], persistenceConfigOverrides({
+    runAws: mockAws(calls, persistenceConfigOverrides({
       DBInstances: [
         {
           DBInstanceArn: RDS_INSTANCE_ARN,
@@ -866,48 +938,197 @@ test('proves exactly one RDS target from exclusive live Lambda security-group in
     resource_arn: RDS_INSTANCE_ARN,
     association: 'exclusive-security-group',
   }]);
+  assert.equal(calls.some(({ action }) => action === 'ec2:DescribeSecurityGroups'), false);
   const evidence = JSON.stringify(buildInspectionSummary(report));
   assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
   assert.ok(evidence.includes(RDS_INSTANCE_ARN));
 });
 
-test('refuses to guess when two RDS instances share the live Lambda VPC', async () => {
+test('proves exactly one RDS target from exclusive live Lambda security-group ingress', async () => {
   const calls = [];
   const report = await inspectProduction({
-    runAws: mockAws(calls, persistenceConfigOverrides({
-      DBInstances: [
-        {
-          DBInstanceArn: RDS_INSTANCE_ARN,
-          VpcId: 'vpc-production',
-          VpcSecurityGroupIds: ['sg-rds-a'],
-        },
-        {
-          DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
-          VpcId: 'vpc-production',
-          VpcSecurityGroupIds: ['sg-rds-b'],
-        },
-      ],
-      ObservedInstanceCount: 2,
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': (target) => {
+        assert.deepEqual(target.groupIds, [LAMBDA_SG_ID, RDS_SG_A, RDS_SG_B]);
+        return {
+          SecurityGroups: [
+            { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+            {
+              GroupId: RDS_SG_A,
+              GroupName: 'checksops-production',
+              IpPermissions: [lambdaPostgresIngress()],
+            },
+            {
+              GroupId: RDS_SG_B,
+              IpPermissions: [{
+                IpProtocol: 'tcp',
+                FromPort: 5432,
+                ToPort: 5432,
+                CidrIp: '0.0.0.0/0',
+                UserIdGroupPairs: [],
+              }],
+            },
+          ],
+        };
+      },
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'complete');
+  assert.equal(report.database.reason, 'live Lambda security-group ingress independently binds exactly one observed RDS instance through AWS metadata');
+  assert.deepEqual(report.database.candidate_resources, [{
+    reference_type: 'rds-instance',
+    resource_arn: RDS_INSTANCE_ARN,
+    association: 'exclusive-security-group-ingress',
+  }]);
+  assert.deepEqual(report.database.unresolved_references, []);
+  assert.equal(calls.filter(({ action }) => action === 'ec2:DescribeSecurityGroups').length, 1);
+  assert.equal(calls.some(({ action }) => /GetSecretValue|ssm:GetParameter|rds:DescribeDBClusters|ExecuteStatement|rds-data/.test(action)), false);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('checksops-production.example'), false);
+  assert.equal(evidence.includes('0.0.0.0/0'), false);
+  assert.ok(evidence.includes(RDS_INSTANCE_ARN));
+});
+
+test('refuses zero security-group ingress matches after describing observed groups', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => ({
+        SecurityGroups: [
+          { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+          {
+            GroupId: RDS_SG_A,
+            IpPermissions: [{
+              IpProtocol: 'tcp',
+              FromPort: 5432,
+              ToPort: 5432,
+              CidrIp: '10.0.0.0/8',
+              UserIdGroupPairs: [],
+            }],
+          },
+          {
+            GroupId: RDS_SG_B,
+            GroupName: 'checksops-production',
+            IpPermissions: [{
+              IpProtocol: 'tcp',
+              FromPort: 443,
+              ToPort: 443,
+              UserIdGroupPairs: [{ GroupId: LAMBDA_SG_ID, UserId: ACCOUNT_ID }],
+            }],
+          },
+        ],
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].required_permission, null);
+  assert.equal(report.database.unresolved_references[0].required_permission_resource, null);
+  assert.equal(report.database.unresolved_references[0].vpc_match_count, 2);
+  assert.equal(report.database.unresolved_references[0].security_group_match_count, 0);
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 0);
+  assert.equal(report.database.unresolved_references[0].master_user_association_count, 0);
+  assert.match(report.database.unresolved_references[0].reason, /does not bind the live Lambda security groups to exactly one/);
+  const describeCall = calls.find(({ action }) => action === 'ec2:DescribeSecurityGroups');
+  assert.deepEqual(describeCall.target.groupIds, [LAMBDA_SG_ID, RDS_SG_A, RDS_SG_B]);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('checksops-production.example'), false);
+  assert.ok(evidence.includes('"security_group_ingress_match_count": 0') || evidence.includes('"security_group_ingress_match_count":0'));
+});
+
+test('refuses multiple security-group ingress matches after describing observed groups', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => ({
+        SecurityGroups: [
+          { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+          { GroupId: RDS_SG_A, IpPermissions: [lambdaPostgresIngress(LAMBDA_SG_ID, { protocol: '-1', from: null, to: null })] },
+          { GroupId: RDS_SG_B, IpPermissions: [lambdaPostgresIngress()] },
+        ],
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].required_permission, null);
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 2);
+  assert.match(report.database.unresolved_references[0].reason, /multiple production RDS instances/);
+  assert.equal(calls.filter(({ action }) => action === 'ec2:DescribeSecurityGroups').length, 1);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+});
+
+test('ignores CIDR-only and foreign-account ingress when proving a production RDS target', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => ({
+        SecurityGroups: [
+          { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+          {
+            GroupId: RDS_SG_A,
+            IpPermissions: [
+              {
+                IpProtocol: 'tcp',
+                FromPort: 5432,
+                ToPort: 5432,
+                CidrIp: '0.0.0.0/0',
+                UserIdGroupPairs: [{ GroupId: LAMBDA_SG_ID, UserId: '999999999999' }],
+              },
+            ],
+          },
+          {
+            GroupId: RDS_SG_B,
+            GroupName: 'checksops-production',
+            Description: 'named production database',
+            IpPermissions: [{
+              IpProtocol: 'tcp',
+              FromPort: 5432,
+              ToPort: 5432,
+              CidrIp: '10.0.0.0/8',
+            }],
+          },
+        ],
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 0);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('named production database'), false);
+});
+
+test('fails closed when observed security-group describe is denied', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => {
+        const error = new Error('AccessDenied: security groups');
+        error.stderr = 'UnauthorizedOperation: You are not authorized to perform this operation';
+        throw error;
+      },
     })),
     fetchImpl: mockFetch,
   });
   assert.equal(report.database.status, 'refused_unproven_aws_production_target');
   assert.deepEqual(report.database.candidate_resources, []);
   assert.equal(report.database.unresolved_references[0].required_permission, 'ec2:DescribeSecurityGroups');
-  assert.equal(
-    report.database.unresolved_references[0].required_permission_resource,
-    'arn:aws:ec2:us-east-1:806168576068:security-group/sg-production',
-  );
-  assert.equal(report.database.unresolved_references[0].vpc_match_count, 2);
-  assert.equal(report.database.unresolved_references[0].security_group_match_count, 0);
-  assert.equal(report.database.unresolved_references[0].master_user_association_count, 0);
-  assert.equal(report.database.unresolved_references[0].observed_db_instance_count, 2);
-  assert.match(report.database.unresolved_references[0].reason, /multiple instances in the live Lambda VPC/);
-  assert.equal(calls.some(({ action }) => action === 'ec2:DescribeSecurityGroups'), false);
-  const evidence = JSON.stringify(buildInspectionSummary(report));
-  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
-  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
-  assert.ok(evidence.includes('ec2:DescribeSecurityGroups'));
+  assert.equal(report.database.unresolved_references[0].required_permission_resource, '*');
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 0);
+  assert.ok(report.missing_read_permissions.some((permission) => (
+    permission.action === 'ec2:DescribeSecurityGroups' && permission.resource === '*'
+  )));
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes(RDS_INSTANCE_ARN), false);
 });
 
 test('refuses a zero-target network association even when an instance name contains production', async () => {
@@ -1130,6 +1351,7 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     { Effect: 'Allow', Action: ['cloudfront:GetDistribution'] },
     { Effect: 'Allow', Action: ['secretsmanager:DescribeSecret'] },
     { Effect: 'Allow', Action: ['rds:DescribeDBInstances'] },
+    { Effect: 'Allow', Action: ['ec2:DescribeSecurityGroups'] },
   ]);
   assert.deepEqual(policy.Statement.map(({ Resource }) => Resource), [
     '*',
@@ -1139,6 +1361,7 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     `arn:aws:cloudfront::${PRODUCTION_PINS.account_id}:distribution/${PRODUCTION_PINS.cloudfront_id}`,
     PERSISTENCE_SECRET_ARN,
     '*',
+    '*',
   ]);
   assert.match(workflow, /s3:GetObject/);
   assert.match(workflow, /lambda:GetFunctionConfiguration/);
@@ -1146,10 +1369,13 @@ test('read workflow is manually dispatched, uses protected environment and no mu
   assert.match(workflow, /apigateway:GET/);
   assert.match(workflow, /secretsmanager:DescribeSecret/);
   assert.match(workflow, /rds:DescribeDBInstances/);
-  assert.doesNotMatch(workflow, /rds:(?:Create|Modify|Delete|Reboot|Start|Stop|Restore|Failover|Promote|Reset|Add|Remove|Authorize|Revoke)|rds-db:connect|secretsmanager:GetSecretValue|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
+  assert.match(workflow, /ec2:DescribeSecurityGroups/);
+  assert.doesNotMatch(workflow, /rds:(?:Create|Modify|Delete|Reboot|Start|Stop|Restore|Failover|Promote|Reset|Add|Remove|Authorize|Revoke)|rds-db:connect|secretsmanager:GetSecretValue|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH|ec2:(?:Authorize|Revoke|Create|Delete|Modify)/i);
   assert.doesNotMatch(workflow, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /npm ci|PostgreSQL inspection dependency/i);
   assert.match(docs, /refused_unproven_aws_production_target/);
+  assert.match(docs, /ec2:DescribeSecurityGroups/);
+  assert.match(docs, /No AWS\/IAM identity policy is applied here/);
   assert.doesNotMatch(docs, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /\b(?:put-object|sync\s+--delete|delete-object|create-invalidation|update-function-code|update-function-configuration|provider|payment)\b/i);
 });

@@ -58,11 +58,38 @@ export function packExecutor(root) {
   for (const [from, to] of copies) {
     fs.copyFileSync(path.join(root, from), path.join(staging, to));
   }
-  execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
-  const zip = path.join(os.tmpdir(), `checksops-guarded-sql-executor-${process.pid}.zip`);
-  try { fs.unlinkSync(zip); } catch { /* ok */ }
+  installExecutorDependencies(staging);
+  const zip = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-guarded-sql-executor-zip-')), 'package.zip');
   execFileSync('zip', ['-qr', zip, '.'], { cwd: staging });
   return { zip, staging };
+}
+
+function installExecutorDependencies(staging) {
+  const npmCache = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-executor-npm-cache-'));
+  const args = ['install', '--omit=dev', '--no-audit', '--no-fund', '--no-progress', '--cache', npmCache];
+  const env = {
+    ...process.env,
+    npm_config_cache: npmCache,
+    npm_config_audit: 'false',
+    npm_config_fund: 'false',
+    npm_config_update_notifier: 'false',
+  };
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      execFileSync('npm', args, {
+        cwd: staging,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  const detail = String(lastError?.stderr || lastError?.stdout || lastError?.message || '').slice(0, 800);
+  throw new Error(`executor package install failed: ${detail}`);
 }
 
 export function main(argv = process.argv.slice(2), env = process.env, root = repoRootFrom(import.meta.url)) {
