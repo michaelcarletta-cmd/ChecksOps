@@ -8,7 +8,7 @@
  * Immediately-before live hashing happens inside the VPC executor via
  * evaluateSqlCollision. This module only binds the authorization package.
  */
-import { CODES, errorEntry, failMany, ok } from './errors.mjs';
+import { CODES, errorEntry, fail, failMany, ok } from './errors.mjs';
 import { validateWorkstreamIdentity } from './identity.mjs';
 
 export const SQL_EXECUTOR_DEPLOYMENT_TYPE = 'sql-executor-invoke';
@@ -44,23 +44,112 @@ export const AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS = Object.freeze({
   ]),
 });
 
+export const AUTHORIZED_SQL53 = Object.freeze({
+  filename: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
+  migration_id: '53_claim_settlement_breakdown',
+  commit: '8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1',
+  source_sha256: '5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197',
+  intended_replacement_sha256: '6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52',
+  function_identity: 'public.save_claim_settlement_breakdown(uuid,uuid,jsonb)',
+  absent_live_definition_sha256: '0000000000000000000000000000000000000000000000000000000000000000',
+  preserved_function_identities: Object.freeze([
+    'public.sync_homeowner_ledger_from_check()',
+    'public.aws_can_write_claim(uuid)',
+    'public.hle_on_check_intake_insert()',
+  ]),
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  AUTHORIZED_SQL53,
 ]);
 
-export function resolveAuthorizedMigration(input = {}) {
-  if (
-    input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
-    || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id
-  ) {
-    return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
-  }
-  return AUTHORIZED_SQL44;
+export function isSql53AuthorizedMigration(input = {}) {
+  return input.filename === AUTHORIZED_SQL53.filename
+    || input.migration_id === AUTHORIZED_SQL53.migration_id;
 }
 
 export function isTenantUsersSameCheckPermissions(input = {}) {
-  return resolveAuthorizedMigration(input) === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
+  return input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
+    || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id;
+}
+
+export function isSql44AuthorizedMigration(input = {}) {
+  return input.filename === AUTHORIZED_SQL44.filename
+    || input.migration_id === AUTHORIZED_SQL44.migration_id;
+}
+
+export function resolveAuthorizedMigration(input = {}) {
+  if (isSql53AuthorizedMigration(input)) return AUTHORIZED_SQL53;
+  if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
+  if (isSql44AuthorizedMigration(input)) return AUTHORIZED_SQL44;
+  return null;
+}
+
+export function requireAuthorizedMigration(input = {}) {
+  const authorized = resolveAuthorizedMigration(input);
+  if (!authorized) {
+    return fail(
+      CODES.SQL_COLLISION,
+      'authorization package is not bound to an allowlisted staging SQL file',
+      {
+        filename: input.filename || null,
+        migration_id: input.migration_id || null,
+      },
+    );
+  }
+  return ok({ allowlist_entry: authorized });
+}
+
+export function classifySql53CreateLive(input = {}, pin = AUTHORIZED_SQL53) {
+  const liveHash = SHA256_RE.test(String(input.live_definition_sha256 || ''))
+    ? input.live_definition_sha256
+    : null;
+  const absentHash = pin.absent_live_definition_sha256;
+  const provenPresent = input.exists === true || (Boolean(liveHash) && liveHash !== absentHash);
+
+  if (provenPresent) {
+    if (liveHash === pin.intended_replacement_sha256) {
+      return fail(
+        CODES.UNRELATED_MUTATION,
+        'settlement function already matches the intended definition; refuse replace',
+        {
+          function_identity: pin.function_identity,
+          live_definition_sha256: liveHash,
+          intended_replacement_sha256: pin.intended_replacement_sha256,
+        },
+      );
+    }
+    return fail(
+      CODES.SQL_COLLISION,
+      'settlement function exists; refuse replace',
+      {
+        function_identity: pin.function_identity,
+        live_definition_sha256: liveHash,
+        intended_replacement_sha256: pin.intended_replacement_sha256,
+      },
+    );
+  }
+
+  if (input.exists === false && liveHash === absentHash) {
+    return ok({
+      state: 'absent',
+      apply_allowed: true,
+      live_definition_sha256: absentHash,
+    });
+  }
+
+  return fail(
+    CODES.SQL_COLLISION,
+    'SQL 53 create requires exists: false and the absent-function live hash immediately before apply',
+    {
+      function_identity: pin.function_identity,
+      exists: input.exists === true ? true : input.exists === false ? false : null,
+      live_definition_sha256: liveHash,
+      absent_live_definition_sha256: absentHash,
+    },
+  );
 }
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
