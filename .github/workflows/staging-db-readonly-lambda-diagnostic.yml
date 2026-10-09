@@ -1,5 +1,9 @@
 name: Staging DB read-only Lambda diagnostic
 
+# workflow_dispatch 403 "Resource not accessible by integration" is a GitHub
+# caller/app/environment permission, not a job-token, OIDC, or session-policy
+# defect. Do not broaden GITHUB_TOKEN permissions to "fix" dispatch.
+
 on:
   workflow_dispatch:
 

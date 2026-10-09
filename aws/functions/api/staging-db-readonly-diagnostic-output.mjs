@@ -4,6 +4,7 @@ import {
   EXPECTED_PUBLIC_TRIGGERS,
   EXPECTED_SKIPPED_AUTH_USERS_FKS,
   PUBLIC_TRIGGER_INVENTORY_LIMIT,
+  redactFunctionDefInspect,
   sanitizePublicTriggerRow,
 } from '../api/db-readonly-validate.mjs';
 
@@ -37,6 +38,11 @@ const validProjectedTable = (row, index) => row?.table === CORE_TABLES[index]
   && typeof row.countMatches === 'boolean'
   && safeCount(row.expectedCount)
   && (row.actualCount === null || safeCount(row.actualCount));
+const inspectContainer = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+export const projectInspect = (inspect) => redactFunctionDefInspect(
+  inspectContainer(inspect) ? inspect : {},
+);
 
 const issueCheck = (item) => {
   if (CHECKS.has(item.probe)) return item.probe;
@@ -176,6 +182,7 @@ export const projectValidation = (validation = {}) => {
     tables,
     privileges: projectPrivileges(validation.privileges),
     catalog: projectCatalog(validation),
+    inspect: projectInspect(validation.inspect),
   };
 };
 
@@ -208,6 +215,7 @@ export const summarizeInvocation = ({ metadata, payload, expectedVersion }) => {
       || !response.tables.every(validProjectedTable)
       || response.issues.length > 512
       || !response.issues.every(validProjectedIssue)
+      || (Object.hasOwn(response, 'inspect') && !inspectContainer(response.inspect))
       || (response.status === 'ok' && response.issues.some((item) => item.status === 'fail'))) {
     return {
       schema: 'checksops-staging-db-readonly-diagnostic/v1',
@@ -218,7 +226,7 @@ export const summarizeInvocation = ({ metadata, payload, expectedVersion }) => {
       writesAttempted: false,
     };
   }
-  return projectValidation({
+  const projected = projectValidation({
     ok: response.status === 'ok',
     readOnly: response.readOnly,
     writesAttempted: response.writesAttempted,
@@ -238,5 +246,12 @@ export const summarizeInvocation = ({ metadata, payload, expectedVersion }) => {
     catalog: response.catalog,
     rlsMode: response.catalog?.rlsMode,
     rlsAudit: { summary: response.catalog?.rlsSummary },
+    inspect: response.inspect,
   });
+  if (!Object.hasOwn(response, 'inspect')) {
+    const rest = { ...projected };
+    delete rest.inspect;
+    return rest;
+  }
+  return projected;
 };

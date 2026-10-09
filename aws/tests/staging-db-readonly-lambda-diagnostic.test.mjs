@@ -7,12 +7,17 @@ import {
   CORE_TABLES,
   EXPECTED_PUBLIC_TRIGGERS,
   EXPECTED_ROW_COUNTS,
+  PINNED_FUNCTION_LOOKUPS,
+  REQUIRED_LEDGER_TRIGGERS,
+  REQUIRED_SETTLEMENT_COLUMNS,
+  hashFunctionDefinition,
   validateReadonlyCoreTables,
 } from '../functions/api/db-readonly-validate.mjs';
 import {
   createDiagnosticHandler,
 } from '../functions/api/staging-db-readonly-diagnostic.mjs';
 import {
+  projectInspect,
   projectValidation,
   summarizeInvocation,
 } from '../functions/api/staging-db-readonly-diagnostic-output.mjs';
@@ -25,6 +30,35 @@ const STAGING_ENV = {
   DATABASE_SECRET_ARN: 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/test',
 };
 const SENSITIVE = 'sensitive-diagnostic-marker';
+const SECRET_BODY = 'CREATE FUNCTION public.aws_can_write_claim(uuid) RETURNS boolean AS $$ SELECT true $$';
+const SECRET_PASSWORD = 'unit-test-only-not-a-real-secret';
+const INSPECT_HASH = hashFunctionDefinition(SECRET_BODY);
+const leakedInspect = () => ({
+  readOnly: false,
+  functions: [{
+    identity: 'public.aws_can_write_claim(uuid)',
+    exists: true,
+    definitionSha256: INSPECT_HASH,
+    definition: SECRET_BODY,
+    def: SECRET_BODY,
+    prosrc: SECRET_BODY,
+    password: SECRET_PASSWORD,
+  }],
+  settlementColumns: [{
+    table: 'claim_settlements',
+    column: 'other_structures_rcv',
+    exists: true,
+    definition: SECRET_BODY,
+  }],
+  ledgerTriggers: [{
+    table: 'check_intake_items',
+    trigger: 'trg_hle_check_intake_insert',
+    exists: true,
+    definition: SECRET_BODY,
+  }],
+  password: SECRET_PASSWORD,
+  sql: 'SELECT pg_get_functiondef(oid)',
+});
 
 const validValidation = (overrides = {}) => ({
   ok: false,
@@ -119,6 +153,11 @@ test('projection contains only allowlisted diagnostic labels, booleans, and safe
   assert.doesNotMatch(JSON.stringify(result), new RegExp(SENSITIVE));
   assert.doesNotMatch(JSON.stringify(result), /currentDatabase|currentUser|secretDatabase|authUidResult|matrix/);
   assert.equal(Object.hasOwn(result.catalog, 'publicTriggerInventory'), false);
+  assert.equal(result.inspect.readOnly, true);
+  assert.equal(result.inspect.functions.length, PINNED_FUNCTION_LOOKUPS.length);
+  assert.equal(result.inspect.functions.every((row) => row.exists === false && row.definitionSha256 === null), true);
+  assert.equal(result.inspect.settlementColumns.length, REQUIRED_SETTLEMENT_COLUMNS.length);
+  assert.equal(result.inspect.ledgerTriggers.length, REQUIRED_LEDGER_TRIGGERS.length);
 });
 
 test('Lambda projection keeps sanitized trigger names and drops definitions or invalid rows', () => {
@@ -152,7 +191,7 @@ test('Lambda projection keeps sanitized trigger names and drops definitions or i
   }]);
   assert.equal(result.catalog.publicTriggerInventoryTruncated, false);
   assert.doesNotMatch(JSON.stringify(result), new RegExp(SENSITIVE));
-  assert.doesNotMatch(JSON.stringify(result), /CREATE TRIGGER|definition/);
+  assert.doesNotMatch(JSON.stringify(result), /CREATE TRIGGER|"definition":/);
 });
 
 test('existing validator enforces TLS/session/transaction read-only and never dispatches writes', async () => {
@@ -259,6 +298,9 @@ test('workflow and SAM target are staging-only, exact-version, isolated, and do 
   assert.doesNotMatch(workflow, /production|CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN|secrets\./i);
   assert.doesNotMatch(workflow, /CHECKSOPS_[A-Z_]*TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY/);
   assert.doesNotMatch(workflow, /pull_request:|push:|upload-artifact|continue-on-error|set -x/);
+  assert.doesNotMatch(workflow, /actions:\s*write|contents:\s*write/);
+  assert.match(workflow, /Resource not accessible by integration/);
+  assert.match(workflow, /caller\/app\/environment permission/);
   assert.match(template, /FunctionName: checksops-staging-db-readonly-diagnostic/);
   assert.match(template, /Handler: staging-db-readonly-diagnostic\.handler/);
   assert.match(template, /AWSSecretsManagerGetSecretValuePolicy:[\s\S]*?SecretArn: !Ref DatabaseSecretArn/);
@@ -351,8 +393,79 @@ test('CLI names added public triggers from the sanitized Lambda inventory', asyn
     );
     assert.equal(summary.triggerInventory.missing.length, 0);
     assert.doesNotMatch(output, new RegExp(SENSITIVE));
-    assert.doesNotMatch(output, /CREATE TRIGGER|definition/);
+    assert.doesNotMatch(output, /CREATE TRIGGER|"definition":/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('authorized Lambda projection keeps only allowlisted inspect existence and hashes', () => {
+  const result = projectValidation(validValidation({
+    inspect: leakedInspect(),
+    currentDatabase: SENSITIVE,
+  }));
+  assert.deepEqual(result.inspect.functions.find((row) => row.identity === 'public.aws_can_write_claim(uuid)'), {
+    identity: 'public.aws_can_write_claim(uuid)',
+    exists: true,
+    definitionSha256: INSPECT_HASH,
+  });
+  assert.equal(result.inspect.settlementColumns.find((row) => row.column === 'other_structures_rcv').exists, true);
+  assert.equal(result.inspect.ledgerTriggers.find((row) => row.trigger === 'trg_hle_check_intake_insert').exists, true);
+  assert.equal(result.inspect.functions.find((row) => row.identity === 'public.hle_on_check_intake_insert()').exists, false);
+  assert.deepEqual(Object.keys(result.inspect).sort(), ['functions', 'ledgerTriggers', 'readOnly', 'settlementColumns']);
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(`${SENSITIVE}|${SECRET_BODY}|${SECRET_PASSWORD}`));
+  assert.doesNotMatch(JSON.stringify(result), /"definition":|"def":|"prosrc":|"password":|"sql":/);
+  assert.deepEqual(projectInspect(leakedInspect()).functions.map((row) => row.identity), PINNED_FUNCTION_LOOKUPS.map((row) => row.identity));
+});
+
+test('invocation summary extracts allowlisted inspect and fails closed on a non-object inspect', () => {
+  const projected = projectValidation(validValidation({ inspect: leakedInspect() }));
+  const metadata = { ExecutedVersion: '12' };
+  const summary = summarizeInvocation({ metadata, payload: projected, expectedVersion: '12' });
+  assert.equal(summary.status, 'unhealthy');
+  assert.deepEqual(summary.inspect.functions.find((row) => row.identity === 'public.aws_can_write_claim(uuid)'), {
+    identity: 'public.aws_can_write_claim(uuid)',
+    exists: true,
+    definitionSha256: INSPECT_HASH,
+  });
+  assert.doesNotMatch(JSON.stringify(summary), new RegExp(`${SECRET_BODY}|${SECRET_PASSWORD}`));
+
+  const { inspect: _dropped, ...withoutInspect } = projected;
+  const omitted = summarizeInvocation({ metadata, payload: withoutInspect, expectedVersion: '12' });
+  assert.equal(Object.hasOwn(omitted, 'inspect'), false);
+  assert.equal(omitted.status, 'unhealthy');
+
+  assert.equal(summarizeInvocation({
+    metadata, payload: { ...withoutInspect, inspect: SECRET_BODY }, expectedVersion: '12',
+  }).classification, 'response_contract_mismatch');
+  assert.equal(summarizeInvocation({
+    metadata, payload: { ...withoutInspect, inspect: [leakedInspect()] }, expectedVersion: '12',
+  }).classification, 'response_contract_mismatch');
+  const failed = summarizeInvocation({
+    metadata, payload: { ...withoutInspect, inspect: SECRET_BODY }, expectedVersion: '12',
+  });
+  assert.equal(Object.hasOwn(failed, 'inspect'), false);
+  assert.doesNotMatch(JSON.stringify(failed), new RegExp(`${SECRET_BODY}|${SECRET_PASSWORD}|${INSPECT_HASH}`));
+});
+
+test('fixed handler projects inspect without reading event input or leaking secrets', async () => {
+  const handler = createDiagnosticHandler({
+    environment: () => STAGING_ENV,
+    validate: async () => validValidation({ inspect: leakedInspect() }),
+  });
+  const response = await handler({
+    body: JSON.stringify({ inspect: leakedInspect(), password: SECRET_PASSWORD }),
+  });
+  assert.equal(response.status, 'unhealthy');
+  assert.equal(response.inspect.functions.find((row) => row.identity === 'public.aws_can_write_claim(uuid)').definitionSha256, INSPECT_HASH);
+  assert.doesNotMatch(JSON.stringify(response), new RegExp(`${SECRET_BODY}|${SECRET_PASSWORD}`));
+});
+
+test('dispatch 403 is a GitHub caller permission, not an OIDC or session-policy workflow bug', () => {
+  const workflow = fs.readFileSync(new URL('../../.github/workflows/staging-db-readonly-lambda-diagnostic.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /permissions:\s*contents: read\s*id-token: write/s);
+  assert.match(workflow, /inline-session-policy:[\s\S]*lambda:InvokeFunction/);
+  assert.doesNotMatch(workflow, /lambda:InvokeFunctionUrl|iam:PassRole|secretsmanager:GetSecretValue/);
+  assert.doesNotMatch(workflow, /actions\/github-script|octokit|workflow_dispatch:[\s\S]*github\.token/);
+  assert.match(workflow, /not a job-token, OIDC, or session-policy/);
 });
