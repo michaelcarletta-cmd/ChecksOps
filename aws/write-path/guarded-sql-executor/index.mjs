@@ -12,9 +12,13 @@ import { functionDefsMatchExactly, readFunctionDef } from './lib/function-def-lo
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
   AUTHORIZED_SQL44,
+  AUTHORIZED_SQL53,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_FUNCTION,
+  classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
+  isSql44AuthorizedMigration,
+  isSql53AuthorizedMigration,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
 
@@ -30,6 +34,14 @@ const TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE = path.join(
   ROOT,
   'sql/20261001193100_tenant_users_can_override_check_status.sql',
 );
+const SQL53_FILE = path.join(ROOT, 'sql/53_claim_settlement_breakdown.sql');
+const SQL53_FORBIDDEN_MARKERS = [
+  'claim_ledger_link_or_create',
+  'sync_homeowner_ledger_from_check',
+  'hle_on_check_intake_insert',
+  '20261007193200',
+  'one_check_received_writer',
+];
 const CA_CANDIDATES = [
   path.join(ROOT, 'rds-global-bundle.pem'),
   '/var/task/rds-global-bundle.pem',
@@ -466,13 +478,250 @@ async function handleTenantPermissions({
   }
 }
 
+async function readPreservedFunctionState(client, identities) {
+  const functions = [];
+  for (const identity of identities) {
+    const lookup = await readFunctionDef(client, identity);
+    if (!lookup.ok) return lookup;
+    functions.push({
+      identity,
+      exists: lookup.details.exists === true,
+      definitionSha256: lookup.details.exists
+        ? hashSqlDefinition(lookup.details.definition)
+        : AUTHORIZED_SQL53.absent_live_definition_sha256,
+    });
+  }
+  return ok({ functions });
+}
+
+function sql53ContainsForbiddenMutation(sqlText) {
+  const text = String(sqlText || '');
+  if (/\bDROP\s+(FUNCTION|TRIGGER|TABLE)\b/i.test(text)) {
+    return 'DROP FUNCTION|TRIGGER|TABLE';
+  }
+  for (const marker of SQL53_FORBIDDEN_MARKERS) {
+    if (text.includes(marker)) return marker;
+  }
+  return null;
+}
+
+async function rollbackSql53(client, inTx) {
+  if (!inTx) return false;
+  try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+  return false;
+}
+
+function sql53PinExact(event = {}) {
+  return event.filename === AUTHORIZED_SQL53.filename
+    && event.migration_id === AUTHORIZED_SQL53.migration_id
+    && event.source_sha256 === AUTHORIZED_SQL53.source_sha256
+    && event.intended_replacement_sha256 === AUTHORIZED_SQL53.intended_replacement_sha256
+    && event.commit === AUTHORIZED_SQL53.commit;
+}
+
+async function handleSql53({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile53,
+  expectedSql53AfterHash,
+}) {
+  const embedded = readEmbeddedSql(sqlFile53, AUTHORIZED_SQL53.source_sha256);
+  if (!embedded.ok) return embedded;
+  const forbidden = sql53ContainsForbiddenMutation(embedded.details.text);
+  if (forbidden) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 53 contains a forbidden unrelated mutation', {
+      marker: forbidden,
+    });
+  }
+
+  let client;
+  let inTx = false;
+  try {
+    client = await connect();
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      const liveLookup = await readFunctionDef(client, AUTHORIZED_SQL53.function_identity);
+      if (!liveLookup.ok) return liveLookup;
+      const exists = liveLookup.details.exists === true;
+      const liveHash = exists
+        ? hashSqlDefinition(liveLookup.details.definition)
+        : AUTHORIZED_SQL53.absent_live_definition_sha256;
+      const preserved = await readPreservedFunctionState(
+        client,
+        AUTHORIZED_SQL53.preserved_function_identities,
+      );
+      if (!preserved.ok) return preserved;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: event.action,
+          executor_identity: identity,
+          exists,
+          function_identity: AUTHORIZED_SQL53.function_identity,
+          live_definition_sha256: liveHash,
+          preserved_functions: preserved.details.functions,
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 53 executor action ${event.action}`);
+    }
+    if (!sql53PinExact(event)) {
+      return fail(CODES.SQL_COLLISION, 'SQL 53 apply is bound to the exact allowlisted pin', {
+        filename: event.filename || null,
+        migration_id: event.migration_id || null,
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      AUTHORIZED_SQL53.function_identity,
+    ]);
+
+    if (isConsumed(event.one_use_id)) {
+      inTx = await rollbackSql53(client, inTx);
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+
+    const liveLookup = await readFunctionDef(client, AUTHORIZED_SQL53.function_identity);
+    if (!liveLookup.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return liveLookup;
+    }
+    const exists = liveLookup.details.exists === true;
+    const liveHash = exists
+      ? hashSqlDefinition(liveLookup.details.definition)
+      : AUTHORIZED_SQL53.absent_live_definition_sha256;
+
+    if (event.expected_live_definition_sha256 !== liveHash) {
+      inTx = await rollbackSql53(client, inTx);
+      return fail(CODES.DEPLOYMENT_COLLISION, 'expected live fingerprint changed immediately before apply', {
+        expected_live_definition_sha256: event.expected_live_definition_sha256 || null,
+        live_definition_sha256: liveHash,
+      });
+    }
+
+    const liveState = classifySql53CreateLive({
+      exists,
+      live_definition_sha256: liveHash,
+    });
+    if (!liveState.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return liveState;
+    }
+
+    const preserved = await readPreservedFunctionState(
+      client,
+      AUTHORIZED_SQL53.preserved_function_identities,
+    );
+    if (!preserved.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return preserved;
+    }
+    const missingPreserved = preserved.details.functions.filter((row) => row.exists !== true);
+    if (missingPreserved.length) {
+      inTx = await rollbackSql53(client, inTx);
+      return fail(CODES.SQL_COLLISION, 'SQL 53 apply refuses to run when a preserved function is missing', {
+        missing: missingPreserved.map((row) => row.identity),
+      });
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: liveHash,
+    });
+    if (!collision.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return collision;
+    }
+
+    await client.query(embedded.details.text);
+
+    const afterLookup = await readFunctionDef(client, AUTHORIZED_SQL53.function_identity);
+    if (!afterLookup.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return afterLookup;
+    }
+    if (afterLookup.details.exists !== true) {
+      inTx = await rollbackSql53(client, inTx);
+      return fail(CODES.SQL_COLLISION, 'apply did not create the settlement function');
+    }
+    const afterHash = hashSqlDefinition(afterLookup.details.definition);
+    if (afterHash !== expectedSql53AfterHash) {
+      inTx = await rollbackSql53(client, inTx);
+      return fail(CODES.SQL_COLLISION, 'applied settlement definition does not match the intended hash', {
+        after_hash: afterHash,
+        intended_replacement_sha256: expectedSql53AfterHash,
+      });
+    }
+
+    const preservedAfter = await readPreservedFunctionState(
+      client,
+      AUTHORIZED_SQL53.preserved_function_identities,
+    );
+    if (!preservedAfter.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return preservedAfter;
+    }
+    const lost = preservedAfter.details.functions.filter((row) => row.exists !== true);
+    if (lost.length) {
+      inTx = await rollbackSql53(client, inTx);
+      return fail(CODES.SQL_COLLISION, 'apply lost an unrelated pinned function', {
+        missing: lost.map((row) => row.identity),
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveHash,
+        after_hash: afterHash,
+        result: 'applied',
+        executor_identity: identity,
+        function_identity: AUTHORIZED_SQL53.function_identity,
+        preserved_functions: preservedAfter.details.functions,
+      },
+    });
+  } catch (error) {
+    inTx = await rollbackSql53(client, inTx);
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (inTx) await rollbackSql53(client, inTx);
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function createHandler({
   connect = defaultConnect,
   now = () => Date.now(),
   sqlFile = SQL_FILE,
   sqlFile601 = TENANT_PERMISSIONS_SQL_FILE,
   sqlFile601Predecessor = TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE,
+  sqlFile53 = SQL53_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
+  expectedSql53AfterHash = AUTHORIZED_SQL53.intended_replacement_sha256,
 } = {}) {
   return async function handler(event = {}) {
     const identity = process.env.EXECUTOR_IDENTITY
@@ -491,6 +740,17 @@ export function createHandler({
       });
     }
 
+    if (isSql53AuthorizedMigration(event)) {
+      return handleSql53({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile53,
+        expectedSql53AfterHash,
+      });
+    }
+
     if (isTenantUsersSameCheckPermissions(event)) {
       return handleTenantPermissions({
         event,
@@ -499,6 +759,13 @@ export function createHandler({
         connect,
         sqlFile601,
         sqlFile601Predecessor,
+      });
+    }
+
+    if (!isSql44AuthorizedMigration(event)) {
+      return fail(CODES.SQL_COLLISION, 'authorization package is not bound to an allowlisted staging SQL file', {
+        filename: event.filename || null,
+        migration_id: event.migration_id || null,
       });
     }
 

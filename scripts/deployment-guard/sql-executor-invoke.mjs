@@ -18,6 +18,7 @@ import {
   SQL_EXECUTOR_FUNCTION,
   authorizationFingerprint,
   evaluateSqlExecutorAuthorization,
+  requireAuthorizedMigration,
   resolveAuthorizedMigration,
 } from './lib/sql-executor-auth.mjs';
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
@@ -36,6 +37,9 @@ function refuseFunctionName(name) {
 
 export function buildExecutorPayload(input = {}, receipt = {}) {
   const authorized = resolveAuthorizedMigration(input);
+  if (!authorized) {
+    return null;
+  }
   const payload = {
     action: input.action || 'apply',
     workstream_id: input.workstream_id || receipt.workstream_id,
@@ -72,15 +76,15 @@ export function main(argv = process.argv.slice(2), env = process.env, invokeFn =
 
   const authorizedMigration = resolveAuthorizedMigration(input);
   const fingerprint = input.preflight_live_fingerprint || authorizationFingerprint({
-    ...authorizedMigration,
+    ...(authorizedMigration || {}),
     ...input,
-    commit: input.commit || authorizedMigration.commit,
+    commit: input.commit || authorizedMigration?.commit,
   });
 
   const authorized = enforceScriptGuard({
     script: import.meta.url,
     workstream_id: opts['workstream-id'] || input.workstream_id,
-    commit: opts.commit || input.commit || authorizedMigration.commit,
+    commit: opts.commit || input.commit || authorizedMigration?.commit,
     target_environment: 'staging',
     target_component: SQL_EXECUTOR_COMPONENT,
     deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
@@ -89,12 +93,16 @@ export function main(argv = process.argv.slice(2), env = process.env, invokeFn =
     receipt: input.receipt,
   });
 
+  const bound = requireAuthorizedMigration(input);
+  if (!bound.ok) return printResult(bound);
+
   const payload = buildExecutorPayload({
     ...input,
     expected_live_definition_sha256: input.expected_live_definition_sha256 || fingerprint.sql,
     one_use_id: input.one_use_id || fingerprint.one_use_id,
     function_name: functionName,
   }, authorized.details.receipt);
+  if (!payload) return printResult(bound);
 
   const evaluation = evaluateSqlExecutorAuthorization(payload);
   if (!evaluation.ok) return printResult(evaluation);

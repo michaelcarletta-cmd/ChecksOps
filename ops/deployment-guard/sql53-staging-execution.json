@@ -1,0 +1,50 @@
+{
+  "id": "sql53-staging-execution",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "ensure_authorized": false,
+  "invoke_authorized": false,
+  "phase2_authorized": false,
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "deployment_type": "sql-executor-invoke",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "commit": "8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_replacement_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "owned_components": [
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preserved_function_identities": [
+    "public.sync_homeowner_ledger_from_check()",
+    "public.aws_can_write_claim(uuid)",
+    "public.hle_on_check_intake_insert()"
+  ],
+  "latest_absent_inspect": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_run": 37947042060,
+    "exists": false,
+    "note": "Historical Phase 1 inspect. A fresh inspect is required immediately before apply and is not satisfied by this pin."
+  },
+  "post_apply_verification": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_name": "Staging DB read-only diagnostic",
+    "ref": "main",
+    "expected_inspect": {
+      "identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+      "exists": true,
+      "definitionSha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52"
+    }
+  },
+  "notes": "Source-only execution-path pin for the dedicated SQL 53 VPC executor handler. This package does not run sql-executor-ensure, invoke the executor, apply SQL, enable retired workflows, apply 20261007193200, apply the one-writer migration, modify SQL 44, or begin Phase 2. Independent apply authorization, a short-lived sql-executor-invoke receipt, and a fresh immediately-before absent inspect are still required."
+}

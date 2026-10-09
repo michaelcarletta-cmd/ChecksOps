@@ -61,8 +61,8 @@ test('SQL 53 pin matches current source bytes and does not broaden other migrati
   assert.ok(PIN.forbidden_owned_components.includes('aws/write-path/sql/44_claim_ledger_link_or_create.sql'));
   assert.ok(PIN.forbidden_owned_components.includes('supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql'));
   assert.ok(PIN.forbidden_owned_components.includes('supabase/migrations/20260918170040_one_check_received_writer.sql'));
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 2);
-  assert.equal(AUTHORIZED_STAGING_SQL.some((row) => row.filename === PIN.filename), false);
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 3);
+  assert.equal(AUTHORIZED_STAGING_SQL.some((row) => row.filename === PIN.filename), true);
 });
 
 test('SQL 53 source creates only the settlement RPC and does not touch ledger SQL', () => {
@@ -184,11 +184,11 @@ test('production, apply flags, extra migrations, and wrong source hash are refus
   }), { root: ROOT }).code, CODES.RECEIPT_MISMATCH);
 });
 
-test('SQL 53 cannot ride the existing executor allowlist', () => {
-  const result = evaluateSqlExecutorAuthorization({
+test('SQL 53 executor pin requires the exact #835 commit/hash tuple', () => {
+  const exact = evaluateSqlExecutorAuthorization({
     workstream_id: 'staging-sql53-3bc9',
-    branch: 'cursor/staging-sql53-auth-3bc9',
-    commit: COMMIT,
+    branch: 'cursor/staging-sql53-execute-3bc9',
+    commit: '8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1',
     operator: 'test-agent',
     target_environment: 'staging',
     target_component: 'staging-sql',
@@ -206,8 +206,31 @@ test('SQL 53 cannot ride the existing executor allowlist', () => {
     build_timestamp: NOW,
     preflight_live_fingerprint: { sql: PIN.absent_live_definition_sha256 },
   });
-  assert.equal(result.ok, false);
-  assert.equal(result.code, CODES.SQL_COLLISION);
+  assert.equal(exact.ok, true, exact.message);
+
+  const wrongCommit = evaluateSqlExecutorAuthorization({
+    workstream_id: 'staging-sql53-3bc9',
+    branch: 'cursor/staging-sql53-execute-3bc9',
+    commit: COMMIT,
+    operator: 'test-agent',
+    target_environment: 'staging',
+    target_component: 'staging-sql',
+    deployment_type: 'sql-executor-invoke',
+    owned_components: [PIN.filename],
+    filename: PIN.filename,
+    migration_id: PIN.migration_id,
+    source_sha256: PIN.source_sha256,
+    intended_replacement_sha256: PIN.intended_definition_sha256,
+    expected_live_definition_sha256: PIN.absent_live_definition_sha256,
+    one_use_id: 'sql53-apply-0002',
+    expiry: '2026-10-09T16:00:00.000Z',
+    action: 'authorize',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: NOW,
+    preflight_live_fingerprint: { sql: PIN.absent_live_definition_sha256 },
+  });
+  assert.equal(wrongCommit.ok, false);
+  assert.equal(wrongCommit.code, CODES.SQL_COLLISION);
 });
 
 test('evaluateDeployment routes SQL 53 sql-apply through the staging pin', () => {
