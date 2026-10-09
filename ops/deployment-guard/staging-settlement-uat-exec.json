@@ -1,0 +1,108 @@
+{
+  "id": "staging-settlement-uat-exec",
+  "authorization": "staging-settlement-uat-execution",
+  "target_environment": "staging",
+  "production_changes": false,
+  "sql_migrations": false,
+  "lambda_or_spa_deployments": false,
+  "release_lock_changes": false,
+  "provider_invocations": false,
+  "write_authorized": true,
+  "writes_attempted": false,
+  "writes_committed": false,
+  "verdict": "BLOCKED",
+  "blocked_reason": "approved_cognito_actor_unreachable",
+  "synthetic_claim_id": null,
+  "settlement_id": null,
+  "check_id": null,
+  "reserved_claim_number": "AWS SETTLEMENT UAT",
+  "inspected_at": "2026-10-09T19:41:11.000Z",
+  "mutations": [],
+  "expected_writes_observed": {
+    "claims": 0,
+    "check_intake_items": 0,
+    "claim_settlements": 0,
+    "homeowner_ledger_events": 0,
+    "deposit_items": 0,
+    "checkalt_deposits": 0,
+    "disbursement_batches": 0,
+    "claim_payments": 0,
+    "provider_transactions": 0
+  },
+  "preflight": {
+    "workflow_status": {
+      "httpStatus": 200,
+      "environment": "staging",
+      "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": true,
+      "AWS_PROVIDER_EXECUTION_ENABLED": false,
+      "AWS_CHECKALT_ENABLED": false,
+      "AWS_MOOV_ENABLED": false,
+      "productionWebhooksRedirected": false
+    },
+    "password_login": {
+      "path": "POST /auth/login",
+      "email": "checksops-tester@freedomadj.com",
+      "httpStatus": 410,
+      "error": "password_auth_disabled",
+      "message": "Staging password login is disabled. Use EMAIL_OTP or a passkey."
+    },
+    "email_otp": {
+      "path": "POST /auth/passwordless/start",
+      "email": "checksops-tester@freedomadj.com",
+      "httpStatus": 200,
+      "ok": true,
+      "challenge": "EMAIL_OTP",
+      "completed": false,
+      "delivery_destination_masked": "c***@f***",
+      "connected_outlook_mailbox": "claims@freedomadj.com",
+      "otp_received_in_connected_mailbox": false,
+      "latest_connected_inbox_after_start": "Beside: Claim Inspection Follow-Up at 2026-10-09T19:42:03Z"
+    }
+  },
+  "identity_split": {
+    "plan_actor": {
+      "email": "checksops-tester@freedomadj.com",
+      "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "historical_cognito_sub_prefix": "c4386408"
+    },
+    "live_cognito": {
+      "checksops-tester@freedomadj.com": {
+        "status": "CONFIRMED",
+        "sub_prefix": "04d85458"
+      },
+      "mcarletta@freedomadj.com": {
+        "status": "CONFIRMED",
+        "sub_prefix": "c4386408"
+      },
+      "claims@freedomadj.com": {
+        "status": "CONFIRMED",
+        "sub_prefix": "047824f8"
+      },
+      "payments@condition1commercial.com": {
+        "status": "CONFIRMED",
+        "sub_prefix": "e418f488"
+      }
+    },
+    "stop": "Live Cognito no longer binds the plan email to historical tester sub c4386408. Do not guess which user maps to abd3c2a0. Do not authenticate as claims@ or staging-master."
+  },
+  "secrets": {
+    "password_file_present": false,
+    "staging_secret_used": "none",
+    "master_uat_secret_present": true,
+    "master_uat_used": false,
+    "note": "checksops/staging/master-uat-password is staging-master@checksops.invalid → 7dbb3009 and is the wrong principal."
+  },
+  "cleanup": {
+    "synthetic_check_deleted": false,
+    "claim_preserved": true,
+    "settlement_preserved": true,
+    "note": "No synthetic check, claim, or settlement was created."
+  },
+  "remaining_blockers": [
+    "Need a short-lived Cognito ID token for the Freedom user whose /identity/me applicationUserId is abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+    "Need the same for C1C payments@condition1commercial.com to run the deny test",
+    "Owner must confirm which live Cognito email maps to abd3c2a0 after the tester/mcarletta split",
+    "Do not use claims@freedomadj.com or staging-master for this UAT"
+  ],
+  "notes": "Stopped before any inspect-or-create write. No customer claims were read or modified. No provider, SQL, Lambda, SPA, or Release Lock change."
+}
