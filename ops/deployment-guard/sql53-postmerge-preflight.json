@@ -1,0 +1,163 @@
+{
+  "id": "sql53-postmerge-preflight",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "ensure_authorized": false,
+  "invoke_authorized": false,
+  "phase2_authorized": false,
+  "receipt_issued": false,
+  "staging_executor_deployment": "GO",
+  "verdict": "GO",
+  "verdict_scope": "update-only checksops-staging-guarded-sql-executor via sql-executor-ensure from 3b186ef",
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "merged_pr": 838,
+  "merged_source_commit": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+  "invoke_auth_commit": "8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1",
+  "ensure_commit": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+  "inspected_at": "2026-10-09T17:31:00.000Z",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_replacement_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "owned_components": [
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preserved_function_identities": [
+    "public.sync_homeowner_ledger_from_check()",
+    "public.aws_can_write_claim(uuid)",
+    "public.hle_on_check_intake_insert()"
+  ],
+  "live_executor": {
+    "CodeSha256": "eWyfw2kGKayio0CGs13FQWYDsyB1jrS5wKEIs+Pk6iM=",
+    "RevisionId": "419c3227-a55a-4c29-9ba8-16cca009350f",
+    "LastModified": "2026-10-05T19:43:49.000+0000",
+    "Runtime": "nodejs20.x",
+    "Handler": "index.handler",
+    "State": "Active",
+    "LastUpdateStatus": "Successful",
+    "Role": "arn:aws:iam::806168576068:role/checksops-staging-guarded-sql-executor",
+    "Timeout": 120,
+    "MemorySize": 256,
+    "code_sha256_changed_from_previous_inspect": false,
+    "revision_id_changed_from_previous_inspect": false
+  },
+  "pack_delta_from_3b186ef": {
+    "only_live_would_be_dropped": [],
+    "only_pack_would_be_added": [
+      "sql/53_claim_settlement_breakdown.sql"
+    ],
+    "changed_would_be_overwritten": [
+      "index.mjs",
+      "lib/sql-executor-auth.mjs",
+      "package-lock.json"
+    ],
+    "unchanged": [
+      "lib/collection-v2-synthetic-uat-cleanup.mjs",
+      "lib/errors.mjs",
+      "lib/function-def-lookup.mjs",
+      "lib/identity.mjs",
+      "lib/sql-apply.mjs",
+      "lib/tmp-rls-catalog.mjs",
+      "package.json",
+      "rds-global-bundle.pem",
+      "sql/20261001193100_tenant_users_can_override_check_status.sql",
+      "sql/20261001231500_tenant_users_same_check_permissions.sql",
+      "sql/39_tmp_write_policy_reconcile.sql",
+      "sql/40_collection_v2_synthetic_uat_cleanup.sql",
+      "sql/44_claim_ledger_link_or_create.sql"
+    ],
+    "node_modules_package_set": "identical",
+    "changed_reason": {
+      "index.mjs": "keep live SQL 39/40 handlers and add transactional exact-match SQL 53",
+      "lib/sql-executor-auth.mjs": "keep SQL 39/40 pins, add SQL 53, exact-match resolveAuthorizedMigration never defaults to SQL 44",
+      "package-lock.json": "npm install noise; same byte size"
+    }
+  },
+  "composed_package_preserves": [
+    "AUTHORIZED_SQL39",
+    "AUTHORIZED_SQL40",
+    "AUTHORIZED_SQL53",
+    "live handleSql39 and handleSql40",
+    "lib/collection-v2-synthetic-uat-cleanup.mjs",
+    "lib/tmp-rls-catalog.mjs",
+    "sql/39_tmp_write_policy_reconcile.sql",
+    "sql/40_collection_v2_synthetic_uat_cleanup.sql",
+    "exact-match resolveAuthorizedMigration never defaults to SQL 44",
+    "transactional handleSql53 with pg_advisory_xact_lock",
+    "sql53PinExact filename+migration_id+source+intended+commit",
+    "dedicated Role and VPC on update"
+  ],
+  "sql39_40_repo_paths": {
+    "pin_filenames": [
+      "aws/rls/sql/39_tmp_write_policy_reconcile.sql",
+      "aws/rls/sql/40_collection_v2_synthetic_uat_cleanup.sql"
+    ],
+    "pack_sources": [
+      "aws/write-path/guarded-sql-executor/sql/39_tmp_write_policy_reconcile.sql",
+      "aws/write-path/guarded-sql-executor/sql/40_collection_v2_synthetic_uat_cleanup.sql"
+    ],
+    "note": "Pack sources stay outside the protected database-rls tree so this workstream does not overwrite PRs #702/#704 or retarget the database-rls lock."
+  },
+  "latest_absent_inspect": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_run": 37959470214,
+    "head_sha": "b35680ea044f2b1e857deafd8314e4639591daf3",
+    "exists": false,
+    "http_status": 200,
+    "public_triggers": "172/172",
+    "settlement_columns": "17/17",
+    "ledger_triggers": "3/3",
+    "inspected_functions": "3/4",
+    "missing_function": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+    "preserved_hashes": {
+      "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+      "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf",
+      "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+    },
+    "agent_dispatch": "HTTP 403 Resource not accessible by integration",
+    "note": "Latest successful diagnostic. #838 was source-only and the live executor CodeSha256/RevisionId/LastModified are unchanged, so this inspect remains supporting evidence that the function is still absent. A fresh owner-dispatched inspect on main at 3b186ef is still required immediately before SQL 53 apply and is not satisfied by this pin."
+  },
+  "ensure_procedure_for_separate_approval": {
+    "immediately_before": [
+      "Fresh-fetch origin/main and confirm 3b186ef27f9a3e27a10b8368ef2eb737998898f2 is HEAD or an unchanged ancestor of pack members.",
+      "Read-only get-function-configuration for checksops-staging-guarded-sql-executor.",
+      "STOP with DEPLOYMENT_COLLISION if CodeSha256 is not eWyfw2kGKayio0CGs13FQWYDsyB1jrS5wKEIs+Pk6iM= or RevisionId is not 419c3227-a55a-4c29-9ba8-16cca009350f."
+    ],
+    "command": "node scripts/deployment-guard/sql-executor-ensure.mjs --workstream-id staging-sql53-3bc9 --commit 3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+    "working_tree": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+    "do_not": [
+      "retarget --function-name",
+      "invoke the executor",
+      "issue a receipt",
+      "execute SQL 53",
+      "apply 20261007193200",
+      "apply the one-writer migration",
+      "modify SQL 44",
+      "change Release Locks",
+      "touch production"
+    ],
+    "after_ensure": [
+      "Re-read CodeSha256 and RevisionId.",
+      "Confirm Role remains arn:aws:iam::806168576068:role/checksops-staging-guarded-sql-executor.",
+      "Confirm VPC still matches staging API.",
+      "Confirm ADMIN_SECRET remains staging checksops_admin, DATABASE_NAME=checksops, EXECUTOR_IDENTITY=checksops-staging-guarded-sql-executor."
+    ]
+  },
+  "untouched": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql",
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "notes": "Source-only post-merge preflight after PR #838. This package does not run sql-executor-ensure, invoke the executor, apply SQL, issue a receipt, enable retired workflows, apply 20261007193200, apply the one-writer migration, modify SQL 44, retarget Release Locks, or begin Phase 2. Independent approval is still required before the ensure command above."
+}
