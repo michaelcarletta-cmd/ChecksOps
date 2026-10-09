@@ -1,12 +1,12 @@
 # Staging DB diagnostic deployment prerequisites
 
 The workflow in `.github/workflows/staging-db-readonly-diagnostic-deploy.yml`
-is a one-time, source-only deployment path for the standalone
-`checksops-staging-db-readonly-diagnostic` stack. It refuses an existing stack,
-any non-`main` or non-exact SHA run, every account other than `806168576068`,
-and any target other than the staging diagnostic. It never deploys or updates
-`checksops-staging-api`. Do not use it for production or as a general SAM
-deployment role.
+is a create-only path for the standalone `checksops-staging-db-readonly-diagnostic`
+stack. It refuses an existing stack, any non-`main` or non-exact SHA run, every
+account other than `806168576068`, and any target other than the staging
+diagnostic. It never deploys or updates `checksops-staging-api`. Do not use it
+for production or as a general SAM deployment role. The deploy job remains
+disabled; it is not an updater and must not be dispatched.
 
 No AWS resources or IAM are provisioned by this repository change. Before an
 authorized operator can run the workflow, the following separate AWS setup is
@@ -110,3 +110,85 @@ approved GitHub environment process.
 Do not deploy from this pull request. The first live deployment requires a
 separate reviewed authorization after the documented AWS prerequisites are
 independently verified.
+
+## Existing-function updater draft — source-only and inactive
+
+`scripts/staging-db-readonly-diagnostic-update.mjs` is a pure safety contract,
+not a deployment command. Its direct entrypoint always refuses with
+`source_only_draft`; it has no AWS client or mutation path. Its offline tests
+exercise exact target and role checks, injected independent-approval
+verification, stack ownership refusal, CodeSha256/RevisionId/configuration
+compare-and-swap, source-composition scope, immutable-version matching, and
+diagnostic output redaction. The role ARN in that contract is the existing
+create-only role, not evidence that the role is authorized or suitable for an
+update. The generic Lambda overlay is not an allowed workaround: this function
+is not a registered shared Lambda target.
+
+No AWS configuration was read for this draft. The repository documents an
+existing function and published version as reported information, but has no
+independently verified live CodeSha256, RevisionId, configuration, published
+version inventory, or stack-to-function ownership evidence. Likewise, no
+independent approval controller, protected-environment reviewer/bypass
+configuration, update-capable OIDC trust, or current IAM policy was verified.
+The exact value of `CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN` was not read or
+changed. Do not infer these facts from source, a workflow input, or a caller
+supplied commit SHA.
+
+### Owner checklist before any updater implementation or activation
+
+- [ ] An independent GitHub/AWS owner supplies evidence for the protected
+  staging approval boundary, independent reviewers, no self-approval, no
+  administrator bypass, main-only deployment restriction, replay protection,
+  and an approval record cryptographically bound to this workstream and commit.
+  The approver/verifier must not be changeable by the same source commit.
+- [ ] An AWS owner performs fresh read-only checks of the exact function,
+  account, region, CodeSha256, RevisionId, complete live configuration,
+  published versions, and CloudFormation stack/resource ownership. Record the
+  observed values in the separately authorized review; never copy fingerprints
+  from old runs or this repository.
+- [ ] If CloudFormation owns the function, the resource owner chooses and
+  approves a stack-aware change-set/update path. Do not call
+  `UpdateFunctionCode` out of band or use the generic overlay. If ownership or
+  resource composition is unclear, stop.
+- [ ] Independently review the GitHub OIDC trust and exact AWS role policy.
+  They must be limited to this staging diagnostic and its owner-approved
+  stack-aware operation; deny production, staging API/shared Lambda, SQL,
+  SPA, and financial resources. Do not reuse the create-only permissions as
+  proof of update authority.
+- [ ] Review the full forward-composed diagnostic package against the live
+  package/build dependencies. Preserve live configuration, unrelated modules,
+  and all unrelated resources; do not restore a prior ZIP or overwrite
+  concurrent work.
+- [ ] Only after those prerequisites, obtain separate owner authorization for
+  an updater implementation and activation. Publish the exact resulting code
+  hash, verify the immutable version, and update
+  `CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN` only through the independently
+  authorized GitHub variable process. Never guess or auto-write that variable.
+
+### Required live staging acceptance tests after independent authorization
+
+1. Verify wrong account, region, role, environment, function, workstream,
+   branch/SHA, missing approval, self-approval, approval replay, and changed
+   workflow/verifier all refuse before AWS mutation.
+2. Verify existing/unexpected stack ownership, stale CodeSha256,
+   stale RevisionId, configuration drift, and a concurrent write refuse
+   without retrying from or restoring old code. Confirm the AWS write uses the
+   freshly observed revision as its compare-and-swap condition.
+3. Verify the stack-aware change set changes only the diagnostic code and
+   preserves live configuration, unrelated package members/resources, and
+   other workstreams. Stop on any same-file source conflict or uncomposed
+   package dependency.
+4. Verify the resulting CodeSha256, published version ARN, and that version's
+   code hash independently. Set the GitHub version variable only to that
+   verified immutable ARN through its authorized process.
+5. Invoke only that exact version with the existing read-only `inspect`
+   allowlist. Confirm unavailable metadata is distinguishable from absent
+   database objects, and that SQL bodies, credentials, and secret values never
+   appear in logs or summaries.
+6. Confirm no SQL migration/write, Lambda configuration change, API route,
+   Cognito admin authorization, CORS, IAM scope, or
+   `workflow_dispatch` 403 behavior was relaxed. Resolve dispatch access only
+   through its GitHub caller/app/environment owner.
+
+Until these checks and independent approvals are evidenced, keep the existing
+create-only workflow disabled and the updater draft non-mutating.
