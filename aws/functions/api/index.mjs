@@ -1,6 +1,6 @@
 import { databaseSecretConfigured } from './secrets.mjs';
 import { probeDatabase, probeIsHealthy } from './db-health.mjs';
-import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
+import { redactFunctionDefInspect, validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { authorizeDbValidatorDetails, dbValidatorHttpResponse } from './db-validator-access.mjs';
 import { handleIdentityMe, resolveIdentitySession } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
@@ -114,15 +114,22 @@ export const handleDbReadonlyValidateRequest = async (event, {
     access,
     validation,
     publicResponse: publicDbValidationResponse,
-    details: (result) => ({
-      statusCode: result.ok ? 200 : 503,
-      body: {
+    details: (result) => {
+      const body = {
         service: 'checksops-api',
         environment: process.env.CHECKSOPS_ENV || 'unknown',
         productionSupabaseChanged: false,
         ...result,
-      },
-    }),
+      };
+      delete body.inspect;
+      if (access.reason === 'staging_admin') {
+        body.inspect = redactFunctionDefInspect(result?.inspect);
+      }
+      return {
+        statusCode: result.ok ? 200 : 503,
+        body,
+      };
+    },
   });
 };
 

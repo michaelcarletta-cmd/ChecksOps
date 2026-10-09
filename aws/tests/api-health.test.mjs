@@ -208,12 +208,16 @@ test('public database diagnostics expose status only', () => {
     tables: [{ table: 'check_intake_items', rowCount: 182 }],
     rlsAudit: { roles: [{ rolname: 'checksops_admin' }] },
     catalog: { publicFunctions: 960 },
+    inspect: {
+      functions: [{ identity: 'public.aws_can_write_claim(uuid)', exists: true, definitionSha256: 'a'.repeat(64) }],
+    },
   });
   assert.equal(validation.statusCode, 200);
   assert.deepEqual(validation.body, { service: 'checksops-api', status: 'ok', readOnly: true });
   assert.equal(Object.hasOwn(validation.body, 'tables'), false);
   assert.equal(Object.hasOwn(validation.body, 'rlsAudit'), false);
   assert.equal(Object.hasOwn(validation.body, 'catalog'), false);
+  assert.equal(Object.hasOwn(validation.body, 'inspect'), false);
 });
 
 test('GET /db-health reports current database and user without leaking secrets', async () => {
@@ -293,6 +297,7 @@ test('failed public validation never exposes database issues, identity, or catal
     tables: [{ error: 'private-diagnostic-marker' }],
     issues: [{ message: 'private-diagnostic-marker' }],
     catalog: { private: true },
+    inspect: { functions: [{ definition: 'private-diagnostic-marker' }] },
     error: 'private-diagnostic-marker',
   }), {
     statusCode: 503,
@@ -396,6 +401,15 @@ const mockValidateClient = ({
       }
       if (sql.includes('pg_constraint')) {
         return { rows: [{ fk_count: authUsersFkCount }] };
+      }
+      if (sql.includes('pg_get_functiondef')) {
+        return { rows: [] };
+      }
+      if (sql.includes('claim_settlements') && sql.includes('pg_attribute')) {
+        return { rows: [] };
+      }
+      if (sql.includes('tgname = ANY')) {
+        return { rows: [] };
       }
       if (sql.includes('pg_get_triggerdef')) {
         return { rows: [] };

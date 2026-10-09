@@ -68,6 +68,9 @@ test('HTTP mapping keeps public redaction and never leaks details on 403', () =>
     ok: false,
     issues: [{ kind: 'trigger', severity: 'error', message: 'host=db.internal' }],
     tables: [{ table: 'claims', rowCount: 1 }],
+    inspect: {
+      functions: [{ identity: 'public.aws_can_write_claim(uuid)', definition: 'CREATE FUNCTION secret' }],
+    },
   };
   const publicResponse = (value) => ({
     statusCode: 503,
@@ -94,6 +97,8 @@ test('HTTP mapping keeps public redaction and never leaks details on 403', () =>
   assert.deepEqual(forbidden, { statusCode: 403, body: { error: 'not_authorized' } });
   assert.equal(JSON.stringify(forbidden).includes('db.internal'), false);
   assert.equal(JSON.stringify(forbidden).includes('claims'), false);
+  assert.equal(JSON.stringify(forbidden).includes('CREATE FUNCTION'), false);
+  assert.equal(Object.hasOwn(publicResult.body, 'inspect'), false);
 
   const allowed = dbValidatorHttpResponse({
     access: { ok: true, reason: 'staging_admin' },
