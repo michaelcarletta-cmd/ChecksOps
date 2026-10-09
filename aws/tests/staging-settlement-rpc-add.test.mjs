@@ -5,7 +5,6 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { CLAIM_SETTLEMENT_VALUE_COLUMNS, SAVE_CLAIM_SETTLEMENT_SQL } from '../functions/api/claim-settlement-rpc.mjs';
 import {
   buildOverlayReceiptInput,
   validateRequestedMember,
@@ -60,11 +59,14 @@ test('ADD source bytes match the accepted main member and SQL 53 pins', () => {
 });
 
 test('RPC value columns match the accepted staging diagnostic 17/17 set', () => {
-  assert.deepEqual([...CLAIM_SETTLEMENT_VALUE_COLUMNS], PIN.sql53.value_columns);
-  assert.equal(CLAIM_SETTLEMENT_VALUE_COLUMNS.length, 17);
+  const rpc = fs.readFileSync(path.join(ROOT, PIN.source_path), 'utf8');
+  const columnBlock = rpc.match(/CLAIM_SETTLEMENT_VALUE_COLUMNS = Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || '';
+  const columns = [...columnBlock.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]);
+  assert.deepEqual(columns, PIN.sql53.value_columns);
+  assert.equal(columns.length, 17);
   assert.equal(PIN.compatibility.value_column_count, 17);
   assert.match(
-    SAVE_CLAIM_SETTLEMENT_SQL,
+    rpc,
     /SELECT public\.save_claim_settlement_breakdown\(\$1::uuid, \$2::uuid, \$3::jsonb\)/,
   );
   assert.deepEqual(PIN.sql53.preserved_function_hashes, {
