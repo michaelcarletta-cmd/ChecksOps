@@ -16,14 +16,13 @@ import {
   evaluateSql53PostApplyInspect,
   evaluateSql53StagingApply,
 } from '../../scripts/deployment-guard/lib/sql53-staging-apply.mjs';
+import {
+  importGuardedSqlExecutor,
+  repoExecutorLibDir,
+} from './helpers/import-guarded-sql-executor.mjs';
 
-const EXECUTOR_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor');
-const GUARD_LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/deployment-guard/lib');
-fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
-for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs']) {
-  fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
-}
-const { createHandler } = await import('../write-path/guarded-sql-executor/index.mjs');
+const { module: executorModule, testModuleDir } = await importGuardedSqlExecutor();
+const { createHandler } = executorModule;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SQL53_FILE = path.join(ROOT, AUTHORIZED_SQL53.filename);
@@ -79,19 +78,38 @@ function mockSql53Connect({
   let applied = false;
   let invoked = false;
   let appliedSql44 = false;
+  let inTx = false;
   const lookups = [];
   const client = {
     applied() { return applied; },
     invoked() { return invoked; },
     appliedSql44() { return appliedSql44; },
+    inTx() { return inTx; },
     lookups() { return lookups; },
     async query(sql, params = []) {
       const text = String(sql);
+      if (/^\s*BEGIN\b/i.test(text)) {
+        inTx = true;
+        return { rows: [] };
+      }
+      if (/^\s*COMMIT\b/i.test(text)) {
+        inTx = false;
+        return { rows: [] };
+      }
+      if (/^\s*ROLLBACK\b/i.test(text)) {
+        inTx = false;
+        applied = false;
+        return { rows: [] };
+      }
+      if (/SELECT\s+pg_advisory_xact_lock\s*\(/i.test(text) && !/CREATE OR REPLACE/i.test(text)) {
+        return { rows: [{}] };
+      }
       if (text.includes('CREATE OR REPLACE FUNCTION public.claim_ledger_link_or_create')) {
         appliedSql44 = true;
         return { rows: [] };
       }
       if (text.includes('CREATE OR REPLACE FUNCTION public.save_claim_settlement_breakdown')) {
+        if (!inTx) throw new Error('SQL 53 apply must run inside a transaction');
         applied = true;
         return { rows: [] };
       }
@@ -142,6 +160,13 @@ function handlerFor(connect, extra = {}) {
   });
 }
 
+test('executor tests import from an isolated temp copy, not the repo executor tree', () => {
+  assert.ok(testModuleDir.startsWith(os.tmpdir()));
+  assert.match(testModuleDir, /guarded-sql-executor-test-/);
+  assert.notEqual(path.resolve(testModuleDir), path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor'));
+  assert.notEqual(path.join(testModuleDir, 'lib'), repoExecutorLibDir());
+});
+
 test('execution pin is source-only and matches the official SQL 53 hashes', () => {
   assert.equal(EXECUTION_PIN.apply_authorized, false);
   assert.equal(EXECUTION_PIN.execute, false);
@@ -155,6 +180,8 @@ test('execution pin is source-only and matches the official SQL 53 hashes', () =
   assert.equal(EXECUTION_PIN.intended_replacement_sha256, AUTHORIZED_SQL53.intended_replacement_sha256);
   assert.equal(EXECUTION_PIN.latest_absent_inspect.workflow_run, 37947042060);
   assert.equal(EXECUTION_PIN.latest_absent_inspect.exists, false);
+  assert.notEqual(EXECUTION_PIN.target_environment, 'production');
+  assert.ok(EXECUTION_PIN.forbidden_owned_components.includes(AUTHORIZED_SQL44.filename));
   assert.equal(
     EXECUTION_PIN.post_apply_verification.workflow,
     '.github/workflows/staging-db-readonly-diagnostic.yml',
@@ -290,6 +317,36 @@ test('an unmatched migration does not fall through to the SQL 44 apply path', as
   assert.equal(result.ok, false);
   assert.equal((await connect()).appliedSql44(), false);
   assert.equal((await connect()).applied(), false);
+});
+
+test('after-hash mismatch rolls back and does not consume one_use_id', async () => {
+  const connect = mockSql53Connect({ afterDef: 'CREATE FUNCTION public.save_claim_settlement_breakdown() WRONG' });
+  const handler = handlerFor(connect);
+  const event = sql53Event({ one_use_id: 'sql53-rollback-1' });
+  const result = await handler(event);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+  assert.match(result.message, /intended hash/);
+  const client = await connect();
+  assert.equal(client.applied(), false);
+  assert.equal(client.inTx(), false);
+  const replay = await handler(event);
+  assert.equal(replay.ok, false);
+  assert.match(replay.message, /intended hash/);
+  assert.doesNotMatch(replay.message, /already been consumed/);
+});
+
+test('mixed SQL 53/44 identifiers do not fall through to either apply path', async () => {
+  const connect = mockSql53Connect();
+  const handler = handlerFor(connect);
+  const result = await handler(sql53Event({
+    filename: AUTHORIZED_SQL53.filename,
+    migration_id: AUTHORIZED_SQL44.migration_id,
+    owned_components: [AUTHORIZED_SQL53.filename],
+  }));
+  assert.equal(result.ok, false);
+  assert.equal((await connect()).applied(), false);
+  assert.equal((await connect()).appliedSql44(), false);
 });
 
 test('post-apply inspect helper still requires the intended hash and preserved functions', () => {

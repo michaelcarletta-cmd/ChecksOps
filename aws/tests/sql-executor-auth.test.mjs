@@ -19,6 +19,8 @@ import {
   authorizationFingerprint,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
+  isSql44AuthorizedMigration,
+  isSql53AuthorizedMigration,
   resolveAuthorizedMigration,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
@@ -398,6 +400,18 @@ test('resolveAuthorizedMigration is exact-match and never defaults to SQL 44', (
     migration_id: AUTHORIZED_SQL53.migration_id,
   }), AUTHORIZED_SQL53);
   assert.equal(AUTHORIZED_STAGING_SQL.length, 3);
+  assert.equal(isSql53AuthorizedMigration({
+    filename: AUTHORIZED_SQL53.filename,
+    migration_id: AUTHORIZED_SQL44.migration_id,
+  }), false);
+  assert.equal(isSql44AuthorizedMigration({
+    filename: AUTHORIZED_SQL53.filename,
+    migration_id: AUTHORIZED_SQL44.migration_id,
+  }), false);
+  assert.equal(resolveAuthorizedMigration({
+    filename: AUTHORIZED_SQL53.filename,
+    migration_id: AUTHORIZED_SQL44.migration_id,
+  }), null);
 });
 
 test('SQL 53 executor authorize pin is accepted and classify refuses an existing function', () => {
@@ -443,6 +457,28 @@ test('SQL 53 executor authorize pin is accepted and classify refuses an existing
     exists: true,
     live_definition_sha256: '9'.repeat(64),
   }).code, CODES.SQL_COLLISION);
+
+  const production = evaluateSqlExecutorAuthorization({
+    workstream_id: 'staging-sql53-3bc9',
+    branch: 'cursor/staging-sql53-execute-3bc9',
+    commit: AUTHORIZED_SQL53.commit,
+    operator: 'test-agent',
+    target_environment: 'production',
+    target_component: 'production-sql',
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+    owned_components: [AUTHORIZED_SQL53.filename],
+    filename: AUTHORIZED_SQL53.filename,
+    migration_id: AUTHORIZED_SQL53.migration_id,
+    source_sha256: AUTHORIZED_SQL53.source_sha256,
+    intended_replacement_sha256: AUTHORIZED_SQL53.intended_replacement_sha256,
+    expected_live_definition_sha256: absentLive,
+    one_use_id: 'sql53-exec-prod',
+    expiry: '2026-10-09T16:00:00.000Z',
+    action: 'apply',
+    function_name: 'checksops-staging-guarded-sql-executor',
+    build_timestamp: '2026-10-09T15:00:00.000Z',
+  }, { now: pinNow });
+  assert.equal(production.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
 test('sql-executor-ensure packs the non-throwing function-def lookup and SQL 53', () => {

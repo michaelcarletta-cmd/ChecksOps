@@ -65,19 +65,27 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL53,
 ]);
 
+export function pinIdentifiersMatch(input = {}, pin = {}) {
+  const hasFile = Boolean(input.filename);
+  const hasMigration = Boolean(input.migration_id);
+  const fileOk = input.filename === pin.filename;
+  const migrationOk = input.migration_id === pin.migration_id;
+  if (hasFile && hasMigration) return fileOk && migrationOk;
+  if (hasFile) return fileOk;
+  if (hasMigration) return migrationOk;
+  return false;
+}
+
 export function isSql53AuthorizedMigration(input = {}) {
-  return input.filename === AUTHORIZED_SQL53.filename
-    || input.migration_id === AUTHORIZED_SQL53.migration_id;
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL53);
 }
 
 export function isTenantUsersSameCheckPermissions(input = {}) {
-  return input.filename === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.filename
-    || input.migration_id === AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS.migration_id;
+  return pinIdentifiersMatch(input, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS);
 }
 
 export function isSql44AuthorizedMigration(input = {}) {
-  return input.filename === AUTHORIZED_SQL44.filename
-    || input.migration_id === AUTHORIZED_SQL44.migration_id;
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL44);
 }
 
 export function resolveAuthorizedMigration(input = {}) {

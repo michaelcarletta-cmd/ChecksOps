@@ -13,12 +13,11 @@ import {
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   authorizationFingerprint,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
-const EXECUTOR_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../write-path/guarded-sql-executor');
-const GUARD_LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/deployment-guard/lib');
-fs.mkdirSync(path.join(EXECUTOR_DIR, 'lib'), { recursive: true });
-for (const name of ['errors.mjs', 'identity.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'function-def-lookup.mjs']) {
-  fs.copyFileSync(path.join(GUARD_LIB, name), path.join(EXECUTOR_DIR, 'lib', name));
-}
+import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
+
+const {
+  module: executorModule,
+} = await importGuardedSqlExecutor();
 const {
   createHandler,
   extractPinnedFunctionSql,
@@ -27,7 +26,7 @@ const {
   readFunctionDef,
   tenantPermissionDefsAreExact,
   tenantPermissionMarkersMatch,
-} = await import('../write-path/guarded-sql-executor/index.mjs');
+} = executorModule;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SQL_FILE = path.join(ROOT, AUTHORIZED_SQL44.filename);

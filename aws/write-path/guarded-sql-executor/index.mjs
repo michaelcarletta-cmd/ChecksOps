@@ -505,6 +505,20 @@ function sql53ContainsForbiddenMutation(sqlText) {
   return null;
 }
 
+async function rollbackSql53(client, inTx) {
+  if (!inTx) return false;
+  try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+  return false;
+}
+
+function sql53PinExact(event = {}) {
+  return event.filename === AUTHORIZED_SQL53.filename
+    && event.migration_id === AUTHORIZED_SQL53.migration_id
+    && event.source_sha256 === AUTHORIZED_SQL53.source_sha256
+    && event.intended_replacement_sha256 === AUTHORIZED_SQL53.intended_replacement_sha256
+    && event.commit === AUTHORIZED_SQL53.commit;
+}
+
 async function handleSql53({
   event,
   authorization,
@@ -523,23 +537,22 @@ async function handleSql53({
   }
 
   let client;
+  let inTx = false;
   try {
     client = await connect();
-    const liveLookup = await readFunctionDef(client, AUTHORIZED_SQL53.function_identity);
-    if (!liveLookup.ok) return liveLookup;
-    const exists = liveLookup.details.exists === true;
-    const liveDef = exists ? liveLookup.details.definition : null;
-    const liveHash = exists
-      ? hashSqlDefinition(liveDef)
-      : AUTHORIZED_SQL53.absent_live_definition_sha256;
-
-    const preserved = await readPreservedFunctionState(
-      client,
-      AUTHORIZED_SQL53.preserved_function_identities,
-    );
-    if (!preserved.ok) return preserved;
 
     if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      const liveLookup = await readFunctionDef(client, AUTHORIZED_SQL53.function_identity);
+      if (!liveLookup.ok) return liveLookup;
+      const exists = liveLookup.details.exists === true;
+      const liveHash = exists
+        ? hashSqlDefinition(liveLookup.details.definition)
+        : AUTHORIZED_SQL53.absent_live_definition_sha256;
+      const preserved = await readPreservedFunctionState(
+        client,
+        AUTHORIZED_SQL53.preserved_function_identities,
+      );
+      if (!preserved.ok) return preserved;
       return ok({
         authorization: authorization.details,
         receipt: {
@@ -561,8 +574,38 @@ async function handleSql53({
     if (event.action !== 'apply') {
       return fail(CODES.INVALID_MANIFEST, `unsupported SQL 53 executor action ${event.action}`);
     }
+    if (!sql53PinExact(event)) {
+      return fail(CODES.SQL_COLLISION, 'SQL 53 apply is bound to the exact allowlisted pin', {
+        filename: event.filename || null,
+        migration_id: event.migration_id || null,
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      AUTHORIZED_SQL53.function_identity,
+    ]);
+
+    if (isConsumed(event.one_use_id)) {
+      inTx = await rollbackSql53(client, inTx);
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+
+    const liveLookup = await readFunctionDef(client, AUTHORIZED_SQL53.function_identity);
+    if (!liveLookup.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return liveLookup;
+    }
+    const exists = liveLookup.details.exists === true;
+    const liveHash = exists
+      ? hashSqlDefinition(liveLookup.details.definition)
+      : AUTHORIZED_SQL53.absent_live_definition_sha256;
 
     if (event.expected_live_definition_sha256 !== liveHash) {
+      inTx = await rollbackSql53(client, inTx);
       return fail(CODES.DEPLOYMENT_COLLISION, 'expected live fingerprint changed immediately before apply', {
         expected_live_definition_sha256: event.expected_live_definition_sha256 || null,
         live_definition_sha256: liveHash,
@@ -573,10 +616,22 @@ async function handleSql53({
       exists,
       live_definition_sha256: liveHash,
     });
-    if (!liveState.ok) return liveState;
+    if (!liveState.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return liveState;
+    }
 
+    const preserved = await readPreservedFunctionState(
+      client,
+      AUTHORIZED_SQL53.preserved_function_identities,
+    );
+    if (!preserved.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return preserved;
+    }
     const missingPreserved = preserved.details.functions.filter((row) => row.exists !== true);
     if (missingPreserved.length) {
+      inTx = await rollbackSql53(client, inTx);
       return fail(CODES.SQL_COLLISION, 'SQL 53 apply refuses to run when a preserved function is missing', {
         missing: missingPreserved.map((row) => row.identity),
       });
@@ -590,17 +645,25 @@ async function handleSql53({
       expected_live_definition_sha256: event.expected_live_definition_sha256,
       live_definition_sha256: liveHash,
     });
-    if (!collision.ok) return collision;
+    if (!collision.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return collision;
+    }
 
     await client.query(embedded.details.text);
 
     const afterLookup = await readFunctionDef(client, AUTHORIZED_SQL53.function_identity);
-    if (!afterLookup.ok) return afterLookup;
+    if (!afterLookup.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return afterLookup;
+    }
     if (afterLookup.details.exists !== true) {
+      inTx = await rollbackSql53(client, inTx);
       return fail(CODES.SQL_COLLISION, 'apply did not create the settlement function');
     }
     const afterHash = hashSqlDefinition(afterLookup.details.definition);
     if (afterHash !== expectedSql53AfterHash) {
+      inTx = await rollbackSql53(client, inTx);
       return fail(CODES.SQL_COLLISION, 'applied settlement definition does not match the intended hash', {
         after_hash: afterHash,
         intended_replacement_sha256: expectedSql53AfterHash,
@@ -611,14 +674,20 @@ async function handleSql53({
       client,
       AUTHORIZED_SQL53.preserved_function_identities,
     );
-    if (!preservedAfter.ok) return preservedAfter;
+    if (!preservedAfter.ok) {
+      inTx = await rollbackSql53(client, inTx);
+      return preservedAfter;
+    }
     const lost = preservedAfter.details.functions.filter((row) => row.exists !== true);
     if (lost.length) {
+      inTx = await rollbackSql53(client, inTx);
       return fail(CODES.SQL_COLLISION, 'apply lost an unrelated pinned function', {
         missing: lost.map((row) => row.identity),
       });
     }
 
+    await client.query('COMMIT');
+    inTx = false;
     consumeOneUse(event.one_use_id);
     return ok({
       receipt: {
@@ -634,8 +703,10 @@ async function handleSql53({
       },
     });
   } catch (error) {
+    inTx = await rollbackSql53(client, inTx);
     return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
   } finally {
+    if (inTx) await rollbackSql53(client, inTx);
     if (client) {
       try { await client.end(); } catch { /* ignore */ }
     }
