@@ -1,7 +1,6 @@
 {
   "Version": "2012-10-17",
   "Id": "checksops-staging-db-readonly-diagnostic-deploy-consumed-ledger-minimum",
-  "Note": "Additive identity-policy statements only. Do not replace DiagnosticOnly. Do not attach from this repository. Artifact GetObject/PutObject on the diagnostic prefix stays as already scoped live; these statements constrain the consumed-approvals prefix.",
   "Statement": [
     {
       "Sid": "DenyDeployDeleteConsumedCreateApprovals",

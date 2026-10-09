@@ -18,8 +18,12 @@ import {
   OWNER_SIGNER_ROLE_ARN,
   PROPOSED_KMS_ALIAS,
   SOURCE_ONLY_APPLY_REFUSED,
+  WRITE_ONCE_DENY,
+  WRITE_ONCE_NOT_DENIED,
   evaluateLedgerPolicies,
+  evaluateOwnerApproverTrust,
   evaluatePackagingIsolation,
+  evaluateWriteOnceRequest,
   githubOidcContract,
   guardedApplyPlan,
   loadLedgerPolicies,
@@ -27,6 +31,7 @@ import {
   packagingPrefixFor,
   phoneFriendlyChecklist,
   readOnlyPreflight,
+  remainingBlockers,
 } from '../../scripts/staging-db-readonly-diagnostic-kms-s3-ledger.mjs';
 
 const policies = loadLedgerPolicies();
@@ -59,6 +64,52 @@ test('write-once statements cannot delete or overwrite via deploy role or altern
     assert.equal(policy.Statement.some((row) => row.Resource === ARTIFACT_OBJECT_ARN), false);
   }
   assert.equal(policies.bucketPolicy.Statement.every((row) => row.Principal === '*'), true);
+  assert.equal(Object.hasOwn(policies.deployIam, 'Note'), false);
+  assert.deepEqual(Object.keys(policies.deployIam).sort(), ['Id', 'Statement', 'Version']);
+  assert.equal(Object.hasOwn(policies.deployIam.Statement[0], 'Principal'), false);
+});
+
+test('AWS write-once semantics deny copy, delete, and unconditional put; recovery is PutBucketPolicy', () => {
+  const consumed = {
+    action: 's3:PutObject',
+    key: `${CREATE_APPROVAL_LEDGER.prefix}/${'ab'.repeat(16)}.json`,
+  };
+  assert.equal(evaluateWriteOnceRequest({ ...consumed, ifNoneMatch: '*' }), WRITE_ONCE_NOT_DENIED);
+  assert.equal(evaluateWriteOnceRequest({ ...consumed }), WRITE_ONCE_DENY);
+  assert.equal(evaluateWriteOnceRequest({ ...consumed, ifNoneMatch: '"abc"' }), WRITE_ONCE_DENY);
+  assert.equal(evaluateWriteOnceRequest({
+    ...consumed,
+    ifNoneMatch: '*',
+    copySource: `${CREATE_APPROVAL_LEDGER.bucket}/other.json`,
+  }), WRITE_ONCE_DENY);
+  assert.equal(evaluateWriteOnceRequest({
+    action: 's3:DeleteObject',
+    key: consumed.key,
+  }), WRITE_ONCE_DENY);
+  assert.equal(evaluateWriteOnceRequest({
+    action: 's3:DeleteObjectVersion',
+    key: consumed.key,
+  }), WRITE_ONCE_DENY);
+  assert.equal(evaluateWriteOnceRequest({
+    action: 's3:PutBucketPolicy',
+    resource: `arn:aws:s3:::${CREATE_APPROVAL_LEDGER.bucket}`,
+  }), WRITE_ONCE_NOT_DENIED);
+  assert.equal(evaluateWriteOnceRequest({
+    action: 's3:PutObject',
+    resource: `arn:aws:s3:::${CREATE_APPROVAL_LEDGER.bucket}/${CREATE_APPROVAL_TARGET.stackName}/${'a'.repeat(40)}/1-1/template.yaml`,
+  }), WRITE_ONCE_NOT_DENIED);
+  assert.ok(evaluateLedgerPolicies(policies).iam_put_object_covers.includes('CompleteMultipartUpload'));
+  assert.ok(evaluateLedgerPolicies(policies).iam_put_object_covers.includes('CopyObject'));
+});
+
+test('owner approver role is proposed only and cannot be GitHub OIDC', () => {
+  const trust = evaluateOwnerApproverTrust(policies.ownerTrust);
+  assert.equal(trust.ok, true);
+  assert.equal(trust.role_exists, false);
+  assert.equal(trust.operational, false);
+  assert.equal(trust.proposed_role_arn, OWNER_SIGNER_ROLE_ARN);
+  assert.equal(OWNER_EVIDENCE.independent_approval_signer_role, 'not_evidenced_2026-10-09');
+  assert.doesNotMatch(JSON.stringify(policies.ownerTrust.Statement[0]), /token\.actions\.githubusercontent\.com:sub/);
 });
 
 test('KMS policy is owner-only Sign and denies deploy and CloudFormation roles', () => {
@@ -128,7 +179,10 @@ test('read-only preflight records Oct 9 evidence and does not authorize apply', 
   assert.equal(result.live_evidence, OWNER_EVIDENCE);
   assert.equal(OWNER_EVIDENCE.artifact_bucket_policy, 'none_2026-10-09');
   assert.equal(OWNER_EVIDENCE.independent_approval_kms_key, 'unknown');
+  assert.deepEqual(result.remaining_blockers, remainingBlockers());
+  assert.ok(result.remaining_blockers.includes('owner_approver_role_not_evidenced'));
   assert.ok(result.blast_radius.out_of_scope.includes('SQL'));
+  assert.match(result.rollback.owner_recovery, /PutBucketPolicy/);
   assert.match(result.rollback.bucket_policy, /had none/);
   assert.equal(phoneFriendlyChecklist().length >= 8, true);
 });
@@ -170,6 +224,14 @@ test('widening write-once resources or allowing deploy Sign fails closed', () =>
     Resource: '*',
   });
   assert.throws(() => evaluateLedgerPolicies(signingDeploy), /ledger_policy_invalid/);
+  const noted = structuredClone(policies);
+  noted.deployIam.Note = 'not an IAM field';
+  assert.throws(() => evaluateLedgerPolicies(noted), /ledger_policy_invalid/);
+  const oidcTrust = structuredClone(policies);
+  oidcTrust.ownerTrust.Statement[0].Principal = {
+    Federated: 'arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com',
+  };
+  assert.throws(() => evaluateLedgerPolicies(oidcTrust), /ledger_policy_invalid/);
 });
 
 test('CLI preflight is source-only and never invokes aws', () => {

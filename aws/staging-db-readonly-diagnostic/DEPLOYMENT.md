@@ -86,6 +86,7 @@ Recorded 2026-10-09, account `806168576068`, `us-east-1`:
 | Exact live AWS role permission set | **pending owner evidence** |
 | Diagnostic package/lockfile vs live dependencies | **pending owner evidence** |
 | Independent approval KMS key / signer / public key | **unknown** (alias search found none; does not prove key absence) |
+| Owner signer role `ChecksOpsOwnerDiagnosticCreateApprover` | **not evidenced** (not in Oct 9 inventory; do not assume operational) |
 | Persistent create-approval consume ledger (S3 If-None-Match) | **unknown** (no bucket policy) |
 | Deploy-role DeleteObject denied on consume prefix | IAM omits DeleteObject; **no bucket Deny** so an alternate path can still delete |
 
@@ -103,21 +104,41 @@ KMS (asymmetric ECDSA, independently administered):
 
 - `KeySpec=ECC_NIST_P256`, `KeyUsage=SIGN_VERIFY`, `ECDSA_SHA_256` only.
 - Proposed alias `alias/checksops-staging-db-readonly-diagnostic-create-approval`.
-- Owner role `ChecksOpsOwnerDiagnosticCreateApprover` is the only `kms:Sign` principal, conditioned on `kms:SigningAlgorithm=ECDSA_SHA_256`.
+- Proposed owner role `ChecksOpsOwnerDiagnosticCreateApprover` is the only `kms:Sign` principal, conditioned on `kms:SigningAlgorithm=ECDSA_SHA_256`.
+- **This role is not evidenced live (Oct 9).** Do not assume it exists or can sign. Source must not create it.
 - Deploy and CloudFormation execution roles are denied `kms:Sign` and key admin. Do not grant those roles `kms:GetPublicKey`; the SPKI public key is a separately controlled staging-environment secret.
 - Account root may manage (not sign) for break-glass. No `kms:*`. This is not the deployment-guard receipt key.
+
+#### Owner signer role (proposed; not operational)
+
+Oct 9 inventory confirmed the GitHub deploy role and CloudFormation execution role. It did **not** list `ChecksOpsOwnerDiagnosticCreateApprover`. Treat the signer as absent until an owner read-only `GetRole` proves otherwise.
+
+Separately administered creation (outside this PR):
+
+- Name: `ChecksOpsOwnerDiagnosticCreateApprover` in account `806168576068`.
+- Trust: `aws/staging-db-readonly-diagnostic/policies/owner-approver-role-trust.json`. MFA-present IAM **user** assume via account root; Deny GitHub OIDC and the diagnostic deploy/execution roles. Do not use `token.actions.githubusercontent.com` as a trust principal. Owner may later replace the root principal with a named IAM user ARN; keep MFA.
+- Permissions: none beyond assuming into `kms:Sign` / `kms:GetPublicKey` / `kms:DescribeKey` on the approval key (from the key policy). No S3 delete, no `s3:PutBucketPolicy`, no CloudFormation, no staging API.
+- Not assumable by the disabled GitHub job. Creating this role does not enable the workflow.
 
 S3 write-once consumed ledger (minimum scoped):
 
 - Resource is only
   `arn:aws:s3:::checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/*`.
-- Real AWS keys: `s3:if-none-match` and `s3:x-amz-copy-source` (S3 conditional writes). `StringNotEquals` alone does not deny a missing header, so a `Null=true` Deny is required as well.
-- Principal `*` Deny delete (`s3:DeleteObject`, `s3:DeleteObjectVersion`) and overwrite (PutObject unless `If-None-Match: *`; PutObject when copy-source is present).
+- Real AWS keys: `s3:if-none-match` and `s3:x-amz-copy-source` (S3 conditional writes). `StringNotEquals` does **not** match a missing key, so a `Null=true` Deny is required as well.
+- IAM action `s3:PutObject` is what AWS authorizes for `PutObject`, `CopyObject`, `CreateMultipartUpload`, `UploadPart`, `UploadPartCopy`, and `CompleteMultipartUpload`. There is no `s3:CopyObject` IAM action. Conditional PutObject denies therefore apply to copy and multipart complete on this prefix.
+- Principal `*` Deny:
+  - delete: `s3:DeleteObject`, `s3:DeleteObjectVersion` (unconditional).
+  - create without `If-None-Match`: `s3:PutObject` when `s3:if-none-match` is Null.
+  - create with any other matcher: `s3:PutObject` when `s3:if-none-match` is not `*`.
+  - copy / UploadPartCopy: `s3:PutObject` when `s3:x-amz-copy-source` is present (`Null=false`).
+- First `PutObject` with `--if-none-match '*'` is not denied by this policy; S3 itself returns 412 if the key exists. Replay of consume is HTTP 412, not overwrite.
 - CloudFormation `package` PutObject stays under
-  `checksops-staging-db-readonly-diagnostic/<40-hex-sha>/<run>-<attempt>/`, which cannot collide with `create-approvals/consumed/`.
-- Consume command remains `aws s3api put-object --body <temp file> --if-none-match '*'`. Inline JSON `--body` is refused. Replay is HTTP 412.
+  `checksops-staging-db-readonly-diagnostic/<40-hex-sha>/<run>-<attempt>/`, which cannot collide with `create-approvals/consumed/`. Unrelated prefixes are not named in this policy.
+- Consume command remains `aws s3api put-object --body <temp file> --if-none-match '*'`. Inline JSON `--body` is refused.
 
-IAM: additive Deny statements only. Do not replace live DiagnosticOnly. Live GetObject/PutObject on the diagnostic prefix is required for packaging and must not gain an If-None-Match requirement.
+IAM identity policy (`deploy-role-consumed-ledger-iam.json`): additive Deny statements only (`Version` / `Id` / `Statement`). Do not attach from this repository. Do not replace live DiagnosticOnly. Live GetObject/PutObject on the diagnostic prefix is required for packaging and must not gain an If-None-Match requirement.
+
+Owner-controlled recovery: `Principal: "*"` object Deny includes the account root for DeleteObject/PutObject on the consumed prefix. `s3:PutBucketPolicy` on the **bucket** ARN is not denied here. Recover by replacing or deleting the bucket policy, then deleting objects. Do not give the deploy role `s3:PutBucketPolicy`. Identity-policy Deny on the deploy role is not a substitute for that recovery path.
 
 GitHub OIDC: the disabled job still has `permissions: contents: read` and **no** `id-token: write`. That absence is intentional. Do not add `id-token: write` or enable `jobs.deploy.if` from this PR. Session policy Deny on the consumed prefix is source-only and inactive while the job is disabled.
 
@@ -129,22 +150,25 @@ GitHub OIDC: the disabled job still has `permissions: contents: read` and **no**
 
 #### Rollback (owner only; not this PR)
 
-1. Delete the new bucket policy (Oct 9 live state had none).
+1. Replace or delete the new bucket policy (Oct 9 live state had none). Object Deny includes account root until this step.
 2. Remove only the additive consumed-prefix IAM Deny statements.
 3. Cancel the proposed alias and schedule-delete the unused signing key if created.
 4. Leave the workflow disabled. Do not add `id-token: write` as rollback.
+5. Do not delete consumed objects until step 1 succeeds. Do not create the owner signer from source.
 
 #### Phone-friendly owner checklist
 
 1. Do not merge, deploy, or enable the diagnostic workflow.
 2. Confirm `if: false` and `contents: read` only (no `id-token: write`).
 3. Confirm package prefix is SHA/run, not `create-approvals/consumed/`.
-4. Create the P-256 SIGN_VERIFY key with the source key policy; only the owner role may `kms:Sign`.
-5. Publish the SPKI public key and key ARN as staging secrets jobs cannot change.
-6. Put the consumed-prefix bucket policy. Do not enable versioning here.
-7. Add the additive deploy-role Deny for delete/overwrite of consumed objects.
-8. Prove `put-object --body FILE --if-none-match '*'`, then replay 412. Never `delete-object`.
-9. Do not touch staging API, production, SQL, Cognito, CORS, or other workstreams.
+4. Separately create `ChecksOpsOwnerDiagnosticCreateApprover` with the proposed MFA user trust. It is not evidenced live.
+5. Create the P-256 SIGN_VERIFY key with the source key policy; only that owner role may `kms:Sign`.
+6. Publish the SPKI public key and key ARN as staging secrets jobs cannot change.
+7. Put the consumed-prefix bucket policy. Do not enable versioning here.
+8. Add the additive deploy-role Deny for delete/overwrite of consumed objects.
+9. Prove `put-object --body FILE --if-none-match '*'`, then replay 412. Never `delete-object`.
+10. Recover consumed objects only by replacing the bucket policy, then deleting.
+11. Do not touch staging API, production, SQL, Cognito, CORS, or other workstreams.
 
 ### Separate non-blocking issues (do not weaken security to "fix")
 

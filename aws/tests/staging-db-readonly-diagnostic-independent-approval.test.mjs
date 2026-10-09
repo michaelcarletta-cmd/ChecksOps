@@ -168,6 +168,8 @@ test('expired, over-TTL, reused nonce, and tampered signatures fail closed', () 
 
 test('missing owner KMS authority and reused guard-receipt key fail closed as the documented blocker', () => {
   assert.equal(OWNER_EVIDENCE.independent_approval_kms_key, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_signer, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_signer_role, 'not_evidenced_2026-10-09');
   assert.equal(OWNER_EVIDENCE.independent_approval_kms_alias, 'none_found_does_not_prove_key_absence_2026-10-09');
   assert.equal(OWNER_EVIDENCE.independent_approval_consume_ledger, 'unknown');
   assert.equal(OWNER_EVIDENCE.independent_approval_consume_ledger_delete_denied, 'iam_omits_delete_no_bucket_deny_2026-10-09');

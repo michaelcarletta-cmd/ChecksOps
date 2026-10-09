@@ -13,6 +13,9 @@ export const LEDGER_POLICY_INVALID = 'ledger_policy_invalid';
 
 export const OWNER_SIGNER_ROLE_ARN = 'arn:aws:iam::806168576068:role/ChecksOpsOwnerDiagnosticCreateApprover';
 export const PROPOSED_KMS_ALIAS = 'alias/checksops-staging-db-readonly-diagnostic-create-approval';
+export const IAM_IDENTITY_POLICY_KEYS = Object.freeze(['Version', 'Id', 'Statement']);
+export const WRITE_ONCE_NOT_DENIED = 'NotDeniedByThisPolicy';
+export const WRITE_ONCE_DENY = 'Deny';
 
 // Real AWS IAM condition keys (S3 conditional writes, Nov 2024; KMS Sign).
 export const AWS_CONDITION_KEYS = Object.freeze({
@@ -57,6 +60,7 @@ export function loadLedgerPolicies({ dir = POLICIES_DIR } = {}) {
     kmsPolicy: JSON.parse(fs.readFileSync(path.join(dir, 'kms-create-approval-key-policy.json'), 'utf8')),
     bucketPolicy: JSON.parse(fs.readFileSync(path.join(dir, 's3-consumed-approvals-bucket-policy.json'), 'utf8')),
     deployIam: JSON.parse(fs.readFileSync(path.join(dir, 'deploy-role-consumed-ledger-iam.json'), 'utf8')),
+    ownerTrust: JSON.parse(fs.readFileSync(path.join(dir, 'owner-approver-role-trust.json'), 'utf8')),
   };
 }
 
@@ -66,6 +70,94 @@ function statements(policy) {
 
 function jsonIncludes(value, needle) {
   return JSON.stringify(value).includes(needle);
+}
+
+function requireIamIdentityPolicyShape(policy) {
+  const keys = Object.keys(policy || {});
+  if (keys.some((key) => !IAM_IDENTITY_POLICY_KEYS.includes(key))) {
+    fail(LEDGER_POLICY_INVALID, { reason: 'nonstandard_iam_identity_field', keys });
+  }
+  if (policy.Version !== '2012-10-17' || !Array.isArray(policy.Statement)) fail();
+  if (statements(policy).some((row) => Object.hasOwn(row, 'Principal'))) {
+    fail(LEDGER_POLICY_INVALID, { reason: 'identity_policy_has_principal' });
+  }
+  return true;
+}
+
+function consumedObjectArn(key) {
+  return `arn:aws:s3:::${CREATE_APPROVAL_LEDGER.bucket}/${key}`;
+}
+
+function matchesConsumedResource(resource) {
+  return resource === CONSUMED_OBJECT_ARN
+    || (typeof resource === 'string'
+      && resource.startsWith(`arn:aws:s3:::${CREATE_APPROVAL_LEDGER.bucket}/${CREATE_APPROVAL_LEDGER.prefix}/`));
+}
+
+// AWS IAM maps CopyObject, CreateMultipartUpload, UploadPart, UploadPartCopy,
+// and CompleteMultipartUpload to s3:PutObject. Missing condition keys do not
+// satisfy StringNotEquals, so a Null deny is required for absent If-None-Match.
+export function evaluateWriteOnceRequest({
+  action,
+  key,
+  resource,
+  ifNoneMatch,
+  copySource,
+} = {}) {
+  const objectResource = resource
+    || (key ? consumedObjectArn(key) : undefined);
+  if (action === 's3:PutBucketPolicy' && (resource === BUCKET_ARN || objectResource === BUCKET_ARN)) {
+    return WRITE_ONCE_NOT_DENIED;
+  }
+  if (!matchesConsumedResource(objectResource) && objectResource !== CONSUMED_OBJECT_ARN) {
+    return WRITE_ONCE_NOT_DENIED;
+  }
+  if (action === 's3:DeleteObject' || action === 's3:DeleteObjectVersion') return WRITE_ONCE_DENY;
+  if (action !== 's3:PutObject') return WRITE_ONCE_NOT_DENIED;
+  if (copySource) return WRITE_ONCE_DENY;
+  if (ifNoneMatch == null || ifNoneMatch === '') return WRITE_ONCE_DENY;
+  if (ifNoneMatch !== '*') return WRITE_ONCE_DENY;
+  return WRITE_ONCE_NOT_DENIED;
+}
+
+export function evaluateOwnerApproverTrust(policy) {
+  const rows = statements(policy);
+  const allow = rows.find((row) => row.Sid === 'OwnerIamUserMfaAssumeOnly');
+  const deny = rows.find((row) => row.Sid === 'DenyGitHubOidcAndDiagnosticRoles');
+  const denyArns = JSON.stringify(deny?.Condition?.StringLike?.['aws:PrincipalArn'] || []);
+  if (allow?.Effect !== 'Allow'
+      || allow.Action !== 'sts:AssumeRole'
+      || allow.Principal?.AWS !== `arn:aws:iam::${CREATE_APPROVAL_TARGET.account}:root`
+      || allow.Condition?.Bool?.['aws:MultiFactorAuthPresent'] !== 'true'
+      || allow.Condition?.StringEquals?.['aws:PrincipalType'] !== 'User') {
+    fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_allow' });
+  }
+  if (deny?.Effect !== 'Deny'
+      || deny.Action !== 'sts:AssumeRole'
+      || !denyArns.includes(CREATE_APPROVAL_TARGET.deployRoleArn)
+      || !denyArns.includes(CREATE_APPROVAL_TARGET.executionRoleArn)
+      || !denyArns.includes('token.actions.githubusercontent.com')) {
+    fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_deny' });
+  }
+  if (jsonIncludes(policy, 'token.actions.githubusercontent.com:sub')
+      || jsonIncludes(allow.Principal, CREATE_APPROVAL_TARGET.deployRoleArn)) {
+    fail(LEDGER_POLICY_INVALID, { reason: 'owner_trust_oidc' });
+  }
+  return {
+    ok: true,
+    role_exists: false,
+    operational: false,
+    proposed_role_arn: OWNER_SIGNER_ROLE_ARN,
+  };
+}
+
+export function remainingBlockers() {
+  return Object.freeze([
+    'owner_approver_role_not_evidenced',
+    'kms_create_approval_key_not_evidenced',
+    'consumed_prefix_bucket_policy_absent',
+    'workflow_disabled_no_id_token_write',
+  ]);
 }
 
 function requireConsumedWriteOnce(policy, { allowPrincipalStar = false } = {}) {
@@ -170,15 +262,26 @@ export function evaluatePackagingIsolation({ sha, runId, runAttempt } = {}) {
 }
 
 export function evaluateLedgerPolicies(policies = loadLedgerPolicies()) {
+  requireIamIdentityPolicyShape(policies.deployIam);
   requireIndependentKms(policies.kmsKey, policies.kmsPolicy);
   requireConsumedWriteOnce(policies.bucketPolicy, { allowPrincipalStar: true });
   requireConsumedWriteOnce(policies.deployIam);
+  const ownerTrust = evaluateOwnerApproverTrust(policies.ownerTrust);
   return {
     ok: true,
     consumedObjectArn: CONSUMED_OBJECT_ARN,
     conditionKeys: AWS_CONDITION_KEYS,
     ownerSignerRoleArn: OWNER_SIGNER_ROLE_ARN,
     proposedKmsAlias: PROPOSED_KMS_ALIAS,
+    ownerTrust,
+    iam_put_object_covers: [
+      'PutObject',
+      'CopyObject',
+      'CreateMultipartUpload',
+      'UploadPart',
+      'UploadPartCopy',
+      'CompleteMultipartUpload',
+    ],
   };
 }
 
@@ -229,6 +332,7 @@ export function readOnlyPreflight({
     workflow_enabled: false,
     id_token_write: false,
     live_evidence: OWNER_EVIDENCE,
+    remaining_blockers: remainingBlockers(),
     evaluated,
     packaging,
     oidc,
@@ -250,6 +354,7 @@ export function readOnlyPreflight({
       kms: 'owner cancels alias and schedules key deletion; public key secret is not written by this PR',
       iam: 'owner removes only the additive consumed-prefix Deny statements',
       workflow: 'leave disabled; do not add id-token:write as rollback',
+      owner_recovery: 'Principal * object Deny includes account root. Recover by s3:PutBucketPolicy on the bucket ARN (not denied here), then delete. Do not grant the deploy role PutBucketPolicy.',
     },
   };
 }
@@ -277,12 +382,14 @@ export function phoneFriendlyChecklist() {
     '1. Do not merge, deploy, or enable the diagnostic workflow.',
     '2. Confirm jobs.deploy.if is false and permissions have contents:read only (no id-token:write).',
     '3. Confirm artifact uploads use SHA/run prefix, not create-approvals/consumed/.',
-    '4. Owner: create ECC_NIST_P256 SIGN_VERIFY key with the source key policy; only owner role kms:Sign.',
-    '5. Owner: publish SPKI public key and key ARN as staging env secrets jobs cannot change.',
-    '6. Owner: put the consumed-prefix bucket policy; do not version the bucket in this change.',
-    '7. Owner: add additive IAM Deny on the deploy role for delete/overwrite of consumed/*.',
-    '8. Prove aws s3api put-object --body FILE --if-none-match * then replay 412; never delete-object.',
-    '9. Do not touch staging API, production, SQL, Cognito, CORS, or other workstreams.',
+    '4. Owner: separately create ChecksOpsOwnerDiagnosticCreateApprover (not evidenced live); MFA IAM user trust; no GitHub OIDC.',
+    '5. Owner: create ECC_NIST_P256 SIGN_VERIFY key with the source key policy; only that owner role kms:Sign.',
+    '6. Owner: publish SPKI public key and key ARN as staging env secrets jobs cannot change.',
+    '7. Owner: put the consumed-prefix bucket policy; do not version the bucket in this change.',
+    '8. Owner: add additive IAM Deny on the deploy role for delete/overwrite of consumed/*.',
+    '9. Prove aws s3api put-object --body FILE --if-none-match * then replay 412; never delete-object.',
+    '10. Recover consumed objects only by replacing the bucket policy, then deleting. Do not grant deploy PutBucketPolicy.',
+    '11. Do not touch staging API, production, SQL, Cognito, CORS, or other workstreams.',
   ];
 }
 

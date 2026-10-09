@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Id": "checksops-owner-diagnostic-create-approver-trust-proposed",
+  "Statement": [
+    {
+      "Sid": "OwnerIamUserMfaAssumeOnly",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::806168576068:root"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "Bool": {
+          "aws:MultiFactorAuthPresent": "true"
+        },
+        "StringEquals": {
+          "aws:PrincipalType": "User"
+        }
+      }
+    },
+    {
+      "Sid": "DenyGitHubOidcAndDiagnosticRoles",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy",
+            "arn:aws:iam::806168576068:role/ChecksOpsStagingDbReadonlyDiagnosticCloudFormationExecution",
+            "arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com",
+            "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy/*",
+            "arn:aws:sts::806168576068:assumed-role/ChecksOpsStagingDbReadonlyDiagnosticCloudFormationExecution/*"
+          ]
+        }
+      }
+    }
+  ]
+}
