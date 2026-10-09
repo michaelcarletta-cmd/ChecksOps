@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import pg from 'pg';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { evaluateForceRls, summarizeRlsMatrix, TENANT_COLUMNS } from './rls-audit.mjs';
@@ -130,6 +131,224 @@ JOIN pg_proc p ON p.oid = t.tgfoid
 WHERE n.nspname = 'public' AND NOT t.tgisinternal
 ORDER BY c.relname, t.tgname
 LIMIT ${PUBLIC_TRIGGER_INVENTORY_LIMIT + 1}`;
+
+/**
+ * Official pg_proc identity lookup. Matches scripts/deployment-guard/lib/function-def-lookup.mjs.
+ * The handler hashes pg_get_functiondef in process and never returns the body.
+ */
+export const FUNCTION_DEF_INSPECT_SQL = `
+SELECT n.nspname AS schema_name,
+       p.proname AS function_name,
+       pg_get_functiondef(p.oid) AS def
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = $1::text
+  AND p.proname = $2::text
+  AND p.pronargs = COALESCE(cardinality($3::text[]), 0)
+  AND (
+    SELECT COALESCE(ARRAY_AGG(proc_t.typ ORDER BY proc_t.ord), ARRAY[]::oid[])
+    FROM unnest(p.proargtypes::oid[]) WITH ORDINALITY AS proc_t(typ, ord)
+  ) = (
+    SELECT COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])
+    FROM unnest(COALESCE($3::text[], ARRAY[]::text[])) WITH ORDINALITY AS u(typ, ord)
+  )
+`.trim();
+
+export const SETTLEMENT_COLUMN_INSPECT_SQL = `SELECT a.attname AS column_name
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relname = 'claim_settlements'
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+  AND a.attname = ANY($1::text[])`;
+
+export const LEDGER_TRIGGER_INSPECT_SQL = `SELECT c.relname AS table_name,
+       t.tgname AS trigger_name
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND NOT t.tgisinternal
+  AND c.relname = $1::text
+  AND t.tgname = ANY($2::text[])`;
+
+export const PINNED_FUNCTION_LOOKUPS = Object.freeze([
+  Object.freeze({
+    identity: 'public.save_claim_settlement_breakdown(uuid,uuid,jsonb)',
+    schema: 'public',
+    name: 'save_claim_settlement_breakdown',
+    argTypes: Object.freeze(['uuid', 'uuid', 'jsonb']),
+  }),
+  Object.freeze({
+    identity: 'public.sync_homeowner_ledger_from_check()',
+    schema: 'public',
+    name: 'sync_homeowner_ledger_from_check',
+    argTypes: Object.freeze([]),
+  }),
+  Object.freeze({
+    identity: 'public.aws_can_write_claim(uuid)',
+    schema: 'public',
+    name: 'aws_can_write_claim',
+    argTypes: Object.freeze(['uuid']),
+  }),
+  Object.freeze({
+    identity: 'public.hle_on_check_intake_insert()',
+    schema: 'public',
+    name: 'hle_on_check_intake_insert',
+    argTypes: Object.freeze([]),
+  }),
+]);
+
+export const REQUIRED_SETTLEMENT_COLUMNS = Object.freeze([
+  'replacement_cost_value',
+  'recoverable_depreciation',
+  'non_recoverable_depreciation',
+  'deductible',
+  'other_structures_rcv',
+  'other_structures_recoverable_depreciation',
+  'other_structures_non_recoverable_depreciation',
+  'other_structures_deductible',
+  'pwi_rcv',
+  'pwi_recoverable_depreciation',
+  'pwi_non_recoverable_depreciation',
+  'personal_property_rcv',
+  'personal_property_recoverable_depreciation',
+  'personal_property_non_recoverable_depreciation',
+  'ale_rcv',
+  'ale_recoverable_depreciation',
+  'ale_non_recoverable_depreciation',
+]);
+
+export const REQUIRED_LEDGER_TRIGGERS = Object.freeze([
+  Object.freeze({ table: 'check_intake_items', trigger: 'trg_sync_homeowner_ledger_ins' }),
+  Object.freeze({ table: 'check_intake_items', trigger: 'trg_sync_homeowner_ledger_upd' }),
+  Object.freeze({ table: 'check_intake_items', trigger: 'trg_hle_check_intake_insert' }),
+]);
+
+const SHA256_RE = /^[0-9a-f]{64}$/;
+
+export const hashFunctionDefinition = (text) =>
+  createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
+
+const functionInspectRow = (identity, exists, definitionSha256 = null) => ({
+  identity,
+  exists: exists === true,
+  definitionSha256: exists === true && SHA256_RE.test(String(definitionSha256 || ''))
+    ? definitionSha256
+    : null,
+});
+
+const settlementColumnInspectRow = (column, exists) => ({
+  table: 'claim_settlements',
+  column,
+  exists: exists === true,
+});
+
+const ledgerTriggerInspectRow = (row, exists) => ({
+  table: row.table,
+  trigger: row.trigger,
+  exists: exists === true,
+});
+
+export const emptyFunctionDefInspect = () => ({
+  readOnly: true,
+  functions: PINNED_FUNCTION_LOOKUPS.map((target) => functionInspectRow(target.identity, false)),
+  settlementColumns: REQUIRED_SETTLEMENT_COLUMNS.map((column) => settlementColumnInspectRow(column, false)),
+  ledgerTriggers: REQUIRED_LEDGER_TRIGGERS.map((row) => ledgerTriggerInspectRow(row, false)),
+});
+
+export const redactFunctionDefInspect = (inspect = {}) => {
+  const empty = emptyFunctionDefInspect();
+  const functionsByIdentity = new Map(
+    (Array.isArray(inspect.functions) ? inspect.functions : []).map((row) => [row?.identity, row]),
+  );
+  const columnsByName = new Map(
+    (Array.isArray(inspect.settlementColumns) ? inspect.settlementColumns : [])
+      .map((row) => [row?.column, row]),
+  );
+  const triggersByKey = new Map(
+    (Array.isArray(inspect.ledgerTriggers) ? inspect.ledgerTriggers : [])
+      .map((row) => [`${row?.table}\0${row?.trigger}`, row]),
+  );
+  return {
+    readOnly: true,
+    functions: empty.functions.map((row) => {
+      const found = functionsByIdentity.get(row.identity);
+      return functionInspectRow(row.identity, found?.exists === true, found?.definitionSha256);
+    }),
+    settlementColumns: empty.settlementColumns.map((row) => (
+      settlementColumnInspectRow(row.column, columnsByName.get(row.column)?.exists === true)
+    )),
+    ledgerTriggers: empty.ledgerTriggers.map((row) => (
+      ledgerTriggerInspectRow(row, triggersByKey.get(`${row.table}\0${row.trigger}`)?.exists === true)
+    )),
+  };
+};
+
+const classifyPinnedFunctionDefRows = (rows) => {
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    return { exists: false, definitionSha256: null };
+  }
+  const def = rows[0]?.def;
+  if (typeof def !== 'string' || !def) {
+    return { exists: false, definitionSha256: null };
+  }
+  return { exists: true, definitionSha256: hashFunctionDefinition(def) };
+};
+
+export const inspectPinnedSqlObjects = async (client) => {
+  const inspect = emptyFunctionDefInspect();
+  for (const [index, target] of PINNED_FUNCTION_LOOKUPS.entries()) {
+    try {
+      const queryResult = await withSavepoint(client, `p_fn_${index}`, () => (
+        client.query(FUNCTION_DEF_INSPECT_SQL, [target.schema, target.name, [...target.argTypes]])
+      ));
+      const classified = classifyPinnedFunctionDefRows(queryResult.rows);
+      inspect.functions[index] = functionInspectRow(
+        target.identity,
+        classified.exists,
+        classified.definitionSha256,
+      );
+    } catch {
+      inspect.functions[index] = functionInspectRow(target.identity, false);
+    }
+  }
+
+  try {
+    const queryResult = await withSavepoint(client, 'p_settlement_cols', () => (
+      client.query(SETTLEMENT_COLUMN_INSPECT_SQL, [[...REQUIRED_SETTLEMENT_COLUMNS]])
+    ));
+    const present = new Set((queryResult.rows || []).map((row) => String(row.column_name || '')));
+    inspect.settlementColumns = REQUIRED_SETTLEMENT_COLUMNS.map((column) => (
+      settlementColumnInspectRow(column, present.has(column))
+    ));
+  } catch {
+    inspect.settlementColumns = REQUIRED_SETTLEMENT_COLUMNS.map((column) => (
+      settlementColumnInspectRow(column, false)
+    ));
+  }
+
+  try {
+    const queryResult = await withSavepoint(client, 'p_ledger_trigs', () => (
+      client.query(LEDGER_TRIGGER_INSPECT_SQL, [
+        'check_intake_items',
+        REQUIRED_LEDGER_TRIGGERS.map((row) => row.trigger),
+      ])
+    ));
+    const present = new Set(
+      (queryResult.rows || []).map((row) => `${row.table_name || ''}\0${row.trigger_name || ''}`),
+    );
+    inspect.ledgerTriggers = REQUIRED_LEDGER_TRIGGERS.map((row) => (
+      ledgerTriggerInspectRow(row, present.has(`${row.table}\0${row.trigger}`))
+    ));
+  } catch {
+    inspect.ledgerTriggers = REQUIRED_LEDGER_TRIGGERS.map((row) => ledgerTriggerInspectRow(row, false));
+  }
+
+  return redactFunctionDefInspect(inspect);
+};
 
 export const sanitizePublicTriggerRow = (row = {}) => {
   const table = String(row.table_name || '');
@@ -675,6 +894,13 @@ export const validateReadonlyCoreTables = async ({
     }
 
     result.catalog = catalog;
+    if (String(process.env.CHECKSOPS_ENV || '').toLowerCase() !== 'production') {
+      try {
+        result.inspect = await inspectPinnedSqlObjects(client);
+      } catch {
+        result.inspect = emptyFunctionDefInspect();
+      }
+    }
     try {
       const roles = (await client.query(`SELECT rolname, rolsuper, rolbypassrls
         FROM pg_roles
