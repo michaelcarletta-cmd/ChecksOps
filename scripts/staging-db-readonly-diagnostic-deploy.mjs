@@ -5,6 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enforceSharedStackTarget } from './deployment-guard/require-guard.mjs';
 import { repoRootFrom } from './deployment-guard/lib/paths.mjs';
+import {
+  createS3CreateApprovalLedger,
+  loadCreateApproval,
+  requireIndependentCreateApproval,
+} from './staging-db-readonly-diagnostic-independent-approval.mjs';
 
 export const DEPLOYMENT = Object.freeze({
   account: '806168576068',
@@ -155,6 +160,16 @@ export function main(env = process.env, deps = {}) {
       roleArn: env.CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN,
       runId: env.GITHUB_RUN_ID,
       runAttempt: env.GITHUB_RUN_ATTEMPT,
+    });
+    requireIndependentCreateApproval({
+      approval: deps.approval || loadCreateApproval(env),
+      commit: env.GITHUB_SHA,
+      actor: env.GITHUB_ACTOR,
+      env,
+      now: deps.now,
+      consumeOnce: deps.consumeOnce || createS3CreateApprovalLedger({
+        execFile: deps.ledgerExecFile,
+      }),
     });
     guardDeployment(env, root);
 

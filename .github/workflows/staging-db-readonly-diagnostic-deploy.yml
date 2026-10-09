@@ -1,10 +1,20 @@
 name: Staging DB read-only diagnostic deploy
 
+# Create-only and DISABLED. jobs.deploy.if remains false. Do not enable
+# or dispatch from this change. Do not add GitHub OIDC token write
+# permission. inputs.approved_commit is a same-run SHA pin, not
+# independent approval. Independent approval is a separately administered
+# AWS KMS signature bound to exact main SHA, workstream, target, nonce,
+# and expiry. Nonce consume is a persistent S3 If-None-Match create, not
+# a runner-local file. workflow_dispatch 403 "Resource not accessible by
+# integration" is a GitHub caller/app/environment permission, not a
+# reason to broaden GITHUB_TOKEN.
+
 on:
   workflow_dispatch:
     inputs:
       approved_commit:
-        description: Exact reviewed main SHA approved for this deployment
+        description: Exact reviewed main SHA pin; not independent approval
         required: true
         type: string
 

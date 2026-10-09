@@ -8,9 +8,120 @@ diagnostic. It never deploys or updates `checksops-staging-api`. Do not use it
 for production or as a general SAM deployment role. The deploy job remains
 disabled; it is not an updater and must not be dispatched.
 
+## Independent approval design (source-only; not live)
+
+GitHub `staging` environment screenshots do not show Required reviewers or
+Prevent self-review. This repository is private; do not assume GitHub review
+gates. `inputs.approved_commit` is a same-run SHA pin and is **not**
+independent approval. A Deployment Guard HMAC receipt issued by the same
+workflow is also not independent: that issuer is created on the runner and is
+modifiable by the same source commit.
+
+Minimum viable independent boundary, without a new external service:
+
+- A separately administered AWS KMS key in account `806168576068` / `us-east-1`.
+- Only an owner-controlled IAM principal may `kms:Sign`. The GitHub OIDC
+  deploy role and CloudFormation execution role must not sign or administer
+  the key.
+- The approval payload is ECDSA_SHA_256 over canonical JSON bound to the
+  exact main SHA, workstream `staging-db-readonly-diagnostic`, staging
+  diagnostic stack/function, account, region, create-only deployment type,
+  one-time 32-hex nonce, issued-at, and expiry (max 60 minutes).
+- Create-only deploy verifies the signature with an owner-supplied SPKI
+  public key and consumes the nonce once through an independently controlled
+  persistent ledger. Verification cannot be replaced by `approved_commit`,
+  GitHub environment reviewers, a local HMAC, or a runner-local file.
+
+Do not claim an independent approval exists. The create-only job stays
+`if: ${{ false }}` with `permissions: contents: read` and no `id-token: write`.
+
+### INDEPENDENT APPROVAL BLOCKER
+
+Activation is blocked until an owner-controlled AWS KMS approval authority is
+evidenced. Source cannot create that key, IAM policy, or signer. Do not bypass
+this with workflow enablement, a caller-supplied SHA, or a repo-generated HMAC.
+
+Owner-controlled setup (outside this PR; do not apply from source):
+
+1. Create a KMS key used only for this create-approval kind.
+2. Key policy: owner principal `kms:Sign` / `kms:GetPublicKey`; deny
+   `kms:Sign` to `ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy` and the
+   CloudFormation execution role. Do not grant the deploy role key admin.
+3. Publish the public key as a staging-environment secret
+   `CHECKSOPS_STAGING_DB_DIAGNOSTIC_APPROVAL_PUBLIC_KEY_DER_B64` and the key
+   ARN as `CHECKSOPS_STAGING_DB_DIAGNOSTIC_APPROVAL_KMS_KEY_ARN`. Workflow
+   jobs must not be able to change those values.
+4. Owner signs one approval for one reviewed main SHA, then discards it.
+   Replay of the nonce must fail.
+5. Provide an independently controlled **persistent** one-time consume
+   ledger. Runner-local files, GitHub caches, and workflow concurrency are
+   not replay protection: a fresh runner has an empty disk.
+   Use atomic S3 `PutObject` `If-None-Match: *` on
+   `s3://checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/<nonce>.json`.
+   AWS CLI `--body` must be a real temp file path, not inline JSON.
+   Deny `s3:DeleteObject` / overwrite for the deploy role on that prefix.
+   Source never issues `delete-object` or `put-object` without `If-None-Match: *`.
+   A 412 PreconditionFailed is reuse. A failed create-stack cannot retry the
+   same nonce; the owner must sign a new approval.
+
+Until that evidence exists, keep the workflow disabled.
+
+### Pending read-only owner evidence (do not retry forbidden AWS reads)
+
+Recorded 2026-10-09, account `806168576068`, `us-east-1`:
+
+| Prerequisite | Status |
+| --- | --- |
+| Lambda `checksops-staging-db-readonly-diagnostic` | absent |
+| CloudFormation stack `checksops-staging-db-readonly-diagnostic` | absent |
+| GitHub OIDC role `ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy` | reported exists; staging env trust + `aud=sts.amazonaws.com` |
+| Inline policy `DiagnosticOnly` | reported CreateStack/DescribeStacks, PassRole, artifact prefix, GetFunctionConfiguration/PublishVersion |
+| CloudFormation execution-role trust/policy | **unknown** |
+| Artifact bucket encryption, public-access block, ownership | **unknown** |
+| Staging environment required reviewers / prevent self-review | **unverified** |
+| Exact live AWS role permission set | **pending owner evidence** |
+| Diagnostic package/lockfile vs live dependencies | **pending owner evidence** |
+| Independent approval KMS key, signer, public key | **unknown** |
+| Persistent create-approval consume ledger (S3 If-None-Match) | **unknown** |
+| Deploy-role DeleteObject denied on consume prefix | **unknown** |
+
+### Separate non-blocking issues (do not weaken security to "fix")
+
+- `workflow_dispatch` 403 `Resource not accessible by integration` is a GitHub
+  caller/app/environment permission. Do not add `actions: write`, broaden
+  `GITHUB_TOKEN`, or change OIDC to work around it.
+- Missing Cognito admin ID token for HTTP `GET /db-readonly-validate` is a
+  separate operator-secret issue. Do not weaken Cognito, CORS, SQL, or
+  production auth.
+
+### Operator checklist before any future enablement
+
+- [ ] Owner evidences the KMS approval key, signer, public key, and deny-sign
+      for the deploy/execution roles. Do not claim an independent approval exists
+      until that evidence is recorded outside this PR.
+- [ ] Owner evidences the persistent consume ledger: bucket encryption,
+      public-access block, ownership, `If-None-Match: *` create-only, and no
+      deploy-role delete/overwrite on the consume prefix. Fresh-runner replay
+      and failed-deploy retries must refuse without a new owner signature.
+- [ ] Owner read-only verifies execution-role trust/policy and artifact-bucket
+      encryption / public-access block / ownership.
+- [ ] Owner confirms staging environment settings without changing visibility
+      or plan. GitHub reviewers are extra, not a substitute for KMS approval.
+- [ ] Owner reviews exact IAM statements and the diagnostic package/lockfile.
+- [ ] First create remains staging-only, main SHA pinned, single-use
+      lease/receipt plus independent approval, absent-stack check, CreateStack
+      only, publish immutable version, fingerprint verify, read-only invoke
+      with allowlisted `inspect`.
+- [ ] No staging API, production, SQL apply, IAM, or other-workstream writes.
+- [ ] Keep the create-only workflow disabled until a later reviewed
+      authorization explicitly enables it. This PR must not enable or dispatch.
+
+## AWS create-only prerequisites (still required; several remain unknown)
+
 No AWS resources or IAM are provisioned by this repository change. Before an
 authorized operator can run the workflow, the following separate AWS setup is
-required:
+required. Treat execution-role and artifact-bucket details as unknown until
+owner read-only evidence exists:
 
 1. Create the private artifact bucket
    `checksops-staging-db-readonly-diagnostic-artifacts-806168576068` in
@@ -34,11 +145,12 @@ required:
    `arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingDbReadonlyDiagnosticDeploy`.
    Its trust provider is `token.actions.githubusercontent.com`, audience is
    `sts.amazonaws.com`, and its subject is exactly
-   `repo:michaelcarletta-cmd/ChecksOps:environment:staging`. Also require
-   the GitHub `staging` environment to allow deployments only from `main` and
-   require its configured reviewers. GitHub environment branch protection and
-   the workflow's `GITHUB_REF` check enforce `main`; AWS OIDC `sub` is scoped
-   to the protected environment.
+   `repo:michaelcarletta-cmd/ChecksOps:environment:staging`. Keep the GitHub
+   `staging` environment restricted to `main`. Do not treat environment
+   reviewers as the independent approval boundary; they are unverified here
+   and are not cryptographically bound to SHA, workstream, or nonce. GitHub
+   environment branch protection and the workflow's `GITHUB_REF` check
+   enforce `main`; AWS OIDC `sub` is scoped to the protected environment.
 
    Trust policy:
 
