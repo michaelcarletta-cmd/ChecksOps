@@ -222,6 +222,16 @@ verified. Do not dispatch it or deploy this diagnostic. Its `approved_commit`
 input only compares a caller-supplied value with `GITHUB_SHA`; it is not an
 approval record.
 
+The current deployer is create-only, not an updater: its preflight fingerprint
+requires `stack_state: must-be-absent`, it refuses a stack returned by
+`DescribeStacks`, and it calls CloudFormation `CreateStack`. The diagnostic
+function and a published immutable version already exist in staging (reported
+for this issue; not independently queried here), so this path cannot safely
+deploy to the current target. The stack is registered as a CloudFormation
+target, but the generic Lambda overlay only accepts registered shared Lambda
+targets; the diagnostic function is not one. Do not work around this mismatch
+with CloudFormation update or an unregistered Lambda overlay.
+
 An issue-comment/API verifier in this repository would not be an independent
 gate: a principal able to change `main` can change or remove the verifier in
 the same commit. Comment records also do not provide an atomic one-time claim
@@ -241,3 +251,35 @@ approving actor, replay, branch or tag mismatch, changed verifier/workflow,
 missing GitHub permission, and concurrent attempts. Re-verify live staging and
 AWS role policies, then separately authorize a single deployment; this
 source-only change performs none of those actions.
+
+Any future update path must first have an independently controlled approval
+boundary and a dedicated target-only writer. A single reviewed `main` SHA must
+be bound to that approval; the writer must freshly read the live target and
+fingerprints, acquire its exact staging diagnostic lease/receipt, and compare
+the fresh code SHA and revision immediately before mutation, refusing all
+drift. It must update only the diagnostic function, preserve its live
+configuration and all unrelated resources, verify the exact resulting code
+SHA, publish and verify an immutable version, then run only the read-only
+version-pinned validation. Old fingerprints are comparison evidence, never
+restore authority. Independently review the AWS role and OIDC trust so they
+cannot write the staging API, production, SQL, SPA, or other builds.
+
+After review/merge, an authorized administrator must establish and test that
+external approval boundary, independently inspect the live stack/function,
+version, and role policies, and approve any separately reviewed updater before
+any deployment. Following an authorized update, verify its emitted
+`version_arn` and `code_sha256`, then update the GitHub Actions variable
+`CHECKSOPS_STAGING_DB_DIAGNOSTIC_VERSION_ARN` to that exact immutable version
+ARN before invoking the diagnostic. The invoke workflow's existing
+`workflow_dispatch` 403 remains an external caller/app/environment permission
+blocker; resolve it there without broadening workflow permissions. No current
+published version or AWS configuration was read by this source-only change.
+
+The deployer and invocation contract tests
+(`aws/tests/staging-db-readonly-diagnostic-deploy.test.mjs` and
+`aws/tests/staging-db-readonly-lambda-diagnostic.test.mjs`) are offline: they
+cover rejection of an existing target or non-absence drift, missing approval,
+version mismatch, unrelated target selection, and allowlisted diagnostic
+output. They do not prove live stack state, IAM/OIDC policy, environment
+reviewer configuration, or AWS apply behavior; those require fresh AWS and
+GitHub administrator evidence before a future authorization.

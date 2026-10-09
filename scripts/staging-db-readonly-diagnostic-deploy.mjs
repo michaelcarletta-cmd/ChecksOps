@@ -68,6 +68,16 @@ export function isMissingStackError(error) {
     .test(String(error || ''));
 }
 
+export function requireAbsentStack(describeStack) {
+  try {
+    describeStack();
+  } catch (error) {
+    if (error.message === 'deployment_command_failed' && error.missingStack === true) return;
+    throw error;
+  }
+  throw new Error('target_stack_already_exists');
+}
+
 export function safeVersionRecord({ FunctionArn, Version, CodeSha256 }, expectedCodeSha256 = CodeSha256) {
   if (FunctionArn !== `arn:aws:lambda:${DEPLOYMENT.region}:${DEPLOYMENT.account}:function:${DEPLOYMENT.functionName}`
       || !/^[1-9][0-9]*$/.test(String(Version || ''))
@@ -150,14 +160,11 @@ export function main(env = process.env, deps = {}) {
 
     const identity = runCommand('aws', ['sts', 'get-caller-identity', '--output', 'json'], { json: true });
     validateAwsIdentity(identity);
-    try {
+    requireAbsentStack(() => {
       runCommand('aws', [
         'cloudformation', 'describe-stacks', '--stack-name', DEPLOYMENT.stackName, '--region', DEPLOYMENT.region,
       ], { json: true });
-      throw new Error('target_stack_already_exists');
-    } catch (error) {
-      if (error.message !== 'deployment_command_failed' || error.missingStack !== true) throw error;
-    }
+    });
 
     const packagedTemplate = path.join(env.RUNNER_TEMP || '/tmp', 'checksops-staging-db-readonly-diagnostic-packaged.yaml');
     const parametersFile = path.join(env.RUNNER_TEMP || '/tmp', 'checksops-staging-db-readonly-diagnostic-parameters.json');
