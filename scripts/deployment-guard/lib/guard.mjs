@@ -6,6 +6,7 @@ import { buildManifest, gitIdentity, validateWorkstreamIdentity } from './identi
 import { evaluateLambdaOverlay, planLambdaApply } from './lambda-overlay.mjs';
 import { evaluateSpaPromote } from './spa-promote.mjs';
 import { evaluateSqlApply } from './sql-apply.mjs';
+import { evaluateSql53StagingApply, isSql53StagingApply } from './sql53-staging-apply.mjs';
 import { evaluateSqlExecutorAuthorization } from './sql-executor-auth.mjs';
 import { acquireLease, inspectLease, releaseLease } from './lease.mjs';
 import { evaluateAcceptedContracts, loadContractRegistry } from './contracts.mjs';
@@ -58,7 +59,9 @@ export function evaluateDeployment(input = {}, ctx = {}) {
   } else if (input.deployment_type === 'spa-promote') {
     specific = evaluateSpaPromote(input);
   } else if (input.deployment_type === 'sql-apply') {
-    specific = evaluateSqlApply(input);
+    specific = isSql53StagingApply({ ...input, root })
+      ? evaluateSql53StagingApply(input, { root })
+      : evaluateSqlApply(input);
   } else if (input.deployment_type === 'sql-executor-invoke') {
     specific = evaluateSqlExecutorAuthorization(input);
   } else if (input.deployment_type === 'verify-only') {
