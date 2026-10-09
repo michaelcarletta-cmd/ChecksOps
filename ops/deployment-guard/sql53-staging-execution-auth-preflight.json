@@ -1,0 +1,87 @@
+{
+  "id": "sql53-staging-execution-auth-preflight",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "ensure_authorized": false,
+  "invoke_authorized": false,
+  "phase2_authorized": false,
+  "receipt_issued": false,
+  "verdict": "GO",
+  "verdict_scope": "separately authorized staging SQL 53 sql-executor-invoke only",
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "deployment_type": "sql-executor-invoke",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "commit": "8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1",
+  "pack_commit": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_replacement_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "owned_components": [
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preserved_function_identities": [
+    "public.sync_homeowner_ledger_from_check()",
+    "public.aws_can_write_claim(uuid)",
+    "public.hle_on_check_intake_insert()"
+  ],
+  "preserved_hashes": {
+    "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+    "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf",
+    "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+  },
+  "latest_absent_inspect": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_run": 37969902795,
+    "head_sha": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+    "event": "workflow_dispatch",
+    "created_at": "2026-10-09T17:57:22Z",
+    "http_status": 200,
+    "exists": false,
+    "public_triggers": "172/172",
+    "settlement_columns": "17/17",
+    "ledger_triggers": "3/3",
+    "inspected_functions": "3/4",
+    "missing_function": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+    "note": "Latest successful owner-dispatched diagnostic on main after the executor deploy. A fresh immediately-before inspect is still required at apply time if this evidence ages or live fingerprints drift."
+  },
+  "live_executor": {
+    "CodeSha256": "oqbZHB8JUyKpLgsfv96gudtHAZKKZkHUSnPFfDkCz24=",
+    "RevisionId": "983b80cd-ef8c-43a7-99c4-d3f9a5334a7d",
+    "LastModified": "2026-10-09T17:47:48.000+0000",
+    "State": "Active",
+    "LastUpdateStatus": "Successful",
+    "matches_approved_deployment": true
+  },
+  "receipt_and_invoke_procedure": {
+    "evaluated_without_receipt": true,
+    "unguarded_invoke_code": "DEPLOYMENT_GUARD_REQUIRED",
+    "receipt_command": "node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input <manifest.json>",
+    "invoke_command": "node scripts/deployment-guard/sql-executor-invoke.mjs --receipt <receipt.json> --input <manifest.json>",
+    "required_contract_results": [
+      "claim-ledger",
+      "tenant-isolation",
+      "financial-write-protections"
+    ],
+    "do_not": [
+      "hand-write a receipt",
+      "use a sql-apply receipt",
+      "invoke without a receipt",
+      "apply 20261007193200",
+      "apply the one-writer migration",
+      "modify SQL 44",
+      "retarget the executor",
+      "touch production"
+    ]
+  },
+  "notes": "Source-only final authorization preflight. This package does not issue a receipt, invoke the executor, apply SQL, change Release Locks, or touch production. Independent apply authorization is still required."
+}
