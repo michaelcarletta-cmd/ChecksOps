@@ -1,0 +1,118 @@
+{
+  "id": "sql53-staging-execution-preflight",
+  "authorization": "source-only",
+  "go": false,
+  "apply_authorized": false,
+  "execute": false,
+  "ensure_authorized": false,
+  "invoke_authorized": false,
+  "phase2_authorized": false,
+  "receipt_issued": false,
+  "one_use_id": null,
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "deployment_type": "sql-executor-invoke",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "merged_source_commit": "b35680ea044f2b1e857deafd8314e4639591daf3",
+  "ensure_source_commit": "b35680ea044f2b1e857deafd8314e4639591daf3",
+  "invoke_auth_commit": "8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1",
+  "commit": "8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_replacement_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "receipt_ttl_minutes": 30,
+  "owned_components": [
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preserved_function_identities": [
+    "public.sync_homeowner_ledger_from_check()",
+    "public.aws_can_write_claim(uuid)",
+    "public.hle_on_check_intake_insert()"
+  ],
+  "historical_absent_inspect": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_run": 37947042060,
+    "fresh": false,
+    "immediately_before": false,
+    "httpStatus": 200,
+    "status": "ok",
+    "exists": false,
+    "definitionSha256": null,
+    "expected_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "triggers": { "expectedCount": 172, "actualCount": 172 },
+    "settlement_columns": 17,
+    "ledger_triggers": 3,
+    "preserved_hashes": {
+      "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+      "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf",
+      "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+    },
+    "note": "Historical Phase 1 inspect. A fresh inspect on current main is required immediately before apply and is not satisfied by this pin."
+  },
+  "live_executor_inspect": {
+    "completed": false,
+    "blocked": true,
+    "blocker": "This workstream has no usable AWS credentials for lambda get-function. Owner must inventory live members before ensure.",
+    "function_name": "checksops-staging-guarded-sql-executor",
+    "code_sha256": null,
+    "revision_id": null,
+    "pack_is_whole_zip": true,
+    "expected_pack_members": [
+      "index.mjs",
+      "package.json",
+      "sql/44_claim_ledger_link_or_create.sql",
+      "sql/53_claim_settlement_breakdown.sql",
+      "sql/20261001231500_tenant_users_same_check_permissions.sql",
+      "sql/20261001193100_tenant_users_can_override_check_status.sql",
+      "rds-global-bundle.pem",
+      "lib/sql-apply.mjs",
+      "lib/sql-executor-auth.mjs",
+      "lib/errors.mjs",
+      "lib/identity.mjs",
+      "lib/function-def-lookup.mjs"
+    ],
+    "stop_on_extra_live_members": "SOURCE_RECONCILIATION_REQUIRED",
+    "stop_on_fingerprint_drift": "DEPLOYMENT_COLLISION"
+  },
+  "release_locks": {
+    "staging_sql53_locked": false,
+    "production_spa_locked": true,
+    "note": "Only production-spa is PRODUCTION_LOCKED. This does not authorize staging SQL 53."
+  },
+  "sql_apply_pin": {
+    "path": "ops/deployment-guard/sql53-staging-authorization.json",
+    "deployment_type": "sql-apply",
+    "apply_authorized": false,
+    "cannot_authorize_executor": true
+  },
+  "post_apply_verification": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_name": "Staging DB read-only diagnostic",
+    "ref": "main",
+    "expected_inspect": {
+      "identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+      "exists": true,
+      "definitionSha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52"
+    },
+    "preserved_must_still_exist": [
+      "public.sync_homeowner_ledger_from_check()",
+      "public.aws_can_write_claim(uuid)",
+      "public.hle_on_check_intake_insert()"
+    ]
+  },
+  "required_owner_approvals": [
+    "Fresh Staging DB read-only diagnostic on current main showing settlement still absent and preserved hashes unchanged",
+    "Read-only live inventory of checksops-staging-guarded-sql-executor versus packExecutor; stop on extra live-only members",
+    "Independent authorization to ensure the executor from merged source b35680ea044f2b1e857deafd8314e4639591daf3",
+    "Independent short-lived sql-executor-invoke receipt issued by official preflight, bound to pin commit 8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1, source 5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197, expected live 0000000000000000000000000000000000000000000000000000000000000000, intended 6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52, and a new unused one_use_id"
+  ],
+  "notes": "Independently reviewed staging SQL 53 execution preflight. This package does not run sql-executor-ensure, invoke the executor, apply SQL, issue a live receipt, enable retired workflows, apply 20261007193200, apply the one-writer migration, modify SQL 44, or begin Phase 2. go remains false until the owner completes the required approvals and official preflight issues a short-lived receipt."
+}

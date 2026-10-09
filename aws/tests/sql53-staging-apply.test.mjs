@@ -185,6 +185,7 @@ test('production, apply flags, extra migrations, and wrong source hash are refus
 });
 
 test('SQL 53 executor pin requires the exact #835 commit/hash tuple', () => {
+  const pinNow = Date.parse('2026-10-09T15:00:00.000Z');
   const exact = evaluateSqlExecutorAuthorization({
     workstream_id: 'staging-sql53-3bc9',
     branch: 'cursor/staging-sql53-execute-3bc9',
@@ -205,7 +206,7 @@ test('SQL 53 executor pin requires the exact #835 commit/hash tuple', () => {
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
     preflight_live_fingerprint: { sql: PIN.absent_live_definition_sha256 },
-  });
+  }, { now: pinNow });
   assert.equal(exact.ok, true, exact.message);
 
   const wrongCommit = evaluateSqlExecutorAuthorization({
@@ -228,7 +229,7 @@ test('SQL 53 executor pin requires the exact #835 commit/hash tuple', () => {
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
     preflight_live_fingerprint: { sql: PIN.absent_live_definition_sha256 },
-  });
+  }, { now: pinNow });
   assert.equal(wrongCommit.ok, false);
   assert.equal(wrongCommit.code, CODES.SQL_COLLISION);
 });
