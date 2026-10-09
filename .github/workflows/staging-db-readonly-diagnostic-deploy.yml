@@ -5,7 +5,8 @@ name: Staging DB read-only diagnostic deploy
 # permission. inputs.approved_commit is a same-run SHA pin, not
 # independent approval. Independent approval is a separately administered
 # AWS KMS signature bound to exact main SHA, workstream, target, nonce,
-# and expiry. workflow_dispatch 403 "Resource not accessible by
+# and expiry. Nonce consume is a persistent S3 If-None-Match create, not
+# a runner-local file. workflow_dispatch 403 "Resource not accessible by
 # integration" is a GitHub caller/app/environment permission, not a
 # reason to broaden GITHUB_TOKEN.
 

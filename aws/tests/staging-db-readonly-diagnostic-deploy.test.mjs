@@ -138,6 +138,7 @@ test('workflow fails closed pending an independent approval boundary', () => {
   assert.doesNotMatch(workflow, /checksops-staging-api|checksops-production-prep-api|production-spa|arn:aws:lambda:us-east-1:[^"]*production/i);
   assert.match(runner, /enforceSharedStackTarget/);
   assert.match(runner, /requireIndependentCreateApproval/);
+  assert.match(runner, /createS3CreateApprovalLedger/);
   assert.match(runner, /--code-sha256/);
   assert.match(runner, /safeVersionRecord/);
   assert.match(runner, /GITHUB_RUN_ID.*GITHUB_RUN_ATTEMPT/);

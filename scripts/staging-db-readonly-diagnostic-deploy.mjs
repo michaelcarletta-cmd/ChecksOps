@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { enforceSharedStackTarget } from './deployment-guard/require-guard.mjs';
 import { repoRootFrom } from './deployment-guard/lib/paths.mjs';
 import {
+  createS3CreateApprovalLedger,
   loadCreateApproval,
   requireIndependentCreateApproval,
 } from './staging-db-readonly-diagnostic-independent-approval.mjs';
@@ -165,8 +166,10 @@ export function main(env = process.env, deps = {}) {
       commit: env.GITHUB_SHA,
       actor: env.GITHUB_ACTOR,
       env,
-      root,
       now: deps.now,
+      consumeOnce: deps.consumeOnce || createS3CreateApprovalLedger({
+        execFile: deps.ledgerExecFile,
+      }),
     });
     guardDeployment(env, root);
 

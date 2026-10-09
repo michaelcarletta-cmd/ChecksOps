@@ -28,8 +28,9 @@ Minimum viable independent boundary, without a new external service:
   diagnostic stack/function, account, region, create-only deployment type,
   one-time 32-hex nonce, issued-at, and expiry (max 60 minutes).
 - Create-only deploy verifies the signature with an owner-supplied SPKI
-  public key and consumes the nonce once. Verification cannot be replaced by
-  `approved_commit`, GitHub environment reviewers, or a local HMAC.
+  public key and consumes the nonce once through an independently controlled
+  persistent ledger. Verification cannot be replaced by `approved_commit`,
+  GitHub environment reviewers, a local HMAC, or a runner-local file.
 
 Do not claim an independent approval exists. The create-only job stays
 `if: ${{ false }}` with `permissions: contents: read` and no `id-token: write`.
@@ -52,6 +53,14 @@ Owner-controlled setup (outside this PR; do not apply from source):
    jobs must not be able to change those values.
 4. Owner signs one approval for one reviewed main SHA, then discards it.
    Replay of the nonce must fail.
+5. Provide an independently controlled **persistent** one-time consume
+   ledger. Runner-local files, GitHub caches, and workflow concurrency are
+   not replay protection: a fresh runner has an empty disk.
+   Use atomic S3 `PutObject` `If-None-Match: *` on
+   `s3://checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/<nonce>.json`.
+   Deny `s3:DeleteObject` / overwrite for the deploy role on that prefix.
+   A 412 PreconditionFailed is reuse. A failed create-stack cannot retry the
+   same nonce; the owner must sign a new approval.
 
 Until that evidence exists, keep the workflow disabled.
 
@@ -71,6 +80,8 @@ Recorded 2026-10-09, account `806168576068`, `us-east-1`:
 | Exact live AWS role permission set | **pending owner evidence** |
 | Diagnostic package/lockfile vs live dependencies | **pending owner evidence** |
 | Independent approval KMS key, signer, public key | **unknown** |
+| Persistent create-approval consume ledger (S3 If-None-Match) | **unknown** |
+| Deploy-role DeleteObject denied on consume prefix | **unknown** |
 
 ### Separate non-blocking issues (do not weaken security to "fix")
 
@@ -86,6 +97,10 @@ Recorded 2026-10-09, account `806168576068`, `us-east-1`:
 - [ ] Owner evidences the KMS approval key, signer, public key, and deny-sign
       for the deploy/execution roles. Do not claim an independent approval exists
       until that evidence is recorded outside this PR.
+- [ ] Owner evidences the persistent consume ledger: bucket encryption,
+      public-access block, ownership, `If-None-Match: *` create-only, and no
+      deploy-role delete/overwrite on the consume prefix. Fresh-runner replay
+      and failed-deploy retries must refuse without a new owner signature.
 - [ ] Owner read-only verifies execution-role trust/policy and artifact-bucket
       encryption / public-access block / ownership.
 - [ ] Owner confirms staging environment settings without changing visibility

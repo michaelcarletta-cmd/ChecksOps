@@ -1,7 +1,6 @@
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
-import { localStateDir } from './deployment-guard/lib/paths.mjs';
 
 export const CREATE_APPROVAL_KIND = 'checksops-staging-db-readonly-diagnostic-create-approval';
 export const CREATE_APPROVAL_MAX_TTL_MS = 60 * 60 * 1000;
@@ -42,6 +41,16 @@ export const OWNER_EVIDENCE = Object.freeze({
   independent_approval_kms_key: 'unknown',
   independent_approval_signer: 'unknown',
   independent_approval_public_key: 'unknown',
+  independent_approval_consume_ledger: 'unknown',
+  independent_approval_consume_ledger_delete_denied: 'unknown',
+  independent_approval_consume_if_none_match: 'unknown',
+});
+
+export const CREATE_APPROVAL_LEDGER = Object.freeze({
+  bucket: 'checksops-staging-db-readonly-diagnostic-artifacts-806168576068',
+  prefix: 'checksops-staging-db-readonly-diagnostic/create-approvals/consumed',
+  region: 'us-east-1',
+  account: '806168576068',
 });
 
 const FORBIDDEN_APPROVER_ARNS = new Set([
@@ -167,34 +176,94 @@ function verifyKmsSignature(approval, publicKeyB64) {
   }
 }
 
-export function consumedCreateApprovalFile(root, nonce) {
+export function consumedCreateApprovalObjectKey(nonce) {
   if (!NONCE_RE.test(String(nonce || ''))) return null;
-  return path.join(localStateDir(root), 'consumed-create-approvals', `${nonce}.json`);
+  return `${CREATE_APPROVAL_LEDGER.prefix}/${nonce}.json`;
 }
 
-export function consumeCreateApprovalNonce(root, approval, { now = Date.now(), actor = null } = {}) {
-  const file = consumedCreateApprovalFile(root, approval?.nonce);
-  if (!file) fail();
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const payload = `${JSON.stringify({
-    consumed_at: new Date(now).toISOString(),
-    actor: actor || null,
+function isPreconditionFailed(error) {
+  const detail = `${error?.stderr || ''}\n${error?.message || ''}\n${error?.name || ''}\n${error?.Code || ''}`;
+  return error?.$metadata?.httpStatusCode === 412
+    || error?.name === 'PreconditionFailed'
+    || error?.Code === 'PreconditionFailed'
+    || /PreconditionFailed|412 Precondition Failed/i.test(detail);
+}
+
+export function createPersistentMemoryLedger(store = new Map()) {
+  return function consumeOnce({ nonce } = {}) {
+    if (!NONCE_RE.test(String(nonce || ''))) fail();
+    if (store.has(nonce)) {
+      return { ok: false, reused: true, persistent: true, ifNoneMatch: '*' };
+    }
+    store.set(nonce, true);
+    return { ok: true, persistent: true, ifNoneMatch: '*' };
+  };
+}
+
+export function createS3CreateApprovalLedger({
+  execFile = execFileSync,
+  bucket = CREATE_APPROVAL_LEDGER.bucket,
+  prefix = CREATE_APPROVAL_LEDGER.prefix,
+  region = CREATE_APPROVAL_LEDGER.region,
+} = {}) {
+  if (bucket !== CREATE_APPROVAL_LEDGER.bucket
+      || prefix !== CREATE_APPROVAL_LEDGER.prefix
+      || region !== CREATE_APPROVAL_LEDGER.region) {
+    fail();
+  }
+  return function consumeOnce({
+    nonce,
+    payload,
+  } = {}) {
+    const key = consumedCreateApprovalObjectKey(nonce);
+    if (!key) fail();
+    try {
+      execFile('aws', [
+        's3api', 'put-object',
+        '--bucket', bucket,
+        '--key', key,
+        '--body', JSON.stringify(payload || { nonce }),
+        '--content-type', 'application/json',
+        '--if-none-match', '*',
+        '--region', region,
+      ], { encoding: 'utf8' });
+      return {
+        ok: true,
+        persistent: true,
+        ifNoneMatch: '*',
+        bucket,
+        key,
+      };
+    } catch (error) {
+      if (isPreconditionFailed(error)) {
+        return { ok: false, reused: true, persistent: true, ifNoneMatch: '*', bucket, key };
+      }
+      fail();
+    }
+  };
+}
+
+function requireAtomicPersistentConsume(consumeOnce, approval, { now, actor } = {}) {
+  if (typeof consumeOnce !== 'function') fail();
+  const result = consumeOnce({
     nonce: approval.nonce,
     commit: approval.commit,
     workstream_id: approval.workstream_id,
-  })}\n`;
-  try {
-    const fd = fs.openSync(file, 'wx');
-    try {
-      fs.writeFileSync(fd, payload);
-    } finally {
-      try { fs.closeSync(fd); } catch { /* ignore */ }
-    }
-  } catch (error) {
-    if (error?.code === 'EEXIST') fail(INDEPENDENT_APPROVAL_REUSED);
-    throw error;
-  }
-  return file;
+    actor: actor || null,
+    now,
+    ifNoneMatch: '*',
+    payload: {
+      kind: CREATE_APPROVAL_KIND,
+      nonce: approval.nonce,
+      commit: approval.commit,
+      workstream_id: approval.workstream_id,
+      consumed_at: new Date(now).toISOString(),
+      actor: actor || null,
+    },
+  });
+  if (result?.reused === true) fail(INDEPENDENT_APPROVAL_REUSED);
+  if (result?.ok !== true || result?.persistent !== true || result?.ifNoneMatch !== '*') fail();
+  return true;
 }
 
 export function loadCreateApproval(env = process.env) {
@@ -223,8 +292,8 @@ export function requireIndependentCreateApproval({
   commit,
   actor,
   env = process.env,
-  root,
   now = Date.now(),
+  consumeOnce,
 } = {}) {
   if (!approval || typeof approval !== 'object' || Array.isArray(approval)) fail();
   if (Object.keys(approval).some((key) => !ALLOWED_APPROVAL_KEYS.has(key))) fail();
@@ -235,6 +304,6 @@ export function requireIndependentCreateApproval({
   requireIndependentApprover(approval, actor);
   const publicKeyB64 = requireConfiguredAuthority(approval, env);
   verifyKmsSignature(approval, publicKeyB64);
-  consumeCreateApprovalNonce(root, approval, { now, actor });
+  requireAtomicPersistentConsume(consumeOnce, approval, { now, actor });
   return true;
 }

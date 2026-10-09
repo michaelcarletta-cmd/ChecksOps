@@ -7,12 +7,16 @@ import { test } from 'node:test';
 import { main as deployMain } from '../../scripts/staging-db-readonly-diagnostic-deploy.mjs';
 import {
   CREATE_APPROVAL_KIND,
+  CREATE_APPROVAL_LEDGER,
   CREATE_APPROVAL_TARGET,
   INDEPENDENT_APPROVAL_BLOCKER,
   INDEPENDENT_APPROVAL_REUSED,
   INDEPENDENT_APPROVAL_UNVERIFIED,
   OWNER_EVIDENCE,
   canonicalCreateApprovalPayload,
+  consumedCreateApprovalObjectKey,
+  createPersistentMemoryLedger,
+  createS3CreateApprovalLedger,
   requireIndependentCreateApproval,
 } from '../../scripts/staging-db-readonly-diagnostic-independent-approval.mjs';
 
@@ -70,8 +74,8 @@ function requireApproval(approval, overrides = {}) {
     commit: COMMIT,
     actor: 'github-actor',
     env: approvalEnv(),
-    root: tmpRoot(),
     now: Date.parse('2026-10-09T12:01:00.000Z'),
+    consumeOnce: createPersistentMemoryLedger(),
     ...overrides,
   });
 }
@@ -127,19 +131,25 @@ test('wrong SHA, workstream, target, account, region, and production bindings fa
 
 test('expired, over-TTL, reused nonce, and tampered signatures fail closed', () => {
   const now = Date.parse('2026-10-09T12:01:00.000Z');
+  let consumeCalls = 0;
+  const consumeOnce = (input) => {
+    consumeCalls += 1;
+    return createPersistentMemoryLedger()(input);
+  };
   assert.throws(() => requireApproval(signedApproval({
     issued_at: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
     expiry: new Date(now - 60 * 1000).toISOString(),
-  })), /independent_approval_unverified/);
+  }), { consumeOnce }), /independent_approval_unverified/);
   assert.throws(() => requireApproval(signedApproval({
     issued_at: new Date(now).toISOString(),
     expiry: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
-  })), /independent_approval_unverified/);
+  }), { consumeOnce }), /independent_approval_unverified/);
+  assert.equal(consumeCalls, 0);
 
-  const root = tmpRoot();
+  const ledger = createPersistentMemoryLedger();
   const once = signedApproval({ nonce: 'ab'.repeat(16) });
-  assert.equal(requireApproval(once, { root }), true);
-  assert.throws(() => requireApproval(once, { root }), /independent_approval_reused/);
+  assert.equal(requireApproval(once, { consumeOnce: ledger }), true);
+  assert.throws(() => requireApproval(once, { consumeOnce: ledger }), /independent_approval_reused/);
 
   const valid = signedApproval();
   assert.throws(() => requireApproval({
@@ -157,6 +167,9 @@ test('expired, over-TTL, reused nonce, and tampered signatures fail closed', () 
 
 test('missing owner KMS authority and reused guard-receipt key fail closed as the documented blocker', () => {
   assert.equal(OWNER_EVIDENCE.independent_approval_kms_key, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_consume_ledger, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_consume_ledger_delete_denied, 'unknown');
+  assert.equal(OWNER_EVIDENCE.independent_approval_consume_if_none_match, 'unknown');
   assert.equal(OWNER_EVIDENCE.cloudformation_execution_role_trust, 'unknown');
   assert.equal(OWNER_EVIDENCE.artifact_bucket_encryption, 'unknown');
   assert.equal(OWNER_EVIDENCE.staging_environment_required_reviewers, 'unverified');
@@ -170,6 +183,114 @@ test('missing owner KMS authority and reused guard-receipt key fail closed as th
   assert.throws(() => requireApproval(signedApproval(), {
     env: approvalEnv({ CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN: KEY_ARN }),
   }), /independent_approval_unverified/);
+});
+
+test('runner-local files are not a consume ledger and missing persistent consume fails closed', () => {
+  const approval = signedApproval({ nonce: '11'.repeat(16) });
+  assert.throws(() => requireApproval(approval, { consumeOnce: undefined }), /independent_approval_unverified/);
+  assert.throws(() => requireApproval(approval, {
+    consumeOnce: () => ({ ok: true, persistent: false, ifNoneMatch: '*' }),
+  }), /independent_approval_unverified/);
+  assert.throws(() => requireApproval(approval, {
+    consumeOnce: () => ({ ok: true, persistent: true, ifNoneMatch: undefined }),
+  }), /independent_approval_unverified/);
+});
+
+test('fresh runner replay and concurrent consume of the same nonce fail closed', () => {
+  const store = new Map();
+  const consumeOnce = createPersistentMemoryLedger(store);
+  const approval = signedApproval({ nonce: '22'.repeat(16) });
+  assert.equal(requireApproval(approval, { consumeOnce }), true);
+  assert.throws(
+    () => requireApproval(approval, { consumeOnce: createPersistentMemoryLedger(store) }),
+    /independent_approval_reused/,
+  );
+
+  const race = new Map();
+  const shared = createPersistentMemoryLedger(race);
+  const concurrent = signedApproval({ nonce: '33'.repeat(16) });
+  const outcomes = [0, 1].map(() => {
+    try {
+      requireApproval(concurrent, { consumeOnce: shared });
+      return 'ok';
+    } catch (error) {
+      return error.message;
+    }
+  });
+  assert.deepEqual(outcomes.sort(), ['independent_approval_reused', 'ok']);
+});
+
+test('S3 consume ledger is atomic If-None-Match create and maps 412 to reused', () => {
+  const nonce = '44'.repeat(16);
+  const key = consumedCreateApprovalObjectKey(nonce);
+  assert.equal(key, `${CREATE_APPROVAL_LEDGER.prefix}/${nonce}.json`);
+  const calls = [];
+  const consumeOnce = createS3CreateApprovalLedger({
+    execFile: (cmd, args) => {
+      calls.push({ cmd, args });
+      return '{}';
+    },
+  });
+  const first = consumeOnce({ nonce, payload: { nonce } });
+  assert.equal(first.ok, true);
+  assert.equal(first.persistent, true);
+  assert.equal(first.ifNoneMatch, '*');
+  assert.equal(calls[0].cmd, 'aws');
+  assert.ok(calls[0].args.includes('put-object'));
+  assert.ok(calls[0].args.includes('--if-none-match'));
+  assert.ok(calls[0].args.includes('*'));
+  assert.ok(calls[0].args.includes(CREATE_APPROVAL_LEDGER.bucket));
+  assert.ok(calls[0].args.includes(key));
+  assert.doesNotMatch(calls[0].args.join(' '), /delete-object|update-stack|checksops-staging-api/);
+
+  const reused = createS3CreateApprovalLedger({
+    execFile: () => {
+      const error = new Error('failed');
+      error.stderr = 'An error occurred (PreconditionFailed) when calling the PutObject operation';
+      throw error;
+    },
+  })({ nonce, payload: { nonce } });
+  assert.equal(reused.reused, true);
+
+  assert.throws(() => createS3CreateApprovalLedger({
+    bucket: 'another-bucket',
+  }), /independent_approval_unverified/);
+});
+
+test('failed create-only deploy cannot retry the same approval on a fresh runner', () => {
+  const consumeOnce = createPersistentMemoryLedger();
+  const approval = signedApproval({ nonce: '55'.repeat(16) });
+  assert.equal(requireApproval(approval, { consumeOnce }), true);
+
+  const retryCalls = [];
+  const retry = deployMain({
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_SHA: COMMIT,
+    APPROVED_COMMIT: COMMIT,
+    CHECKSOPS_DEPLOY_ENVIRONMENT: 'staging',
+    AWS_REGION: 'us-east-1',
+    CHECKSOPS_STAGING_DB_DIAGNOSTIC_ROLE_ARN: CREATE_APPROVAL_TARGET.deployRoleArn,
+    GITHUB_RUN_ID: '101',
+    GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_ACTOR: 'github-actor',
+    ...approvalEnv(),
+  }, {
+    checkedOutSha: COMMIT,
+    root: tmpRoot(),
+    approval,
+    consumeOnce,
+    now: Date.parse('2026-10-09T12:02:00.000Z'),
+    run: (...args) => {
+      retryCalls.push(args);
+      throw new Error('aws_must_not_run');
+    },
+    runQuiet: (...args) => {
+      retryCalls.push(args);
+      throw new Error('aws_must_not_run');
+    },
+  });
+  assert.equal(retry, 2);
+  assert.equal(retryCalls.length, 0);
 });
 
 test('create-only deploy refuses before AWS mutation without independent approval', () => {
@@ -208,6 +329,9 @@ test('create-only workflow stays disabled and does not treat approved_commit as 
   assert.doesNotMatch(workflow, /id-token:\s*write/);
   assert.match(workflow, /not independent approval/);
   assert.match(runner, /requireIndependentCreateApproval/);
+  assert.match(runner, /createS3CreateApprovalLedger/);
+  assert.match(docs, /If-None-Match/);
+  assert.match(docs, /fresh runner/);
   assert.doesNotMatch(runner, /'update-stack'/);
   assert.doesNotMatch(runner, /'delete-stack'/);
   assert.doesNotMatch(runner, /cloudformation', 'deploy/);
