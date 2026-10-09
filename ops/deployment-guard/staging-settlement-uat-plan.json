@@ -1,0 +1,238 @@
+{
+  "id": "staging-settlement-uat-plan",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "write_authorized": false,
+  "create_claim_authorized": false,
+  "save_settlement_authorized": false,
+  "production_changes": false,
+  "verdict": "GO",
+  "execution_verdict": "NO-GO",
+  "existing_synthetic_claim_id": null,
+  "reserved_claim_number": "AWS SETTLEMENT UAT",
+  "live_claim_inventory": {
+    "official_read": "POST /data/query table=claims",
+    "unauthenticated": {
+      "httpStatus": 401,
+      "error": "missing_cognito_token",
+      "has_data": false
+    },
+    "authenticated_inspect": "not_available_this_turn",
+    "reason": "No Cognito ID token or password file is present. Official diagnostic does not list claim rows. Source and fixtures contain no designated AWS SETTLEMENT UAT claim."
+  },
+  "identities": {
+    "actor": {
+      "email": "checksops-tester@freedomadj.com",
+      "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom",
+      "membership_evidence": "scripts/aws-write-tranche1-validate.mjs and scripts/aws-workflow-tranche5-validate.mjs",
+      "live_reconfirm": "authorized GET/POST /data/query tenant_users where user_id and tenant_id match before any write"
+    },
+    "cross_tenant": {
+      "email": "payments@condition1commercial.com",
+      "application_user_id": "fd857564-9534-4b0f-95ac-624ed1273725",
+      "tenant_id": "4f172140-f57a-4744-8050-95f4f07b13b4",
+      "tenant_name": "C1C",
+      "expected_on_freedom_claim": {
+        "httpStatus": 403,
+        "error": "not_authorized"
+      }
+    }
+  },
+  "forbidden_claims": [
+    "any customer or homeowner claim",
+    "695064-GQ and other real Freedom ledger checks",
+    "any claim with existing claim_settlements, homeowner_ledger_events, claim_payments, or provider rows"
+  ],
+  "create_plan": {
+    "needed_if": "authenticated inspect returns zero rows with claim_number AWS SETTLEMENT UAT and org_id Freedom",
+    "step_1_inspect": {
+      "method": "POST",
+      "path": "/data/query",
+      "body": {
+        "table": "claims",
+        "select": "id,claim_number,org_id,status,created_at",
+        "filters": [
+          { "column": "claim_number", "op": "eq", "value": "AWS SETTLEMENT UAT" }
+        ],
+        "limit": 5
+      },
+      "accept_existing_only_if": [
+        "org_id is 2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "no customer name or real claim number",
+        "zero claim_settlements or owner accepts in-place update of that UAT row only",
+        "zero homeowner_ledger_events for that claim_id"
+      ]
+    },
+    "step_2_create_unlinked_check": {
+      "method": "POST",
+      "path": "/workflow/checks",
+      "body": {
+        "carrier_name": "AWS SETTLEMENT UAT",
+        "review_notes": "AWS SETTLEMENT UAT",
+        "check_number": "UAT-SETTLEMENT",
+        "detected_claim_number": null,
+        "claim_id": null,
+        "amount": null
+      },
+      "expected": {
+        "httpStatus": 200,
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "claim_id": null,
+        "ocrInvoked": false,
+        "providerSubmitted": false
+      },
+      "guards": [
+        "never set claim_id on insert",
+        "never set detected_claim_number",
+        "never set amount",
+        "never insert check_messages after later link"
+      ]
+    },
+    "step_3_create_claim": {
+      "method": "POST",
+      "path": "/data/rpc",
+      "body": {
+        "name": "claim_ledger_link_or_create",
+        "args": {
+          "p_check_id": "<synthetic_check_id>",
+          "p_action": "create_new",
+          "p_claim_number": "AWS SETTLEMENT UAT"
+        }
+      },
+      "note": "This is the approved create path. Generic /data/write claims insert is denied. Do not modify SQL 44. Use the live function only.",
+      "expected": {
+        "ok": true,
+        "claim_number": "AWS SETTLEMENT UAT",
+        "org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a"
+      },
+      "stop_if": "homeowner_ledger_events count for the new claim_id is not 0"
+    }
+  },
+  "write_mechanism": {
+    "settlement": {
+      "method": "POST",
+      "path": "/data/rpc",
+      "name": "save_claim_settlement_breakdown",
+      "handler": "aws/functions/api/claim-settlement-rpc.mjs",
+      "sql": "SELECT public.save_claim_settlement_breakdown($1::uuid, $2::uuid, $3::jsonb)",
+      "not": [
+        "/data/write table=claim_settlements",
+        "/data/write table=claims op=insert",
+        "write-claim-settlement.mjs generic table write"
+      ]
+    },
+    "guards": [
+      "Cognito ID token for checksops-tester@freedomadj.com",
+      "identity mapping to abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED=true",
+      "applicationWorkflowWritesEnabled()",
+      "public.aws_can_write_claim(p_claim_id)",
+      "early-route in data.mjs before generic RPC",
+      "17 allowlisted value columns only",
+      "UUID validation",
+      "no provider, check, or ledger columns accepted"
+    ]
+  },
+  "payloads": {
+    "insert": {
+      "name": "save_claim_settlement_breakdown",
+      "args": {
+        "p_claim_id": "<synthetic_claim_id>",
+        "p_settlement_id": null,
+        "p_values": {
+          "replacement_cost_value": 15000,
+          "recoverable_depreciation": 500,
+          "non_recoverable_depreciation": 1000,
+          "deductible": 1500,
+          "other_structures_rcv": 400,
+          "other_structures_recoverable_depreciation": 10,
+          "other_structures_non_recoverable_depreciation": 20,
+          "other_structures_deductible": 30,
+          "pwi_rcv": 300,
+          "pwi_recoverable_depreciation": 10,
+          "pwi_non_recoverable_depreciation": 20,
+          "personal_property_rcv": 200,
+          "personal_property_recoverable_depreciation": 10,
+          "personal_property_non_recoverable_depreciation": 20,
+          "ale_rcv": 100,
+          "ale_recoverable_depreciation": 5,
+          "ale_non_recoverable_depreciation": 10
+        }
+      }
+    },
+    "update": {
+      "name": "save_claim_settlement_breakdown",
+      "args": {
+        "p_claim_id": "<synthetic_claim_id>",
+        "p_settlement_id": "<inserted_settlement_id>",
+        "p_values": {
+          "replacement_cost_value": 17500
+        }
+      }
+    },
+    "invalid": [
+      {
+        "name": "save_claim_settlement_breakdown",
+        "args": {
+          "p_claim_id": "not-a-uuid",
+          "p_settlement_id": null,
+          "p_values": { "replacement_cost_value": 1 }
+        },
+        "expect": { "httpStatus": 400, "error": "invalid_uuid" }
+      },
+      {
+        "name": "save_claim_settlement_breakdown",
+        "args": {
+          "p_claim_id": "<synthetic_claim_id>",
+          "p_settlement_id": null,
+          "p_values": { "pwi_deductible": 1 }
+        },
+        "expect": { "httpStatus": 400, "error": "invalid_settlement_values" }
+      },
+      {
+        "name": "save_claim_settlement_breakdown",
+        "args": {
+          "p_claim_id": "<synthetic_claim_id>",
+          "p_settlement_id": null,
+          "p_values": { "replacement_cost_value": -1 }
+        },
+        "expect": { "httpStatus": 400, "error": "invalid_settlement_values" }
+      }
+    ]
+  },
+  "expected_writes": {
+    "claim_settlements": {
+      "after_insert": { "count_for_claim": 1 },
+      "after_update": { "count_for_claim": 1, "same_id": true, "replacement_cost_value": 17500, "other_structures_rcv": 400 }
+    },
+    "homeowner_ledger_events": { "count_for_claim": 0, "amount_change": 0 },
+    "deposit_items": 0,
+    "checkalt_deposits": 0,
+    "disbursement_batches": 0,
+    "claim_payments": 0,
+    "provider_transactions": 0,
+    "claims": "at most one new row with claim_number AWS SETTLEMENT UAT and org_id Freedom",
+    "check_intake_items": "at most one synthetic unlinked-then-linked T5 check labeled AWS SETTLEMENT UAT"
+  },
+  "idempotency": {
+    "second_insert_without_settlement_id": "updates the latest claim_settlements row for that claim; count stays 1",
+    "update_with_settlement_id": "updates that id; count stays 1"
+  },
+  "cleanup": {
+    "order": [
+      "DELETE only claim_settlements rows for the synthetic claim_id. /data/write cannot delete that table; request a one-row owner cleanup or leave the UAT settlement on the labeled claim.",
+      "DELETE the synthetic check via DELETE /workflow/checks/{id} with reason AWS SETTLEMENT UAT cleanup, only if financial blockers are absent.",
+      "Keep the claims row labeled AWS SETTLEMENT UAT for reuse unless the owner authorizes deleting that one unused claim."
+    ],
+    "do_not": [
+      "delete or update customer claims",
+      "delete homeowner_ledger_events",
+      "call CheckAlt, Moov, or other providers",
+      "apply SQL 44, 20261007193200, or one-writer"
+    ]
+  },
+  "notes": "Evaluate-only. No claim was created and no settlement was saved. The exact claim UUID is assigned by create_new and is unknown until authorized writes. Durable label is claim_number AWS SETTLEMENT UAT."
+}
