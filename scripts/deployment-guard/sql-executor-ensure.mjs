@@ -42,6 +42,8 @@ export function packExecutor(root) {
     ['aws/write-path/guarded-sql-executor/package.json', 'package.json'],
     ['aws/write-path/sql/44_claim_ledger_link_or_create.sql', 'sql/44_claim_ledger_link_or_create.sql'],
     ['aws/workflows/sql/53_claim_settlement_breakdown.sql', 'sql/53_claim_settlement_breakdown.sql'],
+    ['aws/write-path/guarded-sql-executor/sql/39_tmp_write_policy_reconcile.sql', 'sql/39_tmp_write_policy_reconcile.sql'],
+    ['aws/write-path/guarded-sql-executor/sql/40_collection_v2_synthetic_uat_cleanup.sql', 'sql/40_collection_v2_synthetic_uat_cleanup.sql'],
     ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
     ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],
     ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
@@ -50,6 +52,8 @@ export function packExecutor(root) {
     ['scripts/deployment-guard/lib/errors.mjs', 'lib/errors.mjs'],
     ['scripts/deployment-guard/lib/identity.mjs', 'lib/identity.mjs'],
     ['scripts/deployment-guard/lib/function-def-lookup.mjs', 'lib/function-def-lookup.mjs'],
+    ['scripts/deployment-guard/lib/collection-v2-synthetic-uat-cleanup.mjs', 'lib/collection-v2-synthetic-uat-cleanup.mjs'],
+    ['scripts/deployment-guard/lib/tmp-rls-catalog.mjs', 'lib/tmp-rls-catalog.mjs'],
   ];
   for (const [from, to] of copies) {
     fs.copyFileSync(path.join(root, from), path.join(staging, to));

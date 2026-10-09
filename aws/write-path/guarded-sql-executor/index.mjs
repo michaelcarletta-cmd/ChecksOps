@@ -1,7 +1,8 @@
 /**
- * Staging-only VPC SQL executor for the reviewed Claim Ledger SQL 44.
+ * Staging-only VPC SQL executor for allowlisted reviewed SQL files.
  * Fail closed. No arbitrary SQL. No create_new. No production.
  * CREATE OR REPLACE must not invoke the function.
+ * SQL 39 may drop/recreate only the authenticated TMP write policy.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -11,16 +12,39 @@ import { CODES, fail, ok } from './lib/errors.mjs';
 import { functionDefsMatchExactly, readFunctionDef } from './lib/function-def-lookup.mjs';
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
+  AUTHORIZED_SQL39,
+  AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL53,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_FUNCTION,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
+  isSql39,
+  isSql40,
   isSql44AuthorizedMigration,
   isSql53AuthorizedMigration,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
+import {
+  AUTHORIZED_SYNTHETIC_FIXTURE,
+  EMPTY_FIXTURE_SHA256,
+  FORBIDDEN_FREEDOM,
+  evaluateFixtureGuards,
+  hashFixtureSnapshot,
+} from './lib/collection-v2-synthetic-uat-cleanup.mjs';
+import {
+  EXPECTED_POLICY_NAMES,
+  FROZEN_FUNCTION_NAMES,
+  INSPECTED_JOB,
+  TMP_TABLE,
+  hashTmpRlsCatalog,
+  hashTmpRlsFrozen,
+  jobPredicateIntact,
+  policyByName,
+  writePredicateAcceptable,
+  writePredicateIntended,
+} from './lib/tmp-rls-catalog.mjs';
 
 export { readFunctionDef } from './lib/function-def-lookup.mjs';
 
@@ -35,6 +59,8 @@ const TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE = path.join(
   'sql/20261001193100_tenant_users_can_override_check_status.sql',
 );
 const SQL53_FILE = path.join(ROOT, 'sql/53_claim_settlement_breakdown.sql');
+const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
+const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
   'claim_ledger_link_or_create',
   'sync_homeowner_ledger_from_check',
@@ -478,6 +504,534 @@ async function handleTenantPermissions({
   }
 }
 
+async function readTmpRlsCatalog(client) {
+  const table = await client.query(`
+    /* tmp_rls_catalog_rls */
+    SELECT c.relname AS table,
+           c.relrowsecurity,
+           c.relforcerowsecurity
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = $1
+       AND c.relkind = 'r'
+  `, [TMP_TABLE]);
+  const policies = await client.query(`
+    /* tmp_rls_catalog_policies */
+    SELECT pol.polname AS name,
+           CASE WHEN pol.polpermissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END AS permissive,
+           CASE pol.polcmd
+             WHEN 'r' THEN 'SELECT'
+             WHEN 'a' THEN 'INSERT'
+             WHEN 'w' THEN 'UPDATE'
+             WHEN 'd' THEN 'DELETE'
+             WHEN '*' THEN 'ALL'
+           END AS command,
+           '{' || COALESCE((
+             SELECT string_agg(rol.rolname, ',' ORDER BY rol.rolname)
+               FROM pg_roles rol
+              WHERE rol.oid = ANY (pol.polroles)
+           ), '') || '}' AS roles,
+           pg_get_expr(pol.polqual, pol.polrelid) AS using,
+           pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+      FROM pg_policy pol
+      JOIN pg_class c ON c.oid = pol.polrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = $1
+     ORDER BY pol.polname
+  `, [TMP_TABLE]);
+  const grants = await client.query(`
+    /* tmp_rls_catalog_grants */
+    SELECT grantee, privilege_type
+      FROM information_schema.role_table_grants
+     WHERE table_schema = 'public'
+       AND table_name = $1
+     ORDER BY grantee, privilege_type
+  `, [TMP_TABLE]);
+  const membership = await client.query(`
+    /* tmp_rls_catalog_membership */
+    SELECT r.rolname
+      FROM pg_auth_members m
+      JOIN pg_roles r ON r.oid = m.roleid
+      JOIN pg_roles u ON u.oid = m.member
+     WHERE u.rolname = 'checksops'
+     ORDER BY r.rolname
+  `);
+  const row = table.rows[0] || {};
+  return {
+    table: row.table || TMP_TABLE,
+    table_catalog: {
+      table: row.table || TMP_TABLE,
+      relrowsecurity: row.relrowsecurity === true,
+      relforcerowsecurity: row.relforcerowsecurity === true,
+    },
+    relrowsecurity: row.relrowsecurity === true,
+    relforcerowsecurity: row.relforcerowsecurity === true,
+    policies: policies.rows,
+    grants: grants.rows,
+    lambda_role_membership: membership.rows.map((item) => item.rolname),
+  };
+}
+
+async function readTmpRlsFrozen(client) {
+  const functions = await client.query(`
+    /* tmp_rls_frozen_functions */
+    SELECT n.nspname AS schema,
+           p.proname AS name,
+           pg_get_function_identity_arguments(p.oid) AS identity_arguments,
+           pg_get_functiondef(p.oid) AS definition
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname = ANY ($1::text[])
+     ORDER BY p.proname, pg_get_function_identity_arguments(p.oid)
+  `, [FROZEN_FUNCTION_NAMES]);
+  const triggers = await client.query(`
+    /* tmp_rls_frozen_triggers */
+    SELECT t.tgname AS name,
+           pg_get_triggerdef(t.oid) AS definition
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = $1
+       AND NOT t.tgisinternal
+     ORDER BY t.tgname
+  `, [TMP_TABLE]);
+  return {
+    functions: functions.rows.map((row) => ({
+      ...row,
+      identity: `public.${row.name}(${row.identity_arguments || ''})`,
+      definition_sha256: hashSqlDefinition(row.definition || ''),
+    })),
+    triggers: triggers.rows,
+  };
+}
+
+function sql39CatalogGuards(catalog) {
+  const write = policyByName(catalog, AUTHORIZED_SQL39.policy_name);
+  const job = policyByName(catalog, AUTHORIZED_SQL39.job_policy_name);
+  if (!write) {
+    return fail(CODES.SQL_COLLISION, 'authenticated TMP write policy is missing');
+  }
+  if (!job) {
+    return fail(CODES.SQL_COLLISION, 'job/webhook TMP write policy is missing');
+  }
+  if (!writePredicateAcceptable(write.using) || !writePredicateAcceptable(write.with_check)) {
+    return fail(CODES.SQL_COLLISION, 'authenticated TMP write policy drifted from the inspected or intended predicate', {
+      using: write.using,
+      with_check: write.with_check,
+    });
+  }
+  if (!jobPredicateIntact(job.using) || !jobPredicateIntact(job.with_check)) {
+    return fail(CODES.SQL_COLLISION, 'job/webhook TMP write policy drifted from the inspected predicate', {
+      using: job.using,
+      with_check: job.with_check,
+    });
+  }
+  if (catalog.relrowsecurity !== true && catalog.table_catalog?.relrowsecurity !== true) {
+    return fail(CODES.SQL_COLLISION, 'TMP RLS is not enabled; SQL 39 refuses to enable it');
+  }
+  return ok({ write, job });
+}
+
+function sql39AfterGuards(before, after) {
+  const names = [...(after.policies || []).map((policy) => policy.name)].sort();
+  if (JSON.stringify(names) !== JSON.stringify([...EXPECTED_POLICY_NAMES].sort())) {
+    return fail(CODES.SQL_COLLISION, 'TMP policy set drifted after SQL 39', { names });
+  }
+  const write = policyByName(after, AUTHORIZED_SQL39.policy_name);
+  const job = policyByName(after, AUTHORIZED_SQL39.job_policy_name);
+  const beforeJob = policyByName(before, AUTHORIZED_SQL39.job_policy_name);
+  if (!writePredicateIntended(write?.using) || !writePredicateIntended(write?.with_check)) {
+    return fail(CODES.SQL_COLLISION, 'authenticated TMP write policy was not reconciled', {
+      using: write?.using,
+      with_check: write?.with_check,
+    });
+  }
+  if (
+    !job
+    || job.using !== beforeJob?.using
+    || job.with_check !== beforeJob?.with_check
+    || job.roles !== beforeJob?.roles
+    || job.command !== beforeJob?.command
+    || !jobPredicateIntact(job.using)
+  ) {
+    return fail(CODES.SQL_COLLISION, 'job/webhook TMP write policy changed during SQL 39', {
+      before: beforeJob,
+      after: job,
+    });
+  }
+  for (const name of EXPECTED_POLICY_NAMES) {
+    if (name === AUTHORIZED_SQL39.policy_name) continue;
+    const previous = policyByName(before, name);
+    const next = policyByName(after, name);
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      return fail(CODES.SQL_COLLISION, `unexpected TMP policy change: ${name}`, {
+        before: previous,
+        after: next,
+      });
+    }
+  }
+  const beforeCanon = {
+    relrowsecurity: before.table_catalog?.relrowsecurity ?? before.relrowsecurity,
+    relforcerowsecurity: before.table_catalog?.relforcerowsecurity ?? before.relforcerowsecurity,
+    grants: before.grants,
+    membership: before.lambda_role_membership,
+  };
+  const afterCanon = {
+    relrowsecurity: after.table_catalog?.relrowsecurity ?? after.relrowsecurity,
+    relforcerowsecurity: after.table_catalog?.relforcerowsecurity ?? after.relforcerowsecurity,
+    grants: after.grants,
+    membership: after.lambda_role_membership,
+  };
+  if (JSON.stringify(beforeCanon) !== JSON.stringify(afterCanon)) {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 39 changed RLS/FORCE/grants/membership', {
+      before: beforeCanon,
+      after: afterCanon,
+    });
+  }
+  return ok({ write, job });
+}
+
+async function readSql40Fixture(client) {
+  const fixture = AUTHORIZED_SYNTHETIC_FIXTURE;
+  const tmp = (await client.query(`
+    /* sql40_tmp */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           amount_cents,
+           provider_environment,
+           status,
+           notes
+      FROM public.tenant_maintenance_payments
+     WHERE id = $1::uuid
+  `, [fixture.tmp_id])).rows[0] || null;
+  const events = (await client.query(`
+    /* sql40_events */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           provider_metadata
+      FROM public.payment_event_log
+     WHERE id = ANY ($1::uuid[])
+     ORDER BY id::text
+  `, [fixture.event_ids])).rows.map((row) => ({
+    id: row.id,
+    tenant_id: row.tenant_id,
+    provider_transfer_id: row.provider_transfer_id,
+    synthetic_uat_marker: row.provider_metadata?.synthetic_uat_marker || '',
+    harness_id: row.provider_metadata?.harness_id || '',
+    checksops_payment_id: String(row.provider_metadata?.checksops_payment_id || ''),
+  }));
+  const transfers = (await client.query(`
+    /* sql40_transfers */
+    SELECT count(*)::int AS n
+      FROM public.payment_transfers
+     WHERE provider_transfer_id = $1
+        OR coalesce(provider_metadata->>'obligation_id', '') = $2
+        OR coalesce(provider_metadata->>'harness_id', '') = $3
+        OR coalesce(provider_metadata->>'checksops_payment_id', '') = $2
+  `, [fixture.provider_transfer_id, fixture.tmp_id, fixture.harness_id])).rows[0];
+  return {
+    tmp: tmp
+      ? {
+        id: tmp.id,
+        tenant_id: tmp.tenant_id,
+        provider_transfer_id: tmp.provider_transfer_id,
+        amount_cents: Number(tmp.amount_cents),
+        provider_environment: tmp.provider_environment,
+        status: tmp.status,
+        notes: tmp.notes,
+        marker_present: String(tmp.notes || '').includes(fixture.marker),
+        harness_present: String(tmp.notes || '').includes(`harness=${fixture.harness_id}`),
+      }
+      : null,
+    events,
+    payment_transfers: Number(transfers?.n || 0),
+  };
+}
+
+async function readSql40Preservation(client) {
+  const freedom = FORBIDDEN_FREEDOM;
+  const freedomTmp = (await client.query(`
+    /* sql40_freedom_tmp */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           amount_cents,
+           provider_environment,
+           status
+      FROM public.tenant_maintenance_payments
+     WHERE id = $1::uuid
+  `, [freedom.tmp_id])).rows[0] || null;
+  const freedomTransfers = (await client.query(`
+    /* sql40_freedom_xfer */
+    SELECT provider_transfer_id,
+           tenant_id::text AS tenant_id
+      FROM public.payment_transfers
+     WHERE provider_transfer_id = $1
+  `, [freedom.provider_transfer_id])).rows;
+  const freedomTmpByXfer = (await client.query(`
+    /* sql40_freedom_tmp_by_xfer */
+    SELECT id::text AS id,
+           tenant_id::text AS tenant_id,
+           provider_transfer_id,
+           amount_cents,
+           provider_environment,
+           status
+      FROM public.tenant_maintenance_payments
+     WHERE provider_transfer_id = $1
+        OR id = $2::uuid
+  `, [freedom.provider_transfer_id, freedom.tmp_id])).rows;
+  const freedomEvents = (await client.query(`
+    /* sql40_freedom_events */
+    SELECT count(*)::int AS n
+      FROM public.payment_event_log
+     WHERE provider_transfer_id = $1
+        OR id = $2::uuid
+  `, [freedom.provider_transfer_id, freedom.tmp_id])).rows[0];
+  const grants = (await client.query(`
+    /* sql40_tmp_grants */
+    SELECT grantee, privilege_type
+      FROM information_schema.role_table_grants
+     WHERE table_schema = 'public'
+       AND table_name = 'tenant_maintenance_payments'
+       AND grantee IN ('authenticated', 'checksops', 'PUBLIC', 'anon')
+     ORDER BY grantee, privilege_type
+  `)).rows;
+  const writePolicies = (await client.query(`
+    /* sql40_tmp_write_policy */
+    SELECT pol.polname AS name,
+           pg_get_expr(pol.polqual, pol.polrelid) AS using,
+           pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+      FROM pg_policy pol
+      JOIN pg_class c ON c.oid = pol.polrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = 'tenant_maintenance_payments'
+       AND pol.polname IN (
+         'aws_write_tenant_maintenance_payments',
+         'aws_write_tenant_maintenance_payments_job'
+       )
+     ORDER BY pol.polname
+  `)).rows;
+  const deleteGranted = grants.some((row) => String(row.privilege_type).toUpperCase() === 'DELETE');
+  const write = writePolicies.find((row) => row.name === 'aws_write_tenant_maintenance_payments');
+  return {
+    freedom_tmp: freedomTmp,
+    freedom_tmp_by_transfer_or_id: freedomTmpByXfer,
+    freedom_event_count: Number(freedomEvents?.n || 0),
+    freedom_transfers: freedomTransfers,
+    grants,
+    write_policies: writePolicies,
+    application_delete_granted: deleteGranted,
+    sql39_write_intended: Boolean(
+      write && writePredicateIntended(write.using) && writePredicateIntended(write.with_check),
+    ),
+  };
+}
+
+async function handleSql40({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile40,
+}) {
+  const embedded = readEmbeddedSql(sqlFile40, AUTHORIZED_SQL40.source_sha256);
+  if (!embedded.ok) return embedded;
+
+  let client;
+  try {
+    client = await connect();
+    const live = await readSql40Fixture(client);
+    const liveHash = hashFixtureSnapshot(live);
+    const guards = evaluateFixtureGuards(live);
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      const preservation = await readSql40Preservation(client);
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: event.action,
+          executor_identity: identity,
+          fixture: live,
+          fixture_guards: guards,
+          preservation,
+          expected_deletes: {
+            payment_event_log: 2,
+            tenant_maintenance_payments: 1,
+            payment_transfers: 0,
+          },
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 40 executor action ${event.action}`);
+    }
+
+    if (!guards.ok) {
+      const freedom = guards.errors.some((code) => code.includes('FORBIDDEN'));
+      return fail(
+        freedom ? CODES.UNRELATED_MUTATION : CODES.SQL_COLLISION,
+        'SQL 40 refuse: live fixture does not match the authorized exact-ID synthetic cleanup',
+        { errors: guards.errors, live_hash: liveHash },
+      );
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: liveHash,
+      live_definition: JSON.stringify(live),
+    });
+    if (!collision.ok) return collision;
+
+    await client.query(embedded.details.text);
+    const after = await readSql40Fixture(client);
+    const afterHash = hashFixtureSnapshot(after);
+    if (afterHash !== EMPTY_FIXTURE_SHA256 || afterHash !== AUTHORIZED_SQL40.intended_replacement_sha256) {
+      return fail(CODES.SQL_COLLISION, 'SQL 40 did not leave the authorized empty fixture state', {
+        after_hash: afterHash,
+        intended_replacement_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
+      });
+    }
+    if (after.tmp || after.events.length || after.payment_transfers) {
+      return fail(CODES.SQL_COLLISION, 'SQL 40 leftover synthetic rows remain', after);
+    }
+
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveHash,
+        after_hash: afterHash,
+        result: 'applied',
+        executor_identity: identity,
+        fixture_before: live,
+        fixture_after: after,
+        deleted: {
+          payment_event_log: 2,
+          tenant_maintenance_payments: 1,
+          payment_transfers: 0,
+        },
+        application_delete_granted: false,
+      },
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
+async function handleSql39({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile39,
+}) {
+  const embedded = readEmbeddedSql(sqlFile39, AUTHORIZED_SQL39.source_sha256);
+  if (!embedded.ok) return embedded;
+
+  let client;
+  try {
+    client = await connect();
+    const live = await readTmpRlsCatalog(client);
+    const liveHash = hashTmpRlsCatalog(live);
+    const guards = sql39CatalogGuards(live);
+    if (!guards.ok) return guards;
+    const frozenBefore = await readTmpRlsFrozen(client);
+    const frozenBeforeHash = hashTmpRlsFrozen(frozenBefore);
+
+    if (event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize') {
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: liveHash,
+          after_hash: liveHash,
+          result: event.action,
+          executor_identity: identity,
+          catalog: live,
+          frozen_hash: frozenBeforeHash,
+        },
+      });
+    }
+
+    if (event.action !== 'apply') {
+      return fail(CODES.INVALID_MANIFEST, `unsupported SQL 39 executor action ${event.action}`);
+    }
+
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: liveHash,
+      live_definition: JSON.stringify(live),
+    });
+    if (!collision.ok) return collision;
+
+    await client.query(embedded.details.text);
+    const after = await readTmpRlsCatalog(client);
+    const afterGuards = sql39AfterGuards(live, after);
+    if (!afterGuards.ok) return afterGuards;
+    const frozenAfter = await readTmpRlsFrozen(client);
+    const frozenAfterHash = hashTmpRlsFrozen(frozenAfter);
+    if (frozenAfterHash !== frozenBeforeHash) {
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 39 changed TMP helper functions or triggers', {
+        before: frozenBeforeHash,
+        after: frozenAfterHash,
+      });
+    }
+
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveHash,
+        after_hash: hashTmpRlsCatalog(after),
+        result: 'applied',
+        executor_identity: identity,
+        catalog_before: live,
+        catalog_after: after,
+        job_policy_intact: true,
+        frozen_hash: frozenAfterHash,
+        inspected_job: INSPECTED_JOB,
+      },
+    });
+  } catch (error) {
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 async function readPreservedFunctionState(client, identities) {
   const functions = [];
   for (const identity of identities) {
@@ -720,6 +1274,8 @@ export function createHandler({
   sqlFile601 = TENANT_PERMISSIONS_SQL_FILE,
   sqlFile601Predecessor = TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE,
   sqlFile53 = SQL53_FILE,
+  sqlFile39 = SQL39_FILE,
+  sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
   expectedSql53AfterHash = AUTHORIZED_SQL53.intended_replacement_sha256,
 } = {}) {
@@ -748,6 +1304,26 @@ export function createHandler({
         connect,
         sqlFile53,
         expectedSql53AfterHash,
+      });
+    }
+
+    if (isSql40(event)) {
+      return handleSql40({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile40,
+      });
+    }
+
+    if (isSql39(event)) {
+      return handleSql39({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFile39,
       });
     }
 
