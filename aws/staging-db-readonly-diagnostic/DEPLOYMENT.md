@@ -58,7 +58,9 @@ Owner-controlled setup (outside this PR; do not apply from source):
    not replay protection: a fresh runner has an empty disk.
    Use atomic S3 `PutObject` `If-None-Match: *` on
    `s3://checksops-staging-db-readonly-diagnostic-artifacts-806168576068/checksops-staging-db-readonly-diagnostic/create-approvals/consumed/<nonce>.json`.
+   AWS CLI `--body` must be a real temp file path, not inline JSON.
    Deny `s3:DeleteObject` / overwrite for the deploy role on that prefix.
+   Source never issues `delete-object` or `put-object` without `If-None-Match: *`.
    A 412 PreconditionFailed is reuse. A failed create-stack cannot retry the
    same nonce; the owner must sign a new approval.
 

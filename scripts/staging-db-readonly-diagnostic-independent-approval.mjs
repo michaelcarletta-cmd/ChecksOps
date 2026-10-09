@@ -1,6 +1,8 @@
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 export const CREATE_APPROVAL_KIND = 'checksops-staging-db-readonly-diagnostic-create-approval';
 export const CREATE_APPROVAL_MAX_TTL_MS = 60 * 60 * 1000;
@@ -181,6 +183,48 @@ export function consumedCreateApprovalObjectKey(nonce) {
   return `${CREATE_APPROVAL_LEDGER.prefix}/${nonce}.json`;
 }
 
+export function writeCreateApprovalBodyFile(payload, { tmpDir = os.tmpdir() } = {}) {
+  const dir = fs.mkdtempSync(path.join(tmpDir, 'checksops-create-approval-'));
+  const file = path.join(dir, 'body.json');
+  const fd = fs.openSync(file, 'wx');
+  try {
+    fs.writeFileSync(fd, `${JSON.stringify(payload)}\n`);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return file;
+}
+
+function removeCreateApprovalBodyFile(file) {
+  if (!file) return;
+  try {
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+  } catch {
+    /* best-effort */
+  }
+}
+
+export function requireCreateOnlyLedgerPutObjectArgs(args = []) {
+  const list = Array.isArray(args) ? args.map(String) : [];
+  const bodyIndex = list.indexOf('--body');
+  const matchIndex = list.indexOf('--if-none-match');
+  const body = bodyIndex >= 0 ? list[bodyIndex + 1] : '';
+  const match = matchIndex >= 0 ? list[matchIndex + 1] : '';
+  if (list[0] !== 's3api'
+      || list[1] !== 'put-object'
+      || !body
+      || body.startsWith('{')
+      || !fs.existsSync(body)
+      || !fs.statSync(body).isFile()
+      || match !== '*'
+      || list.includes('delete-object')
+      || list.includes('copy-object')
+      || list.includes('--copy-source')) {
+    fail();
+  }
+  return true;
+}
+
 function isPreconditionFailed(error) {
   const detail = `${error?.stderr || ''}\n${error?.message || ''}\n${error?.name || ''}\n${error?.Code || ''}`;
   return error?.$metadata?.httpStatusCode === 412
@@ -205,6 +249,7 @@ export function createS3CreateApprovalLedger({
   bucket = CREATE_APPROVAL_LEDGER.bucket,
   prefix = CREATE_APPROVAL_LEDGER.prefix,
   region = CREATE_APPROVAL_LEDGER.region,
+  tmpDir = os.tmpdir(),
 } = {}) {
   if (bucket !== CREATE_APPROVAL_LEDGER.bucket
       || prefix !== CREATE_APPROVAL_LEDGER.prefix
@@ -217,28 +262,35 @@ export function createS3CreateApprovalLedger({
   } = {}) {
     const key = consumedCreateApprovalObjectKey(nonce);
     if (!key) fail();
+    const bodyFile = writeCreateApprovalBodyFile(payload || { nonce }, { tmpDir });
     try {
-      execFile('aws', [
+      const args = [
         's3api', 'put-object',
         '--bucket', bucket,
         '--key', key,
-        '--body', JSON.stringify(payload || { nonce }),
+        '--body', bodyFile,
         '--content-type', 'application/json',
         '--if-none-match', '*',
         '--region', region,
-      ], { encoding: 'utf8' });
+      ];
+      requireCreateOnlyLedgerPutObjectArgs(args);
+      execFile('aws', args, { encoding: 'utf8' });
       return {
         ok: true,
         persistent: true,
         ifNoneMatch: '*',
         bucket,
         key,
+        bodyFile,
       };
     } catch (error) {
+      if (error?.message === INDEPENDENT_APPROVAL_UNVERIFIED) throw error;
       if (isPreconditionFailed(error)) {
         return { ok: false, reused: true, persistent: true, ifNoneMatch: '*', bucket, key };
       }
       fail();
+    } finally {
+      removeCreateApprovalBodyFile(bodyFile);
     }
   };
 }

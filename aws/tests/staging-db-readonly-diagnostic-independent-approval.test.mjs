@@ -17,6 +17,7 @@ import {
   consumedCreateApprovalObjectKey,
   createPersistentMemoryLedger,
   createS3CreateApprovalLedger,
+  requireCreateOnlyLedgerPutObjectArgs,
   requireIndependentCreateApproval,
 } from '../../scripts/staging-db-readonly-diagnostic-independent-approval.mjs';
 
@@ -227,7 +228,7 @@ test('S3 consume ledger is atomic If-None-Match create and maps 412 to reused', 
   const calls = [];
   const consumeOnce = createS3CreateApprovalLedger({
     execFile: (cmd, args) => {
-      calls.push({ cmd, args });
+      calls.push({ cmd, args: [...args], body: fs.readFileSync(args[args.indexOf('--body') + 1], 'utf8') });
       return '{}';
     },
   });
@@ -255,6 +256,65 @@ test('S3 consume ledger is atomic If-None-Match create and maps 412 to reused', 
   assert.throws(() => createS3CreateApprovalLedger({
     bucket: 'another-bucket',
   }), /independent_approval_unverified/);
+});
+
+test('PutObject --body is an existing file and the command cannot delete or overwrite', () => {
+  const nonce = '66'.repeat(16);
+  const payload = { nonce, commit: COMMIT, workstream_id: CREATE_APPROVAL_TARGET.workstreamId };
+  let observed;
+  const consumeOnce = createS3CreateApprovalLedger({
+    execFile: (cmd, args) => {
+      const body = args[args.indexOf('--body') + 1];
+      observed = {
+        cmd,
+        args: [...args],
+        body,
+        exists: fs.existsSync(body),
+        isFile: fs.statSync(body).isFile(),
+        contents: fs.readFileSync(body, 'utf8'),
+        ifNoneMatch: args[args.indexOf('--if-none-match') + 1],
+      };
+      requireCreateOnlyLedgerPutObjectArgs(args);
+      return '{}';
+    },
+  });
+  assert.equal(consumeOnce({ nonce, payload }).ok, true);
+  assert.equal(observed.cmd, 'aws');
+  assert.equal(observed.args[0], 's3api');
+  assert.equal(observed.args[1], 'put-object');
+  assert.equal(observed.exists, true);
+  assert.equal(observed.isFile, true);
+  assert.equal(JSON.parse(observed.contents).nonce, nonce);
+  assert.doesNotMatch(observed.body, /^\{/);
+  assert.equal(observed.ifNoneMatch, '*');
+  assert.equal(observed.args.includes('delete-object'), false);
+  assert.equal(observed.args.includes('copy-object'), false);
+  assert.equal(observed.args.includes('--copy-source'), false);
+  assert.equal(fs.existsSync(observed.body), false);
+
+  const inlineJson = [
+    's3api', 'put-object',
+    '--bucket', CREATE_APPROVAL_LEDGER.bucket,
+    '--key', consumedCreateApprovalObjectKey(nonce),
+    '--body', JSON.stringify(payload),
+    '--if-none-match', '*',
+  ];
+  assert.throws(() => requireCreateOnlyLedgerPutObjectArgs(inlineJson), /independent_approval_unverified/);
+  assert.throws(() => requireCreateOnlyLedgerPutObjectArgs([
+    's3api', 'put-object',
+    '--body', observed.body,
+    '--if-none-match', '*',
+  ]), /independent_approval_unverified/);
+  assert.throws(() => requireCreateOnlyLedgerPutObjectArgs([
+    's3api', 'delete-object',
+    '--bucket', CREATE_APPROVAL_LEDGER.bucket,
+    '--key', consumedCreateApprovalObjectKey(nonce),
+  ]), /independent_approval_unverified/);
+  assert.throws(() => requireCreateOnlyLedgerPutObjectArgs([
+    's3api', 'put-object',
+    '--body', '/tmp',
+    '--if-none-match', undefined,
+  ]), /independent_approval_unverified/);
 });
 
 test('failed create-only deploy cannot retry the same approval on a fresh runner', () => {
@@ -332,6 +392,8 @@ test('create-only workflow stays disabled and does not treat approved_commit as 
   assert.match(runner, /createS3CreateApprovalLedger/);
   assert.match(docs, /If-None-Match/);
   assert.match(docs, /fresh runner/);
+  assert.doesNotMatch(workflow, /s3:DeleteObject/);
+  assert.match(workflow, /s3:PutObject/);
   assert.doesNotMatch(runner, /'update-stack'/);
   assert.doesNotMatch(runner, /'delete-stack'/);
   assert.doesNotMatch(runner, /cloudformation', 'deploy/);
