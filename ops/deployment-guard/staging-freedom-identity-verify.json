@@ -1,0 +1,47 @@
+{
+  "id": "staging-freedom-identity-verify",
+  "authorization": "identity-verification-only",
+  "write_authorized": false,
+  "writes_attempted": false,
+  "writes_committed": false,
+  "cognito_user_changes": false,
+  "mapping_changes": false,
+  "production_changes": false,
+  "verdict": "BLOCKED",
+  "accepted_for_settlement_uat": false,
+  "auth_method": "EMAIL_OTP",
+  "password_used": false,
+  "inspected_at": "2026-10-09T19:59:00.000Z",
+  "required": {
+    "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "is_master_owner": false
+  },
+  "actual": {
+    "email": "mcarletta@freedomadj.com",
+    "cognito_sub": "c4386408-60e1-70e2-abb6-e6194e8e635f",
+    "application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "auth_uid": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "is_master_owner": false,
+    "roles": ["admin"],
+    "privileged": true,
+    "tenants": [
+      {
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "role": "admin",
+        "tenant_name": "Freedom Adjustment",
+        "tenant_slug": "freedom"
+      }
+    ],
+    "identity_source": "identity_accounts",
+    "mapping_status": "active"
+  },
+  "match": {
+    "application_user_id": false,
+    "freedom_tenant": true,
+    "is_master_owner_false": true
+  },
+  "stop_reason": "application_user_id is 7dbb3009-f059-4767-b5dc-1c5c72379330, not abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+  "mutations": [],
+  "notes": "EMAIL_OTP succeeded. No accounts, mappings, claims, checks, or settlements were changed. C1C remains separately gated."
+}
