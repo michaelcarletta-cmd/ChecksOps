@@ -1,0 +1,50 @@
+{
+  "id": "sql53-executor-ensure-applied",
+  "authorization": "executed-ensure-only",
+  "apply_authorized": false,
+  "execute": false,
+  "ensure_authorized": false,
+  "invoke_authorized": false,
+  "phase2_authorized": false,
+  "receipt_issued": false,
+  "invoked": false,
+  "sql_executed": false,
+  "verdict": "DEPLOYED",
+  "verdict_scope": "update-only checksops-staging-guarded-sql-executor",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "pack_commit": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+  "ensure_writer_commit": "3bee9607df10f22a23bcaae848bac69a9c2ec7bb",
+  "workstream_id": "staging-sql53-3bc9",
+  "before": {
+    "CodeSha256": "eWyfw2kGKayio0CGs13FQWYDsyB1jrS5wKEIs+Pk6iM=",
+    "RevisionId": "419c3227-a55a-4c29-9ba8-16cca009350f",
+    "LastModified": "2026-10-05T19:43:49.000+0000"
+  },
+  "after": {
+    "CodeSha256": "oqbZHB8JUyKpLgsfv96gudtHAZKKZkHUSnPFfDkCz24=",
+    "RevisionId": "983b80cd-ef8c-43a7-99c4-d3f9a5334a7d",
+    "LastModified": "2026-10-09T17:47:48.000+0000",
+    "State": "Active",
+    "LastUpdateStatus": "Successful"
+  },
+  "preserved": {
+    "role": "arn:aws:iam::806168576068:role/checksops-staging-guarded-sql-executor",
+    "vpc_id": "vpc-09f2268778966ce97",
+    "database_name": "checksops",
+    "executor_identity": "checksops-staging-guarded-sql-executor",
+    "admin_secret_is_checksops_admin": true,
+    "runtime": "nodejs20.x",
+    "handler": "index.handler",
+    "timeout": 120,
+    "memory": 256
+  },
+  "package_members_match_3b186ef": true,
+  "handlers_present": [
+    "handleSql39",
+    "handleSql40",
+    "handleSql53",
+    "sql53PinExact",
+    "pg_advisory_xact_lock"
+  ],
+  "notes": "Official sql-executor-ensure ran with RevisionId CAS. No invoke, no SQL, no receipt, no production, no Release Lock change."
+}
