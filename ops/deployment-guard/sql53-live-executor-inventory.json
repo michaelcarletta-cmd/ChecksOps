@@ -1,0 +1,92 @@
+{
+  "id": "sql53-live-executor-inventory",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "ensure_authorized": false,
+  "invoke_authorized": false,
+  "phase2_authorized": false,
+  "receipt_issued": false,
+  "staging_executor_deployment": "NO-GO",
+  "verdict": "SOURCE_RECONCILIATION_REQUIRED",
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "function_name": "checksops-staging-guarded-sql-executor",
+  "merged_source_commit": "b35680ea044f2b1e857deafd8314e4639591daf3",
+  "invoke_auth_commit": "8de7888606b00e7d9a5f0776f2f9c4afe7c14fd1",
+  "ensure_commit": "composed-source-after-reconciliation",
+  "inspected_at": "2026-10-09T16:37:00.000Z",
+  "latest_absent_inspect": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_run": 37959470214,
+    "head_sha": "b35680ea044f2b1e857deafd8314e4639591daf3",
+    "exists": false,
+    "http_status": 200,
+    "public_triggers": "172/172",
+    "settlement_columns": "17/17",
+    "ledger_triggers": "3/3",
+    "inspected_functions": "3/4",
+    "missing_function": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+    "preserved_hashes": {
+      "public.sync_homeowner_ledger_from_check()": "9f6ec2dc",
+      "public.aws_can_write_claim(uuid)": "0a7e62b2",
+      "public.hle_on_check_intake_insert()": "bdd9ec4b"
+    },
+    "note": "Latest successful diagnostic. A fresh inspect is still required immediately before apply."
+  },
+  "live_executor": {
+    "CodeSha256": "eWyfw2kGKayio0CGs13FQWYDsyB1jrS5wKEIs+Pk6iM=",
+    "RevisionId": "419c3227-a55a-4c29-9ba8-16cca009350f",
+    "LastModified": "2026-10-05T19:43:49.000+0000",
+    "Runtime": "nodejs20.x",
+    "Handler": "index.handler",
+    "State": "Active",
+    "previously_inspected_code_sha256": null,
+    "previously_inspected_revision_id": null,
+    "code_sha256_changed_from_previous_inspect": false,
+    "revision_id_changed_from_previous_inspect": false,
+    "note": "Preflight PR #837 recorded live_executor_inspect.completed=false with null fingerprints. These are the first workstream-captured live values."
+  },
+  "raw_b35680ea_pack_delta": {
+    "only_live_would_be_dropped": [
+      "lib/collection-v2-synthetic-uat-cleanup.mjs",
+      "lib/tmp-rls-catalog.mjs",
+      "sql/39_tmp_write_policy_reconcile.sql",
+      "sql/40_collection_v2_synthetic_uat_cleanup.sql"
+    ],
+    "only_pack_would_be_added": [
+      "sql/53_claim_settlement_breakdown.sql"
+    ],
+    "changed_would_be_overwritten": [
+      "index.mjs",
+      "lib/sql-executor-auth.mjs",
+      "package-lock.json"
+    ],
+    "unchanged": [
+      "lib/errors.mjs",
+      "lib/function-def-lookup.mjs",
+      "lib/identity.mjs",
+      "lib/sql-apply.mjs",
+      "package.json",
+      "rds-global-bundle.pem",
+      "sql/20261001193100_tenant_users_can_override_check_status.sql",
+      "sql/20261001231500_tenant_users_same_check_permissions.sql",
+      "sql/44_claim_ledger_link_or_create.sql"
+    ],
+    "node_modules_package_set": "identical"
+  },
+  "composed_package_preserves": [
+    "AUTHORIZED_SQL39",
+    "AUTHORIZED_SQL40",
+    "AUTHORIZED_SQL53",
+    "exact-match resolveAuthorizedMigration never defaults to SQL 44",
+    "transactional handleSql53",
+    "live SQL 39/40 inspect and apply handlers"
+  ],
+  "untouched": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql",
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ]
+}
