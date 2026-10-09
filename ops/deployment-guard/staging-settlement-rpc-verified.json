@@ -1,0 +1,207 @@
+{
+  "id": "staging-settlement-rpc-verified",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "deploy": false,
+  "write_authorized": false,
+  "production_changes": false,
+  "verdicts": {
+    "deployment": "DEPLOYMENT VERIFIED",
+    "uat": "UAT READY",
+    "uat_live_writes": "BLOCKED",
+    "production": "NOT READY"
+  },
+  "overlay": {
+    "workflow": ".github/workflows/guarded-staging-lambda-overlay.yml",
+    "inspect_run": 37977408533,
+    "apply_run": 37978873773,
+    "url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/37978873773",
+    "approved_commit": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+    "operation": "add",
+    "member": "claim-settlement-rpc.mjs",
+    "pre_apply_codeSha256": "+U2BumLiTZSNZe4N9rAkMinxS4k/UyOvfcyYdMrOuu4=",
+    "pre_apply_revisionId": "455f7685-97d1-4dc0-a7bc-b58ce7ba4e93"
+  },
+  "live_staging_api": {
+    "function_name": "checksops-staging-api",
+    "CodeSha256": "qo8at+HVvSWazJPUF/A9owFtOey8MNhzISLOMC+bMdw=",
+    "RevisionId": "3e8c95ca-9e28-46c8-b2bf-b43b633145d6",
+    "LastModified": "2026-10-09T19:15:29.000+0000",
+    "State": "Active",
+    "LastUpdateStatus": "Successful",
+    "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": "true",
+    "CHECKSOPS_ENV": "staging"
+  },
+  "members": {
+    "claim-settlement-rpc.mjs": {
+      "present": true,
+      "sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64"
+    },
+    "data.mjs": {
+      "present": true,
+      "sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+      "preserved": true
+    },
+    "workflow.mjs": {
+      "present": true,
+      "sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+      "preserved": true
+    },
+    "workflow-rpc.mjs": {
+      "present": true,
+      "sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+      "preserved": true
+    },
+    "workflow-transitions.mjs": {
+      "present": true,
+      "sha256": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
+      "preserved": true
+    },
+    "workflow-flags.mjs": {
+      "present": true,
+      "sha256": "a5c05d84ca847dc09c8f35e143a033f9af881e5f4491cf278810bb45857f1892",
+      "preserved": true
+    }
+  },
+  "public_smoke": {
+    "/health": { "httpStatus": 200, "status": "ok" },
+    "/db-health": { "httpStatus": 200, "status": "ok" },
+    "/db-readonly-validate": { "httpStatus": 200, "status": "ok", "readOnly": true }
+  },
+  "sql53": {
+    "exists": true,
+    "definitionSha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+    "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+    "latest_official_diagnostic": 37973071977,
+    "diagnostic_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/37973071977",
+    "note": "Last official hash inspect is pre-overlay. A Lambda ADD cannot change PostgreSQL definitions. No SQL was executed this turn.",
+    "settlement_columns": "17/17",
+    "ledger_triggers": "3/3",
+    "writes_homeowner_ledger": false
+  },
+  "uat": {
+    "offline_tests": [
+      "aws/tests/claim-settlement-breakdown-rpc.test.mjs",
+      "aws/tests/claim-settlement-breakdown-pg.test.mjs"
+    ],
+    "approved_identity": {
+      "email": "checksops-tester@freedomadj.com",
+      "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom"
+    },
+    "cross_tenant_deny": {
+      "email": "payments@condition1commercial.com",
+      "tenant_id": "4f172140-f57a-4744-8050-95f4f07b13b4",
+      "tenant_name": "C1C"
+    },
+    "forbidden_claims": [
+      "any live customer or homeowner claim",
+      "695064-GQ and other real Freedom ledger checks"
+    ],
+    "required_before_live_writes": [
+      "Separate owner authorization for staging settlement writes",
+      "Owner-designated unused synthetic Freedom claim_id, or authorization to create and delete one marked AWS SETTLEMENT UAT",
+      "Cognito ID token for checksops-tester@freedomadj.com",
+      "Rollback: delete only the synthetic settlement row and, if created, only the synthetic claim"
+    ],
+    "cases": [
+      {
+        "id": "dwelling-os-pp",
+        "saves": ["replacement_cost_value", "other_structures_rcv", "personal_property_rcv"]
+      },
+      {
+        "id": "deductible-depreciation",
+        "saves": ["deductible", "recoverable_depreciation", "non_recoverable_depreciation", "other_structures_deductible"]
+      },
+      {
+        "id": "ordinance-law-pwi",
+        "saves": ["pwi_rcv", "pwi_recoverable_depreciation", "pwi_non_recoverable_depreciation"],
+        "note": "UI Ordinance & Law maps to Paid When Incurred pwi_* columns. There is no pwi_deductible."
+      },
+      {
+        "id": "ledger-isolation",
+        "expect": "save_claim_settlement_breakdown writes only claim_settlements; homeowner_ledger_events count unchanged"
+      },
+      {
+        "id": "update-no-duplicate",
+        "expect": "second save with p_settlement_id or latest claim row updates the same id; claim_settlements count stays 1"
+      },
+      {
+        "id": "auth-tenant",
+        "expect": "C1C token against Freedom claim returns 403 not_authorized; unmapped identity 401"
+      },
+      {
+        "id": "invalid-input",
+        "expect": "unknown columns, negatives, non-numbers, missing claim UUID return 400 invalid_settlement_values or invalid_uuid"
+      }
+    ],
+    "endpoint": "POST /data/rpc name=save_claim_settlement_breakdown",
+    "no_financial_providers": true
+  },
+  "production": {
+    "ready": false,
+    "live_lambda": {
+      "function_name": "checksops-production-prep-api",
+      "CodeSha256": "DMcCoF3dpIiULPe530F8DJ8vC1wL1BP7ayqr+e8SCyI=",
+      "RevisionId": "fb17cb70-7b50-468d-a0a6-59a020c43f8c",
+      "LastModified": "2026-10-06T20:29:23.000+0000"
+    },
+    "production_spa": {
+      "classification": "PRODUCTION_LOCKED",
+      "artifact": "/assets/index-CBOwj-7W.js",
+      "sha256": "0b5fa51e11660cc9db224801b14edb3d80e662f0781ddce98d462448f66f3635"
+    },
+    "sequence_when_separately_authorized": [
+      {
+        "step": 1,
+        "action": "Fresh production SQL inspect of save_claim_settlement_breakdown; apply SQL 53 only if absent",
+        "source": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+        "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+        "intended_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+        "verify": "function exists with intended hash; 17/17 columns; protected hashes unchanged"
+      },
+      {
+        "step": 2,
+        "action": "ADD claim-settlement-rpc.mjs onto a freshly downloaded production ZIP",
+        "member_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+        "verify": "member PRESENT at that hash; keep live ocr/write-claim-settlement/check-deposited/financial-remaining"
+      },
+      {
+        "step": 3,
+        "action": "REPLACE data.mjs with accepted staging bytes after RPC is present",
+        "expected_live_before": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+        "accepted_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+        "verify": "data.mjs hash; RPC still present; public/prod health"
+      },
+      {
+        "step": 4,
+        "action": "REPLACE workflow.mjs then workflow-rpc.mjs for Check Intake/Review",
+        "workflow_accepted": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+        "workflow_rpc_accepted": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+        "verify": "each member after its overlay; do not restore a historical ZIP"
+      },
+      {
+        "step": 5,
+        "action": "Independent verify after every step; stop on CodeSha256/RevisionId drift"
+      }
+    ],
+    "do_not": [
+      "overlay ocr.mjs, write-claim-settlement.mjs, check-deposited.mjs, financial-remaining.mjs",
+      "overlay workflow-transitions.mjs before 20261007193200",
+      "promote main SPA over /assets/index-CBOwj-7W.js",
+      "reuse the staging SQL 53 receipt or staging overlay receipt",
+      "apply 20261007193200, one-writer, or SQL 44 in this sequence",
+      "change Release Locks or production CORS"
+    ]
+  },
+  "remaining_dependencies": [
+    "Owner dispatch of Staging DB read-only diagnostic if a post-overlay SQL hash reconfirm is required",
+    "Separate authorization plus unused synthetic Freedom claim before live settlement writes",
+    "Staging write UAT pass before production apply",
+    "This-workstream production approval plus staging acceptance reference",
+    "Official production SQL 53 path and one-member production overlays, each with a fresh inspect"
+  ],
+  "notes": "Evaluate-only post-deploy verification. No SQL, Lambda, production, SPA, financial-provider, or Release Lock writes."
+}
