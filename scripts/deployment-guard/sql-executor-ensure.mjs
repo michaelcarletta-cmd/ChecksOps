@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 /**
- * Create or update ONLY checksops-staging-guarded-sql-executor.
+ * Update ONLY checksops-staging-guarded-sql-executor.
  * Cannot be retargeted at shared APIs or checksops-staging-sql44-2d41.
  * Does not apply SQL. Does not modify checksops-staging-api.
+ * Does not invoke the executor.
+ *
+ * Existing-function updates require expected CodeSha256 + RevisionId CAS.
+ * update-function-code and update-function-configuration both pass --revision-id.
+ * A failed update never falls through to create-function.
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -18,6 +23,7 @@ import { repoRootFrom } from './lib/paths.mjs';
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const ACCOUNT = '806168576068';
+const DEDICATED_ROLE = `arn:aws:iam::${ACCOUNT}:role/${SQL_EXECUTOR_FUNCTION}`;
 const FORBIDDEN = new Set([
   'checksops-staging-api',
   'checksops-staging-sql44-2d41',
@@ -31,6 +37,10 @@ function awsJson(args, env = process.env) {
     env,
   });
   return out.trim() ? JSON.parse(out) : {};
+}
+
+function shortError(error) {
+  return String(error?.stderr || error?.message || error).replace(/\s+/g, ' ').slice(0, 400);
 }
 
 export function packExecutor(root) {
@@ -65,6 +75,20 @@ export function packExecutor(root) {
   return { zip, staging };
 }
 
+function intendedEnvironment(rehearsal) {
+  const adminSecretArn = rehearsal.Environment?.Variables?.ADMIN_SECRET_ARN
+    || 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt';
+  return {
+    Variables: {
+      ADMIN_SECRET_ARN: adminSecretArn,
+      RDS_HOST: rehearsal.Environment?.Variables?.RDS_HOST || 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
+      DATABASE_NAME: 'checksops',
+      EXECUTOR_IDENTITY: SQL_EXECUTOR_FUNCTION,
+      SECRETS_MANAGER_ENDPOINT: rehearsal.Environment?.Variables?.SECRETS_MANAGER_ENDPOINT || '',
+    },
+  };
+}
+
 export function main(argv = process.argv.slice(2), env = process.env, root = repoRootFrom(import.meta.url)) {
   const { opts } = parseArgs(argv);
   const functionName = opts['function-name'] || SQL_EXECUTOR_FUNCTION;
@@ -82,70 +106,154 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
     commit: opts.commit,
   });
 
+  const expectedCodeSha256 = String(opts['expected-code-sha256'] || '');
+  const expectedRevisionId = String(opts['expected-revision-id'] || '');
+  if (!expectedCodeSha256 || !expectedRevisionId) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'sql-executor-ensure requires expected CodeSha256 and RevisionId CAS',
+      {
+        expected_code_sha256: expectedCodeSha256 || null,
+        expected_revision_id: expectedRevisionId || null,
+      },
+    ));
+  }
+
+  let live;
+  try {
+    live = awsJson(['lambda', 'get-function-configuration', '--function-name', functionName], env);
+  } catch (error) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'live executor is missing or unreadable; create-function is forbidden on this path',
+      { function_name: functionName, error: shortError(error) },
+    ));
+  }
+  if (live.CodeSha256 !== expectedCodeSha256 || live.RevisionId !== expectedRevisionId) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'live executor fingerprint changed after preflight',
+      {
+        expected_code_sha256: expectedCodeSha256,
+        live_code_sha256: live.CodeSha256 || null,
+        expected_revision_id: expectedRevisionId,
+        live_revision_id: live.RevisionId || null,
+      },
+    ));
+  }
+  if (live.Role !== DEDICATED_ROLE) {
+    return printResult(fail(
+      CODES.UNRELATED_MUTATION,
+      'live executor role is not the dedicated staging SQL executor role',
+      { role: live.Role || null },
+    ));
+  }
+
   const packed = packExecutor(root);
   const rehearsal = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-rehearsal-oneshot'], env);
   const api = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api'], env);
-  const vpc = api.VpcConfig || {};
-  const adminSecretArn = rehearsal.Environment?.Variables?.ADMIN_SECRET_ARN
-    || 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt';
-  const roleArn = opts.role || rehearsal.Role || `arn:aws:iam::${ACCOUNT}:role/checksops-staging-rehearsal-oneshot`;
-  const environment = {
-    Variables: {
-      ADMIN_SECRET_ARN: adminSecretArn,
-      RDS_HOST: rehearsal.Environment?.Variables?.RDS_HOST || 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
-      DATABASE_NAME: 'checksops',
-      EXECUTOR_IDENTITY: SQL_EXECUTOR_FUNCTION,
-      SECRETS_MANAGER_ENDPOINT: rehearsal.Environment?.Variables?.SECRETS_MANAGER_ENDPOINT || '',
-    },
-  };
-  const vpcConfig = `SubnetIds=${(vpc.SubnetIds || []).join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`;
+  const environment = intendedEnvironment(rehearsal);
 
-  let created = false;
+  let finalLive;
   try {
-    awsJson(['lambda', 'get-function', '--function-name', functionName], env);
+    finalLive = awsJson(['lambda', 'get-function-configuration', '--function-name', functionName], env);
+  } catch (error) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'final live executor read failed before update-function-code',
+      { error: shortError(error) },
+    ));
+  }
+  if (finalLive.CodeSha256 !== expectedCodeSha256 || finalLive.RevisionId !== expectedRevisionId) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'live executor fingerprint changed between pack and update',
+      {
+        expected_code_sha256: expectedCodeSha256,
+        live_code_sha256: finalLive.CodeSha256 || null,
+        expected_revision_id: expectedRevisionId,
+        live_revision_id: finalLive.RevisionId || null,
+      },
+    ));
+  }
+
+  try {
     execFileSync(AWS, [
       '--region', REGION, 'lambda', 'update-function-code',
       '--function-name', functionName,
       '--zip-file', `fileb://${packed.zip}`,
+      '--revision-id', expectedRevisionId,
     ], { encoding: 'utf8', env });
-    try {
-      execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env });
-    } catch { /* ok */ }
-    awsJson([
-      'lambda', 'update-function-configuration',
-      '--function-name', functionName,
-      '--timeout', '120',
-      '--memory-size', '256',
-      '--environment', JSON.stringify(environment),
-    ], env);
-  } catch {
-    created = true;
-    awsJson([
-      'lambda', 'create-function',
-      '--function-name', functionName,
-      '--runtime', 'nodejs20.x',
-      '--role', roleArn,
-      '--handler', 'index.handler',
-      '--timeout', '120',
-      '--memory-size', '256',
-      '--zip-file', `fileb://${packed.zip}`,
-      '--environment', JSON.stringify(environment),
-      '--vpc-config', vpcConfig,
-    ], env);
+  } catch (error) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'update-function-code failed or RevisionId CAS rejected',
+      { error: shortError(error) },
+    ));
   }
   try {
-    execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-active', '--function-name', functionName], { env });
+    execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env });
   } catch { /* ok */ }
+
+  let afterCode;
+  try {
+    afterCode = awsJson(['lambda', 'get-function-configuration', '--function-name', functionName], env);
+  } catch (error) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'executor was unreadable after update-function-code; configuration was not changed',
+      { error: shortError(error) },
+    ));
+  }
+  if (afterCode.Role !== DEDICATED_ROLE) {
+    return printResult(fail(
+      CODES.UNRELATED_MUTATION,
+      'update-function-code changed the dedicated executor role; configuration update refused',
+      { role: afterCode.Role || null },
+    ));
+  }
+
+  try {
+    execFileSync(AWS, [
+      '--region', REGION, 'lambda', 'update-function-configuration',
+      '--function-name', functionName,
+      '--timeout', '120',
+      '--memory-size', '256',
+      '--environment', JSON.stringify(environment),
+      '--revision-id', afterCode.RevisionId,
+    ], { encoding: 'utf8', env });
+  } catch (error) {
+    return printResult(fail(
+      CODES.DEPLOYMENT_COLLISION,
+      'update-function-configuration failed or RevisionId CAS rejected',
+      {
+        after_code_revision_id: afterCode.RevisionId || null,
+        error: shortError(error),
+      },
+    ));
+  }
+  try {
+    execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env });
+  } catch { /* ok */ }
+
   const config = awsJson(['lambda', 'get-function-configuration', '--function-name', functionName], env);
   return printResult(ok({
     function_name: functionName,
-    created,
+    created: false,
     role: config.Role,
     code_sha256: config.CodeSha256,
     revision_id: config.RevisionId,
-    vpc: config.VpcConfig || vpc,
+    previous_code_sha256: expectedCodeSha256,
+    previous_revision_id: expectedRevisionId,
+    vpc: config.VpcConfig || api.VpcConfig || {},
+    database_name: config.Environment?.Variables?.DATABASE_NAME || null,
+    executor_identity: config.Environment?.Variables?.EXECUTOR_IDENTITY || null,
+    admin_secret_is_checksops_admin: String(config.Environment?.Variables?.ADMIN_SECRET_ARN || '').includes('checksops_admin'),
     staging_api_untouched: true,
     billing_sql44_untouched: true,
+    invoked: false,
+    sql_executed: false,
+    receipt_issued: false,
   }));
 }
 
