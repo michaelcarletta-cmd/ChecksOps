@@ -902,7 +902,7 @@ async function handleSql40({
     await client.query(embedded.details.text);
     const after = await readSql40Fixture(client);
     const afterHash = hashFixtureSnapshot(after);
-    if (afterHash !== EMPTY_FIXTURE_SHA256 || afterHash !== AUTHORIZED_SQL40.intended_replacement_sha256) {
+    if (afterHash !== EMPTY_FIXTURE_SHA256 && afterHash !== AUTHORIZED_SQL40.intended_replacement_sha256) {
       return fail(CODES.SQL_COLLISION, 'SQL 40 did not leave the authorized empty fixture state', {
         after_hash: afterHash,
         intended_replacement_sha256: AUTHORIZED_SQL40.intended_replacement_sha256,
