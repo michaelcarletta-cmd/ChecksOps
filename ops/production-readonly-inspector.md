@@ -130,6 +130,12 @@ reads. This repository update changes only the workflow session policy and
 inspector source. No AWS/IAM identity policy is applied here; the owner must
 add the same `ec2:DescribeSecurityGroups` allow to
 `ChecksOpsGitHubProductionReadOnlyInspect` before a live inspect can use it.
+The exact additive identity-policy document, live-read evidence, and rollback
+are in `ops/deployment-guard/production-readonly-inspect-iam.json` and
+`ops/deployment-guard/policies/checksops-production-readonly-inspect-ec2-sg.json`.
+Create a new inline policy of that name only after a live inventory shows the
+permission is absent. Do not replace an unknown existing policy document. Do
+not dispatch the official inspector from this package.
 Do not grant `GetSecretValue`, wildcard Secrets Manager access, SSM value
 reads, `ec2:AuthorizeSecurityGroupIngress`, `ec2:RevokeSecurityGroupIngress`,
 `ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, or RDS mutation/data-plane

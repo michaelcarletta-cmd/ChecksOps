@@ -1,0 +1,105 @@
+{
+  "id": "production-readonly-inspect-iam",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "dispatch_authorized": false,
+  "iam_mutation_authorized": false,
+  "target_environment": "production",
+  "target_component": "production-readonly-inspect-iam",
+  "target_account_id": "806168576068",
+  "target_region": "us-east-1",
+  "target_role_name": "ChecksOpsGitHubProductionReadOnlyInspect",
+  "target_role_arn": "arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect",
+  "required_permission": "ec2:DescribeSecurityGroups",
+  "required_permission_resource": "*",
+  "proposed_inline_policy_name": "ChecksOpsProductionReadOnlyInspectDescribeSecurityGroups",
+  "proposed_policy_path": "ops/deployment-guard/policies/checksops-production-readonly-inspect-ec2-sg.json",
+  "merged_inspector": {
+    "pr": 853,
+    "merged": true,
+    "merged_at": "2026-10-09T22:11:08Z",
+    "merge_commit_sha": "1097ece82f24863440634ddf061fe884f2156add",
+    "present_on_origin_main": true,
+    "workflow": ".github/workflows/inspect-production-readonly.yml",
+    "inspector": "scripts/deployment-guard/production-readonly-inspect.mjs",
+    "session_policy_already_allows_describe_security_groups": true,
+    "code_queries_only_observed_group_ids": true,
+    "code_rejects_filters_names_and_mutations": true
+  },
+  "live_iam_read": {
+    "inspected_at": "2026-10-09T23:22:32.850Z",
+    "mode": "read-only",
+    "caller_account": "806168576068",
+    "caller_arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/checksops-prod-inspector-iam-read",
+    "get_role": "AccessDenied",
+    "list_role_policies": "AccessDenied",
+    "list_attached_role_policies": "AccessDenied",
+    "simulate_principal_policy": "AccessDenied",
+    "existing_grant_of_describe_security_groups": "unknown",
+    "note": "AccessDenied is not NoSuchEntity. The official inspect workflow has assumed this role, so the role exists. This principal cannot read the identity policy."
+  },
+  "official_inspect_evidence": {
+    "run_id": 37821736928,
+    "ref": "main",
+    "head_sha": "0040bd5548192657d665be82d7fc1211d446adbc",
+    "recorded_at": "2026-10-08T18:06:34Z",
+    "workflow_assumed_role_successfully": true,
+    "missing_read_permissions": [],
+    "database_status": "refused_unproven_aws_production_target",
+    "master_user_association_count": 0,
+    "observed_db_instance_count": 2,
+    "vpc_match_count": 2,
+    "security_group_match_count": 0,
+    "required_permission": "ec2:DescribeSecurityGroups",
+    "observed_lambda_security_group_ids": [
+      "sg-0bc4695a666baf49b",
+      "sg-0fe2698f236959353"
+    ],
+    "describe_security_groups_called": false,
+    "note": "Pre-#853 inspector named the permission and did not call it. Identity-policy presence of ec2:DescribeSecurityGroups therefore remains unproven."
+  },
+  "smallest_safe_change": {
+    "kind": "additive_inline_policy",
+    "preserve_trust_policy": true,
+    "preserve_existing_inline_policies": true,
+    "preserve_existing_attached_policies": true,
+    "do_not_replace_unknown_existing_policy_document": true,
+    "do_not_pin_live_security_group_ids": true,
+    "reason_resource_star": "Live RDS security-group IDs cannot be pinned. The merged inspector still queries only already-observed sg-[hex] GroupIds via --group-ids."
+  },
+  "forbidden_actions": [
+    "ec2:AuthorizeSecurityGroupIngress",
+    "ec2:RevokeSecurityGroupIngress",
+    "ec2:CreateSecurityGroup",
+    "ec2:DeleteSecurityGroup",
+    "ec2:ModifySecurityGroupRules",
+    "secretsmanager:GetSecretValue",
+    "ssm:GetParameter",
+    "rds-db:connect"
+  ],
+  "owner_preflight_before_apply": [
+    "aws iam get-role --role-name ChecksOpsGitHubProductionReadOnlyInspect",
+    "aws iam list-role-policies --role-name ChecksOpsGitHubProductionReadOnlyInspect",
+    "aws iam list-attached-role-policies --role-name ChecksOpsGitHubProductionReadOnlyInspect",
+    "Get every inline and attached policy document",
+    "STOP if any document already Allows ec2:DescribeSecurityGroups, ec2:Describe*, ec2:*, or Action *",
+    "STOP if the role ARN, account, or trust policy is not the GitHub OIDC inspect role"
+  ],
+  "owner_apply_after_separate_approval": {
+    "authorized_in_this_package": false,
+    "command": "aws iam put-role-policy --role-name ChecksOpsGitHubProductionReadOnlyInspect --policy-name ChecksOpsProductionReadOnlyInspectDescribeSecurityGroups --policy-document file://ops/deployment-guard/policies/checksops-production-readonly-inspect-ec2-sg.json"
+  },
+  "rollback": {
+    "command": "aws iam delete-role-policy --role-name ChecksOpsGitHubProductionReadOnlyInspect --policy-name ChecksOpsProductionReadOnlyInspectDescribeSecurityGroups",
+    "scope": "only the new inline policy name",
+    "do_not_delete_other_policies": true,
+    "do_not_update_trust": true
+  },
+  "verdict": {
+    "prep": "GO",
+    "apply": "NO-GO",
+    "dispatch_official_inspect": "NO-GO",
+    "owner_apply_after_live_policy_inventory": "CONDITIONAL",
+    "reason": "The merged inspector and session policy are ready. Live identity-policy contents could not be read from ChecksOpsCursorCloudStaging. Do not apply until the owner inventories the role and confirms the permission is absent. Do not dispatch inspect until a later authorization."
+  }
+}
