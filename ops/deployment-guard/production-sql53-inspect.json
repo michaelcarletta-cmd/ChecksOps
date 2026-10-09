@@ -1,0 +1,97 @@
+{
+  "id": "production-sql53-inspect",
+  "authorization": "read-only-production-sql53-inspect",
+  "apply_authorized": false,
+  "execute": false,
+  "write_authorized": false,
+  "sql_writes": false,
+  "sql_migrations": false,
+  "lambda_or_spa_deployments": false,
+  "receipts_issued": false,
+  "release_lock_changes": false,
+  "iam_or_cognito_changes": false,
+  "financial_transactions": false,
+  "automatic_fixes": false,
+  "refused_unproven_bypassed": false,
+  "database_contacted": false,
+  "secret_values_read": false,
+  "verdict": "BLOCKED",
+  "sql53_result": null,
+  "expected_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "inspected_at": "2026-10-09T20:41:00.000Z",
+  "official_mechanism": {
+    "workflow": ".github/workflows/inspect-production-readonly.yml",
+    "script": "scripts/deployment-guard/production-readonly-inspect.mjs",
+    "role": "arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect",
+    "runs_from": "main only",
+    "contacts_database": false,
+    "accepts_connection_string": false,
+    "reads_secret_values": false,
+    "inspects_sql_function_hashes": false
+  },
+  "official_inspect": {
+    "workflow_run": 37821736928,
+    "created_at": "2026-10-08T18:06:34Z",
+    "head_sha": "0040bd5548192657d665be82d7fc1211d446adbc",
+    "conclusion": "success",
+    "report_status": "partial",
+    "database_status": "refused_unproven_aws_production_target",
+    "database_reason": "live Lambda package identity and runtime secret-reference source are not both verified"
+  },
+  "fresh_this_turn": {
+    "workflow_dispatch": {
+      "attempted": true,
+      "httpStatus": 403,
+      "error": "Resource not accessible by integration",
+      "note": "Agent cannot dispatch the official main-only inspect. Owner dispatch remains the official refresh."
+    },
+    "lambda_config": {
+      "inspected_at": "2026-10-09T20:35:29.162Z",
+      "function_name": "checksops-production-prep-api",
+      "CodeSha256": "DMcCoF3dpIiULPe530F8DJ8vC1wL1BP7ayqr+e8SCyI=",
+      "RevisionId": "fb17cb70-7b50-468d-a0a6-59a020c43f8c",
+      "matches_official_inspect": true
+    }
+  },
+  "target_verification": {
+    "proven": false,
+    "status": "refused_unproven_aws_production_target",
+    "master_user_association_count": 0,
+    "observed_db_instance_count": 2,
+    "vpc_match_count": 2,
+    "security_group_match_count": 0,
+    "owning_service_is_rds": false,
+    "candidate_resources": [],
+    "required_permission": "ec2:DescribeSecurityGroups",
+    "required_permission_authorized": false,
+    "required_evidence": "security-group ingress from the live Lambda security groups to exactly one production RDS instance; MasterUserSecret and exclusive VPC/SG membership were checked; secret values, SQL, and additional IAM expansion are not authorized",
+    "reason": "authorized RDS and Lambda network metadata leaves multiple instances in the live Lambda VPC without an exclusive security-group association",
+    "not_used": [
+      "inferred hostnames",
+      "staging database",
+      "source history",
+      "connection strings",
+      "GetSecretValue",
+      "production /db-readonly-validate",
+      "staging SQL executor"
+    ]
+  },
+  "sql53_inspection": {
+    "attempted": false,
+    "exists": null,
+    "signature": null,
+    "definition_sha256": null,
+    "settlement_columns": null,
+    "dependencies": null,
+    "stop": "Official inspector reports refused_unproven_aws_production_target. That refusal was not bypassed. The official inspector never contacts a database, so SQL 53 existence and hash cannot be established through this mechanism."
+  },
+  "missing_evidence": [
+    "Exclusive AWS metadata binding of the live production Lambda DATABASE_SECRET_ARN to exactly one production RDS instance via MasterUserSecret, exclusive VPC membership, or exclusive security-group intersection",
+    "Official inspector currently sees 2 RDS instances in the live Lambda VPC, 0 MasterUserSecret associations, and 0 exclusive SG matches",
+    "Minimum additional official read-only evidence named by the inspector: ec2:DescribeSecurityGroups on the live Lambda security groups. That permission is not authorized and was not added",
+    "An official production SQL function-definition inspect path after the target is proven. The current official inspector never runs SQL and never returns save_claim_settlement_breakdown hashes"
+  ],
+  "next_safe_action": "Owner dispatches inspect-production-readonly.yml from main if a newer official binding report is wanted. Do not apply SQL 53. Do not add IAM, GetSecretValue, or a new SQL inspect path without a separately reviewed authorization. After the official inspector reports a proven production persistence target, a later authorization is still required before any official SQL 53 hash inspect can exist.",
+  "notes": "Stopped before any SQL session. No production configuration, receipt, Release Lock, Lambda, SPA, or financial change."
+}
