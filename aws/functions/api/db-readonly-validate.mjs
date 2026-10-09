@@ -902,7 +902,7 @@ export const validateReadonlyCoreTables = async ({
       }
     }
     try {
-      const roles = (await client.query(`SELECT rolname, rolsuper, rolbypassrls`)
+      const roles = (await client.query(`SELECT rolname, rolsuper, rolbypassrls
         FROM pg_roles
         WHERE rolname IN ('checksops', 'checksops_admin', 'postgres', 'rdsadmin')
         ORDER BY rolname`)).rows;
