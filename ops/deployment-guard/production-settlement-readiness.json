@@ -1,0 +1,211 @@
+{
+  "id": "production-settlement-readiness",
+  "authorization": "read-only-inspection",
+  "apply_authorized": false,
+  "execute": false,
+  "write_authorized": false,
+  "sql_apply_authorized": false,
+  "lambda_or_spa_deployments": false,
+  "receipts_issued": false,
+  "receipts_consumed": false,
+  "release_lock_changes": false,
+  "production_changes": false,
+  "staging_changes": false,
+  "auth_or_iam_changes": false,
+  "financial_transactions": false,
+  "automatic_fixes": false,
+  "verdict": "CONDITIONAL",
+  "deployment_verdict": "NO-GO",
+  "inspected_at": "2026-10-09T20:35:29.162Z",
+  "origin_main": "3b186ef27f9a3e27a10b8368ef2eb737998898f2",
+  "staging_acceptance": {
+    "uat_verdict": "PASS",
+    "uat_tests": "19/19",
+    "uat_ci": "7/7",
+    "claim_id": "38eb9c7d-fbd5-4d39-9937-40fe995c8b9e",
+    "settlement_id": "685fe136-0376-490d-8155-11d6c2fe4844",
+    "actor": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "environment": "staging",
+    "evidence": "ops/deployment-guard/staging-settlement-uat-run.json"
+  },
+  "live_production": {
+    "lambda": {
+      "function_name": "checksops-production-prep-api",
+      "CodeSha256": "DMcCoF3dpIiULPe530F8DJ8vC1wL1BP7ayqr+e8SCyI=",
+      "RevisionId": "fb17cb70-7b50-468d-a0a6-59a020c43f8c",
+      "LastModified": "2026-10-06T20:29:23.000+0000",
+      "State": "Active",
+      "Runtime": "nodejs22.x",
+      "fresh_config_at": "2026-10-09T20:35:29.162Z",
+      "official_inspect_run": 37821736928,
+      "official_inspect_at": "2026-10-08T18:06:34Z",
+      "drift_since_official_inspect": false
+    },
+    "spa": {
+      "host": "https://checksops.com/",
+      "entry_bundle": "/assets/index-CBOwj-7W.js",
+      "bundle_sha256": "0b5fa51e11660cc9db224801b14edb3d80e662f0781ddce98d462448f66f3635",
+      "index_html_sha256": "daff2ae4ffa654736fd05c07d05df3a790319fbf644028ca86754790f8dc7477",
+      "cloudfront_id": "E1B0ZWWO5559U5",
+      "matches_production_spa_lock": true,
+      "fresh_https_at": "2026-10-09T20:32:00.000Z"
+    },
+    "sql": {
+      "status": "unproven",
+      "official_inspect_status": "refused_unproven_aws_production_target",
+      "sql53_exists": null,
+      "sql53_definition_sha256": null,
+      "ledger_has_sql53_apply_proof": false,
+      "note": "Official production-readonly inspector never contacts the database. This inspection did not execute SQL or infer installation from staging."
+    },
+    "financial_flags": {
+      "source": "live Lambda environment 2026-10-09T20:34:43Z",
+      "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": true,
+      "AWS_PROVIDER_EXECUTION_ENABLED": true,
+      "AWS_MOOV_ENABLED": true,
+      "AWS_CHECKALT_ENABLED": true,
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": true,
+      "AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED": false,
+      "note": "Production provider kill switches are ON. Staging UAT ran with providers OFF. Do not change these flags in this workstream."
+    }
+  },
+  "live_staging_for_compare": {
+    "function_name": "checksops-staging-api",
+    "CodeSha256": "qo8at+HVvSWazJPUF/A9owFtOey8MNhzISLOMC+bMdw=",
+    "RevisionId": "3e8c95ca-9e28-46c8-b2bf-b43b633145d6",
+    "LastModified": "2026-10-09T19:15:29.000+0000",
+    "sql53_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+    "claim_settlement_rpc_present": true,
+    "claim_settlement_rpc_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+    "identical_to_production": false
+  },
+  "accepted_source_on_origin_main": {
+    "claim-settlement-rpc.mjs": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+    "data.mjs": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+    "workflow.mjs": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+    "workflow-rpc.mjs": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+    "workflow-transitions.mjs": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
+    "53_claim_settlement_breakdown.sql": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+    "ocr.mjs_repo": "2e69e2eace4c555036606565c35f4e76d3169ab5a36110269389f7387979cac8",
+    "check-deposited.mjs": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+    "write-claim-settlement.mjs": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+    "financial-remaining.mjs": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989"
+  },
+  "member_comparison": {
+    "already_present_keep": {
+      "write-claim-settlement.mjs": {
+        "live_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+        "operation": "keep",
+        "reason": "Production-only settlement writer. Exact live bytes."
+      },
+      "check-deposited.mjs": {
+        "live_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+        "operation": "keep"
+      },
+      "financial-remaining.mjs": {
+        "live_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
+        "operation": "keep"
+      },
+      "ocr.mjs": {
+        "live_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
+        "repo_sha256": "2e69e2eace4c555036606565c35f4e76d3169ab5a36110269389f7387979cac8",
+        "operation": "keep_live",
+        "reason": "Do not overlay origin/main ocr.mjs over live production OCR persist and deposited-payee lock."
+      },
+      "workflow-flags.mjs": {
+        "live_sha256": "a5c05d84ca847dc09c8f35e143a033f9af881e5f4491cf278810bb45857f1892",
+        "operation": "keep"
+      }
+    },
+    "missing_or_different_forward_compose": {
+      "claim-settlement-rpc.mjs": {
+        "live_sha256": null,
+        "accepted_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+        "operation": "add",
+        "sql_before": "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+      },
+      "data.mjs": {
+        "live_sha256": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+        "accepted_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+        "operation": "replace",
+        "depends_on": ["claim-settlement-rpc.mjs"]
+      },
+      "workflow.mjs": {
+        "live_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
+        "accepted_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+        "operation": "replace",
+        "scope": "related accepted claim-processing fix; keep inlined Delete Check"
+      },
+      "workflow-rpc.mjs": {
+        "live_sha256": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
+        "accepted_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+        "operation": "replace",
+        "keep_import": "write-claim-settlement.mjs"
+      }
+    },
+    "do_not_overlay": {
+      "workflow-transitions.mjs": {
+        "live_sha256": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
+        "accepted_sha256": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
+        "operation": "hold",
+        "sql_before": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+        "reason": "Endorsement-stage migration is not part of this settlement release and is not approved."
+      },
+      "ocr.mjs": "keep live bytes",
+      "production-spa": "PRODUCTION_LOCKED to index-CBOwj-7W.js"
+    }
+  },
+  "forbidden_this_release": [
+    "SQL 39",
+    "SQL 40",
+    "SQL 44",
+    "20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "one-writer migration",
+    "workflow-transitions.mjs overlay",
+    "ocr.mjs overlay from origin/main",
+    "full Lambda ZIP replace",
+    "production SPA replace or restore",
+    "Cognito / IAM / permission changes",
+    "Moov / CheckAlt / provider flag changes"
+  ],
+  "required_sequence_when_separately_authorized": [
+    "Fresh-read production Lambda CodeSha256 and RevisionId; stop on drift from DMcCoF3dpIiULPe530F8DJ8vC1wL1BP7ayqr+e8SCyI= / fb17cb70-7b50-468d-a0a6-59a020c43f8c",
+    "Independently prove whether public.save_claim_settlement_breakdown(uuid,uuid,jsonb) exists in production and equals 6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+    "If absent, apply only aws/workflows/sql/53_claim_settlement_breakdown.sql through official production SQL guard + this-workstream receipt",
+    "Overlay onto a freshly downloaded live ZIP, one owned member per receipt, RevisionId CAS: ADD claim-settlement-rpc.mjs, REPLACE data.mjs, then optional REPLACE workflow.mjs and workflow-rpc.mjs",
+    "Preserve every unrelated live member including write-claim-settlement.mjs, ocr.mjs, check-deposited.mjs, financial-remaining.mjs, and inlined Delete Check",
+    "Do not overlay workflow-transitions.mjs or the production SPA"
+  ],
+  "outstanding": {
+    "c1c_cross_tenant_deny": "outstanding and separately gated",
+    "production_sql53_inspect": "required before RPC ADD/call",
+    "this_workstream_production_approval": "not issued",
+    "official_production_lambda_overlay_workflow": "absent; staging has guarded-staging-lambda-overlay.yml only",
+    "endorsement_stage_sql": "not required for settlement; required only before workflow-transitions",
+    "production_customer_uat": "not authorized and not recommended"
+  },
+  "guard_verification": {
+    "exclusive_leases": true,
+    "fresh_live_fingerprints": true,
+    "revision_id_cas": true,
+    "single_use_receipts": true,
+    "staging_acceptance_required_for_production": true,
+    "staging_receipt_cannot_authorize_production": true,
+    "second_fingerprint_before_write": true,
+    "stop_on_drift": "DEPLOYMENT_COLLISION",
+    "same_file_conflict": "SOURCE_RECONCILIATION_REQUIRED",
+    "spa_composition": "SOURCE_COMPOSITION_REQUIRED",
+    "hand_written_receipt": "RECEIPT_FORGED",
+    "receipts_created_this_inspection": false,
+    "locks_modified_this_inspection": false,
+    "official_production_lambda_gha_twin": false
+  },
+  "workstream_risks": [
+    "Collection V2 settlement PRs #737/#744/#691 are concurrent production workstreams; they do not own claim-settlement-rpc.mjs or data.mjs, but a full ZIP replace would overwrite them",
+    "SQL 39 PR #702 and SQL 40 PR #704 own executor/RLS files; do not apply those migrations",
+    "production-spa is PRODUCTION_LOCKED; do not retarget CBOwj-7W",
+    "database-rls tree hash 22152a19 must not be retargeted"
+  ],
+  "recommended_next_safe_action": "Owner separately authorizes a production SQL 53 existence/hash inspect. Do not deploy Lambda or SPA. Do not apply SQL 39/40/44/20261007193200. Await that inspect before any production overlay authorization.",
+  "notes": "Read-only inspection only. Production live state is authoritative. Historical inspect 37812416526 / 37821736928 is evidence; today's CodeSha256 and RevisionId match, so those member hashes remain current. Staging and production are not identical."
+}
