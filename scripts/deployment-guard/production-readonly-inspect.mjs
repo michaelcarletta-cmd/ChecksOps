@@ -172,7 +172,7 @@ export function buildAwsArgs(action, target = {}) {
       }
       return [
         'rds', 'describe-db-instances',
-        '--query', '{DBInstances:DBInstances[].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn,VpcId:DBSubnetGroup.VpcId,SubnetIds:DBSubnetGroup.Subnets[].SubnetIdentifier,VpcSecurityGroupIds:VpcSecurityGroups[].VpcSecurityGroupId},ObservedInstanceCount:length(DBInstances)}',
+        '--query', '{DBInstances:DBInstances[].{DBInstanceArn:DBInstanceArn,SecretArn:MasterUserSecret.SecretArn,VpcId:DBSubnetGroup.VpcId,SubnetIds:DBSubnetGroup.Subnets[].SubnetIdentifier,VpcSecurityGroupIds:VpcSecurityGroups[].VpcSecurityGroupId,Engine:Engine,EngineVersion:EngineVersion,DBInstanceStatus:DBInstanceStatus,MultiAZ:MultiAZ,ReplicaSource:ReadReplicaSourceDBInstanceIdentifier,EndpointPort:Endpoint.Port},ObservedInstanceCount:length(DBInstances)}',
       ];
     case 'ec2:DescribeSecurityGroups': {
       if (Object.keys(target).length !== 1 || !Array.isArray(target.groupIds)) {
@@ -370,15 +370,55 @@ function asResourceIds(value) {
   }).filter((item) => typeof item === 'string' && item.length > 0))];
 }
 
+function isApprovedRdsEngine(value) {
+  return value === 'postgres' || value === 'aurora-postgresql';
+}
+
+function isApprovedRdsStatus(value) {
+  return typeof value === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(value);
+}
+
+function isApprovedEngineVersion(value) {
+  return typeof value === 'string' && /^\d{1,2}(?:\.\d{1,3}){0,3}$/.test(value);
+}
+
 function normalizeRdsInstance(instance) {
   if (!isProductionRdsInstanceArn(instance?.DBInstanceArn)) return null;
+  const replicaSource = instance.ReadReplicaSourceDBInstanceIdentifier || instance.ReplicaSource || null;
+  const endpointPort = Number.isInteger(instance.Endpoint?.Port)
+    ? instance.Endpoint.Port
+    : Number.isInteger(instance.EndpointPort) ? instance.EndpointPort : null;
   return {
     resource_arn: instance.DBInstanceArn,
     secret_arn: instance.MasterUserSecret?.SecretArn || instance.SecretArn || null,
     vpc_id: instance.DBSubnetGroup?.VpcId || instance.VpcId || null,
     subnet_ids: asResourceIds(instance.DBSubnetGroup?.Subnets || instance.SubnetIds),
     security_group_ids: asResourceIds(instance.VpcSecurityGroups || instance.VpcSecurityGroupIds),
+    engine: isApprovedRdsEngine(instance.Engine) ? instance.Engine : null,
+    engine_version: isApprovedEngineVersion(instance.EngineVersion) ? instance.EngineVersion : null,
+    status: isApprovedRdsStatus(instance.DBInstanceStatus) ? instance.DBInstanceStatus : null,
+    multi_az: typeof instance.MultiAZ === 'boolean' ? instance.MultiAZ : null,
+    replica_source_present: Boolean(replicaSource),
+    endpoint_port: Number.isInteger(endpointPort) ? endpointPort : null,
   };
+}
+
+function observedVpcInstances(metadata, network) {
+  if (!metadata) return [];
+  return rdsInstanceRecords(metadata)
+    .filter((instance) => network.vpc_id && instance.vpc_id === network.vpc_id)
+    .map((instance) => ({
+      resource_arn: instance.resource_arn,
+      vpc_id: instance.vpc_id,
+      security_group_ids: instance.security_group_ids,
+      engine: instance.engine,
+      engine_version: instance.engine_version,
+      status: instance.status,
+      multi_az: instance.multi_az,
+      replica_source_present: instance.replica_source_present,
+      endpoint_port: instance.endpoint_port,
+      used_as_proof: false,
+    }));
 }
 
 function rdsInstanceRecords(metadata) {
@@ -795,6 +835,15 @@ async function downloadLambdaPackage(location, fetchImpl) {
   }
 }
 
+function livePackageMember(membersByPath, relativePath) {
+  const exact = membersByPath.get(relativePath);
+  if (exact) return exact;
+  if (!relativePath.startsWith('aws/functions/api/')) return null;
+  const basename = relativePath.slice('aws/functions/api/'.length);
+  if (!basename || basename.includes('/')) return null;
+  return membersByPath.get(basename) || null;
+}
+
 function inventoryLambdaPackage(zip) {
   if (zipEntryCount(zip) === null) throw new Error('invalid Lambda package member list');
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-live-lambda-'));
@@ -1109,6 +1158,10 @@ export async function inspectProduction({
     })),
     unresolved_variables: unresolvedVariableNames,
     candidate_resources: referencedTargets,
+    observed_db_instances: observedVpcInstances(
+      describedSecrets.find((secret) => secret.instances != null)?.instances,
+      network,
+    ),
     unresolved_references: [
       ...unresolvedTargetVariableNames.map((variable_name) => ({
         variable_name,
@@ -1189,7 +1242,7 @@ export async function inspectProduction({
       stage = 'source_comparison';
       const sourceComparisons = CURRENT_SOURCE_MEMBERS.map((relativePath) => {
         const expectedSha256 = safeHash(fs.readFileSync(path.join(SOURCE_ROOT, relativePath)));
-        const live = membersByPath.get(relativePath);
+        const live = livePackageMember(membersByPath, relativePath);
         return {
           repository_path: relativePath,
           member_path: live?.path || null,
@@ -1440,6 +1493,10 @@ export function buildInspectionSummary(report) {
       unresolved_variables: report.database.unresolved_variables || [],
       candidate_resources: (report.database.candidate_resources || []).map((resource) => pick(resource, [
         'reference_type', 'resource_arn', 'association',
+      ])),
+      observed_db_instances: (report.database.observed_db_instances || []).map((instance) => pick(instance, [
+        'resource_arn', 'vpc_id', 'security_group_ids', 'engine', 'engine_version',
+        'status', 'multi_az', 'replica_source_present', 'endpoint_port', 'used_as_proof',
       ])),
       unresolved_references: (report.database.unresolved_references || []).map((reference) => pick(reference, [
         'variable_name', 'reference_type', 'identifier', 'required_permission',
