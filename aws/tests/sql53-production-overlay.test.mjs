@@ -116,13 +116,20 @@ test('overlay fails closed if unrelated live members would change', () => {
   assert.notEqual(EVAL.candidate_members['index.mjs'], sha256Text(MAIN_INDEX));
 });
 
-test('official lambda-overlay CLI stays evaluate-only', () => {
-  assert.equal(PIN.authorization, 'evaluate-only');
-  assert.equal(PIN.apply_authorized, false);
+test('official lambda-overlay CLI stays evaluate-only and records the applied live pin', () => {
+  assert.equal(PIN.authorization, 'owner-authorized-guarded-lambda-overlay');
+  assert.equal(PIN.apply_authorized, true);
+  assert.equal(PIN.verdict, 'OVERLAY_DEPLOYED');
   assert.equal(PIN.live.code_sha256, SQL53_OVERLAY_LIVE_CODE_SHA256);
   assert.equal(PIN.live.revision_id, SQL53_OVERLAY_LIVE_REVISION_ID);
   assert.equal(PIN.live.sql53_authorization_env_present, false);
   assert.equal(PIN.live.sql53_expires_at_env_present, false);
+  assert.equal(PIN.applied.code_sha256, 'oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=');
+  assert.equal(PIN.applied.revision_id, '534d4e36-0e62-461e-948e-e2bf00d3920e');
+  assert.equal(PIN.applied.index_sha256, MAPS.patched_index_sha256);
+  assert.equal(PIN.applied.inspect_sha256, MAPS.inspect_sha256);
+  assert.equal(PIN.applied.sql53_authorization_env_present, false);
+  assert.equal(PIN.applied.sql53_expires_at_env_present, false);
   assert.equal(PIN.http_route, null);
   const result = spawnSync(process.execPath, [
     path.join(ROOT, 'scripts/deployment-guard/lambda-overlay.mjs'),

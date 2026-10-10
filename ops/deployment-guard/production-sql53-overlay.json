@@ -1,9 +1,9 @@
 {
   "id": "production-sql53-overlay",
-  "authorization": "evaluate-only",
-  "verdict": "PREPARED",
-  "apply_authorized": false,
-  "lambda_overlay_authorized": false,
+  "authorization": "owner-authorized-guarded-lambda-overlay",
+  "verdict": "OVERLAY_DEPLOYED",
+  "apply_authorized": true,
+  "lambda_overlay_authorized": true,
   "dispatch_authorized": false,
   "iam_mutation_authorized": false,
   "database_contacted": false,
@@ -52,14 +52,25 @@
     "ok": true,
     "code": null,
     "overlay_allowed": true,
-    "apply": false,
-    "note": "evaluate-only; no AWS write"
+    "apply": true,
+    "note": "owner-authorized guarded apply; independently verified live ZIP"
+  },
+  "applied": {
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "last_modified": "2026-10-10T18:26:47.000+0000",
+    "member_count": 6482,
+    "index_sha256": "77836ef63e6fbca6fb3e49f5970e705cf38b2af653c1be2c4a728be04caf3a9f",
+    "inspect_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+    "inspect_present": true,
+    "sql53_authorization_env_present": false,
+    "sql53_expires_at_env_present": false
   },
   "http_route": null,
   "remaining_blockers": [
-    "Later overlay apply authorization through scripts/deployment-guard/lambda-overlay.mjs",
     "Later temporary owner-chosen token and CHECKSOPS_SQL53_READONLY_INSPECT_EXPIRES_AT",
     "Later tightly scoped lambda:InvokeFunction; no API Gateway grant",
+    "Do not invoke the diagnostic until those are authorized",
     "Do not change live CHECKSOPS_ENV; diagnostic accepts production-prep"
   ]
 }

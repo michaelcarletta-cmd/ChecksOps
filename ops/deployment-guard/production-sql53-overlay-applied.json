@@ -1,0 +1,52 @@
+{
+  "id": "production-sql53-overlay-applied",
+  "authorization": "owner-authorized-guarded-lambda-overlay",
+  "verdict": "OVERLAY_DEPLOYED",
+  "overlay_deployed": true,
+  "function_name": "checksops-production-prep-api",
+  "workstream_id": "prod-sql53-overlay-prep-3bc9",
+  "commit": "e382a5d713f37606bc3f2e9821405ae5e4822cc9",
+  "applied_at": "2026-10-10T18:26:47.000+0000",
+  "mechanism": "scripts/deployment-guard/lib/lambda-overlay-apply.mjs",
+  "receipt_issued_by": "scripts/deployment-guard/preflight.mjs --acquire-lease --receipt",
+  "diagnostic_invoked": false,
+  "database_contacted": false,
+  "iam_mutation": false,
+  "spa_deployed": false,
+  "environment_variables_changed": false,
+  "before": {
+    "code_sha256": "DMcCoF3dpIiULPe530F8DJ8vC1wL1BP7ayqr+e8SCyI=",
+    "revision_id": "fb17cb70-7b50-468d-a0a6-59a020c43f8c",
+    "last_modified": "2026-10-06T20:29:23.000+0000",
+    "member_count": 6481,
+    "index_sha256": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+    "inspect_present": false
+  },
+  "after": {
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "last_modified": "2026-10-10T18:26:47.000+0000",
+    "last_update_status": "Successful",
+    "member_count": 6482,
+    "index_sha256": "77836ef63e6fbca6fb3e49f5970e705cf38b2af653c1be2c4a728be04caf3a9f",
+    "inspect_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+    "inspect_present": true,
+    "checksops_env": "production-prep",
+    "sql53_authorization_env_present": false,
+    "sql53_expires_at_env_present": false
+  },
+  "member_diff": {
+    "added": ["sql53-production-readonly-inspect.mjs"],
+    "changed": ["index.mjs"],
+    "deleted": [],
+    "identical_count": 6480
+  },
+  "http_diagnostic": {
+    "route_registered": false,
+    "api_gateway_status_before": 403,
+    "api_gateway_status_after": 403,
+    "note": "API Gateway continues to refuse the path; no new public HTTP route was added"
+  },
+  "config_unchanged": true,
+  "independent_zip_sha256_matches_codesha256": true
+}
