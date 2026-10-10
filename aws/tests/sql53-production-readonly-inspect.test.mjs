@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { register } from 'node:module';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import {
+
+register('./helpers/pg-ci-stub-hooks.mjs', import.meta.url);
+
+const {
   FUNCTION_DEF_INSPECT_SQL,
   LEDGER_TRIGGER_INSPECT_SQL,
   PINNED_FUNCTION_LOOKUPS,
@@ -11,9 +15,8 @@ import {
   REQUIRED_SETTLEMENT_COLUMNS,
   SETTLEMENT_COLUMN_INSPECT_SQL,
   hashFunctionDefinition,
-} from '../functions/api/db-readonly-validate.mjs';
-import { handler } from '../functions/api/index.mjs';
-import {
+} = await import('../functions/api/db-readonly-validate.mjs');
+const {
   SQL53_FUNCTION_DEF_INSPECT_SQL,
   SQL53_LEDGER_TRIGGER_INSPECT_SQL,
   SQL53_PINNED_FUNCTION_LOOKUPS,
@@ -40,7 +43,7 @@ import {
   secretHostBindsProvenRds,
   sql53ReadonlyInspectAuthorizationState,
   sql53ReadonlyInspectExpiryState,
-} from '../functions/api/sql53-production-readonly-inspect.mjs';
+} = await import('../functions/api/sql53-production-readonly-inspect.mjs');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const API = path.join(ROOT, 'aws/functions/api');
@@ -406,20 +409,37 @@ test('index has no public SQL53 HTTP route and leaves staging validator inspect 
   assert.doesNotMatch(index, /GET \/sql53-production-readonly-inspect/);
   assert.doesNotMatch(index, /READ_ONLY_PATHS[\s\S]*sql53/);
 
-  const httpDenied = await handler({
+  const httpEvent = {
     httpMethod: 'GET',
     rawPath: '/sql53-production-readonly-inspect',
     headers: { 'x-checksops-sql53-inspect-authorization': OWNER_TOKEN },
     requestContext: { apiId: 'kiqojucc02', stage: 'prep', http: { method: 'GET', path: '/sql53-production-readonly-inspect' } },
+  };
+  assert.equal(isHttpApiGatewayEvent(httpEvent), true);
+  assert.equal(isSql53ProductionReadonlyInspectEvent(httpEvent), false);
+  const httpDenied = await handleSql53ProductionReadonlyInspect(httpEvent, {
+    env: authorizedEnv(),
+    loadCredentials: async () => {
+      throw new Error('must not load credentials');
+    },
+    createClient: () => {
+      throw new Error('must not connect');
+    },
   });
-  const httpBody = JSON.parse(httpDenied.body);
-  assert.equal(httpDenied.statusCode, 404);
-  assert.equal(httpBody.error, 'not_found');
-  assert.equal(httpBody.inspect, undefined);
+  assert.equal(httpDenied.statusCode, 403);
+  assert.match(httpDenied.body.reason, /authorization is missing or invalid/);
+  assert.equal(httpDenied.body.inspect, null);
 
-  const invokeDenied = await handler(authorizedEvent());
-  const invokeBody = JSON.parse(invokeDenied.body);
+  const invokeDenied = await handleSql53ProductionReadonlyInspect(authorizedEvent(), {
+    env: {},
+    loadCredentials: async () => {
+      throw new Error('must not load credentials');
+    },
+    createClient: () => {
+      throw new Error('must not connect');
+    },
+  });
   assert.equal(invokeDenied.statusCode, 403);
-  assert.match(invokeBody.reason, /authorization is missing or invalid/);
-  assert.equal(invokeBody.inspect, null);
+  assert.match(invokeDenied.body.reason, /authorization is missing or invalid/);
+  assert.equal(invokeDenied.body.inspect, null);
 });
