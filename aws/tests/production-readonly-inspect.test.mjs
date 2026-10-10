@@ -13,6 +13,7 @@ import {
   extractSecretHostForCompare,
   inspectProduction,
   PRODUCTION_PINS,
+  redactInspectionValue,
   SECRET_HOST_COMPARE_AUTHORIZATION,
   SECRET_HOST_COMPARE_AUTHORIZATION_ENV,
   secretHostCompareAuthorizationState,
@@ -44,7 +45,24 @@ const LAMBDA_ZIP = (() => {
     fs.rmSync(temp, { recursive: true, force: true });
   }
 })();
+const LAMBDA_FLAT_ZIP = (() => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'production-readonly-lambda-flat-'));
+  try {
+    for (const relativePath of LAMBDA_SOURCE_PATHS) {
+      fs.copyFileSync(
+        new URL(`../../${relativePath}`, import.meta.url),
+        path.join(temp, path.basename(relativePath)),
+      );
+    }
+    const archive = path.join(temp, 'package.zip');
+    execFileSync('zip', ['-q', '-r', archive, ...LAMBDA_SOURCE_PATHS.map((item) => path.basename(item))], { cwd: temp });
+    return fs.readFileSync(archive);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+})();
 const LAMBDA_CODE_SHA = createHash('sha256').update(LAMBDA_ZIP).digest('base64');
+const LAMBDA_FLAT_CODE_SHA = createHash('sha256').update(LAMBDA_FLAT_ZIP).digest('base64');
 const LAMBDA_CODE_LOCATION = 'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?temporary-token=must-not-leak';
 const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw';
 const RDS_INSTANCE_ARN = 'arn:aws:rds:us-east-1:806168576068:db:production-db';
@@ -1481,9 +1499,8 @@ test('secret host compare helpers fail closed and never treat names as hosts', (
   });
   assert.deepEqual(unique, {
     match_count: 1,
-    unique: true,
-    compared_instance_count: 2,
-    matching_instance_identifier: 'production-db',
+    unique_match: true,
+    matched_rds_identifier: 'production-db',
     resource_arn: RDS_INSTANCE_ARN,
   });
 });
@@ -1512,10 +1529,12 @@ test('authorized secret host compare binds exactly one RDS endpoint without pers
   });
   assert.equal(report.database.status, 'complete');
   assert.equal(report.database.host_compare.status, 'complete');
-  assert.equal(report.database.host_compare.unique, true);
+  assert.equal(report.database.host_compare.unique_match, true);
   assert.equal(report.database.host_compare.match_count, 1);
-  assert.equal(report.database.host_compare.matching_instance_identifier, 'production-db');
-  assert.equal(report.database.host_compare.resource_arn, RDS_INSTANCE_ARN);
+  assert.equal(report.database.host_compare.matched_rds_identifier, 'production-db');
+  assert.deepEqual(Object.keys(report.database.host_compare).sort(), [
+    'match_count', 'matched_rds_identifier', 'reason', 'status', 'unique_match',
+  ]);
   assert.deepEqual(report.database.candidate_resources, [{
     reference_type: 'rds-instance',
     resource_arn: RDS_INSTANCE_ARN,
@@ -1546,9 +1565,9 @@ test('authorized secret host compare fails closed on zero or multiple endpoint m
     fetchImpl: mockFetch,
   });
   assert.equal(zero.database.status, 'refused_unproven_aws_production_target');
-  assert.equal(zero.database.host_compare.unique, false);
+  assert.equal(zero.database.host_compare.unique_match, false);
   assert.equal(zero.database.host_compare.match_count, 0);
-  assert.equal(zero.database.host_compare.matching_instance_identifier, null);
+  assert.equal(zero.database.host_compare.matched_rds_identifier, null);
   assert.match(zero.database.host_compare.reason, /zero observed RDS endpoints/);
 
   const bothSameHost = {
@@ -1572,8 +1591,8 @@ test('authorized secret host compare fails closed on zero or multiple endpoint m
   });
   assert.equal(multiple.database.status, 'refused_unproven_aws_production_target');
   assert.equal(multiple.database.host_compare.match_count, 2);
-  assert.equal(multiple.database.host_compare.unique, false);
-  assert.equal(multiple.database.host_compare.matching_instance_identifier, null);
+  assert.equal(multiple.database.host_compare.unique_match, false);
+  assert.equal(multiple.database.host_compare.matched_rds_identifier, null);
 });
 
 test('invalid or absent secret host compare authorization never calls GetSecretValue', async () => {
@@ -1592,8 +1611,8 @@ test('invalid or absent secret host compare authorization never calls GetSecretV
     runAws: mockAws(invalidCalls, hexVpcPersistenceOverrides(twoVpcRdsInstances())),
     fetchImpl: mockFetch,
   });
-  assert.equal(invalid.database.host_compare.authorized, false);
-  assert.equal(invalid.database.host_compare.required_phrase, SECRET_HOST_COMPARE_AUTHORIZATION);
+  assert.equal(invalid.database.host_compare.unique_match, false);
+  assert.match(invalid.database.host_compare.reason, /authorization is missing or invalid/);
   assert.equal(invalidCalls.some(({ action }) => action === 'secretsmanager:GetSecretValue'), false);
 });
 
@@ -1612,12 +1631,138 @@ test('authorized secret host compare reports GetSecretValue permission failure w
     })),
     fetchImpl: mockFetch,
   });
-  assert.equal(report.database.host_compare.required_permission, 'secretsmanager:GetSecretValue');
-  assert.equal(report.database.host_compare.unique, false);
+  assert.match(report.database.host_compare.reason, /GetSecretValue was authorized but did not succeed/);
+  assert.equal(report.database.host_compare.unique_match, false);
   assert.ok(report.missing_read_permissions.some((permission) => (
     permission.action === 'secretsmanager:GetSecretValue' && permission.resource === PERSISTENCE_SECRET_ARN
   )));
   assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('opaque-secret-must-not-be-persisted'), false);
+});
+
+test('authorized host compare refuses unverified package provenance without GetSecretValue', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'lambda:GetFunction': () => ({
+        Configuration: {
+          FunctionName: PRODUCTION_PINS.function_name,
+          CodeSha256: 'unverified-package-hash',
+          RevisionId: 'live-revision',
+        },
+        Code: { Location: LAMBDA_CODE_LOCATION },
+      }),
+      'secretsmanager:GetSecretValue': () => {
+        throw new Error('GetSecretValue must not run without proven provenance');
+      },
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.match(report.database.host_compare.reason, /runtime secret-reference source are not both verified/);
+  assert.equal(report.database.host_compare.unique_match, false);
+  assert.equal(report.database.host_compare.matched_rds_identifier, null);
+  assert.equal(calls.some(({ action }) => action === 'secretsmanager:GetSecretValue'), false);
+});
+
+test('flattened live secrets.mjs SHA match is sufficient provenance for host compare', async () => {
+  const secret = JSON.stringify({
+    username: 'checksops',
+    host: PRODUCTION_ENDPOINT,
+    port: 5432,
+    password: 'opaque-secret-must-not-be-persisted',
+  });
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        CodeSha256: LAMBDA_FLAT_CODE_SHA,
+        VpcConfig: {
+          VpcId: 'vpc-production',
+          SubnetIds: ['subnet-production'],
+          SecurityGroupIds: [LAMBDA_SG_ID],
+        },
+        Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+      }),
+      'lambda:GetFunction': () => ({
+        Configuration: {
+          FunctionName: PRODUCTION_PINS.function_name,
+          CodeSha256: LAMBDA_FLAT_CODE_SHA,
+          RevisionId: 'live-revision',
+        },
+        Code: { Location: LAMBDA_CODE_LOCATION },
+      }),
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? twoEndpointVpcInstances() : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': () => ({ SecretString: secret }),
+    })),
+    fetchImpl: (url, options) => {
+      if (new URL(url).hostname !== 'checksops.com') {
+        return Promise.resolve(new Response(LAMBDA_FLAT_ZIP, { status: 200 }));
+      }
+      return mockFetch(url, options);
+    },
+  });
+  const secrets = report.lambda.package.source_comparisons.find((item) => (
+    item.repository_path === 'aws/functions/api/secrets.mjs'
+  ));
+  assert.equal(secrets.member_path, 'secrets.mjs');
+  assert.equal(secrets.matches, true);
+  assert.equal(report.database.host_compare.status, 'complete');
+  assert.equal(report.database.host_compare.unique_match, true);
+  assert.equal(report.database.host_compare.matched_rds_identifier, 'production-db');
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes(PRODUCTION_ENDPOINT), false);
+});
+
+test('existing redactor still suppresses secret-named keys and host_compare remains visible', async () => {
+  const secret = 'opaque-secret-must-not-be-persisted';
+  assert.equal(redactInspectionValue({ host: PRODUCTION_ENDPOINT, password: secret }, 'secret_host_compare'), '[REDACTED]');
+  assert.equal(redactInspectionValue(secret, 'password'), '[REDACTED]');
+  assert.equal(redactInspectionValue(secret, 'database_url'), '[REDACTED]');
+  assert.equal(redactInspectionValue(secret, 'authorization'), '[REDACTED]');
+  const visible = redactInspectionValue({
+    status: 'complete',
+    reason: 'ok',
+    match_count: 1,
+    unique_match: true,
+    matched_rds_identifier: 'production-db',
+  }, 'host_compare');
+  assert.deepEqual(visible, {
+    status: 'complete',
+    reason: 'ok',
+    match_count: 1,
+    unique_match: true,
+    matched_rds_identifier: 'production-db',
+  });
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? twoEndpointVpcInstances() : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': () => ({
+        SecretString: JSON.stringify({
+          username: 'checksops',
+          host: PRODUCTION_ENDPOINT,
+          port: 5432,
+          password: secret,
+        }),
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  report.database.secret_host_compare = { host: PRODUCTION_ENDPOINT, password: secret };
+  report.database.password = secret;
+  const evidence = buildInspectionSummary(report);
+  const json = JSON.stringify(evidence);
+  assert.equal(typeof evidence.database.host_compare, 'object');
+  assert.equal(evidence.database.host_compare.matched_rds_identifier, 'production-db');
+  assert.equal(evidence.database.secret_host_compare, undefined);
+  assert.equal(evidence.database.password, undefined);
+  assert.equal(json.includes(secret), false);
+  assert.equal(json.includes(PRODUCTION_ENDPOINT), false);
 });
 
 test('secret host compare workflow is owner-gated and resource-scoped; default inspect still has no GetSecretValue', () => {

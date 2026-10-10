@@ -469,9 +469,8 @@ export function compareSecretHostToObservedEndpoints({
   if (!host || !vpcId) {
     return {
       match_count: 0,
-      unique: false,
-      compared_instance_count: 0,
-      matching_instance_identifier: null,
+      unique_match: false,
+      matched_rds_identifier: null,
       resource_arn: null,
     };
   }
@@ -489,31 +488,29 @@ export function compareSecretHostToObservedEndpoints({
   const unique = matches.length === 1;
   return {
     match_count: matches.length,
-    unique,
-    compared_instance_count: candidates.length,
-    matching_instance_identifier: unique ? matches[0].instance_identifier : null,
+    unique_match: unique,
+    matched_rds_identifier: unique ? matches[0].instance_identifier : null,
     resource_arn: unique ? matches[0].resource_arn : null,
   };
 }
 
 export function redactSecretHostCompare(result) {
   if (!result) return null;
+  const uniqueMatch = result.unique_match === true;
+  const identifier = uniqueMatch && isApprovedRdsInstanceIdentifier(result.matched_rds_identifier)
+    ? result.matched_rds_identifier
+    : null;
   return {
     status: result.status || null,
     reason: result.reason || null,
-    authorized: result.authorized === true,
-    unique: result.unique === true,
     match_count: Number.isInteger(result.match_count) ? result.match_count : 0,
-    compared_instance_count: Number.isInteger(result.compared_instance_count)
-      ? result.compared_instance_count
-      : 0,
-    matching_instance_identifier: isApprovedRdsInstanceIdentifier(result.matching_instance_identifier)
-      ? result.matching_instance_identifier
-      : null,
-    resource_arn: isProductionRdsInstanceArn(result.resource_arn) ? result.resource_arn : null,
-    required_permission: result.required_permission || null,
-    required_phrase: result.required_phrase || null,
+    unique_match: uniqueMatch,
+    matched_rds_identifier: identifier,
   };
+}
+
+export function redactInspectionValue(value, key = '') {
+  return redact(value, key);
 }
 
 function normalizeEndpointCompareInstance(instance) {
@@ -539,33 +536,32 @@ function refusedSecretHostCompare(reason, extras = {}) {
   return redactSecretHostCompare({
     status: 'refused_unproven_aws_production_target',
     reason,
-    authorized: extras.authorized === true,
-    unique: false,
+    unique_match: false,
     match_count: extras.match_count || 0,
-    compared_instance_count: extras.compared_instance_count || 0,
-    matching_instance_identifier: null,
-    resource_arn: null,
-    required_permission: extras.required_permission || null,
-    required_phrase: extras.required_phrase || null,
+    matched_rds_identifier: null,
   });
 }
 
 async function runAuthorizedSecretHostCompare({
   exactSecretReferences,
   network,
+  packageProvesRuntimeReference,
   readErrors,
   runAws,
 }) {
+  if (!packageProvesRuntimeReference) {
+    return refusedSecretHostCompare(
+      'live Lambda package identity and runtime secret-reference source are not both verified; GetSecretValue was not called',
+    );
+  }
   if (exactSecretReferences.length !== 1) {
     return refusedSecretHostCompare(
       'authorized secret host compare requires exactly one live DATABASE_SECRET_ARN',
-      { authorized: true },
     );
   }
   if (!network.vpc_id) {
     return refusedSecretHostCompare(
       'authorized secret host compare requires the live Lambda VPC',
-      { authorized: true },
     );
   }
   const secretArn = exactSecretReferences[0].identifier;
@@ -577,13 +573,11 @@ async function runAuthorizedSecretHostCompare({
   if (endpointPayload == null) {
     return refusedSecretHostCompare(
       'RDS endpoint metadata is unavailable for secret host compare',
-      { authorized: true, required_permission: 'rds:DescribeDBInstances' },
     );
   }
   if (secretValue == null) {
     return refusedSecretHostCompare(
       'secret value is unavailable for host compare; GetSecretValue was authorized but did not succeed',
-      { authorized: true, required_permission: 'secretsmanager:GetSecretValue' },
     );
   }
   const secretString = secretValue.SecretString;
@@ -598,7 +592,6 @@ async function runAuthorizedSecretHostCompare({
         : extracted.reason === 'secret_host_unavailable'
           ? 'authorized secret host compare could not read a comparable host field'
           : 'authorized secret host compare refused a malformed secret payload',
-      { authorized: true },
     );
   }
   const instances = rdsDescribePayload(endpointPayload).instances
@@ -611,27 +604,20 @@ async function runAuthorizedSecretHostCompare({
     vpcId: network.vpc_id,
   });
   extracted.host = null;
-  if (comparison.match_count === 1 && comparison.unique) {
+  if (comparison.match_count === 1 && comparison.unique_match) {
     return redactSecretHostCompare({
       status: 'complete',
       reason: 'authorized secret host compare binds the live DATABASE_SECRET_ARN host to exactly one observed RDS endpoint',
-      authorized: true,
-      unique: true,
+      unique_match: true,
       match_count: 1,
-      compared_instance_count: comparison.compared_instance_count,
-      matching_instance_identifier: comparison.matching_instance_identifier,
-      resource_arn: comparison.resource_arn,
+      matched_rds_identifier: comparison.matched_rds_identifier,
     });
   }
   return refusedSecretHostCompare(
     comparison.match_count === 0
       ? 'authorized secret host compare matched zero observed RDS endpoints'
       : 'authorized secret host compare matched multiple observed RDS endpoints',
-    {
-      authorized: true,
-      match_count: comparison.match_count,
-      compared_instance_count: comparison.compared_instance_count,
-    },
+    { match_count: comparison.match_count },
   );
 }
 
@@ -1017,6 +1003,15 @@ function lambdaCodeLocationDiagnostics(location) {
     scheme_classification: schemeClassification,
     validator_rejection_reason: 'untrusted_code_location',
   };
+}
+
+function livePackageMember(membersByPath, relativePath) {
+  const exact = membersByPath.get(relativePath);
+  if (exact) return exact;
+  if (!relativePath.startsWith('aws/functions/api/')) return null;
+  const basename = relativePath.slice('aws/functions/api/'.length);
+  if (!basename || basename.includes('/')) return null;
+  return membersByPath.get(basename) || null;
 }
 
 async function downloadLambdaPackage(location, fetchImpl) {
@@ -1443,7 +1438,7 @@ export async function inspectProduction({
       stage = 'source_comparison';
       const sourceComparisons = CURRENT_SOURCE_MEMBERS.map((relativePath) => {
         const expectedSha256 = safeHash(fs.readFileSync(path.join(SOURCE_ROOT, relativePath)));
-        const live = membersByPath.get(relativePath);
+        const live = livePackageMember(membersByPath, relativePath);
         return {
           repository_path: relativePath,
           member_path: live?.path || null,
@@ -1529,19 +1524,19 @@ export async function inspectProduction({
   if (hostCompareState === 'invalid') {
     database.host_compare = refusedSecretHostCompare(
       'secret host compare authorization is missing or invalid; GetSecretValue was not called',
-      { required_phrase: SECRET_HOST_COMPARE_AUTHORIZATION },
     );
   } else if (hostCompareState === 'authorized') {
     database.host_compare = await runAuthorizedSecretHostCompare({
       exactSecretReferences,
       network,
+      packageProvesRuntimeReference,
       readErrors,
       runAws,
     });
-    if (database.host_compare.status === 'complete' && database.host_compare.unique) {
+    if (database.host_compare.status === 'complete' && database.host_compare.unique_match) {
       const hostTarget = {
         reference_type: 'rds-instance',
-        resource_arn: database.host_compare.resource_arn,
+        resource_arn: `arn:aws:rds:${REGION}:${ACCOUNT_ID}:db:${database.host_compare.matched_rds_identifier}`,
         association: 'secret-host-endpoint',
       };
       const conflict = referencedTargets.length === 1
@@ -1551,11 +1546,7 @@ export async function inspectProduction({
         database.reason = 'authorized secret host compare conflicts with an exclusive network association';
         database.host_compare = refusedSecretHostCompare(
           'authorized secret host compare conflicts with an exclusive network association',
-          {
-            authorized: true,
-            match_count: database.host_compare.match_count,
-            compared_instance_count: database.host_compare.compared_instance_count,
-          },
+          { match_count: database.host_compare.match_count },
         );
       } else {
         database.status = 'complete';
@@ -1745,9 +1736,7 @@ export function buildInspectionSummary(report) {
       ])),
       ...(report.database.host_compare ? {
         host_compare: pick(report.database.host_compare, [
-          'status', 'reason', 'authorized', 'unique', 'match_count',
-          'compared_instance_count', 'matching_instance_identifier',
-          'resource_arn', 'required_permission', 'required_phrase',
+          'status', 'reason', 'match_count', 'unique_match', 'matched_rds_identifier',
         ]),
       } : {}),
     } : null,

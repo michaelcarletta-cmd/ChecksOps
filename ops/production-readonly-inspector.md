@@ -81,14 +81,19 @@ An owner-gated companion workflow,
 the live secret host to observed RDS endpoints only after explicit
 authorization. See `ops/production-secret-host-compare.md`. That path still
 never persists the secret value, credentials, connection string, or hostname,
-and it fails closed on zero or multiple endpoint matches. Do not add
-`GetSecretValue` to the default inspect session policy.
+and it fails closed on unverified package provenance or zero or multiple
+endpoint matches. The result is stored as `database.host_compare` so the
+existing redactor does not suppress it. Do not add `GetSecretValue` to
+the default inspect session policy.
 
 The SPA fingerprint is fetched using HTTPS GET from the pinned `checksops.com`
 host. The report compares the live entry, index/bundle hashes, S3 version, and
 CloudFront identity with the production SPA lock. Lambda package evidence
 records CodeSha256, RevisionId, package hash, member paths/sizes/hashes, and
-exact-path comparisons for the reviewed current-main API sources. It does not
+exact-path comparisons for the reviewed current-main API sources. Flattened
+production packages may match `aws/functions/api/<file>` to a root `<file>`
+member only when the SHA-256 is identical. Exact repository paths still win.
+It does not
 record the presigned URL, ZIP bytes, environment values, or source contents.
 Lambda package downloads accept only the pinned-region AWS Lambda S3 virtual-
 hosted or bucket-path endpoints for `awslambda-us-east-1` / `awslambda-us-east-1-tasks`,
