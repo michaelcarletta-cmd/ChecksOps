@@ -1,0 +1,59 @@
+{
+  "id": "production-sql53-oidc-trust",
+  "authorization": "prepare-only",
+  "iam_update_authorized": false,
+  "apply_authorized": false,
+  "fingerprint_only_authorized": false,
+  "diagnostic_invoked": false,
+  "role_name": "ChecksOpsProductionSql53ConfigWriter",
+  "role_arn": "arn:aws:iam::806168576068:role/ChecksOpsProductionSql53ConfigWriter",
+  "inspected_at": "2026-10-10T20:37:05Z",
+  "cursor_oidc": {
+    "issuer": "https://api.cursor.com",
+    "audience": "sts.amazonaws.com",
+    "subject": "user:325724407",
+    "algorithm": "RS256",
+    "live_token_matches_owner": true,
+    "provider_arn": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com",
+    "provider_iam_read": "AccessDenied",
+    "provider_proven_by": "this exact token assumed ChecksOpsCursorCloudStaging via AssumeRoleWithWebIdentity"
+  },
+  "owner_identity": {
+    "cursor_user_id": 325724407,
+    "cursor_name": "Michael Carletta",
+    "verified_as": "cursor_cloud_owner_subject_and_live_oidc_sub"
+  },
+  "can_assume_today": false,
+  "can_assume_after_additive_trust": true,
+  "secure_assume_assessment": {
+    "ok": true,
+    "reason": "Live OIDC token iss/aud/sub already match the working Cursor Cloud provider used by prior owner-created roles. Adding only StringEquals sub=user:325724407 does not trust other Cursor users or ChecksOpsCursorCloudStaging. Current writer trust is Identity Center AdministratorAccess only, so this identity cannot assume until the additive statement is applied."
+  },
+  "existing_administrator_access": {
+    "owner_reported": "AWS IAM Identity Center AdministratorAccess role",
+    "live_statement_read": "AccessDenied",
+    "preserve": true,
+    "exact_arn": "unverified_from_cursor_staging"
+  },
+  "live_permissions": {
+    "verified": false,
+    "get_role": "AccessDenied",
+    "get_role_policy": "AccessDenied",
+    "required_actions": [
+      "lambda:GetFunctionConfiguration",
+      "lambda:UpdateFunctionConfiguration",
+      "lambda:InvokeFunction"
+    ],
+    "required_resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
+  },
+  "selected_trust": "additive-cursor-oidc-owner-pending-approval",
+  "additive_statement_file": "aws/production/sql53-config-writer-trust-additive-cursor-oidc.json",
+  "do_not": [
+    "replace or edit the existing Identity Center AdministratorAccess allow",
+    "trust ChecksOpsCursorCloudStaging",
+    "trust other Cursor users or wildcard api.cursor.com:sub",
+    "trust GitHub OIDC",
+    "update IAM until the owner approves this additive statement",
+    "invoke the diagnostic or set SQL53 environment variables"
+  ]
+}
