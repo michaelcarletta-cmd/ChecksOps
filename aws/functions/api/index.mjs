@@ -33,6 +33,10 @@ import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
 import { handleCollectionV2UatRequest } from './tenant-collection-v2-uat.mjs';
 import { handleTmpRlsCatalogInspectRequest } from './tenant-maintenance-payments-catalog-inspect.mjs';
+import {
+  handleSql53ProductionReadonlyInspect,
+  isSql53ProductionReadonlyInspectEvent,
+} from './sql53-production-readonly-inspect.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -136,6 +140,11 @@ export const handleDbReadonlyValidateRequest = async (event, {
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
+
+  if (isSql53ProductionReadonlyInspectEvent(event)) {
+    const result = await handleSql53ProductionReadonlyInspect(event);
+    return json(result.statusCode, result.body);
+  }
 
   if (method === 'OPTIONS') {
     return json(204, {});
