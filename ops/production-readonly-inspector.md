@@ -73,8 +73,16 @@ target. No persistence target is accepted unless live AWS configuration, the
 verified runtime package, and AWS resource metadata independently establish the
 complete binding; otherwise the report remains
 `refused_unproven_aws_production_target`. The inspector still never accepts a
-connection string, contacts a database, reads a secret value, or inspects SQL
-function definitions.
+connection string, contacts a database, or inspects SQL function definitions.
+The default workflow still never calls `GetSecretValue`.
+
+An owner-gated companion workflow,
+`.github/workflows/inspect-production-secret-host-compare.yml`, may compare
+the live secret host to observed RDS endpoints only after explicit
+authorization. See `ops/production-secret-host-compare.md`. That path still
+never persists the secret value, credentials, connection string, or hostname,
+and it fails closed on zero or multiple endpoint matches. Do not add
+`GetSecretValue` to the default inspect session policy.
 
 The SPA fingerprint is fetched using HTTPS GET from the pinned `checksops.com`
 host. The report compares the live entry, index/bundle hashes, S3 version, and
@@ -130,10 +138,13 @@ reads. This repository update changes only the workflow session policy and
 inspector source. No AWS/IAM identity policy is applied here; the owner must
 add the same `ec2:DescribeSecurityGroups` allow to
 `ChecksOpsGitHubProductionReadOnlyInspect` before a live inspect can use it.
-Do not grant `GetSecretValue`, wildcard Secrets Manager access, SSM value
-reads, `ec2:AuthorizeSecurityGroupIngress`, `ec2:RevokeSecurityGroupIngress`,
-`ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, or RDS mutation/data-plane
-access. Do not expand `rds:DescribeDBInstances` further without separate
+Do not grant `GetSecretValue` on the default inspect path, wildcard Secrets
+Manager access, SSM value reads, `ec2:AuthorizeSecurityGroupIngress`,
+`ec2:RevokeSecurityGroupIngress`, `ec2:CreateSecurityGroup`,
+`ec2:DeleteSecurityGroup`, or RDS mutation/data-plane access. The optional
+secret-host-compare identity statement is documented in
+`ops/deployment-guard/production-secret-host-compare-iam.json` and must not be
+applied from this repository update. Do not expand `rds:DescribeDBInstances` further without separate
 authorization. Persistence remains unproven unless metadata independently binds
 the live Lambda to exactly one production RDS instance and the live package
 proves the runtime secret source.

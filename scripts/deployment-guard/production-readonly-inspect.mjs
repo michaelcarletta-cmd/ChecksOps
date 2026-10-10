@@ -74,6 +74,9 @@ if (
   throw new Error('production inspector pins do not match current guard metadata');
 }
 
+export const SECRET_HOST_COMPARE_AUTHORIZATION = 'OWNER_AUTHORIZED_PRODUCTION_SECRET_HOST_COMPARE';
+export const SECRET_HOST_COMPARE_AUTHORIZATION_ENV = 'CHECKSOPS_SECRET_HOST_COMPARE_AUTHORIZATION';
+
 export const PRODUCTION_PINS = Object.freeze({
   environment: 'production',
   account_id: ACCOUNT_ID,
@@ -94,6 +97,7 @@ const AWS_ACTIONS = Object.freeze({
   'lambda:GetFunctionConfiguration': `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`,
   'lambda:GetFunction': `arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}`,
   'secretsmanager:DescribeSecret': `the exact production secret ARN referenced by ${FUNCTION_NAME}`,
+  'secretsmanager:GetSecretValue': `the exact production secret ARN referenced by ${FUNCTION_NAME}`,
   'rds:DescribeDBInstances': '*',
   'ec2:DescribeSecurityGroups': '*',
   'apigateway:GET': `arn:aws:apigateway:${REGION}::/apis/${API_ID}/*`,
@@ -166,9 +170,27 @@ export function buildAwsArgs(action, target = {}) {
         'secretsmanager', 'describe-secret', '--secret-id', target.secretArn,
         '--query', '{ARN:ARN,Name:Name,OwningService:OwningService}',
       ];
-    case 'rds:DescribeDBInstances':
+    case 'secretsmanager:GetSecretValue':
       if (Object.keys(target).length !== 1 || !isProductionSecretArn(target.secretArn)) {
+        throw new Error('unexpected production persistence secret');
+      }
+      return [
+        'secretsmanager', 'get-secret-value', '--secret-id', target.secretArn,
+        '--query', '{SecretString:SecretString}',
+      ];
+    case 'rds:DescribeDBInstances':
+      if (!isProductionSecretArn(target.secretArn)
+          || Object.keys(target).some((key) => !['secretArn', 'endpointCompare'].includes(key))
+          || (Object.keys(target).length === 1 && !('secretArn' in target))
+          || (Object.keys(target).length === 2 && target.endpointCompare !== true)
+          || ![1, 2].includes(Object.keys(target).length)) {
         throw new Error('unexpected production RDS metadata target');
+      }
+      if (target.endpointCompare === true) {
+        return [
+          'rds', 'describe-db-instances',
+          '--query', '{DBInstances:DBInstances[].{DBInstanceArn:DBInstanceArn,DBInstanceIdentifier:DBInstanceIdentifier,VpcId:DBSubnetGroup.VpcId,Engine:Engine,EndpointAddress:Endpoint.Address,EndpointPort:Endpoint.Port},ObservedInstanceCount:length(DBInstances)}',
+        ];
       }
       return [
         'rds', 'describe-db-instances',
@@ -379,6 +401,238 @@ function normalizeRdsInstance(instance) {
     subnet_ids: asResourceIds(instance.DBSubnetGroup?.Subnets || instance.SubnetIds),
     security_group_ids: asResourceIds(instance.VpcSecurityGroups || instance.VpcSecurityGroupIds),
   };
+}
+
+export function secretHostCompareAuthorizationState(env = {}) {
+  const value = env[SECRET_HOST_COMPARE_AUTHORIZATION_ENV];
+  if (value == null || value === '') return 'absent';
+  return value === SECRET_HOST_COMPARE_AUTHORIZATION ? 'authorized' : 'invalid';
+}
+
+export function normalizeComparableHostname(value) {
+  if (typeof value !== 'string') return null;
+  const hostname = value.trim().toLowerCase().replace(/\.$/, '');
+  if (!hostname || hostname.length > 253 || /[\s:/@\\?#]/.test(hostname)) return null;
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(hostname)) {
+    return null;
+  }
+  return hostname;
+}
+
+function isApprovedRdsInstanceIdentifier(value) {
+  return typeof value === 'string' && /^[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(value);
+}
+
+function isApprovedRdsEngine(value) {
+  return value === 'postgres' || value === 'aurora-postgresql';
+}
+
+function instanceIdentifierFromArn(arn) {
+  const identifier = typeof arn === 'string' ? arn.split(':db:')[1] : null;
+  return isApprovedRdsInstanceIdentifier(identifier) ? identifier : null;
+}
+
+export function extractSecretHostForCompare(secretString) {
+  if (typeof secretString !== 'string' || !secretString) {
+    return { ok: false, reason: 'secret_payload_unavailable' };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(secretString);
+  } catch {
+    return { ok: false, reason: 'secret_payload_malformed' };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, reason: 'secret_payload_malformed' };
+  }
+  if (/checksops_admin/i.test(parsed.username || '')) {
+    return { ok: false, reason: 'refused_privileged_database_user' };
+  }
+  const host = normalizeComparableHostname(parsed.host);
+  if (!host) return { ok: false, reason: 'secret_host_unavailable' };
+  const port = parsed.port == null || parsed.port === ''
+    ? null
+    : Number(parsed.port);
+  if (port != null && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+    return { ok: false, reason: 'secret_payload_malformed' };
+  }
+  return { ok: true, host, port };
+}
+
+export function compareSecretHostToObservedEndpoints({
+  secretHost,
+  secretPort = null,
+  instances = [],
+  vpcId = null,
+} = {}) {
+  const host = normalizeComparableHostname(secretHost);
+  if (!host || !vpcId) {
+    return {
+      match_count: 0,
+      unique: false,
+      compared_instance_count: 0,
+      matching_instance_identifier: null,
+      resource_arn: null,
+    };
+  }
+  const candidates = instances.filter((instance) => (
+    instance?.vpc_id === vpcId
+    && isProductionRdsInstanceArn(instance.resource_arn)
+    && (instance.engine == null || isApprovedRdsEngine(instance.engine))
+    && normalizeComparableHostname(instance.endpoint_host) != null
+  ));
+  const matches = candidates.filter((instance) => {
+    if (normalizeComparableHostname(instance.endpoint_host) !== host) return false;
+    if (secretPort == null) return true;
+    return Number.isInteger(instance.endpoint_port) && instance.endpoint_port === secretPort;
+  });
+  const unique = matches.length === 1;
+  return {
+    match_count: matches.length,
+    unique,
+    compared_instance_count: candidates.length,
+    matching_instance_identifier: unique ? matches[0].instance_identifier : null,
+    resource_arn: unique ? matches[0].resource_arn : null,
+  };
+}
+
+export function redactSecretHostCompare(result) {
+  if (!result) return null;
+  return {
+    status: result.status || null,
+    reason: result.reason || null,
+    authorized: result.authorized === true,
+    unique: result.unique === true,
+    match_count: Number.isInteger(result.match_count) ? result.match_count : 0,
+    compared_instance_count: Number.isInteger(result.compared_instance_count)
+      ? result.compared_instance_count
+      : 0,
+    matching_instance_identifier: isApprovedRdsInstanceIdentifier(result.matching_instance_identifier)
+      ? result.matching_instance_identifier
+      : null,
+    resource_arn: isProductionRdsInstanceArn(result.resource_arn) ? result.resource_arn : null,
+    required_permission: result.required_permission || null,
+    required_phrase: result.required_phrase || null,
+  };
+}
+
+function normalizeEndpointCompareInstance(instance) {
+  if (!isProductionRdsInstanceArn(instance?.DBInstanceArn)) return null;
+  const identifier = isApprovedRdsInstanceIdentifier(instance.DBInstanceIdentifier)
+    ? instance.DBInstanceIdentifier
+    : instanceIdentifierFromArn(instance.DBInstanceArn);
+  if (!identifier) return null;
+  const endpointPort = Number.isInteger(instance.Endpoint?.Port)
+    ? instance.Endpoint.Port
+    : Number.isInteger(instance.EndpointPort) ? instance.EndpointPort : null;
+  return {
+    resource_arn: instance.DBInstanceArn,
+    instance_identifier: identifier,
+    vpc_id: instance.DBSubnetGroup?.VpcId || instance.VpcId || null,
+    engine: isApprovedRdsEngine(instance.Engine) ? instance.Engine : null,
+    endpoint_host: instance.Endpoint?.Address || instance.EndpointAddress || null,
+    endpoint_port: Number.isInteger(endpointPort) ? endpointPort : null,
+  };
+}
+
+function refusedSecretHostCompare(reason, extras = {}) {
+  return redactSecretHostCompare({
+    status: 'refused_unproven_aws_production_target',
+    reason,
+    authorized: extras.authorized === true,
+    unique: false,
+    match_count: extras.match_count || 0,
+    compared_instance_count: extras.compared_instance_count || 0,
+    matching_instance_identifier: null,
+    resource_arn: null,
+    required_permission: extras.required_permission || null,
+    required_phrase: extras.required_phrase || null,
+  });
+}
+
+async function runAuthorizedSecretHostCompare({
+  exactSecretReferences,
+  network,
+  readErrors,
+  runAws,
+}) {
+  if (exactSecretReferences.length !== 1) {
+    return refusedSecretHostCompare(
+      'authorized secret host compare requires exactly one live DATABASE_SECRET_ARN',
+      { authorized: true },
+    );
+  }
+  if (!network.vpc_id) {
+    return refusedSecretHostCompare(
+      'authorized secret host compare requires the live Lambda VPC',
+      { authorized: true },
+    );
+  }
+  const secretArn = exactSecretReferences[0].identifier;
+  const target = { secretArn };
+  const [endpointPayload, secretValue] = await Promise.all([
+    safeRead(readErrors, 'rds:DescribeDBInstances', { secretArn, endpointCompare: true }, runAws),
+    safeRead(readErrors, 'secretsmanager:GetSecretValue', target, runAws, secretArn),
+  ]);
+  if (endpointPayload == null) {
+    return refusedSecretHostCompare(
+      'RDS endpoint metadata is unavailable for secret host compare',
+      { authorized: true, required_permission: 'rds:DescribeDBInstances' },
+    );
+  }
+  if (secretValue == null) {
+    return refusedSecretHostCompare(
+      'secret value is unavailable for host compare; GetSecretValue was authorized but did not succeed',
+      { authorized: true, required_permission: 'secretsmanager:GetSecretValue' },
+    );
+  }
+  const secretString = secretValue.SecretString;
+  if (Object.prototype.hasOwnProperty.call(secretValue, 'SecretString')) {
+    secretValue.SecretString = null;
+  }
+  const extracted = extractSecretHostForCompare(secretString);
+  if (!extracted.ok) {
+    return refusedSecretHostCompare(
+      extracted.reason === 'refused_privileged_database_user'
+        ? 'authorized secret host compare refused a privileged database user'
+        : extracted.reason === 'secret_host_unavailable'
+          ? 'authorized secret host compare could not read a comparable host field'
+          : 'authorized secret host compare refused a malformed secret payload',
+      { authorized: true },
+    );
+  }
+  const instances = rdsDescribePayload(endpointPayload).instances
+    .map(normalizeEndpointCompareInstance)
+    .filter(Boolean);
+  const comparison = compareSecretHostToObservedEndpoints({
+    secretHost: extracted.host,
+    secretPort: extracted.port,
+    instances,
+    vpcId: network.vpc_id,
+  });
+  extracted.host = null;
+  if (comparison.match_count === 1 && comparison.unique) {
+    return redactSecretHostCompare({
+      status: 'complete',
+      reason: 'authorized secret host compare binds the live DATABASE_SECRET_ARN host to exactly one observed RDS endpoint',
+      authorized: true,
+      unique: true,
+      match_count: 1,
+      compared_instance_count: comparison.compared_instance_count,
+      matching_instance_identifier: comparison.matching_instance_identifier,
+      resource_arn: comparison.resource_arn,
+    });
+  }
+  return refusedSecretHostCompare(
+    comparison.match_count === 0
+      ? 'authorized secret host compare matched zero observed RDS endpoints'
+      : 'authorized secret host compare matched multiple observed RDS endpoints',
+    {
+      authorized: true,
+      match_count: comparison.match_count,
+      compared_instance_count: comparison.compared_instance_count,
+    },
+  );
 }
 
 function rdsInstanceRecords(metadata) {
@@ -1251,6 +1505,7 @@ export async function inspectProduction({
     'exclusive-vpc': 'live Lambda VPC membership independently binds exactly one observed RDS instance through AWS metadata',
     'exclusive-security-group': 'live Lambda security groups independently bind exactly one observed RDS instance through AWS metadata',
     'exclusive-security-group-ingress': 'live Lambda security-group ingress independently binds exactly one observed RDS instance through AWS metadata',
+    'secret-host-endpoint': 'authorized secret host compare binds the live DATABASE_SECRET_ARN host to exactly one observed RDS endpoint',
   };
   if (packageProvesRuntimeReference
       && referencedTargets.length === 1
@@ -1269,6 +1524,45 @@ export async function inspectProduction({
       item.reference_type === 'secretsmanager' && item.master_user_association_count !== undefined
     ));
     if (rdsUnresolved?.reason) database.reason = rdsUnresolved.reason;
+  }
+  const hostCompareState = secretHostCompareAuthorizationState(env);
+  if (hostCompareState === 'invalid') {
+    database.host_compare = refusedSecretHostCompare(
+      'secret host compare authorization is missing or invalid; GetSecretValue was not called',
+      { required_phrase: SECRET_HOST_COMPARE_AUTHORIZATION },
+    );
+  } else if (hostCompareState === 'authorized') {
+    database.host_compare = await runAuthorizedSecretHostCompare({
+      exactSecretReferences,
+      network,
+      readErrors,
+      runAws,
+    });
+    if (database.host_compare.status === 'complete' && database.host_compare.unique) {
+      const hostTarget = {
+        reference_type: 'rds-instance',
+        resource_arn: database.host_compare.resource_arn,
+        association: 'secret-host-endpoint',
+      };
+      const conflict = referencedTargets.length === 1
+        && referencedTargets[0].resource_arn !== hostTarget.resource_arn;
+      if (conflict) {
+        database.status = 'refused_unproven_aws_production_target';
+        database.reason = 'authorized secret host compare conflicts with an exclusive network association';
+        database.host_compare = refusedSecretHostCompare(
+          'authorized secret host compare conflicts with an exclusive network association',
+          {
+            authorized: true,
+            match_count: database.host_compare.match_count,
+            compared_instance_count: database.host_compare.compared_instance_count,
+          },
+        );
+      } else {
+        database.status = 'complete';
+        database.reason = persistenceReason['secret-host-endpoint'];
+        database.candidate_resources = [hostTarget];
+      }
+    }
   }
   const distribution = cloudfront?.Distribution || null;
   const apiIntegrations = integrations?.Items || [];
@@ -1449,6 +1743,13 @@ export function buildInspectionSummary(report) {
         'security_group_ingress_match_count',
         'owning_service_is_rds', 'reason',
       ])),
+      ...(report.database.host_compare ? {
+        host_compare: pick(report.database.host_compare, [
+          'status', 'reason', 'authorized', 'unique', 'match_count',
+          'compared_instance_count', 'matching_instance_identifier',
+          'resource_arn', 'required_permission', 'required_phrase',
+        ]),
+      } : {}),
     } : null,
     missing_read_permissions: errors(report.missing_read_permissions),
     read_errors: errors(report.read_errors),
