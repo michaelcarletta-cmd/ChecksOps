@@ -8,6 +8,7 @@ import { evaluateSpaPromote } from './spa-promote.mjs';
 import { evaluateSqlApply } from './sql-apply.mjs';
 import { evaluateSql53StagingApply, isSql53StagingApply } from './sql53-staging-apply.mjs';
 import { evaluateSqlExecutorAuthorization } from './sql-executor-auth.mjs';
+import { evaluateSql53TemporaryConfigPreflight } from './sql53-temporary-config-preflight.mjs';
 import { acquireLease, inspectLease, releaseLease } from './lease.mjs';
 import { evaluateAcceptedContracts, loadContractRegistry } from './contracts.mjs';
 import { evaluateProductionGate } from './production.mjs';
@@ -64,6 +65,8 @@ export function evaluateDeployment(input = {}, ctx = {}) {
       : evaluateSqlApply(input);
   } else if (input.deployment_type === 'sql-executor-invoke') {
     specific = evaluateSqlExecutorAuthorization(input);
+  } else if (input.deployment_type === 'lambda-sql53-temporary-config') {
+    specific = evaluateSql53TemporaryConfigPreflight(input);
   } else if (input.deployment_type === 'verify-only') {
     specific = verifyLiveState(input);
   } else {
