@@ -1,0 +1,97 @@
+{
+  "id": "production-sql53-inspect-prereq",
+  "authorization": "evaluate-only",
+  "inspect_execute_ready": false,
+  "apply_authorized": false,
+  "iam_mutation_authorized": false,
+  "lambda_overlay_authorized": false,
+  "diagnostic_invoked": false,
+  "database_contacted": false,
+  "official_fingerprint_issued": false,
+  "pr_861": {
+    "number": 861,
+    "state": "MERGED",
+    "merged_at": "2026-10-10T19:15:04Z",
+    "merge_commit": "67c73fc9f98996ddfc001024ac1138aa279c6968",
+    "url": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/861",
+    "included_on_origin_main": true
+  },
+  "inspected_at": "2026-10-10T19:27:20Z",
+  "inspector_identity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/sql53-inspect-prereq",
+  "live_lambda": {
+    "function_name": "checksops-production-prep-api",
+    "function_arn": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "last_modified": "2026-10-10T18:26:47.000+0000",
+    "last_update_status": "Successful",
+    "state": "Active",
+    "member_count": 6482,
+    "code_size": 11124536,
+    "checksops_env": "production-prep",
+    "env_key_count": 49,
+    "sql53_authorization_env_present": false,
+    "sql53_expiry_env_present": false,
+    "database_name": "checksops",
+    "database_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw",
+    "has_pg": true,
+    "http_sql53_route": false
+  },
+  "live_overlay_members_sha256": {
+    "index.mjs": "77836ef63e6fbca6fb3e49f5970e705cf38b2af653c1be2c4a728be04caf3a9f",
+    "sql53-production-readonly-inspect.mjs": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+    "secrets.mjs": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
+    "db-health.mjs": "0eb66cecc0db49941a3d0a59789c7b16529d56794de739825b5577f51e3eac8b",
+    "db-readonly-validate.mjs": "ee58fd0a2ea5a4fd554012c1c331cdf369f12c82b64fb81dbc3e39e3b9161606"
+  },
+  "live_diagnostic": {
+    "intact": true,
+    "index_direct_invoke_hook": true,
+    "allowed_envs": ["production", "production-prep"],
+    "accepts_live_checksops_env": true
+  },
+  "unofficial_local_configuration_fingerprint": {
+    "note": "Computed locally from a Cursor-staging GetFunctionConfiguration download. Not an official --fingerprint-only issuance. Official issuance requires ChecksOpsProductionSql53ConfigWriter.",
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "dedicated_writer_role": {
+    "name": "ChecksOpsProductionSql53ConfigWriter",
+    "arn": "arn:aws:iam::806168576068:role/ChecksOpsProductionSql53ConfigWriter",
+    "existence": "unverified",
+    "permissions_verified": false,
+    "probe_identity": "ChecksOpsCursorCloudStaging",
+    "get_role": "AccessDenied",
+    "list_attached_role_policies": "AccessDenied",
+    "list_role_policies": "AccessDenied",
+    "note": "Cursor staging has no iam:GetRole even on known-existing roles, including itself. AccessDenied does not prove the role is missing. PR #861 documented role creation as future production IAM work and did not create it. Do not broaden ChecksOpsCursorCloudStaging."
+  },
+  "official_writer": {
+    "path": "scripts/deployment-guard/sql53-temporary-lambda-config.mjs",
+    "fingerprint_only_from_cursor_staging": {
+      "ok": false,
+      "code": "PRODUCTION_APPROVAL_REQUIRED",
+      "message": "fingerprint-only requires the dedicated production execution role"
+    },
+    "unit_tests": {
+      "file": "aws/tests/sql53-temporary-lambda-config.test.mjs",
+      "pass": 11,
+      "fail": 0
+    }
+  },
+  "lambda_resource_policy": {
+    "invoke_principals": ["apigateway.amazonaws.com"],
+    "dedicated_writer_sid_present": false,
+    "note": "Identity-based InvokeFunction on the dedicated role is sufficient; resource-policy grant is not required by the writer."
+  },
+  "remaining_blockers": [
+    "ChecksOpsProductionSql53ConfigWriter existence and the three required Lambda permissions are unverified from Cursor staging and were not created by merged PR #861",
+    "Official --fingerprint-only cannot be issued until that dedicated role is assumed",
+    "No signed deployment-guard receipt or lease for lambda-sql53-temporary-config",
+    "No owner execute authorization, production approval.workstream_id, or staging_acceptance for this workstream"
+  ],
+  "smallest_safe_next_action": "Owner-authorize production IAM creation of ChecksOpsProductionSql53ConfigWriter only: trust an owner-approved principal that is not ChecksOpsCursorCloudStaging; allow lambda:GetFunctionConfiguration, lambda:UpdateFunctionConfiguration, and lambda:InvokeFunction on arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api only. Then assume that role and run official --fingerprint-only. Do not broaden Cursor staging. Do not apply, invoke, or set SQL53 env vars until that fingerprint and a later execute authorization exist.",
+  "source_only_blockers_resolved": "none_that_unblock_execute"
+}
