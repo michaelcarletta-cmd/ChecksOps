@@ -29,7 +29,8 @@ must match or the handler refuses before loading credentials:
 1. Direct invoke of `checksops-production-prep-api` with IAM
    `lambda:InvokeFunction` on that function only. API Gateway events are
    refused.
-2. `CHECKSOPS_ENV=production`
+2. `CHECKSOPS_ENV` is `production` or the live production value
+   `production-prep`
 3. `AWS_LAMBDA_FUNCTION_NAME=checksops-production-prep-api`
 4. Temporary Lambda env `CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION`
    is an owner-chosen token of at least 32 characters and is not the
