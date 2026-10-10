@@ -43,6 +43,12 @@
       "capabilities": ["lambda-overlay-evaluate"]
     },
     {
+      "path": "scripts/deployment-guard/sql53-production-inspect-prepare.mjs",
+      "classification": "SAFE",
+      "capabilities": ["sql53-inspect-prepare-evaluate"],
+      "note": "Evaluate-only planner for the production SQL53 inspect window. Never sets credentials, changes IAM, updates Lambda configuration, or invokes."
+    },
+    {
       "path": "scripts/deployment-guard/lambda-overlay-apply.mjs",
       "classification": "GUARDED",
       "capabilities": ["lambda-overlay-apply", "lambda-update-function-code"],

@@ -1,0 +1,143 @@
+{
+  "id": "production-sql53-inspect-ready",
+  "authorization": "evaluate-only",
+  "verdict": "PREPARED_NOT_EXECUTED",
+  "inspect_execute_ready": false,
+  "live_module_ready": true,
+  "apply_authorized": false,
+  "iam_mutation_authorized": false,
+  "invoke_authorized": false,
+  "database_contacted": false,
+  "function_name": "checksops-production-prep-api",
+  "workstream_id": "prod-sql53-inspect-ready-3bc9",
+  "live": {
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "last_modified": "2026-10-10T18:26:47.000+0000",
+    "last_update_status": "Successful",
+    "member_count": 6482,
+    "index_sha256": "77836ef63e6fbca6fb3e49f5970e705cf38b2af653c1be2c4a728be04caf3a9f",
+    "inspect_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+    "secrets_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
+    "checksops_env": "production-prep",
+    "inspect_accepts_production_prep": true,
+    "direct_invoke_hook_present": true,
+    "http_route": null,
+    "sql53_authorization_env_present": false,
+    "sql53_expires_at_env_present": false,
+    "environment_key_count": 49,
+    "environment_keys": [
+      "AWS_ACTUM_ENABLED",
+      "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED",
+      "AWS_CHECKALT_ENABLED",
+      "AWS_CHECKALT_STATUS_RECONCILE_ENABLED",
+      "AWS_CHECK_WORKFLOW_WRITES_ENABLED",
+      "AWS_COGNITO_MFA_PREFERRED",
+      "AWS_EMAIL_ALLOWLIST_DOMAINS",
+      "AWS_EMAIL_FROM",
+      "AWS_EMAIL_MODE",
+      "AWS_ENDORSEMENT_AUTO_ADVANCE",
+      "AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT",
+      "AWS_ENDORSEMENT_RESEND_ENABLED",
+      "AWS_ENDPOINT_URL_SECRETS_MANAGER",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED",
+      "AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED",
+      "AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID",
+      "AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID",
+      "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED",
+      "AWS_MOOV_ENABLED",
+      "AWS_MOOV_MONTHLY_BILLING_ENABLED",
+      "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST",
+      "AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED",
+      "AWS_MOOV_TRANSFER_POST_ENABLED",
+      "AWS_PLAID_ENABLED",
+      "AWS_PROVIDER_EXECUTION_ENABLED",
+      "AWS_PROVIDER_LIVE_READS_ENABLED",
+      "AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED",
+      "AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED",
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED",
+      "AWS_PROVIDER_WEBHOOK_DRY_RUN",
+      "AWS_QUICKBOOKS_ENABLED",
+      "AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE",
+      "AWS_STORAGE_WRITES_ENABLED",
+      "AWS_WRITES_ENABLED",
+      "AZURE_DI_SECRET_ID",
+      "CHECKSOPS_DB_BRIDGE_TOKEN",
+      "CHECKSOPS_ENV",
+      "CHECKSOPS_SECRET_EPOCH",
+      "COGNITO_CLIENT_ID",
+      "COGNITO_USER_POOL_ID",
+      "COGNITO_WEBAUTHN_ORIGIN",
+      "COGNITO_WEBAUTHN_RP_ID",
+      "DATABASE_NAME",
+      "DATABASE_SECRET_ARN",
+      "FILES_BUCKET",
+      "FINANCIAL_TOTP_WRAP_KEY_ARN",
+      "MOOV_WEBHOOK_SECRET_ARN",
+      "PROVIDER_SECRETS_ARN",
+      "SIGN_BASE_URL"
+    ]
+  },
+  "token": {
+    "generated": true,
+    "stored": "/tmp/sql53-inspect-ready/token.env",
+    "committed": false,
+    "printed": false,
+    "length": 43,
+    "sha256": "f417a231c4391f5c856fd6f7a2b02bf16c8c44278f8aecf609e7abcccae9179c",
+    "not_published_marker": true,
+    "expiry_must_be_recomputed_immediately_before_config_write": true,
+    "max_window_hours": 2
+  },
+  "temporary_changes_required": {
+    "lambda_configuration": {
+      "api": "UpdateFunctionConfiguration",
+      "function_name": "checksops-production-prep-api",
+      "revision_id_cas": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+      "preserve_existing_keys": 49,
+      "add_keys": [
+        "CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION",
+        "CHECKSOPS_SQL53_READONLY_INSPECT_EXPIRES_AT"
+      ],
+      "do_not_change": [
+        "CHECKSOPS_ENV",
+        "Role",
+        "Runtime",
+        "Handler",
+        "MemorySize",
+        "Timeout",
+        "VpcConfig",
+        "Code"
+      ]
+    },
+    "iam": {
+      "do_not_broaden": "ChecksOpsCursorCloudStaging",
+      "resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+      "actions": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:InvokeFunction"
+      ]
+    },
+    "invoke": {
+      "payload_keys": ["diagnostic", "authorization"],
+      "diagnostic": "sql53-production-readonly-inspect",
+      "http_forbidden": true
+    },
+    "cleanup": {
+      "unset_keys": [
+        "CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION",
+        "CHECKSOPS_SQL53_READONLY_INSPECT_EXPIRES_AT"
+      ],
+      "restore_existing_key_count": 49,
+      "revision_id_cas_required": true,
+      "remove_temporary_iam": true
+    }
+  },
+  "blockers": [
+    "No official guarded Lambda configuration writer; live AWS adapter refuses UpdateFunctionConfiguration",
+    "ChecksOpsCursorCloudStaging cannot be used to change IAM or invoke this Lambda and must not be broadened",
+    "This workstream is evaluate-only: credentials, IAM, configuration, and invoke remain unauthorized"
+  ]
+}
