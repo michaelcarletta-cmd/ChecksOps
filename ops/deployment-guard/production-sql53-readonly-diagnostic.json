@@ -1,0 +1,65 @@
+{
+  "id": "production-sql53-readonly-diagnostic",
+  "authorization": "source-only",
+  "verdict": "PREPARED",
+  "apply_authorized": false,
+  "dispatch_authorized": false,
+  "iam_mutation_authorized": false,
+  "lambda_overlay_authorized": false,
+  "database_contacted": false,
+  "target_rds_identifier": "checksops-production",
+  "official_host_compare_run": 38067130648,
+  "owned_overlay_members": [
+    "sql53-production-readonly-inspect.mjs"
+  ],
+  "owned_overlay_member_sha256": {
+    "sql53-production-readonly-inspect.mjs": "90842a4abaafe89bd5c51dcab048dd615b4cbf23c2f1b54e33b7b52aed67e8a1"
+  },
+  "index_mjs_policy": "surgical_patch_of_live_index_only",
+  "do_not_overlay_from_origin_main": [
+    "index.mjs",
+    "db-readonly-validate.mjs",
+    "claim-settlement-rpc.mjs"
+  ],
+  "live_reconciliation": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "DMcCoF3dpIiULPe530F8DJ8vC1wL1BP7ayqr+e8SCyI=",
+    "revision_id": "fb17cb70-7b50-468d-a0a6-59a020c43f8c",
+    "secrets_mjs": {
+      "live_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
+      "origin_main_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
+      "matches": true
+    },
+    "db_health_mjs": {
+      "matches_origin_main": true
+    },
+    "db_readonly_validate_mjs": {
+      "live_sha256": "ee58fd0a2ea5a4fd554012c1c331cdf369f12c82b64fb81dbc3e39e3b9161606",
+      "origin_main_sha256": "0cb174f7a65dfe0114ae4cdf341d938b4388c0068dae2cf4f2559383e8f6a425",
+      "matches": false,
+      "note": "Do not overlay current main db-readonly-validate.mjs. The diagnostic is self-contained."
+    },
+    "index_mjs": {
+      "live_sha256": "24f13aa5ff4f3d72e7f5ff4dc45dd194796aa4e75958de5bc39c8c1dce3eb4da",
+      "origin_main_sha256": "c7774ff6e15916714553bcb46557208f7fa04d5c9d5c500663c3fd24776dd9b1",
+      "matches": false,
+      "note": "Do not replace live index.mjs with origin/main. After later overlay authorization, add only the import and isSql53ProductionReadonlyInspectEvent hook to a freshly downloaded live index.mjs."
+    }
+  },
+  "authorization_required_before_use": [
+    "CHECKSOPS_ENV=production",
+    "AWS_LAMBDA_FUNCTION_NAME=checksops-production-prep-api",
+    "Lambda environment CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION=OWNER_AUTHORIZED_PRODUCTION_SQL53_READONLY_INSPECT",
+    "Request authorization header or invoke field equals the same phrase"
+  ],
+  "future_deployment_plan": [
+    "Download the live production Lambda ZIP after a fresh official inspect",
+    "Add sql53-production-readonly-inspect.mjs as a new root member",
+    "Patch live index.mjs only; do not copy origin/main index.mjs",
+    "Evaluate through scripts/deployment-guard/lambda-overlay.mjs with owned members only",
+    "Do not sam deploy or replace the complete ZIP",
+    "Owner sets the authorization environment variable in a later authorized config change",
+    "Owner invokes the diagnostic once",
+    "Owner unsets the authorization environment variable"
+  ]
+}

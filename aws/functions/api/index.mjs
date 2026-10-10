@@ -33,6 +33,12 @@ import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
 import { handleCollectionV2UatRequest } from './tenant-collection-v2-uat.mjs';
 import { handleTmpRlsCatalogInspectRequest } from './tenant-maintenance-payments-catalog-inspect.mjs';
+import {
+  handleSql53ProductionReadonlyInspect,
+  isSql53ProductionReadonlyInspectEvent,
+  SQL53_READONLY_INSPECT_HEADER,
+  SQL53_READONLY_INSPECT_PATH,
+} from './sql53-production-readonly-inspect.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -40,7 +46,7 @@ const json = (statusCode, body) => ({
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
+    'access-control-allow-headers': `authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id,${SQL53_READONLY_INSPECT_HEADER}`,
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   },
   body: JSON.stringify(body),
@@ -75,6 +81,7 @@ const READ_ONLY_PATHS = new Set([
   '/ops/readiness',
   '/cutover/readiness',
   '/inspect/tmp-rls-catalog',
+  SQL53_READONLY_INSPECT_PATH,
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
@@ -136,6 +143,11 @@ export const handleDbReadonlyValidateRequest = async (event, {
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
+
+  if (isSql53ProductionReadonlyInspectEvent(event, path)) {
+    const result = await handleSql53ProductionReadonlyInspect(event);
+    return json(result.statusCode, result.body);
+  }
 
   if (method === 'OPTIONS') {
     return json(204, {});
