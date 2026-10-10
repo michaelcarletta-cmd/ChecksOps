@@ -1,0 +1,97 @@
+{
+  "id": "production-sql53-config-writer-iam",
+  "authorization": "prepare-only",
+  "iam_create_authorized": false,
+  "iam_mutation_authorized": false,
+  "apply_authorized": false,
+  "diagnostic_invoked": false,
+  "account": "806168576068",
+  "region": "us-east-1",
+  "role_name": "ChecksOpsProductionSql53ConfigWriter",
+  "role_arn": "arn:aws:iam::806168576068:role/ChecksOpsProductionSql53ConfigWriter",
+  "function_arn": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+  "selected_trust": null,
+  "inspected_at": "2026-10-10T19:50:24Z",
+  "live_iam_inspection": {
+    "ok": false,
+    "probe_identity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/sql53-iam-prep",
+    "denied_actions": [
+      "iam:GetRole",
+      "iam:ListUsers",
+      "iam:ListRoles",
+      "iam:GetAccountSummary",
+      "iam:ListAccountAliases",
+      "iam:ListOpenIDConnectProviders",
+      "iam:GetUser",
+      "iam:SimulatePrincipalPolicy",
+      "cloudtrail:LookupEvents",
+      "cloudformation:ListStacks",
+      "organizations:DescribeOrganization"
+    ],
+    "role_existence": "unverified",
+    "administrator_iam_arn": "unverified",
+    "note": "AccessDenied does not prove the role is missing. Do not broaden ChecksOpsCursorCloudStaging."
+  },
+  "administrator_identity": {
+    "verified": false,
+    "aws_iam_principal_arn": null,
+    "create_role_requires": "an existing owner-controlled production administrator that already has iam:CreateRole, iam:PutRolePolicy, iam:GetRole, and iam:TagRole in account 806168576068. This agent cannot name that ARN from live IAM or from repository files."
+  },
+  "owner_controlled_candidates": [
+    {
+      "id": "owner-iam-user",
+      "kind": "iam-user",
+      "verified": false,
+      "recommended": true,
+      "arn": null,
+      "accepted_form": "arn:aws:iam::806168576068:user/<independently-controlled-owner>",
+      "trust_file": "aws/production/sql53-config-writer-trust-owner-iam-user.template.json",
+      "required_condition": "aws:MultiFactorAuthPresent=true",
+      "source": "aws/staging-db-readonly-diagnostic/policies/owner-approver-required-input.json fail-closed owner-user pattern",
+      "note": "No IAM user ARN is recorded in this repository. Owner must name one existing user. Do not apply the template placeholder."
+    },
+    {
+      "id": "cursor-oidc-owner",
+      "kind": "oidc",
+      "verified": "cursor_cloud_owner_subject_only",
+      "recommended": false,
+      "requires_explicit_owner_approval": true,
+      "federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com",
+      "sub": "user:325724407",
+      "aud": "sts.amazonaws.com",
+      "owner_name": "Michael Carletta",
+      "owner_email": "michaelcarletta@gmail.com",
+      "trust_file": "aws/production/sql53-config-writer-trust-cursor-oidc-owner.json",
+      "evidence": [
+        "cursor-cloud run-info owningUser=325724407",
+        "aws/production/cursor-security-hardening-role-trust.json",
+        "aws/production/cursor-cloudtrail-cwlogs-role-trust.json"
+      ],
+      "not_verified": "Not a live iam:GetUser or iam:GetRole. OIDC provider existence was AccessDenied this turn. This is not an AWS IAM administrator.",
+      "risk": "Any later Cloud Agent run owned by user 325724407 could assume UpdateFunctionConfiguration and InvokeFunction on the production prep Lambda. Do not use unless the owner explicitly chooses this trust."
+    }
+  ],
+  "rejected_principals": [
+    "arn:aws:iam::806168576068:root",
+    "ChecksOpsCursorCloudStaging",
+    "arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect",
+    "arn:aws:iam::806168576068:role/ChecksOpsGitHubStaging*",
+    "arn:aws:iam::806168576068:role/checksops-production-api-execution",
+    "arn:aws:iam::806168576068:role/checksops-production-prep-api",
+    "arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com",
+    "Principal *"
+  ],
+  "permission_actions": [
+    "lambda:GetFunctionConfiguration",
+    "lambda:UpdateFunctionConfiguration",
+    "lambda:InvokeFunction"
+  ],
+  "permission_resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+  "do_not": [
+    "broaden ChecksOpsCursorCloudStaging",
+    "trust GitHub OIDC or the production read-only inspect role",
+    "add wildcards, aliases, other functions, PassRole, or AdministratorAccess",
+    "create or modify IAM until the owner names a trust principal and authorizes create",
+    "invoke the diagnostic or set SQL53 environment variables"
+  ]
+}

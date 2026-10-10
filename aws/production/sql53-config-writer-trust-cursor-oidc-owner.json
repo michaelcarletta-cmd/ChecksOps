@@ -1,0 +1,45 @@
+{
+  "Version": "2012-10-17",
+  "Id": "checksops-production-sql53-config-writer-trust-cursor-oidc-owner",
+  "Statement": [
+    {
+      "Sid": "AllowOwnerCursorCloudOidcOnly",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "api.cursor.com:aud": "sts.amazonaws.com",
+          "api.cursor.com:sub": "user:325724407"
+        }
+      }
+    },
+    {
+      "Sid": "DenyRejectedIdentities",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "sts:AssumeRole",
+        "sts:AssumeRoleWithWebIdentity"
+      ],
+      "Condition": {
+        "StringLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::806168576068:root",
+            "*:role/ChecksOpsCursorCloudStaging",
+            "*:assumed-role/ChecksOpsCursorCloudStaging/*",
+            "arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionReadOnlyInspect",
+            "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionReadOnlyInspect/*",
+            "arn:aws:iam::806168576068:role/ChecksOpsGitHubStaging*",
+            "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStaging*/*",
+            "arn:aws:iam::806168576068:role/checksops-production-api-execution",
+            "arn:aws:iam::806168576068:role/checksops-production-prep-api",
+            "arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com"
+          ]
+        }
+      }
+    }
+  ]
+}
