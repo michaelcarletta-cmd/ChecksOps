@@ -14,12 +14,15 @@ const { Client } = pg;
 
 export const SQL53_READONLY_INSPECT_AUTHORIZATION = 'OWNER_AUTHORIZED_PRODUCTION_SQL53_READONLY_INSPECT';
 export const SQL53_READONLY_INSPECT_AUTHORIZATION_ENV = 'CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION';
-export const SQL53_READONLY_INSPECT_PATH = '/sql53-production-readonly-inspect';
-export const SQL53_READONLY_INSPECT_HEADER = 'x-checksops-sql53-inspect-authorization';
+export const SQL53_READONLY_INSPECT_AUTHORIZATION_MIN_LENGTH = 32;
+export const SQL53_READONLY_INSPECT_EXPIRES_AT_ENV = 'CHECKSOPS_SQL53_READONLY_INSPECT_EXPIRES_AT';
+export const SQL53_READONLY_INSPECT_MAX_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const SQL53_READONLY_INSPECT_DIAGNOSTIC = 'sql53-production-readonly-inspect';
 export const SQL53_READONLY_INSPECT_EXPECTED_DATABASE = 'checksops';
 export const SQL53_READONLY_INSPECT_EXPECTED_FUNCTION = 'checksops-production-prep-api';
+export const SQL53_READONLY_INSPECT_EXPECTED_RDS_IDENTIFIER = 'checksops-production';
 export const SQL53_READONLY_INSPECT_SECRETS_SHA256 = 'f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3';
+export const SQL53_READONLY_INSPECT_EVENT_KEYS = Object.freeze(['diagnostic', 'authorization']);
 
 export const SQL53_FUNCTION_DEF_INSPECT_SQL = `
 SELECT n.nspname AS schema_name,
@@ -140,28 +143,63 @@ export function assertSql53InspectQueryAllowlisted(sql) {
   return text;
 }
 
-function headerAuthorization(event) {
-  const headers = event?.headers || {};
-  const found = Object.entries(headers).find(([key]) => (
-    String(key).toLowerCase() === SQL53_READONLY_INSPECT_HEADER
-  ));
-  return found ? found[1] : undefined;
+export function isHttpApiGatewayEvent(event = {}) {
+  return Boolean(
+    event?.requestContext?.http
+    || event?.requestContext?.apiId
+    || event?.requestContext?.stage
+    || event?.rawPath
+    || event?.httpMethod
+    || event?.headers
+    || event?.queryStringParameters
+  );
 }
 
-function requestAuthorization(event) {
-  if (event?.authorization != null) return event.authorization;
-  return headerAuthorization(event);
+export function isSql53ProductionReadonlyInspectEvent(event = {}) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return false;
+  if (isHttpApiGatewayEvent(event)) return false;
+  const keys = Object.keys(event);
+  if (keys.length !== SQL53_READONLY_INSPECT_EVENT_KEYS.length) return false;
+  if (SQL53_READONLY_INSPECT_EVENT_KEYS.some((key) => !keys.includes(key))) return false;
+  return event.diagnostic === SQL53_READONLY_INSPECT_DIAGNOSTIC;
+}
+
+export function secretHostBindsProvenRds(host, identifier = SQL53_READONLY_INSPECT_EXPECTED_RDS_IDENTIFIER) {
+  if (typeof host !== 'string') return false;
+  const hostname = host.trim().toLowerCase().replace(/\.$/, '');
+  if (!hostname || hostname.length > 253 || /[\s:/@\\?#]/.test(hostname)) return false;
+  if (!hostname.endsWith('.rds.amazonaws.com')) return false;
+  const labels = hostname.split('.');
+  if (labels.length < 5 || labels[0] !== identifier) return false;
+  if (hostname.includes('checksops-staging')) return false;
+  return true;
+}
+
+export function sql53ReadonlyInspectExpiryState(env = {}, now = Date.now()) {
+  const raw = env[SQL53_READONLY_INSPECT_EXPIRES_AT_ENV];
+  if (raw == null || raw === '') return 'absent';
+  const expires = Date.parse(raw);
+  if (!Number.isFinite(expires)) return 'invalid';
+  if (expires <= now) return 'expired';
+  if (expires - now > SQL53_READONLY_INSPECT_MAX_WINDOW_MS) return 'invalid';
+  return 'valid';
 }
 
 export function sql53ReadonlyInspectAuthorizationState(env = {}, event = {}) {
+  if (!isSql53ProductionReadonlyInspectEvent(event)) return 'invalid';
   const configured = env[SQL53_READONLY_INSPECT_AUTHORIZATION_ENV];
-  const requested = requestAuthorization(event);
+  const requested = event.authorization;
   if ((configured == null || configured === '') && (requested == null || requested === '')) {
     return 'absent';
   }
-  if (configured !== SQL53_READONLY_INSPECT_AUTHORIZATION) return 'invalid';
-  if (requested !== SQL53_READONLY_INSPECT_AUTHORIZATION) return 'invalid';
+  if (typeof configured !== 'string' || typeof requested !== 'string') return 'invalid';
+  if (configured.length < SQL53_READONLY_INSPECT_AUTHORIZATION_MIN_LENGTH) return 'invalid';
+  if (requested.length < SQL53_READONLY_INSPECT_AUTHORIZATION_MIN_LENGTH) return 'invalid';
+  if (configured === SQL53_READONLY_INSPECT_AUTHORIZATION) return 'invalid';
+  if (requested === SQL53_READONLY_INSPECT_AUTHORIZATION) return 'invalid';
+  if (configured !== requested) return 'invalid';
   if (String(env.CHECKSOPS_ENV || '').toLowerCase() !== 'production') return 'invalid';
+  if (sql53ReadonlyInspectExpiryState(env) !== 'valid') return 'invalid';
   return 'authorized';
 }
 
@@ -187,12 +225,6 @@ export function proveSql53ReadonlyInspectProvenance(env = {}, { hashMember = has
     return { ok: false, reason: 'sql53 inspect could not hash its own deployed member' };
   }
   return { ok: true, secrets_sha256: secretsSha };
-}
-
-export function isSql53ProductionReadonlyInspectEvent(event, path = '') {
-  if (event?.diagnostic === SQL53_READONLY_INSPECT_DIAGNOSTIC) return true;
-  const method = String(event?.requestContext?.http?.method || event?.httpMethod || '').toUpperCase();
-  return method === 'GET' && path === SQL53_READONLY_INSPECT_PATH;
 }
 
 function refused(reason, extras = {}) {
@@ -232,6 +264,9 @@ export function redactSql53InspectResponse(result = {}) {
     status: result.status || 'refused',
     reason: result.reason || 'sql53 inspect refused',
     readOnly: true,
+    rdsIdentifier: result.rdsIdentifier === SQL53_READONLY_INSPECT_EXPECTED_RDS_IDENTIFIER
+      ? SQL53_READONLY_INSPECT_EXPECTED_RDS_IDENTIFIER
+      : null,
     inspect: inspect ? {
       readOnly: true,
       functions: SQL53_PINNED_FUNCTION_LOOKUPS.map((target) => {
@@ -337,6 +372,9 @@ export async function handleSql53ProductionReadonlyInspect(event = {}, {
   let rawClient;
   try {
     const credentials = await loadCredentials();
+    if (!secretHostBindsProvenRds(credentials?.host)) {
+      return refused('sql53 inspect refused a secret host that is not the proven production RDS');
+    }
     if (/checksops_admin/i.test(credentials?.username || '')) {
       return refused('sql53 inspect refused a privileged database user');
     }
@@ -363,6 +401,7 @@ export async function handleSql53ProductionReadonlyInspect(event = {}, {
       body: redactSql53InspectResponse({
         status: 'complete',
         reason: 'authorized sql53 catalog inspect completed inside a read-only transaction',
+        rdsIdentifier: SQL53_READONLY_INSPECT_EXPECTED_RDS_IDENTIFIER,
         inspect: catalog.inspect,
       }),
     };
