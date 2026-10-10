@@ -5,6 +5,7 @@ import { evaluateProductionGate } from './production.mjs';
 import { refuseUnguardedDeploy } from '../require-guard.mjs';
 
 export const SQL53_CONFIG_FUNCTION = 'checksops-production-prep-api';
+export const SQL53_CONFIG_FUNCTION_ARN = 'arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api';
 export const SQL53_CONFIG_ENV = 'production';
 export const SQL53_CONFIG_DEPLOYMENT_TYPE = 'lambda-sql53-temporary-config';
 export const SQL53_CONFIG_AUTHORIZATION_ENV = 'CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION';
@@ -24,6 +25,37 @@ const TRANSIENT_CONFIGURATION_KEYS = new Set([
   'StateReason',
   'StateReasonCode',
   'ResponseMetadata',
+]);
+
+export const SQL53_CONFIG_EXPECTED_FUNCTIONS = Object.freeze([
+  'public.save_claim_settlement_breakdown(uuid,uuid,jsonb)',
+  'public.sync_homeowner_ledger_from_check()',
+  'public.aws_can_write_claim(uuid)',
+  'public.hle_on_check_intake_insert()',
+]);
+export const SQL53_CONFIG_EXPECTED_COLUMNS = Object.freeze([
+  'replacement_cost_value',
+  'recoverable_depreciation',
+  'non_recoverable_depreciation',
+  'deductible',
+  'other_structures_rcv',
+  'other_structures_recoverable_depreciation',
+  'other_structures_non_recoverable_depreciation',
+  'other_structures_deductible',
+  'pwi_rcv',
+  'pwi_recoverable_depreciation',
+  'pwi_non_recoverable_depreciation',
+  'personal_property_rcv',
+  'personal_property_recoverable_depreciation',
+  'personal_property_non_recoverable_depreciation',
+  'ale_rcv',
+  'ale_recoverable_depreciation',
+  'ale_non_recoverable_depreciation',
+]);
+export const SQL53_CONFIG_EXPECTED_TRIGGERS = Object.freeze([
+  'trg_sync_homeowner_ledger_ins',
+  'trg_sync_homeowner_ledger_upd',
+  'trg_hle_check_intake_insert',
 ]);
 
 function stableValue(value) {
@@ -48,8 +80,9 @@ function configHash(configuration) {
 export function fingerprintSql53LambdaConfiguration(input = {}) {
   const configuration = input.Configuration || input.configuration || input;
   const functionName = configuration.FunctionName || input.function_name || null;
+  const functionArn = configuration.FunctionArn || null;
   const revisionId = configuration.RevisionId || input.revisionId || null;
-  if (functionName !== SQL53_CONFIG_FUNCTION || !revisionId) {
+  if (functionName !== SQL53_CONFIG_FUNCTION || functionArn !== SQL53_CONFIG_FUNCTION_ARN || !revisionId) {
     return fail(CODES.DEPLOYMENT_COLLISION, 'production Lambda configuration identity or RevisionId is missing');
   }
   if (configuration.Environment?.Error) {
@@ -76,8 +109,11 @@ function fingerprintsEqual(left, right) {
   return stableJson(left) === stableJson(right);
 }
 
-function identityAllowed(identity) {
-  const expected = /^arn:aws:sts::806168576068:assumed-role\/ChecksOpsProductionSql53ConfigWriter\/[^/]+$/;
+export function isSql53ConfigWriterIdentity(identity) {
+  const expectedArn = SQL53_CONFIG_ROLE_ARN
+    .replace(':iam::', ':sts::')
+    .replace(':role/', ':assumed-role/');
+  const expected = new RegExp(`^${expectedArn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\/[^/]+$`);
   return identity?.Account === '806168576068' && expected.test(String(identity?.Arn || ''));
 }
 
@@ -153,8 +189,9 @@ function parseInspection(invokeResult) {
     throw new Error('lambda_invocation_incomplete');
   }
   const functions = inspection.functions.map((row) => {
-    if (typeof row?.identity !== 'string' || typeof row.exists !== 'boolean'
-      || (row.definitionSha256 !== null && !/^[0-9a-f]{64}$/.test(String(row.definitionSha256)))) {
+    if (!SQL53_CONFIG_EXPECTED_FUNCTIONS.includes(row?.identity) || typeof row.exists !== 'boolean'
+      || (row.exists && !/^[0-9a-f]{64}$/.test(String(row.definitionSha256 || '')))
+      || (!row.exists && row.definitionSha256 !== null)) {
       throw new Error('lambda_invocation_response_invalid');
     }
     return {
@@ -164,15 +201,20 @@ function parseInspection(invokeResult) {
     };
   });
   const settlementColumns = inspection.settlementColumns.map((row) => {
-    if (row?.table !== 'claim_settlements' || !/^[a-z_]+$/.test(String(row.column || ''))
+    if (row?.table !== 'claim_settlements' || !SQL53_CONFIG_EXPECTED_COLUMNS.includes(row.column)
       || typeof row.exists !== 'boolean') throw new Error('lambda_invocation_response_invalid');
     return { table: row.table, column: row.column, exists: row.exists };
   });
   const ledgerTriggers = inspection.ledgerTriggers.map((row) => {
-    if (row?.table !== 'check_intake_items' || !/^[a-z_]+$/.test(String(row.trigger || ''))
+    if (row?.table !== 'check_intake_items' || !SQL53_CONFIG_EXPECTED_TRIGGERS.includes(row.trigger)
       || typeof row.exists !== 'boolean') throw new Error('lambda_invocation_response_invalid');
     return { table: row.table, trigger: row.trigger, exists: row.exists };
   });
+  if (new Set(functions.map((row) => row.identity)).size !== SQL53_CONFIG_EXPECTED_FUNCTIONS.length
+    || new Set(settlementColumns.map((row) => row.column)).size !== SQL53_CONFIG_EXPECTED_COLUMNS.length
+    || new Set(ledgerTriggers.map((row) => row.trigger)).size !== SQL53_CONFIG_EXPECTED_TRIGGERS.length) {
+    throw new Error('lambda_invocation_response_incomplete');
+  }
   return {
     status: 'complete',
     rdsIdentifier: 'checksops-production',
@@ -201,7 +243,13 @@ async function cleanupAuthorization(aws, authorization, ctx) {
     const hasAuthorization = Object.hasOwn(currentVars, SQL53_CONFIG_AUTHORIZATION_ENV);
     const hasExpiry = Object.hasOwn(currentVars, SQL53_CONFIG_EXPIRY_ENV);
     if (!hasAuthorization && !hasExpiry) {
+      if (snapshot.details.fingerprint.configuration_sha256 !== authorization.expectedBaseHash) {
+        driftDetected = true;
+      }
       return { complete: true, drift_detected: driftDetected, attempts: attempt + 1 };
+    }
+    if (snapshot.details.fingerprint.configuration_sha256 !== authorization.expectedTemporaryHash) {
+      driftDetected = true;
     }
     if ((hasAuthorization && currentVars[SQL53_CONFIG_AUTHORIZATION_ENV] !== authorization.token)
       || (hasExpiry && currentVars[SQL53_CONFIG_EXPIRY_ENV] !== authorization.expiresAt)) {
@@ -261,7 +309,10 @@ export async function applySql53TemporaryLambdaConfig(input = {}, ctx = {}) {
     || !aws?.updateFunctionConfiguration || !aws?.invokeFunction) {
     return fail(CODES.INVALID_MANIFEST, 'SQL53 temporary Lambda writer requires its production AWS adapter and guard root');
   }
-  if (input.function_name != null && input.function_name !== SQL53_CONFIG_FUNCTION) {
+  if ((input.function_name != null && input.function_name !== SQL53_CONFIG_FUNCTION)
+    || (input.target_environment != null && input.target_environment !== SQL53_CONFIG_ENV)
+    || (input.target_component != null && input.target_component !== SQL53_CONFIG_FUNCTION)
+    || (input.deployment_type != null && input.deployment_type !== SQL53_CONFIG_DEPLOYMENT_TYPE)) {
     return fail(CODES.UNRELATED_MUTATION, 'SQL53 temporary configuration is pinned to the production prep Lambda');
   }
   const authorized = refuseUnguardedDeploy({
@@ -275,6 +326,11 @@ export async function applySql53TemporaryLambdaConfig(input = {}, ctx = {}) {
   }, { root: guardRoot, now, env });
   if (!authorized.ok) return authorized;
   const receipt = authorized.details.receipt;
+  if (receipt.owned_components.length !== 1
+    || receipt.owned_components[0] !== SQL53_CONFIG_FUNCTION
+    || Object.hasOwn(receipt, 'owned_member_ops')) {
+    return fail(CODES.RECEIPT_MISMATCH, 'SQL53 configuration receipt must own only the pinned production Lambda');
+  }
   if (input.environment_variables || input.env || input.payload || input.event) {
     return fail(CODES.UNRELATED_MUTATION, 'caller-supplied environment variables and invoke payloads are forbidden');
   }
@@ -295,7 +351,7 @@ export async function applySql53TemporaryLambdaConfig(input = {}, ctx = {}) {
 
   try {
     const identity = normalizeAdapterResult(await aws.getCallerIdentity());
-    if (!identityAllowed(identity)) {
+    if (!isSql53ConfigWriterIdentity(identity)) {
       return fail(CODES.PRODUCTION_APPROVAL_REQUIRED, 'SQL53 writer requires the dedicated production execution role');
     }
   } catch {
@@ -351,16 +407,22 @@ export async function applySql53TemporaryLambdaConfig(input = {}, ctx = {}) {
   });
   if (!consumed.ok) return consumed;
 
-  const authorization = { token, expiresAt: expiry };
+  const authorization = {
+    token,
+    expiresAt: expiry,
+    expectedBaseHash: first.fingerprint.configuration_sha256,
+  };
   const temporaryVariables = {
     ...immediatelyBefore.variables,
     [SQL53_CONFIG_AUTHORIZATION_ENV]: token,
     [SQL53_CONFIG_EXPIRY_ENV]: expiry,
   };
   const expectedTemporaryHash = configHash(configurationWithVariables(immediatelyBeforeConfiguration, temporaryVariables));
+  authorization.expectedTemporaryHash = expectedTemporaryHash;
   let updateAttempted = false;
   let operationFailure = null;
   let inspection = null;
+  let cleanup = { complete: true, attempts: 0, drift_detected: false };
   try {
     updateAttempted = true;
     await aws.updateFunctionConfiguration({
@@ -393,10 +455,21 @@ export async function applySql53TemporaryLambdaConfig(input = {}, ctx = {}) {
       : error?.message === 'unexpected_lambda_configuration_drift'
         ? 'production Lambda configuration drifted before invocation'
         : 'SQL53 direct Lambda invocation or temporary configuration update failed';
+  } finally {
+    if (updateAttempted) {
+      try {
+        cleanup = await cleanupAuthorization(aws, authorization, ctx);
+      } catch {
+        cleanup = {
+          complete: false,
+          attempts: ctx.cleanupAttempts || 3,
+          drift_detected: true,
+          failure: 'cleanup_attempt_failed',
+        };
+      }
+    }
   }
 
-  let cleanup = { complete: true, attempts: 0, drift_detected: false };
-  if (updateAttempted) cleanup = await cleanupAuthorization(aws, authorization, ctx);
   if (!cleanup.complete) {
     return fail(CODES.DEPLOYMENT_COLLISION, 'SQL53 temporary authorization cleanup is incomplete; fail closed and reconcile manually', {
       cleanup,
@@ -426,4 +499,3 @@ export async function applySql53TemporaryLambdaConfig(input = {}, ctx = {}) {
     inspection,
   });
 }
-

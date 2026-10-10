@@ -49,6 +49,12 @@
       "note": "Official receipt-gated Lambda overlay apply. Starts from CURRENT live ZIP, replaces only receipt-owned members, RevisionId CAS. Never restores an old ZIP."
     },
     {
+      "path": "scripts/deployment-guard/sql53-temporary-lambda-config.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql53-temporary-lambda-environment", "lambda-update-function-configuration", "lambda-invoke"],
+      "note": "Production-only SQL53 writer; requires a signed receipt, dedicated execution role, RevisionId CAS, and verified cleanup of the two temporary authorization keys."
+    },
+    {
       "path": "scripts/deployment-guard/spa-promote.mjs",
       "classification": "GUARDED",
       "capabilities": ["spa-evaluate"]

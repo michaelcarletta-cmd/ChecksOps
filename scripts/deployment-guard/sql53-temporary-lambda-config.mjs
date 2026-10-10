@@ -11,6 +11,7 @@ import {
   SQL53_CONFIG_FUNCTION,
   applySql53TemporaryLambdaConfig,
   fingerprintSql53LambdaConfiguration,
+  isSql53ConfigWriterIdentity,
 } from './lib/sql53-temporary-lambda-config.mjs';
 import { refuseUnguardedDeploy } from './require-guard.mjs';
 
@@ -59,13 +60,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
   if (flags.has('fingerprint-only')) {
     try {
       const identity = await aws.getCallerIdentity();
-      if (identity?.Account !== '806168576068'
-        || !/^arn:aws:sts::806168576068:assumed-role\/ChecksOpsProductionSql53ConfigWriter\/[^/]+$/.test(String(identity?.Arn || ''))) {
+      if (!isSql53ConfigWriterIdentity(identity)) {
         return printResult(fail(CODES.PRODUCTION_APPROVAL_REQUIRED, 'fingerprint-only requires the dedicated production execution role'));
       }
       const configuration = await aws.getFunctionConfiguration({ functionName: SQL53_CONFIG_FUNCTION });
       const result = fingerprintSql53LambdaConfiguration(configuration);
-      return printResult(result);
+      return printResult(result.ok
+        ? ok({ fingerprint: result.details.fingerprint })
+        : result);
     } catch {
       return printResult(fail(CODES.DEPLOYMENT_COLLISION, 'failed to read production Lambda fingerprint'));
     }

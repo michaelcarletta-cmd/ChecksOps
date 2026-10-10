@@ -39,8 +39,8 @@ must match or the handler refuses before loading credentials:
 6. Invoke field `authorization` equals that same owner-chosen token
 7. Live `secrets.mjs` SHA-256 equals the official host-compare pin
 
-The environment variables are a one-shot window. Unset both immediately
-after the invoke. Do not leave them as a permanent production access
+The environment variables are a one-shot window. Use only the guarded writer
+below; do not set them manually or leave them as a permanent production access
 mechanism.
 
 ## Production RDS proof
@@ -75,3 +75,86 @@ Do not replace the live ZIP. Do not overlay `origin/main` `index.mjs` or
 live package and surgically patch live `index.mjs` with the direct-invoke
 hook only. See
 `ops/deployment-guard/production-sql53-readonly-diagnostic.json`.
+
+## Guarded temporary configuration writer (source-only)
+
+`scripts/deployment-guard/sql53-temporary-lambda-config.mjs` is the only
+approved source path for the temporary authorization window. It is
+production-only and fixed to `checksops-production-prep-api`. Its apply path
+requires a valid single-use HMAC receipt and active release lease for
+`production/checksops-production-prep-api`, `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1`,
+an explicit `--apply` plus `apply: true`, production approval for the same
+workstream, and a staging acceptance reference. A fresh `--fingerprint-only`
+read produces the `preflight_live_fingerprint` required in the signed
+preflight manifest. The future operator flow is:
+
+1. Read the current production fingerprint with
+   `node scripts/deployment-guard/sql53-temporary-lambda-config.mjs --fingerprint-only`.
+2. Put that exact fingerprint in the official preflight manifest for
+   `target_environment=production`,
+   `target_component=checksops-production-prep-api`,
+   `deployment_type=lambda-sql53-temporary-config`, and
+   `owned_components=["checksops-production-prep-api"]`. Include the matching
+   `function_name`, the identical fingerprint in both
+   `production_fingerprint` and `immediately_before_fingerprint`, the matching
+   production approval marker, staging acceptance reference, and passing
+   accepted-contract results required by the official preflight. Issue the
+   lease and receipt only through
+   `node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input <manifest.json>`.
+3. For a later, separately authorized execution, pass an input containing
+   `apply: true`, the same workstream/commit, the production approval and
+   staging acceptance reference to
+   `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 node scripts/deployment-guard/sql53-temporary-lambda-config.mjs --apply --input <apply.json>`.
+
+The writer generates the one-time token itself (it is never supplied in a
+manifest or written to output). Its default authorization window is five
+minutes; a requested window cannot exceed two hours.
+
+The writer compares the receipt fingerprint with a live configuration
+fingerprint, repeats the read immediately before the write, and uses the live
+`RevisionId` as compare-and-swap. It generates a one-time authorization token,
+adds only `CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION` and
+`CHECKSOPS_SQL53_READONLY_INSPECT_EXPIRES_AT` to a copy of the current
+environment map, invokes only the exact `{diagnostic, authorization}` payload,
+then attempts cleanup in a `finally` path. Cleanup rereads current state,
+uses the latest `RevisionId`, preserves other variables/settings, retries
+boundedly, and independently verifies that both temporary keys are absent.
+Any incomplete cleanup or unexpected drift is reported as failure. Never
+manually retry a failed/uncertain apply; reconcile live state and issue a fresh
+receipt instead.
+
+This PR is source-only. It does not create roles, change IAM, configure
+credentials, call AWS, invoke Lambda, or contact the database.
+
+### Future execution identity and IAM requirements
+
+Create a dedicated role named
+`ChecksOpsProductionSql53ConfigWriter` in account `806168576068`. The writer
+verifies an assumed-role session of exactly that role before reading or
+changing Lambda configuration. Its future identity must not be the staging
+Lambda execution/deployment role, and the staging role must not be broadened.
+The trust policy must name a separately owner-approved principal explicitly;
+do not use wildcard principals, a staging role, or broad repository
+GitHub-OIDC trust. That principal has not been authorized or configured by
+this source-only change.
+
+The role's complete future identity policy is limited to these actions on this
+single unqualified function resource in `us-east-1`:
+
+```text
+arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api
+```
+
+```text
+lambda:GetFunctionConfiguration
+lambda:UpdateFunctionConfiguration
+lambda:InvokeFunction
+```
+
+`sts:GetCallerIdentity` is used only to verify the role and does not require an
+Allow statement. Do not add wildcards, aliases, other functions, or permissions
+for Lambda code/version/policy changes, API Gateway, IAM/PassRole, CloudFormation,
+S3, Secrets Manager, RDS, or SQL. AWS IAM cannot constrain
+`UpdateFunctionConfiguration` to particular environment-variable keys; the
+dedicated identity, signed receipt, live drift checks, two-key writer logic,
+and cleanup verification are therefore all mandatory.
