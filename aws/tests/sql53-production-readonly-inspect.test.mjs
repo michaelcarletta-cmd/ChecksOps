@@ -197,6 +197,7 @@ test('sql53 inspect authorization fails closed without contacting the database',
     [authorizedEnv(), {}],
     [{ ...authorizedEnv(), [SQL53_READONLY_INSPECT_AUTHORIZATION_ENV]: 'nope' }, authorizedEvent()],
     [{ ...authorizedEnv(), CHECKSOPS_ENV: 'staging' }, authorizedEvent()],
+    [{ ...authorizedEnv(), CHECKSOPS_ENV: 'development' }, authorizedEvent()],
     [authorizedEnv(), { diagnostic: SQL53_READONLY_INSPECT_DIAGNOSTIC, authorization: 'nope' }],
     [{ ...authorizedEnv(), [SQL53_READONLY_INSPECT_AUTHORIZATION_ENV]: SQL53_READONLY_INSPECT_AUTHORIZATION }, { diagnostic: SQL53_READONLY_INSPECT_DIAGNOSTIC, authorization: SQL53_READONLY_INSPECT_AUTHORIZATION }],
     [{ ...authorizedEnv(), [SQL53_READONLY_INSPECT_AUTHORIZATION_ENV]: 'short-token' }, { diagnostic: SQL53_READONLY_INSPECT_DIAGNOSTIC, authorization: 'short-token' }],
@@ -219,6 +220,19 @@ test('sql53 inspect authorization fails closed without contacting the database',
   assert.equal(sql53ReadonlyInspectExpiryState(tooLong), 'invalid');
   assert.ok(OWNER_TOKEN.length >= SQL53_READONLY_INSPECT_AUTHORIZATION_MIN_LENGTH);
   assert.deepEqual(deps.calls, []);
+});
+
+test('sql53 inspect accepts the live production-prep environment and fails closed otherwise', () => {
+  assert.equal(sql53ReadonlyInspectAuthorizationState({
+    ...authorizedEnv(),
+    CHECKSOPS_ENV: 'production-prep',
+  }, authorizedEvent()), 'authorized');
+  assert.equal(proveSql53ReadonlyInspectProvenance({
+    ...authorizedEnv(),
+    CHECKSOPS_ENV: 'production-prep',
+  }, {
+    hashMember: (name) => hashSql53PackageMember(name, API),
+  }).ok, true);
 });
 
 test('sql53 inspect fails closed on package provenance mismatch', () => {
