@@ -39,7 +39,24 @@ const LAMBDA_ZIP = (() => {
     fs.rmSync(temp, { recursive: true, force: true });
   }
 })();
+const LAMBDA_FLAT_ZIP = (() => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'production-readonly-lambda-flat-'));
+  try {
+    for (const relativePath of LAMBDA_SOURCE_PATHS) {
+      fs.copyFileSync(
+        new URL(`../../${relativePath}`, import.meta.url),
+        path.join(temp, path.basename(relativePath)),
+      );
+    }
+    const archive = path.join(temp, 'package.zip');
+    execFileSync('zip', ['-q', '-r', archive, ...LAMBDA_SOURCE_PATHS.map((item) => path.basename(item))], { cwd: temp });
+    return fs.readFileSync(archive);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+})();
 const LAMBDA_CODE_SHA = createHash('sha256').update(LAMBDA_ZIP).digest('base64');
+const LAMBDA_FLAT_CODE_SHA = createHash('sha256').update(LAMBDA_FLAT_ZIP).digest('base64');
 const LAMBDA_CODE_LOCATION = 'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?temporary-token=must-not-leak';
 const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw';
 const RDS_INSTANCE_ARN = 'arn:aws:rds:us-east-1:806168576068:db:production-db';
@@ -299,7 +316,9 @@ test('allowlists only pinned AWS read operations and refuses mutations or arbitr
   assert.ok(rdsArgs.at(-1).includes('VpcId:DBSubnetGroup.VpcId'));
   assert.ok(rdsArgs.at(-1).includes('VpcSecurityGroupIds:VpcSecurityGroups[].VpcSecurityGroupId'));
   assert.ok(rdsArgs.at(-1).includes('ObservedInstanceCount:length(DBInstances)'));
-  assert.equal(rdsArgs.at(-1).includes('Endpoint'), false);
+  assert.ok(rdsArgs.at(-1).includes('Engine:Engine'));
+  assert.ok(rdsArgs.at(-1).includes('EndpointPort:Endpoint.Port'));
+  assert.equal(rdsArgs.at(-1).includes('Endpoint.Address'), false);
   assert.equal(rdsArgs.at(-1).includes('MasterUserSecret.SecretArn=='), false);
   const secretArgs = buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: PERSISTENCE_SECRET_ARN });
   assert.ok(secretArgs.at(-1).includes('OwningService:OwningService'));
@@ -650,6 +669,56 @@ test('inventories the live package after the observed Lambda artifact hostname i
   assert.equal(output.includes('/snapshots/'), false);
 });
 
+test('matches flattened production package members by basename SHA-256 only', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        CodeSha256: LAMBDA_FLAT_CODE_SHA,
+        VpcConfig: {
+          VpcId: 'vpc-production',
+          SubnetIds: ['subnet-production'],
+          SecurityGroupIds: [LAMBDA_SG_ID],
+        },
+        Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+      }),
+      'lambda:GetFunction': () => ({
+        Configuration: {
+          FunctionName: PRODUCTION_PINS.function_name,
+          CodeSha256: LAMBDA_FLAT_CODE_SHA,
+          RevisionId: 'live-revision',
+        },
+        Code: { Location: LAMBDA_CODE_LOCATION },
+      }),
+      'ec2:DescribeSecurityGroups': () => ({
+        SecurityGroups: [
+          { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+          { GroupId: RDS_SG_A, IpPermissions: [lambdaPostgresIngress(LAMBDA_SG_ID, { protocol: '-1', from: null, to: null })] },
+          { GroupId: RDS_SG_B, IpPermissions: [lambdaPostgresIngress()] },
+        ],
+      }),
+    })),
+    fetchImpl: (url, options) => {
+      if (new URL(url).hostname !== 'checksops.com') {
+        return Promise.resolve(new Response(LAMBDA_FLAT_ZIP, { status: 200 }));
+      }
+      return mockFetch(url, options);
+    },
+  });
+  assert.equal(report.lambda.package.status, 'complete');
+  assert.equal(report.lambda.package.code_sha256_matches_configuration, true);
+  const secrets = report.lambda.package.source_comparisons.find((item) => (
+    item.repository_path === 'aws/functions/api/secrets.mjs'
+  ));
+  assert.equal(secrets.member_path, 'secrets.mjs');
+  assert.equal(secrets.matches, true);
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 2);
+  assert.match(report.database.reason, /multiple production RDS instances/);
+  assert.ok(report.database.observed_db_instances.every((item) => item.used_as_proof === false));
+});
+
 test('records only safe endpoint and path-style diagnostics for rejected AWS-owned URLs', async () => {
   const location = 'https://s3.us-east-1.amazonaws.com/unapproved-bucket/private-path/package.zip?X-Amz-Signature=private-signature';
   const report = await inspectProduction({
@@ -940,8 +1009,10 @@ test('proves exactly one RDS target from exclusive live Lambda security-group in
   }]);
   assert.equal(calls.some(({ action }) => action === 'ec2:DescribeSecurityGroups'), false);
   const evidence = JSON.stringify(buildInspectionSummary(report));
-  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
   assert.ok(evidence.includes(RDS_INSTANCE_ARN));
+  assert.ok(report.database.observed_db_instances.some((item) => (
+    item.resource_arn === NAMED_PRODUCTION_RDS_ARN && item.used_as_proof === false
+  )));
 });
 
 test('proves exactly one RDS target from exclusive live Lambda security-group ingress', async () => {
@@ -985,10 +1056,12 @@ test('proves exactly one RDS target from exclusive live Lambda security-group in
   assert.equal(calls.filter(({ action }) => action === 'ec2:DescribeSecurityGroups').length, 1);
   assert.equal(calls.some(({ action }) => /GetSecretValue|ssm:GetParameter|rds:DescribeDBClusters|ExecuteStatement|rds-data/.test(action)), false);
   const evidence = JSON.stringify(buildInspectionSummary(report));
-  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
   assert.equal(evidence.includes('checksops-production.example'), false);
   assert.equal(evidence.includes('0.0.0.0/0'), false);
   assert.ok(evidence.includes(RDS_INSTANCE_ARN));
+  assert.ok(report.database.observed_db_instances.some((item) => (
+    item.resource_arn === NAMED_PRODUCTION_RDS_ARN && item.used_as_proof === false
+  )));
 });
 
 test('refuses zero security-group ingress matches after describing observed groups', async () => {
@@ -1035,10 +1108,14 @@ test('refuses zero security-group ingress matches after describing observed grou
   const describeCall = calls.find(({ action }) => action === 'ec2:DescribeSecurityGroups');
   assert.deepEqual(describeCall.target.groupIds, [LAMBDA_SG_ID, RDS_SG_A, RDS_SG_B]);
   const evidence = JSON.stringify(buildInspectionSummary(report));
-  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
-  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
   assert.equal(evidence.includes('checksops-production.example'), false);
   assert.ok(evidence.includes('"security_group_ingress_match_count": 0') || evidence.includes('"security_group_ingress_match_count":0'));
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.ok(report.database.observed_db_instances.every((item) => item.used_as_proof === false));
+  assert.deepEqual(report.database.observed_db_instances.map((item) => item.resource_arn).sort(), [
+    NAMED_PRODUCTION_RDS_ARN,
+    RDS_INSTANCE_ARN,
+  ].sort());
 });
 
 test('refuses multiple security-group ingress matches after describing observed groups', async () => {
@@ -1061,9 +1138,14 @@ test('refuses multiple security-group ingress matches after describing observed 
   assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 2);
   assert.match(report.database.unresolved_references[0].reason, /multiple production RDS instances/);
   assert.equal(calls.filter(({ action }) => action === 'ec2:DescribeSecurityGroups').length, 1);
+  assert.deepEqual(report.database.observed_db_instances.map((item) => item.resource_arn).sort(), [
+    NAMED_PRODUCTION_RDS_ARN,
+    RDS_INSTANCE_ARN,
+  ].sort());
+  assert.ok(report.database.observed_db_instances.every((item) => item.used_as_proof === false));
   const evidence = JSON.stringify(buildInspectionSummary(report));
-  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
-  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('checksops-production.example'), false);
+  assert.match(report.database.reason, /multiple production RDS instances|runtime secret-reference source/);
 });
 
 test('ignores CIDR-only and foreign-account ingress when proving a production RDS target', async () => {
@@ -1104,9 +1186,9 @@ test('ignores CIDR-only and foreign-account ingress when proving a production RD
   assert.deepEqual(report.database.candidate_resources, []);
   assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 0);
   const evidence = JSON.stringify(buildInspectionSummary(report));
-  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
-  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
   assert.equal(evidence.includes('named production database'), false);
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.ok(report.database.observed_db_instances.every((item) => item.used_as_proof === false));
 });
 
 test('fails closed when observed security-group describe is denied', async () => {
@@ -1128,7 +1210,8 @@ test('fails closed when observed security-group describe is denied', async () =>
   assert.ok(report.missing_read_permissions.some((permission) => (
     permission.action === 'ec2:DescribeSecurityGroups' && permission.resource === '*'
   )));
-  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes(RDS_INSTANCE_ARN), false);
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.ok(report.database.observed_db_instances.every((item) => item.used_as_proof === false));
 });
 
 test('refuses a zero-target network association even when an instance name contains production', async () => {
@@ -1255,6 +1338,7 @@ test('evidence summary allowlists nested fields and flags and excludes secret-li
     references: [],
     unresolved_variables: ['DB_PASSWORD'],
     candidate_resources: [],
+    observed_db_instances: [],
     unresolved_references: [],
   });
   assert.equal(evidence.read_errors[0].stderr, undefined);

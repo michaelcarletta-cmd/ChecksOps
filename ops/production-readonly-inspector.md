@@ -46,10 +46,12 @@ metadata. It does not rely on optional secret tags, secret names, descriptions,
 staging, docs, or a single naming coincidence, and it never calls
 `GetSecretValue`. The exact-secret `DescribeSecret` read is authorized in the
 workflow session policy. `DescribeDBInstances` is authorized as a read-only
-metadata action with `Resource: "*"`. The query returns only instance ARN,
-optional `MasterUserSecret` ARN, VPC id, subnet ids, and VPC security-group ids;
-endpoints, identifiers used as names, and unmatched instance ARNs are not
-persisted. A target is proven only by an exact live `DATABASE_SECRET_ARN`
+metadata action with `Resource: "*"`. The query returns instance ARN,
+optional `MasterUserSecret` ARN, VPC id, subnet ids, VPC security-group ids,
+engine, status, Multi-AZ, replica-source presence, and endpoint port.
+Hostnames and secret values are not persisted. VPC-matching instances may be
+listed under `observed_db_instances` as inventory with `used_as_proof: false`.
+That inventory is not a target proof. A target is proven only by an exact live `DATABASE_SECRET_ARN`
 `MasterUserSecret` association, or by exclusive membership of exactly one
 observed instance in the live Lambda VPC, or by an exclusive security-group
 intersection with the live Lambda security groups, or by exclusive
@@ -80,7 +82,9 @@ The SPA fingerprint is fetched using HTTPS GET from the pinned `checksops.com`
 host. The report compares the live entry, index/bundle hashes, S3 version, and
 CloudFront identity with the production SPA lock. Lambda package evidence
 records CodeSha256, RevisionId, package hash, member paths/sizes/hashes, and
-exact-path comparisons for the reviewed current-main API sources. It does not
+current-main API source comparisons. Flattened production packages may match
+`aws/functions/api/<file>` to a root `<file>` member only when the SHA-256 is
+identical. Exact repository paths still win. It does not
 record the presigned URL, ZIP bytes, environment values, or source contents.
 Lambda package downloads accept only the pinned-region AWS Lambda S3 virtual-
 hosted or bucket-path endpoints for `awslambda-us-east-1` / `awslambda-us-east-1-tasks`,
