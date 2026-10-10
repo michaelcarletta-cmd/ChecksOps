@@ -158,3 +158,10 @@ S3, Secrets Manager, RDS, or SQL. AWS IAM cannot constrain
 `UpdateFunctionConfiguration` to particular environment-variable keys; the
 dedicated identity, signed receipt, live drift checks, two-key writer logic,
 and cleanup verification are therefore all mandatory.
+
+Prepared (not applied) IAM documents live in
+`aws/production/sql53-config-writer-permissions.json` and
+`ops/production-sql53-config-writer-iam.md`. Live IAM reads from
+`ChecksOpsCursorCloudStaging` cannot verify an administrator ARN or
+whether this role exists. Do not create the role until the owner names
+a trust principal. Do not broaden staging.

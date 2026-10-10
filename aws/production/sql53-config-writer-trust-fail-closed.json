@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Id": "checksops-production-sql53-config-writer-trust-fail-closed",
+  "Statement": [
+    {
+      "Sid": "DenyAllAssumeUntilOwnerNamesPrincipal",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "sts:AssumeRole",
+        "sts:AssumeRoleWithWebIdentity"
+      ]
+    }
+  ]
+}
