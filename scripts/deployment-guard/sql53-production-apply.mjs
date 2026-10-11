@@ -8,6 +8,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, printResult, readInput } from './lib/cli.mjs';
+import { consumeReceiptOnce } from './lib/consumed-receipts.mjs';
 import { CODES, fail } from './lib/errors.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
 import { enforceScriptGuard } from './require-guard.mjs';
@@ -19,7 +20,7 @@ import {
   executeSql53ProductionApply,
   inspectSql53ProductionCatalog,
   loadSql53ProductionApplyPin,
-  resolveProductionDatabaseUrl,
+  resolveProductionDatabaseAccess,
 } from './lib/sql53-production-apply.mjs';
 
 export async function main(argv = process.argv.slice(2), env = process.env, deps = {}) {
@@ -72,7 +73,18 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     ));
   }
 
-  const url = resolveProductionDatabaseUrl(env, { harness: input.harness === true });
+  if (authorized?.details?.receipt) {
+    const consumed = (deps.consumeReceiptOnce || consumeReceiptOnce)(root, authorized.details.receipt, {
+      actor: opts.operator || input.operator || null,
+      script: 'sql53-production-apply',
+    });
+    if (!consumed.ok) return printResult(consumed);
+  }
+
+  const url = await (deps.resolveAccess || resolveProductionDatabaseAccess)(env, {
+    harness: input.harness === true,
+    getSecretValue: deps.getSecretValue,
+  });
   if (!url.ok) return printResult(url);
   const connect = typeof deps.connect === 'function'
     ? deps.connect

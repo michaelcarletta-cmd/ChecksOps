@@ -18,15 +18,23 @@ import {
   SQL53_PRODUCTION_APPLY_DEPLOYMENT_TYPE,
   SQL53_PRODUCTION_APPLY_PHRASE,
   createProductionDatabaseConnect,
+  credentialsToProductionDatabaseUrl,
   evaluateSql53ProductionApply,
   evaluateSql53ProductionCatalog,
+  evaluateSql53TrustedRunner,
   executeSql53ProductionApply,
   inspectSql53ProductionCatalog,
+  isProductionAdminSecretArn,
   loadSql53ProductionApplyPin,
+  resolveProductionDatabaseAccess,
   resolveProductionDatabaseUrl,
   sql53ContainsForbiddenMutation,
 } from '../../scripts/deployment-guard/lib/sql53-production-apply.mjs';
 import { main as productionApplyMain } from '../../scripts/deployment-guard/sql53-production-apply.mjs';
+import {
+  evaluateGithubSql53ProductionApply,
+  githubSql53Identity,
+} from '../../scripts/deployment-guard/github-sql53-production-apply.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PIN = loadSql53ProductionApplyPin(ROOT);
@@ -233,6 +241,107 @@ test('resolveProductionDatabaseUrl refuses missing, staging, and non-RDS hosts',
   assert.equal(createProductionDatabaseConnect(''), undefined);
 });
 
+const ADMIN_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144';
+const APP_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw';
+const ADMIN_HOST = 'checksops-production.c1.us-east-1.rds.amazonaws.com';
+
+test('admin secret resolver accepts only the existing production checksops_admin secret', async () => {
+  assert.equal(isProductionAdminSecretArn(ADMIN_ARN), true);
+  assert.equal(isProductionAdminSecretArn(APP_ARN), false);
+  const admin = credentialsToProductionDatabaseUrl({
+    username: 'checksops_admin',
+    password: 'unused-test-password',
+    host: ADMIN_HOST,
+    port: 5432,
+    dbname: 'checksops',
+  });
+  assert.equal(admin.ok, true, admin.message);
+  assert.equal(admin.details.source, 'admin-secret');
+  assert.match(admin.details.url, /^postgresql:\/\//);
+  assert.equal(admin.details.host, ADMIN_HOST);
+
+  const appUser = credentialsToProductionDatabaseUrl({
+    username: 'checksops',
+    password: 'unused-test-password',
+    host: ADMIN_HOST,
+    port: 5432,
+    dbname: 'checksops',
+  });
+  assert.equal(appUser.ok, false);
+  assert.equal(appUser.code, CODES.UNRELATED_MUTATION);
+
+  const fromSecret = await resolveProductionDatabaseAccess({
+    CHECKSOPS_SQL53_PRODUCTION_ADMIN_SECRET_ARN: ADMIN_ARN,
+  }, {
+    getSecretValue: async () => JSON.stringify({
+      username: 'checksops_admin',
+      password: 'unused-test-password',
+      host: ADMIN_HOST,
+      port: 5432,
+      dbname: 'checksops',
+    }),
+  });
+  assert.equal(fromSecret.ok, true, fromSecret.message);
+  assert.equal(fromSecret.details.host, ADMIN_HOST);
+
+  const refusedAppArn = await resolveProductionDatabaseAccess({
+    CHECKSOPS_SQL53_PRODUCTION_ADMIN_SECRET_ARN: APP_ARN,
+  }, { getSecretValue: async () => '{"username":"checksops"}' });
+  assert.equal(refusedAppArn.ok, false);
+  assert.equal(refusedAppArn.code, CODES.UNRELATED_MUTATION);
+});
+
+test('trusted runner and GitHub evaluate stay off Lambda and do not apply', () => {
+  const runner = evaluateSql53TrustedRunner({}, { root: ROOT });
+  assert.equal(runner.ok, true, runner.message);
+  assert.equal(runner.details.github_can_apply, false);
+  assert.equal(runner.details.lambda_executor_forbidden, true);
+  assert.equal(runner.details.issuer_key_stays_off_lambda, true);
+  assert.equal(runner.details.independent_execute_authorization_required, true);
+
+  const github = evaluateGithubSql53ProductionApply({
+    GITHUB_SHA: '0e586b8510d2c509586d67648818f8848d24a84f',
+    GITHUB_REF_NAME: 'main',
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_ACTOR: 'test-operator',
+    GITHUB_RUN_ID: '12345',
+    CHECKSOPS_SQL53_GITHUB_MODE: 'evaluate',
+  }, { root: ROOT });
+  assert.equal(github.ok, true, github.message);
+  assert.equal(github.details.sql_not_executed, true);
+
+  const applyMode = evaluateGithubSql53ProductionApply({
+    GITHUB_SHA: '0e586b8510d2c509586d67648818f8848d24a84f',
+    GITHUB_REF_NAME: 'main',
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_ACTOR: 'test-operator',
+    GITHUB_RUN_ID: '12345',
+    CHECKSOPS_SQL53_GITHUB_MODE: 'apply',
+  }, { root: ROOT });
+  assert.equal(applyMode.ok, false);
+  assert.equal(applyMode.code, CODES.GUARD_APPLY_FORBIDDEN);
+
+  const lambda = evaluateGithubSql53ProductionApply({
+    GITHUB_SHA: '0e586b8510d2c509586d67648818f8848d24a84f',
+    GITHUB_REF_NAME: 'main',
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_ACTOR: 'test-operator',
+    GITHUB_RUN_ID: '12345',
+    CHECKSOPS_SQL53_FUNCTION_NAME: 'checksops-production-prep-api',
+  }, { root: ROOT });
+  assert.equal(lambda.ok, false);
+  assert.equal(lambda.code, CODES.UNRELATED_MUTATION);
+
+  const identity = githubSql53Identity({
+    GITHUB_SHA: '0e586b8510d2c509586d67648818f8848d24a84f',
+    GITHUB_REF_NAME: 'feature',
+    GITHUB_REF: 'refs/heads/feature',
+    GITHUB_ACTOR: 'test-operator',
+    GITHUB_RUN_ID: '12345',
+  });
+  assert.equal(identity.ok, false);
+});
+
 test('official CLI apply builds a production connect factory from the validated URL', async () => {
   const inputFile = path.join(os.tmpdir(), `sql53-prod-connect-${process.pid}.json`);
   fs.writeFileSync(inputFile, `${JSON.stringify(productionInput({ inspect: catalog() }), null, 2)}\n`);
@@ -249,6 +358,42 @@ test('official CLI apply builds a production connect factory from the validated 
     },
   });
   assert.equal(code, 0);
+  assert.equal(typeof captured.connect, 'function');
+  assert.match(String(captured.databaseUrl || ''), /checksops-production/);
+});
+
+test('official CLI apply can build a connect factory from the existing admin secret', async () => {
+  const inputFile = path.join(os.tmpdir(), `sql53-prod-secret-${process.pid}.json`);
+  fs.writeFileSync(inputFile, `${JSON.stringify(productionInput({ inspect: catalog() }), null, 2)}\n`);
+  let captured;
+  let consumed = 0;
+  const code = await productionApplyMain(['--apply', '--input', inputFile], {
+    CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1',
+    CHECKSOPS_SQL53_PRODUCTION_ADMIN_SECRET_ARN: ADMIN_ARN,
+  }, {
+    root: ROOT,
+    enforceScriptGuard: () => ({
+      ok: true,
+      details: { receipt: { mac: 'a'.repeat(64), workstream_id: 'prod-sql53-production-executor-3bc9' } },
+    }),
+    consumeReceiptOnce: () => {
+      consumed += 1;
+      return { ok: true, details: { consumed: true } };
+    },
+    getSecretValue: async () => JSON.stringify({
+      username: 'checksops_admin',
+      password: 'unused-test-password',
+      host: ADMIN_HOST,
+      port: 5432,
+      dbname: 'checksops',
+    }),
+    execute: async (_input, ctx) => {
+      captured = ctx;
+      return { ok: true, details: { apply_executed: false } };
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(consumed, 1);
   assert.equal(typeof captured.connect, 'function');
   assert.match(String(captured.databaseUrl || ''), /checksops-production/);
 });

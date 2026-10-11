@@ -1,0 +1,52 @@
+name: SQL53 production apply evaluate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sql53-production-apply-evaluate
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+
+      - name: Refuse unexpected ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "SQL 53 GitHub evaluate is only permitted from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+
+      - name: Evaluate official SQL 53 production path
+        id: evaluate
+        shell: bash
+        env:
+          CHECKSOPS_SQL53_GITHUB_MODE: evaluate
+        run: node scripts/deployment-guard/github-sql53-production-apply.mjs
+
+      - name: Record evaluate-only evidence
+        shell: bash
+        run: |
+          {
+            echo "### SQL 53 production evaluate"
+            echo "- Recommended environment: \`${{ steps.evaluate.outputs.recommended_environment }}\`"
+            echo "- GitHub can apply: \`${{ steps.evaluate.outputs.github_can_apply }}\`"
+            echo "- Pin execute: \`${{ steps.evaluate.outputs.pin_execute }}\`"
+            echo "- Source SHA-256: \`${{ steps.evaluate.outputs.source_sha256 }}\`"
+            echo "- SQL was not executed."
+          } >> "$GITHUB_STEP_SUMMARY"
