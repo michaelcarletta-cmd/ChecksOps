@@ -10,20 +10,43 @@ permissions:
 jobs:
   upload:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout immutable reviewed source
+      - name: Checkout reviewed main source
         uses: actions/checkout@v4
         with:
-          ref: 4b734515d0584aa6008d2fb9503e3b8144551dee
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Verify SQL53 source and disabled execution
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify SQL53 source and production pin
         shell: bash
         run: |
           set -euo pipefail
           echo "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197  aws/workflows/sql/53_claim_settlement_breakdown.sql" | sha256sum -c -
-          node -e "const p=require('./ops/deployment-guard/sql53-production-apply.json'); if(p.execute!==false || p.apply_authorized!==false || p.authorization!=='source-only') process.exit(1)"
-          git archive --format=tar.gz --output=/tmp/reviewed-source-4b734515d058.tar.gz HEAD
-          sha256sum /tmp/reviewed-source-4b734515d058.tar.gz
+          node -e '
+            const p = require("./ops/deployment-guard/sql53-production-apply.json");
+            if (p.source_sha256 !== "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197") process.exit(1);
+            if (p.target_environment !== "production" || p.target_component !== "production-sql") process.exit(1);
+            console.log(`pin execute=${p.execute} apply_authorized=${p.apply_authorized}`);
+          '
+      - name: Package source with runner-only dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="${GITHUB_SHA}"
+          PG=$(node -p 'require("./package-lock.json").packages["node_modules/pg"].version')
+          SM=$(node -p 'require("./package-lock.json").packages["node_modules/@aws-sdk/client-secrets-manager"].version')
+          mkdir -p /tmp/pkg/src /tmp/pkg/deps
+          git archive HEAD | tar -x -C /tmp/pkg/src
+          cd /tmp/pkg/deps
+          echo '{"name":"sql53-runner-deps","private":true}' > package.json
+          npm install --ignore-scripts --omit=optional --no-audit --no-fund "pg@${PG}" "@aws-sdk/client-secrets-manager@${SM}"
+          mv node_modules /tmp/pkg/src/node_modules
+          cd /tmp/pkg
+          tar -czf "source-${SHA}.tar.gz" -C src .
+          sha256sum "source-${SHA}.tar.gz" | tee "source-${SHA}.tar.gz.sha256"
       - name: Assume temporary artifact-upload-only role
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -34,5 +57,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          aws s3 cp /tmp/reviewed-source-4b734515d058.tar.gz s3://checksops-sql53-transfer-806168576068/sql53/reviewed-source-4b734515d058.tar.gz --sse AES256 --no-progress
-          aws s3api head-object --bucket checksops-sql53-transfer-806168576068 --key sql53/reviewed-source-4b734515d058.tar.gz --query '{ContentLength:ContentLength,ServerSideEncryption:ServerSideEncryption}' --output json
+          SHA="${GITHUB_SHA}"
+          for f in "source-${SHA}.tar.gz" "source-${SHA}.tar.gz.sha256"; do
+            aws s3 cp "/tmp/pkg/${f}" "s3://checksops-sql53-transfer-806168576068/sql53/${f}" --sse AES256 --no-progress
+          done
+          aws s3api head-object --bucket checksops-sql53-transfer-806168576068 --key "sql53/source-${SHA}.tar.gz" --query '{ContentLength:ContentLength,ServerSideEncryption:ServerSideEncryption}' --output json

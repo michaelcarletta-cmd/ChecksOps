@@ -53,6 +53,16 @@ node scripts/deployment-guard/sql53-production-apply.mjs \
   --apply --input <sql53-production-apply-manifest.json>
 ```
 
+On `i-0c35557c4e5385406`, also set
+`AWS_ENDPOINT_URL_SECRETS_MANAGER=https://vpce-01649ea2cdb21a689-tp7fo1qj.secretsmanager.us-east-1.vpce.amazonaws.com`.
+The staging Secrets Manager endpoint in `vpc-09f2268778966ce97` has private
+DNS enabled and only admits staging, so the default hostname times out from
+the runner. The production endpoint admits `checksops-sql53-temporary-runner`.
+
+Stage runner source with `.github/workflows/sql53-temporary-transfer.yml`
+(dispatch on `main`). It uploads `sql53/source-<sha>.tar.gz` plus a `.sha256`
+sidecar, with `pg` and `@aws-sdk/client-secrets-manager` at lockfile versions.
+
 `CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL` remains accepted if the URL already
 exists. The CLI may instead load the existing production admin secret. Do not
 create a new secret, role, or Cursor OIDC trust. Do not put `issuer.key` on
