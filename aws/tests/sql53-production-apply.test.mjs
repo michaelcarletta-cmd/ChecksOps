@@ -104,9 +104,10 @@ function catalog({
   };
 }
 
-test('production apply pin reuses the approved SQL 53 file and stays execute-false', () => {
-  assert.equal(PIN.apply_authorized, false);
-  assert.equal(PIN.execute, false);
+test('production apply pin reuses the approved SQL 53 file and is execute-authorized', () => {
+  assert.equal(PIN.authorization, 'execute-authorized');
+  assert.equal(PIN.apply_authorized, true);
+  assert.equal(PIN.execute, true);
   assert.equal(PIN.deployment_type, SQL53_PRODUCTION_APPLY_DEPLOYMENT_TYPE);
   assert.equal(PIN.source_sha256, '5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197');
   assert.equal(hashSqlDefinition.length > 0, true);
@@ -150,13 +151,15 @@ test('staging paths still refuse production and the repair pin stays evaluate-on
   assert.equal(repair.code, CODES.GUARD_APPLY_FORBIDDEN);
 });
 
-test('evaluateSql53ProductionApply accepts a complete production package and refuses execute', () => {
+test('evaluateSql53ProductionApply accepts a complete production package when the pin is execute-authorized', () => {
   const ready = evaluateSql53ProductionApply(productionInput({
     inspect: catalog(),
   }), { root: ROOT });
   assert.equal(ready.ok, true, ready.message);
   assert.equal(ready.details.sql53_production_executor_ready, true);
-  assert.equal(ready.details.independent_execute_authorization_required, true);
+  assert.equal(ready.details.apply_authorized, true);
+  assert.equal(ready.details.execute, true);
+  assert.equal(ready.details.independent_execute_authorization_required, false);
 
   const apply = evaluateSql53ProductionApply(productionInput({
     action: 'apply',
@@ -164,8 +167,9 @@ test('evaluateSql53ProductionApply accepts a complete production package and ref
     inspect: catalog(),
     authorization_phrase: SQL53_PRODUCTION_APPLY_PHRASE,
   }), { root: ROOT });
-  assert.equal(apply.ok, false);
-  assert.equal(apply.code, CODES.GUARD_APPLY_FORBIDDEN);
+  assert.equal(apply.ok, true, apply.message);
+  assert.equal(apply.details.execute, true);
+  assert.equal(apply.details.apply_executed, false);
 
   const exists = evaluateSql53ProductionCatalog(catalog({
     exists: true,
@@ -297,7 +301,9 @@ test('trusted runner and GitHub evaluate stay off Lambda and do not apply', () =
   assert.equal(runner.details.github_can_apply, false);
   assert.equal(runner.details.lambda_executor_forbidden, true);
   assert.equal(runner.details.issuer_key_stays_off_lambda, true);
-  assert.equal(runner.details.independent_execute_authorization_required, true);
+  assert.equal(runner.details.pin_execute, true);
+  assert.equal(runner.details.pin_apply_authorized, true);
+  assert.equal(runner.details.independent_execute_authorization_required, false);
 
   const github = evaluateGithubSql53ProductionApply({
     GITHUB_SHA: '0e586b8510d2c509586d67648818f8848d24a84f',
@@ -435,7 +441,7 @@ test('official CLI apply does not consume a receipt when local apply gates refus
     return { code, consumed, stderr };
   };
 
-  const executeFalse = await run();
+  const executeFalse = await run({}, { ...PIN, execute: false });
   assert.equal(executeFalse.code, 1);
   assert.equal(executeFalse.consumed, 0);
   assert.match(executeFalse.stderr, /GUARD_APPLY_FORBIDDEN/);

@@ -1,8 +1,8 @@
 {
   "id": "sql53-production-apply",
-  "authorization": "source-only",
-  "apply_authorized": false,
-  "execute": false,
+  "authorization": "execute-authorized",
+  "apply_authorized": true,
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql53-production-apply",
@@ -67,10 +67,21 @@
     "exists": false,
     "rdsIdentifier": "checksops-production",
     "at": "2026-10-11T02:16:36Z",
+    "source": "official writer inspect PR #874",
     "settlement_columns_found": 17,
     "settlement_columns_missing": 0,
     "ledger_triggers_found": 3,
-    "ledger_triggers_missing": 0
+    "ledger_triggers_missing": 0,
+    "functions_found": [
+      "public.sync_homeowner_ledger_from_check()",
+      "public.aws_can_write_claim(uuid)",
+      "public.hle_on_check_intake_insert()"
+    ],
+    "functions_missing": [
+      "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)"
+    ],
+    "stale": true,
+    "must_reverify_on_host": "i-0c35557c4e5385406"
   },
   "release_lock": {
     "exclusive": true,
