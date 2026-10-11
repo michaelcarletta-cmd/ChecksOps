@@ -1,7 +1,7 @@
 {
   "workstream_id": "prod-sql53-temporary-config-3bc9",
   "branch": "cursor/prod-sql53-temporary-config-3bc9",
-  "commit": "c4ee487e0ba0dde977a4be11fab8cfec04a4bdd0",
+  "commit": "b00899d93aed7887751eec213009770ae5474731",
   "operator": "cursor-agent",
   "target_environment": "production",
   "target_component": "checksops-production-prep-api",
@@ -33,7 +33,7 @@
     "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation"
   },
   "approval": {
-    "approved": false,
+    "approved": true,
     "workstream_id": "prod-sql53-temporary-config-3bc9",
     "inherited": false,
     "from_previous_workstream": false
@@ -45,5 +45,5 @@
   },
   "apply": false,
   "execute": false,
-  "notes": "Evaluate-only prepared manifest. Refresh commit to HEAD and re-fingerprint immediately before preflight --acquire-lease --receipt. Set approval.approved=true only after owner execution authorization for this workstream. Do not inherit overlay or apply-plan approvals."
+  "notes": "Owner-authorized production inspection for this workstream only. Refresh immediately-before fingerprint at apply. Do not inherit other workstreams."
 }
