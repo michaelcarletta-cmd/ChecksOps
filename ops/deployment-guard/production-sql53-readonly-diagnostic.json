@@ -13,7 +13,7 @@
     "sql53-production-readonly-inspect.mjs"
   ],
   "owned_overlay_member_sha256": {
-    "sql53-production-readonly-inspect.mjs": "e20d5f902da161ab8959ed9e2d02c1bd5c0755473731f18fa4a28fc27228ce9a"
+    "sql53-production-readonly-inspect.mjs": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68"
   },
   "index_mjs_policy": "surgical_patch_of_live_index_only",
   "do_not_overlay_from_origin_main": [
@@ -51,7 +51,7 @@
   "authorization_required_before_use": [
     "Direct invoke of checksops-production-prep-api with lambda:InvokeFunction on that function only",
     "API Gateway / HTTP events are refused",
-    "CHECKSOPS_ENV=production",
+    "CHECKSOPS_ENV=production or production-prep",
     "AWS_LAMBDA_FUNCTION_NAME=checksops-production-prep-api",
     "Temporary Lambda environment CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION is an owner-chosen token of at least 32 characters and is not the published diagnostic marker",
     "Temporary Lambda environment CHECKSOPS_SQL53_READONLY_INSPECT_EXPIRES_AT within two hours",

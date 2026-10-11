@@ -20,6 +20,7 @@ export const SQL53_READONLY_INSPECT_MAX_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const SQL53_READONLY_INSPECT_DIAGNOSTIC = 'sql53-production-readonly-inspect';
 export const SQL53_READONLY_INSPECT_EXPECTED_DATABASE = 'checksops';
 export const SQL53_READONLY_INSPECT_EXPECTED_FUNCTION = 'checksops-production-prep-api';
+export const SQL53_READONLY_INSPECT_ALLOWED_ENVS = Object.freeze(['production', 'production-prep']);
 export const SQL53_READONLY_INSPECT_EXPECTED_RDS_IDENTIFIER = 'checksops-production';
 export const SQL53_READONLY_INSPECT_SECRETS_SHA256 = 'f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3';
 export const SQL53_READONLY_INSPECT_EVENT_KEYS = Object.freeze(['diagnostic', 'authorization']);
@@ -198,14 +199,16 @@ export function sql53ReadonlyInspectAuthorizationState(env = {}, event = {}) {
   if (configured === SQL53_READONLY_INSPECT_AUTHORIZATION) return 'invalid';
   if (requested === SQL53_READONLY_INSPECT_AUTHORIZATION) return 'invalid';
   if (configured !== requested) return 'invalid';
-  if (String(env.CHECKSOPS_ENV || '').toLowerCase() !== 'production') return 'invalid';
+  if (!SQL53_READONLY_INSPECT_ALLOWED_ENVS.includes(String(env.CHECKSOPS_ENV || '').toLowerCase())) {
+    return 'invalid';
+  }
   if (sql53ReadonlyInspectExpiryState(env) !== 'valid') return 'invalid';
   return 'authorized';
 }
 
 export function proveSql53ReadonlyInspectProvenance(env = {}, { hashMember = hashSql53PackageMember } = {}) {
-  if (String(env.CHECKSOPS_ENV || '').toLowerCase() !== 'production') {
-    return { ok: false, reason: 'sql53 inspect requires CHECKSOPS_ENV=production' };
+  if (!SQL53_READONLY_INSPECT_ALLOWED_ENVS.includes(String(env.CHECKSOPS_ENV || '').toLowerCase())) {
+    return { ok: false, reason: 'sql53 inspect requires a production Lambda environment' };
   }
   if (env.AWS_LAMBDA_FUNCTION_NAME !== SQL53_READONLY_INSPECT_EXPECTED_FUNCTION) {
     return { ok: false, reason: 'sql53 inspect package provenance is not the production Lambda' };
