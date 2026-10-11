@@ -1,0 +1,41 @@
+name: SQL53 guarded runner source package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Verify and package pinned SQL53 source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout reviewed SQL53 source
+        uses: actions/checkout@v4
+        with:
+          ref: 4b734515d0584aa6008d2fb9503e3b8144551dee
+          persist-credentials: false
+      - name: Validate immutable migration and disabled production pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197  aws/workflows/sql/53_claim_settlement_breakdown.sql" | sha256sum -c -
+          node -e "const p=require('./ops/deployment-guard/sql53-production-apply.json'); if(p.execute!==false || p.apply_authorized!==false || p.authorization!=='source-only') process.exit(1)"
+          test -f scripts/deployment-guard/sql53-production-apply.mjs
+          test -f scripts/deployment-guard/preflight.mjs
+      - name: Create full source package without git credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --output=/tmp/checksops-sql53-4b734515d058.tar.gz HEAD
+          mkdir -p sql53-package
+          mv /tmp/checksops-sql53-4b734515d058.tar.gz sql53-package/
+          (cd sql53-package && sha256sum checksops-sql53-4b734515d058.tar.gz > checksops-sql53-4b734515d058.tar.gz.sha256)
+      - name: Upload reviewable source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksops-sql53-reviewed-source-4b734515d058
+          path: sql53-package/
+          retention-days: 7
+          if-no-files-found: error
