@@ -1,0 +1,55 @@
+{
+  "id": "sql53-staging-acceptance",
+  "record_kind": "staging_acceptance_evidence",
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "intended_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/37973071977",
+    "accepted_by": "michaelcarletta-cmd",
+    "accepted_at": "2026-10-11",
+    "basis": "Read-only staging diagnostic after apply shows the function present with the intended definition hash and all preserved function hashes unchanged."
+  },
+  "evidence": {
+    "before_apply": {
+      "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+      "workflow_run": 37969902795,
+      "at": "2026-10-09T17:57:40Z",
+      "exists": false,
+      "definitionSha256": null
+    },
+    "apply": {
+      "at": "2026-10-09T18:18:06Z",
+      "function_name": "checksops-staging-guarded-sql-executor",
+      "executor_code_deployed_at": "2026-10-09T17:47:40Z",
+      "executor_code_sha256": "oqbZHB8JUyKpLgsfv96gudtHAZKKZkHUSnPFfDkCz24=",
+      "executor_revision_id": "983b80cd-ef8c-43a7-99c4-d3f9a5334a7d",
+      "deployed_by": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/sql53-ensure-apply",
+      "source": "CloudTrail UpdateFunctionCode/UpdateFunctionConfiguration and Lambda log invocations; not previously recorded in this repository"
+    },
+    "after_apply": {
+      "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+      "workflow_run": 37973071977,
+      "at": "2026-10-09T18:24:56Z",
+      "exists": true,
+      "definitionSha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+      "preserved_function_definition_sha256": {
+        "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+        "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf",
+        "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+      }
+    }
+  },
+  "known_gaps": [
+    "Staging diagnostic runs 38152039966 and 38173152840 (2026-10-11) failed with staging_identity_rejected; CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN needs refreshing before a fresh staging read is possible.",
+    "The staging executor was invoked again at 2026-10-11T16:11:46Z; its action is not visible in Lambda logs.",
+    "sql53-live-executor-inventory.json still lists the pre-2026-10-09T17:47 executor fingerprint; the live executor is not modified by this record.",
+    "sql53-staging-authorization.json and sql53-staging-execution.json remain source-only; this record does not retroactively authorize the 2026-10-09 apply."
+  ],
+  "notes": "Evidence-only record. Does not apply SQL, invoke the executor, or change staging. Supplies the staging acceptance reference required by the production gate for sql53-production-apply."
+}

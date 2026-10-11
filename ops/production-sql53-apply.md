@@ -27,7 +27,8 @@ Do not run these steps until a separate execute authorization sets
    - `target_component=production-sql`
    - `authorization_phrase=CREATE_SAVE_CLAIM_SETTLEMENT_BREAKDOWN`
    - matching `production_fingerprint` and `immediately_before_fingerprint`
-   - `staging_acceptance.ok=true` plus a reference
+   - `staging_acceptance.ok=true` plus a reference (see
+     `ops/deployment-guard/sql53-staging-acceptance.json`)
    - `approval.approved=true` for **this** workstream
    - `inspect` from step 2
    - a new `one_use_id`
