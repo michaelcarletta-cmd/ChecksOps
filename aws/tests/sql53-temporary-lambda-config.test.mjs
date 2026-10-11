@@ -238,6 +238,14 @@ test('official preflight accepts only the exact production config target and mat
     ...input,
     immediately_before_fingerprint: { ...fingerprint, revision_id: 'stale' },
   }).ok, false);
+  assert.equal(evaluateSql53TemporaryConfigPreflight({
+    ...input,
+    owned_member_ops: undefined,
+  }).ok, true);
+  assert.equal(evaluateSql53TemporaryConfigPreflight({
+    ...input,
+    owned_member_ops: { replace: [], add: [] },
+  }).ok, false);
 });
 
 async function runWriter(root, input, aws, overrides = {}) {

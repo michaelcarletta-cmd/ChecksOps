@@ -25,7 +25,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     deployment_type: opts.type || input.deployment_type,
     owned_members: input.owned_members || input.owned_components,
     owned_components: input.owned_components || input.owned_members,
-    owned_member_ops: input.owned_member_ops,
+    ...(Object.hasOwn(input, 'owned_member_ops') ? { owned_member_ops: input.owned_member_ops } : {}),
     preflight: input.preflight || input.preflight_live_fingerprint,
     preflight_live_fingerprint: input.preflight || input.preflight_live_fingerprint,
     immediately_before: input.immediately_before,
