@@ -6,7 +6,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
 
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
@@ -33,7 +32,6 @@ const PIN = loadSql53ProductionApplyPin(ROOT);
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const SQL_PATH = path.join(ROOT, PIN.filename);
 const ABSENT = PIN.absent_live_definition_sha256;
-const { Client } = pg;
 
 const fingerprint = {
   sql: ABSENT,
@@ -106,6 +104,9 @@ test('production apply pin reuses the approved SQL 53 file and stays execute-fal
   assert.equal(fs.existsSync(SQL_PATH), true);
   assert.equal(createHash('sha256').update(fs.readFileSync(SQL_PATH)).digest('hex'), PIN.source_sha256);
   assert.equal(sql53ContainsForbiddenMutation(fs.readFileSync(SQL_PATH, 'utf8')), null);
+  const applySrc = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/lib/sql53-production-apply.mjs'), 'utf8');
+  assert.doesNotMatch(applySrc, /from ['"]pg['"]/);
+  assert.doesNotMatch(applySrc, /from ['"][^'"]*sql53-production-readonly-inspect\.mjs['"]/);
 });
 
 test('staging paths still refuse production and the repair pin stays evaluate-only', () => {
@@ -234,6 +235,13 @@ test('isolated PostgreSQL production apply path creates only the settlement func
 }, async (t) => {
   if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
     t.skip('PostgreSQL 16 initdb is not installed in this environment');
+    return;
+  }
+  let Client;
+  try {
+    ({ Client } = (await import('pg')).default);
+  } catch {
+    t.skip('pg module is not installed');
     return;
   }
 

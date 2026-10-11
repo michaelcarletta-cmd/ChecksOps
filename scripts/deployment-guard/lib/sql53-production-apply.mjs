@@ -16,15 +16,114 @@ import {
   classifySql53CreateLive,
 } from './sql-executor-auth.mjs';
 import { loadSql53Pin } from './sql53-staging-apply.mjs';
-import {
-  SQL53_FUNCTION_DEF_INSPECT_SQL,
-  SQL53_LEDGER_TRIGGER_INSPECT_SQL,
-  SQL53_PINNED_FUNCTION_LOOKUPS,
-  SQL53_REQUIRED_LEDGER_TRIGGERS,
-  SQL53_REQUIRED_SETTLEMENT_COLUMNS,
-  SQL53_SETTLEMENT_COLUMN_INSPECT_SQL,
-  secretHostBindsProvenRds,
-} from '../../../aws/functions/api/sql53-production-readonly-inspect.mjs';
+
+// Keep catalog constants here so Deployment Guard CI can load this module
+// without installing Lambda runtime `pg`. Do not import
+// sql53-production-readonly-inspect.mjs from this file.
+
+export const SQL53_FUNCTION_DEF_INSPECT_SQL = `
+SELECT n.nspname AS schema_name,
+       p.proname AS function_name,
+       pg_get_functiondef(p.oid) AS def
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = $1::text
+  AND p.proname = $2::text
+  AND p.pronargs = COALESCE(cardinality($3::text[]), 0)
+  AND (
+    SELECT COALESCE(ARRAY_AGG(proc_t.typ ORDER BY proc_t.ord), ARRAY[]::oid[])
+    FROM unnest(p.proargtypes::oid[]) WITH ORDINALITY AS proc_t(typ, ord)
+  ) = (
+    SELECT COALESCE(ARRAY_AGG(u.typ::regtype::oid ORDER BY u.ord), ARRAY[]::oid[])
+    FROM unnest(COALESCE($3::text[], ARRAY[]::text[])) WITH ORDINALITY AS u(typ, ord)
+  )
+`.trim();
+
+export const SQL53_SETTLEMENT_COLUMN_INSPECT_SQL = `SELECT a.attname AS column_name
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relname = 'claim_settlements'
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+  AND a.attname = ANY($1::text[])`;
+
+export const SQL53_LEDGER_TRIGGER_INSPECT_SQL = `SELECT c.relname AS table_name,
+       t.tgname AS trigger_name
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND NOT t.tgisinternal
+  AND c.relname = $1::text
+  AND t.tgname = ANY($2::text[])`;
+
+export const SQL53_PINNED_FUNCTION_LOOKUPS = Object.freeze([
+  Object.freeze({
+    identity: 'public.save_claim_settlement_breakdown(uuid,uuid,jsonb)',
+    schema: 'public',
+    name: 'save_claim_settlement_breakdown',
+    argTypes: Object.freeze(['uuid', 'uuid', 'jsonb']),
+  }),
+  Object.freeze({
+    identity: 'public.sync_homeowner_ledger_from_check()',
+    schema: 'public',
+    name: 'sync_homeowner_ledger_from_check',
+    argTypes: Object.freeze([]),
+  }),
+  Object.freeze({
+    identity: 'public.aws_can_write_claim(uuid)',
+    schema: 'public',
+    name: 'aws_can_write_claim',
+    argTypes: Object.freeze(['uuid']),
+  }),
+  Object.freeze({
+    identity: 'public.hle_on_check_intake_insert()',
+    schema: 'public',
+    name: 'hle_on_check_intake_insert',
+    argTypes: Object.freeze([]),
+  }),
+]);
+
+export const SQL53_REQUIRED_SETTLEMENT_COLUMNS = Object.freeze([
+  'replacement_cost_value',
+  'recoverable_depreciation',
+  'non_recoverable_depreciation',
+  'deductible',
+  'other_structures_rcv',
+  'other_structures_recoverable_depreciation',
+  'other_structures_non_recoverable_depreciation',
+  'other_structures_deductible',
+  'pwi_rcv',
+  'pwi_recoverable_depreciation',
+  'pwi_non_recoverable_depreciation',
+  'personal_property_rcv',
+  'personal_property_recoverable_depreciation',
+  'personal_property_non_recoverable_depreciation',
+  'ale_rcv',
+  'ale_recoverable_depreciation',
+  'ale_non_recoverable_depreciation',
+]);
+
+export const SQL53_REQUIRED_LEDGER_TRIGGERS = Object.freeze([
+  Object.freeze({ table: 'check_intake_items', trigger: 'trg_sync_homeowner_ledger_ins' }),
+  Object.freeze({ table: 'check_intake_items', trigger: 'trg_sync_homeowner_ledger_upd' }),
+  Object.freeze({ table: 'check_intake_items', trigger: 'trg_hle_check_intake_insert' }),
+]);
+
+export const SQL53_PRODUCTION_RDS_IDENTIFIER = 'checksops-production';
+
+export function secretHostBindsProvenRds(host, identifier = SQL53_PRODUCTION_RDS_IDENTIFIER) {
+  if (typeof host !== 'string') return false;
+  const hostname = host.trim().toLowerCase().replace(/\.$/, '');
+  if (!hostname || hostname.length > 253 || /[\s:/@\\?#]/.test(hostname)) return false;
+  if (!hostname.endsWith('.rds.amazonaws.com')) return false;
+  const labels = hostname.split('.');
+  if (labels.length < 5 || labels[0] !== identifier) return false;
+  if (hostname.includes('checksops-staging')) return false;
+  return true;
+}
 
 export const SQL53_PRODUCTION_APPLY_DEPLOYMENT_TYPE = 'sql53-production-apply';
 export const SQL53_PRODUCTION_APPLY_COMPONENT = 'production-sql';
