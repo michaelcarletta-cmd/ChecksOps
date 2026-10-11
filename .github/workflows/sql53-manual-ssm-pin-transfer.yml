@@ -1,0 +1,107 @@
+name: SQL53 manual SSM authorization transfer
+
+# Transfer only. No SQL, no lease, no receipt, no deployment.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: checksops-sql53-production-pin-transfer
+  cancel-in-progress: false
+
+jobs:
+  transfer:
+    name: Verify and transfer reviewed SQL53 pin only
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact reviewed main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Validate source, approved pin and configured role
+        shell: bash
+        env:
+          TRANSFER_ROLE_ARN: ${{ vars.CHECKSOPS_SQL53_PIN_TRANSFER_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Requires main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || exit 2
+          test "$TRANSFER_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubSql53PinTransfer" || {
+            echo "Dedicated, reviewed pin-transfer OIDC role is not configured"; exit 2;
+          }
+          echo "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197  aws/workflows/sql/53_claim_settlement_breakdown.sql" | sha256sum -c -
+          python3 - <<'PY'
+          import json
+          p=json.load(open("ops/deployment-guard/sql53-production-apply.json"))
+          assert p["authorization"] == "execute-authorized"
+          assert p["apply_authorized"] is True and p["execute"] is True
+          assert p["source_sha256"] == "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197"
+          assert p["function_identity"] == "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)"
+          print("Exact merged pin and SQL53 source validated")
+          PY
+
+      - name: Assume dedicated pin-transfer-only role
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_SQL53_PIN_TRANSFER_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-sql53-pin-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"ssm:SendCommand","Resource":["arn:aws:ssm:us-east-1::document/AWS-RunShellScript","arn:aws:ec2:us-east-1:806168576068:instance/i-0c35557c4e5385406"]},{"Effect":"Allow","Action":"ssm:GetCommandInvocation","Resource":"*"}]}
+
+      - name: Transfer exact pin using SSM, verify without applying SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, pathlib, subprocess, time
+          pin=pathlib.Path("ops/deployment-guard/sql53-production-apply.json").read_bytes()
+          digest=hashlib.sha256(pin).hexdigest()
+          encoded=base64.b64encode(pin).decode("ascii")
+          # Fixed target, only the approved pin file. No arbitrary command inputs.
+          commands=[
+            "set -eu",
+            "cd /opt/checksops-sql53/source",
+            "echo '5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197  aws/workflows/sql/53_claim_settlement_breakdown.sql' | sha256sum -c -",
+            "cp -a ops/deployment-guard/sql53-production-apply.json /tmp/sql53-pin-before-manual-transfer.json",
+            "printf '%s' '"+encoded+"' | base64 -d > /tmp/sql53-pin-approved-transfer.json",
+            "echo '"+digest+"  /tmp/sql53-pin-approved-transfer.json' | sha256sum -c -",
+            "python3 -c 'import json; p=json.load(open(\"/tmp/sql53-pin-approved-transfer.json\")); assert p[\"authorization\"]==\"execute-authorized\" and p[\"execute\"] is True and p[\"apply_authorized\"] is True'",
+            "cp /tmp/sql53-pin-approved-transfer.json ops/deployment-guard/sql53-production-apply.json",
+            "cmp /tmp/sql53-pin-approved-transfer.json ops/deployment-guard/sql53-production-apply.json",
+            "echo SQL53_PIN_TRANSFER_VERIFIED_NO_SQL_EXECUTED",
+          ]
+          params=json.dumps({"commands":commands})
+          sent=json.loads(subprocess.check_output([
+            "aws","ssm","send-command","--instance-ids","i-0c35557c4e5385406",
+            "--document-name","AWS-RunShellScript","--parameters",params,
+            "--comment","SQL53 reviewed pin transfer only; no SQL execution",
+            "--output","json"
+          ],text=True))
+          cid=sent["Command"]["CommandId"]
+          for _ in range(50):
+            time.sleep(5)
+            try:
+              result=json.loads(subprocess.check_output([
+                "aws","ssm","get-command-invocation","--command-id",cid,
+                "--instance-id","i-0c35557c4e5385406","--output","json"
+              ],text=True))
+            except subprocess.CalledProcessError:
+              continue
+            if result["Status"] in ("Success","Failed","Cancelled","TimedOut"):
+              print(result.get("StandardOutputContent",""))
+              if result["Status"] != "Success":
+                print(result.get("StandardErrorContent",""))
+                raise SystemExit("SSM transfer failed: "+result["Status"])
+              assert "SQL53_PIN_TRANSFER_VERIFIED_NO_SQL_EXECUTED" in result.get("StandardOutputContent","")
+              print("Transfer verified. Production SQL NOT executed.")
+              break
+          else:
+            raise SystemExit("Timed out waiting for SSM transfer verification")
+          PY
