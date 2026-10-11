@@ -25,6 +25,7 @@ const TRANSIENT_CONFIGURATION_KEYS = new Set([
   'StateReason',
   'StateReasonCode',
   'ResponseMetadata',
+  '$metadata',
 ]);
 
 export const SQL53_CONFIG_EXPECTED_FUNCTIONS = Object.freeze([
