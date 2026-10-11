@@ -1,12 +1,11 @@
 import { databaseSecretConfigured } from './secrets.mjs';
 import { probeDatabase, probeIsHealthy } from './db-health.mjs';
-import { redactFunctionDefInspect, validateReadonlyCoreTables } from './db-readonly-validate.mjs';
-import { authorizeDbValidatorDetails, dbValidatorHttpResponse } from './db-validator-access.mjs';
-import { handleIdentityMe, resolveIdentitySession } from './identity.mjs';
+import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
+import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
-import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled, resolveClaims } from './data.mjs';
+import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
 import { handleWrite } from './write.mjs';
 import { handleProviderRequest } from './providers.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
@@ -18,11 +17,10 @@ import {
   handleStoragePublic,
   handleStorageWritesDisabled,
   handlePublicSignatureDocument,
+  handleBrandingLogo,
 } from './storage.mjs';
-import * as storageApi from './storage.mjs';
 import { handlePublicEndorsement } from './check-endorsement.mjs';
 import { handlePublicSignatureSubmit } from './signature-submit.mjs';
-import { handlePublicInvoice } from './public-invoice.mjs';
 import {
   handleStorageUploadUrl,
   handleStorageDelete,
@@ -31,8 +29,7 @@ import {
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
-import { handleCollectionV2UatRequest } from './tenant-collection-v2-uat.mjs';
-import { handleTmpRlsCatalogInspectRequest } from './tenant-maintenance-payments-catalog-inspect.mjs';
+
 import {
   handleSql53ProductionReadonlyInspect,
   isSql53ProductionReadonlyInspectEvent,
@@ -78,64 +75,9 @@ const READ_ONLY_PATHS = new Set([
   '/identity/session',
   '/ops/readiness',
   '/cutover/readiness',
-  '/inspect/tmp-rls-catalog',
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
-
-export const publicDbHealthResponse = (probe) => {
-  const healthy = probeIsHealthy(probe);
-  return {
-    statusCode: healthy ? 200 : 503,
-    body: {
-      service: 'checksops-api',
-      status: healthy ? 'ok' : 'unhealthy',
-    },
-  };
-};
-
-export const publicDbValidationResponse = (validation) => ({
-  statusCode: validation?.ok ? 200 : 503,
-  body: {
-    service: 'checksops-api',
-    status: validation?.ok ? 'ok' : 'unhealthy',
-    readOnly: true,
-  },
-});
-
-export const handleDbReadonlyValidateRequest = async (event, {
-  validate = validateReadonlyCoreTables,
-  resolveAuth = resolveClaims,
-  authorizeDetails = (opts) => authorizeDbValidatorDetails({
-    ...opts,
-    resolveIdentity: opts.resolveIdentity || resolveIdentitySession,
-  }),
-} = {}) => {
-  const validation = await validate();
-  const auth = await resolveAuth(event);
-  const access = await authorizeDetails({ auth });
-  return dbValidatorHttpResponse({
-    access,
-    validation,
-    publicResponse: publicDbValidationResponse,
-    details: (result) => {
-      const body = {
-        service: 'checksops-api',
-        environment: process.env.CHECKSOPS_ENV || 'unknown',
-        productionSupabaseChanged: false,
-        ...result,
-      };
-      delete body.inspect;
-      if (access.reason === 'staging_admin') {
-        body.inspect = redactFunctionDefInspect(result?.inspect);
-      }
-      return {
-        statusCode: result.ok ? 200 : 503,
-        body,
-      };
-    },
-  });
-};
 
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
@@ -181,13 +123,7 @@ export const handler = async (event) => {
 
   if (method === 'GET' && path === '/db-health') {
     const probe = await probeDatabase();
-    const healthy = probeIsHealthy(probe);
-    const auth = await resolveClaims(event);
-    if (!auth.ok) {
-      const publicResult = publicDbHealthResponse(probe);
-      return json(publicResult.statusCode, publicResult.body);
-    }
-    return json(healthy ? 200 : 503, {
+    return json(probeIsHealthy(probe) ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
@@ -196,20 +132,12 @@ export const handler = async (event) => {
   }
 
   if (method === 'GET' && path === '/db-readonly-validate') {
-    const result = await handleDbReadonlyValidateRequest(event);
-    return json(result.statusCode, result.body);
-  }
-
-  // TEMPORARY staging-only TMP RLS catalog inspect. Remove with tenant-maintenance-payments-catalog-inspect.mjs.
-  const tmpRlsCatalog = await handleTmpRlsCatalogInspectRequest(event, path, method);
-  if (tmpRlsCatalog) {
-    return json(tmpRlsCatalog.statusCode || (tmpRlsCatalog.ok ? 200 : 403), {
+    const validation = await validateReadonlyCoreTables();
+    return json(validation.ok ? 200 : 503, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
-      readOnly: true,
-      writesAttempted: false,
-      ...tmpRlsCatalog,
+      ...validation,
     });
   }
 
@@ -316,8 +244,7 @@ export const handler = async (event) => {
 
 
   const brandingLogoPath = path.replace(/^\/prep(?=\/|$)/, '') || '/';
-  const handleBrandingLogo = storageApi.handleBrandingLogo;
-  if (typeof handleBrandingLogo === 'function' && method === 'GET' && (brandingLogoPath === '/branding/logo' || /^\/branding\/logo\/[0-9a-fA-F-]{36}$/.test(brandingLogoPath))) {
+  if (method === 'GET' && (brandingLogoPath === '/branding/logo' || /^\/branding\/logo\/[0-9a-fA-F-]{36}$/.test(brandingLogoPath))) {
     const result = await handleBrandingLogo({ ...event, rawPath: brandingLogoPath });
     if (result.binary && result.body) {
       return {
@@ -477,28 +404,6 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
-    });
-  }
-
-  if (method === 'POST' && path === '/public/invoice') {
-    const result = await handlePublicInvoice(event);
-    return json(result.statusCode || (result.ok ? 200 : 400), {
-      service: 'checksops-api',
-      environment: process.env.CHECKSOPS_ENV || 'unknown',
-      productionSupabaseChanged: false,
-      ...result,
-    });
-  }
-
-  // TEMPORARY staging-only Collection V2 UAT harness. Remove with tenant-collection-v2-uat.mjs.
-  const collectionV2Uat = await handleCollectionV2UatRequest(event, path, method);
-  if (collectionV2Uat) {
-    return json(collectionV2Uat.statusCode || (collectionV2Uat.ok ? 200 : 403), {
-      service: 'checksops-api',
-      environment: process.env.CHECKSOPS_ENV || 'unknown',
-      productionSupabaseChanged: false,
-      liveProviderTransactions: false,
-      ...collectionV2Uat,
     });
   }
 

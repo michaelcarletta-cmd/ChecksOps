@@ -8,6 +8,7 @@ import { handleProcessEmailQueue } from './email-queue.mjs';
 import { handleTenantDomainRecheckCron } from './tenant-email-domain-handlers.mjs';
 import { handleCheckOcrBacklog } from './ocr.mjs';
 import { handleCheckAltStatusReconcileJob } from './providers/production/checkalt-status-reconcile.mjs';
+import { handleMonthlyBillingScheduled } from './tenant-billing-handlers.mjs';
 
 const FINANCIAL_JOBS = new Set([
   'deposit-daily-automation',
@@ -88,6 +89,9 @@ export const handleScheduledRequest = async (event, path, deps = {}) => {
     });
   }
   if (job === 'tenant-domain-recheck-cron') return handleTenantDomainRecheckCron(event);
+  if (job === 'moov-monthly-tenant-billing') {
+    return handleMonthlyBillingScheduled(event, deps);
+  }
   if (job === 'check-ocr-backlog') {
     // OCR backlog requires Cognito identity in current handler — return deferred for schedule
     return {

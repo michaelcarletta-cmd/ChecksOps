@@ -350,6 +350,24 @@ const isMoovSweepRead = (spec, body) => {
   return action === 'get' || action === 'list' || action === 'sweeps';
 };
 
+/**
+ * Accepted Platform Finance UI invokes only:
+ *   moov-platform-bank  action=status
+ *   platform-treasury   action=overview
+ * Unused diagnosis candidates (wallet/pnl/list/get) stay hard-blocked.
+ */
+const isPlatformFinanceRead = (spec, body) => {
+  if (spec?.provider !== 'moov') return false;
+  const action = String(body?.action ?? '').toLowerCase();
+  if (spec.name === 'moov-platform-bank') return action === 'status';
+  if (spec.name === 'platform-treasury') return action === 'overview';
+  return false;
+};
+
+const isAuthorizedMoovProductionRead = (spec, body) => (
+  isMoovSweepRead(spec, body) || isPlatformFinanceRead(spec, body)
+);
+
 export const handleFunctionInvoke = async (event, name, deps = {}) => {
   // Class A ordinary services are owned by app-services.mjs — never stub them here.
   try {
@@ -377,19 +395,19 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
-    if (isMoovSweepRead(spec, body)) {
-      // Read-only production Moov sweep snapshot is allowed while all other provider
-      // operations remain hard-blocked unless separately authorized.
+    if (isAuthorizedMoovProductionRead(spec, body)) {
+      // Read-only production Moov exceptions: sweep snapshot + Platform Finance
+      // status/overview. All other provider operations remain hard-blocked.
     } else {
-    return denyProviderExecution(spec.provider, spec.name, {
-      error: 'production_execution_blocked',
-      message: 'Production provider flags stay false. Staging never uses production Moov/CheckAlt keys. Enable AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED for sandbox/UAT ports only.',
-      tranche4HardBlock: true,
-    });
+      return denyProviderExecution(spec.provider, spec.name, {
+        error: 'production_execution_blocked',
+        message: 'Production provider flags stay false. Staging never uses production Moov/CheckAlt keys. Enable AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED for sandbox/UAT ports only.',
+        tranche4HardBlock: true,
+      });
     }
   }
 
-  if ((providerSandboxExecutionEnabled() || isMoovSweepRead(spec, body)) && hasParityHandler(name)) {
+  if ((providerSandboxExecutionEnabled() || isAuthorizedMoovProductionRead(spec, body)) && hasParityHandler(name)) {
     return runParityHandler(name, event, deps);
   }
 

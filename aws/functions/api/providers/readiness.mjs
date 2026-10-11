@@ -154,7 +154,7 @@ export const evaluateReadiness = (input) => {
 
   const blocking = checks.filter((item) => item.id !== 'fee_plan');
   const canMoveMoney = blocking
-    .filter((item) => item.id !== 'wallet_balance' && item.id !== 'send_funds_ach_sameday' && item.id !== 'collect_funds_ach')
+    .filter((item) => item.id !== 'wallet_balance' && item.id !== 'send_funds_ach_sameday')
     .every((item) => item.state === 'ready');
 
   const overall = canMoveMoney

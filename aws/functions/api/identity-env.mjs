@@ -134,3 +134,96 @@ export const lookupIdentityMapping = async (client, cognitoSub, scope = resolveT
     writesAttempted: false,
   };
 };
+
+/** Live trigger identity_protect_production_cognito_locks requires this GUC. */
+export const PRODUCTION_IDENTITY_WRITE_GUC = 'request.production_identity_write';
+
+export const SELECT_PRODUCTION_LOCK_BY_SUB_SQL = `SELECT application_user_id::text AS application_user_id,
+       cognito_sub
+FROM public.identity_production_cognito_locks
+WHERE cognito_sub = $1
+LIMIT 1`;
+
+export const SELECT_PRODUCTION_LOCK_BY_USER_SQL = `SELECT application_user_id::text AS application_user_id,
+       cognito_sub
+FROM public.identity_production_cognito_locks
+WHERE application_user_id = $1::uuid
+LIMIT 1`;
+
+export const INSERT_PRODUCTION_LOCK_SQL = `INSERT INTO public.identity_production_cognito_locks (application_user_id, cognito_sub)
+VALUES ($1::uuid, $2)`;
+
+/**
+ * Provision the production Cognito lock using the existing write contract
+ * (SET LOCAL request.production_identity_write=1, then INSERT).
+ *
+ * Login /identity/me must not call this. Staging identityEnv is a no-op.
+ * Bind only the server-resolved Cognito sub + application user.
+ */
+export const bindProductionCognitoLock = async (client, {
+  cognitoSub,
+  applicationUserId,
+  identityScope = resolveTrustedIdentityScope(),
+} = {}) => {
+  if (!identityScope?.ok) {
+    return { ok: false, error: identityScope?.error || 'identity_env_unconfigured', writesAttempted: false };
+  }
+  if (identityScope.identityEnv !== IDENTITY_ENV_PRODUCTION) {
+    return {
+      ok: true,
+      bound: false,
+      skipped: true,
+      reason: 'staging_identity_env',
+      writesAttempted: false,
+    };
+  }
+
+  const sub = String(cognitoSub || '').trim();
+  const userId = String(applicationUserId || '').trim();
+  if (!sub || !userId) {
+    return { ok: false, error: 'identity_lock_missing_binding', writesAttempted: false };
+  }
+  if (sub === userId) {
+    return { ok: false, error: 'unsafe_or_missing_cognito_sub', writesAttempted: false };
+  }
+
+  const bySub = (await client.query(SELECT_PRODUCTION_LOCK_BY_SUB_SQL, [sub])).rows[0] || null;
+  const byUser = (await client.query(SELECT_PRODUCTION_LOCK_BY_USER_SQL, [userId])).rows[0] || null;
+
+  if (bySub && String(bySub.application_user_id) !== userId) {
+    return { ok: false, error: 'identity_lock_conflict', writesAttempted: false };
+  }
+  if (byUser && String(byUser.cognito_sub) !== sub) {
+    return { ok: false, error: 'identity_lock_conflict', writesAttempted: false };
+  }
+  if (bySub && byUser) {
+    return {
+      ok: true,
+      bound: true,
+      idempotent: true,
+      applicationUserId: userId,
+      cognitoSub: sub,
+      writesAttempted: false,
+    };
+  }
+
+  await client.query('SELECT set_config($1, $2, true)', [PRODUCTION_IDENTITY_WRITE_GUC, '1']);
+  try {
+    await client.query(INSERT_PRODUCTION_LOCK_SQL, [userId, sub]);
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'identity_lock_failed',
+      message: String(error.message || error).slice(0, 240),
+      writesAttempted: true,
+    };
+  }
+  return {
+    ok: true,
+    bound: true,
+    idempotent: false,
+    applicationUserId: userId,
+    cognitoSub: sub,
+    writesAttempted: true,
+  };
+};

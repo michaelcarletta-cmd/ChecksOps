@@ -22,6 +22,17 @@ import { isUuid, verifyOwnershipChain } from './financial-ownership.mjs';
 import { auditRow } from './financial-audit.mjs';
 import { reconcileOperations } from './financial-reconciliation.mjs';
 import { privilegedAuthPolicy } from './privileged-auth.mjs';
+import {
+  findOperationBySequence,
+  findReservedRemainingDraw,
+  isMoneyOutOperation,
+  loadCheckOperations,
+  lockCheckMoney,
+  nextDisbursementSequence,
+  parseDisbursementSequence,
+  parseRequestedPartialCents,
+  summarizeCheckMoney,
+} from './financial-remaining.mjs';
 
 export const CERTIFICATION_FIXTURE_CENTS = 12345;
 export const CERTIFICATION_MARKER = 'AWS T6 FINANCIAL';
@@ -78,6 +89,7 @@ const publicOperation = (row) => {
     amount_cents: Number(row.amount_cents),
     currency: row.currency,
     amount_source: row.amount_source,
+    disbursement_sequence: Number(row.metadata?.disbursement_sequence) || null,
     idempotency_key: row.idempotency_key,
     status: row.status,
     previous_status: row.previous_status,
@@ -368,18 +380,146 @@ const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ c
     });
     return denied(spoof, { statusCode: ownership.statusCode || 403, ...ownership });
   }
-  const amount = resolveServerAmount({
-    check: found.check,
-    simulationEnabled: financialSandboxSimulationEnabled(),
-  });
-  if (amount.error) {
-    return denied(spoof, { statusCode: 400, ...amount });
+  const moneyOut = isMoneyOutOperation(operationType);
+  let amount;
+  let sequence = null;
+  let drawKind = 'full_check';
+  let remainingSnapshot = null;
+  if (moneyOut) {
+    const requested = parseRequestedPartialCents(body);
+    if (requested.error) return denied(spoof, { statusCode: 400, ...requested });
+    const parsedSequence = parseDisbursementSequence(body);
+    if (parsedSequence.error) return denied(spoof, { statusCode: 400, ...parsedSequence });
+    await lockCheckMoney(client, found.check.id);
+    const checkOps = await loadCheckOperations(client, found.check.id);
+    remainingSnapshot = summarizeCheckMoney(checkOps);
+    if (parsedSequence.present) {
+      const existingSeq = findOperationBySequence(checkOps, operationType, parsedSequence.sequence);
+      if (existingSeq) {
+        remainingSnapshot = summarizeCheckMoney(checkOps);
+        await insertAudit(client, {
+          applicationUserId: mapping.application_user_id,
+          tenantId: found.check.tenant_id,
+          operationType,
+          operationId: existingSeq.id,
+          amountCents: existingSeq.amount_cents,
+          provider,
+          outcome: 'idempotent_replay',
+          idempotencyKey: existingSeq.idempotency_key,
+          details: { disbursement_sequence: parsedSequence.sequence },
+        });
+        return {
+          ok: true,
+          statusCode: 200,
+          duplicate: true,
+          replayed: true,
+          liveProviderCalled: false,
+          productionExecution: false,
+          applicationUserId: mapping.application_user_id,
+          authUid: mapping.application_user_id,
+          cognitoSub: claims.sub,
+          spoofFieldsIgnored: { ...spoof, ownership: ownership.ignored },
+          gate,
+          remaining: remainingSnapshot,
+          amount: {
+            cents: Number(existingSeq.amount_cents),
+            source: existingSeq.amount_source,
+          },
+          operation: publicOperation(existingSeq),
+        };
+      }
+      sequence = parsedSequence.sequence;
+    } else if (!requested.present) {
+      const reservedDraw = findReservedRemainingDraw(checkOps, operationType);
+      if (reservedDraw) {
+        remainingSnapshot = summarizeCheckMoney(checkOps);
+        await insertAudit(client, {
+          applicationUserId: mapping.application_user_id,
+          tenantId: found.check.tenant_id,
+          operationType,
+          operationId: reservedDraw.id,
+          amountCents: reservedDraw.amount_cents,
+          provider,
+          outcome: 'idempotent_replay',
+          idempotencyKey: reservedDraw.idempotency_key,
+          details: { draw_kind: 'remaining' },
+        });
+        return {
+          ok: true,
+          statusCode: 200,
+          duplicate: true,
+          replayed: true,
+          liveProviderCalled: false,
+          productionExecution: false,
+          applicationUserId: mapping.application_user_id,
+          authUid: mapping.application_user_id,
+          cognitoSub: claims.sub,
+          spoofFieldsIgnored: { ...spoof, ownership: ownership.ignored },
+          gate,
+          remaining: remainingSnapshot,
+          amount: {
+            cents: Number(reservedDraw.amount_cents),
+            source: reservedDraw.amount_source,
+          },
+          operation: publicOperation(reservedDraw),
+        };
+      }
+    }
+    if (requested.present) {
+      if (requested.cents > remainingSnapshot.remaining_cents || requested.cents > remainingSnapshot.available_to_reserve_cents) {
+        return denied(spoof, {
+          statusCode: 409,
+          error: 'exceeds_remaining',
+          message: 'requested_partial_cents exceeds server-derived remaining balance',
+          remaining: remainingSnapshot,
+        });
+      }
+      const validated = validateProviderCents(requested.cents);
+      if (validated.error) return denied(spoof, { statusCode: 400, ...validated });
+      amount = {
+        cents: validated.cents,
+        source: 'requested_partial_cents',
+        checkalt: formatCheckAltUserAmount(validated.cents / 100),
+        moov: formatMoovTransferAmount(validated.cents),
+      };
+      drawKind = 'partial';
+    } else {
+      if (remainingSnapshot.available_to_reserve_cents <= 0) {
+        return denied(spoof, {
+          statusCode: 409,
+          error: remainingSnapshot.confirmed_in_cents <= 0 ? 'no_confirmed_money_in' : 'insufficient_remaining',
+          message: remainingSnapshot.fully_disbursed
+            ? 'Check is fully disbursed'
+            : 'No remaining balance is available to reserve',
+          remaining: remainingSnapshot,
+        });
+      }
+      const validated = validateProviderCents(remainingSnapshot.available_to_reserve_cents);
+      if (validated.error) return denied(spoof, { statusCode: 400, ...validated });
+      amount = {
+        cents: validated.cents,
+        source: 'remaining_balance',
+        checkalt: formatCheckAltUserAmount(validated.cents / 100),
+        moov: formatMoovTransferAmount(validated.cents),
+      };
+      drawKind = 'remaining';
+    }
+    if (sequence == null) sequence = nextDisbursementSequence(checkOps, operationType);
+  } else {
+    amount = resolveServerAmount({
+      check: found.check,
+      simulationEnabled: financialSandboxSimulationEnabled(),
+    });
+    if (amount.error) {
+      return denied(spoof, { statusCode: 400, ...amount });
+    }
   }
   const key = stableIdempotencyKey({
     tenantId: found.check.tenant_id,
     operationType,
     resourceId: found.check.id,
     amountCents: amount.cents,
+    disbursementSequence: sequence,
   });
   const existing = await lookupOperation(client, { idempotencyKey: key, tenantId: found.check.tenant_id });
   if (existing) {
@@ -405,38 +545,76 @@ const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ c
       cognitoSub: claims.sub,
       spoofFieldsIgnored: { ...spoof, ownership: ownership.ignored },
       gate,
+      remaining: remainingSnapshot,
       amount,
       operation: publicOperation(existing),
     };
   }
   const ready = found.check.status === 'approved_for_deposit' || found.check.check_stage === 'ready_for_deposit';
-  const inserted = (await client.query(
-    `INSERT INTO public.aws_financial_operations
-      (tenant_id, application_user_id, operation_type, provider, resource_type, resource_id,
-       amount_cents, currency, amount_source, idempotency_key, status, simulated,
-       live_provider_called, metadata)
-     VALUES ($1::uuid, $2::uuid, $3, $4, 'check', $5::uuid, $6, 'USD', $7, $8, $9, true, false, $10::jsonb)
-     RETURNING *`,
-    [
-      found.check.tenant_id,
-      mapping.application_user_id,
-      operationType,
-      provider,
-      found.check.id,
-      amount.cents,
-      amount.source,
-      key,
-      FINANCIAL_STATES.ready_for_provider,
-      JSON.stringify({
-        marker: body?.marker || CERTIFICATION_MARKER,
-        check_status: found.check.status,
-        check_stage: found.check.check_stage,
-        ready_for_provider: ready,
-        provider_account_id: providerAccount?.provider_account_id || null,
-        wallet_id: wallet?.id || null,
-      }),
-    ],
-  )).rows[0];
+  let inserted;
+  try {
+    inserted = (await client.query(
+      `INSERT INTO public.aws_financial_operations
+        (tenant_id, application_user_id, operation_type, provider, resource_type, resource_id,
+         amount_cents, currency, amount_source, idempotency_key, status, simulated,
+         live_provider_called, metadata)
+       VALUES ($1::uuid, $2::uuid, $3, $4, 'check', $5::uuid, $6, 'USD', $7, $8, $9, true, false, $10::jsonb)
+       RETURNING *`,
+      [
+        found.check.tenant_id,
+        mapping.application_user_id,
+        operationType,
+        provider,
+        found.check.id,
+        amount.cents,
+        amount.source,
+        key,
+        FINANCIAL_STATES.ready_for_provider,
+        JSON.stringify({
+          marker: body?.marker || CERTIFICATION_MARKER,
+          check_status: found.check.status,
+          check_stage: found.check.check_stage,
+          ready_for_provider: ready,
+          provider_account_id: providerAccount?.provider_account_id || null,
+          wallet_id: wallet?.id || null,
+          ...(moneyOut ? {
+            disbursement_sequence: sequence,
+            draw_kind: drawKind,
+            requested_partial_cents: drawKind === 'partial' ? amount.cents : null,
+            remaining_snapshot: remainingSnapshot,
+          } : {}),
+        }),
+      ],
+    )).rows[0];
+  } catch (error) {
+    if (error?.code === '23505') {
+      const raced = await lookupOperation(client, { idempotencyKey: key, tenantId: found.check.tenant_id });
+      if (raced) {
+        const afterRace = moneyOut ? summarizeCheckMoney(await loadCheckOperations(client, found.check.id)) : remainingSnapshot;
+        return {
+          ok: true,
+          statusCode: 200,
+          duplicate: true,
+          replayed: true,
+          liveProviderCalled: false,
+          productionExecution: false,
+          applicationUserId: mapping.application_user_id,
+          authUid: mapping.application_user_id,
+          cognitoSub: claims.sub,
+          spoofFieldsIgnored: { ...spoof, ownership: ownership.ignored },
+          gate,
+          remaining: afterRace,
+          amount,
+          operation: publicOperation(raced),
+        };
+      }
+    }
+    throw error;
+  }
+  if (moneyOut) {
+    const afterInsert = await loadCheckOperations(client, found.check.id);
+    remainingSnapshot = summarizeCheckMoney(afterInsert);
+  }
   await insertAudit(client, {
     applicationUserId: mapping.application_user_id,
     tenantId: found.check.tenant_id,
@@ -446,7 +624,11 @@ const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ c
     provider,
     outcome: 'prepared',
     idempotencyKey: key,
-    details: { amount_source: amount.source, ready_for_provider: ready },
+    details: {
+      amount_source: amount.source,
+      ready_for_provider: ready,
+      ...(moneyOut ? { disbursement_sequence: sequence, draw_kind: drawKind } : {}),
+    },
   });
   return {
     ok: true,
@@ -460,6 +642,7 @@ const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ c
     spoofFieldsIgnored: { ...spoof, ownership: ownership.ignored },
     gate,
     amount,
+    remaining: remainingSnapshot,
     readyForProvider: ready,
     operation: publicOperation(inserted),
   };
@@ -782,6 +965,9 @@ const handleSimulateWebhook = async (event, deps) => withIdentityWrite(event, as
     idempotencyKey: operation.idempotency_key,
     details: { event_type: eventType, external_event_id: externalEventId },
   });
+  const remaining = operation.resource_id
+    ? summarizeCheckMoney(await loadCheckOperations(client, operation.resource_id))
+    : null;
   return {
     ok: true,
     statusCode: 200,
@@ -797,6 +983,7 @@ const handleSimulateWebhook = async (event, deps) => withIdentityWrite(event, as
     authUid: mapping.application_user_id,
     cognitoSub: claims.sub,
     spoofFieldsIgnored: spoof,
+    remaining,
     operation: publicOperation(applied.operation),
   };
 }, deps);
@@ -970,3 +1157,4 @@ export const handleFinancialRequest = async (event, path, method, deps = {}) => 
 };
 
 export { handlePrepare, handleSimulateSubmit, handleSimulateWebhook, handleReconcile };
+export { summarizeCheckMoney, parseRequestedPartialCents } from './financial-remaining.mjs';

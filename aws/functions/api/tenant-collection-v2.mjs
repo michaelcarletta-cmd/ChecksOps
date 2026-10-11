@@ -896,7 +896,6 @@ export async function collectTenantObligation(client, {
     simulated: deps.simulate === true,
     occurrence,
     obligation_id: obligationId,
-    obligation_status: obligationStatus,
     collection_status: collectionStatus,
     split: { ...split, bankAmountCents: bankApplied || remaining },
     legs,
