@@ -14,6 +14,7 @@ import { enforceScriptGuard } from './require-guard.mjs';
 import {
   SQL53_PRODUCTION_APPLY_COMPONENT,
   SQL53_PRODUCTION_APPLY_DEPLOYMENT_TYPE,
+  createProductionDatabaseConnect,
   evaluateSql53ProductionApply,
   executeSql53ProductionApply,
   inspectSql53ProductionCatalog,
@@ -73,13 +74,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
 
   const url = resolveProductionDatabaseUrl(env, { harness: input.harness === true });
   if (!url.ok) return printResult(url);
-  if (typeof deps.connect !== 'function' && input.harness !== true) {
-    return printResult(fail(
-      CODES.GUARD_APPLY_FORBIDDEN,
-      'SQL 53 production apply is prepared but live execute still requires the existing production database URL and independent execute authorization',
-      { env: 'CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL', execute: pin.execute === true },
-    ));
-  }
+  const connect = typeof deps.connect === 'function'
+    ? deps.connect
+    : createProductionDatabaseConnect(url.details?.url, { root });
 
   const result = await (deps.execute || executeSql53ProductionApply)({
     ...input,
@@ -92,7 +89,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
   }, {
     root,
     pin,
-    connect: deps.connect,
+    connect,
+    databaseUrl: url.details?.url || null,
     consumedPath: deps.consumedPath,
   });
   return printResult(result);

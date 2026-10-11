@@ -17,6 +17,7 @@ import { evaluateSql53ProductionFunctionRepair } from '../../scripts/deployment-
 import {
   SQL53_PRODUCTION_APPLY_DEPLOYMENT_TYPE,
   SQL53_PRODUCTION_APPLY_PHRASE,
+  createProductionDatabaseConnect,
   evaluateSql53ProductionApply,
   evaluateSql53ProductionCatalog,
   executeSql53ProductionApply,
@@ -228,6 +229,28 @@ test('resolveProductionDatabaseUrl refuses missing, staging, and non-RDS hosts',
     CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL: 'postgres://checksops@checksops-production.c1.us-east-1.rds.amazonaws.com:5432/checksops',
   });
   assert.equal(okUrl.ok, true, okUrl.message);
+  assert.equal(typeof createProductionDatabaseConnect(okUrl.details.url), 'function');
+  assert.equal(createProductionDatabaseConnect(''), undefined);
+});
+
+test('official CLI apply builds a production connect factory from the validated URL', async () => {
+  const inputFile = path.join(os.tmpdir(), `sql53-prod-connect-${process.pid}.json`);
+  fs.writeFileSync(inputFile, `${JSON.stringify(productionInput({ inspect: catalog() }), null, 2)}\n`);
+  let captured;
+  const code = await productionApplyMain(['--apply', '--input', inputFile], {
+    CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1',
+    CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL: 'postgres://checksops@checksops-production.c1.us-east-1.rds.amazonaws.com:5432/checksops',
+  }, {
+    root: ROOT,
+    enforceScriptGuard: () => ({ ok: true }),
+    execute: async (_input, ctx) => {
+      captured = ctx;
+      return { ok: true, details: { apply_executed: false } };
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(typeof captured.connect, 'function');
+  assert.match(String(captured.databaseUrl || ''), /checksops-production/);
 });
 
 test('isolated PostgreSQL production apply path creates only the settlement function', {

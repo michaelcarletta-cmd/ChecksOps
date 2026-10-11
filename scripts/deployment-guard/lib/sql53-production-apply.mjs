@@ -484,7 +484,10 @@ export async function executeSql53ProductionApply(input = {}, ctx = {}) {
   if (!ONE_USE_RE.test(String(input.one_use_id || ''))) {
     return fail(CODES.INVALID_MANIFEST, 'SQL 53 production apply requires a single-use receipt id');
   }
-  if (typeof ctx.connect !== 'function') {
+  const connect = typeof ctx.connect === 'function'
+    ? ctx.connect
+    : createProductionDatabaseConnect(ctx.databaseUrl, { root });
+  if (typeof connect !== 'function') {
     return fail(CODES.GUARD_APPLY_FORBIDDEN, 'SQL 53 production apply requires an injected or existing database connection factory');
   }
 
@@ -504,7 +507,7 @@ export async function executeSql53ProductionApply(input = {}, ctx = {}) {
   let client;
   let inTx = false;
   try {
-    client = await ctx.connect();
+    client = await connect();
     const beforeCatalog = await inspectSql53ProductionCatalog(client);
     if (!beforeCatalog.ok) return beforeCatalog;
     const catalog = evaluateSql53ProductionCatalog(beforeCatalog.details, pin, input);
@@ -639,4 +642,23 @@ export function resolveProductionDatabaseUrl(env = process.env, { harness = fals
     return fail(CODES.UNRELATED_MUTATION, 'SQL 53 production apply refused a staging or Cursor identity database target');
   }
   return ok({ url: raw, host: parsed.hostname });
+}
+
+export function createProductionDatabaseConnect(url, { root = repoRootFrom(import.meta.url) } = {}) {
+  const connectionString = String(url || '').trim();
+  if (!connectionString) return undefined;
+  return async () => {
+    const { Client } = await import('pg');
+    const caPath = path.join(root, 'aws/functions/api/rds-global-bundle.pem');
+    const client = new Client({
+      connectionString,
+      ssl: fs.existsSync(caPath)
+        ? { rejectUnauthorized: true, ca: fs.readFileSync(caPath, 'utf8') }
+        : { rejectUnauthorized: true },
+      connectionTimeoutMillis: 8000,
+      query_timeout: 30000,
+    });
+    await client.connect();
+    return client;
+  };
 }
