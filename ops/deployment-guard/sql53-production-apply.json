@@ -59,8 +59,11 @@
   "preserved_row_counts": [
     "public.claim_settlements",
     "public.check_intake_items",
-    "public.payments",
-    "public.homeowner_ledger"
+    "public.homeowner_ledger_events",
+    "public.claim_payments",
+    "public.claim_check_payments",
+    "public.payment_wallet_ledger",
+    "public.payment_transfers"
   ],
   "production_inspect": {
     "status": "complete",
