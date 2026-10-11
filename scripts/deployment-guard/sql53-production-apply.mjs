@@ -8,6 +8,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, printResult, readInput } from './lib/cli.mjs';
+import { consumeReceiptOnce } from './lib/consumed-receipts.mjs';
 import { CODES, fail } from './lib/errors.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
 import { enforceScriptGuard } from './require-guard.mjs';
@@ -19,14 +20,14 @@ import {
   executeSql53ProductionApply,
   inspectSql53ProductionCatalog,
   loadSql53ProductionApplyPin,
-  resolveProductionDatabaseUrl,
+  resolveProductionDatabaseAccess,
 } from './lib/sql53-production-apply.mjs';
 
 export async function main(argv = process.argv.slice(2), env = process.env, deps = {}) {
   const root = deps.root || repoRootFrom(import.meta.url);
   const { flags, opts } = parseArgs(argv);
   const input = readInput(opts, {});
-  const pin = loadSql53ProductionApplyPin(root);
+  const pin = deps.pin || loadSql53ProductionApplyPin(root);
   const payload = {
     ...input,
     target_environment: 'production',
@@ -72,7 +73,38 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     ));
   }
 
-  const url = resolveProductionDatabaseUrl(env, { harness: input.harness === true });
+  if (input.authorization_phrase !== pin.authorization_phrase) {
+    return printResult(fail(
+      CODES.PRODUCTION_APPROVAL_REQUIRED,
+      'SQL 53 production apply requires the exact authorization phrase',
+    ));
+  }
+  if (pin.execute !== true && input.harness !== true) {
+    return printResult(fail(
+      CODES.GUARD_APPLY_FORBIDDEN,
+      'SQL 53 production execute is not authorized by this pin; independent execute authorization is required',
+      { apply_authorized: false, execute: false },
+    ));
+  }
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(String(input.one_use_id || ''))) {
+    return printResult(fail(
+      CODES.INVALID_MANIFEST,
+      'SQL 53 production apply requires a single-use receipt id',
+    ));
+  }
+
+  if (authorized?.details?.receipt) {
+    const consumed = (deps.consumeReceiptOnce || consumeReceiptOnce)(root, authorized.details.receipt, {
+      actor: opts.operator || input.operator || null,
+      script: 'sql53-production-apply',
+    });
+    if (!consumed.ok) return printResult(consumed);
+  }
+
+  const url = await (deps.resolveAccess || resolveProductionDatabaseAccess)(env, {
+    harness: input.harness === true,
+    getSecretValue: deps.getSecretValue,
+  });
   if (!url.ok) return printResult(url);
   const connect = typeof deps.connect === 'function'
     ? deps.connect

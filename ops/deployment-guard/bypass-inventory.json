@@ -77,6 +77,12 @@
       "note": "Official production SQL 53 apply. Requires a sql53-production-apply receipt, exclusive production-sql lease, fresh catalog, and independent execute authorization. Never retargets the staging executor or production API. Never creates Cursor OIDC access."
     },
     {
+      "path": "scripts/deployment-guard/github-sql53-production-apply.mjs",
+      "classification": "SAFE",
+      "capabilities": ["sql53-production-evaluate"],
+      "note": "GitHub-hosted SQL 53 evaluate only. Never applies SQL, never targets Lambda, and never loads issuer.key onto the production API."
+    },
+    {
       "path": "scripts/deployment-guard/sql-executor-ensure.mjs",
       "classification": "NON_SHARED/SAFE",
       "capabilities": ["lambda-update-function-code", "lambda-create-function"],

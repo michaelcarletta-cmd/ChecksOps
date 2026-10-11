@@ -129,6 +129,8 @@ export const SQL53_PRODUCTION_APPLY_DEPLOYMENT_TYPE = 'sql53-production-apply';
 export const SQL53_PRODUCTION_APPLY_COMPONENT = 'production-sql';
 export const SQL53_PRODUCTION_APPLY_PHRASE = 'CREATE_SAVE_CLAIM_SETTLEMENT_BREAKDOWN';
 export const SQL53_PRODUCTION_DATABASE_URL_ENV = 'CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL';
+export const SQL53_PRODUCTION_ADMIN_SECRET_ARN_ENV = 'CHECKSOPS_SQL53_PRODUCTION_ADMIN_SECRET_ARN';
+export const SQL53_PRODUCTION_ADMIN_SECRET_ARN_RE = /^arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials\/checksops-production\/checksops_admin\/[A-Za-z0-9/_+=.@-]+$/;
 export const SQL53_PRODUCTION_APPLY_PIN_REL = 'ops/deployment-guard/sql53-production-apply.json';
 export const SQL53_PRODUCTION_LEDGER_REL = 'ops/release-locks/applied-migrations.ledger.json';
 
@@ -623,8 +625,8 @@ export function resolveProductionDatabaseUrl(env = process.env, { harness = fals
   if (!raw) {
     return fail(
       CODES.GUARD_APPLY_FORBIDDEN,
-      'SQL 53 production apply requires the existing production database URL; do not create Cursor OIDC access',
-      { env: SQL53_PRODUCTION_DATABASE_URL_ENV },
+      'SQL 53 production apply requires the existing production database URL or admin secret ARN; do not create Cursor OIDC access',
+      { env: SQL53_PRODUCTION_DATABASE_URL_ENV, secret_env: SQL53_PRODUCTION_ADMIN_SECRET_ARN_ENV },
     );
   }
   let parsed;
@@ -641,7 +643,123 @@ export function resolveProductionDatabaseUrl(env = process.env, { harness = fals
   if (/checksops-staging/i.test(parsed.hostname) || /cursor/i.test(parsed.username || '')) {
     return fail(CODES.UNRELATED_MUTATION, 'SQL 53 production apply refused a staging or Cursor identity database target');
   }
-  return ok({ url: raw, host: parsed.hostname });
+  return ok({ url: raw, host: parsed.hostname, source: 'url' });
+}
+
+export function isProductionAdminSecretArn(arn) {
+  return SQL53_PRODUCTION_ADMIN_SECRET_ARN_RE.test(String(arn || '').trim());
+}
+
+export function credentialsToProductionDatabaseUrl(credentials = {}) {
+  const username = String(credentials.username || '').trim();
+  const password = credentials.password;
+  const host = String(credentials.host || '').trim();
+  const port = Number(credentials.port || 5432);
+  const dbname = String(credentials.dbname || credentials.database || 'checksops').trim();
+  if (!/^[A-Za-z0-9._-]+$/.test(username) || !secretHostBindsProvenRds(host)) {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 53 production apply refused admin-secret credentials that are not the proven production RDS');
+  }
+  if (!/^checksops_admin$/i.test(username)) {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 53 production apply refused a non-admin database identity');
+  }
+  if (/cursor/i.test(username) || /checksops-staging/i.test(host)) {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 53 production apply refused a staging or Cursor identity database target');
+  }
+  if (typeof password !== 'string' || !password) {
+    return fail(CODES.INVALID_MANIFEST, 'SQL 53 production admin secret is missing a password field');
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return fail(CODES.INVALID_MANIFEST, 'SQL 53 production admin secret has an invalid port');
+  }
+  if (dbname !== 'checksops') {
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 53 production apply refused a database name that is not checksops');
+  }
+  const url = `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${dbname}`;
+  return ok({ url, host, source: 'admin-secret' });
+}
+
+export async function loadProductionAdminSecret(arn, {
+  getSecretValue,
+} = {}) {
+  const trimmed = String(arn || '').trim();
+  if (!isProductionAdminSecretArn(trimmed)) {
+    return fail(
+      CODES.UNRELATED_MUTATION,
+      'SQL 53 production apply refused a secret that is not the existing production checksops_admin secret',
+    );
+  }
+  const loader = typeof getSecretValue === 'function'
+    ? getSecretValue
+    : async (secretId) => {
+      const { SecretsManagerClient, GetSecretValueCommand } = await import('@aws-sdk/client-secrets-manager');
+      const client = new SecretsManagerClient({ region: 'us-east-1' });
+      const response = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
+      return response?.SecretString || null;
+    };
+  let raw;
+  try {
+    raw = await loader(trimmed);
+  } catch {
+    return fail(CODES.GUARD_APPLY_FORBIDDEN, 'SQL 53 production apply could not read the existing admin secret');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(String(raw || ''));
+  } catch {
+    return fail(CODES.INVALID_MANIFEST, 'SQL 53 production admin secret is not valid JSON');
+  }
+  return credentialsToProductionDatabaseUrl(parsed);
+}
+
+export async function resolveProductionDatabaseAccess(env = process.env, {
+  harness = false,
+  getSecretValue,
+} = {}) {
+  if (harness === true) {
+    return ok({ harness: true, url: null });
+  }
+  if (String(env[SQL53_PRODUCTION_DATABASE_URL_ENV] || '').trim()) {
+    return resolveProductionDatabaseUrl(env, { harness });
+  }
+  const arn = String(env[SQL53_PRODUCTION_ADMIN_SECRET_ARN_ENV] || '').trim();
+  if (!arn) {
+    return resolveProductionDatabaseUrl(env, { harness });
+  }
+  return loadProductionAdminSecret(arn, { getSecretValue });
+}
+
+export function evaluateSql53TrustedRunner(env = process.env, { root, pin } = {}) {
+  const resolvedRoot = root || repoRootFrom(import.meta.url);
+  const resolvedPin = pin || loadSql53ProductionApplyPin(resolvedRoot);
+  const source = evaluateSql53SourcePin(resolvedRoot, resolvedPin);
+  if (!source.ok) return source;
+  const lock = evaluateSql53ReleaseLock(resolvedRoot, resolvedPin);
+  if (!lock.ok) return lock;
+  const urlConfigured = Boolean(String(env[SQL53_PRODUCTION_DATABASE_URL_ENV] || '').trim());
+  const secretArn = String(env[SQL53_PRODUCTION_ADMIN_SECRET_ARN_ENV] || '').trim();
+  const secretArnConfigured = Boolean(secretArn);
+  if (secretArnConfigured && !isProductionAdminSecretArn(secretArn)) {
+    return fail(
+      CODES.UNRELATED_MUTATION,
+      'SQL 53 trusted runner refused a secret ARN that is not the existing production checksops_admin secret',
+    );
+  }
+  return ok({
+    recommended_environment: 'official-cli-on-privately-routed-host',
+    github_can_evaluate: true,
+    github_can_apply: false,
+    lambda_executor_forbidden: true,
+    staging_executor_refuses_production: true,
+    issuer_key_stays_off_lambda: true,
+    database_url_configured: urlConfigured,
+    admin_secret_arn_configured: secretArnConfigured,
+    admin_secret_arn_valid: secretArnConfigured ? isProductionAdminSecretArn(secretArn) : null,
+    pin_execute: resolvedPin.execute === true,
+    pin_apply_authorized: resolvedPin.apply_authorized === true,
+    source_sha256: resolvedPin.source_sha256,
+    independent_execute_authorization_required: resolvedPin.execute !== true,
+    reason: 'GitHub-hosted runners are not attached to vpc-09f2268778966ce97; apply stays on the official CLI',
+  });
 }
 
 export function createProductionDatabaseConnect(url, { root = repoRootFrom(import.meta.url) } = {}) {

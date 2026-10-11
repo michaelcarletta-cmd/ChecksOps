@@ -39,18 +39,26 @@ node scripts/deployment-guard/preflight.mjs \
   --input <sql53-production-apply-manifest.json>
 ```
 
-5. Apply through the dedicated CLI only:
+5. Apply through the dedicated CLI only, on a host that already has private
+   reachability into `vpc-09f2268778966ce97`. Do not apply from GitHub-hosted
+   runners or `checksops-production-prep-api`. Issue the receipt and apply on
+   the same host so the local issuer key, lease, and official
+   `consumeReceiptOnce` registry stay together.
 
 ```bash
 CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 \
 CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT=<receipt.json> \
-CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL=<existing-production-admin-url> \
+CHECKSOPS_SQL53_PRODUCTION_ADMIN_SECRET_ARN=arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144 \
 node scripts/deployment-guard/sql53-production-apply.mjs \
   --apply --input <sql53-production-apply-manifest.json>
 ```
 
-The database URL must already exist and bind `checksops-production` RDS.
-Do not create a new secret, role, or Cursor OIDC trust.
+`CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL` remains accepted if the URL already
+exists. The CLI may instead load the existing production admin secret. Do not
+create a new secret, role, or Cursor OIDC trust. Do not put `issuer.key` on
+Lambda.
+
+GitHub workflow `.github/workflows/sql53-production-apply.yml` is evaluate-only.
 
 ## Rollback
 
@@ -66,5 +74,6 @@ Do not drop tables, columns, triggers, or the other SQL53 functions.
 ## Remaining blocker for live execute
 
 `execute: false` on the production apply pin. Independent execute
-authorization is still required. The existing production database URL with
-`CREATE FUNCTION` privilege must be supplied at that time.
+authorization is still required. Apply from a privately routed host that can
+already read the existing production admin secret. Do not move issuer.key,
+leases, or receipts onto Lambda.
