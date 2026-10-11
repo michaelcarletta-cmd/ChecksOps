@@ -1,0 +1,67 @@
+{
+  "id": "production-sql53-temporary-config-retry",
+  "authorization": "retry-preparation",
+  "sql53_retry_ready": true,
+  "apply_authorized": false,
+  "receipt_issued": false,
+  "lease_acquired": false,
+  "diagnostic_invoked": false,
+  "lambda_configuration_modified": false,
+  "sql_executed": false,
+  "iam_modified": false,
+  "pr_869_on_main": true,
+  "main_merge": "fd1e7829a",
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "branch": "cursor/prod-sql53-retry-prep-3bc9",
+  "inspected_at": "2026-10-11T01:19:30Z",
+  "assumed_identity": {
+    "Account": "806168576068",
+    "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-retry-prep-fp"
+  },
+  "oidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "tests": {
+    "sql53_writer_inspect_tenant_isolation": {
+      "pass": 34,
+      "fail": 0
+    }
+  },
+  "current_live_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "d49b27cc-3dcb-48ab-8490-206097172689",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "previous_revision_id_not_reused": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+  "cleanup_verified": {
+    "sql53_authorization_present": false,
+    "sql53_expiry_present": false,
+    "env_key_count": 49,
+    "last_modified": "2026-10-11T00:55:17.000+0000"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "inherited": false,
+    "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation"
+  },
+  "receipt_and_lease_requirements": {
+    "consumed_first_receipt_reusable": false,
+    "issue_command": "node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input ops/deployment-guard/production-sql53-temporary-config-retry-manifest.json",
+    "lease_key": "production::checksops-production-prep-api",
+    "local_previous_lease": {
+      "holder": "prod-sql53-temporary-config-3bc9",
+      "expiry": "2026-10-11T01:09:53.838Z",
+      "status": "expired",
+      "replaceable_later": true,
+      "acquired_this_turn": false
+    }
+  },
+  "remaining_blockers": [
+    "Owner has not granted retry execution approval (approval.approved remains false)",
+    "No new signed receipt or exclusive lease has been issued",
+    "Immediately-before fingerprint must still equal this live baseline at apply time"
+  ]
+}
