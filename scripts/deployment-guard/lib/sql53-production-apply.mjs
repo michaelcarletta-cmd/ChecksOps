@@ -144,14 +144,19 @@ export const SQL53_FORBIDDEN_MARKERS = Object.freeze([
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const ONE_USE_RE = /^[A-Za-z0-9._:-]{8,128}$/;
-// Fixed allowlist; identifiers are never taken from input. public.payments
-// does not exist in production, so it is counted only when present and is
-// reported as null otherwise. The other tables must exist or apply fails closed.
-const PRESERVED_COUNT_TABLES = Object.freeze([
-  { table: 'claim_settlements', required: true },
-  { table: 'check_intake_items', required: true },
-  { table: 'payments', required: false },
-  { table: 'homeowner_ledger', required: true },
+// Fixed allowlist of production financial and ledger tables whose row counts
+// must not change during apply; identifiers are never taken from input. Taken
+// from the production catalog (2026-10-11): the ledger triggers write to
+// homeowner_ledger_events, and claim payments live in claim_payments and
+// claim_check_payments. Every table is required; a missing one fails closed.
+export const SQL53_PRESERVED_COUNT_TABLES = Object.freeze([
+  'claim_settlements',
+  'check_intake_items',
+  'homeowner_ledger_events',
+  'claim_payments',
+  'claim_check_payments',
+  'payment_wallet_ledger',
+  'payment_transfers',
 ]);
 
 const PRESERVED_COUNT_PRESENCE_SQL = `SELECT t.name AS table_name,
@@ -159,26 +164,22 @@ const PRESERVED_COUNT_PRESENCE_SQL = `SELECT t.name AS table_name,
 FROM unnest($1::text[]) AS t(name)`;
 
 export async function countPreservedRows(client) {
-  const names = PRESERVED_COUNT_TABLES.map((row) => row.table);
-  const presence = await client.query(PRESERVED_COUNT_PRESENCE_SQL, [names]);
+  const presence = await client.query(PRESERVED_COUNT_PRESENCE_SQL, [[...SQL53_PRESERVED_COUNT_TABLES]]);
   const present = new Set(
     (presence?.rows || []).filter((row) => row.present === true).map((row) => row.table_name),
   );
-  const missing = PRESERVED_COUNT_TABLES.filter((row) => row.required && !present.has(row.table));
+  const missing = SQL53_PRESERVED_COUNT_TABLES.filter((table) => !present.has(table));
   if (missing.length) {
     return fail(CODES.SQL_COLLISION, 'SQL 53 production apply refuses to run when a preserved table is missing', {
-      missing: missing.map((row) => `public.${row.table}`),
+      missing: missing.map((table) => `public.${table}`),
     });
   }
-  const counted = PRESERVED_COUNT_TABLES.filter((row) => present.has(row.table));
-  const sql = `SELECT ${counted
-    .map((row) => `(SELECT count(*)::int FROM public.${row.table}) AS ${row.table}`)
+  const sql = `SELECT ${SQL53_PRESERVED_COUNT_TABLES
+    .map((table) => `(SELECT count(*)::int FROM public.${table}) AS ${table}`)
     .join(',\n  ')}`;
   const values = (await client.query(sql)).rows[0] || {};
   const counts = {};
-  for (const row of PRESERVED_COUNT_TABLES) {
-    counts[row.table] = present.has(row.table) ? Number(values[row.table]) : null;
-  }
+  for (const table of SQL53_PRESERVED_COUNT_TABLES) counts[table] = Number(values[table]);
   return ok(counts);
 }
 

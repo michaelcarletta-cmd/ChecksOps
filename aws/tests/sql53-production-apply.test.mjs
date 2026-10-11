@@ -568,19 +568,22 @@ max_connections = 20
         )
       $$;
       CREATE TABLE public.check_intake_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
-      CREATE TABLE public.payments (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), amount numeric NOT NULL DEFAULT 0);
-      CREATE TABLE public.homeowner_ledger (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), note text NOT NULL);
+      CREATE TABLE public.homeowner_ledger_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), note text NOT NULL);
+      CREATE TABLE public.claim_payments (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), amount numeric NOT NULL DEFAULT 0);
+      CREATE TABLE public.claim_check_payments (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
+      CREATE TABLE public.payment_wallet_ledger (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
+      CREATE TABLE public.payment_transfers (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
       CREATE OR REPLACE FUNCTION public.sync_homeowner_ledger_from_check()
       RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
-        INSERT INTO public.homeowner_ledger(note) VALUES ('sync');
+        INSERT INTO public.homeowner_ledger_events(note) VALUES ('sync');
         RETURN NEW;
       END
       $$;
       CREATE OR REPLACE FUNCTION public.hle_on_check_intake_insert()
       RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
-        INSERT INTO public.homeowner_ledger(note) VALUES ('hle');
+        INSERT INTO public.homeowner_ledger_events(note) VALUES ('hle');
         RETURN NEW;
       END
       $$;
@@ -593,7 +596,7 @@ max_connections = 20
       CREATE TRIGGER trg_hle_check_intake_insert
         AFTER INSERT ON public.check_intake_items
         FOR EACH ROW EXECUTE FUNCTION public.hle_on_check_intake_insert();
-      INSERT INTO public.payments(amount) VALUES (12.34);
+      INSERT INTO public.claim_payments(amount) VALUES (12.34);
     `);
 
     const probe = await connect();
@@ -616,14 +619,19 @@ max_connections = 20
     }), { root: ROOT, connect, consumedPath });
     assert.equal(applied.ok, true, applied.message);
     assert.equal(applied.details.after_hash, PIN.intended_definition_sha256);
-    assert.equal(applied.details.preserved_row_counts.payments, 1);
-    assert.equal(applied.details.preserved_row_counts.homeowner_ledger, 0);
-    assert.equal(applied.details.preserved_row_counts.check_intake_items, 0);
-    assert.equal(applied.details.preserved_row_counts.claim_settlements, 0);
+    assert.deepEqual(applied.details.preserved_row_counts, {
+      claim_settlements: 0,
+      check_intake_items: 0,
+      homeowner_ledger_events: 0,
+      claim_payments: 1,
+      claim_check_payments: 0,
+      payment_wallet_ledger: 0,
+      payment_transfers: 0,
+    });
 
     assert.equal(psql(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'save_claim_settlement_breakdown'`), '1');
-    assert.equal(psql(`SELECT count(*) FROM public.payments`), '1');
-    assert.equal(psql(`SELECT count(*) FROM public.homeowner_ledger`), '0');
+    assert.equal(psql(`SELECT count(*) FROM public.claim_payments`), '1');
+    assert.equal(psql(`SELECT count(*) FROM public.homeowner_ledger_events`), '0');
     assert.equal(psql(`SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_sync_homeowner_ledger_ins','trg_sync_homeowner_ledger_upd','trg_hle_check_intake_insert') AND NOT tgisinternal`), '3');
 
     const replay = await executeSql53ProductionApply(productionInput({
@@ -634,28 +642,10 @@ max_connections = 20
     assert.equal(replay.ok, false);
     assert.ok([CODES.UNRELATED_MUTATION, CODES.SQL_COLLISION].includes(replay.code));
 
-    // Production has no public.payments: apply must still succeed and keep
-    // counting the remaining preserved tables.
-    psql(`
-      DROP FUNCTION public.save_claim_settlement_breakdown(uuid, uuid, jsonb);
-      DROP TABLE public.payments;
-    `);
-    const productionShape = await executeSql53ProductionApply(productionInput({
-      harness: true,
-      synthetic_baseline: synthetic,
-      authorization_phrase: SQL53_PRODUCTION_APPLY_PHRASE,
-    }), { root: ROOT, connect, consumedPath: path.join(pgData, 'consumed-no-payments.json') });
-    assert.equal(productionShape.ok, true, productionShape.message);
-    assert.equal(productionShape.details.after_hash, PIN.intended_definition_sha256);
-    assert.equal(productionShape.details.preserved_row_counts.payments, null);
-    assert.equal(productionShape.details.preserved_row_counts.claim_settlements, 0);
-    assert.equal(productionShape.details.preserved_row_counts.check_intake_items, 0);
-    assert.equal(productionShape.details.preserved_row_counts.homeowner_ledger, 0);
-
     // A missing required preserved table fails closed before any write.
     psql(`
       DROP FUNCTION public.save_claim_settlement_breakdown(uuid, uuid, jsonb);
-      ALTER TABLE public.homeowner_ledger RENAME TO homeowner_ledger_moved;
+      ALTER TABLE public.homeowner_ledger_events RENAME TO homeowner_ledger_events_moved;
     `);
     const missingRequired = await executeSql53ProductionApply(productionInput({
       harness: true,
@@ -664,7 +654,7 @@ max_connections = 20
     }), { root: ROOT, connect, consumedPath: path.join(pgData, 'consumed-missing-required.json') });
     assert.equal(missingRequired.ok, false);
     assert.equal(missingRequired.code, CODES.SQL_COLLISION);
-    assert.deepEqual(missingRequired.details.missing, ['public.homeowner_ledger']);
+    assert.deepEqual(missingRequired.details.missing, ['public.homeowner_ledger_events']);
     assert.equal(psql(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'save_claim_settlement_breakdown'`), '0');
   } finally {
     run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', '-w', 'stop']);
