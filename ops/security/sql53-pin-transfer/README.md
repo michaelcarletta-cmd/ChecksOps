@@ -35,6 +35,10 @@ function must remain untouched until its separate guarded apply is approved.
   deployments to `main`, and prevent self-approval where the GitHub plan
   supports that control. The workflow also refuses any ref other than
   `refs/heads/main`.
+- This environment-scoped OIDC subject does not identify a specific workflow
+  file. Treat every workflow on `main` that can target `production` and request
+  an OIDC token as inside the trust boundary; protect workflow changes with
+  required review and keep the production environment approval gate enabled.
 
 The following are policy review criteria, not instructions to apply them
 directly. The exact account OIDC provider ARN must be confirmed before use:
