@@ -1,0 +1,61 @@
+{
+  "id": "production-sql53-temporary-config",
+  "authorization": "workstream-preparation",
+  "sql53_execution_ready": false,
+  "apply_authorized": false,
+  "receipt_issued": false,
+  "lease_acquired": false,
+  "diagnostic_invoked": false,
+  "lambda_configuration_modified": false,
+  "sql_executed": false,
+  "iam_modified": false,
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "branch": "cursor/prod-sql53-temporary-config-3bc9",
+  "deployment_type": "lambda-sql53-temporary-config",
+  "hasher_excludes_sdk_metadata": true,
+  "consecutive_fingerprint_hashes_identical": true,
+  "live_matches_approved_baseline": true,
+  "inspected_at": "2026-10-11T00:50:20Z",
+  "oidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "assumed_identity": {
+    "Account": "806168576068",
+    "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-tmp-config-fp"
+  },
+  "official_stable_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "last_modified": "2026-10-10T18:26:47.000+0000",
+  "staging_acceptance": {
+    "ok": true,
+    "inherited": false,
+    "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation",
+    "evidence": "ops/deployment-guard/production-sql53-temporary-config-acceptance.json",
+    "tests": 30,
+    "pass": 30,
+    "fail": 0
+  },
+  "prepared_manifest": "ops/deployment-guard/production-sql53-temporary-config-manifest.json",
+  "receipt_and_lease_requirements": {
+    "issue_command": "node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input ops/deployment-guard/production-sql53-temporary-config-manifest.json",
+    "lease_key": "production::checksops-production-prep-api",
+    "expired_overlay_lease_replaceable": true,
+    "issued_this_turn": false,
+    "refresh_commit_to_head_before_issue": true,
+    "refresh_immediately_before_fingerprint": true,
+    "set_approval_approved_true_only_after_execution_authorization": true,
+    "contract_results_required": ["tenant-isolation"]
+  },
+  "remaining_blockers": [
+    "Owner has not granted final execution approval for this workstream (approval.approved remains false)",
+    "No signed receipt or exclusive lease has been issued",
+    "Immediately-before fingerprint must still equal the official stable fingerprint at apply time"
+  ],
+  "exact_next_authorized_action": "Owner authorize guarded apply for workstream prod-sql53-temporary-config-3bc9. Then refresh --fingerprint-only, set approval.approved=true on this workstream only, run preflight.mjs --acquire-lease --receipt, then CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 node scripts/deployment-guard/sql53-temporary-lambda-config.mjs --apply as ChecksOpsProductionSql53ConfigWriter."
+}

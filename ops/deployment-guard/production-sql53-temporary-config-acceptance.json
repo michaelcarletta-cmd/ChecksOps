@@ -1,0 +1,22 @@
+{
+  "id": "production-sql53-temporary-config-acceptance",
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "branch": "cursor/prod-sql53-temporary-config-3bc9",
+  "inherited": false,
+  "from_previous_workstream": false,
+  "ok": true,
+  "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation",
+  "executed_at": "2026-10-11T00:50:05Z",
+  "command": "node --test --experimental-strip-types aws/tests/sql53-temporary-lambda-config.test.mjs aws/tests/sql53-production-readonly-inspect.test.mjs aws/tests/tenant-security-compliance.test.mjs",
+  "results": {
+    "sql53-temporary-lambda-config": { "ok": true, "file": "aws/tests/sql53-temporary-lambda-config.test.mjs" },
+    "sql53-production-readonly-inspect": { "ok": true, "file": "aws/tests/sql53-production-readonly-inspect.test.mjs" },
+    "tenant-isolation": { "ok": true, "file": "aws/tests/tenant-security-compliance.test.mjs" }
+  },
+  "totals": {
+    "tests": 30,
+    "pass": 30,
+    "fail": 0
+  },
+  "notes": "Non-inherited staging acceptance for this workstream only. Do not reuse overlay CI 38074940628 or apply-plan evidence."
+}
