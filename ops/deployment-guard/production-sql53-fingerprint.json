@@ -1,0 +1,37 @@
+{
+  "id": "production-sql53-fingerprint",
+  "authorization": "fingerprint-only",
+  "fingerprint_ready": true,
+  "inspect_execute_ready": false,
+  "apply_authorized": false,
+  "receipt_issued": false,
+  "diagnostic_invoked": false,
+  "iam_modified": false,
+  "lambda_configuration_modified": false,
+  "official_writer": "scripts/deployment-guard/sql53-temporary-lambda-config.mjs --fingerprint-only",
+  "writer_commit": "67c73fc9f98996ddfc001024ac1138aa279c6968",
+  "pr_861_included": true,
+  "inspected_at": "2026-10-11T00:38:00Z",
+  "oidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "assumed_identity": {
+    "Account": "806168576068",
+    "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-fingerprint-only"
+  },
+  "fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "e8da3b0605848139ed780d7d0f358fc70e358761e75381a6c7ca38ba3253222b"
+  },
+  "remaining_blockers": [
+    "No owner apply/execute authorization for lambda-sql53-temporary-config",
+    "No signed deployment-guard receipt or lease",
+    "No production approval.workstream_id or staging_acceptance for this workstream",
+    "Apply-time immediately-before fingerprint must still equal this official fingerprint",
+    "Temporary Cursor OIDC trust on ChecksOpsProductionSql53ConfigWriter must be removed after the authorized SQL53 work"
+  ]
+}
