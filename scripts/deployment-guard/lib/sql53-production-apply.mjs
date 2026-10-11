@@ -144,11 +144,43 @@ export const SQL53_FORBIDDEN_MARKERS = Object.freeze([
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const ONE_USE_RE = /^[A-Za-z0-9._:-]{8,128}$/;
-const PRESERVED_COUNT_SQL = `SELECT
-  (SELECT count(*)::int FROM public.claim_settlements) AS claim_settlements,
-  (SELECT count(*)::int FROM public.check_intake_items) AS check_intake_items,
-  (SELECT count(*)::int FROM public.payments) AS payments,
-  (SELECT count(*)::int FROM public.homeowner_ledger) AS homeowner_ledger`;
+// Fixed allowlist; identifiers are never taken from input. public.payments
+// does not exist in production, so it is counted only when present and is
+// reported as null otherwise. The other tables must exist or apply fails closed.
+const PRESERVED_COUNT_TABLES = Object.freeze([
+  { table: 'claim_settlements', required: true },
+  { table: 'check_intake_items', required: true },
+  { table: 'payments', required: false },
+  { table: 'homeowner_ledger', required: true },
+]);
+
+const PRESERVED_COUNT_PRESENCE_SQL = `SELECT t.name AS table_name,
+  to_regclass(format('public.%I', t.name)) IS NOT NULL AS present
+FROM unnest($1::text[]) AS t(name)`;
+
+export async function countPreservedRows(client) {
+  const names = PRESERVED_COUNT_TABLES.map((row) => row.table);
+  const presence = await client.query(PRESERVED_COUNT_PRESENCE_SQL, [names]);
+  const present = new Set(
+    (presence?.rows || []).filter((row) => row.present === true).map((row) => row.table_name),
+  );
+  const missing = PRESERVED_COUNT_TABLES.filter((row) => row.required && !present.has(row.table));
+  if (missing.length) {
+    return fail(CODES.SQL_COLLISION, 'SQL 53 production apply refuses to run when a preserved table is missing', {
+      missing: missing.map((row) => `public.${row.table}`),
+    });
+  }
+  const counted = PRESERVED_COUNT_TABLES.filter((row) => present.has(row.table));
+  const sql = `SELECT ${counted
+    .map((row) => `(SELECT count(*)::int FROM public.${row.table}) AS ${row.table}`)
+    .join(',\n  ')}`;
+  const values = (await client.query(sql)).rows[0] || {};
+  const counts = {};
+  for (const row of PRESERVED_COUNT_TABLES) {
+    counts[row.table] = present.has(row.table) ? Number(values[row.table]) : null;
+  }
+  return ok(counts);
+}
 
 export function loadSql53ProductionApplyPin(root = repoRootFrom(import.meta.url)) {
   return JSON.parse(fs.readFileSync(path.join(root, SQL53_PRODUCTION_APPLY_PIN_REL), 'utf8'));
@@ -515,7 +547,9 @@ export async function executeSql53ProductionApply(input = {}, ctx = {}) {
     const catalog = evaluateSql53ProductionCatalog(beforeCatalog.details, pin, input);
     if (!catalog.ok) return catalog;
 
-    const countsBefore = (await client.query(PRESERVED_COUNT_SQL)).rows[0];
+    const preservedBefore = await countPreservedRows(client);
+    if (!preservedBefore.ok) return preservedBefore;
+    const countsBefore = preservedBefore.details;
 
     await client.query('BEGIN');
     inTx = true;
@@ -584,9 +618,14 @@ export async function executeSql53ProductionApply(input = {}, ctx = {}) {
       return fail(CODES.SQL_COLLISION, 'apply changed a preserved dependency', afterDeps.details);
     }
 
-    const countsAfter = (await client.query(PRESERVED_COUNT_SQL)).rows[0];
-    for (const table of Object.keys(countsBefore || {})) {
-      if (Number(countsAfter[table]) !== Number(countsBefore[table])) {
+    const preservedAfter = await countPreservedRows(client);
+    if (!preservedAfter.ok) {
+      inTx = await rollbackApply(client, inTx);
+      return preservedAfter;
+    }
+    const countsAfter = preservedAfter.details;
+    for (const table of Object.keys(countsBefore)) {
+      if (countsAfter[table] !== countsBefore[table]) {
         inTx = await rollbackApply(client, inTx);
         return fail(CODES.UNRELATED_MUTATION, 'apply mutated preserved financial or ledger row counts', {
           table,

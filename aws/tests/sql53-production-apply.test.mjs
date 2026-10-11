@@ -633,6 +633,39 @@ max_connections = 20
     }), { root: ROOT, connect, consumedPath });
     assert.equal(replay.ok, false);
     assert.ok([CODES.UNRELATED_MUTATION, CODES.SQL_COLLISION].includes(replay.code));
+
+    // Production has no public.payments: apply must still succeed and keep
+    // counting the remaining preserved tables.
+    psql(`
+      DROP FUNCTION public.save_claim_settlement_breakdown(uuid, uuid, jsonb);
+      DROP TABLE public.payments;
+    `);
+    const productionShape = await executeSql53ProductionApply(productionInput({
+      harness: true,
+      synthetic_baseline: synthetic,
+      authorization_phrase: SQL53_PRODUCTION_APPLY_PHRASE,
+    }), { root: ROOT, connect, consumedPath: path.join(pgData, 'consumed-no-payments.json') });
+    assert.equal(productionShape.ok, true, productionShape.message);
+    assert.equal(productionShape.details.after_hash, PIN.intended_definition_sha256);
+    assert.equal(productionShape.details.preserved_row_counts.payments, null);
+    assert.equal(productionShape.details.preserved_row_counts.claim_settlements, 0);
+    assert.equal(productionShape.details.preserved_row_counts.check_intake_items, 0);
+    assert.equal(productionShape.details.preserved_row_counts.homeowner_ledger, 0);
+
+    // A missing required preserved table fails closed before any write.
+    psql(`
+      DROP FUNCTION public.save_claim_settlement_breakdown(uuid, uuid, jsonb);
+      ALTER TABLE public.homeowner_ledger RENAME TO homeowner_ledger_moved;
+    `);
+    const missingRequired = await executeSql53ProductionApply(productionInput({
+      harness: true,
+      synthetic_baseline: synthetic,
+      authorization_phrase: SQL53_PRODUCTION_APPLY_PHRASE,
+    }), { root: ROOT, connect, consumedPath: path.join(pgData, 'consumed-missing-required.json') });
+    assert.equal(missingRequired.ok, false);
+    assert.equal(missingRequired.code, CODES.SQL_COLLISION);
+    assert.deepEqual(missingRequired.details.missing, ['public.homeowner_ledger']);
+    assert.equal(psql(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'save_claim_settlement_breakdown'`), '0');
   } finally {
     run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', '-w', 'stop']);
     fs.rmSync(pgData, { recursive: true, force: true });
