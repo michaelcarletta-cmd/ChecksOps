@@ -1,5 +1,5 @@
 import { parseBody, withIdentityWrite } from './data.mjs';
-import { writesEnabled } from './write-allowlist.mjs';
+import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 
 export const CLAIM_SETTLEMENT_VALUE_COLUMNS = Object.freeze([
   'replacement_cost_value',
@@ -37,8 +37,9 @@ const denied = (spoof, error, statusCode = 400) => ({
 
 export const handleClaimSettlementRpc = (event, deps = {}) => {
   const body = parseBody(event);
-  if (!writesEnabled()) {
-    return Promise.resolve(denied({}, 'writes_disabled', 403));
+  const enabled = deps.forceEnabled === true || applicationWorkflowWritesEnabled();
+  if (!enabled) {
+    return Promise.resolve(denied({}, 'application_workflow_writes_disabled', 403));
   }
   return withIdentityWrite(event, async ({ client, mapping, claims, spoof }) => {
     const args = body.args && typeof body.args === 'object' && !Array.isArray(body.args)
