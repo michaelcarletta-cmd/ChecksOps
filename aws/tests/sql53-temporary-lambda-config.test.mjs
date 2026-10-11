@@ -190,6 +190,26 @@ test('writer response allowlists stay aligned with the SQL53 inspection contract
   );
 });
 
+test('configuration fingerprint ignores request-scoped SDK metadata', () => {
+  const base = configuration();
+  const first = fingerprintSql53LambdaConfiguration({
+    ...base,
+    $metadata: { httpStatusCode: 200, requestId: 'req-1', attempts: 1, totalRetryDelay: 0 },
+  });
+  const second = fingerprintSql53LambdaConfiguration({
+    ...base,
+    $metadata: { httpStatusCode: 200, requestId: 'req-2', attempts: 2, totalRetryDelay: 12 },
+  });
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(
+    first.details.fingerprint.configuration_sha256,
+    second.details.fingerprint.configuration_sha256,
+  );
+  assert.equal(first.details.fingerprint.code_sha256, base.CodeSha256);
+  assert.equal(first.details.fingerprint.revision_id, base.RevisionId);
+});
+
 test('official preflight accepts only the exact production config target and matching fresh fingerprint', () => {
   const config = configuration();
   const fingerprint = fingerprintSql53LambdaConfiguration(config).details.fingerprint;
@@ -219,6 +239,14 @@ test('official preflight accepts only the exact production config target and mat
   assert.equal(evaluateSql53TemporaryConfigPreflight({
     ...input,
     immediately_before_fingerprint: { ...fingerprint, revision_id: 'stale' },
+  }).ok, false);
+  assert.equal(evaluateSql53TemporaryConfigPreflight({
+    ...input,
+    owned_member_ops: undefined,
+  }).ok, true);
+  assert.equal(evaluateSql53TemporaryConfigPreflight({
+    ...input,
+    owned_member_ops: { replace: [], add: [] },
   }).ok, false);
 });
 
