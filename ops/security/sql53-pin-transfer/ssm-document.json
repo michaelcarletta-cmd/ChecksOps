@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "2.2",
+  "description": "ChecksOps SQL53 authorization-pin transfer only. Fixed script; never executes SQL.",
+  "parameters": {
+    "PinPart1": {
+      "type": "String",
+      "description": "First Base64 chunk of the exact reviewed SQL53 pin.",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[A-Za-z0-9+/=]{1,3000}$"
+    },
+    "PinPart2": {
+      "type": "String",
+      "description": "Second Base64 chunk of the exact reviewed SQL53 pin.",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[A-Za-z0-9+/=]{1,3000}$"
+    }
+  },
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "transferReviewedSql53Pin",
+      "inputs": {
+        "runCommand": [
+          "python3 - <<'PY'\nimport base64\nimport hashlib\nimport json\nimport os\nimport pathlib\nimport stat\nimport tempfile\n\nEXPECTED_PIN_SHA256 = \"1116f31148ad7a6a537c087fc85db693366a0b736926ebf30ccf4a65bf3b8471\"\nEXPECTED_SOURCE_SHA256 = \"5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197\"\nEXPECTED_FUNCTION = \"public.save_claim_settlement_breakdown(uuid,uuid,jsonb)\"\nREPO = pathlib.Path(\"/opt/checksops-sql53/source\")\nSOURCE = REPO / \"aws/workflows/sql/53_claim_settlement_breakdown.sql\"\nTARGET = REPO / \"ops/deployment-guard/sql53-production-apply.json\"\n\nencoded = os.environ[\"SSM_PinPart1\"] + os.environ[\"SSM_PinPart2\"]\npin = base64.b64decode(encoded, validate=True)\nif hashlib.sha256(pin).hexdigest() != EXPECTED_PIN_SHA256:\n    raise SystemExit(\"SQL53 pin hash mismatch\")\npayload = json.loads(pin)\nexpected = {\n    \"authorization\": \"execute-authorized\",\n    \"apply_authorized\": True,\n    \"execute\": True,\n    \"target_environment\": \"production\",\n    \"target_component\": \"production-sql\",\n    \"deployment_type\": \"sql53-production-apply\",\n    \"filename\": \"aws/workflows/sql/53_claim_settlement_breakdown.sql\",\n    \"migration_id\": \"53_claim_settlement_breakdown\",\n    \"source_sha256\": EXPECTED_SOURCE_SHA256,\n    \"function_identity\": EXPECTED_FUNCTION,\n}\nif any(payload.get(key) != value for key, value in expected.items()):\n    raise SystemExit(\"SQL53 authorization pin fields mismatch\")\nif hashlib.sha256(SOURCE.read_bytes()).hexdigest() != EXPECTED_SOURCE_SHA256:\n    raise SystemExit(\"Runner SQL53 source hash mismatch\")\nif TARGET.is_symlink() or not TARGET.is_file():\n    raise SystemExit(\"Runner pin target must be an existing regular file\")\nold_pin = TARGET.read_bytes()\nold_mode = stat.S_IMODE(TARGET.stat().st_mode)\n\nfd, backup_path = tempfile.mkstemp(prefix=\"sql53-pin-before-manual-transfer-\", suffix=\".json\", dir=\"/tmp\")\nwith os.fdopen(fd, \"wb\") as backup:\n    backup.write(old_pin)\n    backup.flush()\n    os.fsync(backup.fileno())\n\nfd, replacement_path = tempfile.mkstemp(prefix=\".sql53-pin-approved-transfer-\", dir=str(TARGET.parent))\ntry:\n    with os.fdopen(fd, \"wb\") as replacement:\n        replacement.write(pin)\n        replacement.flush()\n        os.fsync(replacement.fileno())\n        os.fchmod(replacement.fileno(), old_mode)\n    if TARGET.read_bytes() != old_pin:\n        raise SystemExit(\"Runner pin changed during transfer; refusing replacement\")\n    os.replace(replacement_path, TARGET)\nfinally:\n    if os.path.exists(replacement_path):\n        os.unlink(replacement_path)\nif TARGET.read_bytes() != pin or hashlib.sha256(TARGET.read_bytes()).hexdigest() != EXPECTED_PIN_SHA256:\n    raise SystemExit(\"Runner pin replacement verification failed\")\nprint(\"SQL53_PIN_TRANSFER_VERIFIED_NO_SQL_EXECUTED\")\nprint(\"Previous pin backup: \" + backup_path)\nPY"
+        ]
+      }
+    }
+  ]
+}
