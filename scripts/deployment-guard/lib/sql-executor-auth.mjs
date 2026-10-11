@@ -59,10 +59,33 @@ export const AUTHORIZED_SQL53 = Object.freeze({
   ]),
 });
 
+export const AUTHORIZED_SQL39 = Object.freeze({
+  filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
+  migration_id: '39_tmp_write_policy_reconcile',
+  commit: 'f2df6f9bed6ae3ddca9fce39668aa117de796de1',
+  source_sha256: 'a3ec9922d33cf75fc554ac9bdd3e7c1b14429112f38ce23f517d64e06b9442a9',
+  intended_replacement_sha256: 'a3ec9922d33cf75fc554ac9bdd3e7c1b14429112f38ce23f517d64e06b9442a9',
+  table: 'public.tenant_maintenance_payments',
+  policy_name: 'aws_write_tenant_maintenance_payments',
+  job_policy_name: 'aws_write_tenant_maintenance_payments_job',
+});
+
+export const AUTHORIZED_SQL40 = Object.freeze({
+  filename: 'aws/rls/sql/40_collection_v2_synthetic_uat_cleanup.sql',
+  migration_id: '40_collection_v2_synthetic_uat_cleanup',
+  commit: '5ae0a41db7ebe727527060139befb4ba31240144',
+  source_sha256: '9f691e72da8e3490489854f685f470884441e61e2475b91e92fec55fd80b5de8',
+  intended_replacement_sha256: '40a486ede83069b6b640ef4c4b06b88585be2b30102673bccde22238b185405d',
+  expected_live_fixture_sha256: '48c32f695046582285a5dd97433a52da528ad8be0f6b33c2d46c3395a51e98f0',
+  table: 'public.tenant_maintenance_payments',
+});
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   AUTHORIZED_SQL53,
+  AUTHORIZED_SQL39,
+  AUTHORIZED_SQL40,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -80,6 +103,16 @@ export function isSql53AuthorizedMigration(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL53);
 }
 
+export function isSql39(input = {}) {
+  return input.filename === AUTHORIZED_SQL39.filename
+    || input.migration_id === AUTHORIZED_SQL39.migration_id;
+}
+
+export function isSql40(input = {}) {
+  return input.filename === AUTHORIZED_SQL40.filename
+    || input.migration_id === AUTHORIZED_SQL40.migration_id;
+}
+
 export function isTenantUsersSameCheckPermissions(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS);
 }
@@ -90,6 +123,8 @@ export function isSql44AuthorizedMigration(input = {}) {
 
 export function resolveAuthorizedMigration(input = {}) {
   if (isSql53AuthorizedMigration(input)) return AUTHORIZED_SQL53;
+  if (isSql40(input)) return AUTHORIZED_SQL40;
+  if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
   if (isSql44AuthorizedMigration(input)) return AUTHORIZED_SQL44;
   return null;

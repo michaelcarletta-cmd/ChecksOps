@@ -17,6 +17,8 @@ const LIBS = [
   'sql-apply.mjs',
   'sql-executor-auth.mjs',
   'function-def-lookup.mjs',
+  'collection-v2-synthetic-uat-cleanup.mjs',
+  'tmp-rls-catalog.mjs',
 ];
 
 export function repoExecutorLibDir() {

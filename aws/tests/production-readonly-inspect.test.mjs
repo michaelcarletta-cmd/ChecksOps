@@ -9,8 +9,14 @@ import {
   assertProductionTarget,
   buildAwsArgs,
   buildInspectionSummary,
+  compareSecretHostToObservedEndpoints,
+  extractSecretHostForCompare,
   inspectProduction,
   PRODUCTION_PINS,
+  redactInspectionValue,
+  SECRET_HOST_COMPARE_AUTHORIZATION,
+  SECRET_HOST_COMPARE_AUTHORIZATION_ENV,
+  secretHostCompareAuthorizationState,
 } from '../../scripts/deployment-guard/production-readonly-inspect.mjs';
 
 const SHA = (value) => createHash('sha256').update(value).digest('hex');
@@ -39,12 +45,33 @@ const LAMBDA_ZIP = (() => {
     fs.rmSync(temp, { recursive: true, force: true });
   }
 })();
+const LAMBDA_FLAT_ZIP = (() => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'production-readonly-lambda-flat-'));
+  try {
+    for (const relativePath of LAMBDA_SOURCE_PATHS) {
+      fs.copyFileSync(
+        new URL(`../../${relativePath}`, import.meta.url),
+        path.join(temp, path.basename(relativePath)),
+      );
+    }
+    const archive = path.join(temp, 'package.zip');
+    execFileSync('zip', ['-q', '-r', archive, ...LAMBDA_SOURCE_PATHS.map((item) => path.basename(item))], { cwd: temp });
+    return fs.readFileSync(archive);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+})();
 const LAMBDA_CODE_SHA = createHash('sha256').update(LAMBDA_ZIP).digest('base64');
+const LAMBDA_FLAT_CODE_SHA = createHash('sha256').update(LAMBDA_FLAT_ZIP).digest('base64');
 const LAMBDA_CODE_LOCATION = 'https://awslambda-us-east-1-tasks.s3.us-east-1.amazonaws.com/package.zip?temporary-token=must-not-leak';
 const PERSISTENCE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw';
 const RDS_INSTANCE_ARN = 'arn:aws:rds:us-east-1:806168576068:db:production-db';
 const OTHER_RDS_ARN = 'arn:aws:rds:us-east-1:806168576068:db:other-instance';
 const NAMED_PRODUCTION_RDS_ARN = 'arn:aws:rds:us-east-1:806168576068:db:checksops-production';
+const LAMBDA_SG_ID = 'sg-0aaaaaaaaaaaaaaaa';
+const RDS_SG_A = 'sg-0bbbbbbbbbbbbbbbb';
+const RDS_SG_B = 'sg-0cccccccccccccccc';
+const ACCOUNT_ID = '806168576068';
 const PRODUCTION_TARGET = {
   environment: 'production',
   accountId: '806168576068',
@@ -114,6 +141,52 @@ function persistenceConfigOverrides(rdsResponse, extra = {}) {
     }),
     'rds:DescribeDBInstances': () => rdsResponse,
     ...extra,
+  };
+}
+
+function hexVpcPersistenceOverrides(rdsResponse, extra = {}) {
+  return persistenceConfigOverrides(rdsResponse, {
+    'lambda:GetFunctionConfiguration': () => ({
+      ...lambdaConfig,
+      VpcConfig: {
+        VpcId: 'vpc-production',
+        SubnetIds: ['subnet-production'],
+        SecurityGroupIds: [LAMBDA_SG_ID],
+      },
+      Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+    }),
+    ...extra,
+  });
+}
+
+function twoVpcRdsInstances() {
+  return {
+    DBInstances: [
+      {
+        DBInstanceArn: RDS_INSTANCE_ARN,
+        VpcId: 'vpc-production',
+        VpcSecurityGroupIds: [RDS_SG_A],
+      },
+      {
+        DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
+        VpcId: 'vpc-production',
+        VpcSecurityGroupIds: [RDS_SG_B],
+        Endpoint: { Address: 'checksops-production.example.rds.amazonaws.com', Port: 5432 },
+      },
+    ],
+    ObservedInstanceCount: 2,
+  };
+}
+
+function lambdaPostgresIngress(groupId = LAMBDA_SG_ID, extras = {}) {
+  return {
+    IpProtocol: extras.protocol ?? 'tcp',
+    FromPort: extras.from ?? 5432,
+    ToPort: extras.to ?? 5432,
+    UserIdGroupPairs: [{
+      GroupId: extras.sourceGroupId ?? groupId,
+      UserId: extras.userId === undefined ? ACCOUNT_ID : extras.userId,
+    }],
   };
 }
 
@@ -251,10 +324,49 @@ test('allowlists only pinned AWS read operations and refuses mutations or arbitr
   assert.ok(rdsArgs.at(-1).includes('ObservedInstanceCount:length(DBInstances)'));
   assert.equal(rdsArgs.at(-1).includes('Endpoint'), false);
   assert.equal(rdsArgs.at(-1).includes('MasterUserSecret.SecretArn=='), false);
+  const compareArgs = buildAwsArgs('rds:DescribeDBInstances', {
+    secretArn: PERSISTENCE_SECRET_ARN,
+    endpointCompare: true,
+  });
+  assert.ok(compareArgs.at(-1).includes('EndpointAddress:Endpoint.Address'));
+  assert.ok(compareArgs.at(-1).includes('DBInstanceIdentifier:DBInstanceIdentifier'));
+  assert.throws(() => buildAwsArgs('rds:DescribeDBInstances', {
+    secretArn: PERSISTENCE_SECRET_ARN,
+    endpointCompare: false,
+  }));
+  assert.deepEqual(buildAwsArgs('secretsmanager:GetSecretValue', { secretArn: PERSISTENCE_SECRET_ARN }).slice(0, 4), [
+    'secretsmanager', 'get-secret-value', '--secret-id', PERSISTENCE_SECRET_ARN,
+  ]);
+  assert.ok(buildAwsArgs('secretsmanager:GetSecretValue', { secretArn: PERSISTENCE_SECRET_ARN }).at(-1).includes('SecretString:SecretString'));
+  assert.throws(() => buildAwsArgs('secretsmanager:GetSecretValue', { secretArn: '*' }));
+  assert.throws(() => buildAwsArgs('secretsmanager:GetSecretValue', {
+    secretArn: 'arn:aws:secretsmanager:us-west-2:806168576068:secret:other',
+  }));
   const secretArgs = buildAwsArgs('secretsmanager:DescribeSecret', { secretArn: PERSISTENCE_SECRET_ARN });
   assert.ok(secretArgs.at(-1).includes('OwningService:OwningService'));
   assert.equal(secretArgs.at(-1).includes('Description'), false);
   assert.throws(() => buildAwsArgs('rds:DescribeDBInstances', { secretArn: 'arn:aws:secretsmanager:us-west-2:806168576068:secret:other' }));
+  const sgArgs = buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: [RDS_SG_B, LAMBDA_SG_ID] });
+  assert.deepEqual(sgArgs.slice(0, 2), ['ec2', 'describe-security-groups']);
+  assert.ok(sgArgs.includes('--group-ids'));
+  assert.ok(sgArgs.includes(LAMBDA_SG_ID));
+  assert.ok(sgArgs.includes(RDS_SG_B));
+  assert.ok(sgArgs.at(-1).includes('GroupId:GroupId'));
+  assert.ok(sgArgs.at(-1).includes('UserIdGroupPairs'));
+  assert.ok(sgArgs.at(-1).includes('IpProtocol:IpProtocol'));
+  assert.equal(sgArgs.at(-1).includes('CidrIp'), false);
+  assert.equal(sgArgs.at(-1).includes('GroupName'), false);
+  assert.equal(sgArgs.at(-1).includes('Description'), false);
+  assert.equal(sgArgs.at(-1).includes('Tags'), false);
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: [] }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: ['sg-production'] }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupNames: ['checksops-production'] }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', {
+    groupIds: [LAMBDA_SG_ID],
+    filters: [{ Name: 'group-name', Values: ['production'] }],
+  }));
+  assert.throws(() => buildAwsArgs('ec2:DescribeSecurityGroups', { groupIds: [LAMBDA_SG_ID, LAMBDA_SG_ID] }));
+  assert.throws(() => buildAwsArgs('ec2:AuthorizeSecurityGroupIngress', { groupIds: [LAMBDA_SG_ID] }));
   assert.throws(() => buildAwsArgs('apigateway:GET', { apiId: PRODUCTION_PINS.api_id, resource: 'stage', stage: 'staging' }));
   assert.throws(() => buildAwsArgs('cloudfront:CreateInvalidation', { distributionId: PRODUCTION_PINS.cloudfront_id }));
   assert.throws(() => buildAwsArgs('cloudfront:GetDistribution', { distributionId: '*' }));
@@ -841,8 +953,9 @@ test('proves exactly one RDS target from exclusive live Lambda VPC membership', 
 });
 
 test('proves exactly one RDS target from exclusive live Lambda security-group intersection', async () => {
+  const calls = [];
   const report = await inspectProduction({
-    runAws: mockAws([], persistenceConfigOverrides({
+    runAws: mockAws(calls, persistenceConfigOverrides({
       DBInstances: [
         {
           DBInstanceArn: RDS_INSTANCE_ARN,
@@ -866,48 +979,197 @@ test('proves exactly one RDS target from exclusive live Lambda security-group in
     resource_arn: RDS_INSTANCE_ARN,
     association: 'exclusive-security-group',
   }]);
+  assert.equal(calls.some(({ action }) => action === 'ec2:DescribeSecurityGroups'), false);
   const evidence = JSON.stringify(buildInspectionSummary(report));
   assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
   assert.ok(evidence.includes(RDS_INSTANCE_ARN));
 });
 
-test('refuses to guess when two RDS instances share the live Lambda VPC', async () => {
+test('proves exactly one RDS target from exclusive live Lambda security-group ingress', async () => {
   const calls = [];
   const report = await inspectProduction({
-    runAws: mockAws(calls, persistenceConfigOverrides({
-      DBInstances: [
-        {
-          DBInstanceArn: RDS_INSTANCE_ARN,
-          VpcId: 'vpc-production',
-          VpcSecurityGroupIds: ['sg-rds-a'],
-        },
-        {
-          DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
-          VpcId: 'vpc-production',
-          VpcSecurityGroupIds: ['sg-rds-b'],
-        },
-      ],
-      ObservedInstanceCount: 2,
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': (target) => {
+        assert.deepEqual(target.groupIds, [LAMBDA_SG_ID, RDS_SG_A, RDS_SG_B]);
+        return {
+          SecurityGroups: [
+            { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+            {
+              GroupId: RDS_SG_A,
+              GroupName: 'checksops-production',
+              IpPermissions: [lambdaPostgresIngress()],
+            },
+            {
+              GroupId: RDS_SG_B,
+              IpPermissions: [{
+                IpProtocol: 'tcp',
+                FromPort: 5432,
+                ToPort: 5432,
+                CidrIp: '0.0.0.0/0',
+                UserIdGroupPairs: [],
+              }],
+            },
+          ],
+        };
+      },
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'complete');
+  assert.equal(report.database.reason, 'live Lambda security-group ingress independently binds exactly one observed RDS instance through AWS metadata');
+  assert.deepEqual(report.database.candidate_resources, [{
+    reference_type: 'rds-instance',
+    resource_arn: RDS_INSTANCE_ARN,
+    association: 'exclusive-security-group-ingress',
+  }]);
+  assert.deepEqual(report.database.unresolved_references, []);
+  assert.equal(calls.filter(({ action }) => action === 'ec2:DescribeSecurityGroups').length, 1);
+  assert.equal(calls.some(({ action }) => /GetSecretValue|ssm:GetParameter|rds:DescribeDBClusters|ExecuteStatement|rds-data/.test(action)), false);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('checksops-production.example'), false);
+  assert.equal(evidence.includes('0.0.0.0/0'), false);
+  assert.ok(evidence.includes(RDS_INSTANCE_ARN));
+});
+
+test('refuses zero security-group ingress matches after describing observed groups', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => ({
+        SecurityGroups: [
+          { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+          {
+            GroupId: RDS_SG_A,
+            IpPermissions: [{
+              IpProtocol: 'tcp',
+              FromPort: 5432,
+              ToPort: 5432,
+              CidrIp: '10.0.0.0/8',
+              UserIdGroupPairs: [],
+            }],
+          },
+          {
+            GroupId: RDS_SG_B,
+            GroupName: 'checksops-production',
+            IpPermissions: [{
+              IpProtocol: 'tcp',
+              FromPort: 443,
+              ToPort: 443,
+              UserIdGroupPairs: [{ GroupId: LAMBDA_SG_ID, UserId: ACCOUNT_ID }],
+            }],
+          },
+        ],
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].required_permission, null);
+  assert.equal(report.database.unresolved_references[0].required_permission_resource, null);
+  assert.equal(report.database.unresolved_references[0].vpc_match_count, 2);
+  assert.equal(report.database.unresolved_references[0].security_group_match_count, 0);
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 0);
+  assert.equal(report.database.unresolved_references[0].master_user_association_count, 0);
+  assert.match(report.database.unresolved_references[0].reason, /does not bind the live Lambda security groups to exactly one/);
+  const describeCall = calls.find(({ action }) => action === 'ec2:DescribeSecurityGroups');
+  assert.deepEqual(describeCall.target.groupIds, [LAMBDA_SG_ID, RDS_SG_A, RDS_SG_B]);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('checksops-production.example'), false);
+  assert.ok(evidence.includes('"security_group_ingress_match_count": 0') || evidence.includes('"security_group_ingress_match_count":0'));
+});
+
+test('refuses multiple security-group ingress matches after describing observed groups', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => ({
+        SecurityGroups: [
+          { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+          { GroupId: RDS_SG_A, IpPermissions: [lambdaPostgresIngress(LAMBDA_SG_ID, { protocol: '-1', from: null, to: null })] },
+          { GroupId: RDS_SG_B, IpPermissions: [lambdaPostgresIngress()] },
+        ],
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].required_permission, null);
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 2);
+  assert.match(report.database.unresolved_references[0].reason, /multiple production RDS instances/);
+  assert.equal(calls.filter(({ action }) => action === 'ec2:DescribeSecurityGroups').length, 1);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+});
+
+test('ignores CIDR-only and foreign-account ingress when proving a production RDS target', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => ({
+        SecurityGroups: [
+          { GroupId: LAMBDA_SG_ID, IpPermissions: [] },
+          {
+            GroupId: RDS_SG_A,
+            IpPermissions: [
+              {
+                IpProtocol: 'tcp',
+                FromPort: 5432,
+                ToPort: 5432,
+                CidrIp: '0.0.0.0/0',
+                UserIdGroupPairs: [{ GroupId: LAMBDA_SG_ID, UserId: '999999999999' }],
+              },
+            ],
+          },
+          {
+            GroupId: RDS_SG_B,
+            GroupName: 'checksops-production',
+            Description: 'named production database',
+            IpPermissions: [{
+              IpProtocol: 'tcp',
+              FromPort: 5432,
+              ToPort: 5432,
+              CidrIp: '10.0.0.0/8',
+            }],
+          },
+        ],
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.deepEqual(report.database.candidate_resources, []);
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 0);
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
+  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
+  assert.equal(evidence.includes('named production database'), false);
+});
+
+test('fails closed when observed security-group describe is denied', async () => {
+  const report = await inspectProduction({
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'ec2:DescribeSecurityGroups': () => {
+        const error = new Error('AccessDenied: security groups');
+        error.stderr = 'UnauthorizedOperation: You are not authorized to perform this operation';
+        throw error;
+      },
     })),
     fetchImpl: mockFetch,
   });
   assert.equal(report.database.status, 'refused_unproven_aws_production_target');
   assert.deepEqual(report.database.candidate_resources, []);
   assert.equal(report.database.unresolved_references[0].required_permission, 'ec2:DescribeSecurityGroups');
-  assert.equal(
-    report.database.unresolved_references[0].required_permission_resource,
-    'arn:aws:ec2:us-east-1:806168576068:security-group/sg-production',
-  );
-  assert.equal(report.database.unresolved_references[0].vpc_match_count, 2);
-  assert.equal(report.database.unresolved_references[0].security_group_match_count, 0);
-  assert.equal(report.database.unresolved_references[0].master_user_association_count, 0);
-  assert.equal(report.database.unresolved_references[0].observed_db_instance_count, 2);
-  assert.match(report.database.unresolved_references[0].reason, /multiple instances in the live Lambda VPC/);
-  assert.equal(calls.some(({ action }) => action === 'ec2:DescribeSecurityGroups'), false);
-  const evidence = JSON.stringify(buildInspectionSummary(report));
-  assert.equal(evidence.includes(RDS_INSTANCE_ARN), false);
-  assert.equal(evidence.includes(NAMED_PRODUCTION_RDS_ARN), false);
-  assert.ok(evidence.includes('ec2:DescribeSecurityGroups'));
+  assert.equal(report.database.unresolved_references[0].required_permission_resource, '*');
+  assert.equal(report.database.unresolved_references[0].security_group_ingress_match_count, 0);
+  assert.ok(report.missing_read_permissions.some((permission) => (
+    permission.action === 'ec2:DescribeSecurityGroups' && permission.resource === '*'
+  )));
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes(RDS_INSTANCE_ARN), false);
 });
 
 test('refuses a zero-target network association even when an instance name contains production', async () => {
@@ -1130,6 +1392,7 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     { Effect: 'Allow', Action: ['cloudfront:GetDistribution'] },
     { Effect: 'Allow', Action: ['secretsmanager:DescribeSecret'] },
     { Effect: 'Allow', Action: ['rds:DescribeDBInstances'] },
+    { Effect: 'Allow', Action: ['ec2:DescribeSecurityGroups'] },
   ]);
   assert.deepEqual(policy.Statement.map(({ Resource }) => Resource), [
     '*',
@@ -1139,6 +1402,7 @@ test('read workflow is manually dispatched, uses protected environment and no mu
     `arn:aws:cloudfront::${PRODUCTION_PINS.account_id}:distribution/${PRODUCTION_PINS.cloudfront_id}`,
     PERSISTENCE_SECRET_ARN,
     '*',
+    '*',
   ]);
   assert.match(workflow, /s3:GetObject/);
   assert.match(workflow, /lambda:GetFunctionConfiguration/);
@@ -1146,10 +1410,379 @@ test('read workflow is manually dispatched, uses protected environment and no mu
   assert.match(workflow, /apigateway:GET/);
   assert.match(workflow, /secretsmanager:DescribeSecret/);
   assert.match(workflow, /rds:DescribeDBInstances/);
-  assert.doesNotMatch(workflow, /rds:(?:Create|Modify|Delete|Reboot|Start|Stop|Restore|Failover|Promote|Reset|Add|Remove|Authorize|Revoke)|rds-db:connect|secretsmanager:GetSecretValue|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH/i);
+  assert.match(workflow, /ec2:DescribeSecurityGroups/);
+  assert.doesNotMatch(workflow, /rds:(?:Create|Modify|Delete|Reboot|Start|Stop|Restore|Failover|Promote|Reset|Add|Remove|Authorize|Revoke)|rds-db:connect|secretsmanager:GetSecretValue|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|lambda:PublishVersion|cloudfront:CreateInvalidation|apigateway:POST|apigateway:PATCH|ec2:(?:Authorize|Revoke|Create|Delete|Modify)/i);
   assert.doesNotMatch(workflow, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /npm ci|PostgreSQL inspection dependency/i);
   assert.match(docs, /refused_unproven_aws_production_target/);
+  assert.match(docs, /ec2:DescribeSecurityGroups/);
+  assert.match(docs, /No AWS\/IAM identity policy is applied here/);
   assert.doesNotMatch(docs, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
   assert.doesNotMatch(workflow, /\b(?:put-object|sync\s+--delete|delete-object|create-invalidation|update-function-code|update-function-configuration|provider|payment)\b/i);
+});
+
+const PRODUCTION_ENDPOINT = 'checksops-production.example.rds.amazonaws.com';
+const STAGING_ENDPOINT = 'checksops-staging.example.rds.amazonaws.com';
+
+function twoEndpointVpcInstances() {
+  return {
+    DBInstances: [
+      {
+        DBInstanceArn: RDS_INSTANCE_ARN,
+        DBInstanceIdentifier: 'production-db',
+        VpcId: 'vpc-production',
+        Engine: 'postgres',
+        EndpointAddress: PRODUCTION_ENDPOINT,
+        EndpointPort: 5432,
+      },
+      {
+        DBInstanceArn: NAMED_PRODUCTION_RDS_ARN,
+        DBInstanceIdentifier: 'checksops-production',
+        VpcId: 'vpc-production',
+        Engine: 'postgres',
+        EndpointAddress: STAGING_ENDPOINT,
+        EndpointPort: 5432,
+      },
+    ],
+    ObservedInstanceCount: 2,
+  };
+}
+
+function authorizedHostCompareEnv() {
+  return { [SECRET_HOST_COMPARE_AUTHORIZATION_ENV]: SECRET_HOST_COMPARE_AUTHORIZATION };
+}
+
+test('secret host compare helpers fail closed and never treat names as hosts', () => {
+  assert.equal(secretHostCompareAuthorizationState({}), 'absent');
+  assert.equal(secretHostCompareAuthorizationState({ [SECRET_HOST_COMPARE_AUTHORIZATION_ENV]: '' }), 'absent');
+  assert.equal(secretHostCompareAuthorizationState({ [SECRET_HOST_COMPARE_AUTHORIZATION_ENV]: 'nope' }), 'invalid');
+  assert.equal(secretHostCompareAuthorizationState(authorizedHostCompareEnv()), 'authorized');
+  assert.equal(extractSecretHostForCompare('').ok, false);
+  assert.equal(extractSecretHostForCompare('{').reason, 'secret_payload_malformed');
+  assert.equal(extractSecretHostForCompare(JSON.stringify({
+    username: 'checksops_admin', host: PRODUCTION_ENDPOINT,
+  })).reason, 'refused_privileged_database_user');
+  assert.equal(extractSecretHostForCompare(JSON.stringify({ host: 'checksops-production' })).ok, false);
+  assert.equal(extractSecretHostForCompare(JSON.stringify({
+    host: `https://user:password@${PRODUCTION_ENDPOINT}`,
+  })).ok, false);
+  const extracted = extractSecretHostForCompare(JSON.stringify({
+    username: 'checksops',
+    host: PRODUCTION_ENDPOINT,
+    port: 5432,
+    password: 'opaque-secret-must-not-be-persisted',
+  }));
+  assert.equal(extracted.ok, true);
+  assert.equal(extracted.host, PRODUCTION_ENDPOINT);
+  const unique = compareSecretHostToObservedEndpoints({
+    secretHost: PRODUCTION_ENDPOINT,
+    secretPort: 5432,
+    vpcId: 'vpc-production',
+    instances: [
+      {
+        resource_arn: RDS_INSTANCE_ARN,
+        instance_identifier: 'production-db',
+        vpc_id: 'vpc-production',
+        engine: 'postgres',
+        endpoint_host: PRODUCTION_ENDPOINT,
+        endpoint_port: 5432,
+      },
+      {
+        resource_arn: NAMED_PRODUCTION_RDS_ARN,
+        instance_identifier: 'checksops-production',
+        vpc_id: 'vpc-production',
+        engine: 'postgres',
+        endpoint_host: STAGING_ENDPOINT,
+        endpoint_port: 5432,
+      },
+    ],
+  });
+  assert.deepEqual(unique, {
+    match_count: 1,
+    unique_match: true,
+    matched_rds_identifier: 'production-db',
+    resource_arn: RDS_INSTANCE_ARN,
+  });
+});
+
+test('authorized secret host compare binds exactly one RDS endpoint without persisting secrets', async () => {
+  const secret = JSON.stringify({
+    username: 'checksops',
+    host: PRODUCTION_ENDPOINT,
+    port: 5432,
+    password: 'opaque-secret-must-not-be-persisted',
+    dbname: 'checksops',
+  });
+  const calls = [];
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? twoEndpointVpcInstances() : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': (target) => {
+        assert.equal(target.secretArn, PERSISTENCE_SECRET_ARN);
+        return { SecretString: secret };
+      },
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'complete');
+  assert.equal(report.database.host_compare.status, 'complete');
+  assert.equal(report.database.host_compare.unique_match, true);
+  assert.equal(report.database.host_compare.match_count, 1);
+  assert.equal(report.database.host_compare.matched_rds_identifier, 'production-db');
+  assert.deepEqual(Object.keys(report.database.host_compare).sort(), [
+    'match_count', 'matched_rds_identifier', 'reason', 'status', 'unique_match',
+  ]);
+  assert.deepEqual(report.database.candidate_resources, [{
+    reference_type: 'rds-instance',
+    resource_arn: RDS_INSTANCE_ARN,
+    association: 'secret-host-endpoint',
+  }]);
+  assert.ok(calls.some(({ action, target }) => (
+    action === 'secretsmanager:GetSecretValue' && target.secretArn === PERSISTENCE_SECRET_ARN
+  )));
+  const evidence = JSON.stringify(buildInspectionSummary(report));
+  assert.equal(evidence.includes(secret), false);
+  assert.equal(evidence.includes('opaque-secret-must-not-be-persisted'), false);
+  assert.equal(evidence.includes(PRODUCTION_ENDPOINT), false);
+  assert.equal(evidence.includes(STAGING_ENDPOINT), false);
+  assert.equal(evidence.includes('checksops_admin'), false);
+});
+
+test('authorized secret host compare fails closed on zero or multiple endpoint matches', async () => {
+  const zero = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? twoEndpointVpcInstances() : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': () => ({
+        SecretString: JSON.stringify({ host: 'other-db.example.rds.amazonaws.com', port: 5432 }),
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(zero.database.status, 'refused_unproven_aws_production_target');
+  assert.equal(zero.database.host_compare.unique_match, false);
+  assert.equal(zero.database.host_compare.match_count, 0);
+  assert.equal(zero.database.host_compare.matched_rds_identifier, null);
+  assert.match(zero.database.host_compare.reason, /zero observed RDS endpoints/);
+
+  const bothSameHost = {
+    DBInstances: twoEndpointVpcInstances().DBInstances.map((instance) => ({
+      ...instance,
+      EndpointAddress: PRODUCTION_ENDPOINT,
+    })),
+    ObservedInstanceCount: 2,
+  };
+  const multiple = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? bothSameHost : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': () => ({
+        SecretString: JSON.stringify({ host: PRODUCTION_ENDPOINT, port: 5432 }),
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(multiple.database.status, 'refused_unproven_aws_production_target');
+  assert.equal(multiple.database.host_compare.match_count, 2);
+  assert.equal(multiple.database.host_compare.unique_match, false);
+  assert.equal(multiple.database.host_compare.matched_rds_identifier, null);
+});
+
+test('invalid or absent secret host compare authorization never calls GetSecretValue', async () => {
+  const absentCalls = [];
+  const absent = await inspectProduction({
+    runAws: mockAws(absentCalls, hexVpcPersistenceOverrides(twoVpcRdsInstances())),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(absent.database.host_compare, undefined);
+  assert.equal(absentCalls.some(({ action }) => action === 'secretsmanager:GetSecretValue'), false);
+  assert.equal(absentCalls.some(({ target }) => target?.endpointCompare === true), false);
+
+  const invalidCalls = [];
+  const invalid = await inspectProduction({
+    env: { [SECRET_HOST_COMPARE_AUTHORIZATION_ENV]: 'owner-please' },
+    runAws: mockAws(invalidCalls, hexVpcPersistenceOverrides(twoVpcRdsInstances())),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(invalid.database.host_compare.unique_match, false);
+  assert.match(invalid.database.host_compare.reason, /authorization is missing or invalid/);
+  assert.equal(invalidCalls.some(({ action }) => action === 'secretsmanager:GetSecretValue'), false);
+});
+
+test('authorized secret host compare reports GetSecretValue permission failure without leaking the secret', async () => {
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? twoEndpointVpcInstances() : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': () => {
+        const error = new Error('denied');
+        error.stderr = 'AccessDeniedException SecretString=opaque-secret-must-not-be-persisted';
+        throw error;
+      },
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.match(report.database.host_compare.reason, /GetSecretValue was authorized but did not succeed/);
+  assert.equal(report.database.host_compare.unique_match, false);
+  assert.ok(report.missing_read_permissions.some((permission) => (
+    permission.action === 'secretsmanager:GetSecretValue' && permission.resource === PERSISTENCE_SECRET_ARN
+  )));
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes('opaque-secret-must-not-be-persisted'), false);
+});
+
+test('authorized host compare refuses unverified package provenance without GetSecretValue', async () => {
+  const calls = [];
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws(calls, hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'lambda:GetFunction': () => ({
+        Configuration: {
+          FunctionName: PRODUCTION_PINS.function_name,
+          CodeSha256: 'unverified-package-hash',
+          RevisionId: 'live-revision',
+        },
+        Code: { Location: LAMBDA_CODE_LOCATION },
+      }),
+      'secretsmanager:GetSecretValue': () => {
+        throw new Error('GetSecretValue must not run without proven provenance');
+      },
+    })),
+    fetchImpl: mockFetch,
+  });
+  assert.equal(report.database.status, 'refused_unproven_aws_production_target');
+  assert.match(report.database.host_compare.reason, /runtime secret-reference source are not both verified/);
+  assert.equal(report.database.host_compare.unique_match, false);
+  assert.equal(report.database.host_compare.matched_rds_identifier, null);
+  assert.equal(calls.some(({ action }) => action === 'secretsmanager:GetSecretValue'), false);
+});
+
+test('flattened live secrets.mjs SHA match is sufficient provenance for host compare', async () => {
+  const secret = JSON.stringify({
+    username: 'checksops',
+    host: PRODUCTION_ENDPOINT,
+    port: 5432,
+    password: 'opaque-secret-must-not-be-persisted',
+  });
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'lambda:GetFunctionConfiguration': () => ({
+        ...lambdaConfig,
+        CodeSha256: LAMBDA_FLAT_CODE_SHA,
+        VpcConfig: {
+          VpcId: 'vpc-production',
+          SubnetIds: ['subnet-production'],
+          SecurityGroupIds: [LAMBDA_SG_ID],
+        },
+        Environment: { Variables: { DATABASE_SECRET_ARN: PERSISTENCE_SECRET_ARN } },
+      }),
+      'lambda:GetFunction': () => ({
+        Configuration: {
+          FunctionName: PRODUCTION_PINS.function_name,
+          CodeSha256: LAMBDA_FLAT_CODE_SHA,
+          RevisionId: 'live-revision',
+        },
+        Code: { Location: LAMBDA_CODE_LOCATION },
+      }),
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? twoEndpointVpcInstances() : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': () => ({ SecretString: secret }),
+    })),
+    fetchImpl: (url, options) => {
+      if (new URL(url).hostname !== 'checksops.com') {
+        return Promise.resolve(new Response(LAMBDA_FLAT_ZIP, { status: 200 }));
+      }
+      return mockFetch(url, options);
+    },
+  });
+  const secrets = report.lambda.package.source_comparisons.find((item) => (
+    item.repository_path === 'aws/functions/api/secrets.mjs'
+  ));
+  assert.equal(secrets.member_path, 'secrets.mjs');
+  assert.equal(secrets.matches, true);
+  assert.equal(report.database.host_compare.status, 'complete');
+  assert.equal(report.database.host_compare.unique_match, true);
+  assert.equal(report.database.host_compare.matched_rds_identifier, 'production-db');
+  assert.equal(JSON.stringify(buildInspectionSummary(report)).includes(PRODUCTION_ENDPOINT), false);
+});
+
+test('existing redactor still suppresses secret-named keys and host_compare remains visible', async () => {
+  const secret = 'opaque-secret-must-not-be-persisted';
+  assert.equal(redactInspectionValue({ host: PRODUCTION_ENDPOINT, password: secret }, 'secret_host_compare'), '[REDACTED]');
+  assert.equal(redactInspectionValue(secret, 'password'), '[REDACTED]');
+  assert.equal(redactInspectionValue(secret, 'database_url'), '[REDACTED]');
+  assert.equal(redactInspectionValue(secret, 'authorization'), '[REDACTED]');
+  const visible = redactInspectionValue({
+    status: 'complete',
+    reason: 'ok',
+    match_count: 1,
+    unique_match: true,
+    matched_rds_identifier: 'production-db',
+  }, 'host_compare');
+  assert.deepEqual(visible, {
+    status: 'complete',
+    reason: 'ok',
+    match_count: 1,
+    unique_match: true,
+    matched_rds_identifier: 'production-db',
+  });
+  const report = await inspectProduction({
+    env: authorizedHostCompareEnv(),
+    runAws: mockAws([], hexVpcPersistenceOverrides(twoVpcRdsInstances(), {
+      'rds:DescribeDBInstances': (target) => (
+        target.endpointCompare ? twoEndpointVpcInstances() : twoVpcRdsInstances()
+      ),
+      'secretsmanager:GetSecretValue': () => ({
+        SecretString: JSON.stringify({
+          username: 'checksops',
+          host: PRODUCTION_ENDPOINT,
+          port: 5432,
+          password: secret,
+        }),
+      }),
+    })),
+    fetchImpl: mockFetch,
+  });
+  report.database.secret_host_compare = { host: PRODUCTION_ENDPOINT, password: secret };
+  report.database.password = secret;
+  const evidence = buildInspectionSummary(report);
+  const json = JSON.stringify(evidence);
+  assert.equal(typeof evidence.database.host_compare, 'object');
+  assert.equal(evidence.database.host_compare.matched_rds_identifier, 'production-db');
+  assert.equal(evidence.database.secret_host_compare, undefined);
+  assert.equal(evidence.database.password, undefined);
+  assert.equal(json.includes(secret), false);
+  assert.equal(json.includes(PRODUCTION_ENDPOINT), false);
+});
+
+test('secret host compare workflow is owner-gated and resource-scoped; default inspect still has no GetSecretValue', () => {
+  const compare = fs.readFileSync(new URL('../../.github/workflows/inspect-production-secret-host-compare.yml', import.meta.url), 'utf8');
+  const inspect = fs.readFileSync(new URL('../../.github/workflows/inspect-production-readonly.yml', import.meta.url), 'utf8');
+  const iam = JSON.parse(fs.readFileSync(new URL('../../ops/deployment-guard/production-secret-host-compare-iam.json', import.meta.url), 'utf8'));
+  assert.match(compare, /workflow_dispatch:/);
+  assert.match(compare, /secret_host_compare_authorization:/);
+  assert.match(compare, /environment: production-readonly/);
+  assert.match(compare, /OWNER_AUTHORIZED_PRODUCTION_SECRET_HOST_COMPARE/);
+  assert.match(compare, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  assert.match(compare, /Secret host compare is not authorized/);
+  const policy = JSON.parse(compare.match(/inline-session-policy: >-\n\s+(\{[^\n]+\})/)[1]);
+  assert.ok(policy.Statement.some((statement) => (
+    statement.Action.includes('secretsmanager:GetSecretValue')
+    && statement.Resource === PERSISTENCE_SECRET_ARN
+  )));
+  assert.equal(iam.Statement[0].Action, 'secretsmanager:GetSecretValue');
+  assert.equal(iam.Statement[0].Resource, PERSISTENCE_SECRET_ARN);
+  assert.doesNotMatch(inspect, /secretsmanager:GetSecretValue/);
+  assert.doesNotMatch(compare, /rds-db:connect|ssm:GetParameter|s3:PutObject|lambda:UpdateFunction|ec2:Authorize|GetSecretValue", "Resource": "\*"/);
+  assert.doesNotMatch(compare, /supabase|CHECKSOPS_PRODUCTION_READONLY_DATABASE_URL|database connection secret/i);
 });

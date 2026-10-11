@@ -1,0 +1,93 @@
+{
+  "id": "sql53-production-apply",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql53-production-apply",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "intended_replacement_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "authorization_phrase": "CREATE_SAVE_CLAIM_SETTLEMENT_BREAKDOWN",
+  "owned_components": [
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preserved_function_identities": [
+    "public.sync_homeowner_ledger_from_check()",
+    "public.aws_can_write_claim(uuid)",
+    "public.hle_on_check_intake_insert()"
+  ],
+  "preserved_function_definition_sha256": {
+    "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+    "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf",
+    "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+  },
+  "preserved_settlement_columns": [
+    "replacement_cost_value",
+    "recoverable_depreciation",
+    "non_recoverable_depreciation",
+    "deductible",
+    "other_structures_rcv",
+    "other_structures_recoverable_depreciation",
+    "other_structures_non_recoverable_depreciation",
+    "other_structures_deductible",
+    "pwi_rcv",
+    "pwi_recoverable_depreciation",
+    "pwi_non_recoverable_depreciation",
+    "personal_property_rcv",
+    "personal_property_recoverable_depreciation",
+    "personal_property_non_recoverable_depreciation",
+    "ale_rcv",
+    "ale_recoverable_depreciation",
+    "ale_non_recoverable_depreciation"
+  ],
+  "preserved_ledger_triggers": [
+    "trg_sync_homeowner_ledger_ins",
+    "trg_sync_homeowner_ledger_upd",
+    "trg_hle_check_intake_insert"
+  ],
+  "preserved_row_counts": [
+    "public.claim_settlements",
+    "public.check_intake_items",
+    "public.payments",
+    "public.homeowner_ledger"
+  ],
+  "production_inspect": {
+    "status": "complete",
+    "exists": false,
+    "rdsIdentifier": "checksops-production",
+    "at": "2026-10-11T02:16:36Z",
+    "settlement_columns_found": 17,
+    "settlement_columns_missing": 0,
+    "ledger_triggers_found": 3,
+    "ledger_triggers_missing": 0
+  },
+  "release_lock": {
+    "exclusive": true,
+    "component": "production-sql",
+    "ledger": "ops/release-locks/applied-migrations.ledger.json",
+    "migration_id": "53_claim_settlement_breakdown"
+  },
+  "rollback": {
+    "statement": "DROP FUNCTION IF EXISTS public.save_claim_settlement_breakdown(uuid, uuid, jsonb);",
+    "forbidden": [
+      "DROP TABLE",
+      "DROP TRIGGER",
+      "ALTER TABLE public.claim_settlements",
+      "DROP FUNCTION public.aws_can_write_claim(uuid)",
+      "DROP FUNCTION public.sync_homeowner_ledger_from_check()",
+      "DROP FUNCTION public.hle_on_check_intake_insert()"
+    ]
+  },
+  "notes": "Dedicated production SQL 53 apply path. Reuses the approved settlement file and create-only gates. Does not weaken the staging executor. This pin does not execute production SQL until an independent execute authorization sets execute=true and a single-use receipt is issued."
+}

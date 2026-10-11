@@ -49,6 +49,12 @@
       "note": "Official receipt-gated Lambda overlay apply. Starts from CURRENT live ZIP, replaces only receipt-owned members, RevisionId CAS. Never restores an old ZIP."
     },
     {
+      "path": "scripts/deployment-guard/sql53-temporary-lambda-config.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql53-temporary-lambda-environment", "lambda-update-function-configuration", "lambda-invoke"],
+      "note": "Production-only SQL53 writer; requires a signed receipt, dedicated execution role, RevisionId CAS, and verified cleanup of the two temporary authorization keys."
+    },
+    {
       "path": "scripts/deployment-guard/spa-promote.mjs",
       "classification": "GUARDED",
       "capabilities": ["spa-evaluate"]
@@ -63,6 +69,18 @@
       "classification": "GUARDED",
       "capabilities": ["sql-executor-invoke"],
       "note": "Official staging VPC SQL executor invoke. Requires a sql-executor-invoke receipt. Never accepts arbitrary SQL. Never targets production or shared APIs."
+    },
+    {
+      "path": "scripts/deployment-guard/sql53-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql53-production-apply"],
+      "note": "Official production SQL 53 apply. Requires a sql53-production-apply receipt, exclusive production-sql lease, fresh catalog, and independent execute authorization. Never retargets the staging executor or production API. Never creates Cursor OIDC access."
+    },
+    {
+      "path": "scripts/deployment-guard/github-sql53-production-apply.mjs",
+      "classification": "SAFE",
+      "capabilities": ["sql53-production-evaluate"],
+      "note": "GitHub-hosted SQL 53 evaluate only. Never applies SQL, never targets Lambda, and never loads issuer.key onto the production API."
     },
     {
       "path": "scripts/deployment-guard/sql-executor-ensure.mjs",

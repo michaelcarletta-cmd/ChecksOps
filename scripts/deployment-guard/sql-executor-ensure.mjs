@@ -42,6 +42,8 @@ export function packExecutor(root) {
     ['aws/write-path/guarded-sql-executor/package.json', 'package.json'],
     ['aws/write-path/sql/44_claim_ledger_link_or_create.sql', 'sql/44_claim_ledger_link_or_create.sql'],
     ['aws/workflows/sql/53_claim_settlement_breakdown.sql', 'sql/53_claim_settlement_breakdown.sql'],
+    ['aws/write-path/guarded-sql-executor/sql/39_tmp_write_policy_reconcile.sql', 'sql/39_tmp_write_policy_reconcile.sql'],
+    ['aws/write-path/guarded-sql-executor/sql/40_collection_v2_synthetic_uat_cleanup.sql', 'sql/40_collection_v2_synthetic_uat_cleanup.sql'],
     ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
     ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],
     ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
@@ -50,15 +52,44 @@ export function packExecutor(root) {
     ['scripts/deployment-guard/lib/errors.mjs', 'lib/errors.mjs'],
     ['scripts/deployment-guard/lib/identity.mjs', 'lib/identity.mjs'],
     ['scripts/deployment-guard/lib/function-def-lookup.mjs', 'lib/function-def-lookup.mjs'],
+    ['scripts/deployment-guard/lib/collection-v2-synthetic-uat-cleanup.mjs', 'lib/collection-v2-synthetic-uat-cleanup.mjs'],
+    ['scripts/deployment-guard/lib/tmp-rls-catalog.mjs', 'lib/tmp-rls-catalog.mjs'],
   ];
   for (const [from, to] of copies) {
     fs.copyFileSync(path.join(root, from), path.join(staging, to));
   }
-  execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
-  const zip = path.join(os.tmpdir(), `checksops-guarded-sql-executor-${process.pid}.zip`);
-  try { fs.unlinkSync(zip); } catch { /* ok */ }
+  installExecutorDependencies(staging);
+  const zip = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-guarded-sql-executor-zip-')), 'package.zip');
   execFileSync('zip', ['-qr', zip, '.'], { cwd: staging });
   return { zip, staging };
+}
+
+function installExecutorDependencies(staging) {
+  const npmCache = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-executor-npm-cache-'));
+  const args = ['install', '--omit=dev', '--no-audit', '--no-fund', '--no-progress', '--cache', npmCache];
+  const env = {
+    ...process.env,
+    npm_config_cache: npmCache,
+    npm_config_audit: 'false',
+    npm_config_fund: 'false',
+    npm_config_update_notifier: 'false',
+  };
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      execFileSync('npm', args, {
+        cwd: staging,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  const detail = String(lastError?.stderr || lastError?.stdout || lastError?.message || '').slice(0, 800);
+  throw new Error(`executor package install failed: ${detail}`);
 }
 
 export function main(argv = process.argv.slice(2), env = process.env, root = repoRootFrom(import.meta.url)) {

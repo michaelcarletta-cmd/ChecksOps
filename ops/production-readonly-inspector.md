@@ -24,8 +24,10 @@ The OIDC role ARN variable must be
 The workflow applies this exact session policy; the role's identity policy must
 also permit these reads, or the report lists the missing permission:
 
-- `sts:GetCallerIdentity` and `rds:DescribeDBInstances` (`Resource: *`; AWS
-  requires the RDS metadata action to be unscoped).
+- `sts:GetCallerIdentity`, `rds:DescribeDBInstances`, and
+  `ec2:DescribeSecurityGroups` (`Resource: *`; AWS requires the RDS metadata
+  action to be unscoped, and live RDS security-group IDs cannot be pinned in
+  the workflow). The inspector only queries already-observed GroupIds.
 - `s3:GetObject` on only the production `index.html` and `assets/index-*.js`.
 - `lambda:GetFunctionConfiguration` and `lambda:GetFunction` on only
   `checksops-production-prep-api`. `GetFunction` is used only to retrieve the
@@ -50,26 +52,48 @@ endpoints, identifiers used as names, and unmatched instance ARNs are not
 persisted. A target is proven only by an exact live `DATABASE_SECRET_ARN`
 `MasterUserSecret` association, or by exclusive membership of exactly one
 observed instance in the live Lambda VPC, or by an exclusive security-group
-intersection with the live Lambda security groups. Zero or multiple matches
-remain fail-closed. An authorized empty `MasterUserSecret` match is not proof
-that production RDS does not exist: application credentials may be separately
-managed. If two observed instances share the live Lambda VPC without an
-exclusive security-group association, the report stays
-`refused_unproven_aws_production_target` and records sanitized association
-counts plus the minimum additional read-only evidence
-`ec2:DescribeSecurityGroups` on the live Lambda security groups. That
-permission is not added by this inspector. SSM parameter values are never
+intersection with the live Lambda security groups, or by exclusive
+security-group ingress from the live Lambda security groups to exactly one
+observed RDS instance (TCP 5432 or all-protocols `UserIdGroupPairs` in the
+same account). Zero or multiple matches remain fail-closed. CIDR rules, names,
+hostnames, tags, and staging configuration are not used. An authorized empty
+`MasterUserSecret` match is not proof that production RDS does not exist:
+application credentials may be separately managed. If two observed instances
+share the live Lambda VPC without an exclusive security-group association, the
+inspector describes only already-observed GroupIds (live Lambda security
+groups plus VPC-matching RDS security groups already returned by
+`DescribeDBInstances`) and accepts a target only when exactly one instance has
+that ingress. Describing only the Lambda security groups is not sufficient:
+ingress lives on the RDS security groups, and Lambda egress is commonly
+unrestricted CIDR. Zero or multiple ingress matches stay
+`refused_unproven_aws_production_target`. Exclusive VPC membership of exactly
+one instance still proves without an EC2 call. SSM parameter values are never
 fetched; metadata alone is treated as insufficient to prove their persistence
 target. No persistence target is accepted unless live AWS configuration, the
 verified runtime package, and AWS resource metadata independently establish the
 complete binding; otherwise the report remains
-`refused_unproven_aws_production_target`.
+`refused_unproven_aws_production_target`. The inspector still never accepts a
+connection string, contacts a database, or inspects SQL function definitions.
+The default workflow still never calls `GetSecretValue`.
+
+An owner-gated companion workflow,
+`.github/workflows/inspect-production-secret-host-compare.yml`, may compare
+the live secret host to observed RDS endpoints only after explicit
+authorization. See `ops/production-secret-host-compare.md`. That path still
+never persists the secret value, credentials, connection string, or hostname,
+and it fails closed on unverified package provenance or zero or multiple
+endpoint matches. The result is stored as `database.host_compare` so the
+existing redactor does not suppress it. Do not add `GetSecretValue` to
+the default inspect session policy.
 
 The SPA fingerprint is fetched using HTTPS GET from the pinned `checksops.com`
 host. The report compares the live entry, index/bundle hashes, S3 version, and
 CloudFront identity with the production SPA lock. Lambda package evidence
 records CodeSha256, RevisionId, package hash, member paths/sizes/hashes, and
-exact-path comparisons for the reviewed current-main API sources. It does not
+exact-path comparisons for the reviewed current-main API sources. Flattened
+production packages may match `aws/functions/api/<file>` to a root `<file>`
+member only when the SHA-256 is identical. Exact repository paths still win.
+It does not
 record the presigned URL, ZIP bytes, environment values, or source contents.
 Lambda package downloads accept only the pinned-region AWS Lambda S3 virtual-
 hosted or bucket-path endpoints for `awslambda-us-east-1` / `awslambda-us-east-1-tasks`,
@@ -106,17 +130,29 @@ exact-resource Lambda `GetFunction` read:
   "Effect": "Allow",
   "Action": "rds:DescribeDBInstances",
   "Resource": "*"
+},
+{
+  "Effect": "Allow",
+  "Action": "ec2:DescribeSecurityGroups",
+  "Resource": "*"
 }
 ```
 
-The production read-only role's identity policy separately authorizes this
-read. No AWS/IAM identity policy is changed by this repository update. Do not
-grant `GetSecretValue`, wildcard Secrets Manager access, SSM value reads,
-`ec2:DescribeSecurityGroups`, or RDS mutation/data-plane access. Do not expand
-`rds:DescribeDBInstances` further without separate authorization. Persistence
-remains unproven unless metadata independently binds the live Lambda to exactly
-one production RDS instance and the live package proves the runtime secret
-source.
+The production read-only role's identity policy separately authorizes these
+reads. This repository update changes only the workflow session policy and
+inspector source. No AWS/IAM identity policy is applied here; the owner must
+add the same `ec2:DescribeSecurityGroups` allow to
+`ChecksOpsGitHubProductionReadOnlyInspect` before a live inspect can use it.
+Do not grant `GetSecretValue` on the default inspect path, wildcard Secrets
+Manager access, SSM value reads, `ec2:AuthorizeSecurityGroupIngress`,
+`ec2:RevokeSecurityGroupIngress`, `ec2:CreateSecurityGroup`,
+`ec2:DeleteSecurityGroup`, or RDS mutation/data-plane access. The optional
+secret-host-compare identity statement is documented in
+`ops/deployment-guard/production-secret-host-compare-iam.json` and must not be
+applied from this repository update. Do not expand `rds:DescribeDBInstances` further without separate
+authorization. Persistence remains unproven unless metadata independently binds
+the live Lambda to exactly one production RDS instance and the live package
+proves the runtime secret source.
 
 The production release lock currently has no Lambda `CodeSha256` pin. The
 inspector reports the live Lambda code fingerprint, workflow flags, source

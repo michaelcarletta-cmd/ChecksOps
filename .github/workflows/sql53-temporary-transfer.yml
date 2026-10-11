@@ -1,0 +1,38 @@
+name: SQL53 upload verified source to temporary runner bucket
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout immutable reviewed source
+        uses: actions/checkout@v4
+        with:
+          ref: 4b734515d0584aa6008d2fb9503e3b8144551dee
+          persist-credentials: false
+      - name: Verify SQL53 source and disabled execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197  aws/workflows/sql/53_claim_settlement_breakdown.sql" | sha256sum -c -
+          node -e "const p=require('./ops/deployment-guard/sql53-production-apply.json'); if(p.execute!==false || p.apply_authorized!==false || p.authorization!=='source-only') process.exit(1)"
+          git archive --format=tar.gz --output=/tmp/reviewed-source-4b734515d058.tar.gz HEAD
+          sha256sum /tmp/reviewed-source-4b734515d058.tar.gz
+      - name: Assume temporary artifact-upload-only role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::806168576068:role/ChecksOpsGitHubSql53ArtifactUpload
+          aws-region: us-east-1
+          role-session-name: sql53-reviewed-package-upload
+      - name: Upload reviewed source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 cp /tmp/reviewed-source-4b734515d058.tar.gz s3://checksops-sql53-transfer-806168576068/sql53/reviewed-source-4b734515d058.tar.gz --sse AES256 --no-progress
+          aws s3api head-object --bucket checksops-sql53-transfer-806168576068 --key sql53/reviewed-source-4b734515d058.tar.gz --query '{ContentLength:ContentLength,ServerSideEncryption:ServerSideEncryption}' --output json

@@ -11,6 +11,8 @@ import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
 import {
+  AUTHORIZED_SQL39,
+  AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL53,
   AUTHORIZED_STAGING_SQL,
@@ -19,6 +21,8 @@ import {
   authorizationFingerprint,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
+  isSql39,
+  isSql40,
   isSql44AuthorizedMigration,
   isSql53AuthorizedMigration,
   resolveAuthorizedMigration,
@@ -399,7 +403,15 @@ test('resolveAuthorizedMigration is exact-match and never defaults to SQL 44', (
     filename: AUTHORIZED_SQL53.filename,
     migration_id: AUTHORIZED_SQL53.migration_id,
   }), AUTHORIZED_SQL53);
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 3);
+  assert.equal(resolveAuthorizedMigration({
+    filename: AUTHORIZED_SQL39.filename,
+  }), AUTHORIZED_SQL39);
+  assert.equal(resolveAuthorizedMigration({
+    migration_id: AUTHORIZED_SQL40.migration_id,
+  }), AUTHORIZED_SQL40);
+  assert.equal(isSql39({ filename: AUTHORIZED_SQL39.filename }), true);
+  assert.equal(isSql40({ migration_id: AUTHORIZED_SQL40.migration_id }), true);
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 5);
   assert.equal(isSql53AuthorizedMigration({
     filename: AUTHORIZED_SQL53.filename,
     migration_id: AUTHORIZED_SQL44.migration_id,
@@ -485,6 +497,10 @@ test('sql-executor-ensure packs the non-throwing function-def lookup and SQL 53'
   const src = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/sql-executor-ensure.mjs'), 'utf8');
   assert.match(src, /function-def-lookup\.mjs/);
   assert.match(src, /53_claim_settlement_breakdown\.sql/);
+  assert.match(src, /39_tmp_write_policy_reconcile\.sql/);
+  assert.match(src, /40_collection_v2_synthetic_uat_cleanup\.sql/);
+  assert.match(src, /collection-v2-synthetic-uat-cleanup\.mjs/);
+  assert.match(src, /tmp-rls-catalog\.mjs/);
   assert.equal(src.includes('::regprocedure'), false);
 });
 

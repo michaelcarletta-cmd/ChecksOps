@@ -61,7 +61,7 @@ test('SQL 53 pin matches current source bytes and does not broaden other migrati
   assert.ok(PIN.forbidden_owned_components.includes('aws/write-path/sql/44_claim_ledger_link_or_create.sql'));
   assert.ok(PIN.forbidden_owned_components.includes('supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql'));
   assert.ok(PIN.forbidden_owned_components.includes('supabase/migrations/20260918170040_one_check_received_writer.sql'));
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 3);
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 5);
   assert.equal(AUTHORIZED_STAGING_SQL.some((row) => row.filename === PIN.filename), true);
 });
 
@@ -185,7 +185,6 @@ test('production, apply flags, extra migrations, and wrong source hash are refus
 });
 
 test('SQL 53 executor pin requires the exact #835 commit/hash tuple', () => {
-  const pinNow = Date.parse('2026-10-09T15:00:00.000Z');
   const exact = evaluateSqlExecutorAuthorization({
     workstream_id: 'staging-sql53-3bc9',
     branch: 'cursor/staging-sql53-execute-3bc9',
@@ -206,7 +205,7 @@ test('SQL 53 executor pin requires the exact #835 commit/hash tuple', () => {
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
     preflight_live_fingerprint: { sql: PIN.absent_live_definition_sha256 },
-  }, { now: pinNow });
+  }, { now: Date.parse(NOW) });
   assert.equal(exact.ok, true, exact.message);
 
   const wrongCommit = evaluateSqlExecutorAuthorization({
@@ -229,7 +228,7 @@ test('SQL 53 executor pin requires the exact #835 commit/hash tuple', () => {
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
     preflight_live_fingerprint: { sql: PIN.absent_live_definition_sha256 },
-  }, { now: pinNow });
+  }, { now: Date.parse(NOW) });
   assert.equal(wrongCommit.ok, false);
   assert.equal(wrongCommit.code, CODES.SQL_COLLISION);
 });

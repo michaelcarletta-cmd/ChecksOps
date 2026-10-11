@@ -22,6 +22,8 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   'cloudformation',
   's3-object-write',
   'lambda-oneshot',
+  'lambda-sql53-temporary-config',
+  'sql53-production-apply',
   'apigateway-update',
   'infra-mutate',
   'verify-only',
