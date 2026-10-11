@@ -33,7 +33,7 @@ export function evaluateSql53TemporaryConfigPreflight(input = {}) {
   if (!Array.isArray(owned) || owned.length !== 1 || owned[0] !== FUNCTION_NAME) {
     errors.push('owned_components must contain only the production prep Lambda');
   }
-  if (Object.hasOwn(input, 'owned_member_ops')) {
+  if (Object.hasOwn(input, 'owned_member_ops') && input.owned_member_ops != null) {
     errors.push('Lambda member operations are not part of a configuration receipt');
   }
   if (input.apply === true || input.execute === true) {
