@@ -22,6 +22,7 @@ const {
   SQL53_PINNED_FUNCTION_LOOKUPS,
   SQL53_REQUIRED_LEDGER_TRIGGERS,
   SQL53_REQUIRED_SETTLEMENT_COLUMNS,
+  SQL53_READONLY_INSPECT_ALLOWED_ENVS,
   SQL53_READONLY_INSPECT_AUTHORIZATION,
   SQL53_READONLY_INSPECT_AUTHORIZATION_ENV,
   SQL53_READONLY_INSPECT_AUTHORIZATION_MIN_LENGTH,
@@ -219,6 +220,29 @@ test('sql53 inspect authorization fails closed without contacting the database',
   assert.equal(sql53ReadonlyInspectExpiryState(tooLong), 'invalid');
   assert.ok(OWNER_TOKEN.length >= SQL53_READONLY_INSPECT_AUTHORIZATION_MIN_LENGTH);
   assert.deepEqual(deps.calls, []);
+});
+
+test('sql53 inspect authorizes live production-prep and still refuses staging', () => {
+  assert.deepEqual([...SQL53_READONLY_INSPECT_ALLOWED_ENVS], ['production', 'production-prep']);
+  assert.equal(sql53ReadonlyInspectAuthorizationState(authorizedEnv(), authorizedEvent()), 'authorized');
+  assert.equal(sql53ReadonlyInspectAuthorizationState({
+    ...authorizedEnv(),
+    CHECKSOPS_ENV: 'production-prep',
+  }, authorizedEvent()), 'authorized');
+  assert.equal(proveSql53ReadonlyInspectProvenance({
+    ...authorizedEnv(),
+    CHECKSOPS_ENV: 'production-prep',
+  }, {
+    hashMember: (name) => hashSql53PackageMember(name, API),
+  }).ok, true);
+  assert.equal(sql53ReadonlyInspectAuthorizationState({
+    ...authorizedEnv(),
+    CHECKSOPS_ENV: 'staging',
+  }, authorizedEvent()), 'invalid');
+  assert.equal(proveSql53ReadonlyInspectProvenance({
+    ...authorizedEnv(),
+    CHECKSOPS_ENV: 'staging',
+  }).ok, false);
 });
 
 test('sql53 inspect fails closed on package provenance mismatch', () => {
