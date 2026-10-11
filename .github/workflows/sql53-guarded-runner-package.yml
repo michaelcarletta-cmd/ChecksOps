@@ -29,9 +29,9 @@ jobs:
         run: |
           set -euo pipefail
           git archive --format=tar.gz --output=/tmp/checksops-sql53-4b734515d058.tar.gz HEAD
-          sha256sum /tmp/checksops-sql53-4b734515d058.tar.gz > /tmp/checksops-sql53-4b734515d058.tar.gz.sha256
           mkdir -p sql53-package
-          mv /tmp/checksops-sql53-4b734515d058.tar.gz* sql53-package/
+          mv /tmp/checksops-sql53-4b734515d058.tar.gz sql53-package/
+          (cd sql53-package && sha256sum checksops-sql53-4b734515d058.tar.gz > checksops-sql53-4b734515d058.tar.gz.sha256)
       - name: Upload reviewable source artifact
         uses: actions/upload-artifact@v4
         with:
