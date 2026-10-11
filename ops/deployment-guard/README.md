@@ -53,6 +53,7 @@ node scripts/deployment-guard/lambda-overlay.mjs --input path/to/overlay.json
 node scripts/deployment-guard/spa-promote.mjs --input path/to/spa.json
 node scripts/deployment-guard/spa-upload.mjs --environment production
 node scripts/deployment-guard/sql-apply.mjs --input path/to/sql.json
+node scripts/deployment-guard/sql53-production-apply.mjs --input path/to/sql53-production-apply.json
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
 node scripts/deployment-guard/scan-bypass.mjs
 

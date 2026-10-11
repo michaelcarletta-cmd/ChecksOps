@@ -7,6 +7,7 @@ import { evaluateLambdaOverlay, planLambdaApply } from './lambda-overlay.mjs';
 import { evaluateSpaPromote } from './spa-promote.mjs';
 import { evaluateSqlApply } from './sql-apply.mjs';
 import { evaluateSql53StagingApply, isSql53StagingApply } from './sql53-staging-apply.mjs';
+import { evaluateSql53ProductionApply, isSql53ProductionApply } from './sql53-production-apply.mjs';
 import { evaluateSqlExecutorAuthorization } from './sql-executor-auth.mjs';
 import { evaluateSql53TemporaryConfigPreflight } from './sql53-temporary-config-preflight.mjs';
 import { acquireLease, inspectLease, releaseLease } from './lease.mjs';
@@ -63,6 +64,8 @@ export function evaluateDeployment(input = {}, ctx = {}) {
     specific = isSql53StagingApply({ ...input, root })
       ? evaluateSql53StagingApply(input, { root })
       : evaluateSqlApply(input);
+  } else if (input.deployment_type === 'sql53-production-apply') {
+    specific = evaluateSql53ProductionApply(input, { root });
   } else if (input.deployment_type === 'sql-executor-invoke') {
     specific = evaluateSqlExecutorAuthorization(input);
   } else if (input.deployment_type === 'lambda-sql53-temporary-config') {
