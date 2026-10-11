@@ -9,13 +9,20 @@ permissions:
 
 jobs:
   upload:
+    environment: staging
     runs-on: ubuntu-latest
     steps:
       - name: Checkout immutable reviewed source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: 4b734515d0584aa6008d2fb9503e3b8144551dee
           persist-credentials: false
+      - name: Refuse unexpected ref or checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "SQL53 artifact upload is only permitted from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "4b734515d0584aa6008d2fb9503e3b8144551dee" || { echo "Checkout SHA mismatch"; exit 2; }
       - name: Verify SQL53 source and disabled execution
         shell: bash
         run: |
@@ -25,11 +32,21 @@ jobs:
           git archive --format=tar.gz --output=/tmp/reviewed-source-4b734515d058.tar.gz HEAD
           sha256sum /tmp/reviewed-source-4b734515d058.tar.gz
       - name: Assume temporary artifact-upload-only role
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
         with:
           role-to-assume: arn:aws:iam::806168576068:role/ChecksOpsGitHubSql53ArtifactUpload
           aws-region: us-east-1
           role-session-name: sql53-reviewed-package-upload
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sts:GetCallerIdentity"],"Resource":"*"},{"Effect":"Allow","Action":["s3:PutObject","s3:GetObject"],"Resource":"arn:aws:s3:::checksops-sql53-transfer-806168576068/sql53/reviewed-source-4b734515d058.tar.gz"}]}
+      - name: Verify assumed AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ACCOUNT" = "806168576068" || { echo "Unexpected AWS account"; exit 2; }
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubSql53ArtifactUpload/sql53-reviewed-package-upload" || { echo "Unexpected AWS role identity"; exit 2; }
       - name: Upload reviewed source only
         shell: bash
         run: |
