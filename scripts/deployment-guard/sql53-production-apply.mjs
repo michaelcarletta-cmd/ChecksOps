@@ -27,7 +27,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
   const root = deps.root || repoRootFrom(import.meta.url);
   const { flags, opts } = parseArgs(argv);
   const input = readInput(opts, {});
-  const pin = loadSql53ProductionApplyPin(root);
+  const pin = deps.pin || loadSql53ProductionApplyPin(root);
   const payload = {
     ...input,
     target_environment: 'production',
@@ -70,6 +70,26 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     return printResult(fail(
       CODES.GUARD_APPLY_FORBIDDEN,
       'SQL 53 production apply is blocked unless CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1',
+    ));
+  }
+
+  if (input.authorization_phrase !== pin.authorization_phrase) {
+    return printResult(fail(
+      CODES.PRODUCTION_APPROVAL_REQUIRED,
+      'SQL 53 production apply requires the exact authorization phrase',
+    ));
+  }
+  if (pin.execute !== true && input.harness !== true) {
+    return printResult(fail(
+      CODES.GUARD_APPLY_FORBIDDEN,
+      'SQL 53 production execute is not authorized by this pin; independent execute authorization is required',
+      { apply_authorized: false, execute: false },
+    ));
+  }
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(String(input.one_use_id || ''))) {
+    return printResult(fail(
+      CODES.INVALID_MANIFEST,
+      'SQL 53 production apply requires a single-use receipt id',
     ));
   }
 

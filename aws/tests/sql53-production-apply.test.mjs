@@ -351,6 +351,7 @@ test('official CLI apply builds a production connect factory from the validated 
     CHECKSOPS_SQL53_PRODUCTION_DATABASE_URL: 'postgres://checksops@checksops-production.c1.us-east-1.rds.amazonaws.com:5432/checksops',
   }, {
     root: ROOT,
+    pin: { ...PIN, execute: true },
     enforceScriptGuard: () => ({ ok: true }),
     execute: async (_input, ctx) => {
       captured = ctx;
@@ -372,6 +373,7 @@ test('official CLI apply can build a connect factory from the existing admin sec
     CHECKSOPS_SQL53_PRODUCTION_ADMIN_SECRET_ARN: ADMIN_ARN,
   }, {
     root: ROOT,
+    pin: { ...PIN, execute: true },
     enforceScriptGuard: () => ({
       ok: true,
       details: { receipt: { mac: 'a'.repeat(64), workstream_id: 'prod-sql53-production-executor-3bc9' } },
@@ -396,6 +398,57 @@ test('official CLI apply can build a connect factory from the existing admin sec
   assert.equal(consumed, 1);
   assert.equal(typeof captured.connect, 'function');
   assert.match(String(captured.databaseUrl || ''), /checksops-production/);
+});
+
+test('official CLI apply does not consume a receipt when local apply gates refuse', async () => {
+  const receipt = { mac: 'b'.repeat(64), workstream_id: 'prod-sql53-production-executor-3bc9' };
+  const run = async (overrides = {}, pin = PIN) => {
+    const inputFile = path.join(os.tmpdir(), `sql53-prod-gate-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
+    fs.writeFileSync(inputFile, `${JSON.stringify(productionInput({
+      inspect: catalog(),
+      ...overrides,
+    }), null, 2)}\n`);
+    let consumed = 0;
+    let stderr = '';
+    const originalWrite = process.stderr.write;
+    process.stderr.write = (chunk, ...args) => {
+      stderr += String(chunk);
+      return originalWrite.call(process.stderr, chunk, ...args);
+    };
+    let code;
+    try {
+      code = await productionApplyMain(['--apply', '--input', inputFile], {
+        CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1',
+      }, {
+        root: ROOT,
+        pin,
+        enforceScriptGuard: () => ({ ok: true, details: { receipt } }),
+        consumeReceiptOnce: () => {
+          consumed += 1;
+          return { ok: true, details: { consumed: true } };
+        },
+        execute: async () => ({ ok: true, details: { apply_executed: false } }),
+      });
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+    return { code, consumed, stderr };
+  };
+
+  const executeFalse = await run();
+  assert.equal(executeFalse.code, 1);
+  assert.equal(executeFalse.consumed, 0);
+  assert.match(executeFalse.stderr, /GUARD_APPLY_FORBIDDEN/);
+
+  const missingPhrase = await run({ authorization_phrase: 'WRONG_PHRASE' }, { ...PIN, execute: true });
+  assert.equal(missingPhrase.code, 1);
+  assert.equal(missingPhrase.consumed, 0);
+  assert.match(missingPhrase.stderr, /PRODUCTION_APPROVAL_REQUIRED/);
+
+  const missingOneUse = await run({ one_use_id: '' }, { ...PIN, execute: true });
+  assert.equal(missingOneUse.code, 1);
+  assert.equal(missingOneUse.consumed, 0);
+  assert.match(missingOneUse.stderr, /INVALID_MANIFEST/);
 });
 
 test('isolated PostgreSQL production apply path creates only the settlement function', {
