@@ -3491,25 +3491,17 @@ function CheckDetailPanel({
         if (!depositItemId) throw new Error("prepare_deposit did not return a deposit_item_id");
       }
 
-      // 3. Assign manual_branch provider if still pending
+      // 3. Read the deposit item state. The AWS mark_manual_deposit RPC owns
+      // the manual_branch assignment, so do not run assign_provider first.
+      // That avoids requiring manual_branch to be an active external provider.
       const { data: itemAfterPrep } = await supabase
         .from("deposit_items")
-        .select("status, provider")
+        .select("status")
         .eq("id", depositItemId)
         .single();
 
-      if (itemAfterPrep?.status === "pending_assignment") {
-        const { error: assignErr } = await supabase.rpc("deposit_action", {
-          p_action: "assign_provider",
-          p_actor_id: user.id,
-          p_deposit_item_id: depositItemId,
-          p_provider: "manual_branch",
-          p_notes: "Auto-assigned manual_branch from Check Command Center",
-        });
-        if (assignErr) throw assignErr;
-      }
-
-      // 4. Mark as manually deposited (sets check_intake_items.status = 'deposited' too)
+      // 4. Mark as manually deposited (sets provider = 'manual_branch' and
+      // check_intake_items.status/check_stage = 'deposited' without provider execution).
       if (itemAfterPrep?.status !== "succeeded" && itemAfterPrep?.status !== "reconciled") {
         const { error: markErr } = await supabase.rpc("deposit_action", {
           p_action: "mark_manual_deposit",
