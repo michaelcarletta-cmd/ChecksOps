@@ -110,10 +110,20 @@ test('financial delete blockers include provider and disbursement tables', () =>
       'check_payment_directions',
       'checkalt_deposits',
       'claim_check_payments',
+      'claim_checks_terminal',
+      'claim_disbursements',
+      'claim_payments',
       'deposit_items',
       'disbursement_batches',
     ],
   );
+});
+
+test('claim_checks-keyed blockers resolve through claim_checks', () => {
+  for (const table of ['check_payment_directions', 'claim_disbursements', 'claim_checks_terminal']) {
+    const row = FINANCIAL_DELETE_BLOCKERS.find((r) => r.table === table);
+    assert.match(row.sql, /cc\.check_intake_item_id = \$1::uuid/, table);
+  }
 });
 
 test('delete aborts when check_deletion_log insert fails', async () => {
