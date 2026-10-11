@@ -1,0 +1,121 @@
+{
+  "id": "production-sql53-temporary-config-execute-retry",
+  "authorization": "final-guarded-production-retry",
+  "sql53_inspection_executed": true,
+  "diagnostic_complete": true,
+  "cleanup_verified": true,
+  "production_code_unchanged": true,
+  "iam_modified": false,
+  "lambda_code_deployed": false,
+  "sql_executed": false,
+  "live_diagnostic_overwritten": false,
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "branch": "cursor/prod-sql53-execute-retry-3bc9",
+  "approved_source_commit": "f458a689e35f10228165c8c0ba136496e8f01bc1",
+  "pr_869_on_main": true,
+  "pr_872_on_main": true,
+  "executed_at": "2026-10-11T02:16:36Z",
+  "assumed_identity": {
+    "Account": "806168576068",
+    "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-execute-retry"
+  },
+  "oidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "before_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "d49b27cc-3dcb-48ab-8490-206097172689",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "after_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "f4904e55-61b3-46c4-bf1f-da178e84911b",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "temporary_sql53_variables_before": {
+    "authorization_present": false,
+    "expiry_present": false,
+    "env_key_count": 49
+  },
+  "temporary_sql53_variables_after": {
+    "authorization_present": false,
+    "expiry_present": false,
+    "env_key_count": 49,
+    "last_modified": "2026-10-11T02:16:41.000+0000",
+    "last_update_status": "Successful"
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "prod-sql53-temporary-config-3bc9",
+    "inherited": false,
+    "from_previous_workstream": false
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "inherited": false,
+    "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation"
+  },
+  "receipt": {
+    "issued_at": "2026-10-11T02:16:05.472Z",
+    "consumed_at": "2026-10-11T02:16:36.618Z",
+    "consumed": true,
+    "commit": "f458a689e35f10228165c8c0ba136496e8f01bc1"
+  },
+  "writer": {
+    "ok": true,
+    "cleanup": {
+      "complete": true,
+      "drift_detected": false,
+      "attempts": 1
+    },
+    "authorization_cleanup_verified": true,
+    "receipt_consumed": true
+  },
+  "inspection": {
+    "status": "complete",
+    "rdsIdentifier": "checksops-production",
+    "readOnly": true,
+    "functions_found": [
+      "public.sync_homeowner_ledger_from_check()",
+      "public.aws_can_write_claim(uuid)",
+      "public.hle_on_check_intake_insert()"
+    ],
+    "functions_missing": [
+      "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)"
+    ],
+    "settlement_columns_found": [
+      "replacement_cost_value",
+      "recoverable_depreciation",
+      "non_recoverable_depreciation",
+      "deductible",
+      "other_structures_rcv",
+      "other_structures_recoverable_depreciation",
+      "other_structures_non_recoverable_depreciation",
+      "other_structures_deductible",
+      "pwi_rcv",
+      "pwi_recoverable_depreciation",
+      "pwi_non_recoverable_depreciation",
+      "personal_property_rcv",
+      "personal_property_recoverable_depreciation",
+      "personal_property_non_recoverable_depreciation",
+      "ale_rcv",
+      "ale_recoverable_depreciation",
+      "ale_non_recoverable_depreciation"
+    ],
+    "settlement_columns_missing": [],
+    "ledger_triggers_found": [
+      "trg_sync_homeowner_ledger_ins",
+      "trg_sync_homeowner_ledger_upd",
+      "trg_hle_check_intake_insert"
+    ],
+    "ledger_triggers_missing": []
+  },
+  "remaining_blockers": [
+    "public.save_claim_settlement_breakdown(uuid,uuid,jsonb) is absent in production",
+    "Temporary Cursor OIDC trust on ChecksOpsProductionSql53ConfigWriter remains and should be removed through a separately authorized IAM cleanup"
+  ]
+}
