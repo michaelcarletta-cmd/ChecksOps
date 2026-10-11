@@ -121,6 +121,41 @@ max_connections = 20
           WHERE c.id = _claim_id
         )
       $$;
+      CREATE TABLE public.check_intake_items (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id uuid
+      );
+      CREATE TABLE public.payments (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        amount numeric NOT NULL DEFAULT 0
+      );
+      CREATE TABLE public.homeowner_ledger (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        note text NOT NULL
+      );
+      CREATE OR REPLACE FUNCTION public.sync_homeowner_ledger_from_check()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        INSERT INTO public.homeowner_ledger(note) VALUES ('sync');
+        RETURN NEW;
+      END
+      $$;
+      CREATE OR REPLACE FUNCTION public.hle_on_check_intake_insert()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        INSERT INTO public.homeowner_ledger(note) VALUES ('hle');
+        RETURN NEW;
+      END
+      $$;
+      CREATE TRIGGER trg_sync_homeowner_ledger_ins
+        AFTER INSERT ON public.check_intake_items
+        FOR EACH ROW EXECUTE FUNCTION public.sync_homeowner_ledger_from_check();
+      CREATE TRIGGER trg_sync_homeowner_ledger_upd
+        AFTER UPDATE ON public.check_intake_items
+        FOR EACH ROW EXECUTE FUNCTION public.sync_homeowner_ledger_from_check();
+      CREATE TRIGGER trg_hle_check_intake_insert
+        AFTER INSERT ON public.check_intake_items
+        FOR EACH ROW EXECUTE FUNCTION public.hle_on_check_intake_insert();
       CREATE OR REPLACE FUNCTION public.touch_claim_updated_at()
       RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
       BEGIN
@@ -225,6 +260,15 @@ max_connections = 20
     ]);
     assert.notEqual(directClaimsWrite.status, 0, 'checksops must not receive claims UPDATE privilege');
     assert.equal(psql(`SELECT org_id FROM public.claims WHERE id = '${CLAIM_A}'`), TENANT_A);
+
+    assert.equal(psql(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'save_claim_settlement_breakdown'`), '1');
+    assert.equal(psql(`SELECT count(*) FROM public.homeowner_ledger`), '0');
+    assert.equal(psql(`SELECT count(*) FROM public.payments`), '0');
+    assert.equal(psql(`SELECT count(*) FROM public.check_intake_items`), '0');
+    assert.equal(psql(`SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_sync_homeowner_ledger_ins','trg_sync_homeowner_ledger_upd','trg_hle_check_intake_insert') AND NOT tgisinternal`), '3');
+    assert.equal(psql(`SELECT pg_get_functiondef('public.sync_homeowner_ledger_from_check()'::regprocedure) LIKE '%homeowner_ledger%'`), 't');
+    assert.equal(psql(`SELECT pg_get_functiondef('public.hle_on_check_intake_insert()'::regprocedure) LIKE '%homeowner_ledger%'`), 't');
+    assert.equal(psql(`SELECT pg_get_functiondef('public.aws_can_write_claim(uuid)'::regprocedure) LIKE '%tenant_users%'`), 't');
   } finally {
     run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', '-w', 'stop']);
     fs.rmSync(pgData, { recursive: true, force: true });

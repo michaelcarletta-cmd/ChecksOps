@@ -1,0 +1,81 @@
+{
+  "id": "sql53-production-function-repair",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+  "migration_id": "53_claim_settlement_breakdown",
+  "source_sha256": "5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197",
+  "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+  "absent_live_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "intended_definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+  "owned_components": [
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preserved_function_identities": [
+    "public.sync_homeowner_ledger_from_check()",
+    "public.aws_can_write_claim(uuid)",
+    "public.hle_on_check_intake_insert()"
+  ],
+  "preserved_settlement_columns": [
+    "replacement_cost_value",
+    "recoverable_depreciation",
+    "non_recoverable_depreciation",
+    "deductible",
+    "other_structures_rcv",
+    "other_structures_recoverable_depreciation",
+    "other_structures_non_recoverable_depreciation",
+    "other_structures_deductible",
+    "pwi_rcv",
+    "pwi_recoverable_depreciation",
+    "pwi_non_recoverable_depreciation",
+    "personal_property_rcv",
+    "personal_property_recoverable_depreciation",
+    "personal_property_non_recoverable_depreciation",
+    "ale_rcv",
+    "ale_recoverable_depreciation",
+    "ale_non_recoverable_depreciation"
+  ],
+  "preserved_ledger_triggers": [
+    "trg_sync_homeowner_ledger_ins",
+    "trg_sync_homeowner_ledger_upd",
+    "trg_hle_check_intake_insert"
+  ],
+  "production_inspect": {
+    "status": "complete",
+    "exists": false,
+    "rdsIdentifier": "checksops-production",
+    "settlement_columns_found": 17,
+    "settlement_columns_missing": 0,
+    "ledger_triggers_found": 3,
+    "ledger_triggers_missing": 0,
+    "functions_found": [
+      "public.sync_homeowner_ledger_from_check()",
+      "public.aws_can_write_claim(uuid)",
+      "public.hle_on_check_intake_insert()"
+    ],
+    "functions_missing": [
+      "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)"
+    ]
+  },
+  "rollback": {
+    "statement": "DROP FUNCTION IF EXISTS public.save_claim_settlement_breakdown(uuid, uuid, jsonb);",
+    "forbidden": [
+      "DROP TABLE",
+      "DROP TRIGGER",
+      "ALTER TABLE public.claim_settlements",
+      "DROP FUNCTION public.aws_can_write_claim(uuid)",
+      "DROP FUNCTION public.sync_homeowner_ledger_from_check()",
+      "DROP FUNCTION public.hle_on_check_intake_insert()"
+    ]
+  },
+  "notes": "Evaluate-only production repair package. Reuses the approved SQL 53 file. Does not apply SQL, change Lambda, recreate IAM, or modify ledger triggers or settlement columns. Independent production apply authorization is still required."
+}
