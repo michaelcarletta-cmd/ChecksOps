@@ -165,19 +165,34 @@ async function waitForUpdate(aws, { attempts = 20, delayMs = 1000 } = {}) {
   throw new Error('lambda_update_timeout');
 }
 
-function parseInspection(invokeResult) {
-  const result = normalizeAdapterResult(invokeResult) || {};
-  if (result.FunctionError) throw new Error('lambda_invocation_failed');
-  let payload = result.Payload;
-  if (Buffer.isBuffer(payload) || payload instanceof Uint8Array) payload = Buffer.from(payload).toString('utf8');
-  if (typeof payload === 'string') {
+function parseJsonValue(value) {
+  if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+    return parseJsonValue(Buffer.from(value).toString('utf8'));
+  }
+  if (typeof value === 'string') {
+    let parsed;
     try {
-      payload = JSON.parse(payload);
+      parsed = JSON.parse(value);
     } catch {
       throw new Error('lambda_invocation_response_invalid');
     }
+    return parseJsonValue(parsed);
   }
-  const body = payload?.body;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('lambda_invocation_response_invalid');
+  }
+  return value;
+}
+
+export function parseSql53InspectionResponse(invokeResult) {
+  const result = normalizeAdapterResult(invokeResult) || {};
+  if (result.FunctionError) throw new Error('lambda_invocation_failed');
+  const payload = parseJsonValue(result.Payload);
+  if (payload.FunctionError) throw new Error('lambda_invocation_failed');
+  if (typeof payload.statusCode !== 'number') {
+    throw new Error('lambda_invocation_response_invalid');
+  }
+  const body = parseJsonValue(payload.body);
   const inspection = body?.inspect;
   if (payload?.statusCode !== 200
     || body?.status !== 'complete'
@@ -448,7 +463,7 @@ export async function applySql53TemporaryLambdaConfig(input = {}, ctx = {}) {
         authorization: token,
       },
     });
-    inspection = parseInspection(invocation);
+    inspection = parseSql53InspectionResponse(invocation);
   } catch (error) {
     operationFailure = error?.message === 'authorization_expired_before_invoke'
       ? 'temporary authorization expired before invocation'
