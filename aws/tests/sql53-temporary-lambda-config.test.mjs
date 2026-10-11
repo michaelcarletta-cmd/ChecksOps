@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { register } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 import {
@@ -15,6 +16,7 @@ import {
   SQL53_CONFIG_FUNCTION,
   applySql53TemporaryLambdaConfig,
   fingerprintSql53LambdaConfiguration,
+  parseSql53InspectionResponse,
 } from '../../scripts/deployment-guard/lib/sql53-temporary-lambda-config.mjs';
 import { evaluateSql53TemporaryConfigPreflight } from '../../scripts/deployment-guard/lib/sql53-temporary-config-preflight.mjs';
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
@@ -457,6 +459,121 @@ test('unauthorized concurrent settings drift is preserved, authorization is remo
     assert.equal(harness.state.Environment.Variables.OTHER, 'concurrent env change');
     assert.equal(harness.state.Environment.Variables[SQL53_CONFIG_AUTHORIZATION_ENV], undefined);
     assert.equal(harness.state.Description, 'concurrent change preserved');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function liveIndexEnvelope(payload = inspectionPayload()) {
+  return {
+    statusCode: payload.statusCode,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload.body),
+  };
+}
+
+function invokeResult(payload, extras = {}) {
+  return {
+    StatusCode: 200,
+    Payload: Buffer.from(JSON.stringify(payload)),
+    ...extras,
+  };
+}
+
+test('live production index hook still stringifies the SQL53 inspect body', () => {
+  const index = fs.readFileSync(path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../functions/api/index.mjs',
+  ), 'utf8');
+  assert.match(index, /if \(isSql53ProductionReadonlyInspectEvent\(event\)\) \{\n    const result = await handleSql53ProductionReadonlyInspect\(event\);\n    return json\(result\.statusCode, result\.body\);/);
+});
+
+test('official writer accepts object and stringified SQL53 inspect bodies', () => {
+  const objectParsed = parseSql53InspectionResponse(invokeResult(inspectionPayload()));
+  const stringParsed = parseSql53InspectionResponse(invokeResult(liveIndexEnvelope()));
+  assert.equal(objectParsed.status, 'complete');
+  assert.deepEqual(objectParsed, stringParsed);
+  assert.equal(objectParsed.inspect.functions.length, 4);
+  assert.equal(objectParsed.inspect.settlementColumns.length, 17);
+  assert.equal(objectParsed.inspect.ledgerTriggers.length, 3);
+  assert.equal(JSON.stringify(objectParsed).includes('must not be returned'), false);
+});
+
+test('official writer refuses malformed, incomplete, and unsuccessful inspect envelopes', () => {
+  assert.throws(
+    () => parseSql53InspectionResponse({ Payload: Buffer.from('{not-json') }),
+    /lambda_invocation_response_invalid/,
+  );
+  assert.throws(
+    () => parseSql53InspectionResponse(invokeResult({
+      statusCode: 200,
+      body: '{not-json',
+    })),
+    /lambda_invocation_response_invalid/,
+  );
+  assert.throws(
+    () => parseSql53InspectionResponse(invokeResult({
+      statusCode: 200,
+      body: JSON.stringify(['not', 'an', 'object']),
+    })),
+    /lambda_invocation_response_invalid/,
+  );
+  assert.throws(
+    () => parseSql53InspectionResponse({
+      FunctionError: 'Unhandled',
+      Payload: Buffer.from(JSON.stringify(liveIndexEnvelope())),
+    }),
+    /lambda_invocation_failed/,
+  );
+  assert.throws(
+    () => parseSql53InspectionResponse(invokeResult({
+      ...liveIndexEnvelope(),
+      FunctionError: 'Unhandled',
+    })),
+    /lambda_invocation_failed/,
+  );
+  assert.throws(
+    () => parseSql53InspectionResponse(invokeResult({
+      statusCode: 403,
+      body: JSON.stringify({
+        status: 'refused',
+        reason: 'sql53 inspect authorization is missing or invalid; database was not contacted',
+        rdsIdentifier: null,
+        inspect: null,
+      }),
+    })),
+    /lambda_invocation_incomplete/,
+  );
+  const missingResults = inspectionPayload();
+  missingResults.body.inspect.functions = missingResults.body.inspect.functions.slice(0, 2);
+  assert.throws(
+    () => parseSql53InspectionResponse(invokeResult(liveIndexEnvelope(missingResults))),
+    /lambda_invocation_incomplete/,
+  );
+  const incompleteExists = inspectionPayload();
+  delete incompleteExists.body.inspect.functions[0].exists;
+  assert.throws(
+    () => parseSql53InspectionResponse(invokeResult(liveIndexEnvelope(incompleteExists))),
+    /lambda_invocation_response_invalid/,
+  );
+});
+
+test('temporary config writer accepts the live stringified inspect envelope and still cleans up', async () => {
+  const root = tempRoot();
+  try {
+    const original = configuration();
+    const harness = makeHarness({
+      initial: original,
+      invoke: async () => invokeResult(liveIndexEnvelope()),
+    });
+    const result = await runWriter(root, signedInput(root, original), harness.aws);
+    assert.equal(result.ok, true, result.message);
+    assert.equal(result.details.inspection.status, 'complete');
+    assert.equal(result.details.inspection.inspect.functions.length, 4);
+    assert.equal(result.details.cleanup.complete, true);
+    assert.equal(harness.state.Environment.Variables[SQL53_CONFIG_AUTHORIZATION_ENV], undefined);
+    assert.equal(harness.state.Environment.Variables[SQL53_CONFIG_EXPIRY_ENV], undefined);
+    assert.equal(JSON.stringify(result).includes(AUTH_TOKEN), false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
