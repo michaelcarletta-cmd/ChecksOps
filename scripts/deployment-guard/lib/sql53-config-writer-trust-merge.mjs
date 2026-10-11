@@ -79,6 +79,11 @@ function rejectedTrust(statements) {
   return REJECTED_TRUST_MARKERS.filter((marker) => text.includes(marker));
 }
 
+export function isIdentityCenterAdministratorIdentity(identity) {
+  return identity?.Account === '806168576068'
+    && /^arn:aws:sts::806168576068:assumed-role\/AWSReservedSSO_AdministratorAccess_[A-Za-z0-9]+\/[^/]+$/.test(String(identity?.Arn || ''));
+}
+
 export function permissionsRemainSql53Only(policy) {
   const statements = policy?.Statement;
   if (!Array.isArray(statements) || statements.length !== 1) return false;

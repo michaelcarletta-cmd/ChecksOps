@@ -1,0 +1,39 @@
+{
+  "id": "production-sql53-oidc-trust-apply",
+  "authorization": "owner-approved-additive-oidc-trust",
+  "apply_executed": false,
+  "writer_assumed": false,
+  "fingerprint_only_executed": false,
+  "lambda_configuration_modified": false,
+  "diagnostic_invoked": false,
+  "staging_broadened": false,
+  "reason": "AUTHORIZED_ADMINISTRATOR_UNAVAILABLE",
+  "inspected_at": "2026-10-11T00:18:19Z",
+  "oidc_claims": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407",
+    "matches_approved_statement": true
+  },
+  "probe_identity": "ChecksOpsCursorCloudStaging/sql53-oidc-apply-read",
+  "live_role_read": {
+    "get_role": "AccessDenied",
+    "list_role_policies": "AccessDenied",
+    "list_attached_role_policies": "AccessDenied",
+    "permissions_verified": false
+  },
+  "required_apply_identity": "IAM Identity Center AdministratorAccess assumed-role in account 806168576068",
+  "staging_apply_refused": {
+    "ok": false,
+    "code": "PRODUCTION_APPROVAL_REQUIRED",
+    "message": "SQL53 OIDC trust apply requires the IAM Identity Center AdministratorAccess role"
+  },
+  "apply_script": "scripts/deployment-guard/sql53-config-writer-trust-apply.mjs",
+  "do_not": [
+    "broaden ChecksOpsCursorCloudStaging",
+    "replace the live trust policy",
+    "assume ChecksOpsProductionSql53ConfigWriter from this session",
+    "run fingerprint-only",
+    "modify Lambda configuration or invoke the diagnostic"
+  ]
+}
