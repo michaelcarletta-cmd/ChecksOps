@@ -296,6 +296,17 @@ export default function CheckCommandCenter() {
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
+  // On mobile the Review & Decision bar and tabs are sticky. Opening a check or
+  // switching tabs keeps the queue's scroll offset, which leaves the panel's
+  // first rows (Edit Fields, Claim Ledger title) hidden under those bars.
+  const reviewPanelRef = useRef<HTMLDivElement>(null);
+  const scrollReviewPanelToTop = useCallback(() => {
+    if (!isMobile) return;
+    requestAnimationFrame(() => reviewPanelRef.current?.scrollIntoView({ block: "start" }));
+  }, [isMobile]);
+  useEffect(() => {
+    if (reviewCheckId) scrollReviewPanelToTop();
+  }, [reviewCheckId, scrollReviewPanelToTop]);
   // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [markReturnedCheck, setMarkReturnedCheck] = useState<{ id: string; label: string } | null>(null);
@@ -1836,7 +1847,7 @@ export default function CheckCommandCenter() {
               style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}
             >
               {reviewCheckId ? (
-                <Card className="animate-fade-in">
+                <Card ref={reviewPanelRef} className="animate-fade-in scroll-mt-14">
                   {isMobile && (
                     <div className="sticky top-14 z-20 bg-card/95 backdrop-blur border-b px-3 py-2 flex items-center gap-2 rounded-t-lg">
                       <Button
@@ -1856,7 +1867,7 @@ export default function CheckCommandCenter() {
                     </CardHeader>
                   )}
                   <CardContent className="p-0">
-                    <Tabs defaultValue="review">
+                    <Tabs defaultValue="review" onValueChange={scrollReviewPanelToTop}>
                        <div className="sticky top-[104px] md:top-0 z-10 bg-muted w-full overflow-x-auto scrollbar-hide border-b">
                          <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
                            <TabsTrigger value="review" className="text-xs whitespace-nowrap px-2 sm:px-3">Review</TabsTrigger>
