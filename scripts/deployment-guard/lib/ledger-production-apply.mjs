@@ -27,7 +27,7 @@ export const LEDGER_PRODUCTION_DEPLOYMENT_TYPE = 'sql-apply';
 
 const ONE_USE_RE = /^[A-Za-z0-9._:-]{8,128}$/;
 const LEDGER_TRIGGER_SQL = `
-SELECT t.tgname AS name, p.proname AS function_name, pg_get_triggerdef(t.oid) AS def
+SELECT t.tgname AS name, p.proname AS function_name, t.tgenabled::text AS enabled, pg_get_triggerdef(t.oid) AS def
 FROM pg_trigger t
 JOIN pg_proc p ON p.oid = t.tgfoid
 WHERE t.tgrelid = to_regclass($1::text) AND NOT t.tgisinternal
@@ -97,6 +97,7 @@ export async function readLedgerState(client, pin) {
   const triggers = triggerRows.map((row) => ({
     name: row.name,
     function_name: row.function_name,
+    enabled: row.enabled,
     definitionSha256: hashSqlDefinition(row.def),
   }));
   const eventCount = String((await client.query(LEDGER_EVENT_COUNT_SQL))?.rows?.[0]?.n ?? '');
@@ -115,9 +116,10 @@ export function ledgerPreconditionErrors(state, pin) {
   const drifted = state.preserved_functions
     .filter((row) => row.definitionSha256 !== row.expectedSha256)
     .map((row) => row.identity);
-  const byName = new Map(state.triggers.map((row) => [row.name, row.function_name]));
+  // pg_get_triggerdef does not encode enabled state; 'O' (origin) and 'A' (always) fire.
+  const byName = new Map(state.triggers.map((row) => [row.name, row]));
   const missingTriggers = Object.entries(pin.required_ledger_triggers)
-    .filter(([name, fn]) => byName.get(name) !== fn)
+    .filter(([name, fn]) => byName.get(name)?.function_name !== fn || !['O', 'A'].includes(byName.get(name)?.enabled))
     .map(([name]) => name);
   return { drifted, missingTriggers };
 }
@@ -137,6 +139,11 @@ export function evaluateLedgerProductionApply(input = {}, { root = repoRootFrom(
   ].filter(([key, value]) => input[key] !== value).map(([key]) => key);
   if (mismatched.length) {
     return fail(CODES.SQL_COLLISION, 'ledger production apply is bound to the exact production pin', { mismatched });
+  }
+  if (input.staging_acceptance?.reference !== pin.staging_acceptance?.reference) {
+    return fail(CODES.PRODUCTION_APPROVAL_REQUIRED, 'staging acceptance must be the reference recorded in the production pin', {
+      expected: pin.staging_acceptance?.reference || null,
+    });
   }
   const gate = evaluateProductionGate({ ...input, target_environment: 'production' });
   if (!gate.ok) return gate;
@@ -170,6 +177,9 @@ export async function resolveLedgerDatabaseUrl({ pin, getSecretValue } = {}) {
     secret = JSON.parse(String(await loader(pin.admin_secret_arn) || ''));
   } catch {
     return fail(CODES.GUARD_APPLY_FORBIDDEN, 'could not read the production admin secret');
+  }
+  if (!secret || typeof secret !== 'object' || Array.isArray(secret)) {
+    return fail(CODES.INVALID_MANIFEST, 'production admin secret is not a JSON object');
   }
   if (!secret.host) {
     if (secret.dbInstanceIdentifier !== pin.rds_identifier) {
@@ -222,7 +232,10 @@ function consumeOneUse(file, oneUseId) {
   fs.writeFileSync(file, `${JSON.stringify(current)}\n`, { mode: 0o600 });
 }
 
-export async function executeLedgerProductionApply(input = {}, ctx = {}) {
+const consumedFileFor = (root, ctx) => ctx.consumedPath || path.join(root, '.deployment-guard', 'ledger-production-consumed.json');
+
+/** Cheap checks that must pass before the single-use guard receipt is spent. */
+export function precheckLedgerProductionApply(input = {}, ctx = {}) {
   const root = ctx.root || repoRootFrom(import.meta.url);
   const pin = ctx.pin || loadLedgerProductionPin(root);
   const evaluation = evaluateLedgerProductionApply(input, { root, pin });
@@ -236,10 +249,18 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
   if (!ONE_USE_RE.test(String(input.one_use_id || ''))) {
     return fail(CODES.INVALID_MANIFEST, 'ledger production apply requires a single-use id');
   }
-  const consumedFile = ctx.consumedPath || path.join(root, '.deployment-guard', 'ledger-production-consumed.json');
-  if (loadConsumed(consumedFile).consumed.includes(input.one_use_id)) {
+  if (loadConsumed(consumedFileFor(root, ctx)).consumed.includes(input.one_use_id)) {
     return fail(CODES.RECEIPT_REUSED, 'one_use_id has already been consumed; replay is forbidden', { one_use_id: input.one_use_id });
   }
+  return evaluation;
+}
+
+export async function executeLedgerProductionApply(input = {}, ctx = {}) {
+  const root = ctx.root || repoRootFrom(import.meta.url);
+  const pin = ctx.pin || loadLedgerProductionPin(root);
+  const evaluation = precheckLedgerProductionApply(input, { ...ctx, root, pin });
+  if (!evaluation.ok) return evaluation;
+  const consumedFile = consumedFileFor(root, ctx);
   const sql = readPinnedLedgerSql(root, pin);
   if (!sql.ok) return sql;
   if (typeof ctx.connect !== 'function') {
@@ -248,6 +269,7 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
 
   const client = await ctx.connect();
   let inTx = false;
+  let committed = false;
   const rollback = async (result) => {
     if (inTx) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -256,7 +278,8 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
     return result;
   };
   try {
-    await client.query('BEGIN');
+    // One snapshot for the before/after row counts, so concurrent ledger writes cannot skew them.
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     inTx = true;
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [pin.function_identity]);
 
@@ -315,7 +338,7 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
 
     await client.query('COMMIT');
     inTx = false;
-    consumeOneUse(consumedFile, input.one_use_id);
+    committed = true;
     return ok({
       receipt: {
         workstream: input.workstream_id,
@@ -336,6 +359,14 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
     }));
   } finally {
     await client.end().catch(() => {});
+    // Recorded after the transaction so a registry write error is never reported as a rollback.
+    if (committed) {
+      try {
+        consumeOneUse(consumedFile, input.one_use_id);
+      } catch (error) {
+        process.stderr.write(`ledger apply COMMITTED; one_use_id ${input.one_use_id} could not be recorded: ${String(error?.message || error).slice(0, 200)}\n`);
+      }
+    }
   }
 }
 

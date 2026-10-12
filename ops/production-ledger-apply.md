@@ -30,11 +30,13 @@ RDS (`credentialsToProductionDatabaseUrl`).
    `aws/tests/api-write.test.mjs` on the same source and record them as
    `contract_results` in the manifest.
 3. **Manifest** (`sql-apply`, `production`, `production-sql`): exact pin fields,
+   `live_definition_sha256` = `"<live hash from step 1>"`,
    `preflight_live_fingerprint` = `production_fingerprint` =
    `immediately_before_fingerprint` = `{ "sql": "<live hash from step 1>" }`,
    the pin's `staging_acceptance`, `approval` for this workstream,
    `authorization_phrase` `REPLACE_SYNC_HOMEOWNER_LEDGER_FROM_CHECK`, a new
-   `one_use_id`.
+   `one_use_id`, and `owned_components` = `["<pin filename>"]` (the tool refuses a
+   receipt that does not own the pinned migration).
 4. **Lease and receipt** on the same host:
    `node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input <manifest>`.
 5. **Apply:**

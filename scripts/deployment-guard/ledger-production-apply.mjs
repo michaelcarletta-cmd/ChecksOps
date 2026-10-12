@@ -25,6 +25,7 @@ import {
   executeLedgerProductionApply,
   inspectLedgerProduction,
   loadLedgerProductionPin,
+  precheckLedgerProductionApply,
   resolveLedgerDatabaseUrl,
 } from './lib/ledger-production-apply.mjs';
 
@@ -74,8 +75,15 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
   if (env.CHECKSOPS_DEPLOYMENT_GUARD_APPLY !== '1') {
     return printResult(fail(CODES.GUARD_APPLY_FORBIDDEN, 'ledger production apply is blocked unless CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1'));
   }
-  if (authorized?.details?.receipt) {
-    const consumed = (deps.consumeReceiptOnce || consumeReceiptOnce)(root, authorized.details.receipt, {
+  const receipt = authorized?.details?.receipt;
+  if (receipt && !(receipt.owned_components || []).includes(pin.filename)) {
+    return printResult(fail(CODES.RECEIPT_MISMATCH, 'receipt does not own the pinned ledger migration', { required_component: pin.filename }));
+  }
+  // Spend the single-use receipt only after the phrase, one_use_id and replay checks pass.
+  const precheck = precheckLedgerProductionApply(payload, { root, pin, consumedPath: deps.consumedPath });
+  if (!precheck.ok) return printResult(precheck);
+  if (receipt) {
+    const consumed = (deps.consumeReceiptOnce || consumeReceiptOnce)(root, receipt, {
       actor: payload.operator || null,
       script: 'ledger-production-apply',
     });

@@ -47,6 +47,7 @@ function manifest(overrides = {}) {
     migration_id: PIN.migration_id,
     source_sha256: PIN.source_sha256,
     expected_live_definition_sha256: PIN.expected_live_definition_sha256,
+    live_definition_sha256: PIN.expected_live_definition_sha256,
     preflight_live_fingerprint: fingerprint,
     production_fingerprint: fingerprint,
     immediately_before_fingerprint: fingerprint,
@@ -90,6 +91,8 @@ test('evaluation is bound to the exact pin and the production gate', () => {
   assert.equal(evaluateLedgerProductionApply(manifest({ target_environment: 'staging' }), { root: ROOT, pin: PIN }).code, CODES.SQL_COLLISION);
   assert.equal(evaluateLedgerProductionApply(manifest({ approval: { approved: true, workstream_id: 'someone-else' } }), { root: ROOT, pin: PIN }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(evaluateLedgerProductionApply(manifest({ staging_acceptance: { ok: false } }), { root: ROOT, pin: PIN }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  const otherRun = { ok: true, reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/1' };
+  assert.equal(evaluateLedgerProductionApply(manifest({ staging_acceptance: otherRun }), { root: ROOT, pin: PIN }).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(evaluateLedgerProductionApply(manifest({ immediately_before_fingerprint: { sql: 'c'.repeat(64) } }), { root: ROOT, pin: PIN }).code, CODES.DEPLOYMENT_COLLISION);
 });
 
@@ -142,6 +145,46 @@ test('CLI apply needs the guard receipt and CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1',
   assert.match(out, /GUARD_APPLY_FORBIDDEN/);
   assert.match(out, /DEPLOYMENT_GUARD_REQUIRED/);
   assert.doesNotMatch(out, /should-not-connect/);
+});
+
+test('CLI does not spend the receipt on a wrong phrase, a reused id or a receipt for another file', async () => {
+  const run = async (overrides, receipt, consumed) => {
+    const input = path.join(os.tmpdir(), `ledger-prod-input-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
+    fs.writeFileSync(input, JSON.stringify(manifest(overrides)));
+    const writes = [];
+    let spent = 0;
+    const orig = { out: process.stdout.write, err: process.stderr.write };
+    process.stdout.write = (chunk) => { writes.push(String(chunk)); return true; };
+    process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+    try {
+      await ledgerMain(['--apply', '--input', input], { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, {
+        root: ROOT,
+        pin: PIN,
+        enforceScriptGuard: () => ({ ok: true, details: { receipt } }),
+        consumeReceiptOnce: () => { spent += 1; return { ok: true }; },
+        connect: neverConnect,
+        consumedPath: consumed,
+      });
+    } finally {
+      process.stdout.write = orig.out;
+      process.stderr.write = orig.err;
+      fs.rmSync(input, { force: true });
+    }
+    return { out: writes.join(''), spent };
+  };
+  const owned = { owned_components: [PIN.filename] };
+  const phrase = await run({ authorization_phrase: 'yes' }, owned, consumedPath());
+  assert.equal(phrase.spent, 0);
+  assert.match(phrase.out, /PRODUCTION_APPROVAL_REQUIRED/);
+  const other = await run({}, { owned_components: ['supabase/migrations/other.sql'] }, consumedPath());
+  assert.equal(other.spent, 0);
+  assert.match(other.out, /RECEIPT_MISMATCH/);
+  const file = consumedPath();
+  fs.writeFileSync(file, JSON.stringify({ consumed: ['ledger-prod-reused-id'] }));
+  const reused = await run({ one_use_id: 'ledger-prod-reused-id' }, owned, file);
+  assert.equal(reused.spent, 0);
+  assert.match(reused.out, /RECEIPT_REUSED/);
+  for (const r of [phrase, other, reused]) assert.doesNotMatch(r.out, /should-not-connect/);
 });
 
 // ---------------------------------------------------------------------------
@@ -264,6 +307,12 @@ test('PostgreSQL 16: read-only inspect, apply, replay and drift refusals', { tim
     assert.equal(missing.code, CODES.DEPLOYMENT_COLLISION);
     assert.deepEqual(missing.details.missing_ledger_triggers, ['trg_sync_homeowner_ledger_upd']);
     assert.equal(await liveSyncSha(noTrigger), PIN.expected_live_definition_sha256);
+
+    const disabled = await freshDatabase('ALTER TABLE public.check_intake_items DISABLE TRIGGER trg_sync_homeowner_ledger_upd;');
+    const off = await executeLedgerProductionApply(manifest(), { root: ROOT, pin: PIN, connect: disabled, consumedPath: consumedPath() });
+    assert.equal(off.code, CODES.DEPLOYMENT_COLLISION);
+    assert.deepEqual(off.details.missing_ledger_triggers, ['trg_sync_homeowner_ledger_upd']);
+    assert.equal(await liveSyncSha(disabled), PIN.expected_live_definition_sha256);
 
     const syncDrift = await freshDatabase(`CREATE OR REPLACE FUNCTION public.sync_homeowner_ledger_from_check()
       RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$ BEGIN RETURN NEW; END; $$;`);
