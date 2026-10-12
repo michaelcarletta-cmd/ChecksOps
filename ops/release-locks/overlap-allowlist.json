@@ -1619,6 +1619,13 @@
       "reason": "PR #658's Signature Request allowlist intent is distinct from #762's settlement RPC intercept; preserve signature_requests/signature_signers behavior. The other PR must rebase before merge.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 891,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR #891 targets claude/production-spa-live-source (the locked 61432c2 production SPA lineage), not main. Both PRs carry the same mobile Review panel commit 57925ea; #892 is its main-lineage copy for staging. Neither merges into the other.",
+      "expires": "2026-12-31",
+      "review_condition": "same-commit-different-base-lineage"
     }
   ]
 }
