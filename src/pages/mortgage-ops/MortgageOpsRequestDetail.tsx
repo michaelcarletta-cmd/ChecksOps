@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 const FieldPlacementEditor = lazy(() => import("@/components/claim-detail/FieldPlacementEditor").then((m) => ({ default: m.FieldPlacementEditor })));
 import { toast } from "sonner";
 import {
@@ -998,7 +999,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                     <Field label="Amount" value={check.amount != null ? `$${Number(check.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"} />
                     <Field label="Check #" value={check.check_number || "—"} />
                     <Field label="Carrier" value={check.carrier_name || "—"} />
-                    <Field label="Issue date" value={check.issue_date ? format(new Date(check.issue_date), "MMM d, yyyy") : "—"} />
+                    <Field label="Issue date" value={formatIssueDateDisplay(check.issue_date)} />
                     <Field label="Payee" value={check.payee_line || "—"} className="col-span-2" />
                     {check.payee_address && <Field label="Payee address" value={check.payee_address} className="col-span-2" />}
                     {check.property_address && <Field label="Property" value={check.property_address} className="col-span-2" />}
@@ -1042,13 +1043,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                     <Field label="Loss type" value={req.loss_type || claim?.loss_type || "—"} />
                     <Field
                       label="Date of loss"
-                      value={
-                        req.date_of_loss
-                          ? format(new Date(req.date_of_loss), "MMM d, yyyy")
-                          : claim?.loss_date
-                          ? format(new Date(claim.loss_date), "MMM d, yyyy")
-                          : "—"
-                      }
+                      value={formatIssueDateDisplay(req.date_of_loss || claim?.loss_date)}
                     />
                     <Field label="Insurance" value={req.insurance_company || claim?.insurance_company || "—"} className="col-span-2" />
                     <Field label={<><User className="h-3 w-3 inline mr-1" />Homeowner</>} value={req.homeowner_name || claim?.policyholder_name || "—"} className="col-span-2" />

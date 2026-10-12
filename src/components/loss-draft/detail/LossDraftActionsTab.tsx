@@ -19,6 +19,7 @@ import type { LossDraftRecord } from "@/hooks/queries/useLossDraft";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 import { ClaimSettlementEditor } from "@/components/payments/ClaimSettlementEditor";
 import { useQuery } from "@tanstack/react-query";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 
 
 
@@ -425,7 +426,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
           <div className="bg-accent/30 rounded-lg p-2 mt-2">
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
-              Next follow-up: {format(new Date(draft.follow_up_date), "MMM d, yyyy")}
+              Next follow-up: {formatIssueDateDisplay(draft.follow_up_date)}
             </div>
             <p className="text-[10px] text-muted-foreground">
               {draft.follow_up_count} contacts · Last:{" "}

@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "lucide-react";
-import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
 import { fundsReceivedFromScopedIntakeRows } from "@/lib/claimLedgerSync";
@@ -25,6 +24,7 @@ import {
   resolveAuthoritativeClaimId,
   type ClaimLedgerLinkAction,
 } from "@/lib/checkClaimLinkGuard";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 
 interface Props {
   checkIntakeItemId: string;
@@ -720,7 +720,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
                       {c.check_number ? `#${c.check_number}` : "(no #)"}
                       {c.carrier_name && <span className="text-muted-foreground"> · {c.carrier_name}</span>}
                       {c.issue_date && (
-                        <span className="text-muted-foreground"> · {format(new Date(c.issue_date), "MMM d, yyyy")}</span>
+                        <span className="text-muted-foreground"> · {formatIssueDateDisplay(c.issue_date)}</span>
                       )}
                     </span>
                   </div>
