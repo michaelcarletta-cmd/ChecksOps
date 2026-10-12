@@ -87,14 +87,14 @@ export function WalletPanel() {
 
         <div className="flex flex-wrap items-end gap-6">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Available</p>
+            <p className="text-xs tracking-wide text-muted-foreground">Available</p>
             <p className="text-2xl font-semibold">
               {wallet?.status === "sync_failed" ? "Balance unavailable" : money(wallet?.available_cents ?? 0)}
             </p>
           </div>
           {!!wallet?.pending_cents && wallet?.status !== "sync_failed" && (
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending</p>
+              <p className="text-xs tracking-wide text-muted-foreground">Pending</p>
               <p className="text-lg">{money(wallet.pending_cents)}</p>
             </div>
           )}
@@ -139,7 +139,7 @@ export function WalletPanel() {
 
         {ledger.length > 0 && (
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Recent activity</p>
+            <p className="text-xs tracking-wide text-muted-foreground">Recent activity</p>
             <div className="divide-y rounded-md border">
               {ledger.slice(0, 8).map((entry) => (
                 <div key={entry.id} className="flex items-center justify-between px-3 py-2 text-sm">

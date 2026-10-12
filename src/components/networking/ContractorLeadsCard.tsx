@@ -275,7 +275,7 @@ export function ContractorLeadsCard() {
 
         {uploads && uploads.length > 0 && (
           <div className="mt-6 border-t border-border pt-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+            <div className="text-xs tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
               <FileImage className="h-3.5 w-3.5" /> Homeowner check uploads
             </div>
             <div className="space-y-2">

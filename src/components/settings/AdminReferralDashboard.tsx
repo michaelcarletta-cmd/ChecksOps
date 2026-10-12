@@ -180,7 +180,7 @@ export function AdminReferralDashboard() {
         <CardContent className="p-0">
           <div className="relative overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-muted-foreground uppercase bg-muted/50">
+              <thead className="text-xs text-muted-foreground bg-muted/50">
                 <tr>
                   <th className="px-6 py-3">Tenant</th>
                   <th className="px-6 py-3 text-center">Referral Code</th>
@@ -212,7 +212,7 @@ export function AdminReferralDashboard() {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <code className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold">
-                          {t.referral_code || "PENDING"}
+                          {t.referral_code || "Pending"}
                         </code>
                       </td>
                       <td className="px-6 py-4 text-center font-bold text-green-600">

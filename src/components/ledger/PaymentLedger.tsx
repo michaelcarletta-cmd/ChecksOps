@@ -187,7 +187,7 @@ export function PaymentLedger() {
         <Card className="bg-emerald-500/5 border-emerald-500/10">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600/80">Disbursements (Settled)</p>
+              <p className="text-[10px] tracking-wider font-semibold text-emerald-600/80">Disbursements (Settled)</p>
               <p className="text-xl font-bold mt-0.5">${stats.totalOut.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
             </div>
             <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
@@ -199,7 +199,7 @@ export function PaymentLedger() {
         <Card className="bg-blue-500/5 border-blue-500/10">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-wider font-semibold text-blue-600/80">Recipients</p>
+              <p className="text-[10px] tracking-wider font-semibold text-blue-600/80">Recipients</p>
               <p className="text-xl font-bold mt-0.5">{stats.uniqueRecipients}</p>
             </div>
             <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center">
@@ -211,7 +211,7 @@ export function PaymentLedger() {
         <Card className="bg-purple-500/5 border-purple-500/10">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-wider font-semibold text-purple-600/80">Total Payments</p>
+              <p className="text-[10px] tracking-wider font-semibold text-purple-600/80">Total Payments</p>
               <p className="text-xl font-bold mt-0.5">{stats.count}</p>
             </div>
             <div className="h-8 w-8 rounded-full bg-purple-500/10 flex items-center justify-center">

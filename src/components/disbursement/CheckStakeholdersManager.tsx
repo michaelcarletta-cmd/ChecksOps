@@ -270,7 +270,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
 
               {visiblePartners.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground px-1">Partner organizations</p>
+                  <p className="text-[10px] tracking-wide text-muted-foreground px-1">Partner organizations</p>
                   <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
                     {visiblePartners.map((p: any) => (
                       <button
@@ -303,7 +303,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
               {availableToAdd.length > 0 && (
                 <div className="space-y-1">
                   {visiblePartners.length > 0 && (
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground px-1">Saved stakeholders</p>
+                    <p className="text-[10px] tracking-wide text-muted-foreground px-1">Saved stakeholders</p>
                   )}
                   <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
                     {availableToAdd.map((a: any) => {

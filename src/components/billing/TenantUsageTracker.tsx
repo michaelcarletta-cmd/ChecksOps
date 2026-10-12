@@ -196,7 +196,7 @@ export function TenantUsageTracker() {
           <ScrollArea className="h-[400px]">
             <Table>
               <TableHeader>
-                <TableRow className="text-[10px] uppercase tracking-wider">
+                <TableRow className="text-[10px] tracking-wider">
                   <TableHead className="pl-4">Date</TableHead>
                   <TableHead>Event / Item</TableHead>
                   <TableHead className="text-right">Estimated Fee</TableHead>
@@ -217,7 +217,7 @@ export function TenantUsageTracker() {
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="text-xs font-medium">
-                            <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 uppercase mr-2">
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 mr-2">
                               {row.event_type?.replace('_', ' ') || 'processing'}
                             </Badge>
                             Check #{row.check_number || "—"}

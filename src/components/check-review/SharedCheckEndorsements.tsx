@@ -157,7 +157,7 @@ export function SharedCheckEndorsements({
           {newSigners.map((s, i) => (
             <div key={i} className="grid grid-cols-1 sm:grid-cols-[1fr_1.2fr_auto] gap-2">
               <div className="space-y-1">
-                {i === 0 && <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Name</Label>}
+                {i === 0 && <Label className="text-[10px] tracking-wide text-muted-foreground">Name</Label>}
                 <Input
                   placeholder="Signer name"
                   value={s.name}
@@ -165,7 +165,7 @@ export function SharedCheckEndorsements({
                 />
               </div>
               <div className="space-y-1">
-                {i === 0 && <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Email</Label>}
+                {i === 0 && <Label className="text-[10px] tracking-wide text-muted-foreground">Email</Label>}
                 <Input
                   type="email"
                   placeholder="signer@example.com"

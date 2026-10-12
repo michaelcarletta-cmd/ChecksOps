@@ -1344,7 +1344,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 </p>
 
                 <div>
-                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Mail to (name)</label>
+                  <label className="text-[10px] tracking-wide text-muted-foreground">Mail to (name)</label>
                   <Input
                     value={mailToName}
                     onChange={(e) => setMailToName(e.target.value)}
@@ -1355,7 +1355,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Mailing address</label>
+                    <label className="text-[10px] tracking-wide text-muted-foreground">Mailing address</label>
                     <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={prefillMailToFromDirectory}>
                       Pull from directory
                     </Button>
@@ -1371,7 +1371,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Carrier</label>
+                    <label className="text-[10px] tracking-wide text-muted-foreground">Carrier</label>
                     <Input
                       value={shipCarrier}
                       onChange={(e) => setShipCarrier(e.target.value)}
@@ -1380,7 +1380,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Tracking #</label>
+                    <label className="text-[10px] tracking-wide text-muted-foreground">Tracking #</label>
                     <Input
                       value={shipTracking}
                       onChange={(e) => setShipTracking(e.target.value)}
@@ -1451,7 +1451,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Services (fixed)</label>
+                    <label className="text-[10px] tracking-wide text-muted-foreground">Services (fixed)</label>
                     <div className="flex items-center gap-1">
                       <span className="text-sm text-muted-foreground">$</span>
                       <Input
@@ -1465,7 +1465,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   </div>
 
                   <div>
-                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Shipping label paid</label>
+                    <label className="text-[10px] tracking-wide text-muted-foreground">Shipping label paid</label>
                     <div className="flex items-center gap-1">
                       <span className="text-sm text-muted-foreground">$</span>
                       <Input
@@ -1482,7 +1482,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 </div>
 
                 <div>
-                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Shipping description</label>
+                  <label className="text-[10px] tracking-wide text-muted-foreground">Shipping description</label>
                   <Input
                     value={invoiceShippingDesc}
                     onChange={(e) => setInvoiceShippingDesc(e.target.value)}
@@ -1491,7 +1491,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 </div>
 
                 <div>
-                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Internal notes (optional)</label>
+                  <label className="text-[10px] tracking-wide text-muted-foreground">Internal notes (optional)</label>
                   <Textarea
                     rows={2}
                     placeholder="Anything to add for the month-end sweep…"
@@ -1577,7 +1577,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 function Field({ label, value, className }: { label: React.ReactNode; value: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] tracking-wide text-muted-foreground">{label}</div>
       <div className="truncate">{value}</div>
     </div>
   );

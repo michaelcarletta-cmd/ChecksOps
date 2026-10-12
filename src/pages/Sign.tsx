@@ -591,7 +591,7 @@ export default function Sign() {
                   <div key={sectionName} className="space-y-3">
                     {sectionName !== "__default__" && (
                       <div className="border-b border-gray-200 pb-1 pt-2">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{sectionName}</p>
+                        <p className="text-xs font-semibold text-gray-500 tracking-wider">{sectionName}</p>
                       </div>
                     )}
                     {sectionFields.map((field: any) => {

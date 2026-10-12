@@ -42,7 +42,7 @@ const SideRow = ({ label, report }: { label: string; report: CheckAltSideReport 
   <div className="flex items-center justify-between gap-3 text-xs">
     <span className="text-muted-foreground">{label}</span>
     <span className={report.pass ? "font-medium text-emerald-400" : "font-medium text-red-300"}>
-      {report.pass ? "PASS" : "FAIL"}
+      {report.pass ? "Pass" : "Fail"}
       {!report.pass && report.reason ? ` · ${report.reason}` : ""}
     </span>
     <span className="text-muted-foreground tabular-nums">

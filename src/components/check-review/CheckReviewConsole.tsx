@@ -455,7 +455,7 @@ export function CheckReviewQueue({
 
   const filterBar = (
     <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 bg-muted/30">
-      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Class</span>
+      <span className="text-[11px] font-medium text-muted-foreground tracking-wide">Class</span>
       <Select value={classFilter} onValueChange={setClassFilter}>
         <SelectTrigger className="h-7 w-[220px] text-xs">
           <SelectValue />
@@ -502,7 +502,7 @@ export function CheckReviewQueue({
           <Fragment key={group.key}>
             <div className="rounded-md border-t-4 border-primary bg-primary/20 px-3 py-3 text-foreground font-semibold">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
+                <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
                 <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
                 <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
               </div>
@@ -1084,7 +1084,7 @@ export function ReviewDecisionPanel({
         })()}
 
         <div className="space-y-3">
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Check Details</h4>
+          <h4 className="text-xs font-medium text-muted-foreground tracking-wider">Check Details</h4>
           {editing ? (
             <>
               <div>
@@ -1202,7 +1202,7 @@ export function ReviewDecisionPanel({
 
         {/* Funds type + property address — visible to all partners with shared access */}
         <div className="space-y-3">
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Check Classification</h4>
+          <h4 className="text-xs font-medium text-muted-foreground tracking-wider">Check Classification</h4>
           <div>
             <Label className="text-xs">Funds Type</Label>
             <Select
@@ -1280,7 +1280,7 @@ export function ReviewDecisionPanel({
 
           return (
             <div className="space-y-3">
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <h4 className="text-xs font-medium text-muted-foreground tracking-wider">
                 Routing Decision
               </h4>
 
@@ -1752,7 +1752,7 @@ function PayeeReconciliation({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <h4 className="text-xs font-medium text-muted-foreground tracking-wider">
           Payee Reconciliation
         </h4>
         <div className="flex gap-1">

@@ -170,13 +170,13 @@ export function MoovTreasuryPanel() {
           <>
             <div className="flex flex-wrap items-end gap-6">
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Available balance</p>
+                <p className="text-xs tracking-wide text-muted-foreground">Available balance</p>
                 <p className="text-2xl font-semibold">
                   {wallet?.status === "sync_failed" ? "Unavailable" : money(wallet?.available_cents ?? 0)}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Settlement bank</p>
+                <p className="text-xs tracking-wide text-muted-foreground">Settlement bank</p>
                 <p className="text-sm">
                   {settlementMethod
                     ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
@@ -309,7 +309,7 @@ export function MoovTreasuryPanel() {
             )}
 
             <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Recent payouts</p>
+              <p className="text-xs tracking-wide text-muted-foreground">Recent payouts</p>
               {history.filter((s) => sweepAmountCents(s) > 0).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No automatic payouts yet. They appear here after the first daily run.

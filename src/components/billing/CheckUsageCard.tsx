@@ -174,7 +174,7 @@ export function CheckUsageCard() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{format(new Date(e.billed_at), "MMM d, h:mm a")}</span>
-                    <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 uppercase">
+                    <Badge variant="outline" className="text-[9px] h-4 px-1 py-0">
                       {e.event_type?.replace('_', ' ') || 'processing'}
                     </Badge>
                   </div>

@@ -274,7 +274,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
           {groups.map((g, gi) => (
             <div key={g.key} className="relative">
               {g.checkLabel && (
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                <div className="text-xs tracking-wide text-muted-foreground mb-2">
                   {g.checkLabel}
                 </div>
               )}
@@ -538,7 +538,7 @@ function SharedDocumentsPanel({ documents }: { documents: SharedDocument[] }) {
                 <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="min-w-0">
                   <div className="text-sm font-medium truncate">{doc.file_name}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase">
+                  <div className="text-[10px] text-muted-foreground">
                     {doc.doc_type.split(":")[1] || "Document"}
                     {doc.file_size ? ` · ${(doc.file_size / 1024).toFixed(0)} KB` : ""}
                   </div>
@@ -564,7 +564,7 @@ function SharedDocumentsPanel({ documents }: { documents: SharedDocument[] }) {
 function TotalTile({ label, value, tone, highlight }: { label: string; value: number; tone: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg border p-3 ${highlight ? "border-primary/50 bg-primary/5" : "border-border"}`}>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] tracking-wide text-muted-foreground">{label}</div>
       <div className={`text-base font-semibold mt-1 ${tone}`}>{fmt(value)}</div>
     </div>
   );

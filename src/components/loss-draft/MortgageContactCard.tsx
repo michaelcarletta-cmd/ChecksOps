@@ -243,7 +243,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
             <div className="flex items-start gap-1.5 text-muted-foreground">
               <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <p className="text-[10px] uppercase tracking-wide">Address</p>
+                <p className="text-[10px] tracking-wide">Address</p>
                 {addressLines.map((l, i) => (
                   <p key={i} className="text-xs text-foreground">
                     {l}
@@ -258,7 +258,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
       {/* Per-claim fields: loan # + portal URL */}
       <div className="border-t pt-2 space-y-1.5 text-xs">
         <div className="flex items-center justify-between">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Claim-Specific</p>
+          <p className="text-[10px] tracking-wide text-muted-foreground">Claim-Specific</p>
           {!editing ? (
             <Button
               size="sm"

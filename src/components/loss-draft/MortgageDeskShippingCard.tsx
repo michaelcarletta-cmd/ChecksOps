@@ -66,7 +66,7 @@ export function MortgageDeskShippingCard({ checkIntakeItemId }: { checkIntakeIte
       {req.mail_to_address && (
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="flex items-center gap-1 text-[10px] tracking-wide text-muted-foreground">
               <MapPin className="h-3 w-3" /> Check is being mailed to
             </span>
             <Button size="sm" variant="ghost" className="h-6 px-1 text-[10px]" onClick={copyAddress}>

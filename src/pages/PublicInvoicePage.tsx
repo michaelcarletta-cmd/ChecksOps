@@ -198,7 +198,7 @@ export default function PublicInvoicePage() {
             {/* Bill to */}
             <div className="grid gap-4 sm:grid-cols-2 border-t border-border/60 pt-5">
               <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                <div className="text-xs font-medium tracking-wide text-muted-foreground mb-1">
                   Bill to
                 </div>
                 <div className="font-medium text-foreground">{invoice.customer_name}</div>
@@ -206,7 +206,7 @@ export default function PublicInvoicePage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  <div className="text-xs font-medium tracking-wide text-muted-foreground mb-1">
                     Invoice date
                   </div>
                   <div className="text-sm text-foreground flex items-center gap-1.5">
@@ -215,7 +215,7 @@ export default function PublicInvoicePage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  <div className="text-xs font-medium tracking-wide text-muted-foreground mb-1">
                     Due date
                   </div>
                   <div className="text-sm text-foreground flex items-center gap-1.5">
@@ -228,7 +228,7 @@ export default function PublicInvoicePage() {
 
             {invoice.description && (
               <div className="border-t border-border/60 pt-5">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                <div className="text-xs font-medium tracking-wide text-muted-foreground mb-1">
                   Description
                 </div>
                 <p className="text-sm text-foreground">{invoice.description}</p>
@@ -237,7 +237,7 @@ export default function PublicInvoicePage() {
 
             {/* Line items */}
             <div className="border-t border-border/60 pt-5">
-              <div className="hidden sm:grid grid-cols-12 gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+              <div className="hidden sm:grid grid-cols-12 gap-3 text-xs font-medium tracking-wide text-muted-foreground mb-2">
                 <div className="col-span-7">Item</div>
                 <div className="col-span-2 text-right">Qty</div>
                 <div className="col-span-3 text-right">Amount</div>

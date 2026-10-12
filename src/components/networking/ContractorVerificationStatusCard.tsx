@@ -110,7 +110,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5 font-semibold">
+          <div className="text-[10px] tracking-wide text-muted-foreground mb-1.5 font-semibold">
             Verified requirements
           </div>
           <div className="space-y-1.5">
@@ -126,7 +126,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
         </div>
 
         <div className="border-t border-border pt-3">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5 font-semibold flex items-center gap-1">
+          <div className="text-[10px] tracking-wide text-muted-foreground mb-1.5 font-semibold flex items-center gap-1">
             <Star className="h-3 w-3" /> OPS requirements (needs all Verified + below)
           </div>
           <div className="space-y-1.5">

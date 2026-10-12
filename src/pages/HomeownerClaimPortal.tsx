@@ -422,11 +422,11 @@ export default function HomeownerClaimPortal() {
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground grid grid-cols-2 gap-2">
             <div>
-              <div className="uppercase text-[10px]">Loss type</div>
+              <div className="text-[10px]">Loss type</div>
               <div className="text-foreground">{lead.loss_type ?? "—"}</div>
             </div>
             <div>
-              <div className="uppercase text-[10px]">Property ZIP</div>
+              <div className="text-[10px]">Property ZIP</div>
               <div className="text-foreground">{lead.property_zip ?? "—"}</div>
             </div>
           </CardContent>

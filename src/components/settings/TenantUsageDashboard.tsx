@@ -175,7 +175,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
           <div className="space-y-6 overflow-y-auto pr-2 pb-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <div className="text-[10px] font-bold text-muted-foreground tracking-wider mb-1 flex items-center gap-1.5">
                   <TrendingUp className="h-3 w-3" /> Check Processing
                 </div>
                 <div className="text-3xl font-bold tracking-tight">
@@ -185,7 +185,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
               </div>
               
               <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <div className="text-[10px] font-bold text-muted-foreground tracking-wider mb-1 flex items-center gap-1.5">
                   <Receipt className="h-3 w-3" /> MortgageOps
                 </div>
                 <div className="text-3xl font-bold tracking-tight">
@@ -195,7 +195,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
               </div>
 
               <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <div className="text-[10px] font-bold text-muted-foreground tracking-wider mb-1 flex items-center gap-1.5">
                   <DollarSign className="h-3 w-3" /> Disbursements
                 </div>
                 <div className="text-3xl font-bold tracking-tight">
@@ -209,7 +209,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-medium text-primary uppercase tracking-wider mb-1">Total Estimated Fees</div>
+                  <div className="text-xs font-medium text-primary tracking-wider mb-1">Total Estimated Fees</div>
                   <div className="text-4xl font-black text-primary">
                     {formatCents(data?.amount_cents ?? 0, data?.currency)}
                   </div>
@@ -226,28 +226,28 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
             {/* Year-to-date + Payments Out */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Checks YTD</div>
+                <div className="text-[10px] tracking-wider text-muted-foreground">Checks YTD</div>
                 <div className="text-2xl font-bold mt-1">{rollups?.ytdChecks ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
                   Fees: {formatCents(rollups?.ytdCheckFeesCents ?? 0)}
                 </div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Check Deposits YTD</div>
+                <div className="text-[10px] tracking-wider text-muted-foreground">Check Deposits YTD</div>
                 <div className="text-2xl font-bold mt-1">{rollups?.checkalt.count ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
                   Volume: ${(rollups?.checkalt.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Moov Out YTD</div>
+                <div className="text-[10px] tracking-wider text-muted-foreground">Moov Out YTD</div>
                 <div className="text-2xl font-bold mt-1">{rollups?.moov.count ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
                   Sent: ${(rollups?.moov.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Paid to ChecksOps</div>
+                <div className="text-[10px] tracking-wider text-muted-foreground">Paid to ChecksOps</div>
                 <div className="text-2xl font-bold mt-1">{formatCents(rollups?.maintenancePaidCents ?? 0)}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Maintenance fees</div>
               </div>
@@ -255,7 +255,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
 
             {/* Monthly breakdown of checks processed */}
             <div className="rounded-lg border bg-card p-4">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              <div className="text-xs font-semibold text-muted-foreground tracking-wider mb-3">
                 Checks by Month · {now.getFullYear()}
               </div>
               <div className="grid grid-cols-6 md:grid-cols-12 gap-1">
@@ -272,7 +272,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                           style={{ height: `${pct}%` }}
                         />
                       </div>
-                      <div className="text-[9px] text-muted-foreground uppercase">
+                      <div className="text-[9px] text-muted-foreground">
                         {format(new Date(now.getFullYear(), i, 1), "MMM")}
                       </div>
                       <div className="text-[10px] font-semibold">{count}</div>
@@ -343,7 +343,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{format(new Date(e.billed_at), "MMM d, h:mm a")}</span>
-                            <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 uppercase font-bold">
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 font-bold">
                               {e.event_type?.replace('_', ' ') || 'processing'}
                             </Badge>
                           </div>

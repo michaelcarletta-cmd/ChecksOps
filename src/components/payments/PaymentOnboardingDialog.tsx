@@ -270,7 +270,7 @@ export function PaymentOnboardingDialog({ tenantId, open, onOpenChange, onSubmit
 
         <div className="space-y-5">
           <section className="space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Business</h4>
+            <h4 className="text-xs font-semibold tracking-wide text-muted-foreground">Business</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="legal-name" className="text-xs">Legal business name</Label>
@@ -320,7 +320,7 @@ export function PaymentOnboardingDialog({ tenantId, open, onOpenChange, onSubmit
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <h4 className="text-xs font-semibold tracking-wide text-muted-foreground">
                   Controller &amp; owners
                 </h4>
                 <p className="text-[11px] text-muted-foreground">

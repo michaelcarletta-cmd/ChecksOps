@@ -127,7 +127,7 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
 
 
         <div className="border-t border-border pt-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Recent pre-claim links</div>
+          <div className="text-xs tracking-wide text-muted-foreground mb-2">Recent pre-claim links</div>
           {loading ? (
             <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
           ) : tokens.length === 0 ? (

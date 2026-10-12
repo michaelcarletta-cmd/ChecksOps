@@ -168,7 +168,7 @@ export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
                   <Hourglass className="h-3.5 w-3.5 shrink-0" />
                 )}
                 <span className="font-medium truncate">{r.payee_name}</span>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <span className="text-[10px] tracking-wide text-muted-foreground">
                   {PAYEE_TYPE_LABEL[r.payee_type] ?? r.payee_type}
                 </span>
                 <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400">

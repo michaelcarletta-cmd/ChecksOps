@@ -295,9 +295,9 @@ export default function WalletOps() {
           <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-xs font-bold uppercase tracking-widest text-primary">WalletOps</span>
+              <span className="text-xs font-bold tracking-widest text-primary">WalletOps</span>
             </div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Available operating balance</p>
+            <p className="text-xs tracking-wide text-muted-foreground">Available operating balance</p>
             <div className="text-4xl font-bold tracking-tight md:text-5xl">
               {walletLoading ? "…" : balanceLabel}
             </div>
@@ -330,7 +330,7 @@ export default function WalletOps() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-500">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-500">
                 <ArrowDownLeft className="h-3 w-3" /> Pending in
               </div>
               <div className="mt-1 text-xl font-semibold">
@@ -338,7 +338,7 @@ export default function WalletOps() {
               </div>
             </div>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-amber-500">
                 <ArrowUpRight className="h-3 w-3" /> Pending out
               </div>
               <div className="mt-1 text-xl font-semibold">
@@ -369,24 +369,24 @@ export default function WalletOps() {
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Wallet</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Wallet</p>
             <p className="mt-0.5 font-medium">{walletLoading ? "…" : balanceLabel}</p>
             <p className="text-xs text-muted-foreground">Available operating balance</p>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Primary funding account</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Primary funding account</p>
             <p className="mt-0.5 font-medium">{fundingBank}</p>
             <p className="text-xs text-muted-foreground">Connected bank for this organization</p>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">ChecksOps billing</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">ChecksOps billing</p>
             <p className="mt-0.5 font-medium">Wallet first, then connected bank for the remainder</p>
             <p className="text-xs text-muted-foreground">
               Available wallet funds are used first. Any remainder is collected from {fundingBank}.
             </p>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Automatic payouts</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Automatic payouts</p>
             <p className="mt-0.5 font-medium">{sweepsOn ? "On" : "Off"}</p>
             <p className="text-xs text-muted-foreground">
               {sweepsOn
@@ -395,7 +395,7 @@ export default function WalletOps() {
             </p>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Minimum retained balance</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained balance</p>
             <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
             {sweepsOn && (
               <p className="text-xs text-muted-foreground">
@@ -445,7 +445,7 @@ export default function WalletOps() {
         >
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Settlement bank</p>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Settlement bank</p>
               <p className="mt-0.5 font-medium">
                 {settlementMethod
                   ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
@@ -453,17 +453,17 @@ export default function WalletOps() {
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Minimum retained</p>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained</p>
               <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payout speed</p>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Payout speed</p>
               <p className="mt-0.5 font-medium">
                 {config?.push_rail ? (SWEEP_RAIL_LABEL[config.push_rail] ?? config.push_rail) : "Not set"}
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last automatic payout</p>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Last automatic payout</p>
               <p className="mt-0.5 font-medium">
                 {lastSweep
                   ? `${money(sweepAmountCents(lastSweep))}${sweepTimestamp(lastSweep) ? ` · ${new Date(sweepTimestamp(lastSweep)!).toLocaleDateString()}` : ""}`

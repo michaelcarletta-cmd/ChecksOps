@@ -213,7 +213,7 @@ export default function Terms() {
         </Section>
 
         <Section id="warranty" title="11. Disclaimers">
-          <p className="uppercase text-xs tracking-wide">
+          <p className="text-xs tracking-wide">
             The Service is provided "as is" and "as available." To the maximum extent permitted by
             law, ChecksOps disclaims all warranties, express or implied, including merchantability,
             fitness for a particular purpose, title, and non-infringement. We do not warrant that
@@ -223,7 +223,7 @@ export default function Terms() {
         </Section>
 
         <Section id="liability" title="12. Limitation of liability">
-          <p className="uppercase text-xs tracking-wide">
+          <p className="text-xs tracking-wide">
             To the maximum extent permitted by law, neither party will be liable for indirect,
             incidental, special, consequential, exemplary, or punitive damages, or for lost profits,
             revenue, goodwill, or data. ChecksOps' total aggregate liability arising out of or

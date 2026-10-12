@@ -121,7 +121,7 @@ export function DataView<T>({
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
                 {details.map((c) => (
                   <div key={c.id} className="min-w-0">
-                    <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-[11px] tracking-wide text-muted-foreground">
                       {c.mobileLabel ?? c.header}
                     </dt>
                     <dd

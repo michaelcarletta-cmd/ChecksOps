@@ -339,7 +339,7 @@ export function ContractorServiceAreaCard() {
 
         {/* Currently saved summary */}
         <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1">
-          <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
+          <div className="font-semibold text-muted-foreground tracking-wide text-[10px]">
             Currently saved
           </div>
           <div>
@@ -384,7 +384,7 @@ export function ContractorServiceAreaCard() {
 
         {/* Trades / specialties */}
         <div className="space-y-2 border-t border-border pt-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+          <Label className="text-xs tracking-wide text-muted-foreground flex items-center gap-1">
             <Wrench className="h-3 w-3" /> Trades &amp; specialties
           </Label>
           <div className="flex flex-wrap gap-1.5">
@@ -442,7 +442,7 @@ export function ContractorServiceAreaCard() {
         {/* Business name + short bio */}
         <div className="space-y-3 border-t border-border pt-4">
           <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs tracking-wide text-muted-foreground">
               Business name (shown on your directory card)
             </Label>
             <Input
@@ -458,7 +458,7 @@ export function ContractorServiceAreaCard() {
             </p>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs tracking-wide text-muted-foreground">
               Short bio (shown on your card)
             </Label>
             <Textarea
@@ -473,7 +473,7 @@ export function ContractorServiceAreaCard() {
 
         {/* Google reviews link */}
         <div className="space-y-2 border-t border-border pt-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+          <Label className="text-xs tracking-wide text-muted-foreground flex items-center gap-1">
             <Star className="h-3 w-3" /> Google reviews link (optional)
           </Label>
           <p className="text-[11px] text-muted-foreground">
@@ -498,7 +498,7 @@ export function ContractorServiceAreaCard() {
 
         {/* ZIP prefixes */}
         <div className="space-y-2 border-t border-border pt-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <Label className="text-xs tracking-wide text-muted-foreground">
             Service ZIP prefixes (first 3 digits)
           </Label>
           <div className="flex flex-wrap gap-1.5 min-h-[28px]">
@@ -536,7 +536,7 @@ export function ContractorServiceAreaCard() {
         {/* States served */}
         <div className="space-y-2 border-t border-border pt-4">
           <div className="flex items-center justify-between gap-2">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs tracking-wide text-muted-foreground">
               States served
             </Label>
             <Button
@@ -596,7 +596,7 @@ export function ContractorServiceAreaCard() {
 
         {/* Home base + radius */}
         <div className="space-y-2 border-t border-border pt-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <Label className="text-xs tracking-wide text-muted-foreground">
             Home base &amp; drive radius
           </Label>
           <div className="flex gap-2">

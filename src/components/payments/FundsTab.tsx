@@ -511,7 +511,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       {!readOnly && disburseMode === "platform" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disbursement</p>
+            <p className="text-xs font-medium text-muted-foreground tracking-wider">Disbursement</p>
             <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setDisburseMode(null)}>
               <X className="h-3 w-3 mr-1" />Cancel
             </Button>
@@ -543,7 +543,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         <Card>
           <CardContent className="pt-3 pb-3 space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Record External Payment</p>
+              <p className="text-xs font-medium text-muted-foreground tracking-wider">Record External Payment</p>
               <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setDisburseMode(null)}>
                 <X className="h-3 w-3 mr-1" />Cancel
               </Button>

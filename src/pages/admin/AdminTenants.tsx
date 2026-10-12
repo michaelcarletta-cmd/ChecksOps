@@ -1186,22 +1186,22 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Check Processing Usage</div>
+                <div className="text-[10px] text-muted-foreground tracking-wider">Check Processing Usage</div>
                 <div className="text-2xl font-bold mt-1">{checkCount}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.amount_cents ?? 0)}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">MortgageOps Usage</div>
+                <div className="text-[10px] text-muted-foreground tracking-wider">MortgageOps Usage</div>
                 <div className="text-2xl font-bold mt-1">{mortgageCount}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.mortgage_amount_cents ?? 0)}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Disbursement Usage</div>
+                <div className="text-[10px] text-muted-foreground tracking-wider">Disbursement Usage</div>
                 <div className="text-2xl font-bold mt-1">{moov?.count ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Next Day {nextDay} · Same Day {sameDay}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
+                <div className="text-[10px] text-muted-foreground tracking-wider">Paid to ChecksOps</div>
                 <div className="text-2xl font-bold mt-1">{fmt(maintenancePaidCents)}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Maintenance fees</div>
               </div>
@@ -1223,7 +1223,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   </Button>
                 </div>
                 <table className="w-full text-sm">
-                  <thead className="text-[10px] uppercase text-muted-foreground bg-muted/20">
+                  <thead className="text-[10px] text-muted-foreground bg-muted/20">
                     <tr>
                       <th className="text-left px-4 py-2 font-medium">Line item</th>
                       <th className="text-right px-4 py-2 font-medium">Usage</th>
@@ -1320,7 +1320,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{new Date(e.billed_at).toLocaleString()}</span>
-                          <Badge variant="secondary" className="text-[9px] h-4 px-1 uppercase">
+                          <Badge variant="secondary" className="text-[9px] h-4 px-1">
                             {(e.event_type || "processing").replace("_", " ")}
                           </Badge>
                         </div>

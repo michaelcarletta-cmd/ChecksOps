@@ -122,7 +122,7 @@ export function DTPStatusIndicator({ checkIntakeItemId, className }: DTPStatusIn
                 >
                   <FileSignature className="h-3 w-3" />
                   <span className="truncate max-w-[160px]">{recipient}</span>
-                  <span className="text-[10px] uppercase tracking-wide opacity-80">
+                  <span className="text-[10px] tracking-wide opacity-80">
                     {style.label}
                   </span>
                 </Badge>
