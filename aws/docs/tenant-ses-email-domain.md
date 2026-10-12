@@ -124,8 +124,10 @@ ARNs, account IDs, claims, or secrets.
 
 ## IAM — do not add in this PR
 
-Staging `aws/template.yaml` and `aws/production/api-execution-role.yaml` must
-**not** gain SES permissions here.
+Staging `aws/template.yaml` must **not** gain SES send permissions.
+Production API send is recorded separately on
+`aws/production/api-execution-role.yaml` as isolated `ProductionApiSesSend`
+(`ses:SendEmail` on verified `checksops.com` / `Support@checksops.com` only).
 
 When a later, separately approved deploy enables domain APIs, use **narrow**
 actions (no `ses:*`):
