@@ -17,13 +17,13 @@ import { acquireLease } from './lib/lease.mjs';
 import { issueReceiptWithSigner } from './lib/receipt.mjs';
 import { signReceiptWithKms } from './lib/kms-issuer.mjs';
 import { validateZipMemberName } from './lib/lambda-owned-members.mjs';
-import { hashZipMembers } from './lib/zip-members.mjs';
+import { readZipMembers } from './lib/zip-members.mjs';
 
 export const FUNCTION_NAME = 'checksops-production-prep-api';
 export const PLAN_REL = 'ops/deployment-guard/production-api-overlay-plan.json';
 const REGION = 'us-east-1';
 const HEX64 = /^[0-9a-f]{64}$/i;
-const STAGING_ACCEPTANCE_RE = /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/(actions\/runs\/\d+|pull\/\d+)(\S*)$/;
+const STAGING_ACCEPTANCE_RE = /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/(actions\/runs\/\d+(\/job\/\d+)?|pull\/\d+)$/;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
@@ -74,6 +74,7 @@ export function resolvePlannedMember(member, { root = repoRoot, plan = loadPlan(
       sqlBefore: row.sql_before || null,
       sourceRelative,
       imports: localImports(bytes.toString('utf8')),
+      source: bytes.toString('utf8'),
     },
   };
 }
@@ -84,6 +85,58 @@ export function localImports(source) {
   let match;
   while ((match = re.exec(source))) found.add(match[1]);
   return [...found].sort();
+}
+
+/** Named imports from relative modules, resolved to ZIP member paths. */
+export function namedImports(source, fromMember = '') {
+  const dir = path.posix.dirname(fromMember);
+  const out = [];
+  const re = /import\s*\{([^}]*)\}\s*from\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]/g;
+  let match;
+  while ((match = re.exec(source))) {
+    const names = match[1].split(',').map((part) => part.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+    out.push({ module: path.posix.normalize(path.posix.join(dir, match[2])), names });
+  }
+  return out;
+}
+
+export function exportNames(source) {
+  const names = new Set();
+  for (const match of source.matchAll(/export\s+(?:async\s+)?(?:const|let|var|function\*?|class)\s+([A-Za-z0-9_$]+)/g)) names.add(match[1]);
+  for (const match of source.matchAll(/export\s*\{([^}]*)\}/g)) {
+    for (const part of match[1].split(',')) {
+      const [local, alias] = part.trim().split(/\s+as\s+/);
+      if (local) names.add((alias || local).trim());
+    }
+  }
+  return names;
+}
+
+/**
+ * ESM link check against the live ZIP: every name the new member imports must be
+ * exported by the live module, and every live module that imports from this member
+ * must still find its names in the new bytes. A failure here would take the whole
+ * Lambda down at module link time.
+ */
+export function linkProblems(memberName, newSource, liveSources) {
+  const problems = [];
+  for (const { module, names } of namedImports(newSource, memberName)) {
+    if (!Object.hasOwn(liveSources, module)) {
+      problems.push(`${module} is not live`);
+      continue;
+    }
+    const exported = exportNames(liveSources[module]);
+    for (const name of names) if (!exported.has(name)) problems.push(`${module} does not export ${name}`);
+  }
+  const newExports = exportNames(newSource);
+  for (const [file, source] of Object.entries(liveSources)) {
+    if (file === memberName) continue;
+    for (const { module, names } of namedImports(source, file)) {
+      if (module !== memberName) continue;
+      for (const name of names) if (!newExports.has(name)) problems.push(`${file} imports ${name} from ${memberName}, which the new bytes drop`);
+    }
+  }
+  return problems;
 }
 
 /**
@@ -128,6 +181,16 @@ export function classifyLive(planned, live, { plan, expectedLiveSha256 = null, m
     const missing = planned.imports.filter((name) => !live.members.includes(name));
     if (missing.length) {
       throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'member imports modules that are not in the live production ZIP yet', { member: planned.member, missing });
+    }
+    const index = plan.order.indexOf(planned.member);
+    const pending = plan.order.slice(0, index)
+      .filter((name) => live.memberHashes?.[name] !== plan.members[name].accepted_sha256);
+    if (pending.length) {
+      throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'apply plan members in order; earlier members are not yet the accepted bytes', { member: planned.member, pending });
+    }
+    const problems = linkProblems(planned.member, planned.source, live.sources || {});
+    if (problems.length) {
+      throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'member would not link against the live production modules', { member: planned.member, problems });
     }
   }
   return { state: 'READY' };
@@ -177,18 +240,28 @@ export async function inspectLive(member, { lambda = null, fetchImpl = fetch, lo
   if (!response?.ok) {
     throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'failed to download current live production Lambda ZIP', { status: response?.status || null });
   }
-  const members = hashZipMembers(Buffer.from(await response.arrayBuffer()));
-  const present = Object.hasOwn(members, member);
+  const files = readZipMembers(Buffer.from(await response.arrayBuffer()));
+  const memberHashes = {};
+  const sources = {};
+  for (const [name, data] of Object.entries(files)) {
+    memberHashes[name] = sha256(data);
+    if (name.endsWith('.mjs') && !name.startsWith('node_modules/')) sources[name] = data.toString('utf8');
+  }
+  const present = Object.hasOwn(memberHashes, member);
   return {
     functionName: FUNCTION_NAME,
     codeSha256,
     revisionId,
     member,
     memberState: present ? 'PRESENT' : 'ABSENT',
-    memberSha256: present ? members[member] : null,
-    members: Object.keys(members),
+    memberSha256: present ? memberHashes[member] : null,
+    members: Object.keys(memberHashes),
+    memberHashes,
+    sources,
   };
 }
+
+const publicLive = ({ members, memberHashes, sources, ...rest }) => rest;
 
 function appendGithubOutput(values, env = process.env) {
   const file = env.GITHUB_OUTPUT;
@@ -224,7 +297,7 @@ export async function run(env = process.env, deps = {}) {
       throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'post-apply live member is not the accepted bytes', { expected: member.acceptedSha256, actual: live.memberSha256 });
     }
     appendGithubOutput({ ...summary, state: 'VERIFIED' }, env);
-    return { ok: true, mode, identity, live: { ...live, members: undefined }, state: 'VERIFIED', mutation: false };
+    return { ok: true, mode, identity, live: publicLive(live), state: 'VERIFIED', mutation: false };
   }
 
   const classified = classifyLive(member, live, {
@@ -237,7 +310,7 @@ export async function run(env = process.env, deps = {}) {
     if (mode === 'apply') {
       throw new GuardError(CODES.UNRELATED_MUTATION, 'live member already equals the accepted bytes; nothing to apply', { member: member.member });
     }
-    return { ok: true, mode, identity, live: { ...live, members: undefined }, state: classified.state, mutation: false };
+    return { ok: true, mode, identity, live: publicLive(live), state: classified.state, mutation: false };
   }
 
   validateApplyInputs({
@@ -301,7 +374,7 @@ export async function run(env = process.env, deps = {}) {
     ok: true,
     mode,
     identity,
-    live: { ...live, members: undefined },
+    live: publicLive(live),
     state: classified.state,
     mutation: false,
     authorization: { lease: lease.details.lease, receiptFile: issued.details.file, overlayInput: inputPath },

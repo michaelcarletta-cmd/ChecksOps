@@ -30,16 +30,47 @@ const ENV = {
   GITHUB_RUN_ID: '12345',
 };
 
-function liveFor(member, { sha256 = undefined, present = undefined, extra = [] } = {}) {
+const API = path.join(ROOT, 'aws/functions/api');
+function repoModules(dir = API, prefix = '') {
+  const out = {};
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue;
+    const rel = prefix + entry.name;
+    if (entry.isDirectory()) Object.assign(out, repoModules(path.join(dir, entry.name), `${rel}/`));
+    else if (entry.name.endsWith('.mjs')) out[rel] = fs.readFileSync(path.join(dir, entry.name), 'utf8');
+  }
+  return out;
+}
+// Production also carries modules main does not (checked live on 2026-10-12).
+const REPO_MODULES = {
+  ...repoModules(),
+  'mortgage-ops-usage.mjs': 'export async function accrueMortgageOpsAcceptedRequest() {}\n',
+};
+
+// Live ZIP stand-in: main's modules, with planned members before `member` already on the
+// accepted bytes, later ones still on the reconciled pre-deploy bytes, and ADD members absent.
+function liveFor(member, { sha256 = undefined, present = undefined, extra = [], pending = [], sources = {} } = {}) {
   const row = PLAN.members[member];
   const memberSha = sha256 !== undefined ? sha256 : row.expected_live_sha256;
   const isPresent = present !== undefined ? present : memberSha !== null;
-  // Every module the planned members import is live except members the plan still has to ADD.
-  const imported = PLAN.order.flatMap((name) => localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', name), 'utf8')));
-  const members = [...new Set(['index.mjs', ...PLAN.order, ...imported])]
-    .filter((name) => PLAN.members[name]?.operation !== 'add')
-    .concat(extra);
-  if (isPresent && !members.includes(member)) members.push(member);
+  const index = PLAN.order.indexOf(member);
+  const liveSources = { ...REPO_MODULES, ...sources };
+  const memberHashes = {};
+  for (const name of Object.keys(liveSources)) {
+    const planned = PLAN.members[name];
+    if (!planned) { memberHashes[name] = createHash('sha256').update(liveSources[name]).digest('hex'); continue; }
+    const position = PLAN.order.indexOf(name);
+    if (name === member) {
+      if (isPresent) memberHashes[name] = memberSha;
+    } else if (position < index && !pending.includes(name)) {
+      memberHashes[name] = planned.accepted_sha256;
+    } else if (planned.operation === 'replace') {
+      memberHashes[name] = planned.expected_live_sha256;
+    } else if (extra.includes(name)) {
+      memberHashes[name] = planned.accepted_sha256;
+    }
+  }
+  for (const name of Object.keys(liveSources)) if (!Object.hasOwn(memberHashes, name)) delete liveSources[name];
   return async () => ({
     functionName: FUNCTION_NAME,
     codeSha256: 'oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=',
@@ -47,7 +78,9 @@ function liveFor(member, { sha256 = undefined, present = undefined, extra = [] }
     member,
     memberState: isPresent ? 'PRESENT' : 'ABSENT',
     memberSha256: isPresent ? memberSha : null,
-    members: isPresent ? members : members.filter((name) => name !== member),
+    members: Object.keys(memberHashes),
+    memberHashes,
+    sources: liveSources,
   });
 }
 
@@ -163,11 +196,10 @@ test('workflow-transitions waits for the ledger migration; data waits for claim-
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED,
   );
   await assert.rejects(
-    run(applyEnv('data.mjs'), applyDeps('data.mjs').deps),
+    run(applyEnv('data.mjs'), applyDeps('data.mjs', { pending: ['claim-settlement-rpc.mjs'] }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing.includes('claim-settlement-rpc.mjs'),
   );
-  const ready = applyDeps('data.mjs', { extra: ['claim-settlement-rpc.mjs'] });
-  const result = await run(applyEnv('data.mjs'), ready.deps);
+  const result = await run(applyEnv('data.mjs'), applyDeps('data.mjs').deps);
   assert.equal(result.state, 'READY');
 });
 
@@ -186,6 +218,28 @@ test('apply issues a production receipt bound to this run, the live fingerprint 
   assert.deepEqual(input.member_sources, { 'workflow.mjs': 'aws/functions/api/workflow.mjs' });
   assert.equal(input.staging_acceptance.reference, ACCEPTANCE);
   assert.equal(input.approval.workstream_id, 'github-production-overlay-12345');
+});
+
+test('apply refuses out of plan order and when imported names would not link', async () => {
+  await assert.rejects(
+    run(applyEnv('workflow-rpc.mjs'), applyDeps('workflow-rpc.mjs', { pending: ['workflow.mjs'] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes('workflow.mjs'),
+  );
+  // workflow.mjs imports withIdentity from data.mjs; a live data.mjs without it must block the write.
+  await assert.rejects(
+    run(applyEnv('workflow.mjs'), applyDeps('workflow.mjs', { sources: { 'data.mjs': 'export const parseBody = () => ({});\n' } }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.problems.some((row) => /data\.mjs does not export/.test(row)),
+  );
+});
+
+test('staging acceptance must be a bare ChecksOps run or PR URL', async () => {
+  for (const bad of ['https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/1garbage', 'https://github.com/other/repo/pull/1', 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1 extra']) {
+    await assert.rejects(
+      run(applyEnv('workflow.mjs', { CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: bad }), applyDeps('workflow.mjs').deps),
+      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED,
+      bad,
+    );
+  }
 });
 
 test('verify fails unless the live member is the accepted bytes', async () => {
