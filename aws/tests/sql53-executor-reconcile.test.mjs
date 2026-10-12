@@ -14,6 +14,7 @@ import {
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL53,
   AUTHORIZED_LEDGER_20261007193200,
+  AUTHORIZED_SQL71_AMOUNT_GRANT,
   AUTHORIZED_STAGING_SQL,
   resolveAuthorizedMigration,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
@@ -87,7 +88,11 @@ test('packExecutor retains live-only members and adds SQL 53 and the ledger migr
     members['sql/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql'],
     AUTHORIZED_LEDGER_20261007193200.source_sha256,
   );
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 6);
+  assert.equal(
+    members['sql/71_review_amount_column_grant.sql'],
+    AUTHORIZED_SQL71_AMOUNT_GRANT.source_sha256,
+  );
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 7);
 });
 
 test('unmatched authorization never falls through to SQL 44', () => {

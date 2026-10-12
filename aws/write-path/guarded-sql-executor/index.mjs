@@ -15,8 +15,10 @@ import {
   AUTHORIZED_SQL39,
   AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
+  AMOUNT_GRANT_STATE_TEXT,
   AUTHORIZED_LEDGER_20261007193200,
   AUTHORIZED_SQL53,
+  AUTHORIZED_SQL71_AMOUNT_GRANT,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_FUNCTION,
   classifySql53CreateLive,
@@ -26,6 +28,7 @@ import {
   isLedger20261007193200,
   isSql44AuthorizedMigration,
   isSql53AuthorizedMigration,
+  isSql71AmountGrant,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
 import {
@@ -65,6 +68,7 @@ const LEDGER_20261007193200_FILE = path.join(
   ROOT,
   'sql/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql',
 );
+const SQL71_AMOUNT_GRANT_FILE = path.join(ROOT, 'sql/71_review_amount_column_grant.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -1535,6 +1539,164 @@ async function handleLedger20261007193200({
   }
 }
 
+// --- SQL 71: GRANT UPDATE (amount) to checksops -----------------------------
+
+const COLUMN_UPDATE_PRIVILEGES_SQL = `
+SELECT c.column_name AS column_name,
+       has_column_privilege($1::text, 'public.check_intake_items', c.column_name, 'UPDATE') AS can_update
+FROM information_schema.columns c
+WHERE c.table_schema = 'public' AND c.table_name = 'check_intake_items'
+ORDER BY c.column_name
+`.trim();
+const TABLE_UPDATE_PRIVILEGE_SQL = "SELECT has_table_privilege($1::text, 'public.check_intake_items', 'UPDATE') AS can_update";
+// The file may hold only comments and this one statement.
+const SQL71_SINGLE_STATEMENT_RE = /^(?:\s*--[^\n]*\n)*\s*GRANT UPDATE \(amount\) ON TABLE public\.check_intake_items TO checksops;\s*$/;
+
+async function readAmountGrantState(client, pin = AUTHORIZED_SQL71_AMOUNT_GRANT) {
+  const rows = (await client.query(COLUMN_UPDATE_PRIVILEGES_SQL, [pin.grantee]))?.rows || [];
+  if (!rows.length) {
+    return fail(CODES.SQL_COLLISION, 'public.check_intake_items has no columns visible to the executor');
+  }
+  const tableLevel = (await client.query(TABLE_UPDATE_PRIVILEGE_SQL, [pin.grantee]))?.rows?.[0]?.can_update === true;
+  const updatable = rows.filter((row) => row.can_update === true).map((row) => row.column_name);
+  const amountRow = rows.find((row) => row.column_name === pin.column);
+  if (!amountRow) return fail(CODES.SQL_COLLISION, 'check_intake_items.amount is missing');
+  const granted = amountRow.can_update === true;
+  const stateText = granted ? AMOUNT_GRANT_STATE_TEXT.granted : AMOUNT_GRANT_STATE_TEXT.absent;
+  return ok({
+    amount_update_granted: granted,
+    table_level_update: tableLevel,
+    updatable_columns: updatable,
+    updatable_columns_sha256: hashSqlDefinition(updatable.join(',')),
+    live_definition_sha256: hashSqlDefinition(stateText),
+  });
+}
+
+async function handleSql71AmountGrant({ event, authorization, identity, connect, sqlFile71 }) {
+  const pin = AUTHORIZED_SQL71_AMOUNT_GRANT;
+  const embedded = readEmbeddedSql(sqlFile71, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!SQL71_SINGLE_STATEMENT_RE.test(embedded.details.text)) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 71 is not the single pinned GRANT statement');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 71 executor action ${event.action}`);
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 71 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      const state = await readAmountGrantState(client, pin);
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          apply_preconditions_met: state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && state.details.table_level_update === false,
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql71_amount_grant']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readAmountGrantState(client, pin);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.amount_update_granted) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'checksops already has UPDATE (amount); refuse re-grant');
+    }
+    if (before.details.table_level_update) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'checksops has table-level UPDATE; column grants are not in the expected state');
+    }
+    if (before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'expected live privilege state changed immediately before apply');
+    }
+
+    await client.query(embedded.details.text);
+
+    const after = await readAmountGrantState(client, pin);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const expectedAfter = [...before.details.updatable_columns, pin.column].sort();
+    const actualAfter = [...after.details.updatable_columns].sort();
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.table_level_update
+      || JSON.stringify(actualAfter) !== JSON.stringify(expectedAfter)) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'grant changed more than UPDATE (amount) for checksops', {
+        before: before.details.updatable_columns,
+        after: after.details.updatable_columns,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        updatable_columns_before: before.details.updatable_columns,
+        updatable_columns_after: after.details.updatable_columns,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function createHandler({
   connect = defaultConnect,
   now = () => Date.now(),
@@ -1543,6 +1705,7 @@ export function createHandler({
   sqlFile601Predecessor = TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE,
   sqlFile53 = SQL53_FILE,
   sqlFileLedger = LEDGER_20261007193200_FILE,
+  sqlFile71 = SQL71_AMOUNT_GRANT_FILE,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -1574,6 +1737,10 @@ export function createHandler({
         sqlFile53,
         expectedSql53AfterHash,
       });
+    }
+
+    if (isSql71AmountGrant(event)) {
+      return handleSql71AmountGrant({ event, authorization, identity, connect, sqlFile71 });
     }
 
     if (isLedger20261007193200(event)) {

@@ -19,6 +19,7 @@ on:
         type: choice
         options:
           - ledger-20261007193200
+          - sql71-review-amount-grant
       approved_commit:
         description: "Required for deploy/apply: exact main commit approved for this run"
         required: false
