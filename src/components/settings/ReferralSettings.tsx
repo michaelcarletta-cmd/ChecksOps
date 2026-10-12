@@ -153,7 +153,7 @@ export function ReferralSettings() {
             {tenantData?.referred_by_tenant_id ? (
               <div className="bg-green-50 border border-green-100 rounded-lg p-6 text-center space-y-3">
                 <h4 className="font-bold text-green-800">Referral Applied!</h4>
-                <Badge variant="outline" className="bg-white border-green-200 text-green-600">Code redeemed</Badge>
+                <Badge variant="outline" className="bg-white border-green-200 text-green-600">Code Redeemed</Badge>
               </div>
             ) : (
               <>
