@@ -7,7 +7,7 @@ import {
 } from "@/lib/checkaltDepositOrchestrator";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
@@ -54,6 +54,7 @@ import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
 import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
+import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
@@ -288,12 +289,24 @@ export default function CheckCommandCenter() {
   const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const canMoveChecks = useCanMoveChecks();
+  const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [classFilter, setClassFilter] = useState<string>("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
+  // On mobile the Review & Decision bar and tabs are sticky. Opening a check or
+  // switching tabs keeps the queue's scroll offset, which leaves the panel's
+  // first rows (Edit Fields, Claim Ledger title) hidden under those bars.
+  const reviewPanelRef = useRef<HTMLDivElement>(null);
+  const scrollReviewPanelToTop = useCallback(() => {
+    if (!isMobile) return;
+    requestAnimationFrame(() => reviewPanelRef.current?.scrollIntoView({ block: "start" }));
+  }, [isMobile]);
+  useEffect(() => {
+    if (reviewCheckId) scrollReviewPanelToTop();
+  }, [reviewCheckId, scrollReviewPanelToTop]);
   // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [markReturnedCheck, setMarkReturnedCheck] = useState<{ id: string; label: string } | null>(null);
@@ -458,75 +471,21 @@ export default function CheckCommandCenter() {
     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
   }, [bulkSelected, user?.id, clearBulk, qc, tenantId]);
 
-  // On mobile, scroll to top when a check is opened or review check is opened
+  // On mobile, scroll to top when a check is opened. Review-panel open is
+  // handled by scrollReviewPanelToTop so the two scrolls do not fight.
   useEffect(() => {
-    if (isMobile && (selectedCheck || reviewCheckId)) {
+    if (isMobile && selectedCheck) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [selectedCheck, reviewCheckId, isMobile]);
+  }, [selectedCheck, isMobile]);
 
   // Realtime: consolidated in useCheckCommandRealtime (debounced invalidations).
   useCheckCommandRealtime(tenantId);
 
   const canAccessManager = canMoveChecks;
 
-  // Admin: allow delete at any stage
-  const canDeleteAnyCheck = true;
-
-  const deleteCheckMutation = useMutation({
-    mutationFn: async (checkId: string) => {
-      // Delete all related records first (order matters for FK constraints)
-      const tables = [
-        "check_endorsement_events",
-        "check_endorsements",
-        "check_review_decisions",
-        "check_reissue_requests",
-        "check_eligibility_results",
-        "check_audit_log",
-        "check_payees",
-      ] as const;
-
-      for (const table of tables) {
-        const { error } = await supabase.from(table).delete().eq("check_id", checkId);
-        if (error) {
-          console.error(`[DELETE] Failed to delete from ${table}:`, error);
-          throw new Error(`Failed to clear ${table}: ${error.message}`);
-        }
-      }
-
-      // Remove any accounting rows and unlink any active loss draft before deleting the check
-      const { error: ccErr } = await supabase.from("claim_checks").delete().eq("check_intake_item_id", checkId);
-      if (ccErr) console.warn("[DELETE] claim_checks cleanup:", ccErr.message);
-
-      const { error: lossDraftErr } = await supabase
-        .from("loss_draft_tracking")
-        .update({ check_intake_item_id: null })
-        .eq("check_intake_item_id", checkId);
-      if (lossDraftErr) {
-        console.error("[DELETE] loss_draft_tracking unlink:", lossDraftErr);
-        throw new Error(`Failed to unlink loss draft: ${lossDraftErr.message}`);
-      }
-
-      const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
-      if (error) throw new Error(`Failed to delete check: ${error.message}`);
-    },
-    // Phase 4: drop the row from the queue immediately, restore it if the
-    // delete fails server-side.
-    onMutate: (checkId: string) => {
-      const rollback = optimisticRemove(qc, [checkId]);
-      return { rollback };
-    },
-    onSuccess: () => {
-      toast({ title: "Check deleted" });
-      setSelectedCheck(null);
-      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-    },
-    onError: (e, _vars, ctx) => {
-      ctx?.rollback?.();
-      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
-    },
-  });
+  // Admin: allow delete at any stage through the accepted Delete Check workflow.
+  const canDeleteAnyCheck = isAdmin;
 
 
   const { data: checks = [], isLoading } = useQuery({
@@ -1667,6 +1626,7 @@ export default function CheckCommandCenter() {
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
               </div>
@@ -1843,6 +1803,7 @@ export default function CheckCommandCenter() {
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
               </div>
@@ -1887,7 +1848,7 @@ export default function CheckCommandCenter() {
               style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}
             >
               {reviewCheckId ? (
-                <Card className="animate-fade-in">
+                <Card ref={reviewPanelRef} className="animate-fade-in scroll-mt-14">
                   {isMobile && (
                     <div className="sticky top-14 z-20 bg-card/95 backdrop-blur border-b px-3 py-2 flex items-center gap-2 rounded-t-lg">
                       <Button
@@ -1907,7 +1868,7 @@ export default function CheckCommandCenter() {
                     </CardHeader>
                   )}
                   <CardContent className="p-0">
-                    <Tabs defaultValue="review">
+                    <Tabs defaultValue="review" onValueChange={scrollReviewPanelToTop}>
                        <div className="sticky top-[104px] md:top-0 z-10 bg-muted w-full overflow-x-auto scrollbar-hide border-b">
                          <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
                            <TabsTrigger value="review" className="text-xs whitespace-nowrap px-2 sm:px-3">Review</TabsTrigger>
@@ -2200,20 +2161,22 @@ export default function CheckCommandCenter() {
                                   </Button>
                                 )}
                                 {canDelete && !isShared && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (confirm("Delete this check? This cannot be undone.")) {
-                                        deleteCheckMutation.mutate(check.id);
-                                      }
-                                    }}
-                                    disabled={deleteCheckMutation.isPending}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <AdminDeleteCheckButton
+                                      checkId={check.id}
+                                      checkNumber={check.check_number}
+                                      onDeleted={() => {
+                                        optimisticRemove(qc, [check.id]);
+                                        setSelectedCheck(null);
+                                        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                                        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                                      }}
+                                      size="icon"
+                                      variant="ghost"
+                                      label=""
+                                      className="h-7 w-7"
+                                    />
+                                  </div>
                                 )}
                               </div>
                             </TableCell>
@@ -2358,6 +2321,7 @@ export default function CheckCommandCenter() {
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
               ) : (
@@ -2923,9 +2887,11 @@ function RerunOcrButton({ checkId, onSuccess }: { checkId: string; onSuccess: ()
 function CheckDetailPanel({
   checkId,
   onRefresh,
+  onDeleted,
 }: {
   checkId: string;
   onRefresh: () => void;
+  onDeleted?: () => void;
 }) {
   const { requireStepUp } = useStepUp();
   const [detailTab, setDetailTab] = useState("overview");
@@ -3280,20 +3246,6 @@ function CheckDetailPanel({
 
 
 
-   // Fetch reviewer profile for name display
-  const { data: reviewerProfile } = useQuery({
-    queryKey: ["reviewer-profile", check?.reviewed_by],
-    enabled: !!check?.reviewed_by,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", check!.reviewed_by!)
-        .single();
-      return data;
-    },
-  });
-
   const { data: auditLog = [] } = useQuery({
     queryKey: ["check-audit", checkId],
     queryFn: async () => {
@@ -3551,25 +3503,17 @@ function CheckDetailPanel({
         if (!depositItemId) throw new Error("prepare_deposit did not return a deposit_item_id");
       }
 
-      // 3. Assign manual_branch provider if still pending
+      // 3. Read the deposit item state. The AWS mark_manual_deposit RPC owns
+      // the manual_branch assignment, so do not run assign_provider first.
+      // That avoids requiring manual_branch to be an active external provider.
       const { data: itemAfterPrep } = await supabase
         .from("deposit_items")
-        .select("status, provider")
+        .select("status")
         .eq("id", depositItemId)
         .single();
 
-      if (itemAfterPrep?.status === "pending_assignment") {
-        const { error: assignErr } = await supabase.rpc("deposit_action", {
-          p_action: "assign_provider",
-          p_actor_id: user.id,
-          p_deposit_item_id: depositItemId,
-          p_provider: "manual_branch",
-          p_notes: "Auto-assigned manual_branch from Check Command Center",
-        });
-        if (assignErr) throw assignErr;
-      }
-
-      // 4. Mark as manually deposited (sets check_intake_items.status = 'deposited' too)
+      // 4. Mark as manually deposited (sets provider = 'manual_branch' and
+      // check_intake_items.status/check_stage = 'deposited' without provider execution).
       if (itemAfterPrep?.status !== "succeeded" && itemAfterPrep?.status !== "reconciled") {
         const { error: markErr } = await supabase.rpc("deposit_action", {
           p_action: "mark_manual_deposit",
@@ -3926,6 +3870,21 @@ function CheckDetailPanel({
             >
               <Share2 className="h-3 w-3" /> Share
             </Button>
+          )}
+          {!isSharedView && (
+            <AdminDeleteCheckButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              onDeleted={() => {
+                onRefresh();
+                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                onDeleted?.();
+              }}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
           )}
         </div>
 
@@ -4325,21 +4284,6 @@ function CheckDetailPanel({
                 </div>
               )}
               <Separator />
-              {check.reviewed_by && (
-                <>
-                  <Separator />
-                  <div className="bg-muted/30 rounded-md p-2.5 space-y-1">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Reviewed By</p>
-                    <p className="text-sm font-medium">{reviewerProfile?.full_name || reviewerProfile?.email || check.reviewed_by.slice(0, 8) + "..."}</p>
-                    {check.reviewed_at && (
-                      <p className="text-xs text-muted-foreground">{format(new Date(check.reviewed_at), "MMM d, yyyy h:mm a")}</p>
-                    )}
-                    {check.review_notes && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">"{check.review_notes}"</p>
-                    )}
-                  </div>
-                </>
-               )}
               {canUndo && !isSharedView && (
                 <Button
                   size="sm"
@@ -4789,6 +4733,7 @@ function CheckDetailPanel({
                     onRefresh();
                     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
                     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                    onDeleted?.();
                   }}
                   size="sm"
                   variant="outline"
