@@ -15,8 +15,8 @@
       "evidence": "2026-10-12 read-only catalog inspect on i-0c35557c4e5385406: function present with intended definition 6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52"
     },
     "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "2026-10-12 guarded apply on i-0c35557c4e5385406 (workstream prod-ledger-20261007193200, main 23540ecb): sync_homeowner_ledger_from_check() 9f6ec2dc… -> 03fcea3c…; read-only inspect after apply reports already_applied, preserved functions and ledger triggers unchanged"
     }
   },
   "order": [

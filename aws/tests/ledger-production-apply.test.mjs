@@ -26,7 +26,9 @@ import {
 import { main as ledgerMain } from '../../scripts/deployment-guard/ledger-production-apply.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const PIN = loadLedgerProductionPin(ROOT);
+const COMMITTED_PIN = loadLedgerProductionPin(ROOT);
+// The committed pin was flipped to execute:false after the 2026-10-12 apply; the apply tests exercise an execute-authorized copy.
+const PIN = { ...COMMITTED_PIN, execute: true };
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const RECORD = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/ledger-20261007193200-staging-authorization.json'), 'utf8'));
 const HLE = 'public.hle_on_check_intake_insert()';
@@ -100,6 +102,36 @@ test('apply refuses before connecting without the phrase or a single-use id', as
   assert.equal(noPhrase.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const noId = await executeLedgerProductionApply(manifest({ one_use_id: 'x' }), { root: ROOT, pin: PIN, connect: neverConnect, consumedPath: consumedPath() });
   assert.equal(noId.code, CODES.INVALID_MANIFEST);
+});
+
+test('the committed pin no longer authorizes an apply', async () => {
+  assert.equal(COMMITTED_PIN.execute, false);
+  const refused = await executeLedgerProductionApply(manifest(), { root: ROOT, pin: COMMITTED_PIN, connect: neverConnect, consumedPath: consumedPath() });
+  assert.equal(refused.code, CODES.GUARD_APPLY_FORBIDDEN);
+
+  const input = path.join(os.tmpdir(), `ledger-prod-committed-${process.pid}.json`);
+  fs.writeFileSync(input, JSON.stringify(manifest()));
+  const writes = [];
+  let spent = 0;
+  const orig = { out: process.stdout.write, err: process.stderr.write };
+  process.stdout.write = (chunk) => { writes.push(String(chunk)); return true; };
+  process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  try {
+    await ledgerMain(['--apply', '--input', input], { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, {
+      root: ROOT,
+      pin: COMMITTED_PIN,
+      enforceScriptGuard: () => ({ ok: true, details: { receipt: { owned_components: [COMMITTED_PIN.filename] } } }),
+      consumeReceiptOnce: () => { spent += 1; return { ok: true }; },
+      connect: neverConnect,
+      consumedPath: consumedPath(),
+    });
+  } finally {
+    process.stdout.write = orig.out;
+    process.stderr.write = orig.err;
+    fs.rmSync(input, { force: true });
+  }
+  assert.equal(spent, 0);
+  assert.match(writes.join(''), /GUARD_APPLY_FORBIDDEN/);
 });
 
 test('admin secret without a host resolves only to the pinned production endpoint', async () => {

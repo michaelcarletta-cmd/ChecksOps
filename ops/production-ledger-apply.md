@@ -9,6 +9,9 @@ Pin: `ops/deployment-guard/ledger-20261007193200-production-apply.json`
 (before `9f6ec2dc…`, after `03fcea3c…`, the hashes staging applied). Tool:
 `scripts/deployment-guard/ledger-production-apply.mjs`.
 
+**Status:** applied to production on 2026-10-12 (workstream `prod-ledger-20261007193200`,
+main `23540ecb`); the pin is now `execute: false`. A re-apply needs a new reviewed pin change.
+
 ## Where it runs
 
 Only on the SQL53 runner `i-0c35557c4e5385406` in `vpc-09f2268778966ce97`, from the

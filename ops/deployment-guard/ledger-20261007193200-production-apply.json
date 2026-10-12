@@ -1,7 +1,7 @@
 {
   "id": "ledger-20261007193200-production-apply",
-  "authorization": "execute-authorized",
-  "execute": true,
+  "authorization": "applied",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -31,6 +31,7 @@
     "basis": "Guarded staging SQL executor apply of ledger-20261007193200 on 2026-10-12 (inspect run 38254866114, deploy run 38255277671), followed by owner staging UAT of Review to Endorsing."
   },
   "production_evidence": {
+    "2026-10-12 apply": "Guarded apply on i-0c35557c4e5385406, workstream prod-ledger-20261007193200, main 23540ecb, contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 27/27: 9f6ec2dc… -> 03fcea3c…; triggers_sha256 cc8abb7d… unchanged; homeowner_ledger_events 766 before and after. execute is false so the pin is no longer a standing authorization.",
     "2026-10-12": "Read-only inspect on i-0c35557c4e5385406: sync_homeowner_ledger_from_check() 9f6ec2dc\u2026, trg_sync_homeowner_ledger_ins (AFTER INSERT) and trg_sync_homeowner_ledger_upd (AFTER UPDATE OF status) enabled; hle_on_check_intake_insert() bdd9ec4b\u2026 and aws_can_write_claim(uuid) 0a7e62b2\u2026 unchanged."
   }
 }
