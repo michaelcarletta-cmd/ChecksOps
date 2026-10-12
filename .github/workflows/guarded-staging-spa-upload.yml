@@ -85,30 +85,55 @@ jobs:
       - name: Validate staging OIDC inputs
         shell: bash
         env:
+          INPUT_MODE: ${{ inputs.mode }}
+          STAGING_SPA_INSPECT_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_SPA_INSPECT_ROLE_ARN }}
           STAGING_SPA_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN }}
         run: |
           set -euo pipefail
-          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingSpaUpload"
-          test -n "$STAGING_SPA_DEPLOY_ROLE_ARN" || { echo "CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN is not available to the staging environment job"; exit 2; }
-          test "$STAGING_SPA_DEPLOY_ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN does not match the dedicated staging SPA upload role"; exit 2; }
+          # inspect never assumes the write role; it uses the existing read-only SPA inspect role.
+          if [ "$INPUT_MODE" = "inspect" ]; then
+            test "$STAGING_SPA_INSPECT_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingSpaInspect" || { echo "CHECKSOPS_STAGING_SPA_INSPECT_ROLE_ARN does not match the read-only staging SPA inspect role"; exit 2; }
+          else
+            test "$STAGING_SPA_DEPLOY_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingSpaUpload" || { echo "CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN does not match the dedicated staging SPA upload role"; exit 2; }
+          fi
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide ACTIONS_ID_TOKEN_REQUEST_URL despite id-token: write"; exit 2; }
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "GitHub did not provide ACTIONS_ID_TOKEN_REQUEST_TOKEN despite id-token: write"; exit 2; }
 
-      - name: Configure AWS credentials through GitHub OIDC
+      - name: Configure read-only staging AWS session (inspect)
+        if: ${{ inputs.mode == 'inspect' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_SPA_INSPECT_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-spa-inspect-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b/index.html"}]}
+
+      - name: Configure staging SPA upload session (apply)
+        if: ${{ inputs.mode == 'apply' }}
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
         with:
           role-to-assume: ${{ vars.CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
           role-session-name: checksops-staging-spa-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b/index.html"},{"Effect":"Allow","Action":["s3:PutObject"],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b/*"},{"Effect":"Allow","Action":["cloudfront:CreateInvalidation"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1"},{"Effect":"Allow","Action":["kms:Sign","kms:GetPublicKey"],"Resource":"*"}]}
 
       - name: Verify AWS identity
         shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
           ARN="$(aws sts get-caller-identity --query Arn --output text)"
           test "$ACCOUNT" = "806168576068" || { echo "Unexpected AWS account"; exit 2; }
-          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingSpaUpload/checksops-staging-spa-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+          if [ "$INPUT_MODE" = "inspect" ]; then
+            EXPECTED="arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingSpaInspect/checksops-staging-spa-inspect-$GITHUB_RUN_ID"
+          else
+            EXPECTED="arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingSpaUpload/checksops-staging-spa-$GITHUB_RUN_ID"
+          fi
+          test "$ARN" = "$EXPECTED" || { echo "Unexpected AWS role identity"; exit 2; }
 
       - name: Build fresh staging SPA from main
         if: ${{ inputs.mode == 'apply' }}

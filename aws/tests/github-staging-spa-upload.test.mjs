@@ -258,3 +258,29 @@ test('workflow never interpolates expressions into run scripts', () => {
   assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
   assert.match(workflow, /\^\[0-9a-f\]\{64\}\$/);
 });
+
+test('inspect assumes only the read-only role; apply alone assumes the narrowed upload role', () => {
+  const step = (name) => {
+    const start = workflow.indexOf(`      - name: ${name}`);
+    assert.notEqual(start, -1, name);
+    const next = workflow.indexOf('\n      - name:', start + 1);
+    return workflow.slice(start, next === -1 ? undefined : next);
+  };
+  const inspect = step('Configure read-only staging AWS session (inspect)');
+  assert.match(inspect, /if: \$\{\{ inputs\.mode == 'inspect' \}\}/);
+  assert.match(inspect, /CHECKSOPS_STAGING_SPA_INSPECT_ROLE_ARN/);
+  assert.doesNotMatch(inspect, /CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN|PutObject|kms|cloudfront/);
+  assert.match(inspect, /"Action":\["s3:GetObject"\],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b\/index\.html"/);
+
+  const apply = step('Configure staging SPA upload session (apply)');
+  assert.match(apply, /if: \$\{\{ inputs\.mode == 'apply' \}\}/);
+  assert.match(apply, /CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN/);
+  const session = JSON.parse(apply.match(/inline-session-policy: >-\n\s+(\{.*\})/)[1]);
+  const actions = session.Statement.flatMap((row) => row.Action).sort();
+  assert.deepEqual(actions, ['cloudfront:CreateInvalidation', 'kms:GetPublicKey', 'kms:Sign', 's3:GetObject', 's3:PutObject']);
+  assert.ok(session.Statement.every((row) => row.Resource === '*' ? row.Action.every((a) => a.startsWith('kms:')) : true));
+
+  const identity = step('Verify AWS identity');
+  assert.match(identity, /ChecksOpsGitHubStagingSpaInspect\/checksops-staging-spa-inspect-\$GITHUB_RUN_ID/);
+  assert.match(identity, /ChecksOpsGitHubStagingSpaUpload\/checksops-staging-spa-\$GITHUB_RUN_ID/);
+});
