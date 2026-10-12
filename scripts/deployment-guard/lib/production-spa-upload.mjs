@@ -382,7 +382,8 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
 
   const invalidation = await aws.createInvalidation({
     distributionId: target.cloudfront_id,
-    paths: ['/index.html', '/assets/*'],
+    // '/*' also refreshes '/' and client-side routes, which CloudFront caches separately from /index.html.
+    paths: ['/*'],
   });
   if (!invalidation?.ok) return invalidation || fail(CODES.DEPLOYMENT_COLLISION, 'cloudfront invalidation failed');
 
@@ -402,13 +403,18 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     });
   }
 
-  const hostVerify = await verifySpaHost({
-    fetchImpl,
-    host: target.host,
-    expected,
-  });
+  // CloudFront edges can serve the previous index.html for a short while after the invalidation.
+  const verifyAttempts = Math.max(1, Number(ctx.hostVerifyAttempts ?? 10));
+  const verifyDelayMs = Math.max(0, Number(ctx.hostVerifyDelayMs ?? 15000));
+  const sleep = ctx.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  let hostVerify;
+  for (let attempt = 1; attempt <= verifyAttempts; attempt += 1) {
+    hostVerify = await verifySpaHost({ fetchImpl, host: target.host, expected });
+    if (hostVerify.ok || attempt === verifyAttempts) break;
+    await sleep(verifyDelayMs);
+  }
   if (!hostVerify.ok) {
-    return hostVerify;
+    return fail(hostVerify.code, hostVerify.message, { ...hostVerify.details, attempts: verifyAttempts, s3_written: true });
   }
 
   let lockAdvance = {

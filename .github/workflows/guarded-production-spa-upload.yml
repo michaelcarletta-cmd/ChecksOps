@@ -1,0 +1,233 @@
+name: Guarded production SPA upload
+
+# Fresh main build of the website to checksops.com through the official receipt-gated
+# production writer. The production environment gates the role; apply also needs the
+# exact main commit, the inspected live index.html hash, a staging acceptance reference
+# and the approval phrase.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect the live production index.html or apply a guarded upload of a fresh main build"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - apply
+      approved_commit:
+        description: "Required for apply: exact main commit approved for deployment"
+        required: false
+        default: ""
+        type: string
+      expected_live_index_sha256:
+        description: "Required for apply: live index.html SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+      staging_acceptance_reference:
+        description: "Required for apply: ChecksOps GitHub run or PR URL recording staging acceptance"
+        required: false
+        default: ""
+        type: string
+      approval_phrase:
+        description: "Required for apply: exactly DEPLOY WEBSITE TO PRODUCTION"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: guarded-production-spa-upload
+  cancel-in-progress: false
+
+jobs:
+  production-spa:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          # Full history: apply proves the locked live source is an ancestor of this commit.
+          fetch-depth: 0
+
+      - name: Refuse non-main or incomplete apply
+        shell: bash
+        # Inputs reach the script only through env, never as interpolated shell source.
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_LIVE_INDEX_SHA256: ${{ inputs.expected_live_index_sha256 }}
+          INPUT_STAGING_ACCEPTANCE: ${{ inputs.staging_acceptance_reference }}
+          INPUT_APPROVAL_PHRASE: ${{ inputs.approval_phrase }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded production SPA upload only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          case "$INPUT_MODE" in
+            inspect|apply) ;;
+            *) echo "mode must be inspect or apply"; exit 2 ;;
+          esac
+          if [ "$INPUT_MODE" = "apply" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "apply requires a 40-character approved_commit"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            [[ "$INPUT_EXPECTED_LIVE_INDEX_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "apply requires expected_live_index_sha256 from inspect"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "DEPLOY WEBSITE TO PRODUCTION" || { echo "approval_phrase must be exactly: DEPLOY WEBSITE TO PRODUCTION"; exit 2; }
+            test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "apply requires staging_acceptance_reference"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/github-production-spa-upload.test.mjs
+          node --test aws/tests/production-spa-upload-writer.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate production OIDC inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "GitHub did not provide an OIDC request token"; exit 2; }
+
+      # Both modes use the production SPA role (trusted only for this environment), narrowed
+      # by a session policy: inspect can only read index.html; apply adds object puts and
+      # the one invalidation. Neither can delete, list or sync.
+      - name: Configure read-only production session (inspect)
+        if: ${{ inputs.mode == 'inspect' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy
+          aws-region: us-east-1
+          role-session-name: checksops-production-spa-inspect-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::checksops-production-frontend-806168576068/index.html"}]}
+
+      - name: Configure production SPA upload session (apply)
+        if: ${{ inputs.mode == 'apply' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy
+          aws-region: us-east-1
+          role-session-name: checksops-production-spa-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::checksops-production-frontend-806168576068/index.html"},{"Effect":"Allow","Action":["s3:PutObject"],"Resource":"arn:aws:s3:::checksops-production-frontend-806168576068/*"},{"Effect":"Allow","Action":["cloudfront:CreateInvalidation"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"}]}
+
+      - name: Verify AWS identity
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          if [ "$INPUT_MODE" = "inspect" ]; then
+            EXPECTED="arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-production-spa-inspect-$GITHUB_RUN_ID"
+          else
+            EXPECTED="arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-production-spa-$GITHUB_RUN_ID"
+          fi
+          test "$ARN" = "$EXPECTED" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Build fresh production SPA from main
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        # Public production Cognito values; github-production-spa-upload.mjs re-checks them exactly.
+        env:
+          VITE_AUTH_PROVIDER: cognito
+          VITE_APP_URL: https://checksops.com
+          VITE_CHECKSOPS_API_URL: /prep
+          VITE_AWS_REGION: us-east-1
+          VITE_COGNITO_USER_POOL_ID: us-east-1_h00WorYMT
+          VITE_COGNITO_USER_POOL_CLIENT_ID: 3ja9fqaq2fjkv3i6up2varcqpe
+        run: |
+          set -euo pipefail
+          test ! -e dist || { echo "dist already exists in a fresh checkout"; exit 2; }
+          echo "CHECKSOPS_BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          bun run build:aws
+
+      - name: Inspect and authorize exact live index.html
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_DEPLOY_MODE: ${{ inputs.mode }}
+          CHECKSOPS_EXPECTED_LIVE_INDEX_SHA256: ${{ inputs.expected_live_index_sha256 }}
+          CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ${{ inputs.staging_acceptance_reference }}
+          CHECKSOPS_PRODUCTION_APPROVAL: ${{ inputs.approval_phrase }}
+          VITE_AUTH_PROVIDER: cognito
+          VITE_APP_URL: https://checksops.com
+          VITE_CHECKSOPS_API_URL: /prep
+          VITE_AWS_REGION: us-east-1
+          VITE_COGNITO_USER_POOL_ID: us-east-1_h00WorYMT
+          VITE_COGNITO_USER_POOL_CLIENT_ID: 3ja9fqaq2fjkv3i6up2varcqpe
+        run: node scripts/deployment-guard/github-production-spa-upload.mjs
+
+      - name: Record inspected live state
+        if: ${{ always() }}
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          LIVE_INDEX_SHA256: ${{ steps.preflight.outputs.live_index_html_sha256 }}
+          LIVE_ENTRY_BUNDLE: ${{ steps.preflight.outputs.live_entry_bundle }}
+          LIVE_LAST_MODIFIED: ${{ steps.preflight.outputs.live_last_modified }}
+          LIVE_MATCHES_LOCK: ${{ steps.preflight.outputs.live_matches_lock }}
+          CANDIDATE_ENTRY: ${{ steps.preflight.outputs.candidate_entry_bundle }}
+        run: |
+          {
+            echo "### Production SPA preflight"
+            echo "- Mode: \`$INPUT_MODE\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Live index.html SHA-256: \`$LIVE_INDEX_SHA256\`"
+            echo "- Live entry bundle: \`$LIVE_ENTRY_BUNDLE\` (LastModified \`$LIVE_LAST_MODIFIED\`)"
+            echo "- Live matches release lock: \`$LIVE_MATCHES_LOCK\`"
+            echo "- Candidate entry bundle: \`$CANDIDATE_ENTRY\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload through official receipt-gated production SPA writer
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+          SPA_INPUT: ${{ steps.preflight.outputs.spa_input }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/production-spa-upload.mjs --input "$SPA_INPUT"
+
+      - name: Public production smoke
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CANDIDATE_ENTRY: ${{ steps.preflight.outputs.candidate_entry_bundle }}
+        run: |
+          set -euo pipefail
+          served="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' "https://checksops.com/?verify=$GITHUB_RUN_ID" | grep -oE '/assets/index-[^"]+\.js' | head -1 || true)"
+          test "$served" = "$CANDIDATE_ENTRY" || { echo "https://checksops.com/ serves '$served', expected '$CANDIDATE_ENTRY'"; exit 2; }
+          curl -fsS --max-time 20 -o /dev/null "https://checksops.com$CANDIDATE_ENTRY"
+          health="$(curl -fsS --max-time 20 https://checksops.com/prep/health)"
+          echo "$health" | grep -qE '"status" *: *"ok"' || { echo "/prep/health is not ok"; exit 2; }
+          echo "- https://checksops.com/ serves \`$served\`; /prep/health ok" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        run: rm -rf .deployment-guard dist

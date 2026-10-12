@@ -103,6 +103,12 @@
       "note": "Official staging SPA upload. Requires a staging-frontend spa-promote receipt. Refuses production."
     },
     {
+      "path": "scripts/deployment-guard/github-production-spa-upload.mjs",
+      "classification": "SAFE",
+      "capabilities": ["production-spa-preflight"],
+      "note": "GitHub-hosted production SPA preflight. Reads only the live production index.html, requires live == production-spa release lock, the locked live source as an ancestor of main, the exact approval phrase and a staging acceptance reference, runs every accepted contract, then takes the production-spa lease and issues a receipt. Never writes S3 or CloudFront; production-spa-upload.mjs is the only writer."
+    },
+    {
       "path": "scripts/deployment-guard/production-spa-upload.mjs",
       "classification": "GUARDED",
       "capabilities": ["spa-index-upload", "cloudfront-invalidation", "s3-put-object"],

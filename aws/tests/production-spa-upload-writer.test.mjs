@@ -218,7 +218,51 @@ test('production SPA writer: happy-path upload order, drift checks, and post-ver
   const invalidationIdx = aws.calls.findIndex((c) => c.method === 'createInvalidation');
   const indexPutIdx = aws.calls.findIndex((c) => c.method === 'putObject' && c.key === 'index.html');
   assert.ok(invalidationIdx > indexPutIdx, 'expected invalidation after index.html upload');
+  assert.deepEqual(aws.calls[invalidationIdx].paths, ['/*']);
   assert.equal(result.details.receipt.mac, issued.receipt.mac);
+});
+
+test('production SPA writer: host verification retries while CloudFront still serves the old index', async () => {
+  const root = tmpRootWithOps();
+  const distDir = writeDist(root, { entry: '/assets/index-candidate.js', js: "console.log('candidate');\n" });
+  const liveBefore = { index_html_sha256: 'idx-live-1', entry_bundle: '/assets/index-live.js', etag: 'e', last_modified: 't', s3_version_id: 'v1' };
+  const issued = issueSpaReceipt(root, { fingerprint: liveBefore });
+  const aws = createFakeAws({ liveBefore });
+  aws.setAfterIndexHtml(fs.readFileSync(path.join(distDir, 'index.html'), 'utf8'));
+  const registry = loadContractRegistry(root);
+  const fresh = fetchFromDist(distDir);
+  const stale = fetchFromDist(distDir, { overrideIndexHtml: '<script src="/assets/index-live.js"></script>' });
+  let indexFetches = 0;
+  let sleeps = 0;
+  const result = await applyProductionSpaUpload({
+    workstream_id: 'workstream-a',
+    commit: SHA,
+    deployment_type: 'spa-promote',
+    receipt: issued.receipt,
+    dist_dir: distDir,
+    deploy_mode: 'per_object_put',
+    accepted_source_composition: true,
+    source_composition_manifest: { files: ['src/App.tsx'] },
+    frontend_workstreams: ['workstream-a'],
+    staging_acceptance: { ok: true, reference: 'staging#acceptance' },
+    approval: { approved: true, workstream_id: 'workstream-a' },
+    contract_results: passingContractResults(registry),
+  }, {
+    env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
+    guardRoot: root,
+    target: TARGET,
+    aws,
+    receiptRegistry: createSharedReceiptRegistry(),
+    fetchImpl: (url, init) => {
+      if (new URL(url).pathname === '/index.html') indexFetches += 1;
+      return (indexFetches <= 2 ? stale : fresh)(url, init);
+    },
+    now: NOW,
+    sleep: async () => { sleeps += 1; },
+  });
+  assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+  assert.equal(sleeps, 2);
+  assert.equal(result.details.after_host_fingerprint.entry_bundle, '/assets/index-candidate.js');
 });
 
 test('production SPA writer: missing receipt fails closed', async () => {
@@ -734,6 +778,7 @@ test('production SPA writer: failing accepted contract blocks deployment', async
 });
 
 test('production SPA writer: post-deploy verification mismatch fails without rollback', async () => {
+  let sleeps = 0;
   const root = tmpRootWithOps();
   const distDir = writeDist(root, { entry: '/assets/index-candidate.js', js: "console.log('candidate');\n" });
   const candidate = distFingerprint(distDir);
@@ -775,10 +820,15 @@ test('production SPA writer: post-deploy verification mismatch fails without rol
     receiptRegistry,
     fetchImpl: fetchFromDist(distDir, { overrideIndexHtml: '<html>WRONG</html>' }),
     now: NOW,
+    hostVerifyAttempts: 3,
+    sleep: async () => { sleeps += 1; },
   });
 
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(sleeps, 2);
+  assert.equal(result.details.attempts, 3);
+  assert.equal(result.details.s3_written, true);
 });
 
 test('production SPA writer: receipt reuse is blocked (single-use)', async () => {
