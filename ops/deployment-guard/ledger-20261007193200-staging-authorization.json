@@ -1,0 +1,80 @@
+{
+  "id": "ledger-20261007193200-staging-authorization",
+  "authorization": "source-only",
+  "apply_authorized": false,
+  "execute": false,
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "deployment_type": "sql-apply",
+  "filename": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+  "migration_id": "20261007193200_skip_claim_ledger_event_for_endorsement_stage",
+  "source_sha256": "1a9e6d54c67d2068ba9497f10fcf6956c1699b3005e679b72c3cc3bf2e37878b",
+  "function_identity": "public.sync_homeowner_ledger_from_check()",
+  "expected_live_definition_sha256": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+  "expected_live_definition_source": "supabase/migrations/20260716013636_43110a13-bf14-42f7-a1c1-6a76393b3054.sql",
+  "intended_definition_sha256": "03fcea3c87b8ed087222b4071cbe36542df00dfca5c21ea44d20dc113a1047a2",
+  "owned_components": [
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql"
+  ],
+  "forbidden_owned_components": [
+    "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+    "supabase/migrations/20260918170040_one_check_received_writer.sql"
+  ],
+  "preconditions": {
+    "preserved_function_definition_sha256": {
+      "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48",
+      "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf"
+    },
+    "preserved_function_definition_source": {
+      "public.hle_on_check_intake_insert()": "supabase/migrations/20260712113217_22811cbb-33cd-491f-8333-ab4949f5f7bc.sql"
+    },
+    "required_ledger_triggers": [
+      "trg_hle_check_intake_insert",
+      "trg_sync_homeowner_ledger_ins",
+      "trg_sync_homeowner_ledger_upd"
+    ],
+    "check_source_column": "check_intake_items.check_source text NOT NULL DEFAULT 'insurance' (20260522142101)"
+  },
+  "live_evidence": {
+    "staging": {
+      "source": "ops/deployment-guard/sql53-staging-acceptance.json (staging DB read-only diagnostic run 37973071977, 2026-10-09)",
+      "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+      "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+    },
+    "production": {
+      "source": "ops/deployment-guard/sql53-production-apply.json (official writer inspect PR #874, 2026-10-11T02:16:36Z)",
+      "public.sync_homeowner_ledger_from_check()": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+      "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48",
+      "ledger_triggers_found": 3
+    },
+    "finding": "Both environments run the July 2026 definitions of both ledger functions. 20260918170040 (one check_received writer) was never applied, so each linked insurance check currently receives two check_received events: one from hle_on_check_intake_insert and one from sync_homeowner_ledger_from_check."
+  },
+  "expected_behavior_change": {
+    "check_received_per_linked_insert": { "before": 2, "after": 1 },
+    "endorsements_sent_on_endorsements_in_progress": { "before": 1, "after": 0 },
+    "ready_for_deposit_on_approved_for_deposit": { "before": 1, "after": 1 },
+    "hle_on_check_intake_insert_definition": "unchanged",
+    "triggers": "unchanged; the file only replaces sync_homeowner_ledger_from_check()",
+    "existing_rows": "unchanged; duplicate check_received rows already written stay until a separate reviewed cleanup",
+    "verified_by": "aws/tests/ledger-20261007193200-staging-authorization.test.mjs (isolated PostgreSQL 16, byte-identical live definitions)"
+  },
+  "post_apply_verification": {
+    "workflow": ".github/workflows/staging-db-readonly-diagnostic.yml",
+    "workflow_name": "Staging DB read-only diagnostic",
+    "ref": "main",
+    "expected_inspect": {
+      "identity": "public.sync_homeowner_ledger_from_check()",
+      "exists": true,
+      "definitionSha256": "03fcea3c87b8ed087222b4071cbe36542df00dfca5c21ea44d20dc113a1047a2"
+    },
+    "blocked_by": "CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN expired (runs 38152039966 and 38173152840 failed with staging_identity_rejected)"
+  },
+  "rollback": {
+    "condition": "Only if the post-apply inspect shows intended_definition_sha256 and the pre-apply inspect showed expected_live_definition_sha256.",
+    "restore_source": "supabase/migrations/20260716013636_43110a13-bf14-42f7-a1c1-6a76393b3054.sql (CREATE OR REPLACE FUNCTION public.sync_homeowner_ledger_from_check() block only)",
+    "restore_definition_sha256": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699"
+  },
+  "executor_support": "missing: the staging guarded SQL executor (aws/write-path/guarded-sql-executor) only runs its bundled allowlist (44, tenant permissions, 39, 40, 53) and lists 20261007193200 among SQL53 forbidden markers. A separate reviewed change must add this pinned file before any apply.",
+  "notes": "Evaluate-only pin for the staging ledger migration. Does not apply SQL, invoke the executor, change triggers, or authorize production. Independent apply authorization, a short-lived sql-apply receipt, a fresh pre-apply inspect matching expected_live_definition_sha256, and executor support are still required. Production needs its own record plus this record's staging acceptance."
+}
