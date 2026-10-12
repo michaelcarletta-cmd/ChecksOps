@@ -31,6 +31,15 @@ test('no expected mapping uses Cognito sub as the application UUID', () => {
   }
 });
 
+test('staging Plan A maps admin mailbox to live admin Cognito sub, not tester', () => {
+  const tester = EXPECTED_EIGHT.find((row) => row.applicationUserId === 'abd3c2a0-6dc0-4680-92dd-a013e1141c91');
+  const admin = EXPECTED_EIGHT.find((row) => row.applicationUserId === '7dbb3009-f059-4767-b5dc-1c5c72379330');
+  assert.equal(admin.cognitoSub, 'c4386408-60e1-70e2-abb6-e6194e8e635f');
+  assert.equal(tester.cognitoSub, '04d85458-1041-7017-a8e8-b2f3f0a5b75b');
+  assert.notEqual(tester.cognitoSub, admin.cognitoSub);
+  assert.ok(!EXPECTED_EIGHT.some((row) => row.cognitoSub === '54a8b4c8-60d1-7028-cfbb-0eb2baee5592'));
+});
+
 test('oneshot ninth and probe constants stay aligned', () => {
   assert.equal(ONESHOT_NINTH, NINTH_ID);
   assert.equal(ONESHOT_PROBE, PROBE_SUB);
