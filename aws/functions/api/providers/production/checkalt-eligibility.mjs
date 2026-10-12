@@ -5,9 +5,13 @@
  * tenant_id, Ready stage, and packet presence are not sources of truth.
  *
  * Rear official-image freshness is bound by a fingerprint of current
- * endorsement state, stamped when the official rear .checkalt.jpg upload URL
- * is issued. Timestamp comparison of S3 LastModified vs updated_at is not
- * used — it cannot prove the rear image matches current signatures.
+ * endorsement state. Missing fingerprints on already-compliant official
+ * rear JPEGs are stamped during write-capable deposit preflight only after
+ * canvas/endorsement provenance proves the stored image matches current
+ * completed signatures. Upload-url also stamps when a new official rear
+ * .checkalt.jpg is issued, using withIdentityWrite so the UPDATE commits.
+ * Timestamp comparison of S3 LastModified vs updated_at is not used as
+ * the sole proof — it cannot prove the rear image matches current signatures.
  */
 import { createHash } from 'node:crypto';
 
@@ -98,13 +102,92 @@ export function endorsementStateFingerprint(checkId, payees, endorsements) {
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 
-export function readStoredRearFingerprint(check) {
+const ENDORSEMENT_RENDERER_RE = /^(canvas-v\d+|endorsement-canvas)/i;
+
+export function parseEndorsementRenderMeta(check) {
   let meta = check?.endorsement_render_meta;
   if (typeof meta === 'string') {
-    try { meta = JSON.parse(meta); } catch { return ''; }
+    try { meta = JSON.parse(meta); } catch { return {}; }
   }
-  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return '';
-  return fingerprintToken(meta[FINGERPRINT_META_KEY]);
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return {};
+  return meta;
+}
+
+export function readStoredRearFingerprint(check) {
+  return fingerprintToken(parseEndorsementRenderMeta(check)[FINGERPRINT_META_KEY]);
+}
+
+export function officialRearRenderTimestampMs(check) {
+  const meta = parseEndorsementRenderMeta(check);
+  const checkId = fingerprintToken(check?.id);
+  const requestId = fingerprintToken(meta.request_id);
+  if (checkId && requestId.toLowerCase().startsWith(`${checkId.toLowerCase()}-`)) {
+    const suffix = requestId.slice(checkId.length + 1);
+    if (/^\d{13}$/.test(suffix)) {
+      const ms = Number(suffix);
+      if (Number.isFinite(ms) && ms > 0) return ms;
+    }
+  }
+  for (const key of ['rendered_at', 'completed_at', 'generated_at', 'created_at']) {
+    const ms = Date.parse(fingerprintToken(meta[key]));
+    if (Number.isFinite(ms)) return ms;
+  }
+  return null;
+}
+
+export function latestEndorsementMutationMs(payees, endorsements) {
+  let latest = null;
+  for (const row of [...(payees || []), ...(endorsements || [])]) {
+    for (const key of ['signed_at', 'endorsed_at']) {
+      const ms = Date.parse(fingerprintToken(row?.[key]));
+      if (Number.isFinite(ms)) latest = latest == null ? ms : Math.max(latest, ms);
+    }
+  }
+  return latest;
+}
+
+/**
+ * Prove an already-stored official rear JPEG was produced for this check's
+ * current completed endorsements. Missing fingerprint is not enough.
+ */
+export function evaluateExistingOfficialRearCorrespondence(check, payees, endorsements, images = {}) {
+  const endorsement = evaluateEndorsementEligibility(check, payees, endorsements);
+  if (!endorsement.ok) return endorsement;
+
+  const rearPath = images.rearPath || officialCheckAltRearPath(check);
+  if (!isOfficialCheckAltRearPath(check, rearPath)) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_not_this_check' };
+  }
+
+  const meta = parseEndorsementRenderMeta(check);
+  if (!ENDORSEMENT_RENDERER_RE.test(fingerprintToken(meta.renderer_version))) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_provenance_missing' };
+  }
+
+  const checkId = fingerprintToken(check?.id);
+  const requestId = fingerprintToken(meta.request_id);
+  if (!checkId || !requestId.toLowerCase().startsWith(checkId.toLowerCase())) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_request_not_this_check' };
+  }
+
+  const rearBytes = Number(images.compliance?.rear?.bytes || images.rearBytes || 0);
+  const metaBytes = Number(meta.bytes || 0);
+  if (metaBytes > 0 && rearBytes > 0 && metaBytes !== rearBytes) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_bytes_mismatch' };
+  }
+
+  const renderedAt = officialRearRenderTimestampMs(check);
+  if (renderedAt == null) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_render_time_unknown' };
+  }
+  const latest = latestEndorsementMutationMs(payees, endorsements);
+  if (latest == null) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_endorsement_time_unknown' };
+  }
+  if (latest > renderedAt) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_fingerprint_mismatch' };
+  }
+  return { ok: true, renderedAt, latestEndorsementAt: latest };
 }
 
 export function officialCheckAltFrontPath(check) {
@@ -319,6 +402,27 @@ export async function stampCheckAltRearFingerprint(client, checkId, tenantId, pa
   return fingerprint;
 }
 
+export async function bindExistingOfficialRearFingerprintIfEligible(client, check, payees, endorsements, images) {
+  const correspondence = evaluateExistingOfficialRearCorrespondence(check, payees, endorsements, images);
+  if (!correspondence.ok) return correspondence;
+  const expected = endorsementStateFingerprint(check.id, payees, endorsements);
+  const stored = readStoredRearFingerprint(check);
+  if (stored && stored !== expected) {
+    return { ok: false, error: ERROR_PROVIDER_REAR_IMAGE_STALE, reason: 'rear_fingerprint_mismatch' };
+  }
+  if (stored === expected) {
+    return { ok: true, fingerprint: stored, stamped: false };
+  }
+  const fingerprint = await stampCheckAltRearFingerprint(
+    client,
+    check.id,
+    check.tenant_id,
+    payees,
+    endorsements,
+  );
+  return { ok: true, fingerprint, stamped: true };
+}
+
 export async function stampOfficialRearFingerprintIfNeeded(client, check, rel) {
   if (!check?.id || !rel) return null;
   let row = check;
@@ -335,5 +439,10 @@ export async function stampOfficialRearFingerprintIfNeeded(client, check, rel) {
   if (!isOfficialCheckAltRearPath(row, rel)) return null;
   const payees = await loadCheckPayees(client, row.id, row.tenant_id);
   const endorsements = await loadCheckEndorsements(client, row.id, row.tenant_id);
+  const eligibility = evaluateEndorsementEligibility(row, payees, endorsements);
+  if (!eligibility.ok) return null;
+  const expected = endorsementStateFingerprint(row.id, payees, endorsements);
+  const stored = readStoredRearFingerprint(row);
+  if (stored === expected) return stored;
   return stampCheckAltRearFingerprint(client, row.id, row.tenant_id, payees, endorsements);
 }
