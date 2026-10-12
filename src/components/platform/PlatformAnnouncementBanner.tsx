@@ -70,7 +70,9 @@ export function PlatformAnnouncementBanner() {
   };
 
   return (
-    <div className="sticky top-0 z-50 w-full">
+    // In normal flow, not sticky: page headers (sticky top-0) and the Review bars
+    // (top-14) pin at fixed offsets, and a pinned banner would cover them.
+    <div className="relative z-50 w-full">
       {visible.map((a) => {
         const tone = TONE[a.severity] ?? TONE.info;
         const windowText = formatWindow(a);

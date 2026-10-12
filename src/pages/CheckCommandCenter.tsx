@@ -1163,7 +1163,7 @@ export default function CheckCommandCenter() {
   }, [tenantId, qc]);
 
   return (
-    <div className="space-y-4 max-w-full overflow-x-hidden">
+    <div className="space-y-4 max-w-full overflow-x-clip">
       <div className="flex flex-wrap items-start sm:items-center justify-between gap-2">
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold tracking-tight">ChecksOps</h1>
@@ -1841,8 +1841,12 @@ export default function CheckCommandCenter() {
               </CardContent>
             </Card>
 
+            {/* overflow-hidden only from md up: on phones it would make this wrapper the
+                sticky container, pushing the top-14 / top-[104px] Review bars down over
+                the panel content. Ancestors use overflow-x-clip (not hidden) for the same
+                reason, so the bars pin under the app header. */}
             <div
-              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${
+              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 md:overflow-hidden w-full ${
                 isMobile && !reviewCheckId ? "hidden" : ""
               }`}
               style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}

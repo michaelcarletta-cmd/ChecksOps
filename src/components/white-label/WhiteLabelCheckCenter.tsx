@@ -112,7 +112,7 @@ export function WhiteLabelCheckCenter() {
           </Button>
         </div>
       </header>
-      <main className="p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+      <main className="p-2 sm:p-3 md:p-6 max-w-full overflow-x-clip">
         <Suspense fallback={<PageLoader />}>
           <CheckCommandCenter />
         </Suspense>
