@@ -392,3 +392,24 @@ test('REPLACE receipt ownership and reviewed-hash requirement are unchanged', as
   assert.deepEqual(input.owned_member_ops, { replace: ['tenant-management-v2.mjs'], add: [] });
   assert.deepEqual(input.preflight_live_fingerprint, { codeSha256: live.codeSha256, revisionId: live.revisionId });
 });
+
+test('workflow never interpolates expressions into run scripts', () => {
+  const lines = workflow.split('\n');
+  const offenders = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = lines[i].match(/^(\s*)run: (\|)?(.*)$/);
+    if (!match) continue;
+    if (!match[2]) {
+      if (match[3].includes('${{')) offenders.push(i + 1);
+      continue;
+    }
+    const indent = match[1].length;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const line = lines[j];
+      if (line.trim() && line.match(/^(\s*)/)[1].length <= indent) break;
+      if (line.includes('${{')) offenders.push(j + 1);
+    }
+  }
+  assert.deepEqual(offenders, [], `run scripts must read inputs and outputs through env (lines ${offenders.join(', ')})`);
+  assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
+});
