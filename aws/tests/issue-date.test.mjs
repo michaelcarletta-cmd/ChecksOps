@@ -128,7 +128,7 @@ test('date-only columns are never displayed through new Date(...)', () => {
       if (entry.isDirectory()) walk(file);
       else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
         const text = fs.readFileSync(file, 'utf8');
-        const re = /new Date\([^)]*\b(issue_date|loss_date|follow_up_date|due_date)\)/g;
+        const re = /new Date\([^)]*\b(issue_date|loss_date|date_of_loss|follow_up_date|due_date)\)/g;
         if (re.test(text)) offenders.push(file);
       }
     }
