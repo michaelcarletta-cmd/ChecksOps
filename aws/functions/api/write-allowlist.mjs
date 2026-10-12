@@ -66,15 +66,11 @@ const INTAKE_SAFE_COLUMNS = [
 ];
 
 // Any user may correct these, but only while the check is still in Review;
-// write-check-workflow.mjs enforces check_stage = review or a Review status
-// in the UPDATE itself. To change them later the check must be moved back to Review.
+// write-check-workflow.mjs enforces check_stage in the UPDATE itself (the same
+// field the Review queue filters on). To change them later the check must be
+// moved back to Review.
 export const REVIEW_FINANCIAL_COLUMNS = Object.freeze(['amount', 'routing_number', 'account_number']);
-export const REVIEW_EDITABLE_STATUSES = Object.freeze([
-  'uploaded',
-  'needs_review',
-  'ocr_complete',
-  'manual_review_required',
-]);
+export const REVIEW_CHECK_STAGE = 'review';
 
 export const INTAKE_PROHIBITED_COLUMNS = new Set([
   'pa_fee_amount',

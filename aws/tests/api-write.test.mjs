@@ -372,8 +372,9 @@ test('amount, routing and account change only while the check is in Review', asy
     assert.match(result.message, /back to Review/);
   }
   const update = blocked.queries.find((q) => /UPDATE public.check_intake_items/.test(String(q.sql)));
-  assert.match(String(update.sql), /AND \(status = ANY\(\$\d+::text\[\]\) OR check_stage = 'review'\)/);
-  assert.deepEqual(update.params.at(-1), ['uploaded', 'needs_review', 'ocr_complete', 'manual_review_required']);
+  assert.match(String(update.sql), /AND check_stage::text = \$\d+::text/);
+  assert.doesNotMatch(String(update.sql), /status = ANY/);
+  assert.equal(update.params.at(-1), 'review');
 
   // In Review the guarded UPDATE returns the row and the values are normalized.
   const inReview = mockClient({ rows: [{ id: CHECK_ID, amount: 1250.5 }] });
@@ -412,7 +413,7 @@ test('amount, routing and account change only while the check is in Review', asy
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(descriptive));
   const descUpdate = descriptive.queries.find((q) => /UPDATE public.check_intake_items/.test(String(q.sql)));
-  assert.doesNotMatch(String(descUpdate.sql), /status = ANY/);
+  assert.doesNotMatch(String(descUpdate.sql), /check_stage/);
 });
 
 test('financial intake values are validated', async () => {

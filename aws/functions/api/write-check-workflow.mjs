@@ -1,5 +1,5 @@
 import { ident } from './data.mjs';
-import { REVIEW_EDITABLE_STATUSES, REVIEW_FINANCIAL_COLUMNS, WRITE_ALLOWLIST } from './write-allowlist.mjs';
+import { REVIEW_CHECK_STAGE, REVIEW_FINANCIAL_COLUMNS, WRITE_ALLOWLIST } from './write-allowlist.mjs';
 import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -366,15 +366,15 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     endorsement_render_meta: 'jsonb',
   });
   built.params.push(checkId);
-  // Amount, routing and account change only while the check is in Review.
-  // Review membership is check_stage = review (including migrated rows whose
-  // status is still processing / in_review) or one of the legacy Review statuses.
-  // The predicate is part of the UPDATE so a concurrently routed check cannot slip through.
+  // Amount, routing and account change only while the check is in Review
+  // (check_stage = review, which the Review queue filters on; status alone can
+  // be stale after a stage override). The stage test is part of the UPDATE so a
+  // check routed concurrently cannot slip through.
   const financial = REVIEW_FINANCIAL_COLUMNS.some((column) => column in nextValues);
   let reviewGuard = '';
   if (financial) {
-    built.params.push([...REVIEW_EDITABLE_STATUSES]);
-    reviewGuard = ` AND (status = ANY($${built.next + 1}::text[]) OR check_stage = 'review')`;
+    built.params.push(REVIEW_CHECK_STAGE);
+    reviewGuard = ` AND check_stage::text = $${built.next + 1}::text`;
   }
   const rows = (await client.query(
     `UPDATE public.check_intake_items
