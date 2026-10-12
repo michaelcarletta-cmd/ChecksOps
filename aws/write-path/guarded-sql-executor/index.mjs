@@ -15,6 +15,7 @@ import {
   AUTHORIZED_SQL39,
   AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
+  AUTHORIZED_LEDGER_20261007193200,
   AUTHORIZED_SQL53,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   SQL_EXECUTOR_FUNCTION,
@@ -22,6 +23,7 @@ import {
   evaluateSqlExecutorAuthorization,
   isSql39,
   isSql40,
+  isLedger20261007193200,
   isSql44AuthorizedMigration,
   isSql53AuthorizedMigration,
   isTenantUsersSameCheckPermissions,
@@ -59,6 +61,10 @@ const TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE = path.join(
   'sql/20261001193100_tenant_users_can_override_check_status.sql',
 );
 const SQL53_FILE = path.join(ROOT, 'sql/53_claim_settlement_breakdown.sql');
+const LEDGER_20261007193200_FILE = path.join(
+  ROOT,
+  'sql/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql',
+);
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -1267,6 +1273,268 @@ async function handleSql53({
   }
 }
 
+const LEDGER_TRIGGER_SQL = `
+SELECT t.tgname AS name, p.proname AS function_name, pg_get_triggerdef(t.oid) AS def
+FROM pg_trigger t
+JOIN pg_proc p ON p.oid = t.tgfoid
+WHERE t.tgrelid = to_regclass($1::text) AND NOT t.tgisinternal
+ORDER BY t.tgname
+`.trim();
+const LEDGER_EVENT_COUNT_SQL = 'SELECT count(*)::text AS n FROM public.homeowner_ledger_events';
+// The file may hold exactly one statement: the CREATE OR REPLACE of the pinned function.
+const LEDGER_SINGLE_STATEMENT_RE = /^\s*CREATE OR REPLACE FUNCTION public\.sync_homeowner_ledger_from_check\(\)\s+RETURNS TRIGGER\b[^$]*\bAS \$\$(?:(?!\$\$)[\s\S])*\$\$;\s*$/;
+const LEDGER_FORBIDDEN_MARKERS = [
+  'hle_on_check_intake_insert',
+  'claim_ledger_link_or_create',
+  'save_claim_settlement_breakdown',
+  'one_check_received_writer',
+  'aws_can_write_claim',
+];
+
+function ledgerSqlForbiddenMutation(sqlText) {
+  const text = String(sqlText || '');
+  if (!LEDGER_SINGLE_STATEMENT_RE.test(text)) return 'not a single CREATE OR REPLACE of the pinned function';
+  if (/\b(DROP|ALTER|GRANT|REVOKE|TRUNCATE|DELETE)\b/i.test(text)) return 'DROP|ALTER|GRANT|REVOKE|TRUNCATE|DELETE';
+  if (/\bCREATE\s+(OR\s+REPLACE\s+)?TRIGGER\b/i.test(text)) return 'CREATE TRIGGER';
+  for (const marker of LEDGER_FORBIDDEN_MARKERS) {
+    if (text.includes(marker)) return marker;
+  }
+  return null;
+}
+
+async function readLedgerState(client, pin = AUTHORIZED_LEDGER_20261007193200) {
+  const target = await readFunctionDef(client, pin.function_identity);
+  if (!target.ok) return target;
+  const preserved = [];
+  for (const [identity, expected] of Object.entries(pin.preserved_function_definition_sha256)) {
+    const lookup = await readFunctionDef(client, identity);
+    if (!lookup.ok) return lookup;
+    const exists = lookup.details.exists === true;
+    preserved.push({
+      identity,
+      exists,
+      definitionSha256: exists ? hashSqlDefinition(lookup.details.definition) : null,
+      expectedSha256: expected,
+    });
+  }
+  const triggerRows = (await client.query(LEDGER_TRIGGER_SQL, [pin.trigger_table]))?.rows || [];
+  const triggers = triggerRows.map((row) => ({
+    name: row.name,
+    function_name: row.function_name,
+    definitionSha256: hashSqlDefinition(row.def),
+  }));
+  const eventCount = String((await client.query(LEDGER_EVENT_COUNT_SQL))?.rows?.[0]?.n ?? '');
+  const exists = target.details.exists === true;
+  return ok({
+    exists,
+    live_definition_sha256: exists ? hashSqlDefinition(target.details.definition) : null,
+    preserved_functions: preserved,
+    triggers,
+    triggers_sha256: hashSqlDefinition(JSON.stringify(triggers)),
+    ledger_event_count: eventCount,
+  });
+}
+
+function ledgerPreconditionErrors(state, pin = AUTHORIZED_LEDGER_20261007193200) {
+  const drifted = state.preserved_functions
+    .filter((row) => row.definitionSha256 !== row.expectedSha256)
+    .map((row) => row.identity);
+  const byName = new Map(state.triggers.map((row) => [row.name, row.function_name]));
+  const missingTriggers = Object.entries(pin.required_ledger_triggers)
+    .filter(([name, fn]) => byName.get(name) !== fn)
+    .map(([name]) => name);
+  return { drifted, missingTriggers };
+}
+
+function ledgerPinExact(event = {}, pin = AUTHORIZED_LEDGER_20261007193200) {
+  return event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit;
+}
+
+async function handleLedger20261007193200({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFileLedger,
+}) {
+  const pin = AUTHORIZED_LEDGER_20261007193200;
+  const embedded = readEmbeddedSql(sqlFileLedger, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  const forbidden = ledgerSqlForbiddenMutation(embedded.details.text);
+  if (forbidden) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded ledger SQL contains a forbidden mutation', {
+      marker: forbidden,
+    });
+  }
+
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported ledger executor action ${event.action}`);
+  }
+  if (event.action === 'apply' && !ledgerPinExact(event, pin)) {
+    return fail(CODES.SQL_COLLISION, 'ledger apply is bound to the exact allowlisted pin', {
+      filename: event.filename || null,
+      migration_id: event.migration_id || null,
+      expected_live_definition_sha256: event.expected_live_definition_sha256 || null,
+    });
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+
+    if (readOnly) {
+      const state = await readLedgerState(client, pin);
+      if (!state.ok) return state;
+      const { drifted, missingTriggers } = ledgerPreconditionErrors(state.details, pin);
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          function_identity: pin.function_identity,
+          ...state.details,
+          apply_preconditions_met: state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && drifted.length === 0
+            && missingTriggers.length === 0,
+          drifted_preserved_functions: drifted,
+          missing_ledger_triggers: missingTriggers,
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [pin.function_identity]);
+
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+
+    const before = await readLedgerState(client, pin);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    const liveHash = before.details.live_definition_sha256;
+    if (before.details.exists !== true) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'ledger apply is replace-only; the function is missing', {
+        function_identity: pin.function_identity,
+      });
+    }
+    if (liveHash === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'ledger function already matches the intended definition; refuse replace', {
+        live_definition_sha256: liveHash,
+      });
+    }
+    const collision = evaluateSqlCollision({
+      filename: event.filename,
+      migration_id: event.migration_id,
+      source_sha256: event.source_sha256,
+      target_environment: 'staging',
+      expected_live_definition_sha256: event.expected_live_definition_sha256,
+      live_definition_sha256: liveHash,
+    });
+    if (!collision.ok) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'expected live fingerprint changed immediately before apply', {
+        expected_live_definition_sha256: event.expected_live_definition_sha256,
+        live_definition_sha256: liveHash,
+      });
+    }
+    const pre = ledgerPreconditionErrors(before.details, pin);
+    if (pre.drifted.length || pre.missingTriggers.length) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'ledger preconditions do not hold immediately before apply', {
+        drifted_preserved_functions: pre.drifted,
+        missing_ledger_triggers: pre.missingTriggers,
+      });
+    }
+
+    await client.query(embedded.details.text);
+
+    const after = await readLedgerState(client, pin);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'applied ledger definition does not match the intended hash', {
+        after_hash: after.details.live_definition_sha256,
+        intended_replacement_sha256: pin.intended_replacement_sha256,
+      });
+    }
+    const post = ledgerPreconditionErrors(after.details, pin);
+    if (post.drifted.length || post.missingTriggers.length
+      || after.details.triggers_sha256 !== before.details.triggers_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'ledger apply changed a preserved function or trigger', {
+        drifted_preserved_functions: post.drifted,
+        missing_ledger_triggers: post.missingTriggers,
+        triggers_before_sha256: before.details.triggers_sha256,
+        triggers_after_sha256: after.details.triggers_sha256,
+      });
+    }
+    if (after.details.ledger_event_count !== before.details.ledger_event_count) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'ledger apply changed homeowner_ledger_events rows', {
+        before: before.details.ledger_event_count,
+        after: after.details.ledger_event_count,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveHash,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        function_identity: pin.function_identity,
+        preserved_functions: after.details.preserved_functions,
+        triggers: after.details.triggers,
+        ledger_event_count: after.details.ledger_event_count,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function createHandler({
   connect = defaultConnect,
   now = () => Date.now(),
@@ -1274,6 +1542,7 @@ export function createHandler({
   sqlFile601 = TENANT_PERMISSIONS_SQL_FILE,
   sqlFile601Predecessor = TENANT_PERMISSIONS_PREDECESSOR_SQL_FILE,
   sqlFile53 = SQL53_FILE,
+  sqlFileLedger = LEDGER_20261007193200_FILE,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -1304,6 +1573,16 @@ export function createHandler({
         connect,
         sqlFile53,
         expectedSql53AfterHash,
+      });
+    }
+
+    if (isLedger20261007193200(event)) {
+      return handleLedger20261007193200({
+        event,
+        authorization,
+        identity,
+        connect,
+        sqlFileLedger,
       });
     }
 
