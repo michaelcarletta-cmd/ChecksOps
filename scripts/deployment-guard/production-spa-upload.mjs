@@ -30,7 +30,7 @@ function sha256Text(text) {
 }
 
 function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+  const match = String(html || '').match(/\/assets\/index-[^"'\s]+\.js/);
   return match ? match[0] : null;
 }
 
@@ -85,7 +85,7 @@ function createAwsAdapter(env) {
         });
       }
     },
-    async putObject({ bucket, key, bodyPath, contentType, cacheControl }) {
+    async putObject({ bucket, key, bodyPath, contentType, cacheControl, ifMatch }) {
       try {
         const args = [
           's3api', 'put-object',
@@ -95,6 +95,8 @@ function createAwsAdapter(env) {
         ];
         if (contentType) args.push('--content-type', contentType);
         if (cacheControl) args.push('--cache-control', cacheControl);
+        // S3 conditional write: fails with 412 if the object changed since it was read.
+        if (ifMatch) args.push('--if-match', `"${String(ifMatch).replaceAll('"', '')}"`);
         const out = awsJson(args, env);
         return ok({
           key,

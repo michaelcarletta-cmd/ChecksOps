@@ -120,13 +120,13 @@ function createFakeAws({ liveBefore, liveBeforeIndex = '<html></html>' } = {}) {
         current = {
           ...current,
           index_html_sha256: sha256Text(afterIndexHtml),
-          entry_bundle: (String(afterIndexHtml).match(/\/assets\/index-[^"'\\s]+\.js/) || [null])[0],
+          entry_bundle: (String(afterIndexHtml).match(/\/assets\/index-[^"'\s]+\.js/) || [null])[0],
         };
       }
       return okResult({ fingerprint: current, head: { VersionId: current.s3_version_id || null } });
     },
-    async putObject({ bucket, key }) {
-      calls.push({ method: 'putObject', bucket, key });
+    async putObject({ bucket, key, ifMatch }) {
+      calls.push({ method: 'putObject', bucket, key, ifMatch });
       if (key === 'index.html') indexUploaded = true;
       return okResult({ key, s3_version_id: 'v-new' });
     },
@@ -219,7 +219,16 @@ test('production SPA writer: happy-path upload order, drift checks, and post-ver
   const indexPutIdx = aws.calls.findIndex((c) => c.method === 'putObject' && c.key === 'index.html');
   assert.ok(invalidationIdx > indexPutIdx, 'expected invalidation after index.html upload');
   assert.deepEqual(aws.calls[invalidationIdx].paths, ['/*']);
+  assert.equal(aws.calls[indexPutIdx].ifMatch, 'etag-live', 'index.html switch must be conditional on the re-read ETag');
+  assert.ok(aws.calls.filter((c) => c.method === 'putObject' && c.key !== 'index.html').every((c) => !c.ifMatch));
   assert.equal(result.details.receipt.mac, issued.receipt.mac);
+});
+
+test('production SPA writer: entry bundles whose hash contains "s" are recognised', () => {
+  const root = tmpRootWithOps();
+  const fp = distFingerprint(writeDist(root, { entry: '/assets/index-Bs3xQs9a.js' }));
+  assert.equal(fp.ok, true, JSON.stringify(fp));
+  assert.equal(fp.details.entry_bundle, '/assets/index-Bs3xQs9a.js');
 });
 
 test('production SPA writer: host verification retries while CloudFront still serves the old index', async () => {
@@ -1260,6 +1269,7 @@ test('production SPA writer: failed supersession verify does not advance the loc
     receiptRegistry: createSharedReceiptRegistry(),
     fetchImpl: fetchFromDist(distDir, { overrideIndexHtml: '<html>WRONG</html>' }),
     now: NOW,
+    sleep: async () => {},
   });
 
   assert.equal(result.ok, false);

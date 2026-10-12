@@ -16,6 +16,7 @@ import {
   validateLiveMatchesLock,
   validateProductionBuildEnv,
   validateSourceComposition,
+  verifyStagingAcceptance,
   workflowIdentity,
 } from '../../scripts/deployment-guard/github-production-spa-upload.mjs';
 import { loadContractRegistry } from '../../scripts/deployment-guard/lib/contracts.mjs';
@@ -35,8 +36,12 @@ const LIVE = {
 };
 const ACCEPTANCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38255758030';
 const BASE_ENV = { GITHUB_SHA: SHA, GITHUB_REF_NAME: 'main', GITHUB_ACTOR: 'operator', GITHUB_RUN_ID: '9876' };
+const ACCEPTED_SHA = 'b'.repeat(40);
+const githubRun = (body, status = 200) => async () => ({ ok: status === 200, status, json: async () => body });
+const SUCCESS_RUN = githubRun({ status: 'completed', conclusion: 'success', head_sha: ACCEPTED_SHA });
 const APPLY_ENV = {
   ...BASE_ENV,
+  GITHUB_TOKEN: 'test-token',
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_EXPECTED_LIVE_INDEX_SHA256: LIVE.index_html_sha256,
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
@@ -45,7 +50,8 @@ const APPLY_ENV = {
 const registry = loadContractRegistry(REPO_ROOT);
 const workflow = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/guarded-production-spa-upload.yml'), 'utf8');
 
-const tempRoot = (t, entry = '/assets/index-NewBuild1.js') => {
+// The default candidate hash contains an 's', which a mis-escaped regex once rejected.
+const tempRoot = (t, entry = '/assets/index-NewBuilds1.js') => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-production-spa-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
@@ -64,6 +70,7 @@ const applyDeps = (root, extra = {}) => ({
   registry,
   contractRunner: () => true,
   isAncestor: () => true,
+  fetchImpl: SUCCESS_RUN,
   ...extra,
 });
 const guardFiles = (root) => fs.existsSync(path.join(root, '.deployment-guard'));
@@ -103,6 +110,29 @@ test('build environment must be the production Cognito pool on checksops.com wit
   }
 });
 
+test('staging acceptance is verified on GitHub: successful run or merged PR, on this commit or an ancestor', async () => {
+  const ancestorOf = (a) => a === ACCEPTED_SHA;
+  const ok = await verifyStagingAcceptance(ACCEPTANCE, SHA, { fetchImpl: SUCCESS_RUN, token: 't', isAncestor: ancestorOf });
+  assert.equal(ok.accepted_sha, ACCEPTED_SHA);
+  const pr = 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/904';
+  assert.equal((await verifyStagingAcceptance(pr, SHA, { fetchImpl: githubRun({ merged: true, merge_commit_sha: ACCEPTED_SHA }), token: 't', isAncestor: ancestorOf })).kind, 'pull');
+  const refusals = [
+    [ACCEPTANCE, { fetchImpl: SUCCESS_RUN, token: '' }, /GITHUB_TOKEN/],
+    [ACCEPTANCE, { fetchImpl: githubRun({}, 404), token: 't' }, /could not be read/],
+    [ACCEPTANCE, { fetchImpl: githubRun({ status: 'completed', conclusion: 'failure', head_sha: ACCEPTED_SHA }), token: 't' }, /did not succeed/],
+    [ACCEPTANCE, { fetchImpl: githubRun({ status: 'in_progress', conclusion: null, head_sha: ACCEPTED_SHA }), token: 't' }, /did not succeed/],
+    [ACCEPTANCE, { fetchImpl: SUCCESS_RUN, token: 't', isAncestor: () => false }, /not for this commit/],
+    [pr, { fetchImpl: githubRun({ merged: false, merge_commit_sha: ACCEPTED_SHA }), token: 't' }, /not merged/],
+    ['https://example.com/run/1', { fetchImpl: SUCCESS_RUN, token: 't' }, /ChecksOps GitHub run or PR/],
+  ];
+  for (const [reference, opts, pattern] of refusals) {
+    await assert.rejects(verifyStagingAcceptance(reference, SHA, { isAncestor: ancestorOf, ...opts }), pattern);
+  }
+  let calledUrl;
+  await verifyStagingAcceptance(ACCEPTANCE, SHA, { fetchImpl: async (url, init) => { calledUrl = [url, init.headers.authorization]; return SUCCESS_RUN(); }, token: 'tok', isAncestor: ancestorOf });
+  assert.deepEqual(calledUrl, ['https://api.github.com/repos/michaelcarletta-cmd/ChecksOps/actions/runs/38255758030', 'Bearer tok']);
+});
+
 test('source composition requires the locked live source to be an ancestor of the commit', () => {
   assert.equal(validateSourceComposition(LOCK, SHA, { isAncestor: () => false }).code, CODES.SOURCE_COMPOSITION_REQUIRED);
   const okResult = validateSourceComposition(LOCK, SHA, { isAncestor: (a, c) => a === LOCK.source_git_sha && c === SHA });
@@ -135,9 +165,10 @@ test('apply refusals happen before any lease or receipt', async (t) => {
     [{ CHECKSOPS_PRODUCTION_APPROVAL: 'DEPLOY TO PRODUCTION' }, {}, /approval phrase/],
     [{ CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: '' }, {}, /staging acceptance/],
     [{}, { readLive: async () => ({ ...LIVE, entry_bundle: '/assets/index-Drift.js' }) }, /not the release-locked baseline/],
-    [{}, { isAncestor: () => false }, /combine the frontend sources/],
+    [{}, { isAncestor: (a) => a !== LOCK.source_git_sha }, /combine the frontend sources/],
     [{}, { buildEnv: { ...PRODUCTION_BUILD_ENV, VITE_COGNITO_USER_POOL_ID: 'us-east-1_vPmQ7cL1F' } }, /build environment is invalid/],
     [{}, { contractRunner: (file) => !file.includes('claim-ledger') }, /claim-ledger/],
+    [{}, { fetchImpl: githubRun({ status: 'completed', conclusion: 'failure', head_sha: ACCEPTED_SHA }) }, /did not succeed/],
   ];
   for (const [envExtra, depsExtra, pattern] of cases) {
     const root = tempRoot(t);
@@ -166,6 +197,7 @@ test('apply issues a production-spa receipt and writer input that the official w
   const input = JSON.parse(fs.readFileSync(result.authorization.spaInput, 'utf8'));
   assert.equal(input.approval.workstream_id, 'github-production-spa-9876');
   assert.equal(input.staging_acceptance.reference, ACCEPTANCE);
+  assert.equal(input.staging_acceptance.accepted_sha, ACCEPTED_SHA);
   assert.equal(input.source_composition_manifest.live_source, LOCK.source_git_sha);
   assert.equal(input.deploy_mode, 'per_object_put');
 
@@ -212,6 +244,10 @@ test('workflow is main-only, production-environment, scoped by session policy, a
   assert.match(workflow, /approval_phrase must be exactly: DEPLOY WEBSITE TO PRODUCTION/);
   assert.match(workflow, /role\/ChecksOpsProductionSpaDeploy/);
   assert.match(workflow, /fetch-depth: 0/);
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  // The build runs before any AWS credentials exist in the job.
+  assert.ok(workflow.indexOf('bun run build:aws') < workflow.indexOf('configure-aws-credentials@'));
   assert.match(workflow, /node scripts\/deployment-guard\/production-spa-upload\.mjs --input/);
   assert.equal((workflow.match(/inline-session-policy/g) || []).length, 2);
   assert.doesNotMatch(workflow, /s3:DeleteObject|s3:ListBucket|s3 sync|s3 cp|s3 rm|--delete/);

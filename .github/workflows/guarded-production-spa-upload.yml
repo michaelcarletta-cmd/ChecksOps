@@ -39,6 +39,9 @@ on:
 permissions:
   contents: read
   id-token: write
+  # Read-only lookups that verify the staging acceptance reference.
+  actions: read
+  pull-requests: read
 
 concurrency:
   group: guarded-production-spa-upload
@@ -55,6 +58,7 @@ jobs:
         with:
           # Full history: apply proves the locked live source is an ancestor of this commit.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Refuse non-main or incomplete apply
         shell: bash
@@ -101,6 +105,24 @@ jobs:
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
           node scripts/deployment-guard/scan-bypass.mjs
 
+      # Build before any AWS credentials exist, so build-time code never holds production write access.
+      - name: Build fresh production SPA from main
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        # Public production Cognito values; github-production-spa-upload.mjs re-checks them exactly.
+        env:
+          VITE_AUTH_PROVIDER: cognito
+          VITE_APP_URL: https://checksops.com
+          VITE_CHECKSOPS_API_URL: /prep
+          VITE_AWS_REGION: us-east-1
+          VITE_COGNITO_USER_POOL_ID: us-east-1_h00WorYMT
+          VITE_COGNITO_USER_POOL_CLIENT_ID: 3ja9fqaq2fjkv3i6up2varcqpe
+        run: |
+          set -euo pipefail
+          test ! -e dist || { echo "dist already exists in a fresh checkout"; exit 2; }
+          echo "CHECKSOPS_BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          bun run build:aws
+
       - name: Validate production OIDC inputs
         shell: bash
         run: |
@@ -145,23 +167,6 @@ jobs:
           fi
           test "$ARN" = "$EXPECTED" || { echo "Unexpected AWS role identity"; exit 2; }
 
-      - name: Build fresh production SPA from main
-        if: ${{ inputs.mode == 'apply' }}
-        shell: bash
-        # Public production Cognito values; github-production-spa-upload.mjs re-checks them exactly.
-        env:
-          VITE_AUTH_PROVIDER: cognito
-          VITE_APP_URL: https://checksops.com
-          VITE_CHECKSOPS_API_URL: /prep
-          VITE_AWS_REGION: us-east-1
-          VITE_COGNITO_USER_POOL_ID: us-east-1_h00WorYMT
-          VITE_COGNITO_USER_POOL_CLIENT_ID: 3ja9fqaq2fjkv3i6up2varcqpe
-        run: |
-          set -euo pipefail
-          test ! -e dist || { echo "dist already exists in a fresh checkout"; exit 2; }
-          echo "CHECKSOPS_BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-          bun run build:aws
-
       - name: Inspect and authorize exact live index.html
         id: preflight
         shell: bash
@@ -170,6 +175,7 @@ jobs:
           CHECKSOPS_EXPECTED_LIVE_INDEX_SHA256: ${{ inputs.expected_live_index_sha256 }}
           CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ${{ inputs.staging_acceptance_reference }}
           CHECKSOPS_PRODUCTION_APPROVAL: ${{ inputs.approval_phrase }}
+          GITHUB_TOKEN: ${{ github.token }}
           VITE_AUTH_PROVIDER: cognito
           VITE_APP_URL: https://checksops.com
           VITE_CHECKSOPS_API_URL: /prep
@@ -221,7 +227,13 @@ jobs:
           CANDIDATE_ENTRY: ${{ steps.preflight.outputs.candidate_entry_bundle }}
         run: |
           set -euo pipefail
-          served="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' "https://checksops.com/?verify=$GITHUB_RUN_ID" | grep -oE '/assets/index-[^"]+\.js' | head -1 || true)"
+          # '/' is cached separately from /index.html; give the '/*' invalidation time to finish.
+          served=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            served="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' "https://checksops.com/?verify=$GITHUB_RUN_ID-$attempt" | grep -oE '/assets/index-[^"]+\.js' | head -1 || true)"
+            [ "$served" = "$CANDIDATE_ENTRY" ] && break
+            sleep 15
+          done
           test "$served" = "$CANDIDATE_ENTRY" || { echo "https://checksops.com/ serves '$served', expected '$CANDIDATE_ENTRY'"; exit 2; }
           curl -fsS --max-time 20 -o /dev/null "https://checksops.com$CANDIDATE_ENTRY"
           health="$(curl -fsS --max-time 20 https://checksops.com/prep/health)"

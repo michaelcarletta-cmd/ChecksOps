@@ -25,7 +25,7 @@ function sha256File(file) {
 }
 
 function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+  const match = String(html || '').match(/\/assets\/index-[^"'\s]+\.js/);
   return match ? match[0] : null;
 }
 
@@ -370,13 +370,18 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   });
   if (!toctou.ok) return toctou;
 
-  // Upload index.html last.
+  // Upload index.html last, conditional on the ETag just re-read so a concurrent writer cannot be overwritten.
+  const switchEtag = immediatelyBefore.details.fingerprint?.etag || null;
+  if (!switchEtag) {
+    return fail(CODES.DEPLOYMENT_COLLISION, 'live index.html has no ETag; refusing an unconditional index switch');
+  }
   const indexPut = await aws.putObject({
     bucket: target.s3_bucket,
     key: 'index.html',
     bodyPath: path.join(dist.details.dist, 'index.html'),
     contentType: 'text/html; charset=utf-8',
     cacheControl: 'no-cache,no-store,must-revalidate',
+    ifMatch: switchEtag,
   });
   if (!indexPut?.ok) return indexPut || fail(CODES.DEPLOYMENT_COLLISION, 'index.html upload failed');
 
@@ -409,7 +414,11 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   const sleep = ctx.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   let hostVerify;
   for (let attempt = 1; attempt <= verifyAttempts; attempt += 1) {
-    hostVerify = await verifySpaHost({ fetchImpl, host: target.host, expected });
+    try {
+      hostVerify = await verifySpaHost({ fetchImpl, host: target.host, expected });
+    } catch (error) {
+      hostVerify = fail(CODES.DEPLOYMENT_COLLISION, 'post-deploy host verification request failed', { error: String(error?.message || error) });
+    }
     if (hostVerify.ok || attempt === verifyAttempts) break;
     await sleep(verifyDelayMs);
   }

@@ -8,7 +8,7 @@
  *          lock, the locked live source as an ancestor of this main commit (so the
  *          build composes every live frontend change), a fresh `vite build --mode aws`
  *          for checksops.com, every accepted contract passing, a staging acceptance
- *          reference and the exact approval phrase. It then evaluates spa-promote,
+ *          reference verified on GitHub and the exact approval phrase. It then evaluates spa-promote,
  *          takes the production-spa lease, issues a receipt and writes the input for
  *          production-spa-upload.mjs. This script never writes S3 or CloudFront.
  */
@@ -149,6 +149,40 @@ export function validateSourceComposition(lock, commit, { isAncestor = defaultIs
   return { ok: true, details: { live_source: lock.source_git_sha, commit, live_source_is_ancestor: true } };
 }
 
+/**
+ * The staging acceptance reference must be real: a successful ChecksOps run or a merged
+ * ChecksOps PR whose commit is this commit or one of its ancestors.
+ */
+export async function verifyStagingAcceptance(reference, commit, { fetchImpl = globalThis.fetch, token, isAncestor = defaultIsAncestor } = {}) {
+  const match = String(reference || '').match(STAGING_ACCEPTANCE_RE);
+  if (!match) throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, 'staging acceptance must be a ChecksOps GitHub run or PR URL');
+  if (!token) throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, 'GITHUB_TOKEN is required to verify the staging acceptance reference');
+  const api = 'https://api.github.com/repos/michaelcarletta-cmd/ChecksOps';
+  const runId = reference.match(/\/actions\/runs\/(\d+)/)?.[1];
+  const prNumber = reference.match(/\/pull\/(\d+)$/)?.[1];
+  const res = await fetchImpl(runId ? `${api}/actions/runs/${runId}` : `${api}/pulls/${prNumber}`, {
+    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
+  });
+  if (!res?.ok) {
+    throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, 'staging acceptance reference could not be read from GitHub', { status: res?.status ?? null });
+  }
+  const body = await res.json();
+  let sha;
+  if (runId) {
+    if (body.status !== 'completed' || body.conclusion !== 'success') {
+      throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, 'staging acceptance run did not succeed', { status: body.status, conclusion: body.conclusion });
+    }
+    sha = body.head_sha;
+  } else {
+    if (body.merged !== true) throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, 'staging acceptance PR is not merged');
+    sha = body.merge_commit_sha;
+  }
+  if (!/^[0-9a-f]{40}$/.test(String(sha || '')) || !isAncestor(sha, commit)) {
+    throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, 'staging acceptance is not for this commit or one of its ancestors', { accepted_sha: sha || null, commit });
+  }
+  return { ok: true, reference, accepted_sha: sha, kind: runId ? 'run' : 'pull' };
+}
+
 const defaultContractRunner = (testPath) => {
   const args = testPath.endsWith('.test.mjs') ? ['--experimental-strip-types', '--test', testPath] : [testPath];
   return spawnSync(process.execPath, args, { cwd: repoRoot, encoding: 'utf8', stdio: 'inherit' }).status === 0;
@@ -205,6 +239,11 @@ export async function run(env = process.env, deps = {}) {
   if (!expected.ok) throw new GuardError(expected.code, expected.message, expected.details || {});
   if (!lockMatch.ok) throw new GuardError(lockMatch.code, lockMatch.message, lockMatch.details);
   validateApplyInputs({ approval: env.CHECKSOPS_PRODUCTION_APPROVAL, stagingAcceptance: env.CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE });
+  const accepted = await verifyStagingAcceptance(env.CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE, identity.commit, {
+    fetchImpl: deps.fetchImpl,
+    token: env.GITHUB_TOKEN,
+    isAncestor: deps.isAncestor,
+  });
   const composition = validateSourceComposition(lock, identity.commit, { isAncestor: deps.isAncestor });
   if (!composition.ok) throw new GuardError(composition.code, composition.message, composition.details);
   const buildEnv = validateProductionBuildEnv(deps.buildEnv || env);
@@ -220,7 +259,7 @@ export async function run(env = process.env, deps = {}) {
   const contractResults = runContractTests(registry, { runner: deps.contractRunner });
   const fingerprint = { index_html_sha256: live.index_html_sha256, entry_bundle: live.entry_bundle };
   const approval = { approved: true, workstream_id: identity.workstreamId, phrase: APPROVAL_PHRASE, approver: identity.operator };
-  const stagingAcceptance = { ok: true, reference: String(env.CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE) };
+  const stagingAcceptance = { ok: true, reference: accepted.reference, accepted_sha: accepted.accepted_sha };
   const buildTimestamp = env.CHECKSOPS_BUILD_TIMESTAMP || new Date().toISOString();
   const shared = {
     workstream_id: identity.workstreamId,
