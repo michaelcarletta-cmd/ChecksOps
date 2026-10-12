@@ -471,12 +471,13 @@ export default function CheckCommandCenter() {
     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
   }, [bulkSelected, user?.id, clearBulk, qc, tenantId]);
 
-  // On mobile, scroll to top when a check is opened or review check is opened
+  // On mobile, scroll to top when a check is opened. Review-panel open is
+  // handled by scrollReviewPanelToTop so the two scrolls do not fight.
   useEffect(() => {
-    if (isMobile && (selectedCheck || reviewCheckId)) {
+    if (isMobile && selectedCheck) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [selectedCheck, reviewCheckId, isMobile]);
+  }, [selectedCheck, isMobile]);
 
   // Realtime: consolidated in useCheckCommandRealtime (debounced invalidations).
   useCheckCommandRealtime(tenantId);
