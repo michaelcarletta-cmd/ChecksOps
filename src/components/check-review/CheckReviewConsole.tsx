@@ -801,6 +801,7 @@ export function ReviewDecisionPanel({
     },
   });
 
+  const skippedDecisionFieldsRef = useRef<string[]>([]);
   const submitDecision = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
@@ -830,13 +831,17 @@ export function ReviewDecisionPanel({
         accountNumber,
       });
 
-      if (Object.keys(updates).length > 0) {
+      // AWS rejects the whole write if it carries a prohibited column, which used to
+      // block routing; save what AWS accepts and report what it did not.
+      const persist = isAwsStaging() ? pickAwsSafeIntakeUpdates(updates) : { safe: updates, skipped: [] as string[] };
+      if (Object.keys(persist.safe).length > 0) {
         const { error: updateError } = await supabase
           .from("check_intake_items")
-          .update({ ...updates, updated_at: new Date().toISOString() })
+          .update({ ...persist.safe, updated_at: new Date().toISOString() })
           .eq("id", checkId);
         if (updateError) throw updateError;
       }
+      skippedDecisionFieldsRef.current = persist.skipped;
 
       const { data, error } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: checkId,
@@ -864,6 +869,14 @@ export function ReviewDecisionPanel({
     },
     onSuccess: (data) => {
       formDirtyRef.current = false;
+      const skipped = skippedDecisionFieldsRef.current;
+      skippedDecisionFieldsRef.current = [];
+      if (skipped.length > 0) {
+        toast({
+          title: "Some field changes were not saved",
+          description: `This environment does not save: ${skipped.join(", ")}. The check was still routed.`,
+        });
+      }
       const stageLabel: Record<string, string> = {
         loss_draft: "Loss Draft",
         endorsing: "Endorsing",
