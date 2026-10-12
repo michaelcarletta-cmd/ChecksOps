@@ -1,0 +1,228 @@
+name: Guarded production Lambda overlay
+
+# One accepted member per run on checksops-production-prep-api. The production
+# environment requires reviewer approval before the job can assume the role.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect live production state or apply one accepted member"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - apply
+      member:
+        description: "Accepted member from ops/deployment-guard/production-api-overlay-plan.json"
+        required: true
+        type: choice
+        options:
+          - write-claim-settlement.mjs
+          - financial-remaining.mjs
+          - check-deposited.mjs
+          - workflow.mjs
+          - workflow-rpc.mjs
+          - claim-settlement-rpc.mjs
+          - data.mjs
+          - workflow-transitions.mjs
+      approved_commit:
+        description: "Required for apply: exact main commit approved for deployment"
+        required: false
+        default: ""
+        type: string
+      expected_live_member_sha256:
+        description: "Required for REPLACE apply: live member SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+      staging_acceptance_reference:
+        description: "Required for apply: ChecksOps GitHub run or PR URL recording staging acceptance"
+        required: false
+        default: ""
+        type: string
+      approval_phrase:
+        description: "Required for apply: exactly DEPLOY <member> TO PRODUCTION"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: guarded-production-lambda-overlay
+  cancel-in-progress: false
+
+jobs:
+  production-overlay:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+
+      - name: Refuse non-main or incomplete apply
+        shell: bash
+        # Inputs reach the script only through env, never as interpolated shell source.
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_MEMBER: ${{ inputs.member }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
+          INPUT_STAGING_ACCEPTANCE: ${{ inputs.staging_acceptance_reference }}
+          INPUT_APPROVAL_PHRASE: ${{ inputs.approval_phrase }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded production overlay only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          if [ "$INPUT_MODE" = "apply" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "apply requires a 40-character approved_commit"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "DEPLOY $INPUT_MEMBER TO PRODUCTION" || { echo "approval_phrase must be exactly: DEPLOY $INPUT_MEMBER TO PRODUCTION"; exit 2; }
+            test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "apply requires staging_acceptance_reference"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: latest
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/github-production-lambda-overlay.test.mjs
+          node --test aws/tests/production-lambda-source-reconciliation.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node --test aws/tests/lambda-overlay-apply-writer.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate production OIDC inputs
+        shell: bash
+        env:
+          PRODUCTION_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionLambdaOverlay"
+          test "$PRODUCTION_DEPLOY_ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN must be the dedicated production overlay role"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-production-overlay-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionLambdaOverlay/checksops-production-overlay-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Load production KMS verifier
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:806168576068:key/*) ;;
+            *) echo "invalid production deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
+
+      - name: Inspect and authorize exact live member
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_DEPLOY_MODE: ${{ inputs.mode }}
+          CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ${{ inputs.member }}
+          CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
+          CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ${{ inputs.staging_acceptance_reference }}
+          CHECKSOPS_PRODUCTION_APPROVAL: ${{ inputs.approval_phrase }}
+        run: node scripts/deployment-guard/github-production-lambda-overlay.mjs
+
+      - name: Record inspected live state
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          STATE: ${{ steps.preflight.outputs.state }}
+          OWNED_MEMBER: ${{ steps.preflight.outputs.owned_member }}
+          PLANNED_OPERATION: ${{ steps.preflight.outputs.planned_operation }}
+          ACCEPTED_SHA256: ${{ steps.preflight.outputs.accepted_sha256 }}
+          LIVE_CODE_SHA256: ${{ steps.preflight.outputs.live_code_sha256 }}
+          LIVE_REVISION_ID: ${{ steps.preflight.outputs.live_revision_id }}
+          LIVE_MEMBER_STATE: ${{ steps.preflight.outputs.live_member_state }}
+          LIVE_MEMBER_SHA256: ${{ steps.preflight.outputs.live_member_sha256 }}
+        run: |
+          {
+            echo "### Production Lambda overlay preflight"
+            echo "- Mode: \`$INPUT_MODE\` / state: \`$STATE\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Member: \`$OWNED_MEMBER\` (planned \`$PLANNED_OPERATION\`, accepted \`$ACCEPTED_SHA256\`)"
+            echo "- Live CodeSha256: \`$LIVE_CODE_SHA256\` / RevisionId: \`$LIVE_REVISION_ID\`"
+            echo "- Live member: \`$LIVE_MEMBER_STATE\` \`$LIVE_MEMBER_SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply through official receipt-gated overlay writer
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+          OVERLAY_INPUT: ${{ steps.preflight.outputs.overlay_input }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/lambda-overlay-apply.mjs --apply --input "$OVERLAY_INPUT"
+
+      - name: Verify live member is the accepted bytes
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_DEPLOY_MODE: verify
+          CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ${{ inputs.member }}
+        run: node scripts/deployment-guard/github-production-lambda-overlay.mjs
+
+      - name: Public production smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const base = 'https://checksops.com/prep';
+          for (const path of ['/health', '/db-health']) {
+            const res = await fetch(base + path, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+            let body = {};
+            try { body = JSON.parse(await res.text()); } catch {}
+            console.log(JSON.stringify({ path, httpStatus: res.status, status: body?.status ?? null }));
+            if (res.status !== 200 || body?.status !== 'ok') throw new Error(path + ' is not healthy');
+          }
+          NODE
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf .deployment-guard

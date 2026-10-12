@@ -1,0 +1,7 @@
+{
+  "Description": "ChecksOps GitHub production deployment-guard receipt signing only",
+  "KeySpec": "ECC_NIST_P256",
+  "KeyUsage": "SIGN_VERIFY",
+  "Alias": "alias/checksops-production-deployment-guard",
+  "Tags": [{ "TagKey": "Purpose", "TagValue": "deployment-guard-receipts-production" }]
+}
