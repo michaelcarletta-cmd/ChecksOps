@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-09-23T19:05:00Z",
+  "workstream": "feature-verification-mortgage-ops-authenticated",
+  "verdict": "BLOCKED",
+  "productionModified": false,
+  "cognitoModified": false,
+  "moneyPathsTouched": false,
+  "identityUsed": {
+    "email": "staging-mops-4b61bc@checksops.invalid",
+    "name": "Staging Mortgage Agent",
+    "pool": "us-east-1_vPmQ7cL1F",
+    "sub": "b4d8d428-2081-706b-04b0-e4694e568059",
+    "cognitoStatus": "CONFIRMED",
+    "enabled": true
+  },
+  "emailOtp": {
+    "start": {
+      "url": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/auth/passwordless/start",
+      "http": 200,
+      "challenge": "EMAIL_OTP",
+      "passwordUsed": false,
+      "deliveryDestinationMasked": "s***@c***"
+    },
+    "verify": "not_attempted",
+    "cognitoEmailSendingAccount": "COGNITO_DEFAULT",
+    "lambdaConfig": {},
+    "applicationSinkUsed": false
+  },
+  "otherIdentities": {
+    "forceChangeMopsUat": {
+      "count": 3,
+      "emailOtp": "409 email_otp_unavailable SELECT_CHALLENGE PASSWORD/PASSWORD_SRP"
+    },
+    "claimsAtFreedomadj": {
+      "cognito": "UserNotFoundException",
+      "historicalRoleSnapshot": "mortgage_agent",
+      "passwordlessStart": "200 enumeration-suppressed fake challenge"
+    }
+  },
+  "provisioningWorkflow": "Admin Mortgage Ops Hire Agent → POST /functions/v1/hire-mortgage-agent",
+  "deskStepsReached": [],
+  "stopReason": "Completing EMAIL_OTP for the existing isolated agent requires Cognito mail delivery or a CustomEmailSender/SES change. Frozen. Not implemented."
+}
