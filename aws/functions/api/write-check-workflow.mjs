@@ -1,6 +1,11 @@
 import { ident } from './data.mjs';
 import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
 import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
+import {
+  invalidateEndorsementsForMaterialPayeeChange,
+  isMaterialPayeeChange,
+  materialPayeeFieldsChanged,
+} from './endorsement-material-invalidation.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -71,7 +76,7 @@ const lookupPayee = async (client, payeeId) => {
   const invalid = requireUuid('id', payeeId);
   if (invalid) return invalid;
   const rows = (await client.query(
-    `SELECT p.id, p.check_id, p.tenant_id AS payee_tenant_id, c.tenant_id
+    `SELECT p.id, p.check_id, p.payee_name, p.payee_type, p.tenant_id AS payee_tenant_id, c.tenant_id
      FROM public.check_payees p
      JOIN public.check_intake_items c ON c.id = p.check_id
      WHERE p.id = $1::uuid`,
@@ -350,7 +355,7 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   return { rows };
 };
 
-const executePayees = async ({ client, op, values, filters }) => {
+const executePayees = async ({ client, mapping, op, values, filters }) => {
   if (op === 'insert') {
     const checkId = values.check_id;
     const looked = await lookupCheck(client, checkId);
@@ -407,6 +412,18 @@ const executePayees = async ({ client, op, values, filters }) => {
     built.params,
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'payee not writable' };
+  if (isMaterialPayeeChange(looked.payee, coerced.values)) {
+    await invalidateEndorsementsForMaterialPayeeChange(client, {
+      checkId: looked.payee.check_id,
+      payeeId: looked.payee.id,
+      previousName: looked.payee.payee_name,
+      newName: coerced.values.payee_name ?? looked.payee.payee_name,
+      previousType: looked.payee.payee_type,
+      newType: coerced.values.payee_type ?? looked.payee.payee_type,
+      materialFields: materialPayeeFieldsChanged(looked.payee, coerced.values),
+      actorId: mapping?.application_user_id || null,
+    });
+  }
   return { rows };
 };
 
@@ -1360,7 +1377,7 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (badFilters) return badFilters;
 
   if (table === 'check_intake_items') return executeIntakeUpdate({ client, values, filters });
-  if (table === 'check_payees') return executePayees({ client, op, values, filters });
+  if (table === 'check_payees') return executePayees({ client, mapping, op, values, filters });
   if (table === 'check_endorsements') return executeEndorsements({ client, op, values, filters });
   if (table === 'check_endorsement_events') return executeEndorsementEvents({ client, op, filters });
   if (table === 'check_audit_log') return executeAuditLog({ client, mapping, values });
