@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { INTAKE_PROHIBITED_COLUMNS, WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
+import { INTAKE_PROHIBITED_COLUMNS, REVIEW_FINANCIAL_COLUMNS, WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -121,7 +121,8 @@ test('generic claims INSERT and claim_id UPDATE remain denied; linked Save stays
   assert.equal(WRITE_ALLOWLIST.claims.columns.has('org_id'), false);
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('claim_id'), true);
   assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('claim_id'), false);
-  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('amount'), false);
+  // amount is writable only in Review (write-check-workflow.mjs guards the UPDATE).
+  assert.equal(REVIEW_FINANCIAL_COLUMNS.includes('amount'), true);
   assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('deposited_at'), false);
   assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('check_stage'), false);
 

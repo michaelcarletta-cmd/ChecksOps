@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { handleCheckOcrIntake, redactOcrIntakeResponse } from '../functions/api/ocr.mjs';
 import { resetAzureDiSecretCache } from '../functions/api/azure-di-secret.mjs';
 import { redactOcrLog, safeOcrLog } from '../functions/api/azure-check-ocr.mjs';
-import { INTAKE_PROHIBITED_COLUMNS, WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
+import { INTAKE_PROHIBITED_COLUMNS, REVIEW_FINANCIAL_COLUMNS, WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
 
 const ROUTING_OK = '111000025';
 const ACCOUNT = '000111222333';
@@ -27,9 +27,10 @@ test('MICR database grant is column-scoped to the backend writer, not generic cl
   assert.match(grant, /GRANT UPDATE \(routing_number, account_number\)[\s\S]*TO checksops;/);
   assert.doesNotMatch(grant, /authenticated|GRANT UPDATE ON TABLE/i);
   assert.match(grantRunner, /readSql\(SQL_DIR, '52_verified_ocr_micr_column_grant\.sql'\)/);
+  // Generic client writes reach these columns only through the Review-only UPDATE guard.
   for (const column of ['routing_number', 'account_number']) {
-    assert.equal(INTAKE_PROHIBITED_COLUMNS.has(column), true);
-    assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has(column), false);
+    assert.equal(REVIEW_FINANCIAL_COLUMNS.includes(column), true);
+    assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has(column), true);
   }
 });
 
@@ -366,10 +367,10 @@ test('response redaction strips banking fields while keeping states', () => {
   assert.ok(!blob.includes('99.12'));
 });
 
-test('descriptive persistence allowlist and prohibited MICR columns stay unchanged', () => {
-  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('routing_number'), true);
-  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('account_number'), true);
-  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('amount'), true);
+test('descriptive persistence allowlist and Review-only financial columns stay unchanged', () => {
+  // amount / routing / account: users may correct them only in Review; OCR writes MICR only when verified.
+  assert.deepEqual([...REVIEW_FINANCIAL_COLUMNS], ['amount', 'routing_number', 'account_number']);
+  for (const column of REVIEW_FINANCIAL_COLUMNS) assert.equal(INTAKE_PROHIBITED_COLUMNS.has(column), false);
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('detected_claim_number'), true);
 });
 

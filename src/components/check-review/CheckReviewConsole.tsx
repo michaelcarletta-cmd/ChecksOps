@@ -765,7 +765,7 @@ export function ReviewDecisionPanel({
 
       const persist = isAwsStaging() ? pickAwsSafeIntakeUpdates(updates) : { safe: updates, skipped: [] };
       if (Object.keys(persist.safe).length === 0) {
-        throw new Error("AWS staging cannot save amount, routing, or account fields");
+        throw new Error("None of these field changes can be saved here");
       }
 
       const { error } = await supabase

@@ -1,5 +1,5 @@
 import { ident } from './data.mjs';
-import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
+import { REVIEW_EDITABLE_STATUSES, REVIEW_FINANCIAL_COLUMNS, WRITE_ALLOWLIST } from './write-allowlist.mjs';
 import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -162,6 +162,28 @@ const intakeCoerce = (values) => {
     const text = asText(values.funds_type, 80);
     if (text.error) return text;
     out.funds_type = text.value;
+  }
+  if ('amount' in values) {
+    if (values.amount === null || values.amount === '') out.amount = null;
+    else {
+      const n = Number(values.amount);
+      if (!Number.isFinite(n) || n < 0 || n > 50_000_000 || Math.round(n * 100) !== n * 100) {
+        return { error: 'invalid_field', field: 'amount' };
+      }
+      out.amount = n.toFixed(2);
+    }
+  }
+  if ('routing_number' in values) {
+    const digits = values.routing_number == null ? '' : String(values.routing_number).trim();
+    if (!digits) out.routing_number = null;
+    else if (!/^\d{9}$/.test(digits)) return { error: 'invalid_field', field: 'routing_number' };
+    else out.routing_number = digits;
+  }
+  if ('account_number' in values) {
+    const digits = values.account_number == null ? '' : String(values.account_number).trim();
+    if (!digits) out.account_number = null;
+    else if (!/^\d{4,20}$/.test(digits)) return { error: 'invalid_field', field: 'account_number' };
+    else out.account_number = digits;
   }
   if ('issue_date' in values) {
     if (values.issue_date === null || values.issue_date === '') out.issue_date = null;
@@ -333,19 +355,35 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     expiration_days: 'int',
     is_multi_payee: 'boolean',
     issue_date: 'date',
+    amount: 'numeric',
     mortgage_sent_at: 'timestamptz',
     mortgage_received_at: 'timestamptz',
     endorsement_override: 'jsonb',
     endorsement_render_meta: 'jsonb',
   });
   built.params.push(checkId);
+  // Amount, routing and account change only while the check is in Review. The
+  // status test is part of the UPDATE so a check routed concurrently cannot slip through.
+  const financial = REVIEW_FINANCIAL_COLUMNS.some((column) => column in nextValues);
+  let reviewGuard = '';
+  if (financial) {
+    built.params.push([...REVIEW_EDITABLE_STATUSES]);
+    reviewGuard = ` AND status = ANY($${built.next + 1}::text[])`;
+  }
   const rows = (await client.query(
     `UPDATE public.check_intake_items
      SET ${built.sets.join(', ')}
-     WHERE id = $${built.next}::uuid
+     WHERE id = $${built.next}::uuid${reviewGuard}
      RETURNING *`,
     built.params,
   )).rows;
+  if (!rows.length && financial) {
+    return {
+      error: 'financial_edit_requires_review',
+      statusCode: 409,
+      message: 'Move the check back to Review to change the amount, routing number, or account number.',
+    };
+  }
   if (!rows.length) return { error: 'rls_denied', message: 'check not writable' };
   return { rows };
 };

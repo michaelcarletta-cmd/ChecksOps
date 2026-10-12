@@ -19,7 +19,7 @@ const SIG_SRC = fs.readFileSync(path.join(ROOT, 'src/components/claim-detail/Sig
 test('SQL 44 is a narrow Claim Ledger RPC and does not broaden generic writes', () => {
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('claim_id'), true);
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('detected_claim_number'), true);
-  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('amount'), true);
+  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('pa_fee_amount'), true);
   assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('claim_id'), false);
   assert.equal(WRITE_ALLOWLIST.claims.ops.has('insert'), false);
   assert.equal(WRITE_ALLOWLIST.claims.columns.has('claim_number'), true);

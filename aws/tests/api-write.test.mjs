@@ -142,12 +142,16 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(denyTableReason('moov_unknown'), 'unknown_table');
   const financialIntake = pickAllowlistedValues('check_intake_items', {
     carrier_name: 'Test',
-    amount: 12,
-    routing_number: '123456789',
+    pa_fee_amount: 12,
+    status: 'deposited',
   });
   assert.equal(financialIntake.error, 'column_not_allowlisted');
-  assert.ok(financialIntake.columns.includes('amount'));
-  assert.ok(financialIntake.columns.includes('routing_number'));
+  assert.ok(financialIntake.columns.includes('pa_fee_amount'));
+  assert.ok(financialIntake.columns.includes('status'));
+  // Amount, routing and account are allowlisted; write-check-workflow limits them to Review.
+  for (const column of ['amount', 'routing_number', 'account_number']) {
+    assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has(column), true, column);
+  }
   assert.equal(WRITE_ALLOWLIST.check_message_reads.ops.has('upsert'), true);
   const picked = pickAllowlistedValues('check_message_reads', {
     user_id: SPOOF_ID,
@@ -353,17 +357,65 @@ test('generic /data mutating routes stay writes_disabled; get_or_create ignores 
   assert.equal(select.params[0], APP_ID);
 });
 
-test('generic /data/write cannot update OCR MICR columns', async () => {
-  const client = mockClient();
-  for (const column of ['routing_number', 'account_number']) {
+test('amount, routing and account change only while the check is in Review', async () => {
+  // The mock returns no row from the guarded UPDATE: the check is past Review.
+  const blocked = mockClient();
+  for (const values of [{ amount: 50 }, { routing_number: '111000025' }, { account_number: '111000025' }]) {
     const result = await handleWrite(jwtEvent('/data/write', 'POST', {
       table: 'check_intake_items',
       op: 'update',
-      values: { [column]: '111000025' },
+      values,
+      filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    }), depsFor(blocked));
+    assert.equal(result.statusCode, 409, JSON.stringify(values));
+    assert.equal(result.error, 'financial_edit_requires_review');
+    assert.match(result.message, /back to Review/);
+  }
+  const update = blocked.queries.find((q) => /UPDATE public.check_intake_items/.test(String(q.sql)));
+  assert.match(String(update.sql), /AND status = ANY\(\$\d+::text\[\]\)/);
+  assert.deepEqual(update.params.at(-1), ['uploaded', 'needs_review', 'ocr_complete', 'manual_review_required']);
+
+  // In Review the guarded UPDATE returns the row and the values are normalized.
+  const inReview = mockClient({ rows: [{ id: CHECK_ID, amount: 1250.5 }] });
+  const saved = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { amount: 1250.5, routing_number: '021000021', account_number: '123456789' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(inReview));
+  assert.equal(saved.ok, true, JSON.stringify(saved));
+  const savedUpdate = inReview.queries.find((q) => /UPDATE public.check_intake_items/.test(String(q.sql)));
+  assert.match(String(savedUpdate.sql), /amount = \$\d+::numeric/);
+  assert.ok(savedUpdate.params.includes('1250.50'));
+  assert.ok(savedUpdate.params.includes('021000021'));
+
+  // Descriptive edits carry no status guard, so endorsing can still edit them.
+  const descriptive = mockClient({ rows: [{ id: CHECK_ID }] });
+  await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { carrier_name: 'Carrier', funds_type: 'insurance', property_address: '1 Main', expiration_days: 90 },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(descriptive));
+  const descUpdate = descriptive.queries.find((q) => /UPDATE public.check_intake_items/.test(String(q.sql)));
+  assert.doesNotMatch(String(descUpdate.sql), /status = ANY/);
+});
+
+test('financial intake values are validated', async () => {
+  const client = mockClient({ rows: [{ id: CHECK_ID }] });
+  for (const values of [
+    { amount: -1 }, { amount: 50_000_001 }, { amount: 'abc' }, { amount: 10.123 },
+    { routing_number: '12345678' }, { routing_number: '12345678a' },
+    { account_number: '123' }, { account_number: '1'.repeat(21) },
+  ]) {
+    const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+      table: 'check_intake_items',
+      op: 'update',
+      values,
       filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
     }), depsFor(client));
-    assert.equal(result.error, 'column_not_allowlisted');
-    assert.ok(result.columns.includes(column));
+    assert.equal(result.statusCode, 400, JSON.stringify(values));
+    assert.equal(result.error, 'invalid_field');
   }
 });
 
@@ -435,7 +487,7 @@ test('Tranche 2 denies financial intake columns, status, insert, and endorsement
   const amount = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'check_intake_items',
     op: 'update',
-    values: { amount: 50 },
+    values: { pa_fee_amount: 50 },
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
   assert.equal(amount.statusCode, 403);
@@ -777,15 +829,17 @@ test('Review claim # save uses RPC and does not allowlist the column or amount',
   assert.equal(client.queries.some((q) => /INSERT INTO public\.claims/.test(String(q.sql))), false);
   assert.equal(client.queries.some((q) => /UPDATE public\.claims/.test(String(q.sql))), false);
 
-  const amountStillDenied = await handleWrite(jwtEvent('/data/write', 'POST', {
+  const amountWithClaimNumber = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'check_intake_items',
     op: 'update',
     values: { amount: 50, detected_claim_number: '003779807' },
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
-  assert.equal(amountStillDenied.statusCode, 403);
-  assert.equal(amountStillDenied.error, 'column_not_allowlisted');
-  assert.ok(amountStillDenied.columns.includes('amount'));
+  // The claim number goes through its RPC; the amount now meets the Review-only
+  // guard (the mock check is past Review), and claims are still never written.
+  assert.equal(amountWithClaimNumber.statusCode, 409);
+  assert.equal(amountWithClaimNumber.error, 'financial_edit_requires_review');
+  assert.equal(client.queries.some((q) => /INSERT INTO public\.claims|UPDATE public\.claims/.test(String(q.sql))), false);
 });
 
 test('Review claim # save denies invalid, missing, and cross-tenant checks without writing claims', async () => {
