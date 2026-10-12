@@ -1,0 +1,36 @@
+{
+  "id": "ledger-20261007193200-production-apply",
+  "authorization": "execute-authorized",
+  "execute": true,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+  "migration_id": "20261007193200_skip_claim_ledger_event_for_endorsement_stage",
+  "source_sha256": "1a9e6d54c67d2068ba9497f10fcf6956c1699b3005e679b72c3cc3bf2e37878b",
+  "function_identity": "public.sync_homeowner_ledger_from_check()",
+  "expected_live_definition_sha256": "9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699",
+  "intended_replacement_sha256": "03fcea3c87b8ed087222b4071cbe36542df00dfca5c21ea44d20dc113a1047a2",
+  "authorization_phrase": "REPLACE_SYNC_HOMEOWNER_LEDGER_FROM_CHECK",
+  "preserved_function_definition_sha256": {
+    "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48",
+    "public.aws_can_write_claim(uuid)": "0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf"
+  },
+  "trigger_table": "public.check_intake_items",
+  "required_ledger_triggers": {
+    "trg_hle_check_intake_insert": "hle_on_check_intake_insert",
+    "trg_sync_homeowner_ledger_ins": "sync_homeowner_ledger_from_check",
+    "trg_sync_homeowner_ledger_upd": "sync_homeowner_ledger_from_check"
+  },
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38255758030",
+    "basis": "Guarded staging SQL executor apply of ledger-20261007193200 on 2026-10-12 (inspect run 38254866114, deploy run 38255277671), followed by owner staging UAT of Review to Endorsing."
+  },
+  "production_evidence": {
+    "2026-10-12": "Read-only inspect on i-0c35557c4e5385406: sync_homeowner_ledger_from_check() 9f6ec2dc\u2026, trg_sync_homeowner_ledger_ins (AFTER INSERT) and trg_sync_homeowner_ledger_upd (AFTER UPDATE OF status) enabled; hle_on_check_intake_insert() bdd9ec4b\u2026 and aws_can_write_claim(uuid) 0a7e62b2\u2026 unchanged."
+  }
+}
