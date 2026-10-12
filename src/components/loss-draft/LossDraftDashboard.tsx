@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { localTodayDateValue, toDateInputValue } from "@/lib/issueDate";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -200,7 +201,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                     <TableBody>
                       {filtered.map(d => {
                         const sc = escrowStatusConfig[d.escrow_status] ?? { label: d.escrow_status, color: "" };
-                        const overdue = d.follow_up_date && new Date(d.follow_up_date) < new Date();
+                        const overdue = Boolean(d.follow_up_date) && toDateInputValue(d.follow_up_date) < localTodayDateValue();
                         return (
                           <TableRow
                             key={d.id}

@@ -15,6 +15,7 @@ import { ArrowLeft, Plus, DollarSign, Home, Phone, Mail, Pencil, Trash2, Receipt
 import { format } from "date-fns";
 import { CashJobForm } from "./CashJobForm";
 import { CashJobCheckUpload } from "./CashJobCheckUpload";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 
 const PAYMENT_METHODS: Record<string, string> = {
   cash: "Cash", check: "Check", zelle: "Zelle",
@@ -342,7 +343,7 @@ export function CashJobDetail({ jobId, onBack }: Props) {
                       <Badge variant="outline" className="text-[10px]">{PAYMENT_METHODS[payment.payment_method]}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {format(new Date(payment.payment_date), "MMM d, yyyy")}
+                      {formatIssueDateDisplay(payment.payment_date)}
                       {payment.reference_number && ` · Ref: ${payment.reference_number}`}
                     </p>
                     {payment.notes && <p className="text-xs text-muted-foreground italic">{payment.notes}</p>}

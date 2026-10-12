@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toDateInputValue } from "@/lib/issueDate";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -115,7 +116,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       check_number: data.intake.check_number ?? "",
       amount: data.intake.amount != null ? String(data.intake.amount) : "",
       payee_line: data.intake.payee_line ?? "",
-      issue_date: (data.intake as any).issue_date ?? "",
+      issue_date: toDateInputValue((data.intake as any).issue_date),
       routing_number: (data.intake as any).routing_number ?? "",
       account_number: (data.intake as any).account_number ?? "",
     });
@@ -214,7 +215,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
       const dateTrim = form.issue_date.trim();
       const newDate = dateTrim.length === 0 ? null : dateTrim;
-      const currentDate = (data.intake as any).issue_date ?? null;
+      const currentDate = toDateInputValue((data.intake as any).issue_date) || null;
       if (newDate !== currentDate) {
         if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
           throw new Error("Issue date must be in YYYY-MM-DD format");

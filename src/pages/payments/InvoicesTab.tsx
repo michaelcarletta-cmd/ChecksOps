@@ -23,6 +23,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import {
   Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban, Settings,
 } from "lucide-react";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 
 const currency = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n || 0);
@@ -404,7 +405,7 @@ export function InvoicesTab() {
                       {label(inv.status)}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      Due {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : "—"}
+                      Due {formatIssueDateDisplay(inv.due_date)}
                     </span>
                     <span className="ml-auto text-sm font-semibold">{currency(inv.total_amount)}</span>
                   </div>
@@ -442,7 +443,7 @@ export function InvoicesTab() {
                       <div className="break-all text-xs text-muted-foreground">{inv.customer_email}</div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : "—"}
+                      {formatIssueDateDisplay(inv.due_date)}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap">{currency(inv.total_amount)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">{currency(inv.paid_amount)}</TableCell>

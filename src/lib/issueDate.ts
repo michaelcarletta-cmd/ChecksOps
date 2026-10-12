@@ -71,3 +71,21 @@ export function formatIssueDateDisplay(value: IssueDateInput, fallback = "—"):
     return fallback;
   }
 }
+
+/**
+ * `YYYY-MM-DD` for an `<input type="date">` or a DATE column write, from any
+ * value parseIssueDate accepts. The AWS API returns DATE columns as
+ * `2026-10-12T00:00:00.000Z`; a date input cannot display that and shows blank.
+ */
+export function toDateInputValue(value: IssueDateInput): string {
+  const parsed = parseIssueDate(value);
+  if (!parsed) return "";
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${parsed.getFullYear()}-${month}-${day}`;
+}
+
+/** Today's calendar date in the viewer's timezone, as `YYYY-MM-DD`. */
+export function localTodayDateValue(now: Date = new Date()): string {
+  return toDateInputValue(now);
+}

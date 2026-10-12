@@ -1,3 +1,4 @@
+import { parseIssueDate } from "./issueDate.ts";
 /**
  * Non-sensitive year-to-date payment reporting helpers.
  * Must never include TIN, EIN, SSN, or other tax-identifier values.
@@ -134,8 +135,8 @@ export function aggregateRecipientRows({
   for (const p of cashPayments) {
     const acct = p.stakeholder_accounts;
     if (!p.payment_date) continue;
-    const d = new Date(p.payment_date);
-    if (d.getFullYear() !== year) continue;
+    const d = parseIssueDate(p.payment_date);
+    if (!d || d.getFullYear() !== year) continue;
     const m = d.getMonth();
     const amount = Number(p.amount ?? 0);
     if (acct?.id) {

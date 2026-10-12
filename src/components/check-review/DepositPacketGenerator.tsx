@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Printer, FileText } from "lucide-react";
 import { format } from "date-fns";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -205,7 +206,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
         <div class="meta-item"><label>Amount</label><p style="font-weight:700">${esc(fmtAmount(check.amount))}</p></div>
         <div class="meta-item"><label>Check #</label><p style="font-family:monospace">${esc(check.check_number)}</p></div>
         <div class="meta-item"><label>Claim #</label><p>${esc(check.detected_claim_number)}</p></div>
-        <div class="meta-item"><label>Issue Date</label><p>${esc(fmtDate(check.issue_date))}</p></div>
+        <div class="meta-item"><label>Issue Date</label><p>${esc(formatIssueDateDisplay(check.issue_date))}</p></div>
         <div class="meta-item"><label>Recommendation</label><p>${esc(check.deposit_recommendation?.replace(/_/g, " "))}</p></div>
       </div>
       <h2>Payees &amp; Endorsements</h2>
@@ -252,7 +253,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
               <div><p className="text-[10px] text-muted-foreground uppercase">Amount</p><p className="text-xs font-bold">{fmtAmount(check.amount)}</p></div>
               <div><p className="text-[10px] text-muted-foreground uppercase">Check #</p><p className="text-xs font-mono">{check.check_number ?? "—"}</p></div>
               <div><p className="text-[10px] text-muted-foreground uppercase">Claim #</p><p className="text-xs">{check.detected_claim_number ?? "—"}</p></div>
-              <div><p className="text-[10px] text-muted-foreground uppercase">Issue Date</p><p className="text-xs">{fmtDate(check.issue_date)}</p></div>
+              <div><p className="text-[10px] text-muted-foreground uppercase">Issue Date</p><p className="text-xs">{formatIssueDateDisplay(check.issue_date)}</p></div>
               <div><p className="text-[10px] text-muted-foreground uppercase">Recommendation</p><p className="text-xs">{check.deposit_recommendation?.replace(/_/g, " ") ?? "—"}</p></div>
             </div>
 

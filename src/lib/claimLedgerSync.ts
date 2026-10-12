@@ -1,3 +1,4 @@
+import { localTodayDateValue, toDateInputValue } from "./issueDate.ts";
 /** Pure plan and idempotent apply for one-check → one-claim ledger sync. No junction table. */
 
 export type IntakeCheck = {
@@ -113,7 +114,7 @@ export function buildClaimLedgerSyncPlan(opts: {
         check_number: check.check_number || `OCR-${check.id}`,
         amount: check.amount ?? null,
         carrier_name: check.carrier_name ?? null,
-        check_date: check.issue_date ?? null,
+        check_date: toDateInputValue(check.issue_date) || null,
         payee_line: check.payee_line ?? null,
         source: "uploaded_check_ocr",
         check_type: "insurance_check",
@@ -129,7 +130,7 @@ export function buildClaimLedgerSyncPlan(opts: {
             check_intake_item_id: check.id,
             amount: Number(check.amount),
             payment_method: "insurance_check",
-            payment_date: check.issue_date || new Date().toISOString().slice(0, 10),
+            payment_date: toDateInputValue(check.issue_date) || localTodayDateValue(),
             recipient_type: "insured",
             direction: "inbound",
             check_number: check.check_number ?? null,
@@ -306,7 +307,7 @@ export function applyDatabaseLedgerSync(store: {
 }, checkId: string) {
   const check = store.check_intake_items.find((row) => row.id === checkId);
   if (!check?.claim_id) return { skipped: true };
-  const paymentDate = check.issue_date || new Date().toISOString().slice(0, 10);
+  const paymentDate = toDateInputValue(check.issue_date) || localTodayDateValue();
 
   const existingCc = store.claim_checks.filter((row) => row.check_intake_item_id === check.id);
   if (!existingCc.length) {

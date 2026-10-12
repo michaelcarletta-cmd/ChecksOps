@@ -26,7 +26,7 @@ import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@/lib/reviewQueueQuery";
-import { formatIssueDateDisplay } from "@/lib/issueDate";
+import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
@@ -161,7 +161,7 @@ function buildReviewFieldUpdatePayload(
     updates.payee_line = nextPayeeLine;
     fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: nextPayeeLine });
   }
-  if (nextIssueDate !== (check.issue_date ?? null)) {
+  if (nextIssueDate !== (toDateInputValue(check.issue_date) || null)) {
     updates.issue_date = nextIssueDate;
     fieldChanges.push({ field: "issue_date", old_value: check.issue_date, new_value: nextIssueDate });
   }
@@ -710,7 +710,7 @@ export function ReviewDecisionPanel({
       setCheckNumber(check.check_number ?? "");
       setAmount(check.amount?.toString() ?? "");
       setPayeeLine(check.payee_line ?? "");
-      setIssueDate(check.issue_date ?? "");
+      setIssueDate(toDateInputValue(check.issue_date));
       setRoutingNumber(check.routing_number ?? "");
       setAccountNumber(check.account_number ?? "");
       setFundsType(((check as any).funds_type as string) ?? "");
@@ -941,7 +941,7 @@ export function ReviewDecisionPanel({
                   setCheckNumber(check.check_number ?? "");
                   setAmount(check.amount?.toString() ?? "");
                   setPayeeLine(check.payee_line ?? "");
-                  setIssueDate(check.issue_date ?? "");
+                  setIssueDate(toDateInputValue(check.issue_date));
                   setRoutingNumber(check.routing_number ?? "");
                   setAccountNumber(check.account_number ?? "");
                   markDirty();

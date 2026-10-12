@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { format } from 'date-fns';
-import { formatIssueDateDisplay, parseIssueDate } from '../../src/lib/issueDate.ts';
+import { formatIssueDateDisplay, localTodayDateValue, parseIssueDate, toDateInputValue } from '../../src/lib/issueDate.ts';
 import { isInReviewQueue } from '../../src/lib/reviewQueueQuery.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -98,4 +98,41 @@ test('Review queue filter still counts 30 review rows', () => {
   for (const row of rows) {
     assert.doesNotThrow(() => formatIssueDateDisplay(row.issue_date));
   }
+});
+
+test('AWS DATE values keep the chosen calendar day in US timezones', () => {
+  const saved = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    // The AWS API returns a DATE column as UTC midnight.
+    assert.equal(formatIssueDateDisplay('2026-10-12T00:00:00.000Z'), 'Oct 12, 2026');
+    assert.equal(formatIssueDateDisplay('2026-10-12'), 'Oct 12, 2026');
+    assert.equal(toDateInputValue('2026-10-12T00:00:00.000Z'), '2026-10-12');
+    assert.equal(toDateInputValue('2026-10-12'), '2026-10-12');
+    assert.equal(toDateInputValue(''), '');
+    assert.equal(toDateInputValue(null), '');
+    assert.equal(toDateInputValue('not a date'), '');
+    // 9:30pm on Oct 12 in New York is already Oct 13 in UTC.
+    assert.equal(localTodayDateValue(new Date('2026-10-13T01:30:00.000Z')), '2026-10-12');
+    assert.equal(parseIssueDate('2026-01-01T00:00:00.000Z').getFullYear(), 2026);
+  } finally {
+    if (saved === undefined) delete process.env.TZ; else process.env.TZ = saved;
+  }
+});
+
+test('date-only columns are never displayed through new Date(...)', () => {
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
+        const text = fs.readFileSync(file, 'utf8');
+        const re = /new Date\([^)]*\b(issue_date|loss_date|follow_up_date|due_date)\)/g;
+        if (re.test(text)) offenders.push(file);
+      }
+    }
+  };
+  walk(path.join(ROOT, 'src'));
+  assert.deepEqual(offenders, []);
 });
