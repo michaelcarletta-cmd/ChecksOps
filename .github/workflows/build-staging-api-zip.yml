@@ -1,0 +1,116 @@
+name: Build staging API Lambda zip (no deploy)
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact commit SHA to build (immutable)
+        required: true
+        default: 68223f6cc4491fbfba157af5fee1f387b4e966f5
+      expected_zip_sha256:
+        description: Expected SHA-256 of the inner Lambda zip (hex)
+        required: true
+        default: 85fee3c1b31d9ea1a4d959210053b5a70a4614628c0bbb8f615bbfe657913f2d
+  push:
+    branches:
+      - cursor/mortgage-agent-identity-lock-parity-a64c
+    paths:
+      - '.github/workflows/build-staging-api-zip.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-staging-api-zip-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve candidate SHA
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="${{ inputs.candidate_sha || '68223f6cc4491fbfba157af5fee1f387b4e966f5' }}"
+          echo "candidate_sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "candidate_short=${SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out candidate commit (detached)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout "${{ steps.vars.outputs.candidate_sha }}"
+          git rev-parse HEAD
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install AWS SAM CLI (build-only)
+        run: pip3 install aws-sam-cli
+
+      - name: Build staging Lambda (SAM build, no deploy)
+        working-directory: aws
+        run: sam build --config-env staging
+
+      - name: Deterministic package Lambda zip from .aws-sam/build/ApiFunction
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd aws
+          GITSHA="${{ steps.vars.outputs.candidate_short }}"
+          BUILD_DIR=".aws-sam/build/ApiFunction"
+          ZIP="checksops-staging-api-${GITSHA}.zip"
+          MANIFEST="checksops-staging-api-${GITSHA}.manifest.txt"
+          SHA_FILE="checksops-staging-api-${GITSHA}.zip.sha256"
+          rm -f "$ZIP" "$MANIFEST" "$SHA_FILE"
+
+          python3 - <<'PY'
+          import os, time
+          from pathlib import Path
+          root=Path('.aws-sam/build/ApiFunction')
+          fixed=time.mktime((1980,1,1,0,0,0,0,0,-1))
+          for p in root.rglob('*'):
+            try:
+              os.utime(p, (fixed, fixed), follow_symlinks=False)
+            except Exception:
+              pass
+          PY
+
+          (cd "$BUILD_DIR" && zip -X -r "../${ZIP}" . >/dev/null)
+          sha256sum "$ZIP" | tee "$SHA_FILE"
+          unzip -Z -1 "$ZIP" | sort > "$MANIFEST"
+
+      - name: Assert expected zip SHA-256 matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd aws
+          EXPECTED="${{ inputs.expected_zip_sha256 || '85fee3c1b31d9ea1a4d959210053b5a70a4614628c0bbb8f615bbfe657913f2d' }}"
+          ACTUAL="$(cut -d' ' -f1 checksops-staging-api-${{ steps.vars.outputs.candidate_short }}.zip.sha256)"
+          echo "expected=$EXPECTED"
+          echo "actual=$ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Upload staging API zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksops-staging-api-zip-${{ steps.vars.outputs.candidate_short }}
+          path: |
+            aws/checksops-staging-api-${{ steps.vars.outputs.candidate_short }}.zip
+            aws/checksops-staging-api-${{ steps.vars.outputs.candidate_short }}.zip.sha256
+            aws/checksops-staging-api-${{ steps.vars.outputs.candidate_short }}.manifest.txt
