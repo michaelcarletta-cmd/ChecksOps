@@ -253,7 +253,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         skippedIntakeFields = persist.skipped;
         if (Object.keys(persist.safe).length === 0) {
           if (!statusOverriddenOnAws) {
-            throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
+            throw new Error("AWS staging cannot save status or mortgage fields");
           }
           // Status already committed via RPC. Do not fail the save for leftover
           // AWS-prohibited columns (amount, routing, account, mortgage).

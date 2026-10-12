@@ -65,12 +65,16 @@ const INTAKE_SAFE_COLUMNS = [
   'updated_at',
 ];
 
+// Any user may correct these, but only while the check is still in Review;
+// write-check-workflow.mjs enforces check_stage in the UPDATE itself (the same
+// field the Review queue filters on). To change them later the check must be
+// moved back to Review.
+export const REVIEW_FINANCIAL_COLUMNS = Object.freeze(['amount', 'routing_number', 'account_number']);
+export const REVIEW_CHECK_STAGE = 'review';
+
 export const INTAKE_PROHIBITED_COLUMNS = new Set([
-  'amount',
   'pa_fee_amount',
   'pa_fee_pct',
-  'routing_number',
-  'account_number',
   'status',
   'check_stage',
   'claim_id',
@@ -122,7 +126,7 @@ export const WRITE_ALLOWLIST = {
   check_intake_items: {
     tranche: 2,
     ops: new Set(['update']),
-    columns: new Set([...INTAKE_SAFE_COLUMNS, ...T5_INTAKE_COLUMNS]),
+    columns: new Set([...INTAKE_SAFE_COLUMNS, ...T5_INTAKE_COLUMNS, ...REVIEW_FINANCIAL_COLUMNS]),
     t5Columns: T5_INTAKE_COLUMNS,
     identityColumn: null,
     requiredForWrite: { update: [] },
@@ -132,7 +136,7 @@ export const WRITE_ALLOWLIST = {
     frontend: {
       file: 'CheckCommandCenter EditableField / ReviewDecisionPanel persistMeta / CheckAdminEditDialog / CheckMortgageMonitoring',
       op: 'update',
-      reason: 'T2 descriptive + image paths. T5 adds mortgage monitoring timestamps (not final release, not status/amount).',
+      reason: 'T2 descriptive + image paths. T5 adds mortgage monitoring timestamps (not final release, not status). Amount, routing and account only while the check is in Review.',
     },
   },
   check_payees: {

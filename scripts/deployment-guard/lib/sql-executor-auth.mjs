@@ -81,6 +81,24 @@ export const AUTHORIZED_LEDGER_20261007193200 = Object.freeze({
   }),
 });
 
+// Column privilege grant. The "definition" is the canonical privilege state
+// string, hashed: AMOUNT_GRANT_STATE_TEXT.absent before, .granted after.
+export const AMOUNT_GRANT_STATE_TEXT = Object.freeze({
+  absent: 'checksops UPDATE (amount) ON public.check_intake_items: absent',
+  granted: 'checksops UPDATE (amount) ON public.check_intake_items: granted',
+});
+export const AUTHORIZED_SQL71_AMOUNT_GRANT = Object.freeze({
+  filename: 'aws/workflows/sql/71_review_amount_column_grant.sql',
+  migration_id: '71_review_amount_column_grant',
+  commit: 'a04461398e3250d49399ab1e3fc5cfa0e911cbb7',
+  source_sha256: 'ada473038b3771232b9c9a290629362ad67ab31e0985bbc2d260aeafcda78966',
+  expected_live_definition_sha256: '2d96f50bae23aac3c9893656a4e68eccb1f1c298d5c1085753dd1472e1a3df2a',
+  intended_replacement_sha256: 'ff8e86f95a78474068f6b083087ac6fdad7af321aff9a6536ca38faadf5d35a9',
+  grantee: 'checksops',
+  table: 'public.check_intake_items',
+  column: 'amount',
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -109,6 +127,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL39,
   AUTHORIZED_SQL40,
   AUTHORIZED_LEDGER_20261007193200,
+  AUTHORIZED_SQL71_AMOUNT_GRANT,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -128,6 +147,10 @@ export function isSql53AuthorizedMigration(input = {}) {
 
 export function isLedger20261007193200(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_LEDGER_20261007193200);
+}
+
+export function isSql71AmountGrant(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL71_AMOUNT_GRANT);
 }
 
 export function isSql39(input = {}) {
@@ -151,6 +174,7 @@ export function isSql44AuthorizedMigration(input = {}) {
 export function resolveAuthorizedMigration(input = {}) {
   if (isSql53AuthorizedMigration(input)) return AUTHORIZED_SQL53;
   if (isLedger20261007193200(input)) return AUTHORIZED_LEDGER_20261007193200;
+  if (isSql71AmountGrant(input)) return AUTHORIZED_SQL71_AMOUNT_GRANT;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;

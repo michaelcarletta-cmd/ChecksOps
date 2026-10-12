@@ -1626,6 +1626,293 @@
       "reason": "PR #891 targets claude/production-spa-live-source (the locked 61432c2 production SPA lineage), not main. Both PRs carry the same mobile Review panel commit 57925ea; #892 is its main-lineage copy for staging. Neither merges into the other.",
       "expires": "2026-12-31",
       "review_condition": "same-commit-different-base-lineage"
+    },
+    {
+      "other_pr": 430,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #430; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 439,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #439; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 441,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #441; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 442,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #442; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 443,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #443; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 444,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #444; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 445,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #445; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 446,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #446; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 447,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #447; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 448,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #448; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 449,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #449; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 451,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #451; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 460,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #460; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 461,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #461; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 463,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #463; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 469,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #469; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 472,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #472; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 483,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #483; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 485,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #485; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 487,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #487; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 488,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #488; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 490,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #490; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 497,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #497; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 498,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #498; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 500,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #500; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 502,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #502; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 503,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #503; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 505,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #505; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 512,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #512; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 513,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #513; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 514,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #514; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 525,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #525; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 532,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #532; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 545,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #545; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 565,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #565; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 566,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #566; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 572,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #572; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 577,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #577; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 582,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #582; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 685,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #685; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 686,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #901 adds Review-only amount/routing/account columns to write-allowlist.mjs and overlaps PR #686; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

@@ -8,13 +8,16 @@ import {
 } from "../src/components/check-review/adminEditSavedChanges.ts";
 
 test("drops leftover AWS-prohibited intake keys from the success toast after a status RPC", () => {
+  // Amount, routing and account are saveable on AWS (the API allows them only in Review),
+  // so the summary below is exercised with an explicit skipped list.
   const persist = pickAwsSafeIntakeUpdates({
     amount: 1250.5,
     routing_number: "021000021",
     account_number: "123456789",
+    status: "needs_review",
   });
-  assert.deepEqual(persist.safe, {});
-  assert.deepEqual(persist.skipped, ["amount", "routing_number", "account_number"]);
+  assert.deepEqual(persist.safe, { amount: 1250.5, routing_number: "021000021", account_number: "123456789" });
+  assert.deepEqual(persist.skipped, ["status"]);
 
   const summary = summarizeAdminEditSave(
     [
@@ -23,7 +26,7 @@ test("drops leftover AWS-prohibited intake keys from the success toast after a s
       "routing # → ***0021",
       "account # → ***6789",
     ],
-    persist.skipped,
+    ["amount", "routing_number", "account_number"],
   );
 
   assert.deepEqual(summary.savedMessages, ["status → needs review"]);
@@ -45,12 +48,12 @@ test("keeps persisted descriptive fields when a mixed AWS save skips financial c
     amount: 99,
     routing_number: "021000021",
   });
-  assert.deepEqual(persist.safe, { payee_line: "Jane Doe" });
-  assert.deepEqual(persist.skipped, ["amount", "routing_number"]);
+  assert.deepEqual(persist.safe, { payee_line: "Jane Doe", amount: 99, routing_number: "021000021" });
+  assert.deepEqual(persist.skipped, []);
 
   const summary = summarizeAdminEditSave(
     ["payee → Jane Doe", "amount → $99.00", "routing # → ***0021"],
-    persist.skipped,
+    ["amount", "routing_number"],
   );
 
   assert.deepEqual(summary.savedMessages, ["payee → Jane Doe"]);
@@ -85,4 +88,10 @@ test("admin edit dialog filters skipped keys before the success toast", () => {
     source,
     /toast\.success\(`Saved: \$\{changes\.join\(", "\)\}`\)/,
   );
+});
+
+test("Review field saves coerce stored amount before the dirty check", () => {
+  const source = readFileSync("src/components/check-review/CheckReviewConsole.tsx", "utf8");
+  assert.match(source, /check\.amount != null \? Number\(check\.amount\) : null/);
+  assert.doesNotMatch(source, /nextAmount !== \(check\.amount \?\? null\)/);
 });

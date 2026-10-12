@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { INTAKE_PROHIBITED_COLUMNS } from '../functions/api/write-allowlist.mjs';
+import { INTAKE_PROHIBITED_COLUMNS, REVIEW_FINANCIAL_COLUMNS } from '../functions/api/write-allowlist.mjs';
 import {
   collectOcrPayeeCandidates,
   normalizeIssueDate,
@@ -159,7 +159,7 @@ test('3) no amount persistence occurs', async () => {
   const blob = JSON.stringify(client.statements.map((row) => row.sql));
   assert.equal(blob.includes('amount'), false);
   assert.equal(client.store.amount, null);
-  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('amount'), true);
+  assert.equal(REVIEW_FINANCIAL_COLUMNS.includes('amount'), true);
 });
 
 test('4-6) three structured OCR payees become pending unknown candidates', async () => {
@@ -274,8 +274,8 @@ test('13-16) routing/account/MICR/CheckAlt/Moov stay out of the handoff', () => 
   assert.doesNotMatch(helper, /routing_number|account_number|micr_check_number|checkalt-submit|checkalt-dispatch|moov-transfer|moov-webhook/);
   assert.match(ocr, /persistOcrDescriptiveHandoff/);
   assert.match(ocr, /Intentionally do not set amount here/);
-  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('routing_number'), true);
-  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('account_number'), true);
+  // Users may correct these in Review through /data/write; the OCR handoff never writes them.
+  assert.deepEqual([...REVIEW_FINANCIAL_COLUMNS], ['amount', 'routing_number', 'account_number']);
 });
 
 test('17) HTTP redaction is unchanged and still hides payee names', () => {

@@ -24,6 +24,7 @@ import { acquireLease } from './lib/lease.mjs';
 import { issueReceiptWithSigner } from './lib/receipt.mjs';
 import {
   AUTHORIZED_LEDGER_20261007193200,
+  AUTHORIZED_SQL71_AMOUNT_GRANT,
   SQL_EXECUTOR_COMPONENT,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   SQL_EXECUTOR_FUNCTION,
@@ -46,6 +47,7 @@ const RECEIPT_TTL_MS = 15 * 60 * 1000;
 // Workflow choice value → allowlisted pin. Only reviewed pins may appear here.
 export const MIGRATIONS = Object.freeze({
   'ledger-20261007193200': AUTHORIZED_LEDGER_20261007193200,
+  'sql71-review-amount-grant': AUTHORIZED_SQL71_AMOUNT_GRANT,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

@@ -24,15 +24,17 @@ export const AWS_SAFE_INTAKE_COLUMNS = new Set([
   "mortgage_sent_at",
   "mortgage_tracking_number",
   "mortgage_received_at",
+  // Saved only while the check is in Review; the API returns 409
+  // financial_edit_requires_review otherwise.
+  "amount",
+  "routing_number",
+  "account_number",
   "updated_at",
 ]);
 
 export const AWS_PROHIBITED_INTAKE_COLUMNS = new Set([
-  "amount",
   "pa_fee_amount",
   "pa_fee_pct",
-  "routing_number",
-  "account_number",
   "status",
   "check_stage",
   "claim_id",
