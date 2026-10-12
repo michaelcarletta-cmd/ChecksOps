@@ -214,12 +214,19 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           const base = 'https://checksops.com/prep';
-          for (const path of ['/health', '/db-health']) {
+          // Production /health reports status; /db-health answers 503 unless the probe passes
+          // and reports the probe fields (select1, authentication) rather than a status field.
+          const checks = {
+            '/health': (body) => body?.status === 'ok',
+            '/db-health': (body) => body?.select1 === 'ok' && body?.authentication === 'ok',
+          };
+          for (const [path, healthy] of Object.entries(checks)) {
             const res = await fetch(base + path, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
             let body = {};
             try { body = JSON.parse(await res.text()); } catch {}
-            console.log(JSON.stringify({ path, httpStatus: res.status, status: body?.status ?? null }));
-            if (res.status !== 200 || body?.status !== 'ok') throw new Error(path + ' is not healthy');
+            const ok = res.status === 200 && healthy(body);
+            console.log(JSON.stringify({ path, httpStatus: res.status, healthy: ok }));
+            if (!ok) throw new Error(path + ' is not healthy');
           }
           NODE
 
