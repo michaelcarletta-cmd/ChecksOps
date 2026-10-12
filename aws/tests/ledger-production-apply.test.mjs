@@ -11,7 +11,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
 
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { AUTHORIZED_LEDGER_20261007193200 as STAGING_PIN } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
@@ -227,6 +226,13 @@ async function withCluster(t, fn) {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
+    return;
+  }
+  let pg;
+  try {
+    pg = (await import('pg')).default;
+  } catch {
+    t.skip('pg module is not installed');
     return;
   }
   const pgData = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-ledger-prod-'));
