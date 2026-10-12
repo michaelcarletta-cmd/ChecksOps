@@ -1,0 +1,203 @@
+name: Guarded staging SPA upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Inspect the live staging index.html or apply a guarded upload of a fresh main build"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - apply
+      approved_commit:
+        description: "Required for apply: exact main commit approved for deployment"
+        required: false
+        default: ""
+        type: string
+      expected_live_index_sha256:
+        description: "Required for apply: live index.html SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: guarded-staging-spa-upload
+  cancel-in-progress: false
+
+jobs:
+  staging-spa:
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+
+      - name: Refuse non-main or unapproved apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging SPA upload only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            test -n "${{ inputs.approved_commit }}" || { echo "apply requires approved_commit"; exit 2; }
+            test "${{ inputs.approved_commit }}" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            test -n "${{ inputs.expected_live_index_sha256 }}" || { echo "apply requires expected_live_index_sha256 from inspect"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: latest
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/github-staging-spa-upload.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate staging OIDC inputs
+        shell: bash
+        env:
+          STAGING_SPA_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingSpaUpload"
+          test -n "$STAGING_SPA_DEPLOY_ROLE_ARN" || { echo "CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN is not available to the staging environment job"; exit 2; }
+          test "$STAGING_SPA_DEPLOY_ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN does not match the dedicated staging SPA upload role"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide ACTIONS_ID_TOKEN_REQUEST_URL despite id-token: write"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "GitHub did not provide ACTIONS_ID_TOKEN_REQUEST_TOKEN despite id-token: write"; exit 2; }
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-spa-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ACCOUNT" = "806168576068" || { echo "Unexpected AWS account"; exit 2; }
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingSpaUpload/checksops-staging-spa-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Build fresh staging SPA from main
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          VITE_APP_URL: ${{ vars.STAGING_SPA_VITE_APP_URL }}
+          VITE_AUTH_PROVIDER: ${{ vars.STAGING_SPA_VITE_AUTH_PROVIDER }}
+          VITE_CHECKSOPS_API_URL: ${{ vars.STAGING_SPA_VITE_CHECKSOPS_API_URL }}
+          VITE_AWS_REGION: ${{ vars.STAGING_SPA_VITE_AWS_REGION }}
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.STAGING_SPA_VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.STAGING_SPA_VITE_COGNITO_USER_POOL_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          test "$VITE_APP_URL" = "https://staging.checksops.com" || { echo "STAGING_SPA_VITE_APP_URL must be https://staging.checksops.com"; exit 2; }
+          test ! -e dist || { echo "dist already exists in a fresh checkout"; exit 2; }
+          echo "CHECKSOPS_BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          bun run build:aws
+
+      - name: Load staging KMS verifier
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_STAGING_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          test -n "$KMS_KEY_ARN" || { echo "staging deployment-guard KMS key ARN is missing"; exit 2; }
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:*:key/*) ;;
+            *) echo "invalid staging deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
+
+      - name: Inspect and authorize exact live index.html
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_STAGING_DEPLOY_MODE: ${{ inputs.mode }}
+          CHECKSOPS_EXPECTED_LIVE_INDEX_SHA256: ${{ inputs.expected_live_index_sha256 }}
+          VITE_APP_URL: ${{ vars.STAGING_SPA_VITE_APP_URL }}
+          VITE_AUTH_PROVIDER: ${{ vars.STAGING_SPA_VITE_AUTH_PROVIDER }}
+          VITE_CHECKSOPS_API_URL: ${{ vars.STAGING_SPA_VITE_CHECKSOPS_API_URL }}
+          VITE_AWS_REGION: ${{ vars.STAGING_SPA_VITE_AWS_REGION }}
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.STAGING_SPA_VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.STAGING_SPA_VITE_COGNITO_USER_POOL_CLIENT_ID }}
+        run: node scripts/deployment-guard/github-staging-spa-upload.mjs
+
+      - name: Record inspected live state
+        shell: bash
+        run: |
+          {
+            echo "### Staging SPA preflight"
+            echo "- Mode: \`${{ inputs.mode }}\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Live index.html SHA-256: \`${{ steps.preflight.outputs.live_index_html_sha256 }}\`"
+            echo "- Live entry bundle: \`${{ steps.preflight.outputs.live_entry_bundle }}\`"
+            echo "- Live LastModified: \`${{ steps.preflight.outputs.live_last_modified }}\`"
+            echo "- Candidate entry bundle: \`${{ steps.preflight.outputs.candidate_entry_bundle }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload through official receipt-gated staging SPA writer
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/staging-spa-upload.mjs \
+            --environment staging \
+            --workstream-id "${{ steps.preflight.outputs.workstream_id }}" \
+            --commit "$GITHUB_SHA" \
+            --dist dist
+
+      - name: Verify public staging serves the new entry bundle
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CANDIDATE_ENTRY: ${{ steps.preflight.outputs.candidate_entry_bundle }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            served="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' "https://staging.checksops.com/?verify=$GITHUB_RUN_ID-$attempt" | grep -oE '/assets/index-[^"]+\.js' | head -1 || true)"
+            if [ "$served" = "$CANDIDATE_ENTRY" ]; then
+              echo "- Public staging serves \`$served\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "public staging still serves '$served', expected '$CANDIDATE_ENTRY'"
+          exit 2
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        run: rm -rf .deployment-guard dist
