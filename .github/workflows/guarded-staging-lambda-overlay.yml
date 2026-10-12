@@ -61,20 +61,30 @@ jobs:
 
       - name: Refuse non-main or unapproved apply
         shell: bash
+        # Inputs reach the script only through env, never as interpolated shell source.
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_OPERATION: ${{ inputs.operation }}
+          INPUT_MEMBER: ${{ inputs.member }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
+          INPUT_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: ${{ inputs.accept_public_validator_unhealthy }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging deploy only runs from main"; exit 2; }
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
-          if [ "${{ inputs.mode }}" = "apply" ]; then
-            test -n "${{ inputs.approved_commit }}" || { echo "apply requires approved_commit"; exit 2; }
-            test "${{ inputs.approved_commit }}" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
-            if [ "${{ inputs.operation }}" = "replace" ]; then
-              test -n "${{ inputs.expected_live_member_sha256 }}" || { echo "REPLACE apply requires expected_live_member_sha256 from inspect"; exit 2; }
+          if [ "$INPUT_MODE" = "apply" ]; then
+            test -n "$INPUT_APPROVED_COMMIT" || { echo "apply requires approved_commit"; exit 2; }
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "approved_commit must be a 40-character commit SHA"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            if [ "$INPUT_OPERATION" = "replace" ]; then
+              test -n "$INPUT_EXPECTED_LIVE_MEMBER_SHA256" || { echo "REPLACE apply requires expected_live_member_sha256 from inspect"; exit 2; }
+              [[ "$INPUT_EXPECTED_LIVE_MEMBER_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "expected_live_member_sha256 must be 64 hex characters"; exit 2; }
             fi
           fi
-          if [ "${{ inputs.accept_public_validator_unhealthy }}" = "true" ]; then
-            test "${{ inputs.member }}" = "db-readonly-validate.mjs" || { echo "accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api"; exit 2; }
-            test "${{ inputs.operation }}" = "replace" || { echo "accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api"; exit 2; }
+          if [ "$INPUT_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY" = "true" ]; then
+            test "$INPUT_MEMBER" = "db-readonly-validate.mjs" || { echo "accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api"; exit 2; }
+            test "$INPUT_OPERATION" = "replace" || { echo "accept_public_validator_unhealthy is limited to replace db-readonly-validate.mjs on checksops-staging-api"; exit 2; }
           fi
 
       - name: Set up Node.js
@@ -142,10 +152,12 @@ jobs:
 
       - name: Verify AWS identity
         shell: bash
+        env:
+          STAGING_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_DEPLOY_ROLE_ARN }}
         run: |
           set -euo pipefail
           aws sts get-caller-identity
-          test -n "${{ vars.CHECKSOPS_STAGING_DEPLOY_ROLE_ARN }}" || { echo "staging deploy role variable is missing"; exit 2; }
+          test -n "$STAGING_DEPLOY_ROLE_ARN" || { echo "staging deploy role variable is missing"; exit 2; }
 
       - name: Load staging KMS verifier
         if: ${{ inputs.mode == 'apply' }}
@@ -178,18 +190,27 @@ jobs:
 
       - name: Record inspected live state
         shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_OPERATION: ${{ inputs.operation }}
+          INPUT_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: ${{ inputs.accept_public_validator_unhealthy }}
+          OWNED_MEMBER: ${{ steps.preflight.outputs.owned_member }}
+          LIVE_CODE_SHA256: ${{ steps.preflight.outputs.live_code_sha256 }}
+          LIVE_REVISION_ID: ${{ steps.preflight.outputs.live_revision_id }}
+          LIVE_MEMBER_STATE: ${{ steps.preflight.outputs.live_member_state }}
+          LIVE_MEMBER_SHA256: ${{ steps.preflight.outputs.live_member_sha256 }}
         run: |
           {
             echo "### Staging Lambda overlay preflight"
-            echo "- Mode: \`${{ inputs.mode }}\`"
-            echo "- Operation: \`${{ inputs.operation }}\`"
+            echo "- Mode: \`$INPUT_MODE\`"
+            echo "- Operation: \`$INPUT_OPERATION\`"
             echo "- Commit: \`$GITHUB_SHA\`"
-            echo "- Member: \`${{ steps.preflight.outputs.owned_member }}\`"
-            echo "- Live CodeSha256: \`${{ steps.preflight.outputs.live_code_sha256 }}\`"
-            echo "- Live RevisionId: \`${{ steps.preflight.outputs.live_revision_id }}\`"
-            echo "- Live member state: \`${{ steps.preflight.outputs.live_member_state }}\`"
-            echo "- Live member SHA-256: \`${{ steps.preflight.outputs.live_member_sha256 }}\`"
-            echo "- Accept public validator unhealthy: \`${{ inputs.accept_public_validator_unhealthy }}\`"
+            echo "- Member: \`$OWNED_MEMBER\`"
+            echo "- Live CodeSha256: \`$LIVE_CODE_SHA256\`"
+            echo "- Live RevisionId: \`$LIVE_REVISION_ID\`"
+            echo "- Live member state: \`$LIVE_MEMBER_STATE\`"
+            echo "- Live member SHA-256: \`$LIVE_MEMBER_SHA256\`"
+            echo "- Accept public validator unhealthy: \`$INPUT_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Apply through official receipt-gated overlay writer
@@ -202,9 +223,10 @@ jobs:
           CHECKSOPS_COMMIT: ${{ github.sha }}
           CHECKSOPS_BRANCH: main
           CHECKSOPS_OPERATOR: ${{ github.actor }}
+          OVERLAY_INPUT: ${{ steps.preflight.outputs.overlay_input }}
         run: |
           set -euo pipefail
-          node scripts/deployment-guard/lambda-overlay-apply.mjs --apply --input "${{ steps.preflight.outputs.overlay_input }}"
+          node scripts/deployment-guard/lambda-overlay-apply.mjs --apply --input "$OVERLAY_INPUT"
 
       - name: Public staging smoke (inspect or post-deploy)
         shell: bash
