@@ -1,0 +1,17 @@
+{
+  "name": "checksops-staging-mortgage-desk-e2e-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Staging-only Mortgage Desk E2E harness. Direct invoke. Fail-closed. No provider execution.",
+  "main": "src/index.mjs",
+  "scripts": {
+    "pack": "bash pack.sh",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-lambda": "3.1124.0",
+    "@aws-sdk/client-secrets-manager": "3.1124.0",
+    "pg": "8.16.3"
+  }
+}
