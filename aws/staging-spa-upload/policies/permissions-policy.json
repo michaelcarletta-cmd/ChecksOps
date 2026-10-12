@@ -1,0 +1,40 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadLiveStagingIndex",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::checksops-staging-frontend-c48b/index.html"
+    },
+    {
+      "Sid": "WriteStagingSpaObjects",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::checksops-staging-frontend-c48b/*"
+    },
+    {
+      "Sid": "InvalidateStagingDistribution",
+      "Effect": "Allow",
+      "Action": "cloudfront:CreateInvalidation",
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1"
+    },
+    {
+      "Sid": "SignStagingGuardReceipts",
+      "Effect": "Allow",
+      "Action": "kms:Sign",
+      "Resource": "REPLACE_WITH_CHECKSOPS_STAGING_DEPLOYMENT_GUARD_KMS_KEY_ARN",
+      "Condition": {
+        "StringEquals": {
+          "kms:SigningAlgorithm": "ECDSA_SHA_256"
+        }
+      }
+    },
+    {
+      "Sid": "ReadStagingGuardPublicKey",
+      "Effect": "Allow",
+      "Action": "kms:GetPublicKey",
+      "Resource": "REPLACE_WITH_CHECKSOPS_STAGING_DEPLOYMENT_GUARD_KMS_KEY_ARN"
+    }
+  ]
+}
