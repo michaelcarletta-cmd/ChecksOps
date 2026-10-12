@@ -43,14 +43,23 @@ jobs:
 
       - name: Refuse non-main or unapproved apply
         shell: bash
+        # Inputs reach the script only through env, never as interpolated shell source.
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_LIVE_INDEX_SHA256: ${{ inputs.expected_live_index_sha256 }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging SPA upload only runs from main"; exit 2; }
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
-          if [ "${{ inputs.mode }}" = "apply" ]; then
-            test -n "${{ inputs.approved_commit }}" || { echo "apply requires approved_commit"; exit 2; }
-            test "${{ inputs.approved_commit }}" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
-            test -n "${{ inputs.expected_live_index_sha256 }}" || { echo "apply requires expected_live_index_sha256 from inspect"; exit 2; }
+          case "$INPUT_MODE" in
+            inspect|apply) ;;
+            *) echo "mode must be inspect or apply"; exit 2 ;;
+          esac
+          if [ "$INPUT_MODE" = "apply" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "apply requires approved_commit as a 40-character commit SHA"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            [[ "$INPUT_EXPECTED_LIVE_INDEX_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "apply requires expected_live_index_sha256 from inspect as 64 hex characters"; exit 2; }
           fi
 
       - name: Set up Node.js
@@ -153,15 +162,21 @@ jobs:
 
       - name: Record inspected live state
         shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          LIVE_INDEX_SHA256: ${{ steps.preflight.outputs.live_index_html_sha256 }}
+          LIVE_ENTRY_BUNDLE: ${{ steps.preflight.outputs.live_entry_bundle }}
+          LIVE_LAST_MODIFIED: ${{ steps.preflight.outputs.live_last_modified }}
+          CANDIDATE_ENTRY: ${{ steps.preflight.outputs.candidate_entry_bundle }}
         run: |
           {
             echo "### Staging SPA preflight"
-            echo "- Mode: \`${{ inputs.mode }}\`"
+            echo "- Mode: \`$INPUT_MODE\`"
             echo "- Commit: \`$GITHUB_SHA\`"
-            echo "- Live index.html SHA-256: \`${{ steps.preflight.outputs.live_index_html_sha256 }}\`"
-            echo "- Live entry bundle: \`${{ steps.preflight.outputs.live_entry_bundle }}\`"
-            echo "- Live LastModified: \`${{ steps.preflight.outputs.live_last_modified }}\`"
-            echo "- Candidate entry bundle: \`${{ steps.preflight.outputs.candidate_entry_bundle }}\`"
+            echo "- Live index.html SHA-256: \`$LIVE_INDEX_SHA256\`"
+            echo "- Live entry bundle: \`$LIVE_ENTRY_BUNDLE\`"
+            echo "- Live LastModified: \`$LIVE_LAST_MODIFIED\`"
+            echo "- Candidate entry bundle: \`$CANDIDATE_ENTRY\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload through official receipt-gated staging SPA writer
@@ -176,7 +191,7 @@ jobs:
           set -euo pipefail
           node scripts/deployment-guard/staging-spa-upload.mjs \
             --environment staging \
-            --workstream-id "${{ steps.preflight.outputs.workstream_id }}" \
+            --workstream-id "$CHECKSOPS_WORKSTREAM_ID" \
             --commit "$GITHUB_SHA" \
             --dist dist
 
