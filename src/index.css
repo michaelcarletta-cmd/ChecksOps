@@ -232,7 +232,9 @@ All colors MUST be HSL.
   @media (max-width: 767px) {
     body {
       background-attachment: scroll;
-      overflow-y: auto;
+      /* No overflow-y here: with overflow-x: clip it makes body its own
+         (non-scrolling) scroll container, which un-pins every sticky element,
+         including the app header, on phones. The viewport scrolls instead. */
       min-height: 100dvh;
     }
   }
