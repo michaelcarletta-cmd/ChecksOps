@@ -25,7 +25,7 @@ function sha256File(file) {
 }
 
 function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+  const match = String(html || '').match(/\/assets\/index-[^"'\s]+\.js/);
   return match ? match[0] : null;
 }
 
@@ -370,19 +370,25 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   });
   if (!toctou.ok) return toctou;
 
-  // Upload index.html last.
+  // Upload index.html last, conditional on the ETag just re-read so a concurrent writer cannot be overwritten.
+  const switchEtag = immediatelyBefore.details.fingerprint?.etag || null;
+  if (!switchEtag) {
+    return fail(CODES.DEPLOYMENT_COLLISION, 'live index.html has no ETag; refusing an unconditional index switch');
+  }
   const indexPut = await aws.putObject({
     bucket: target.s3_bucket,
     key: 'index.html',
     bodyPath: path.join(dist.details.dist, 'index.html'),
     contentType: 'text/html; charset=utf-8',
     cacheControl: 'no-cache,no-store,must-revalidate',
+    ifMatch: switchEtag,
   });
   if (!indexPut?.ok) return indexPut || fail(CODES.DEPLOYMENT_COLLISION, 'index.html upload failed');
 
   const invalidation = await aws.createInvalidation({
     distributionId: target.cloudfront_id,
-    paths: ['/index.html', '/assets/*'],
+    // '/*' also refreshes '/' and client-side routes, which CloudFront caches separately from /index.html.
+    paths: ['/*'],
   });
   if (!invalidation?.ok) return invalidation || fail(CODES.DEPLOYMENT_COLLISION, 'cloudfront invalidation failed');
 
@@ -402,13 +408,22 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
     });
   }
 
-  const hostVerify = await verifySpaHost({
-    fetchImpl,
-    host: target.host,
-    expected,
-  });
+  // CloudFront edges can serve the previous index.html for a short while after the invalidation.
+  const verifyAttempts = Math.max(1, Number(ctx.hostVerifyAttempts ?? 10));
+  const verifyDelayMs = Math.max(0, Number(ctx.hostVerifyDelayMs ?? 15000));
+  const sleep = ctx.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  let hostVerify;
+  for (let attempt = 1; attempt <= verifyAttempts; attempt += 1) {
+    try {
+      hostVerify = await verifySpaHost({ fetchImpl, host: target.host, expected });
+    } catch (error) {
+      hostVerify = fail(CODES.DEPLOYMENT_COLLISION, 'post-deploy host verification request failed', { error: String(error?.message || error) });
+    }
+    if (hostVerify.ok || attempt === verifyAttempts) break;
+    await sleep(verifyDelayMs);
+  }
   if (!hostVerify.ok) {
-    return hostVerify;
+    return fail(hostVerify.code, hostVerify.message, { ...hostVerify.details, attempts: verifyAttempts, s3_written: true });
   }
 
   let lockAdvance = {
