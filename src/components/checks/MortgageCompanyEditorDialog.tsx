@@ -133,7 +133,7 @@ export function MortgageCompanyEditorDialog({
         </DialogHeader>
         <div className="space-y-5">
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b pb-1">
+            <h3 className="text-xs font-semibold text-muted-foreground tracking-wide border-b pb-1">
               Company
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -205,7 +205,7 @@ export function MortgageCompanyEditorDialog({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b pb-1">
+            <h3 className="text-xs font-semibold text-muted-foreground tracking-wide border-b pb-1">
               Address
             </h3>
             <div className="space-y-2">

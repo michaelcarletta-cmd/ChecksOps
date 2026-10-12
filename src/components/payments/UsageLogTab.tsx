@@ -90,7 +90,7 @@ export function UsageLogTab() {
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm backdrop-blur-sm">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <div className="text-[10px] font-bold text-muted-foreground tracking-wider mb-1 flex items-center gap-1.5">
               <TrendingUp className="h-3 w-3" /> Monthly Total
             </div>
             <div className="text-2xl font-bold tracking-tight text-primary">
@@ -99,7 +99,7 @@ export function UsageLogTab() {
           </div>
           
           <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <div className="text-[10px] font-bold text-muted-foreground tracking-wider mb-1 flex items-center gap-1.5">
               <Activity className="h-3 w-3" /> Events
             </div>
             <div className="text-2xl font-bold tracking-tight">
@@ -108,7 +108,7 @@ export function UsageLogTab() {
           </div>
 
           <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <div className="text-[10px] font-bold text-muted-foreground tracking-wider mb-1 flex items-center gap-1.5">
               <ShieldCheck className="h-3 w-3" /> Billing Status
             </div>
             <div className="mt-1">

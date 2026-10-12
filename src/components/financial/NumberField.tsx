@@ -76,7 +76,7 @@ export function StatTile({
     tone === "positive" ? "text-emerald-500" : tone === "negative" ? "text-destructive" : "text-foreground";
   return (
     <div className="min-w-0 rounded-lg border border-border/60 bg-card/50 p-3">
-      <p className="truncate-flex text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="truncate-flex text-[11px] tracking-wide text-muted-foreground">{label}</p>
       <p className={`text-fluid-lg font-semibold tabular-nums ${toneClass}`}>{value}</p>
       {sub && <p className="truncate-flex text-[11px] text-muted-foreground">{sub}</p>}
     </div>

@@ -368,7 +368,7 @@ export function SharedCheckPaymentDirection({
       <CardContent className="space-y-4">
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <Label className="text-[10px] tracking-wide text-muted-foreground">
               Payment recipient (contractor / PA / rep)
             </Label>
             <Input
@@ -384,7 +384,7 @@ export function SharedCheckPaymentDirection({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <Label className="text-[10px] tracking-wide text-muted-foreground">
                 Insured name
               </Label>
               <Input
@@ -399,7 +399,7 @@ export function SharedCheckPaymentDirection({
               )}
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <Label className="text-[10px] tracking-wide text-muted-foreground">
                 Insured email
               </Label>
               <div className="relative">

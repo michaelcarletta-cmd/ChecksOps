@@ -295,7 +295,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
       {/* History */}
       {(requests.data ?? []).length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Recent funding</p>
+          <p className="text-xs tracking-wide text-muted-foreground">Recent funding</p>
           <div className="divide-y rounded-md border">
             {(requests.data ?? []).map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
@@ -337,7 +337,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
 function Stat({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className="rounded-md border p-3">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs tracking-wide text-muted-foreground">{label}</p>
       <p className={`text-lg font-semibold ${muted ? "text-muted-foreground" : ""}`}>{value}</p>
     </div>
   );

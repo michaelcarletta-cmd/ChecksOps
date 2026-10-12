@@ -213,7 +213,7 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
           </div>
 
           <div className="space-y-3">
-            <Label className="text-[11px] uppercase text-muted-foreground tracking-wide">Business address</Label>
+            <Label className="text-[11px] text-muted-foreground tracking-wide">Business address</Label>
             <div className="grid gap-3">
               <Field label="Street" value={form.street} onChange={(v) => setForm({ ...form, street: v })} placeholder="123 Main St" />
               <div className="grid sm:grid-cols-3 gap-3">
@@ -292,7 +292,7 @@ function StatusPill({ label, done }: { label: string; done: boolean }) {
 function Field({ label, value, onChange, type = "text", placeholder, className = "" }: any) {
   return (
     <div className={`space-y-1 ${className}`}>
-      <Label className="text-[11px] uppercase text-muted-foreground tracking-wide">{label}</Label>
+      <Label className="text-[11px] text-muted-foreground tracking-wide">{label}</Label>
       <Input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="h-9" />
     </div>
   );

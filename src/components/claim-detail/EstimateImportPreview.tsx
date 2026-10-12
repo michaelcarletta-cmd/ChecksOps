@@ -123,7 +123,7 @@ export function EstimateImportPreview({
         {/* Line items preview */}
         <ScrollArea className="flex-1 min-h-0">
           <div className="space-y-1">
-            <div className="grid grid-cols-[1fr_60px_50px_80px_80px_90px_28px] gap-1 px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
+            <div className="grid grid-cols-[1fr_60px_50px_80px_80px_90px_28px] gap-1 px-2 py-1 text-[10px] font-semibold text-muted-foreground tracking-wider border-b">
               <span>Description</span><span>Qty</span><span>Unit</span><span>Price</span><span>Total</span><span>Trade</span><span />
             </div>
             {items.map((item, idx) => (

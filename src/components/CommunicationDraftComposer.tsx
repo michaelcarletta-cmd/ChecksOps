@@ -54,7 +54,7 @@ export const CommunicationDraftComposer = ({
   return (
     <Card className="mt-3 border-primary/30 bg-background/70 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+        <Badge variant="secondary" className="text-[10px] tracking-wide">
           {isEmail ? (
             <>
               <Mail className="mr-1 h-3 w-3" />

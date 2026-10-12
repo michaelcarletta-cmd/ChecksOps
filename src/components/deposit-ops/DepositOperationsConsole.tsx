@@ -802,7 +802,7 @@ function DepositItemDetail({
                 <span className="text-muted-foreground">{(checkData as any).check_source === "cash_job" ? "Property" : "Carrier"}</span>
                 <span className="ml-2">{checkData.carrier_name ?? "—"}</span>
                 {(checkData as any).check_source === "cash_job" && (
-                  <Badge variant="outline" className="ml-2 text-[9px] border-amber-500/40 text-amber-500">CASH JOB</Badge>
+                  <Badge variant="outline" className="ml-2 text-[9px] border-amber-500/40 text-amber-500">Cash Job</Badge>
                 )}
               </div>
               <div>

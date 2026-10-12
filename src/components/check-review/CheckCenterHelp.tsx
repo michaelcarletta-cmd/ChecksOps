@@ -157,7 +157,7 @@ export function CheckCenterHelpPanel() {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-wide text-muted-foreground">
             Core Process
           </h3>
           <div className="space-y-3">
@@ -168,7 +168,7 @@ export function CheckCenterHelpPanel() {
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-sm font-semibold tracking-wide text-muted-foreground">
             Tabs &amp; Deposit Paths
           </h3>
           <div className="grid gap-3 md:grid-cols-2">

@@ -250,7 +250,7 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
                       <span className="text-[10px] opacity-70">· {tenantName}</span>
                     )}
                     {m.source === "shared" && (
-                      <span className="text-[9px] uppercase tracking-wide opacity-60">Partner</span>
+                      <span className="text-[9px] tracking-wide opacity-60">Partner</span>
                     )}
                     <span className="text-[10px] opacity-60">
                       {format(new Date(m.created_at), "MMM d, h:mm a")}

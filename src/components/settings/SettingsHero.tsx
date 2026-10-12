@@ -15,7 +15,7 @@ export function SettingsHero({ title, description, badge, icon }: SettingsHeroPr
       <div className="relative flex flex-col gap-2">
         <div className="flex items-center gap-2">
           {icon || <Sparkles className="h-4 w-4 text-primary" />}
-          <span className="text-xs font-bold uppercase tracking-widest text-primary">{badge}</span>
+          <span className="text-xs font-bold tracking-widest text-primary">{badge}</span>
         </div>
         <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground max-w-2xl">

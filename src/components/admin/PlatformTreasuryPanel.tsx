@@ -125,11 +125,11 @@ export function PlatformTreasuryPanel() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-8">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Available</p>
+              <p className="text-xs tracking-wide text-muted-foreground">Available</p>
               <p className="text-2xl font-semibold">{money(wallet?.available_cents ?? 0)}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending</p>
+              <p className="text-xs tracking-wide text-muted-foreground">Pending</p>
               <p className="text-lg">{money(wallet?.pending_cents ?? 0)}</p>
             </div>
             <Badge variant="outline" className="capitalize">
@@ -150,7 +150,7 @@ export function PlatformTreasuryPanel() {
             <>
               <Separator />
               <div className="space-y-1">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Recent activity</p>
+                <p className="text-xs tracking-wide text-muted-foreground">Recent activity</p>
                 <div className="divide-y rounded-md border">
                   {wallet.transactions.slice(0, 8).map((t, i) => (
                     <div key={t.id ?? i} className="flex items-center justify-between px-3 py-2 text-sm">

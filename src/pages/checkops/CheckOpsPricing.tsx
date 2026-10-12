@@ -90,7 +90,7 @@ export default function CheckOpsPricing() {
             <CardContent className="p-6 md:p-8">
               <div className="flex items-center gap-2 text-primary mb-3">
                 <Building2 className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-wider">Platform</span>
+                <span className="text-xs font-semibold tracking-wider">Platform</span>
               </div>
               <h3 className="text-xl font-bold">ChecksOps System</h3>
               <p className="text-xs text-muted-foreground mt-1">One-time, per company</p>
@@ -118,7 +118,7 @@ export default function CheckOpsPricing() {
             <CardContent className="p-6 md:p-8">
               <div className="flex items-center gap-2 text-primary mb-3">
                 <Receipt className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-wider">Per Check</span>
+                <span className="text-xs font-semibold tracking-wider">Per Check</span>
               </div>
               <h3 className="text-xl font-bold">Processing Rate</h3>
               <p className="text-xs text-muted-foreground mt-1">Billed monthly on usage</p>
@@ -142,7 +142,7 @@ export default function CheckOpsPricing() {
             <CardContent className="p-6 md:p-8">
               <div className="flex items-center gap-2 text-primary mb-3">
                 <Wrench className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-wider">Maintenance</span>
+                <span className="text-xs font-semibold tracking-wider">Maintenance</span>
               </div>
               <h3 className="text-xl font-bold">Support & Updates</h3>
               <p className="text-xs text-muted-foreground mt-1">Choose monthly or annual</p>

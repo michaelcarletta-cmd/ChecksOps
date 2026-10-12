@@ -217,7 +217,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
             <div className="flex items-center gap-3">
               <div className="hidden md:flex flex-col items-end mr-2">
                 <div className="text-xl font-bold text-foreground">{total}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Verified Pros</div>
+                <div className="text-[10px] tracking-wider text-muted-foreground font-semibold">Verified Pros</div>
               </div>
             </div>
           </div>
@@ -294,15 +294,15 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
                 </div>
                 {selected.bio && <p className="text-sm text-muted-foreground">{selected.bio}</p>}
                 <div>
-                  <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">Trades</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-1.5">Trades</div>
                   <div className="flex flex-wrap gap-1.5">{(selected.trades ?? []).map(t => <Badge key={t} variant="outline">{TRADE_LABEL.get(t) ?? t}</Badge>)}</div>
                 </div>
                 <div>
-                  <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">Serves</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-1.5">Serves</div>
                   <div className="flex flex-wrap gap-1.5">{(selected.service_states ?? []).map(s => <Badge key={s} variant="outline">{s}</Badge>)}</div>
                 </div>
                 <div className="border-t border-border pt-4">
-                  <div className="text-xs font-semibold uppercase text-muted-foreground mb-3">
+                  <div className="text-xs font-semibold text-muted-foreground mb-3">
                     Reviews from paid claims ({selectedReviews.length})
                   </div>
                   {detailLoading ? (

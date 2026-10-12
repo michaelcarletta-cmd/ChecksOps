@@ -184,7 +184,7 @@ export function PlatformBankPanel() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className="uppercase">{state?.environment ?? "…"}</Badge>
+            <Badge variant="outline">{state?.environment ?? "…"}</Badge>
             <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>

@@ -311,11 +311,11 @@ function ProfileSettings({ tenant }: { tenant: any }) {
         description="Update how your company appears across ChecksOps"
       >
         <div className="space-y-2">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Company Name</Label>
+          <Label className="text-[11px] tracking-wide text-muted-foreground">Company Name</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9" />
         </div>
         <div className="space-y-2">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Slug (URL path)</Label>
+          <Label className="text-[11px] tracking-wide text-muted-foreground">Slug (URL path)</Label>
           <Input value={tenant.slug} disabled className="h-9 opacity-60" />
           <p className="text-xs text-muted-foreground">Workspace URL: {tenantUrl}</p>
         </div>
@@ -590,7 +590,7 @@ function BrandingSettings({ tenant }: { tenant: any }) {
             )}
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-muted-foreground">Or paste a URL</Label>
+            <Label className="text-[10px] text-muted-foreground">Or paste a URL</Label>
             <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." />
           </div>
           {logoUrl && (

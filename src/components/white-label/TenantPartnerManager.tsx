@@ -190,7 +190,7 @@ export function TenantPartnerManager() {
             value={redeemCode}
             onChange={(e) => setRedeemCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
             maxLength={8}
-            className="h-9 flex-1 font-mono uppercase tracking-widest"
+            className="h-9 flex-1 font-mono tracking-widest"
           />
           <Button
             onClick={() => redeemCode.length === 8 && redeemMutation.mutate(redeemCode)}

@@ -47,7 +47,7 @@ export const PressureIndex = ({ score, level, factors, confidenceLevel, children
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Pressure Index — {score ?? "--"}/100
-            <Badge className={badgeColor}>{level?.toUpperCase() || "--"}</Badge>
+            <Badge className={badgeColor}>{level ? level.charAt(0).toUpperCase() + level.slice(1) : "--"}</Badge>
           </DialogTitle>
         </DialogHeader>
 

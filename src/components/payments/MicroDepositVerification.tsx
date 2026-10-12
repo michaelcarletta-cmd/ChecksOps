@@ -210,7 +210,7 @@ export function MicroDepositVerification({
         </p>
         {isSandbox && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">Test mode</p>
+            <p className="text-[10px] font-semibold tracking-wide text-amber-500">Test mode</p>
             <p className="text-[11px] text-muted-foreground">Sandbox test code: 0001</p>
           </div>
         )}

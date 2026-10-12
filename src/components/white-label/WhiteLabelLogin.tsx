@@ -252,7 +252,7 @@ export function WhiteLabelLogin() {
                     <span className="w-full border-t border-border/60" />
                   </div>
                   <div className="relative flex justify-center">
-                    <span className="bg-card px-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <span className="bg-card px-2 text-[11px] tracking-wide text-muted-foreground">
                       or
                     </span>
                   </div>

@@ -391,7 +391,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             </p>
           ) : null}
           <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Claim #</label>
+            <label className="text-[10px] tracking-wide text-muted-foreground">Claim #</label>
             <Input
               value={input}
               onChange={(e) => {
@@ -615,15 +615,15 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         {/* Totals */}
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-md bg-muted/40 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total RCV</p>
+            <p className="text-[10px] text-muted-foreground tracking-wide">Total RCV</p>
             <p className="text-sm font-bold">{fmt(totalRcv)}</p>
           </div>
           <div className="rounded-md bg-muted/40 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Received</p>
+            <p className="text-[10px] text-muted-foreground tracking-wide">Received</p>
             <p className="text-sm font-bold text-primary">{fmt(totalReceived)}</p>
           </div>
           <div className="rounded-md bg-muted/40 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Outstanding</p>
+            <p className="text-[10px] text-muted-foreground tracking-wide">Outstanding</p>
             <p className={`text-sm font-bold ${remaining === 0 && totalExpected > 0 ? "text-emerald-600" : "text-amber-600"}`}>
               {fmt(remaining)}
             </p>
@@ -643,7 +643,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         {/* Settlement breakdown */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+            <p className="text-[10px] font-medium text-muted-foreground tracking-wider">
               Settlement breakdown
             </p>
             {!readOnly && (
@@ -699,7 +699,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
 
         {/* Sibling checks */}
         <div>
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+          <p className="text-[10px] font-medium text-muted-foreground tracking-wider mb-1">
             All checks for this claim ({siblingChecks.length})
           </p>
           <div className="rounded-md border border-border/50 divide-y divide-border/50">

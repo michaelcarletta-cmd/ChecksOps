@@ -285,7 +285,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                         </TableRow>
                       ))}
                       <TableRow>
-                        <TableCell colSpan={6} className="font-medium">TOTAL</TableCell>
+                        <TableCell colSpan={6} className="font-medium">Total</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
                           {fmtMoney(displayedSum)}
                         </TableCell>

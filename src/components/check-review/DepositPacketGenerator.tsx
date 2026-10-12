@@ -188,7 +188,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
         h1{font-size:1.25rem;margin-bottom:0.25rem}
         h2{font-size:1rem;color:#444;margin-top:1.5rem;margin-bottom:0.5rem;border-bottom:1px solid #ddd;padding-bottom:0.25rem}
         .meta{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem}
-        .meta-item label{font-size:0.7rem;color:#888;text-transform:uppercase;letter-spacing:0.5px}
+        .meta-item label{font-size:0.7rem;color:#888;letter-spacing:0.5px}
         .meta-item p{font-size:0.9rem;margin:0.15rem 0 0;font-weight:500}
         .notes{background:#f9f9f9;padding:0.75rem;border-radius:0.25rem;font-size:0.85rem;margin-top:0.5rem}
         .check-img{display:block;width:100%;height:auto;border:1px solid #ddd;border-radius:0.25rem}
@@ -249,12 +249,12 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
 
             <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Details</h2>
             <div className="grid grid-cols-2 gap-2">
-              <div><p className="text-[10px] text-muted-foreground uppercase">Carrier</p><p className="text-xs font-medium">{check.carrier_name ?? "—"}</p></div>
-              <div><p className="text-[10px] text-muted-foreground uppercase">Amount</p><p className="text-xs font-bold">{fmtAmount(check.amount)}</p></div>
-              <div><p className="text-[10px] text-muted-foreground uppercase">Check #</p><p className="text-xs font-mono">{check.check_number ?? "—"}</p></div>
-              <div><p className="text-[10px] text-muted-foreground uppercase">Claim #</p><p className="text-xs">{check.detected_claim_number ?? "—"}</p></div>
-              <div><p className="text-[10px] text-muted-foreground uppercase">Issue Date</p><p className="text-xs">{formatIssueDateDisplay(check.issue_date)}</p></div>
-              <div><p className="text-[10px] text-muted-foreground uppercase">Recommendation</p><p className="text-xs">{check.deposit_recommendation?.replace(/_/g, " ") ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Carrier</p><p className="text-xs font-medium">{check.carrier_name ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Amount</p><p className="text-xs font-bold">{fmtAmount(check.amount)}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Check #</p><p className="text-xs font-mono">{check.check_number ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Claim #</p><p className="text-xs">{check.detected_claim_number ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Issue Date</p><p className="text-xs">{formatIssueDateDisplay(check.issue_date)}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Recommendation</p><p className="text-xs">{check.deposit_recommendation?.replace(/_/g, " ") ?? "—"}</p></div>
             </div>
 
             <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Payees & Endorsements</h2>
