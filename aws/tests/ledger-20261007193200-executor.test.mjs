@@ -103,8 +103,11 @@ test('pin matches the migration bytes and the staging authorization record', () 
   assert.deepEqual(Object.keys(PIN.required_ledger_triggers), RECORD.preconditions.required_ledger_triggers);
   assert.equal(RECORD.apply_authorized, false);
   assert.equal(RECORD.execute, false);
-  const log = spawnSync('git', ['log', '-1', '--format=%H', '--', PIN.filename], { cwd: ROOT, encoding: 'utf8' });
-  if (log.status === 0 && log.stdout.trim()) assert.equal(log.stdout.trim(), PIN.commit);
+  // Shallow CI checkouts lack the pinned commit; when it is present, its copy of the file must match.
+  const atCommit = spawnSync('git', ['show', `${PIN.commit}:${PIN.filename}`], { cwd: ROOT, maxBuffer: 1024 * 1024 });
+  if (atCommit.status === 0) {
+    assert.equal(createHash('sha256').update(atCommit.stdout).digest('hex'), PIN.source_sha256);
+  }
 });
 
 test('allowlist resolves the ledger pin exactly and never falls through to SQL 44 or 53', () => {
