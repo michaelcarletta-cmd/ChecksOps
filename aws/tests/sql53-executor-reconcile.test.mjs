@@ -13,6 +13,7 @@ import {
   AUTHORIZED_SQL40,
   AUTHORIZED_SQL44,
   AUTHORIZED_SQL53,
+  AUTHORIZED_LEDGER_20261007193200,
   AUTHORIZED_STAGING_SQL,
   resolveAuthorizedMigration,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
@@ -71,7 +72,7 @@ test('composed source pins keep live SQL 39/40 bytes and merged SQL 53', () => {
   assert.equal(fs.existsSync(path.join(ROOT, AUTHORIZED_SQL40.filename)), false);
 });
 
-test('packExecutor retains live-only members and adds SQL 53', () => {
+test('packExecutor retains live-only members and adds SQL 53 and the ledger migration', () => {
   const packed = packExecutor(ROOT);
   const members = zipSourceMembers(packed.zip);
   assert.equal(members['sql/39_tmp_write_policy_reconcile.sql'], LIVE_SHA.sql39);
@@ -82,7 +83,11 @@ test('packExecutor retains live-only members and adds SQL 53', () => {
   assert.equal(members['sql/44_claim_ledger_link_or_create.sql'], AUTHORIZED_SQL44.source_sha256);
   assert.ok(members['index.mjs']);
   assert.ok(members['lib/sql-executor-auth.mjs']);
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 5);
+  assert.equal(
+    members['sql/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql'],
+    AUTHORIZED_LEDGER_20261007193200.source_sha256,
+  );
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 6);
 });
 
 test('unmatched authorization never falls through to SQL 44', () => {

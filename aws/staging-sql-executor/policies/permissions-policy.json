@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InspectDeployInvokeStagingSqlExecutorOnly",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:InvokeFunction"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-guarded-sql-executor"
+    },
+    {
+      "Sid": "ReadExecutorEnvironmentSources",
+      "Effect": "Allow",
+      "Action": "lambda:GetFunctionConfiguration",
+      "Resource": [
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-rehearsal-oneshot",
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-api"
+      ]
+    },
+    {
+      "Sid": "SignStagingGuardReceipts",
+      "Effect": "Allow",
+      "Action": "kms:Sign",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/9396f5b2-d6af-4fca-aa55-0fbf57913f6c",
+      "Condition": {
+        "StringEquals": {
+          "kms:SigningAlgorithm": "ECDSA_SHA_256"
+        }
+      }
+    },
+    {
+      "Sid": "ReadStagingGuardPublicKey",
+      "Effect": "Allow",
+      "Action": "kms:GetPublicKey",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/9396f5b2-d6af-4fca-aa55-0fbf57913f6c"
+    }
+  ]
+}

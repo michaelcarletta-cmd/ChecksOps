@@ -33,29 +33,46 @@ function awsJson(args, env = process.env) {
   return out.trim() ? JSON.parse(out) : {};
 }
 
+// [source path in the repo, member path in the executor zip]
+export const EXECUTOR_PACK_MEMBERS = Object.freeze([
+  ['aws/write-path/guarded-sql-executor/index.mjs', 'index.mjs'],
+  ['aws/write-path/guarded-sql-executor/package.json', 'package.json'],
+  ['aws/write-path/sql/44_claim_ledger_link_or_create.sql', 'sql/44_claim_ledger_link_or_create.sql'],
+  ['aws/workflows/sql/53_claim_settlement_breakdown.sql', 'sql/53_claim_settlement_breakdown.sql'],
+  ['aws/write-path/guarded-sql-executor/sql/39_tmp_write_policy_reconcile.sql', 'sql/39_tmp_write_policy_reconcile.sql'],
+  ['aws/write-path/guarded-sql-executor/sql/40_collection_v2_synthetic_uat_cleanup.sql', 'sql/40_collection_v2_synthetic_uat_cleanup.sql'],
+  ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
+  ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],
+  ['supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql', 'sql/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql'],
+  ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
+  ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
+  ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
+  ['scripts/deployment-guard/lib/errors.mjs', 'lib/errors.mjs'],
+  ['scripts/deployment-guard/lib/identity.mjs', 'lib/identity.mjs'],
+  ['scripts/deployment-guard/lib/function-def-lookup.mjs', 'lib/function-def-lookup.mjs'],
+  ['scripts/deployment-guard/lib/collection-v2-synthetic-uat-cleanup.mjs', 'lib/collection-v2-synthetic-uat-cleanup.mjs'],
+  ['scripts/deployment-guard/lib/tmp-rls-catalog.mjs', 'lib/tmp-rls-catalog.mjs'],
+]);
+
+/** Environment the executor runs with, derived from the staging rehearsal function. */
+export function executorEnvironment(rehearsal = {}) {
+  return {
+    Variables: {
+      ADMIN_SECRET_ARN: rehearsal.Environment?.Variables?.ADMIN_SECRET_ARN
+        || 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt',
+      RDS_HOST: rehearsal.Environment?.Variables?.RDS_HOST || 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
+      DATABASE_NAME: 'checksops',
+      EXECUTOR_IDENTITY: SQL_EXECUTOR_FUNCTION,
+      SECRETS_MANAGER_ENDPOINT: rehearsal.Environment?.Variables?.SECRETS_MANAGER_ENDPOINT || '',
+    },
+  };
+}
+
 export function packExecutor(root) {
   const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-guarded-sql-executor-'));
   fs.mkdirSync(path.join(staging, 'sql'), { recursive: true });
   fs.mkdirSync(path.join(staging, 'lib'), { recursive: true });
-  const copies = [
-    ['aws/write-path/guarded-sql-executor/index.mjs', 'index.mjs'],
-    ['aws/write-path/guarded-sql-executor/package.json', 'package.json'],
-    ['aws/write-path/sql/44_claim_ledger_link_or_create.sql', 'sql/44_claim_ledger_link_or_create.sql'],
-    ['aws/workflows/sql/53_claim_settlement_breakdown.sql', 'sql/53_claim_settlement_breakdown.sql'],
-    ['aws/write-path/guarded-sql-executor/sql/39_tmp_write_policy_reconcile.sql', 'sql/39_tmp_write_policy_reconcile.sql'],
-    ['aws/write-path/guarded-sql-executor/sql/40_collection_v2_synthetic_uat_cleanup.sql', 'sql/40_collection_v2_synthetic_uat_cleanup.sql'],
-    ['supabase/migrations/20261001231500_tenant_users_same_check_permissions.sql', 'sql/20261001231500_tenant_users_same_check_permissions.sql'],
-    ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],
-    ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
-    ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
-    ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
-    ['scripts/deployment-guard/lib/errors.mjs', 'lib/errors.mjs'],
-    ['scripts/deployment-guard/lib/identity.mjs', 'lib/identity.mjs'],
-    ['scripts/deployment-guard/lib/function-def-lookup.mjs', 'lib/function-def-lookup.mjs'],
-    ['scripts/deployment-guard/lib/collection-v2-synthetic-uat-cleanup.mjs', 'lib/collection-v2-synthetic-uat-cleanup.mjs'],
-    ['scripts/deployment-guard/lib/tmp-rls-catalog.mjs', 'lib/tmp-rls-catalog.mjs'],
-  ];
-  for (const [from, to] of copies) {
+  for (const [from, to] of EXECUTOR_PACK_MEMBERS) {
     fs.copyFileSync(path.join(root, from), path.join(staging, to));
   }
   installExecutorDependencies(staging);
@@ -113,18 +130,8 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
   const rehearsal = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-rehearsal-oneshot'], env);
   const api = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api'], env);
   const vpc = api.VpcConfig || {};
-  const adminSecretArn = rehearsal.Environment?.Variables?.ADMIN_SECRET_ARN
-    || 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt';
   const roleArn = opts.role || rehearsal.Role || `arn:aws:iam::${ACCOUNT}:role/checksops-staging-rehearsal-oneshot`;
-  const environment = {
-    Variables: {
-      ADMIN_SECRET_ARN: adminSecretArn,
-      RDS_HOST: rehearsal.Environment?.Variables?.RDS_HOST || 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
-      DATABASE_NAME: 'checksops',
-      EXECUTOR_IDENTITY: SQL_EXECUTOR_FUNCTION,
-      SECRETS_MANAGER_ENDPOINT: rehearsal.Environment?.Variables?.SECRETS_MANAGER_ENDPOINT || '',
-    },
-  };
+  const environment = executorEnvironment(rehearsal);
   const vpcConfig = `SubnetIds=${(vpc.SubnetIds || []).join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`;
 
   let created = false;

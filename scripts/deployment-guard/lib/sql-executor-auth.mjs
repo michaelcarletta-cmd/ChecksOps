@@ -59,6 +59,28 @@ export const AUTHORIZED_SQL53 = Object.freeze({
   ]),
 });
 
+// Replace-only: the live July definition (9f6ec2dc…) is the only accepted
+// starting point. See ops/deployment-guard/ledger-20261007193200-staging-authorization.json.
+export const AUTHORIZED_LEDGER_20261007193200 = Object.freeze({
+  filename: 'supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql',
+  migration_id: '20261007193200_skip_claim_ledger_event_for_endorsement_stage',
+  commit: 'b303311836fd597583929a792123c8f8f302fc89',
+  source_sha256: '1a9e6d54c67d2068ba9497f10fcf6956c1699b3005e679b72c3cc3bf2e37878b',
+  intended_replacement_sha256: '03fcea3c87b8ed087222b4071cbe36542df00dfca5c21ea44d20dc113a1047a2',
+  expected_live_definition_sha256: '9f6ec2dc9a5bcb7b7651d5b556788eb73ba5b567d457196fe82544f98aca8699',
+  function_identity: 'public.sync_homeowner_ledger_from_check()',
+  preserved_function_definition_sha256: Object.freeze({
+    'public.hle_on_check_intake_insert()': 'bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48',
+    'public.aws_can_write_claim(uuid)': '0a7e62b26bf4dd07ce9c06a104773d472ccff6b5a0207d338de4ba594eb32caf',
+  }),
+  trigger_table: 'public.check_intake_items',
+  required_ledger_triggers: Object.freeze({
+    trg_hle_check_intake_insert: 'hle_on_check_intake_insert',
+    trg_sync_homeowner_ledger_ins: 'sync_homeowner_ledger_from_check',
+    trg_sync_homeowner_ledger_upd: 'sync_homeowner_ledger_from_check',
+  }),
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -86,6 +108,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL53,
   AUTHORIZED_SQL39,
   AUTHORIZED_SQL40,
+  AUTHORIZED_LEDGER_20261007193200,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -101,6 +124,10 @@ export function pinIdentifiersMatch(input = {}, pin = {}) {
 
 export function isSql53AuthorizedMigration(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL53);
+}
+
+export function isLedger20261007193200(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_LEDGER_20261007193200);
 }
 
 export function isSql39(input = {}) {
@@ -123,6 +150,7 @@ export function isSql44AuthorizedMigration(input = {}) {
 
 export function resolveAuthorizedMigration(input = {}) {
   if (isSql53AuthorizedMigration(input)) return AUTHORIZED_SQL53;
+  if (isLedger20261007193200(input)) return AUTHORIZED_LEDGER_20261007193200;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
