@@ -1,0 +1,87 @@
+{
+  "id": "production-api-overlay-plan",
+  "function_name": "checksops-production-prep-api",
+  "source": "aws/tests/fixtures/production-reconciliation-deployment-manifest-2026-10-08.json",
+  "notes": "One member per guarded production run. Main's bytes must equal accepted_sha256. REPLACE requires the live member to still equal expected_live_sha256 (the reconciled pre-deploy bytes) unless it already equals accepted_sha256 (no-op). ADD requires the member to be absent. ocr.mjs and index.mjs are never overlaid. workflow-delete-check.mjs is not imported by any accepted member (Delete Check is served from workflow.mjs) and is excluded, matching overlay_sequence_when_authorized.",
+  "live_identity_at_plan": {
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "f4904e55-61b3-46c4-bf1f-da178e84911b",
+    "last_modified": "2026-10-11T02:16:41.000+0000",
+    "drift_since_proof": "2026-10-10 ChecksOpsCursorCloudStaging overlay added sql53-production-readonly-inspect.mjs (4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68) and its index.mjs import; no planned member changed."
+  },
+  "sql_prerequisites": {
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql": {
+      "verified_live": true,
+      "evidence": "2026-10-12 read-only catalog inspect on i-0c35557c4e5385406: function present with intended definition 6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52"
+    },
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql": {
+      "verified_live": false,
+      "evidence": null
+    }
+  },
+  "order": [
+    "write-claim-settlement.mjs",
+    "financial-remaining.mjs",
+    "check-deposited.mjs",
+    "workflow.mjs",
+    "workflow-rpc.mjs",
+    "claim-settlement-rpc.mjs",
+    "data.mjs",
+    "workflow-transitions.mjs"
+  ],
+  "members": {
+    "write-claim-settlement.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+      "expected_live_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d",
+      "sql_before": null
+    },
+    "financial-remaining.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
+      "expected_live_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
+      "sql_before": null
+    },
+    "check-deposited.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+      "expected_live_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+      "sql_before": null
+    },
+    "workflow.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+      "expected_live_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
+      "sql_before": null
+    },
+    "workflow-rpc.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+      "expected_live_sha256": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
+      "sql_before": null
+    },
+    "claim-settlement-rpc.mjs": {
+      "operation": "add",
+      "accepted_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+    },
+    "data.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+      "expected_live_sha256": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
+      "sql_before": "aws/workflows/sql/53_claim_settlement_breakdown.sql"
+    },
+    "workflow-transitions.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
+      "expected_live_sha256": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
+      "sql_before": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql"
+    }
+  },
+  "do_not_overlay": [
+    "ocr.mjs",
+    "index.mjs",
+    "workflow-delete-check.mjs"
+  ]
+}
