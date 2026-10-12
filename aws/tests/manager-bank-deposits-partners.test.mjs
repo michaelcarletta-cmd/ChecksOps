@@ -88,13 +88,13 @@ test('Deposit Ops backend console remains intact after Manager tab removal', () 
   assert.equal(/DepositOperationsConsole/.test(whiteLabel), false);
 });
 
-test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of checks', () => {
+test('Bank Deposits exposes date jump, Auto-Deposit only, and Total = sum of checks', () => {
   const src = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
   assert.match(src, /type="date"/);
   assert.match(src, /Jump to deposit date/);
   assert.match(src, /TenantAutoApproveCard/);
   assert.match(src, /sumDepositAmounts/);
-  assert.match(src, />TOTAL</);
+  assert.match(src, />Total</);
   assert.match(src, /bankDepositDayKey/);
   assert.match(src, /isBankDepositSettled/);
   assert.equal(/CheckAltSettings/.test(src), false);
