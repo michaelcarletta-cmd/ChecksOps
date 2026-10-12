@@ -192,6 +192,19 @@ const requireRole = async (client, userId, allowed) => {
   return { roles };
 };
 
+// There are no admin-only actions inside a tenant: any member of the tenant may
+// act. Platform admin/staff keep cross-tenant access.
+const isTenantMemberOrStaff = async (client, userId, tenantId, roles = null) => {
+  const platform = roles || await rolesOf(client, userId);
+  if (platform.has('admin') || platform.has('staff')) return true;
+  if (!isUuid(tenantId)) return false;
+  const rows = (await client.query(
+    'SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1',
+    [userId, tenantId],
+  )).rows;
+  return rows.length > 0;
+};
+
 const arg = (args, ...keys) => {
   for (const key of keys) {
     if (args[key] !== undefined && args[key] !== null) return args[key];
@@ -295,8 +308,8 @@ const executeInvalidateSession = async ({ client, mapping, args }) => {
 };
 
 const executeAcceptMortgage = async ({ client, mapping, args }) => {
-  const gated = await requireRole(client, mapping.application_user_id, ['admin', 'mortgage_agent']);
-  if (gated.error) return gated;
+  const roles = await rolesOf(client, mapping.application_user_id);
+  const anyTenant = roles.has('admin') || roles.has('mortgage_agent');
   const requestId = arg(args, '_request_id', 'request_id');
   if (!isUuid(requestId)) return { error: 'invalid_uuid', field: '_request_id' };
   const rows = (await client.query(
@@ -308,8 +321,10 @@ const executeAcceptMortgage = async ({ client, mapping, args }) => {
      WHERE id = $1::uuid
        AND assigned_employee_id IS NULL
        AND status = 'requested'
+       AND ($3::boolean OR tenant_id IN (
+         SELECT tenant_id FROM public.tenant_users WHERE user_id = $2::uuid))
      RETURNING *`,
-    [requestId, mapping.application_user_id],
+    [requestId, mapping.application_user_id, anyTenant],
   )).rows;
   if (!rows.length) return { error: 'already_taken', message: 'already_taken' };
   // JS accrual .catch() swallows 42501 but still aborts the Postgres
@@ -332,8 +347,7 @@ const executeAcceptMortgage = async ({ client, mapping, args }) => {
 };
 
 const executeUpdateMortgageStatus = async ({ client, mapping, args }) => {
-  const gated = await requireRole(client, mapping.application_user_id, ['admin', 'mortgage_agent']);
-  if (gated.error) return gated;
+  const roles = await rolesOf(client, mapping.application_user_id);
   const requestId = arg(args, '_request_id', 'request_id');
   const status = String(arg(args, '_status', 'status') || '').trim();
   const notes = arg(args, '_notes', 'notes');
@@ -341,7 +355,7 @@ const executeUpdateMortgageStatus = async ({ client, mapping, args }) => {
   if (!['in_progress', 'completed', 'cancelled'].includes(status)) {
     return { error: 'invalid_status', message: 'invalid_status' };
   }
-  const isAdmin = gated.roles.has('admin');
+  const isAdmin = roles.has('admin');
   const rows = (await client.query(
     `UPDATE public.mortgage_handling_requests
      SET status = $2::text,
@@ -353,7 +367,8 @@ const executeUpdateMortgageStatus = async ({ client, mapping, args }) => {
          END,
          updated_at = now()
      WHERE id = $1::uuid
-       AND (assigned_employee_id = $4::uuid OR $5::boolean)
+       AND (assigned_employee_id = $4::uuid OR $5::boolean OR tenant_id IN (
+         SELECT tenant_id FROM public.tenant_users WHERE user_id = $4::uuid))
      RETURNING *`,
     [requestId, status, notes == null ? null : String(notes).slice(0, 4000), mapping.application_user_id, isAdmin],
   )).rows;
@@ -492,8 +507,15 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
       );
     }
   } else if (action === 'admin_reset_status') {
-    const gated = await requireRole(client, mapping.application_user_id, ['admin', 'staff']);
-    if (gated.error) return gated;
+    const draftTenant = draft.check_intake_item_id
+      ? (await client.query(
+        'SELECT tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+        [draft.check_intake_item_id],
+      )).rows[0]?.tenant_id
+      : null;
+    if (!(await isTenantMemberOrStaff(client, mapping.application_user_id, draftTenant))) {
+      return { error: 'not_authorized', message: 'Not authorized to reset this loss draft' };
+    }
     const target = String(extra?.target_status || '').trim();
     if (!SAFE_LOSS_DRAFT_RESET_STATUSES.has(target)) {
       return {
@@ -693,9 +715,6 @@ const sameClaimId = (left, right) => {
 };
 
 export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
-  const gated = await requireRole(client, mapping.application_user_id, ['admin']);
-  if (gated.error) return gated;
-
   const checkId = arg(args, 'p_check_id', 'check_id');
   if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'p_check_id' };
 
@@ -890,7 +909,7 @@ const requireManagerAdmin = async (client, userId) => {
   if (roles.has('admin') || roles.has('staff')) return { roles };
   const tenantAdmin = (await client.query(
     `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND lower(role::text) IN ('admin', 'owner')`,
+     WHERE user_id = $1::uuid`,
     [userId],
   )).rows[0];
   if (!tenantAdmin) {
@@ -915,7 +934,7 @@ const requireOwnTenantAdmin = async (client, userId, tenantId) => {
   }
   const tenantAdmin = (await client.query(
     `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND lower(role::text) IN ('admin', 'owner')`,
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid`,
     [userId, tenantId],
   )).rows[0];
   if (!tenantAdmin) {
@@ -931,7 +950,7 @@ const requireDepositManagerForTenant = async (client, userId, tenantId, roles) =
   }
   const tenantAdmin = (await client.query(
     `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND lower(role::text) IN ('admin', 'owner')`,
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid`,
     [userId, tenantId],
   )).rows[0];
   if (!tenantAdmin) {

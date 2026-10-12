@@ -71,7 +71,9 @@ export function usePermissions() {
   }, [permissions]);
 
   const isReadOnly = userRole === "read_only";
-  const isAdmin = userRole === "admin";
+  // ChecksOps has no admin-only features: every signed-in user gets them.
+  // The API and RLS still keep each user inside their own tenant.
+  const isAdmin = Boolean(user);
   const isStaff = userRole === "staff";
 
   return {

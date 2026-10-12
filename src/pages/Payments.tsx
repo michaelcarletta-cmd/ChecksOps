@@ -58,7 +58,8 @@ const SectionCard = ({
 const Payments = () => {
   const { user, userRole } = useAuth();
   const { tenant } = useTenant();
-  const isAdmin = user?.role === 'admin';
+  // ChecksOps has no admin-only features: every signed-in user gets them.
+  const isAdmin = Boolean(user);
   const platformOwner = isPlatformOwner(user?.email, user?.id);
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "ledger");

@@ -420,8 +420,19 @@ export const executeProfiles = async ({ client, mapping, values, filters }) => {
       `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
       [mapping.application_user_id],
     )).rows.map((row) => String(row.role || '').toLowerCase());
+    // No admin-only edits: any user may update the profile of someone who
+    // shares one of their tenants. Platform admins keep cross-tenant access.
     if (!roles.includes('admin')) {
-      return { error: 'not_authorized', message: 'Can only update own profile' };
+      const shared = (await client.query(
+        `SELECT 1 FROM public.tenant_users mine
+           JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
+          WHERE mine.user_id = $1::uuid AND theirs.user_id = $2::uuid
+          LIMIT 1`,
+        [mapping.application_user_id, id],
+      )).rows;
+      if (!shared.length) {
+        return { error: 'not_authorized', message: 'Can only update profiles in your company' };
+      }
     }
   }
   const out = {};

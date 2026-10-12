@@ -113,8 +113,9 @@ function SectionCard({
 
 export default function WalletOps() {
   const { tenant } = useTenant();
-  const { userRole } = useAuth();
-  const isAdmin = userRole === "admin";
+  const { user } = useAuth();
+  // ChecksOps has no admin-only features: every signed-in user gets them.
+  const isAdmin = Boolean(user);
   const { toast } = useToast();
   const { enabled, isLoading: eligibilityLoading } = usePaymentProviderEligibility();
 

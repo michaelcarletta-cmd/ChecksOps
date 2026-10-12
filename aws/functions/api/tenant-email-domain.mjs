@@ -664,7 +664,8 @@ export const resolveTenantAccess = async (client, mapping, tenantId) => {
     tenantAdmin,
     member,
     canView: platformAdmin || member,
-    canConfigure: platformAdmin || tenantAdmin,
+    // No admin-only sender settings: any member of the tenant may configure them.
+    canConfigure: platformAdmin || member,
     canDeleteIdentity: platformAdmin && master === true,
     role: tenantAdmin ? 'admin' : (membership?.role || (platformAdmin ? 'platform_admin' : null)),
   };

@@ -1,6 +1,6 @@
 /**
  * Server-matching Tax & 1099 UI gate.
- * Ordinary tenant members must not see the tax area.
+ * Any member of the tenant may use the tax area (no admin-only features).
  * Hidden tabs are not authorization — the API also enforces this.
  */
 
@@ -17,5 +17,5 @@ export function canAccessTaxUi({
 } = {}): boolean {
   if (isPlatformOwner === true) return true;
   if (String(platformRole || "").toLowerCase() === "admin") return true;
-  return PERMITTED_TENANT_TAX_ROLES.has(String(tenantRole || "").toLowerCase());
+  return String(tenantRole || "").trim() !== "";
 }

@@ -7,15 +7,16 @@ import { RunPayrollDialog } from "@/components/payroll/RunPayrollDialog";
 import { PayrollHistoryTable } from "@/components/payroll/PayrollHistoryTable";
 
 export function PayrollTab() {
-  const { userRole } = useAuth();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
-  if (userRole !== "admin") {
+  // ChecksOps has no admin-only features: any signed-in user can run payroll.
+  if (!user) {
     return (
       <Card>
         <CardContent className="p-6 flex items-center gap-3 text-sm text-muted-foreground">
           <Lock className="h-4 w-4" />
-          Payroll is admin-only. Contact your account admin to run off-claim payments.
+          Sign in to run off-claim payments.
         </CardContent>
       </Card>
     );

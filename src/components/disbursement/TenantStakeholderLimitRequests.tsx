@@ -59,7 +59,8 @@ export function TenantStakeholderLimitRequests() {
     },
   });
 
-  const canApprove = role === "owner" || role === "admin";
+  // No admin-only approvals: any member of the tenant may approve.
+  const canApprove = Boolean(role);
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["tenant-stakeholder-limit-requests", tenant?.id, tab],

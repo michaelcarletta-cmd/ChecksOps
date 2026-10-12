@@ -268,6 +268,19 @@ const rolesOf = async (client, userId, tenantId) => {
 
 const canTransition = (roles) => roles.some((role) => TRANSITION_ROLES.has(role) || role === 'member');
 
+// There are no admin-only actions: any member of the check's tenant may act on
+// it. Platform admin/staff keep cross-tenant access.
+const isTenantMemberOrStaff = async (client, userId, tenantId) => {
+  const platform = await platformRolesOf(client, userId);
+  if (platform.has('admin') || platform.has('staff')) return true;
+  if (!isUuid(tenantId)) return false;
+  const rows = (await client.query(
+    'SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1',
+    [userId, tenantId],
+  )).rows;
+  return rows.length > 0;
+};
+
 const lookupWorkflowCheck = async (client, checkId) => {
   if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'check_id' };
   const rows = (await client.query(
@@ -489,15 +502,7 @@ export const handleCheckTransition = async (event, deps = {}) => {
     if (!decided.ok) {
       return denied(spoof, decided);
     }
-    const roles = await rolesOf(client, mapping.application_user_id, looked.check.tenant_id);
-    const roleAllowed = looked.check.claim_id
-      ? decided.spec.requiredRole === 'tenant_member'
-        ? canTransition(roles)
-        : decided.spec.requiredRole === 'staff_or_tenant_admin'
-          ? roles.some((role) => TRANSITION_ROLES.has(role))
-          : false
-      : canTransition(roles);
-    if (!roleAllowed) {
+    if (!(await isTenantMemberOrStaff(client, mapping.application_user_id, looked.check.tenant_id))) {
       return denied(spoof, { error: 'insufficient_role', message: 'Transition requires a tenant membership role' });
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
@@ -595,10 +600,6 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (body.sql || body.query || body.rawSql) {
       return denied(spoof, { error: 'generic_sql_denied' });
     }
-    const roles = await platformRolesOf(client, mapping.application_user_id);
-    if (!roles.has('admin')) {
-      return denied(spoof, { error: 'not_authorized', message: 'Only admins can delete checks' });
-    }
     const checkId = body.check_id || body.checkId || body.id
       || String(event?.rawPath || '').split('/').filter(Boolean).pop();
     const reason = clip(body.reason || body.p_reason || body.delete_reason, 2000);
@@ -611,6 +612,9 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     const looked = await lookupWorkflowCheck(client, checkId);
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
+    }
+    if (!(await isTenantMemberOrStaff(client, mapping.application_user_id, looked.check.tenant_id))) {
+      return denied(spoof, { error: 'not_authorized', message: 'Only members of this check\'s company can delete it' });
     }
     if (isPartnerLinked(looked.check)) {
       return denied(spoof, {

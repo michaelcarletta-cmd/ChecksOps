@@ -322,8 +322,9 @@ export function OrganizationSettings() {
 
   if (loading) return <div>Loading organization...</div>;
 
-  const isOrgOwner = userOrg?.role === "owner";
-  const isOrgAdmin = ["owner", "admin"].includes(userOrg?.role);
+  // No admin-only organization settings: any member may manage them.
+  const isOrgOwner = Boolean(userOrg);
+  const isOrgAdmin = Boolean(userOrg);
 
   if (!userOrg) {
     return (

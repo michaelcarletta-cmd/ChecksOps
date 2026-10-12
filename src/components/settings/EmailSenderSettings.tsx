@@ -165,7 +165,7 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
   const platformAdmin = userRole === "admin";
   const canConfigure = aws
     ? Boolean(payload?.settings?.canConfigure)
-    : platformAdmin || membership?.role === "admin";
+    : platformAdmin || Boolean(membership);
 
   const [fromName, setFromName] = useState("");
   const [replyTo, setReplyTo] = useState("");

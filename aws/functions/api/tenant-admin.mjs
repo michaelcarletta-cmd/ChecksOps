@@ -65,7 +65,8 @@ const assertTenantAdmin = async (client, mapping, tenantId) => {
   const master = (await client.query(
     `SELECT public.is_master_owner() AS is_master`,
   )).rows[0];
-  const ok = membership?.role === 'admin'
+  // No admin-only tenant settings: any member of the tenant may manage it.
+  const ok = Boolean(membership)
     || system?.role === 'admin'
     || master?.is_master === true;
   return ok;
@@ -236,11 +237,27 @@ export const handleDeleteUser = async (event) => withIdentity(event, async ({
     [mapping.application_user_id],
   )).rows[0];
   const master = (await client.query(`SELECT public.is_master_owner() AS is_master`)).rows[0];
-  if (system?.role !== 'admin' && !master?.is_master) {
-    return { ok: false, statusCode: 403, error: 'admin_required', spoofFieldsIgnored: spoof };
-  }
+  const platformAdmin = system?.role === 'admin' || master?.is_master === true;
   if (!userId && !email) {
     return { ok: false, statusCode: 400, error: 'missing_user', spoofFieldsIgnored: spoof };
+  }
+  if (!platformAdmin) {
+    // No admin-only removal: any user may remove someone from the tenants they
+    // share. Disabling the login itself reaches other tenants, so it stays with
+    // platform admins.
+    if (!userId) {
+      return { ok: false, statusCode: 400, error: 'missing_user', spoofFieldsIgnored: spoof };
+    }
+    const removed = await client.query(
+      `DELETE FROM public.tenant_users
+        WHERE user_id = $1::uuid
+          AND tenant_id IN (SELECT tenant_id FROM public.tenant_users WHERE user_id = $2::uuid)`,
+      [userId, mapping.application_user_id],
+    );
+    if (!(removed.rowCount > 0)) {
+      return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
+    }
+    return { ok: true, statusCode: 200, disabled: false, removed_from_tenants: removed.rowCount, spoofFieldsIgnored: spoof };
   }
   // Soft-disable: remove tenant memberships; do not hard-delete Cognito from staging automation.
   if (userId) {

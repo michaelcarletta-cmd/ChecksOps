@@ -26,11 +26,8 @@ export function authorizeForceComplete(opts: {
   const member = (opts.tenantMemberships || []).some(
     (row) => String(row.tenant_id || "") === String(opts.check?.tenant_id),
   );
+  // Any member of the check's tenant may force-complete (no admin-only actions).
   if (!member) return { ok: false, status: 403, error: "forbidden" };
-
-  const roles = (opts.userRoles || []).map((role) => String(role || "").toLowerCase());
-  const privileged = roles.some((role) => role === "admin" || role === "staff");
-  if (!privileged) return { ok: false, status: 403, error: "forbidden" };
   return { ok: true };
 }
 

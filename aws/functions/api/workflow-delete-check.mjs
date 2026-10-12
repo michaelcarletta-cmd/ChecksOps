@@ -314,10 +314,6 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (body.sql || body.query || body.rawSql) {
       return denied(spoof, { error: 'generic_sql_denied' });
     }
-    const roles = await platformRolesOf(client, mapping.application_user_id);
-    if (!roles.has('admin')) {
-      return denied(spoof, { error: 'not_authorized', message: 'Only admins can delete checks' });
-    }
     const checkId = body.check_id || body.checkId || body.id
       || String(event?.rawPath || '').split('/').filter(Boolean).pop();
     const reason = clip(body.reason || body.p_reason || body.delete_reason, 2000);
@@ -335,6 +331,18 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     const looked = await lookupWorkflowCheck(client, checkId);
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
+    }
+    // No admin-only delete: any member of the check's tenant may delete it.
+    // Platform admin/staff keep cross-tenant access.
+    const roles = await platformRolesOf(client, mapping.application_user_id);
+    if (!roles.has('admin') && !roles.has('staff')) {
+      const member = (await client.query(
+        'SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1',
+        [mapping.application_user_id, looked.check.tenant_id],
+      )).rows;
+      if (!member.length) {
+        return denied(spoof, { error: 'not_authorized', message: 'Only members of this check\'s company can delete it' });
+      }
     }
     if (isPartnerLinked(looked.check) || isTerminalFinancial(looked.check)) {
       return denied(spoof, {

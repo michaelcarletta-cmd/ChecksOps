@@ -126,8 +126,9 @@ export const evaluateTaxAccess = ({
     return { allowed: true, reason: 'platform_admin' };
   }
   const tenantRole = tenantMembershipRole == null ? '' : String(tenantMembershipRole).toLowerCase();
-  if (PERMITTED_TENANT_TAX_ROLES.has(tenantRole)) {
-    return { allowed: true, reason: 'tenant_finance_admin' };
+  // No admin-only tax access: any member of the tenant may use it.
+  if (tenantRole) {
+    return { allowed: true, reason: 'tenant_member' };
   }
   return { allowed: false, reason: 'not_authorized' };
 };

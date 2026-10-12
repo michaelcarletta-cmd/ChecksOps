@@ -39,6 +39,18 @@ const isAdmin = async (client, userId) => {
   return master?.is_master === true;
 };
 
+const sharesTenant = async (client, userId, targetUserId) => {
+  const rows = (await safeQuery(
+    client,
+    `SELECT 1 FROM public.tenant_users mine
+       JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
+      WHERE mine.user_id = $1::uuid AND theirs.user_id = $2::uuid
+      LIMIT 1`,
+    [userId, targetUserId],
+  )).rows;
+  return rows.length > 0;
+};
+
 export const softwareTokenEnrolled = (user = {}) => {
   const list = user.UserMFASettingList || user.userMFASettingList || [];
   return list.includes('SOFTWARE_TOKEN_MFA');
@@ -47,12 +59,15 @@ export const softwareTokenEnrolled = (user = {}) => {
 export const runAdminResetTotp = async ({
   client, mapping, body, spoof, cognitoClient, poolId,
 }) => {
-  if (!await isAdmin(client, mapping.application_user_id)) {
-    return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
-  }
   const userId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
   if (!UUID_RE.test(userId)) {
     return { ok: false, statusCode: 400, error: 'invalid_user_id', spoofFieldsIgnored: spoof };
+  }
+  // No admin-only reset: any user may reset 2FA for someone who shares one of
+  // their tenants. Platform admins and the master owner keep cross-tenant access.
+  if (!await isAdmin(client, mapping.application_user_id)
+    && !await sharesTenant(client, mapping.application_user_id, userId)) {
+    return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
   }
 
   const account = (await safeQuery(
