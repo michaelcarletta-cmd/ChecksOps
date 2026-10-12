@@ -192,10 +192,16 @@ test('apply requires the exact approval phrase and a staging acceptance URL', as
 });
 
 test('workflow-transitions waits for the ledger migration; data waits for claim-settlement-rpc', async () => {
+  const LEDGER = 'supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql';
+  const unverified = structuredClone(PLAN);
+  unverified.sql_prerequisites[LEDGER] = { verified_live: false, evidence: null };
   await assert.rejects(
-    run(applyEnv('workflow-transitions.mjs'), applyDeps('workflow-transitions.mjs').deps),
+    run(applyEnv('workflow-transitions.mjs'), { ...applyDeps('workflow-transitions.mjs').deps, plan: unverified }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED,
   );
+  assert.equal(PLAN.sql_prerequisites[LEDGER].verified_live, true);
+  const transitions = await run(applyEnv('workflow-transitions.mjs'), applyDeps('workflow-transitions.mjs').deps);
+  assert.equal(transitions.state, 'READY');
   await assert.rejects(
     run(applyEnv('data.mjs'), applyDeps('data.mjs', { pending: ['claim-settlement-rpc.mjs'] }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing.includes('claim-settlement-rpc.mjs'),
