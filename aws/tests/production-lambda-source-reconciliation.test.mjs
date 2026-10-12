@@ -176,3 +176,19 @@ test('required member imports resolve without staging-503 files', () => {
   assert.match(read('workflow-rpc.mjs'), /write-claim-settlement\.mjs/);
   assert.doesNotMatch(read('workflow.mjs'), /workflow-delete-check\.mjs/);
 });
+
+test('overlay sequence adds new members before any member that imports them', () => {
+  const sequence = manifest.overlay_sequence_when_authorized;
+  const added = new Set(Object.entries(manifest.members)
+    .filter(([, row]) => row.live_sha256 === null)
+    .map(([name]) => name));
+  for (const [idx, name] of sequence.entries()) {
+    const specs = [...read(name).matchAll(/(?:from\s+|import\(\s*)['"]\.\/([^'"]+\.mjs)['"]/g)].map((m) => m[1]);
+    for (const spec of specs.filter((s) => added.has(s))) {
+      const at = sequence.indexOf(spec);
+      assert.ok(at !== -1 && at < idx, `${name} imports ${spec}, which is absent live and must be overlaid first`);
+    }
+  }
+  assert.ok(sequence.indexOf('claim-settlement-rpc.mjs') < sequence.indexOf('data.mjs'));
+  assert.equal(manifest.members['data.mjs'].sql_before, manifest.sql_order[1].path);
+});

@@ -54,7 +54,9 @@
       "live_sha256": "f4c34863997c191f2ca92ab597692938638ada7fba02443c5459dee549277bcb",
       "accepted_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
       "operation": "replace",
-      "required_imports": ["claim-settlement-rpc.mjs"]
+      "required_imports": ["claim-settlement-rpc.mjs"],
+      "sql_before": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
+      "reason": "Switches save_claim_settlement_breakdown from live workflow-rpc direct writer to claim-settlement-rpc.mjs, which calls the SQL 53 function. Overlay only after SQL 53 exists and claim-settlement-rpc.mjs is added; earlier, settlement saves fail."
     },
     "ocr.mjs": {
       "live_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
@@ -110,8 +112,8 @@
     "check-deposited.mjs",
     "workflow.mjs",
     "workflow-rpc.mjs",
-    "data.mjs",
-    "claim-settlement-rpc.mjs"
+    "claim-settlement-rpc.mjs",
+    "data.mjs"
   ],
   "do_not_overlay_until_sql": [
     "workflow-transitions.mjs"
@@ -120,7 +122,7 @@
     "ocr.mjs"
   ],
   "remaining_dependencies": [
-    "SQL 53 before claim-settlement-rpc ADD/call",
+    "SQL 53 before claim-settlement-rpc ADD/call, and claim-settlement-rpc ADD before data.mjs REPLACE",
     "SQL 20261007193200 before workflow-transitions REPLACE",
     "SQL 52 only if verified MICR persist lacks column privilege",
     "Staging SPA composed candidate for CheckCommandCenter.tsx + client.ts",
