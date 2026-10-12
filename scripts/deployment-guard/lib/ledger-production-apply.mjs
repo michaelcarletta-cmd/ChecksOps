@@ -4,8 +4,8 @@
  *
  * Mirrors the staging guarded executor's ledger handler: replace-only, the live
  * definition must equal the pinned before-hash, the result must equal the pinned
- * after-hash, preserved functions, ledger triggers and homeowner_ledger_events rows
- * must be unchanged, all inside one transaction that rolls back on any mismatch.
+ * after-hash, and preserved functions and ledger triggers must be unchanged, all
+ * inside one transaction that rolls back on any mismatch.
  * Runs only on a host with private reachability into the production VPC.
  */
 import fs from 'node:fs';
@@ -35,7 +35,7 @@ ORDER BY t.tgname
 `.trim();
 const LEDGER_EVENT_COUNT_SQL = 'SELECT count(*)::text AS n FROM public.homeowner_ledger_events';
 // The file may hold exactly one statement: the CREATE OR REPLACE of the pinned function.
-const LEDGER_SINGLE_STATEMENT_RE = /^\s*CREATE OR REPLACE FUNCTION public\.sync_homeowner_ledger_from_check\(\)\s+RETURNS TRIGGER\b[^$]*\bAS \$\$(?:(?!\$\$)[\s\S])*\$\$;\s*$/;
+const LEDGER_SINGLE_STATEMENT_RE = /^\s*CREATE OR REPLACE FUNCTION public\.sync_homeowner_ledger_from_check\(\)\s+RETURNS TRIGGER\b[^$;]*\bAS \$\$(?:(?!\$\$)[\s\S])*\$\$;\s*$/;
 const LEDGER_FORBIDDEN_MARKERS = [
   'hle_on_check_intake_insert',
   'claim_ledger_link_or_create',
@@ -270,6 +270,7 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
   const client = await ctx.connect();
   let inTx = false;
   let committed = false;
+  let commitSent = false;
   const rollback = async (result) => {
     if (inTx) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -278,8 +279,8 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
     return result;
   };
   try {
-    // One snapshot for the before/after row counts, so concurrent ledger writes cannot skew them.
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    // Read committed: every catalog read below happens after the advisory lock is held.
+    await client.query('BEGIN');
     inTx = true;
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [pin.function_identity]);
 
@@ -329,13 +330,8 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
         triggers_after_sha256: after.details.triggers_sha256,
       }));
     }
-    if (after.details.ledger_event_count !== before.details.ledger_event_count) {
-      return rollback(fail(CODES.UNRELATED_MUTATION, 'ledger apply changed homeowner_ledger_events rows', {
-        before: before.details.ledger_event_count,
-        after: after.details.ledger_event_count,
-      }));
-    }
 
+    commitSent = true;
     await client.query('COMMIT');
     inTx = false;
     committed = true;
@@ -354,6 +350,13 @@ export async function executeLedgerProductionApply(input = {}, ctx = {}) {
       },
     });
   } catch (error) {
+    if (commitSent) {
+      // COMMIT may have landed before the error; a re-run is refused once the after-hash is live.
+      inTx = false;
+      return fail(CODES.SQL_COLLISION, 'ledger production COMMIT outcome is unknown; re-run --inspect before anything else', {
+        message: String(error?.message || error).slice(0, 300),
+      });
+    }
     return rollback(fail(CODES.SQL_COLLISION, 'ledger production apply failed and was rolled back', {
       message: String(error?.message || error).slice(0, 300),
     }));

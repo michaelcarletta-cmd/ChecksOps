@@ -82,6 +82,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
   // Spend the single-use receipt only after the phrase, one_use_id and replay checks pass.
   const precheck = precheckLedgerProductionApply(payload, { root, pin, consumedPath: deps.consumedPath });
   if (!precheck.ok) return printResult(precheck);
+  // Resolve the secret and prove the production host before spending the receipt (no DB connection yet).
+  const factory = await connectFactory(pin, root, deps);
+  if (!factory.ok) return printResult(factory);
   if (receipt) {
     const consumed = (deps.consumeReceiptOnce || consumeReceiptOnce)(root, receipt, {
       actor: payload.operator || null,
@@ -90,8 +93,6 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     if (!consumed.ok) return printResult(consumed);
   }
 
-  const factory = await connectFactory(pin, root, deps);
-  if (!factory.ok) return printResult(factory);
   return printResult(await executeLedgerProductionApply(payload, {
     root,
     pin,

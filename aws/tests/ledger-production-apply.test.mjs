@@ -308,6 +308,36 @@ test('PostgreSQL 16: read-only inspect, apply, replay and drift refusals', { tim
     assert.deepEqual(missing.details.missing_ledger_triggers, ['trg_sync_homeowner_ledger_upd']);
     assert.equal(await liveSyncSha(noTrigger), PIN.expected_live_definition_sha256);
 
+    // The replace runs, then a post-check fails: everything rolls back to the before-hash.
+    const postFail = await freshDatabase();
+    const wrongAfter = await executeLedgerProductionApply(manifest(), {
+      root: ROOT, pin: { ...PIN, intended_replacement_sha256: 'f'.repeat(64) }, connect: postFail, consumedPath: consumedPath(),
+    });
+    assert.equal(wrongAfter.code, CODES.SQL_COLLISION);
+    assert.equal(wrongAfter.details.after_hash, PIN.intended_replacement_sha256);
+    assert.equal(await liveSyncSha(postFail), PIN.expected_live_definition_sha256);
+
+    // A failed COMMIT is reported as unknown, never as a rollback, and the id is not recorded.
+    const commitLost = await freshDatabase();
+    const dropCommit = async () => {
+      const client = await commitLost();
+      const query = client.query.bind(client);
+      client.query = (text, ...rest) => (text === 'COMMIT' ? Promise.reject(new Error('connection lost')) : query(text, ...rest));
+      return client;
+    };
+    const lostFile = consumedPath();
+    const lost = await executeLedgerProductionApply(manifest(), { root: ROOT, pin: PIN, connect: dropCommit, consumedPath: lostFile });
+    assert.equal(lost.ok, false);
+    assert.match(lost.message, /outcome is unknown/);
+    assert.equal(fs.existsSync(lostFile), false);
+
+    const hleDrift = await freshDatabase(`CREATE OR REPLACE FUNCTION public.aws_can_write_claim(_claim_id uuid)
+      RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT true $$;`);
+    const preserved = await executeLedgerProductionApply(manifest(), { root: ROOT, pin: PIN, connect: hleDrift, consumedPath: consumedPath() });
+    assert.equal(preserved.code, CODES.DEPLOYMENT_COLLISION);
+    assert.ok(preserved.details.drifted_preserved_functions.length > 0);
+    assert.equal(await liveSyncSha(hleDrift), PIN.expected_live_definition_sha256);
+
     const disabled = await freshDatabase('ALTER TABLE public.check_intake_items DISABLE TRIGGER trg_sync_homeowner_ledger_upd;');
     const off = await executeLedgerProductionApply(manifest(), { root: ROOT, pin: PIN, connect: disabled, consumedPath: consumedPath() });
     assert.equal(off.code, CODES.DEPLOYMENT_COLLISION);

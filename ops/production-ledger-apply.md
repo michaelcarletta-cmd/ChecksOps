@@ -43,8 +43,9 @@ RDS (`credentialsToProductionDatabaseUrl`).
    `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT=<receipt> node scripts/deployment-guard/ledger-production-apply.mjs --apply --input <manifest>`.
    One transaction with an advisory lock: refuses unless the live definition is the
    before-hash and the preserved functions and three ledger triggers are intact;
-   rolls back unless the result is the after-hash with triggers, preserved functions
-   and `homeowner_ledger_events` row count unchanged.
+   rolls back unless the result is the after-hash with triggers and preserved
+   functions unchanged. If the tool reports the COMMIT outcome as unknown, run
+   step 1 before anything else.
 6. **Verify:** re-run step 1; `already_applied` must be true.
 
 ## Rollback
