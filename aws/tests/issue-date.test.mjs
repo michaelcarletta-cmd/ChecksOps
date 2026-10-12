@@ -136,3 +136,18 @@ test('date-only columns are never displayed through new Date(...)', () => {
   walk(path.join(ROOT, 'src'));
   assert.deepEqual(offenders, []);
 });
+
+test('check detail inline date editor sends and shows the calendar day', () => {
+  const src = read('src/pages/CheckCommandCenter.tsx');
+  assert.match(src, /inputType === "date" \? toDateInputValue\(value\)/);
+  assert.match(src, /outValue = toDateInputValue\(draft\) \|\| null;/);
+  assert.doesNotMatch(src, /format\(new Date\(v\)/);
+});
+
+test('review decision saves only AWS-accepted fields and still routes', () => {
+  const src = read('src/components/check-review/CheckReviewConsole.tsx');
+  const decision = src.slice(src.indexOf('const submitDecision = useMutation'), src.indexOf('submit_check_review_decision_safe'));
+  assert.match(decision, /pickAwsSafeIntakeUpdates\(updates\)/);
+  assert.match(decision, /\.update\(\{ \.\.\.persist\.safe, updated_at/);
+  assert.doesNotMatch(decision, /\.update\(\{ \.\.\.updates,/);
+});

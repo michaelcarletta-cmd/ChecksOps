@@ -47,7 +47,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
-import { formatIssueDateDisplay } from "@/lib/issueDate";
+import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
 
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
@@ -4066,7 +4066,7 @@ function CheckDetailPanel({
                 value={check.issue_date}
                 inputType="date"
                 readOnly={isSharedView}
-                displayFormatter={(v) => (v ? format(new Date(v), "MMM d, yyyy") : null)}
+                displayFormatter={(v) => (v ? formatIssueDateDisplay(v) : null)}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -4964,13 +4964,15 @@ function EditableField({
   readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<string>(value ?? "");
+  // Date inputs need YYYY-MM-DD; the AWS API returns DATE columns as UTC midnight.
+  const initialDraft = inputType === "date" ? toDateInputValue(value) : value ?? "";
+  const [draft, setDraft] = useState<string>(initialDraft);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!editing) setDraft(value ?? "");
-  }, [value, editing]);
+    if (!editing) setDraft(initialDraft);
+  }, [initialDraft, editing]);
 
   const persist = async () => {
     setSaving(true);
@@ -4979,7 +4981,7 @@ function EditableField({
       if (inputType === "boolean") {
         outValue = draft === "true";
       } else if (inputType === "date") {
-        outValue = draft ? draft : null;
+        outValue = toDateInputValue(draft) || null;
       } else if (inputType === "number") {
         const n = parseInt(draft, 10);
         outValue = isNaN(n) ? null : n;
