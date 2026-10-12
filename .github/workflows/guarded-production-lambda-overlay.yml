@@ -214,18 +214,19 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           const base = 'https://checksops.com/prep';
-          // Production /health reports status; /db-health answers 503 unless the probe passes
-          // and reports the probe fields (select1, authentication) rather than a status field.
+          // /db-health answers 503 unless its probe passes. Production's current build reports the
+          // probe fields (select1, authentication); main's redacted build reports only status.
+          const word = (value) => (typeof value === 'string' && /^[a-z_]{1,24}$/.test(value) ? value : null);
           const checks = {
             '/health': (body) => body?.status === 'ok',
-            '/db-health': (body) => body?.select1 === 'ok' && body?.authentication === 'ok',
+            '/db-health': (body) => body?.status === 'ok' || (body?.select1 === 'ok' && body?.authentication === 'ok'),
           };
           for (const [path, healthy] of Object.entries(checks)) {
-            const res = await fetch(base + path, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+            const res = await fetch(base + path, { method: 'GET', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
             let body = {};
             try { body = JSON.parse(await res.text()); } catch {}
             const ok = res.status === 200 && healthy(body);
-            console.log(JSON.stringify({ path, httpStatus: res.status, healthy: ok }));
+            console.log(JSON.stringify({ path, httpStatus: res.status, healthy: ok, status: word(body?.status), select1: word(body?.select1), authentication: word(body?.authentication) }));
             if (!ok) throw new Error(path + ' is not healthy');
           }
           NODE

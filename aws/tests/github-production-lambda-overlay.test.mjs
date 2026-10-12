@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import {
@@ -257,4 +258,54 @@ test('non-main identity is refused', async () => {
     run({ ...ENV, GITHUB_REF_NAME: 'feature', CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, inspectLive: liveFor('workflow.mjs') }),
     (error) => error.code === CODES.UNRELATED_MUTATION,
   );
+});
+
+const SMOKE = WORKFLOW.match(/- name: Public production smoke[\s\S]*?node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/)[1];
+
+async function runProductionSmoke(responses) {
+  const logs = [];
+  const context = vm.createContext({
+    AbortSignal,
+    console: { log: (line) => logs.push(JSON.parse(line)) },
+    fetch: async (url, options) => {
+      assert.equal(options.method, 'GET');
+      assert.equal(new URL(url).origin, 'https://checksops.com');
+      const route = new URL(url).pathname.replace('/prep', '');
+      const response = responses[route];
+      return new Response(response.raw ?? JSON.stringify(response.body), { status: response.status || 200 });
+    },
+  });
+  try {
+    await new vm.Script(`(async () => {${SMOKE}\n})()`).runInContext(context);
+    return { logs };
+  } catch (error) {
+    return { logs, error };
+  }
+}
+
+test('production smoke accepts both the current probe body and the redacted status body', async () => {
+  const health = { body: { status: 'ok' } };
+  const probe = { body: { service: 'checksops-api', secretsManager: 'ok', networkTls: 'ok', authentication: 'ok', select1: 'ok' } };
+  const redacted = { body: { service: 'checksops-api', status: 'ok' } };
+  for (const dbHealth of [probe, redacted]) {
+    const result = await runProductionSmoke({ '/health': health, '/db-health': dbHealth });
+    assert.equal(result.error, undefined, JSON.stringify(result.logs));
+    assert.deepEqual(result.logs.map((row) => row.healthy), [true, true]);
+  }
+});
+
+test('production smoke fails on unhealthy, partial or malformed /db-health and logs no bodies', async () => {
+  const health = { body: { status: 'ok' } };
+  for (const dbHealth of [
+    { status: 503, body: { service: 'checksops-api', status: 'unhealthy' } },
+    { status: 200, body: { select1: 'ok', authentication: 'failed' } },
+    { status: 200, body: { select1: 'failed', authentication: 'ok', currentUser: 'checksops' } },
+    { status: 200, raw: 'not json' },
+  ]) {
+    const result = await runProductionSmoke({ '/health': health, '/db-health': dbHealth });
+    assert.match(String(result.error?.message), /\/db-health is not healthy/, JSON.stringify(dbHealth));
+    const row = result.logs.at(-1);
+    assert.deepEqual(Object.keys(row).sort(), ['authentication', 'healthy', 'httpStatus', 'path', 'select1', 'status']);
+    assert.equal(row.currentUser, undefined);
+  }
 });
