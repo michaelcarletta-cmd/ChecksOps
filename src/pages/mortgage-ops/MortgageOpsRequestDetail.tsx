@@ -1043,13 +1043,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                     <Field label="Loss type" value={req.loss_type || claim?.loss_type || "—"} />
                     <Field
                       label="Date of loss"
-                      value={
-                        req.date_of_loss
-                          ? format(new Date(req.date_of_loss), "MMM d, yyyy")
-                          : claim?.loss_date
-                          ? formatIssueDateDisplay(claim.loss_date)
-                          : "—"
-                      }
+                      value={formatIssueDateDisplay(req.date_of_loss || claim?.loss_date)}
                     />
                     <Field label="Insurance" value={req.insurance_company || claim?.insurance_company || "—"} className="col-span-2" />
                     <Field label={<><User className="h-3 w-3 inline mr-1" />Homeowner</>} value={req.homeowner_name || claim?.policyholder_name || "—"} className="col-span-2" />
