@@ -153,7 +153,8 @@ function buildReviewFieldUpdatePayload(
     updates.check_number = nextCheckNumber;
     fieldChanges.push({ field: "check_number", old_value: check.check_number, new_value: nextCheckNumber });
   }
-  if (nextAmount !== (check.amount ?? null)) {
+  const currentAmount = check.amount != null ? Number(check.amount) : null;
+  if (nextAmount !== currentAmount) {
     updates.amount = nextAmount;
     fieldChanges.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: draft.amount.trim() || null });
   }

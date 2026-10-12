@@ -372,7 +372,7 @@ test('amount, routing and account change only while the check is in Review', asy
     assert.match(result.message, /back to Review/);
   }
   const update = blocked.queries.find((q) => /UPDATE public.check_intake_items/.test(String(q.sql)));
-  assert.match(String(update.sql), /AND status = ANY\(\$\d+::text\[\]\)/);
+  assert.match(String(update.sql), /AND \(status = ANY\(\$\d+::text\[\]\) OR check_stage = 'review'\)/);
   assert.deepEqual(update.params.at(-1), ['uploaded', 'needs_review', 'ocr_complete', 'manual_review_required']);
 
   // In Review the guarded UPDATE returns the row and the values are normalized.
@@ -388,6 +388,20 @@ test('amount, routing and account change only while the check is in Review', asy
   assert.match(String(savedUpdate.sql), /amount = \$\d+::numeric/);
   assert.ok(savedUpdate.params.includes('1250.50'));
   assert.ok(savedUpdate.params.includes('021000021'));
+
+  // Typical two-decimal amounts are not exact in IEEE floats (19.99 * 100 !== 1999).
+  for (const [amount, stored] of [[19.99, '19.99'], [10.1, '10.10'], ['10.10', '10.10']]) {
+    const centsClient = mockClient({ rows: [{ id: CHECK_ID }] });
+    const centsSaved = await handleWrite(jwtEvent('/data/write', 'POST', {
+      table: 'check_intake_items',
+      op: 'update',
+      values: { amount },
+      filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    }), depsFor(centsClient));
+    assert.equal(centsSaved.ok, true, JSON.stringify({ amount, centsSaved }));
+    const centsUpdate = centsClient.queries.find((q) => /UPDATE public.check_intake_items/.test(String(q.sql)));
+    assert.ok(centsUpdate.params.includes(stored), String(amount));
+  }
 
   // Descriptive edits carry no status guard, so endorsing can still edit them.
   const descriptive = mockClient({ rows: [{ id: CHECK_ID }] });

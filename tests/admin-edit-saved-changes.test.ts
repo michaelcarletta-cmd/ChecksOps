@@ -89,3 +89,9 @@ test("admin edit dialog filters skipped keys before the success toast", () => {
     /toast\.success\(`Saved: \$\{changes\.join\(", "\)\}`\)/,
   );
 });
+
+test("Review field saves coerce stored amount before the dirty check", () => {
+  const source = readFileSync("src/components/check-review/CheckReviewConsole.tsx", "utf8");
+  assert.match(source, /check\.amount != null \? Number\(check\.amount\) : null/);
+  assert.doesNotMatch(source, /nextAmount !== \(check\.amount \?\? null\)/);
+});

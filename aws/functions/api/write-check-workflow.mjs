@@ -167,7 +167,11 @@ const intakeCoerce = (values) => {
     if (values.amount === null || values.amount === '') out.amount = null;
     else {
       const n = Number(values.amount);
-      if (!Number.isFinite(n) || n < 0 || n > 50_000_000 || Math.round(n * 100) !== n * 100) {
+      const cents = Math.round(n * 100);
+      // IEEE floats are not exact for most two-decimal dollar amounts
+      // (19.99 * 100 === 1998.9999999999998). Compare with a sub-cent
+      // tolerance so legal cents persist and 10.123 still fails.
+      if (!Number.isFinite(n) || n < 0 || n > 50_000_000 || Math.abs(n * 100 - cents) > 1e-6) {
         return { error: 'invalid_field', field: 'amount' };
       }
       out.amount = n.toFixed(2);
@@ -362,13 +366,15 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     endorsement_render_meta: 'jsonb',
   });
   built.params.push(checkId);
-  // Amount, routing and account change only while the check is in Review. The
-  // status test is part of the UPDATE so a check routed concurrently cannot slip through.
+  // Amount, routing and account change only while the check is in Review.
+  // Review membership is check_stage = review (including migrated rows whose
+  // status is still processing / in_review) or one of the legacy Review statuses.
+  // The predicate is part of the UPDATE so a concurrently routed check cannot slip through.
   const financial = REVIEW_FINANCIAL_COLUMNS.some((column) => column in nextValues);
   let reviewGuard = '';
   if (financial) {
     built.params.push([...REVIEW_EDITABLE_STATUSES]);
-    reviewGuard = ` AND status = ANY($${built.next + 1}::text[])`;
+    reviewGuard = ` AND (status = ANY($${built.next + 1}::text[]) OR check_stage = 'review')`;
   }
   const rows = (await client.query(
     `UPDATE public.check_intake_items
