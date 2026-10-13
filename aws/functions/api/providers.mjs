@@ -350,6 +350,12 @@ const isMoovSweepRead = (spec, body) => {
   return action === 'get' || action === 'list' || action === 'sweeps';
 };
 
+// Production balance refresh: provider reads only (no wallet, transfer or ledger
+// creation). Every other production Moov operation stays hard-blocked.
+const isMoovProductionRead = (spec, body) => (
+  isMoovSweepRead(spec, body) || (spec?.provider === 'moov' && spec?.name === 'moov-wallet-sync')
+);
+
 export const handleFunctionInvoke = async (event, name, deps = {}) => {
   // Class A ordinary services are owned by app-services.mjs — never stub them here.
   try {
@@ -377,9 +383,9 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
-    if (isMoovSweepRead(spec, body)) {
-      // Read-only production Moov sweep snapshot is allowed while all other provider
-      // operations remain hard-blocked unless separately authorized.
+    if (isMoovProductionRead(spec, body)) {
+      // Read-only production Moov sweep snapshot and balance refresh are allowed while
+      // all other provider operations remain hard-blocked unless separately authorized.
     } else {
     return denyProviderExecution(spec.provider, spec.name, {
       error: 'production_execution_blocked',
@@ -389,7 +395,8 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     }
   }
 
-  if ((providerSandboxExecutionEnabled() || isMoovSweepRead(spec, body)) && hasParityHandler(name)) {
+  if ((providerSandboxExecutionEnabled() || (executionAllowed('moov') && isMoovProductionRead(spec, body)))
+    && hasParityHandler(name)) {
     return runParityHandler(name, event, deps);
   }
 

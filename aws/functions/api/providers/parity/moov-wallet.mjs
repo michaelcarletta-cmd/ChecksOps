@@ -9,6 +9,31 @@ const walletScopes = {
   methods: (id) => [`/accounts/${id}/payment-methods.read`],
 };
 
+function selectProviderWallet(list, walletType, knownWalletId) {
+  const pinned = knownWalletId
+    ? (list ?? []).find((w) => (w?.walletID ?? w?.walletId) === knownWalletId)
+    : null;
+  return pinned
+    ?? (list ?? []).find((w) => (
+      walletType === 'trust'
+        ? String(w?.name ?? w?.metadata?.walletType ?? '').toLowerCase().includes('trust')
+        : !String(w?.name ?? '').toLowerCase().includes('trust')
+    ))
+    ?? (walletType === 'operating' ? (list ?? [])[0] : null);
+}
+
+function walletBalances(wallet) {
+  const available = wallet?.availableBalance?.valueDecimal
+    ? Math.round(Number(wallet.availableBalance.valueDecimal) * 100)
+    : Number(wallet?.availableBalance?.value ?? 0);
+  const pending = Number(wallet?.pendingBalance?.value ?? 0);
+  return {
+    walletID: wallet?.walletID ?? wallet?.walletId,
+    availableCents: Number.isFinite(available) ? available : 0,
+    pendingCents: Number.isFinite(pending) ? pending : 0,
+  };
+}
+
 async function ensureProviderWallet(accountId, walletType, name, knownWalletId, fetchImpl) {
   let list = [];
   try {
@@ -20,18 +45,7 @@ async function ensureProviderWallet(accountId, walletType, name, knownWalletId, 
     if (e.status !== 403) throw e;
   }
 
-  const pinned = knownWalletId
-    ? (list ?? []).find((w) => (w?.walletID ?? w?.walletId) === knownWalletId)
-    : null;
-  const wanted = pinned
-    ?? (list ?? []).find((w) => (
-      walletType === 'trust'
-        ? String(w?.name ?? w?.metadata?.walletType ?? '').toLowerCase().includes('trust')
-        : !String(w?.name ?? '').toLowerCase().includes('trust')
-    ))
-    ?? (walletType === 'operating' ? (list ?? [])[0] : null);
-
-  let wallet = wanted;
+  let wallet = selectProviderWallet(list, walletType, knownWalletId);
   if (!wallet) {
     wallet = await moovFetch(`/accounts/${accountId}/wallets`, {
       method: 'POST',
@@ -40,16 +54,7 @@ async function ensureProviderWallet(accountId, walletType, name, knownWalletId, 
       fetchImpl,
     });
   }
-
-  const available = wallet?.availableBalance?.valueDecimal
-    ? Math.round(Number(wallet.availableBalance.valueDecimal) * 100)
-    : Number(wallet?.availableBalance?.value ?? 0);
-  const pending = Number(wallet?.pendingBalance?.value ?? 0);
-  return {
-    walletID: wallet?.walletID ?? wallet?.walletId,
-    availableCents: Number.isFinite(available) ? available : 0,
-    pendingCents: Number.isFinite(pending) ? pending : 0,
-  };
+  return walletBalances(wallet);
 }
 
 export async function walletPaymentMethodId(accountId, walletId, fetchImpl) {
@@ -114,6 +119,59 @@ export async function syncWallet(client, args) {
       args.accountId, pmId, availableCents, pendingCents],
   )).rows[0];
   return saved;
+}
+
+/**
+ * Production balance refresh. Provider GETs only (wallet list and payment methods):
+ * never creates a wallet, transfer or ledger entry. Updates only the local
+ * payment_wallets row for this tenant/environment/wallet type. A wallet already
+ * recorded locally must still be returned by the provider (no fallback to another
+ * wallet), and a new row never claims the wallet bound to the tenant's other wallet
+ * type. Returns { error } instead of creating or repointing a wallet.
+ */
+export async function syncWalletReadOnly(client, args) {
+  const walletType = args.walletType ?? 'operating';
+  const name = walletType === 'trust' ? 'Trust wallet' : 'Operating wallet';
+  const existing = await readWallet(client, args.tenantId, args.environment, walletType);
+  if (args.skipProviderFetch && existing) return existing;
+
+  const list = await moovFetch(`/accounts/${args.accountId}/wallets`, {
+    scopes: walletScopes.read(args.accountId),
+    fetchImpl: args.fetchImpl,
+  });
+  let wallet;
+  if (existing?.provider_wallet_id) {
+    wallet = (list ?? []).find((w) => (w?.walletID ?? w?.walletId) === existing.provider_wallet_id);
+    if (!wallet) return { error: 'wallet_mismatch' };
+  } else {
+    const other = await readWallet(client, args.tenantId, args.environment, walletType === 'trust' ? 'operating' : 'trust');
+    const taken = other?.provider_wallet_id;
+    const candidates = (list ?? []).filter((w) => (w?.walletID ?? w?.walletId) !== taken);
+    wallet = selectProviderWallet(candidates, walletType, null);
+  }
+  if (!wallet) return { error: 'wallet_not_found' };
+  const provider = walletBalances(wallet);
+  if (!provider.walletID) return { error: 'wallet_not_found' };
+  const pmId = await walletPaymentMethodId(args.accountId, provider.walletID, args.fetchImpl);
+
+  return (await client.query(
+    `INSERT INTO public.payment_wallets
+      (tenant_id, provider, environment, wallet_type, name, provider_wallet_id,
+       provider_account_id, provider_payment_method_id, available_cents, pending_cents,
+       status, last_synced_at)
+     VALUES ($1::uuid, 'moov', $2, $3, $4, $5, $6, $7, $8, $9, 'active', now())
+     ON CONFLICT (tenant_id, provider, environment, wallet_type) DO UPDATE SET
+       provider_wallet_id = EXCLUDED.provider_wallet_id,
+       provider_account_id = EXCLUDED.provider_account_id,
+       provider_payment_method_id = COALESCE(EXCLUDED.provider_payment_method_id, payment_wallets.provider_payment_method_id),
+       available_cents = EXCLUDED.available_cents,
+       pending_cents = EXCLUDED.pending_cents,
+       status = 'active',
+       last_synced_at = now()
+     RETURNING *`,
+    [args.tenantId, args.environment, walletType, name, provider.walletID,
+      args.accountId, pmId, provider.availableCents, provider.pendingCents],
+  )).rows[0];
 }
 
 export async function writeLedgerEntry(client, entry) {
