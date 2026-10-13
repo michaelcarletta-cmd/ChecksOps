@@ -7,7 +7,7 @@
   "members": {
     "providers/production/moov-fund-authz.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "66baf54e4c8b36250b4718bb32ba746fb9b3777905b1c818bed98587f2c5a0df",
+      "accepted_sha256": "290da0d4c085cfc93b849d33ec8606f61f48f128c14a17ddf484f69b9c7c7afb",
       "operation": "add",
       "required_imports": []
     },
@@ -19,17 +19,19 @@
     },
     "auth-financial-totp.mjs": {
       "live_sha256": "82f979dc4f13f9f92c973401a632cd101ebf669d3717058abf34edce7a62ffd7",
-      "accepted_sha256": "6b46f690a8ad6b547c25fa64eba022e6d1343c67edfb383400cc918538e51332",
+      "accepted_sha256": "9abdc5289c1bcd6decb76210578dd5f040df62b0e53dc6c26aaf5ca66a4c70fb",
       "operation": "replace",
       "required_imports": [
         "providers/production/moov-fund-authz.mjs",
+        "cognito.mjs",
+        "data.mjs",
         "financial-ownership.mjs",
         "identity.mjs"
       ]
     },
     "providers/production/moov-wallet-fund.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "1c66f021d7a14c824d64e08bf208c0e38c1481782061bb86f8bd226f410cfed0",
+      "accepted_sha256": "0bb71eb365c4d2c1c6a74457b3006ddce8d5629cd529b3d4075b003b8b74d672",
       "operation": "add",
       "required_imports": [
         "providers/production/moov-fund-authz.mjs",
@@ -41,6 +43,7 @@
         "financial-flags.mjs",
         "financial-ownership.mjs",
         "ops-readiness.mjs",
+        "sandbox-flags.mjs",
         "data.mjs",
         "sandbox-credentials.mjs"
       ]

@@ -5,6 +5,7 @@ import { handleProviderRequest } from '../functions/api/providers.mjs';
 import {
   moovRefusedTransfer,
   parseFundAmountCents,
+  resolveFacilitatorId,
   selectDebitMethod,
 } from '../functions/api/providers/production/moov-wallet-fund.mjs';
 import { loginSessionBinding } from '../functions/api/providers/production/moov-fund-authz.mjs';
@@ -24,6 +25,7 @@ const FLAGS = {
   AWS_MOOV_ENABLED: 'true',
   AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
   AWS_MOOV_TRANSFER_POST_ENABLED: 'true',
+  AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'true',
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
 };
 
@@ -307,7 +309,11 @@ test('a committed but never-sent row is resumed with the same Moov idempotency k
   await withEnv(FLAGS, async () => {
     const id = '00000000-0000-4000-8000-000000000007';
     const client = fakeDb({
-      transfers: [{ id, tenant_id: TENANT, idempotency_key: `wallet-fund:${CLICK}`, amount_cents: 2500, leg_role: 'wallet_funding', status: 'ready', provider_transfer_id: null }],
+      transfers: [{
+        id, tenant_id: TENANT, idempotency_key: `wallet-fund:${CLICK}`, amount_cents: 2500, leg_role: 'wallet_funding',
+        status: 'ready', provider_transfer_id: null, wallet_id: 'wallet-row',
+        provider_metadata: { source_moov_payment_method_id: 'pm-debit', destination_moov_payment_method_id: 'pm-wallet' },
+      }],
     });
     const moov = moovStub();
     const result = await run(client, moov);
@@ -341,23 +347,81 @@ test('a timeout or 5xx is recorded as unknown and committed even though the requ
 test('a Moov refusal is recorded as failed and committed', async () => {
   await withEnv(FLAGS, async () => {
     const client = fakeDb();
-    const moov = moovStub({ postResult: { status: 422, body: { error: 'insufficient capabilities' } } });
+    const moov = moovStub({ postResult: { status: 422, body: { error: 'insufficient capabilities', errors: { source: 'internal detail' } } } });
     const result = await run(client, moov);
     assert.equal(result.ok, false);
-    assert.equal(result.statusCode, 422);
+    assert.equal(result.statusCode, 502);
+    assert.equal(result.error, 'provider_transfer_refused');
+    assert.doesNotMatch(JSON.stringify(result), /internal detail|insufficient capabilities/);
     assert.equal(client.committed.transfers[0].status, 'failed');
+    assert.match(client.committed.transfers[0].failure_reason, /insufficient capabilities/);
   });
 });
 
-test('the transfer switch off records the request but sends nothing', async () => {
+test('the transfer switch off records nothing and sends nothing', async () => {
   await withEnv({ ...FLAGS, AWS_MOOV_TRANSFER_POST_ENABLED: undefined }, async () => {
     const client = fakeDb();
     const moov = moovStub();
     const result = await run(client, moov);
     assert.equal(result.statusCode, 403);
     assert.equal(result.error, 'transfer_post_held');
+    assert.equal(moov.calls.length, 0);
+    assert.equal(client.committed.transfers.length, 0);
+  });
+});
+
+test('funding needs financial permissions on and sandbox execution off', async () => {
+  for (const env of [{ AWS_FINANCIAL_PERMISSIONS_ACTIVATED: undefined }, { AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }]) {
+    await withEnv({ ...FLAGS, ...env }, async () => {
+      const client = fakeDb();
+      const moov = moovStub();
+      const result = await run(client, moov);
+      assert.equal(result.statusCode, 403, JSON.stringify(env));
+      assert.equal(moov.calls.length, 0);
+      assert.equal(client.committed.transfers.length, 0);
+    });
+  }
+});
+
+test('a resumed request whose bank or wallet changed is refused, not sent', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb({
+      transfers: [{
+        id: '00000000-0000-4000-8000-000000000008', tenant_id: TENANT, idempotency_key: `wallet-fund:${CLICK}`, amount_cents: 2500,
+        leg_role: 'wallet_funding', status: 'ready', provider_transfer_id: null, wallet_id: 'wallet-row',
+        provider_metadata: { source_moov_payment_method_id: 'pm-old-bank', destination_moov_payment_method_id: 'pm-wallet' },
+      }],
+    });
+    const moov = moovStub();
+    const result = await run(client, moov);
+    assert.equal(result.error, 'idempotency_key_reused');
     assert.equal(moov.posts().length, 0);
-    assert.equal(client.committed.transfers[0].status, 'ready');
+  });
+});
+
+test('without a platform account id the facilitator comes only from this tenant\'s wallet, else nothing is sent', async () => {
+  const methods = [{ paymentMethodType: 'moov-wallet', paymentMethodID: 'pm-wallet', wallet: { walletID: 'w', partnerAccountID: 'partner-1' } }];
+  assert.equal(resolveFacilitatorId('platform-acct', methods, 'pm-wallet'), 'platform-acct');
+  assert.equal(resolveFacilitatorId(null, methods, 'pm-wallet'), 'partner-1');
+  assert.equal(resolveFacilitatorId(null, methods, 'pm-other'), null);
+  assert.equal(resolveFacilitatorId(null, [], 'pm-wallet'), null);
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    const result = await handleProviderRequest(
+      fundEvent({ tenant_id: TENANT, amount_cents: 2500, idempotency_key: CLICK }),
+      '/functions/v1/moov-wallet-fund',
+      'POST',
+      {
+        loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+        createClient: () => client,
+        loadProviderSecrets: async () => ({ MOOV_PUBLIC_KEY: 'pk', MOOV_SECRET_KEY: 'sk' }),
+        fetchImpl: moov.impl,
+      },
+    );
+    assert.equal(result.error, 'facilitator_unavailable');
+    assert.equal(moov.posts().length, 0);
+    assert.equal(client.committed.transfers.length, 0);
   });
 });
 

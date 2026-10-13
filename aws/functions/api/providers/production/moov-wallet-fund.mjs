@@ -18,9 +18,9 @@ import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { isUuid } from '../../financial-ownership.mjs';
 import { flagTrue } from '../../ops-readiness.mjs';
+import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 import {
   MoovError,
-  facilitatorAccountId,
   moovFetch,
   normalizeTransferStatus,
   scopes,
@@ -133,6 +133,27 @@ export function selectDebitMethod(methods, preferredBankId) {
   return { error: debits.length ? 'bank_choice_required' : 'bank_not_ready' };
 }
 
+/**
+ * The account that facilitates the transfer: the platform account from the
+ * production secrets, else the partner on this tenant's own wallet method.
+ * Never a cached or tenant-derived guess.
+ */
+export function resolveFacilitatorId(platformAccountId, methods, walletMethodId) {
+  if (platformAccountId) return String(platformAccountId);
+  const walletMethod = (Array.isArray(methods) ? methods : [])
+    .find((m) => String(m?.paymentMethodType) === 'moov-wallet' && methodIdOf(m) === String(walletMethodId));
+  const partner = walletMethod?.wallet?.partnerAccountID ?? walletMethod?.wallet?.partnerAccountId ?? null;
+  return partner ? String(partner) : null;
+}
+
+const publicWallet = (row) => ({
+  wallet_type: row.wallet_type,
+  available_cents: Number(row.available_cents ?? 0),
+  pending_cents: Number(row.pending_cents ?? 0),
+  status: row.status,
+  last_synced_at: row.last_synced_at ?? null,
+});
+
 const publicTransfer = (row) => (row ? {
   id: row.id,
   status: row.status,
@@ -168,6 +189,9 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
   await bindRequestGucs(client, mapping, claims);
 
   let draft = await transferByKey(client, tenantId, key);
+  if (!draft && !transferPostEnabled()) {
+    return fail('transfer_post_held', 403, { message: 'Sending to Moov is switched off. Nothing was recorded or sent.' });
+  }
   if (draft) {
     if (Number(draft.amount_cents) !== amount || draft.leg_role !== 'wallet_funding') {
       return fail('idempotency_key_reused', 409, { message: 'That request was already used for a different payment.' });
@@ -209,7 +233,18 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
   const sourceMethodId = methodIdOf(picked.method);
   const bankId = bankIdOf(picked.method);
   const sourceLocal = local && local.provider_bank_account_id === bankId ? local.id : null;
-  const facilitatorId = await facilitatorAccountId(account.provider_account_id, fetchImpl);
+  const facilitatorId = resolveFacilitatorId(ctx.moovContext.productionPlatformAccountId, methods, wallet.provider_payment_method_id);
+  if (!facilitatorId) {
+    return fail('facilitator_unavailable', 503, { message: 'Payments are not configured correctly. Nothing was sent.' });
+  }
+  // A resumed request must still describe the same bank and wallet.
+  if (draft && (
+    String(draft.wallet_id) !== String(wallet.id)
+    || String(draft.provider_metadata?.source_moov_payment_method_id || '') !== sourceMethodId
+    || String(draft.provider_metadata?.destination_moov_payment_method_id || '') !== String(wallet.provider_payment_method_id)
+  )) {
+    return fail('idempotency_key_reused', 409, { message: 'That request was already used for a different payment.' });
+  }
 
   if (!draft) {
     try {
@@ -251,7 +286,7 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
   if (!transferPostEnabled()) {
     return fail('transfer_post_held', 403, {
       transfer: publicTransfer(draft),
-      message: 'Funding was recorded but sending to Moov is switched off. Nothing was sent.',
+      message: 'Sending to Moov is switched off. Nothing was sent.',
     });
   }
 
@@ -302,7 +337,11 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
     });
     await commitAndContinue(client, mapping, claims);
     if (refused) {
-      return fail(error.message, Number(error.status) || 502, { transfer_id: draft.id, liveProviderCalled: true });
+      return fail('provider_transfer_refused', 502, {
+        transfer_id: draft.id,
+        liveProviderCalled: true,
+        message: 'Moov declined this funding. Nothing was sent.',
+      });
     }
     return fail('provider_outcome_unknown', 502, {
       transfer_id: draft.id,
@@ -333,7 +372,7 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
     success: true,
     duplicate: false,
     transfer: publicTransfer(saved),
-    wallet,
+    wallet: publicWallet(wallet),
     liveProviderCalled: true,
     message: 'Funding started. Bank transfers usually take 1–3 business days before the money can be spent.',
   });
@@ -351,6 +390,10 @@ export async function handleProductionMoovWalletFund(event, deps = {}) {
     });
     const meta = { spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id, environment: ENVIRONMENT, operation: OPERATION };
     if (ctx.error) return { ...ctx, ...meta };
+    // Same production gate as CheckAlt: financial permissions on, sandbox execution off.
+    if (!financialPermissionsActivated() || providerSandboxExecutionEnabled()) {
+      return { ...fail('production_funding_disabled', 403, { message: 'Funding is not enabled.' }), ...meta };
+    }
     // Platform roles never move a tenant's money; only that tenant's members can.
     if (!ctx.memberships.some((m) => m.tenant_id === ctx.tenantId)) {
       return { ...fail('Forbidden', 403, { error: 'cross_tenant_denied' }), ...meta };
@@ -364,8 +407,8 @@ export async function handleProductionMoovWalletFund(event, deps = {}) {
     } catch (error) {
       const { isProviderNetworkError, providerEgressFailure } = await import('../../sandbox-credentials.mjs');
       if (isProviderNetworkError(error)) return { ...providerEgressFailure('moov'), ...meta };
-      const status = error instanceof MoovError ? (error.status || 502) : 500;
-      return { ...fail(error instanceof MoovError ? error.message : 'wallet_fund_failed', status), ...meta };
+      const status = error instanceof MoovError ? 502 : 500;
+      return { ...fail('wallet_fund_failed', status, { message: 'Funding could not be started. Nothing was sent.' }), ...meta };
     }
   }, deps);
 }

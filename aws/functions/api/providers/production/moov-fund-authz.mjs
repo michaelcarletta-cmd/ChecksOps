@@ -34,6 +34,8 @@ export async function loadSessionFundStepUp(client, { userId, tenantId, loginSes
        AND tenant_id = $2::uuid
        AND action_key = $3
        AND succeeded IS TRUE
+       AND factor_type = 'totp'
+       AND (metadata->>'source') = 'app_financial_totp'
        AND (metadata->>'login_session') = $4
      ORDER BY created_at DESC
      LIMIT 1`,

@@ -7,7 +7,8 @@ import { flagTrue } from './ops-readiness.mjs';
 import { evaluatePrivilegedEnrollment, privilegedAuthPolicy } from './privileged-auth.mjs';
 import { normalizeTotpCode, totpUserFailureMessage } from './auth-totp-code.mjs';
 import { getSecretStringFromAws } from './secrets.mjs';
-import { withIdentityWrite } from './data.mjs';
+import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from './cognito.mjs';
+import { commitWriteTransaction, withIdentityWrite } from './data.mjs';
 import {
   encryptSecret,
   decryptSecret,
@@ -116,6 +117,19 @@ const consumeRate = async (client, userId, action) => {
     };
   }
   return { ok: true };
+};
+
+/**
+ * Commit the rate-limit hit before the code is checked. A wrong code makes the
+ * request fail and roll back, which would otherwise undo the count and allow
+ * unlimited guessing.
+ */
+const persistRateLimitHit = async (client, mapping, claims) => {
+  await commitWriteTransaction(client);
+  await client.query('BEGIN');
+  await client.query('SET TRANSACTION READ WRITE');
+  await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
+  await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || claims?.email || '']);
 };
 
 const statusRow = async (client, userId) => {
@@ -306,6 +320,7 @@ export const handleMfaVerify = async (event, deps = {}) => {
     try {
       const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, 'enroll_confirm');
       if (!rate.ok) return rate;
+      await persistRateLimitHit(ctx.client, ctx.mapping, ctx.claims);
       const wrap = await (deps.loadWrapKey || loadFinancialTotpWrapKey)();
       const verified = await verifyAgainstStore({
         client: ctx.client,
@@ -516,6 +531,7 @@ export const handleMfaStepUp = async (event, deps = {}) => {
     try {
       const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, 'step_up');
       if (!rate.ok) return rate;
+      await persistRateLimitHit(ctx.client, ctx.mapping, ctx.claims);
       const bound = await resolveFinancialStepUpBinding({
         client: ctx.client,
         mapping: ctx.mapping,
