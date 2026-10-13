@@ -2,7 +2,7 @@
   "id": "production-api-overlay-plan",
   "function_name": "checksops-production-prep-api",
   "source": "aws/tests/fixtures/production-reconciliation-deployment-manifest-2026-10-08.json",
-  "notes": "One member per guarded production run. Main's bytes must equal accepted_sha256. REPLACE requires the live member to still equal expected_live_sha256 (the reconciled pre-deploy bytes) unless it already equals accepted_sha256 (no-op). ADD requires the member to be absent. ocr.mjs and index.mjs are never overlaid. workflow-delete-check.mjs is not imported by any accepted member (Delete Check is served from workflow.mjs) and is excluded, matching overlay_sequence_when_authorized.",
+  "notes": "One member per guarded production run. Main's bytes must equal accepted_sha256. REPLACE requires the live member to still equal expected_live_sha256 (the reconciled pre-deploy bytes) unless it already equals accepted_sha256 (no-op). ADD requires the member to be absent. ocr.mjs and index.mjs are never overlaid. workflow-delete-check.mjs is not imported by any accepted member (Delete Check is served from workflow.mjs) and is excluded, matching overlay_sequence_when_authorized. Read-only production Moov wallet sync (2026-10-13): moov-wallet.mjs, then ADD providers/production/moov-wallet-sync.mjs, then providers.mjs (live production bytes, which carry the Platform Finance read exception, plus the moov-wallet-sync route). parity/moov-functions.mjs is not overlaid.",
   "live_identity_at_plan": {
     "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
     "revision_id": "f4904e55-61b3-46c4-bf1f-da178e84911b",
@@ -27,7 +27,10 @@
     "workflow-rpc.mjs",
     "claim-settlement-rpc.mjs",
     "data.mjs",
-    "workflow-transitions.mjs"
+    "workflow-transitions.mjs",
+    "providers/parity/moov-wallet.mjs",
+    "providers/production/moov-wallet-sync.mjs",
+    "providers.mjs"
   ],
   "members": {
     "write-claim-settlement.mjs": {
@@ -77,6 +80,27 @@
       "accepted_sha256": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
       "expected_live_sha256": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
       "sql_before": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql"
+    },
+    "providers/parity/moov-wallet.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "100d7214ecab2860158654b9e52b5f430c2cb53f2794b690a9cfd3247bff6882",
+      "expected_live_sha256": "4f6f548960cfdadd524402d953cfa903594a672448a561cc4f223d2fe56f4144",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-moov-wallet-sync-manifest-2026-10-13.json"
+    },
+    "providers/production/moov-wallet-sync.mjs": {
+      "operation": "add",
+      "accepted_sha256": "4c2701f4a6e5eadae91dd3b7d54ecb420ecdcc9e7996c50bef226baa1ba001d2",
+      "expected_live_sha256": null,
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-moov-wallet-sync-manifest-2026-10-13.json"
+    },
+    "providers.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "32536aec98356c5103df1fcce489687b1eee2c5bdd7d1b145e1133c6e34be6f7",
+      "expected_live_sha256": "d6472ef4050e9824e8325122a9ce7e47f7f08300ca208502696b5dbfa035df48",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-moov-wallet-sync-manifest-2026-10-13.json"
     }
   },
   "do_not_overlay": [

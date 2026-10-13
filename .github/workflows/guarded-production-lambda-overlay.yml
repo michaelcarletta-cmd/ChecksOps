@@ -26,6 +26,9 @@ on:
           - claim-settlement-rpc.mjs
           - data.mjs
           - workflow-transitions.mjs
+          - providers/parity/moov-wallet.mjs
+          - providers/production/moov-wallet-sync.mjs
+          - providers.mjs
       approved_commit:
         description: "Required for apply: exact main commit approved for deployment"
         required: false
