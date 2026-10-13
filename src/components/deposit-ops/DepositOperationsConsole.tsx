@@ -33,6 +33,7 @@ import { DisbursementConsole } from "@/components/disbursement/DisbursementConso
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { awsApiBaseUrl } from "@/lib/awsStaging";
 import { checkAltProviderUserMessage } from "@/lib/awsCheckAltMoneyPath";
+import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -385,7 +386,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                   {approvedChecks.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="font-mono text-sm">#{c.check_number || "—"}</TableCell>
-                      <TableCell className="text-sm">{c.carrier_name || "—"}</TableCell>
+                      <TableCell className="text-sm">{displayCase(c.carrier_name) || "—"}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(c.amount)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -457,7 +458,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                         onClick={() => setSelectedItemId(item.id)}
                       >
                         <TableCell className="font-mono text-sm">#{item.check_number || "—"}</TableCell>
-                        <TableCell className="text-sm max-w-[120px] truncate">{item.carrier_name || "—"}</TableCell>
+                        <TableCell className="text-sm max-w-[120px] truncate">{displayCase(item.carrier_name) || "—"}</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(item.amount)}</TableCell>
                         <TableCell>
                           <span className="text-xs">{providerLabel(item.provider)}</span>
@@ -800,7 +801,7 @@ function DepositItemDetail({
               <div><span className="text-muted-foreground">Amount</span><span className="ml-2 font-medium">{checkData.amount != null ? `$${Number(checkData.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</span></div>
               <div>
                 <span className="text-muted-foreground">{(checkData as any).check_source === "cash_job" ? "Property" : "Carrier"}</span>
-                <span className="ml-2">{checkData.carrier_name ?? "—"}</span>
+                <span className="ml-2">{displayCaseOrNull(checkData.carrier_name) ?? "—"}</span>
                 {(checkData as any).check_source === "cash_job" && (
                   <Badge variant="outline" className="ml-2 text-[9px] border-amber-500/40 text-amber-500">Cash Job</Badge>
                 )}
@@ -812,7 +813,7 @@ function DepositItemDetail({
                 </span>
               </div>
 
-              <div className="col-span-2"><span className="text-muted-foreground">Payee Line</span><span className="ml-2">{checkData.payee_line ?? "—"}</span></div>
+              <div className="col-span-2"><span className="text-muted-foreground">Payee Line</span><span className="ml-2">{displayCaseOrNull(checkData.payee_line) ?? "—"}</span></div>
               {checkData.routing_number && (
                 <div><span className="text-muted-foreground">Routing</span><span className="ml-2 font-mono">{checkData.routing_number}</span></div>
               )}
@@ -831,7 +832,7 @@ function DepositItemDetail({
                   <div className="flex flex-wrap gap-1 mt-1">
                     {(checkData.check_payees as Array<{ payee_name: string; payee_type: string; endorsement_status: string }>).map((p, i) => (
                       <Badge key={i} variant="outline" className="text-[10px]">
-                        {p.payee_name}
+                        {displayCase(p.payee_name)}
                         {p.payee_type === "mortgage_company" && " (Mortgage)"}
                       </Badge>
                     ))}
@@ -848,7 +849,7 @@ function DepositItemDetail({
         open={imageViewerOpen}
         frontUrl={imageUrls?.front ?? null}
         backUrl={imageUrls?.back ?? null}
-        title={`Check #${checkData?.check_number ?? "—"} — ${checkData?.carrier_name ?? ""}`}
+        title={`Check #${checkData?.check_number ?? "—"} — ${displayCase(checkData?.carrier_name)}`}
         onClose={() => setImageViewerOpen(false)}
       />
 
@@ -1074,7 +1075,7 @@ export function BranchDepositManifest() {
                 <TableRow key={item.id}>
                   <TableCell className="text-xs">{idx + 1}</TableCell>
                   <TableCell className="font-mono text-sm">#{item.check_number || "—"}</TableCell>
-                  <TableCell className="text-sm">{item.carrier_name || "—"}</TableCell>
+                  <TableCell className="text-sm">{displayCase(item.carrier_name) || "—"}</TableCell>
                   <TableCell className="text-xs">{item.provider === "internal_ready" ? "Internal" : "Branch"}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     ${(item.amount ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}

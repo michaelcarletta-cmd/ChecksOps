@@ -7,6 +7,7 @@ import {
   selectOwnerThenPartner,
 } from "@/lib/partnerSafeReads";
 import { compressCheckImage } from "@/lib/compressCheckImage";
+import { displayCase } from "@/lib/displayCase";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -425,7 +426,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         await (supabase.from("check_endorsement_events") as any).delete().eq("endorsement_id", row.id);
         await (supabase.from("check_endorsements") as any).delete().eq("id", row.id);
       }
-      toast({ title: `${row.payee_name} removed` });
+      toast({ title: `${displayCase(row.payee_name)} removed` });
       refresh();
     } catch (e: unknown) {
       toast({
@@ -725,7 +726,7 @@ function EndorsementCard({
         });
         if (error) throw new Error(error.message);
       }
-      toast({ title: `${endorsement.payee_name} marked as endorsed` });
+      toast({ title: `${displayCase(endorsement.payee_name)} marked as endorsed` });
       onRefresh();
     } catch (e: unknown) {
       toast({
@@ -753,7 +754,7 @@ function EndorsementCard({
         });
         if (error) throw new Error(error.message);
       }
-      toast({ title: `${endorsement.payee_name} marked endorsed on the check` });
+      toast({ title: `${displayCase(endorsement.payee_name)} marked endorsed on the check` });
       onRefresh();
     } catch (e: unknown) {
       toast({
@@ -829,7 +830,7 @@ function EndorsementCard({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <PayeeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="font-medium text-sm truncate">{endorsement.payee_name}</span>
+          <span className="font-medium text-sm truncate">{displayCase(endorsement.payee_name)}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <Badge className={`text-[10px] ${config.color}`}>
@@ -843,14 +844,14 @@ function EndorsementCard({
                   size="icon"
                   variant="ghost"
                   className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove ${endorsement.payee_name}`}
+                  aria-label={`Remove ${displayCase(endorsement.payee_name)}`}
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Remove {endorsement.payee_name}?</AlertDialogTitle>
+                  <AlertDialogTitle>Remove {displayCase(endorsement.payee_name)}?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This removes the payee from this check along with any endorsement record for them. This cannot be undone.
                   </AlertDialogDescription>

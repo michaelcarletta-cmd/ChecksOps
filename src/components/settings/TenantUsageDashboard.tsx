@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Receipt, Loader2, AlertCircle, TrendingUp, DollarSign } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { SectionCard } from "./SectionCard";
+import { displayCase } from "@/lib/displayCase";
 
 interface TenantUsageDashboardProps {
   tenantId: string;
@@ -350,7 +351,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                           <div className="text-[10px] text-muted-foreground font-mono flex gap-2">
                             <span>ID: {e.check_intake_item_id}</span>
                             {e.check_number && <span>· Check #{e.check_number}</span>}
-                            {e.payee_name && <span className="truncate max-w-[150px]">· {e.payee_name}</span>}
+                            {e.payee_name && <span className="truncate max-w-[150px]">· {displayCase(e.payee_name)}</span>}
                             {e.processed_by && <span className="text-primary/80">· By: {e.processed_by}</span>}
                           </div>
                         </div>

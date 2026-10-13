@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import homeownerOpsLogo from "@/assets/homeowner-ops-logo.png";
+import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 
 type LedgerEvent = {
   id: string;
@@ -402,7 +403,7 @@ function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndo
                   <div className="min-w-0">
                     <div className="font-medium truncate">
                       {partyLabel(p.payee_type)}
-                      <span className="text-muted-foreground font-normal"> · {p.payee_name}</span>
+                      <span className="text-muted-foreground font-normal"> · {displayCase(p.payee_name)}</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground">
                       {p.sent_at ? `Requested ${new Date(p.sent_at).toLocaleDateString()}` : "Awaiting request"}
@@ -895,7 +896,7 @@ function MoneySummaryPanel({
             {payments.map((p) => (
               <div key={p.id} className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">
-                  Deductible payment{p.bank_last_four ? ` · ${p.bank_name ?? "Bank"} ••••${p.bank_last_four}` : ""}
+                  Deductible payment{p.bank_last_four ? ` · ${displayCaseOrNull(p.bank_name) ?? "Bank"} ••••${p.bank_last_four}` : ""}
                 </span>
                 <span className="flex items-center gap-2">
                   {fmt(Number(p.amount))}

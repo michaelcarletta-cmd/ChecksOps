@@ -25,6 +25,7 @@ import {
   AutomationHealthCard, AutomationRunHistory, DigestDeliveryCenter, AutomationSettingsPanel,
 } from "./DepositAutomationHealth";
 import { PendingApprovalDeposits } from "@/components/settings/CheckAltSettings";
+import { displayCase } from "@/lib/displayCase";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
@@ -155,7 +156,7 @@ function ScoredQueue() {
                   </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-xs">#{item.check_number || "—"}</TableCell>
-                <TableCell className="text-xs max-w-[100px] truncate">{item.carrier_name || "—"}</TableCell>
+                <TableCell className="text-xs max-w-[100px] truncate">{displayCase(item.carrier_name) || "—"}</TableCell>
                 <TableCell className="text-right tabular-nums text-sm">{fmtMoney(item.amount as number)}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className="text-[10px]">{item.next_action || "—"}</Badge>

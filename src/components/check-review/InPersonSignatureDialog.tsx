@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
+import { displayCase } from "@/lib/displayCase";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -113,7 +114,7 @@ export function InPersonSignatureDialog({ open, onOpenChange, endorsementId, pay
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
       if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to capture signature"));
-      toast({ title: `${payeeName} signed in person` });
+      toast({ title: `${displayCase(payeeName)} signed in person` });
       onComplete();
       onOpenChange(false);
     } catch (e: any) {
@@ -128,7 +129,7 @@ export function InPersonSignatureDialog({ open, onOpenChange, endorsementId, pay
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <PenTool className="h-4 w-4" /> Sign in person — {payeeName}
+            <PenTool className="h-4 w-4" /> Sign in person — {displayCase(payeeName)}
           </DialogTitle>
           <DialogDescription className="text-xs">
             Hand the device to the payee and have them sign below. This captures a legally binding e-signature.

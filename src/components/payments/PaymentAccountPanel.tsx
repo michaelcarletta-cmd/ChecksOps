@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MoovBankLink } from "./MoovBankLink";
 import { MicroDepositVerification } from "./MicroDepositVerification";
 import { PaymentOnboardingDialog } from "./PaymentOnboardingDialog";
+import { displayCase } from "@/lib/displayCase";
 
 import {
   BANK_STATUS_LABEL,
@@ -171,7 +172,7 @@ export function PaymentAccountPanel() {
           <div className="flex flex-col items-end">
             <span className="text-xs">
               {account?.bankName
-                ? `${account.bankName}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
+                ? `${displayCase(account.bankName)}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
                 : BANK_STATUS_LABEL[account?.bankConnectionStatus ?? "not_connected"]}
             </span>
             {tenantId && account?.bankConnectionStatus !== "connected" && (

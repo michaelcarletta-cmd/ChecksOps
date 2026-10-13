@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { Download, Search, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: "text-blue-600 border-blue-500/30 bg-blue-500/10",
@@ -321,7 +322,7 @@ export function PaymentLedger() {
                           )}
                         </td>
                         <td className="p-3 text-xs font-mono hidden md:table-cell">{check?.check_number ?? "—"}</td>
-                        <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{check?.carrier_name ?? "—"}</td>
+                        <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{displayCaseOrNull(check?.carrier_name) ?? "—"}</td>
                         <td className="p-3 text-right font-medium text-sm">${Number(p.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                         <td className="p-3">
                           <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[p.status] ?? ""}`}>

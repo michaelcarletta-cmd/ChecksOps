@@ -11,6 +11,7 @@ import {
   Scale, Landmark, Ban, FileWarning, BookCheck,
 } from "lucide-react";
 import { format } from "date-fns";
+import { displayCase } from "@/lib/displayCase";
 
 interface ReconciliationItem {
   id: string;
@@ -350,7 +351,7 @@ export function ReconciliationDashboard({ searchQuery = "" }: ReconciliationDash
                       <TableRow key={item.id}>
                         <TableCell>{statusIcon(item.status, item.nsf_flag)}</TableCell>
                         <TableCell className="font-mono text-sm">#{item.check_number || "—"}</TableCell>
-                        <TableCell className="text-sm">{item.carrier_name || "—"}</TableCell>
+                        <TableCell className="text-sm">{displayCase(item.carrier_name) || "—"}</TableCell>
                         <TableCell className="text-xs">{item.provider ? providerLabels[item.provider] ?? item.provider : "—"}</TableCell>
                         <TableCell className="text-right tabular-nums">{fmtMoney(item.amount)}</TableCell>
                         <TableCell className="text-right tabular-nums">

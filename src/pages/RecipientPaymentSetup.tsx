@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { applyMoovTheme } from "@/lib/payments/moovTheme";
 import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2, UserRound, Clock } from "lucide-react";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 interface SessionData {
   recipient: { id: string; name: string; status: string; bank_linked?: boolean; bank_name?: string | null; last_four?: string | null };
@@ -234,7 +235,7 @@ export default function RecipientPaymentSetup() {
       )}
       {!loading && session && !needsIdentity && termsAccepted && !liveComplete && bankAlreadyLinked && (
         <div className="space-y-3">
-          <div className="flex gap-2 rounded-md border border-emerald-500/30 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs">Identity and agreement are recorded. {session.recipient.bank_name ?? "Your bank"}{session.recipient.last_four ? ` ••••${session.recipient.last_four}` : ""} is connected{bankVerified ? " and verified." : "."}</p></div>
+          <div className="flex gap-2 rounded-md border border-emerald-500/30 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs">Identity and agreement are recorded. {displayCaseOrNull(session.recipient.bank_name) ?? "Your bank"}{session.recipient.last_four ? ` ••••${session.recipient.last_four}` : ""} is connected{bankVerified ? " and verified." : "."}</p></div>
           {!bankVerified && bankShouldInitiate && !bankCanConfirm && (
             <div className="space-y-3">
               <p className="text-[11px] text-muted-foreground">Confirm this bank with a $0.01 verification deposit. A 4-digit code will appear on the deposit as MV••••. You can return with this same link after it arrives.</p>

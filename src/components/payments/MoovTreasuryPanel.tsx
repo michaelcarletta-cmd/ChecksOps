@@ -24,6 +24,7 @@ import {
   type SweepPushRail,
 } from "@/lib/payments/sweeps";
 import { sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", {
@@ -179,7 +180,7 @@ export function MoovTreasuryPanel() {
                 <p className="text-xs tracking-wide text-muted-foreground">Settlement bank</p>
                 <p className="text-sm">
                   {settlementMethod
-                    ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
+                    ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
                     : "Not connected"}
                 </p>
               </div>
@@ -212,7 +213,7 @@ export function MoovTreasuryPanel() {
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   {settlementMethod
-                    ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"} is connected. Refresh treasury settings to load the payout speeds your bank supports.`
+                    ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••${settlementMethod.last_four ?? "----"} is connected. Refresh treasury settings to load the payout speeds your bank supports.`
                     : "Connect and verify a settlement bank account to turn on daily payouts."}
                 </p>
                 {settlementMethod && (

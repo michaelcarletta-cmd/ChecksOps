@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Download, FileText, CheckCircle2, AlertTriangle, Clock, Landmark, Scale, BookCheck, Lock } from "lucide-react";
 import { format } from "date-fns";
+import { displayCase } from "@/lib/displayCase";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
@@ -105,7 +106,7 @@ export function CloseoutPacketViewer({ depositItemId }: { depositItemId: string 
         <CardContent className="p-4 space-y-2">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div><span className="text-muted-foreground text-xs">Check #</span><br />#{item.check_number || "—"}</div>
-            <div><span className="text-muted-foreground text-xs">Carrier</span><br />{item.carrier_name || "—"}</div>
+            <div><span className="text-muted-foreground text-xs">Carrier</span><br />{displayCase(item.carrier_name) || "—"}</div>
             <div><span className="text-muted-foreground text-xs">Amount</span><br />{fmtMoney(item.amount)}</div>
             <div><span className="text-muted-foreground text-xs">Provider</span><br />{item.provider || "—"}</div>
           </div>

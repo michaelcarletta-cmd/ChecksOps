@@ -202,6 +202,7 @@ import {
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
+import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 
 
 /* ------------------------------------------------------------------ */
@@ -1441,7 +1442,7 @@ export default function CheckCommandCenter() {
                             {group.checks.map((check) => (
                               <TableRow key={check.id} className="cursor-pointer" onMouseEnter={() => prefetchCheckDetail(check.id)} onFocus={() => prefetchCheckDetail(check.id)} onClick={() => setSelectedCheck(check.id)}>
                                 <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
-                                <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
+                                <TableCell className="text-sm">{displayCase(check.carrier_name) || "—"}</TableCell>
                                 <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
                                 <TableCell><Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>{getEffectiveStatusLabel(check)}</Badge></TableCell>
                               </TableRow>
@@ -1536,7 +1537,7 @@ export default function CheckCommandCenter() {
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
-                                      <span className="font-semibold text-foreground">{group.policyholderName}</span>
+                                      <span className="font-semibold text-foreground">{displayCase(group.policyholderName)}</span>
                                       <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
                                       <span className="text-xs font-normal text-muted-foreground">
                                         {group.rows.length} {group.rows.length === 1 ? "disbursement" : "disbursements"}
@@ -1564,7 +1565,7 @@ export default function CheckCommandCenter() {
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
                                   >
                                     <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
-                                    <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
+                                    <TableCell className="text-sm">{displayCase(check?.carrier_name) || "—"}</TableCell>
                                     <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
                                       {check?.property_address || "—"}
                                     </TableCell>
@@ -1710,7 +1711,7 @@ export default function CheckCommandCenter() {
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
-                                      <span className="font-semibold text-foreground">{group.policyholderName}</span>
+                                      <span className="font-semibold text-foreground">{displayCase(group.policyholderName)}</span>
                                       <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
                                       <span className="text-xs font-normal text-muted-foreground">
                                         {group.rows.length} {group.rows.length === 1 ? "receipt" : "receipts"}
@@ -1738,7 +1739,7 @@ export default function CheckCommandCenter() {
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
                                   >
                                     <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
-                                    <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
+                                    <TableCell className="text-sm">{displayCase(check?.carrier_name) || "—"}</TableCell>
                                     <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
                                       {check?.property_address || "—"}
                                     </TableCell>
@@ -2074,7 +2075,7 @@ export default function CheckCommandCenter() {
                             </TableCell>
                             <TableCell className="text-sm md:max-w-[180px]">
                               <div className="flex flex-col gap-0.5">
-                                <span className="break-words md:truncate leading-tight">{check.carrier_name || "Pending OCR"}</span>
+                                <span className="break-words md:truncate leading-tight">{displayCase(check.carrier_name) || "Pending OCR"}</span>
                                 <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} hideWhenSafe />
                                 {check.property_address && (
                                   <span className="text-[10px] text-muted-foreground break-words md:truncate leading-tight" title={check.property_address}>
@@ -2397,7 +2398,7 @@ function ClaimCheckFileHeader({ group, compact = false, hideReadySignal = false 
           ) : (
             <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
           )}
-          <span className="font-semibold text-foreground break-words leading-tight">{group.policyholderName}</span>
+          <span className="font-semibold text-foreground break-words leading-tight">{displayCase(group.policyholderName)}</span>
           {!isCashJobGroup && (
             <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
           )}
@@ -3816,12 +3817,12 @@ function CheckDetailPanel({
   const blockingReasons: string[] = [];
   if (pendingEndorsements.length > 0) {
     blockingReasons.push(
-      `${pendingEndorsements.length} unsigned endorsement(s): ${pendingEndorsements.map((e) => e.payee_name).join(", ")}`,
+      `${pendingEndorsements.length} unsigned endorsement(s): ${pendingEndorsements.map((e) => displayCase(e.payee_name)).join(", ")}`,
     );
   }
   if (rejectedEndorsements.length > 0) {
     blockingReasons.push(
-      `${rejectedEndorsements.length} rejected endorsement(s): ${rejectedEndorsements.map((e) => e.payee_name).join(", ")} — requires resolution`,
+      `${rejectedEndorsements.length} rejected endorsement(s): ${rejectedEndorsements.map((e) => displayCase(e.payee_name)).join(", ")} — requires resolution`,
     );
   }
   if (check.status === "loss_draft_required") {
@@ -3896,7 +3897,7 @@ function CheckDetailPanel({
             button at the top of the panel is the single entry point for check
             imagery. */}
         {check.carrier_name && (
-          <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
+          <p className="text-sm text-muted-foreground">{displayCase(check.carrier_name)}</p>
         )}
         {check.amount != null && (
           <EditableAmount checkId={checkId} currentAmount={check.amount} readOnly={isSharedView} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
@@ -4060,6 +4061,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="carrier_name"
                 value={check.carrier_name}
+                displayFormatter={displayCaseOrNull}
                 readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
@@ -4108,6 +4110,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="payee_line"
                 value={check.payee_line}
+                displayFormatter={displayCaseOrNull}
                 multiline
                 readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
@@ -5348,7 +5351,7 @@ function EditablePayeeCard({
         ) : (
           <div className="flex items-center gap-2">
             <PayeeIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium text-sm">{payee.payee_name}</span>
+            <span className="font-medium text-sm">{displayCase(payee.payee_name)}</span>
           </div>
         )}
         <div className="flex items-center gap-1">
@@ -5452,7 +5455,7 @@ function PayeeCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <PayeeIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">{payee.payee_name}</span>
+          <span className="font-medium text-sm">{displayCase(payee.payee_name)}</span>
         </div>
         <Badge className={`text-[10px] ${endorsementColors[payee.endorsement_status] ?? ""}`}>
           {endorsementStatusLabel(payee.endorsement_status)}

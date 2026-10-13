@@ -8,6 +8,7 @@ import { Loader2, MessageSquare, Search } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { CheckMessageThread } from "./CheckMessageThread";
 import { resolveMessageThreadTitle } from "@/lib/messageThreadTitle";
+import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 
 interface UnreadRow {
   check_id: string;
@@ -190,7 +191,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
             rows.map((r) => {
               const c = r.check!;
               const isActive = (selected?.check_id ?? "") === r.check_id;
-              const threadTitle = threadTitleForCheck(c);
+              const threadTitle = displayCaseOrNull(threadTitleForCheck(c));
               const claimNumber = claimFromEmbed(c.claims)?.claim_number;
               return (
                 <button
@@ -224,7 +225,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
                       )}
                       {c.carrier_name && (
                         <div className="text-[10px] text-muted-foreground truncate">
-                          {c.carrier_name}
+                          {displayCase(c.carrier_name)}
                         </div>
                       )}
 
@@ -256,7 +257,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
                 {selected?.check
                   ? [
                       `Check #${selected.check.check_number || "—"}`,
-                      threadTitleForCheck(selected.check),
+                      displayCaseOrNull(threadTitleForCheck(selected.check)),
                     ].filter(Boolean).join(" • ")
                   : "Select a conversation"}
               </CardTitle>

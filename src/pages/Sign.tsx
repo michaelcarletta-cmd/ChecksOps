@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileSignature, Check, AlertTriangle, Clock, Eye, Send } from "lucide-react";
 import { resolveFieldDisplay, detectDocumentType } from "@/lib/signer-display-templates";
 import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
+import { displayCase } from "@/lib/displayCase";
 
 export default function Sign() {
   const [searchParams] = useSearchParams();
@@ -536,7 +537,7 @@ export default function Sign() {
                 <p className="text-xs text-blue-700">Claim: {request.claim_number}</p>
               )}
               {request.policyholder_name && (
-                <p className="text-xs text-blue-700">Policyholder: {request.policyholder_name}</p>
+                <p className="text-xs text-blue-700">Policyholder: {displayCase(request.policyholder_name)}</p>
               )}
               <p className="text-xs text-blue-600 mt-1">
                 The fields below apply to the document shown above. Please review the document before signing.

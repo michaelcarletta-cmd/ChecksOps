@@ -402,7 +402,7 @@ export const CausationBlameCounterSection = ({
                     <AccordionContent className="space-y-4 pt-2">
                       {/* Carrier Claim */}
                       <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                        <p className="text-xs font-medium text-destructive mb-1">CARRIER CLAIMS:</p>
+                        <p className="text-xs font-medium text-destructive mb-1">Carrier claims:</p>
                         <p className="text-sm italic">"{tactic.carrierClaim}"</p>
                       </div>
                       

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, RefreshCw, Link2, Copy, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 interface Props {
   tenantId: string;
@@ -189,7 +190,7 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
               <Row label="Bank connected">
                 {tenant.bank_last_four ? (
                   <span className="text-xs">
-                    {tenant.bank_name ?? "Bank"} ••••{tenant.bank_last_four}
+                    {displayCaseOrNull(tenant.bank_name) ?? "Bank"} ••••{tenant.bank_last_four}
                   </span>
                 ) : (
                   <span className="text-muted-foreground text-xs">Not connected</span>

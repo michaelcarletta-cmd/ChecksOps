@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { format, differenceInDays } from "date-fns";
 import { CheckAdminEditDialog } from "./CheckAdminEditDialog";
+import { displayCase } from "@/lib/displayCase";
 
 type CheckRow = {
   id: string;
@@ -441,7 +442,7 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
           {target && (
             <div className="space-y-3">
               <div className="rounded-md bg-muted p-3 text-sm">
-                <div className="font-medium">{target.payee_line || target.carrier_name || "Check"}</div>
+                <div className="font-medium">{displayCase(target.payee_line || target.carrier_name) || "Check"}</div>
                 <div className="text-xs text-muted-foreground">
                   Check #{target.check_number ?? "—"} · Expected ${Number(target.amount ?? 0).toLocaleString()}
                 </div>
@@ -492,7 +493,7 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
           </DialogHeader>
           {deleteTarget && (
             <div className="rounded-md bg-muted p-3 text-sm">
-              <div className="font-medium">{deleteTarget.payee_line || deleteTarget.carrier_name || "Check"}</div>
+              <div className="font-medium">{displayCase(deleteTarget.payee_line || deleteTarget.carrier_name) || "Check"}</div>
               <div className="text-xs text-muted-foreground">
                 Check #{deleteTarget.check_number ?? "—"} · ${Number(deleteTarget.amount ?? 0).toLocaleString()}
               </div>
@@ -589,7 +590,7 @@ function Row({
     <div className="p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-sm">
       <div className="flex-1 min-w-0">
         <div className="font-medium truncate">
-          {c.payee_line || c.carrier_name || `Check ${c.id.slice(0, 8)}`}
+          {displayCase(c.payee_line || c.carrier_name) || `Check ${c.id.slice(0, 8)}`}
         </div>
         <div className="text-xs text-muted-foreground flex flex-wrap gap-x-2">
           <span>#{c.check_number ?? "—"}</span>

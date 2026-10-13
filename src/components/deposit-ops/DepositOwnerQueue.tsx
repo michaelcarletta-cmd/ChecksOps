@@ -20,6 +20,7 @@ import {
   Upload, FileCheck, Ban, BarChart3,
 } from "lucide-react";
 import { format } from "date-fns";
+import { displayCase } from "@/lib/displayCase";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -580,7 +581,7 @@ export function DepositOwnerQueue({ searchQuery = "" }: DepositOwnerQueueProps =
                           <Checkbox checked={selected.has(item.id)} onCheckedChange={() => toggle(item.id)} />
                         </TableCell>
                         <TableCell className="font-mono text-xs">#{item.check_number || "—"}</TableCell>
-                        <TableCell className="text-xs max-w-[100px] truncate">{item.carrier_name || "—"}</TableCell>
+                        <TableCell className="text-xs max-w-[100px] truncate">{displayCase(item.carrier_name) || "—"}</TableCell>
                         <TableCell className="text-right tabular-nums text-sm">{fmtMoney(item.amount)}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-[10px]">{item.status.replace(/_/g, " ")}</Badge>

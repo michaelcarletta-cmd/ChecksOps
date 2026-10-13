@@ -32,6 +32,7 @@ import {
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
 import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
 import { logAudit } from "@/hooks/useAuditLog";
+import { displayCase } from "@/lib/displayCase";
 
 interface SignedEndorsementAsset extends SignatureAsset {
   payee_type: string;
@@ -790,7 +791,7 @@ export function EndorsementAdjuster({
       ) : (
         <div className="text-xs text-muted-foreground">
           Loaded signatures:{" "}
-          {signedEndorsements.map((s) => s.payee_name).join(", ") || "none"}
+          {signedEndorsements.map((s) => displayCase(s.payee_name)).join(", ") || "none"}
         </div>
       )}
 
@@ -880,7 +881,7 @@ export function EndorsementAdjuster({
                   {e.signature_image_url && !e.signature_image_url.startsWith("typed:") ? (
                     <img
                       src={e.signature_image_url}
-                      alt={`${e.payee_name} signature`}
+                      alt={`${displayCase(e.payee_name)} signature`}
                       style={{
                         height: sigHeightPx,
                         width: clientSignatureWidthPx,

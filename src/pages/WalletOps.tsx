@@ -47,6 +47,7 @@ import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", {
@@ -167,7 +168,7 @@ export default function WalletOps() {
     sweeps: history,
     knownTransferIds: (transferData?.classified ?? []).map((row) => row.transfer.provider_transfer_id),
     settlementLabel: settlementMethod
-      ? `${settlementMethod.bank_name ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
+      ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
       : "Connected bank",
   });
   const pendingOut = (transferData?.pendingOutCents ?? 0) + sweepActivity.pendingOutCents;
@@ -176,7 +177,7 @@ export default function WalletOps() {
   const billingActivity = transferData?.billing ?? [];
   const classifiedTransfers = transferData?.classified ?? [];
   const fundingBank = settlementMethod
-    ? `${settlementMethod.bank_name ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
+    ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
     : "Not connected";
   const billingTransferKeys = new Set(
     billingActivity.flatMap((row) => row.transfer_ids.map((id) => String(id))),
@@ -448,7 +449,7 @@ export default function WalletOps() {
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Settlement bank</p>
               <p className="mt-0.5 font-medium">
                 {settlementMethod
-                  ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
+                  ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
                   : "Not connected"}
               </p>
             </div>
