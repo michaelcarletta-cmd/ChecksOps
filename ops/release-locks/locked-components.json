@@ -856,6 +856,49 @@
       "open_pr_overlap": [],
       "notes": "Owner-approved 2026-10-13. Read-only production Moov wallet sync; no money movement. PR #915 (owner-approved hash update): sets the server-only financial GUCs so tenant members can save the refreshed balance under SQL 72."
     },
+    "moov-production-send": {
+      "id": "moov-production-send",
+      "ownership_group": "moov-production-send",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "b03e47eec7d598ccd6f09b1a07a0b7dfc91bf8bb",
+        "tree_hash": "92f5faa5e52b6ccfa11b995922b38bb5a30753e86acb01ff841e5e4a9247bd31",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Not yet deployed. After deploy, rollback is the guarded overlay of the previous live providers.mjs bytes recorded in the manifest (11c6fdd8, the #915 funding bytes); the added module is inert without the providers.mjs route, and AWS_MOOV_SEND_POST_ENABLED=false (or AWS_MOOV_TRANSFER_POST_ENABLED=false) stops all sending."
+      },
+      "missing_evidence": [
+        "staging acceptance",
+        "production overlay receipts"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72)."
+    },
     "moov-production-fund": {
       "id": "moov-production-fund",
       "ownership_group": "moov-production-fund",
