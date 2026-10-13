@@ -90,3 +90,19 @@ test('inspection workflow is manually dispatched and limits AWS access to the st
   assert.match(workflow, /checksops-staging-frontend-c48b\/index\.html/);
   assert.doesNotMatch(workflow, /\b(?:put-object|sync|delete-object|create-invalidation|s3\s+rm)\b/);
 });
+
+test('entry bundle names containing "s" or "_" are recognized by inspect and upload', async () => {
+  const { entryFromHtml } = await import('../../scripts/deployment-guard/staging-spa-upload.mjs');
+  const html = '<script type="module" crossorigin src="/assets/index-0FJs_MM1.js"></script>';
+  assert.equal(entryFromHtml(html), '/assets/index-0FJs_MM1.js');
+  assert.equal(entryFromHtml('<script src="/assets/index-sss.js"></script>'), '/assets/index-sss.js');
+  assert.equal(entryFromHtml('<script src="/assets/index-a b.js"></script>'), null);
+
+  const sHtml = '<script type="module" src="/assets/index-0FJs_MM1.js"></script>';
+  const runAws = (args) => {
+    if (args[1] === 'head-object') return JSON.stringify({ ETag: '"e"', LastModified: '2026-10-13T00:00:00Z' });
+    fs.writeFileSync(args.at(-1), sHtml);
+    return '{}';
+  };
+  assert.equal(readStagingFingerprint({ runAws }).entry_bundle, '/assets/index-0FJs_MM1.js');
+});
