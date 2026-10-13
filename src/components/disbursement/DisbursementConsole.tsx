@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +20,8 @@ import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useWallet } from "@/hooks/useWallet";
+import { useStepUp } from "@/hooks/useStepUp";
+import { sendPayment, SendPaymentError, type SendRecipient } from "@/lib/payments/sends";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
@@ -37,6 +39,7 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   subcontractor: "Subcontractor",
   overhead: "Overhead",
   insured: "Insured",
+  partner: "Partner",
   contractor: "Contractor",
   supplier: "Supplier",
   other: "Other",
@@ -48,10 +51,26 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   subcontractor: "bg-purple-500/10 text-purple-700 border-purple-500/20",
   overhead: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   insured: "bg-rose-500/10 text-rose-700 border-rose-500/20",
+  partner: "bg-teal-500/10 text-teal-700 border-teal-500/20",
   contractor: "bg-indigo-500/10 text-indigo-700 border-indigo-500/20",
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
+// Server answers that settle a payment for good, or refuse it before anything is
+// planned: only these let the next click start a new payment.
+const FINAL_SEND_CODES = new Set([
+  "send_failed",
+  "send_partial",
+  "provider_outcome_unknown",
+  "idempotency_key_reused",
+  "invalid_send_request",
+  "check_not_found",
+  "facilitator_changed",
+]);
+
+// Send transfers that never left (anything else counts against the check).
+const NOT_SENT = new Set(["failed", "canceled", "returned"]);
+
 // Recipient readiness on Moov.
 const isMoovReady = (acct: any) =>
   acct?.provider === "moov" && !!(acct?.provider_bank_account_id || acct?.provider_account_id);
@@ -81,11 +100,16 @@ export function DisbursementConsole({
   // Moov is the primary disbursement rail. Actum/Plaid remain as the fallback
   // whenever a recipient has not connected a bank on the Moov rail yet.
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
-  // Funding source: pay out of the tenant's held balance (wallet) or pull from
-  // the bank on each transfer.
-  const [sourceKind, setSourceKind] = useState<"auto" | "wallet">("auto");
+  // Sends are paid from the balance first; any shortfall comes straight from the linked bank.
   const { wallet } = useWallet("operating");
   const walletAvailable = wallet ? Number(wallet.available_cents) / 100 : null;
+  const { requireStepUp } = useStepUp();
+  // The key of a send whose outcome is not known yet (network error, server error,
+  // or still being sent). Pressing Send again for the same payment reuses it, so the
+  // server finishes or reports that payment instead of paying it again.
+  const pendingSend = useRef<{ signature: string; key: string } | null>(null);
+  // Mirrors pendingSend for rendering: the Send button stays usable to finish it.
+  const [sendOpen, setSendOpen] = useState(false);
 
 
 
@@ -94,17 +118,40 @@ export function DisbursementConsole({
   const hoursRemaining = 0;
 
 
-  // Shared checks: any organization this check was shared with is automatically
-  // surfaced as a payout stakeholder when the disbursement console opens.
+  // Partners this check is shared with are paid wallet to wallet (or to their bank
+  // when they have no balance account); the server checks the share again.
   const { data: partnerStakeholders = [] } = useQuery({
-    queryKey: ["partner-stakeholders", checkIntakeItemId],
+    queryKey: ["partner-recipients", checkIntakeItemId, tenant?.id],
+    enabled: !!checkIntakeItemId && !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_checks")
+        .select("target_tenant_id, revoked_at")
+        .eq("check_id", checkIntakeItemId!)
+        .eq("source_tenant_id", tenant!.id)
+        .is("revoked_at", null);
+      if (error) throw error;
+      const ids = [...new Set((data ?? []).map((row: any) => row.target_tenant_id).filter(Boolean))] as string[];
+      if (ids.length === 0) return [];
+      const { data: names } = await supabase.from("tenants_public").select("id, name").in("id", ids);
+      const nameOf = new Map((names ?? []).map((t: any) => [t.id, t.name]));
+      return ids.map((id) => ({ partner_tenant_id: id, partner_name: (nameOf.get(id) as string) || "Partner organization" }));
+    },
+  });
+
+  // Sends recorded by the payment server for this check (one row per transfer).
+  const { data: sentTransfers = [] } = useQuery({
+    queryKey: ["check-sends", checkIntakeItemId],
     enabled: !!checkIntakeItemId,
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("ensure_partner_stakeholders", {
-        p_check_id: checkIntakeItemId,
-      });
+      const { data, error } = await supabase
+        .from("payment_transfers")
+        .select("id, amount_cents, status, leg_role, created_at, provider_metadata")
+        .eq("check_id", checkIntakeItemId!)
+        .in("leg_role", ["send_wallet", "send_bank"])
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as any[];
+      return data ?? [];
     },
   });
 
@@ -131,20 +178,26 @@ export function DisbursementConsole({
     },
   });
 
-  // Merge in partner (shared-tenant) payout accounts, which live under another
-  // organization and therefore aren't readable through the join above.
+  // Partners appear next to this check's stakeholders.
   const accounts = useMemo(() => {
     const merged = [...(ownAccounts as any[])];
-    const seen = new Set(merged.map((a: any) => a.id));
     for (const p of partnerStakeholders as any[]) {
-      if (!p?.account || seen.has(p.account.id)) continue;
-      merged.push({ ...p.account, added_via: "partner_share", partner_name: p.partner_name });
-      seen.add(p.account.id);
+      merged.push({
+        id: `partner:${p.partner_tenant_id}`,
+        partner_tenant_id: p.partner_tenant_id,
+        nickname: p.partner_name,
+        account_type: "partner",
+        verification_status: "verified",
+        is_active: true,
+        provider: "moov",
+        provider_account_id: "partner",
+        added_via: "partner_share",
+      });
     }
     return merged;
   }, [ownAccounts, partnerStakeholders]);
 
-  const partnersNeedingSetup = (partnerStakeholders as any[]).filter((p) => p && !p.ready);
+  const partnersNeedingSetup: any[] = [];
 
 
 
@@ -177,8 +230,11 @@ export function DisbursementConsole({
         }
       }
     }
+    for (const t of sentTransfers as any[]) {
+      if (!NOT_SENT.has(String(t.status))) total += (Number(t.amount_cents) || 0) / 100;
+    }
     return total;
-  }, [pastBatches]);
+  }, [pastBatches, sentTransfers]);
 
   // Round to the nearest cent (2 decimals) — no fractional cents anywhere
   const toCents = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -187,13 +243,22 @@ export function DisbursementConsole({
 
   const allSplits = useMemo(() => {
     const rows: any[] = [];
+    for (const t of sentTransfers as any[]) {
+      rows.push({
+        id: t.id,
+        amount: (Number(t.amount_cents) || 0) / 100,
+        status: t.status,
+        stakeholder_accounts: { nickname: `${t.provider_metadata?.recipient_name ?? "Recipient"}${t.leg_role === "send_bank" ? " (from bank)" : ""}` },
+        batch_created_at: t.created_at,
+      });
+    }
     for (const b of pastBatches as any[]) {
       for (const s of (b.disbursement_splits ?? [])) {
         rows.push({ ...s, batch_created_at: b.created_at, batch_id: b.id });
       }
     }
     return rows;
-  }, [pastBatches]);
+  }, [pastBatches, sentTransfers]);
 
   const totalAllocated = useMemo(() => {
     return Object.values(allocations).reduce((sum, v) => {
@@ -234,7 +299,6 @@ export function DisbursementConsole({
 
   const submitBatch = useMutation({
     mutationFn: async () => {
-      await guardFinancial("disbursement.send");
       if (!user || !tenant) throw new Error("Not authenticated");
       if (fundsHoldActive) {
         throw new Error(
@@ -275,7 +339,22 @@ export function DisbursementConsole({
         });
 
       if (splits.length === 0) throw new Error("No allocations entered");
-      if (isOverAllocated) {
+
+      const sendSpeed: "standard" | "same_day" = deliverySpeed === "same_day" ? "same_day" : "standard";
+      const recipients: SendRecipient[] = splits.map((split) => {
+        const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
+        const amount_cents = Math.round(split.amount * 100);
+        return acct?.partner_tenant_id
+          ? { kind: "partner", partner_tenant_id: acct.partner_tenant_id, amount_cents }
+          : { kind: "stakeholder", stakeholder_account_id: split.stakeholder_account_id, amount_cents };
+      });
+      const signature = JSON.stringify([checkIntakeItemId, sendSpeed, recipients]);
+      // Pressing Send again for a payment whose outcome is still open continues that
+      // payment (same key). Its own legs already count as sent, so the checks below
+      // would wrongly block it; the server settles it by its key and never pays twice.
+      const continuing = moovEnabled && deliverySpeed !== "external" && pendingSend.current?.signature === signature;
+
+      if (isOverAllocated && !continuing) {
         const over = Math.abs(remaining);
         throw new Error(
           `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. ` +
@@ -284,7 +363,7 @@ export function DisbursementConsole({
         );
       }
       // Race-condition guard: re-check server-side totals before insert
-      if (checkIntakeItemId) {
+      if (checkIntakeItemId && !continuing) {
         const { data: freshBatches } = await supabase
           .from("disbursement_batches")
           .select("status,disbursement_splits(amount,status)")
@@ -297,7 +376,16 @@ export function DisbursementConsole({
           }
           return sum;
         }, 0);
-        const freshAvailable = Math.max(0, checkAmount - freshDisbursed);
+        const { data: freshSends } = await supabase
+          .from("payment_transfers")
+          .select("amount_cents,status")
+          .eq("check_id", checkIntakeItemId)
+          .in("leg_role", ["send_wallet", "send_bank"]);
+        const freshSent = (freshSends ?? []).reduce(
+          (sum: number, t: { amount_cents: number | string; status: string }) => (NOT_SENT.has(String(t.status)) ? sum : sum + (Number(t.amount_cents) || 0) / 100),
+          0,
+        );
+        const freshAvailable = Math.max(0, checkAmount - freshDisbursed - freshSent);
         const allocSum = splits.reduce((s, x) => s + x.amount, 0);
         if (allocSum > freshAvailable + 0.01) {
           throw new Error(
@@ -305,6 +393,61 @@ export function DisbursementConsole({
           );
         }
       }
+
+      if (moovEnabled && deliverySpeed !== "external") {
+        if (!checkIntakeItemId) throw new Error("Payments can only be sent from a check.");
+        const speed = sendSpeed;
+        // One key per payment: a retry of the same payment never sends twice.
+        if (pendingSend.current?.signature !== signature) {
+          pendingSend.current = { signature, key: crypto.randomUUID() };
+        }
+        const idempotencyKey = pendingSend.current.key;
+        const send = () =>
+          sendPayment({ tenantId: tenant.id, checkId: checkIntakeItemId, speed, recipients, idempotencyKey });
+        const attempt = async () => {
+          try {
+            return await send();
+          } catch (error) {
+            // The server decides whether this login has confirmed two-factor; ask only when it says so.
+            if (!(error instanceof SendPaymentError) || error.code !== "totp_required") throw error;
+            const confirmed = await requireStepUp(
+              {
+                actionKey: "wallet.fund",
+                checkId: null,
+                tenantId: tenant.id,
+                title: "Confirm payment",
+                description: "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out.",
+              },
+              { force: true },
+            );
+            if (!confirmed) {
+              pendingSend.current = null;
+              setSendOpen(false);
+              throw new Error("Payment was cancelled. Two-factor confirmation is required.");
+            }
+            return send();
+          }
+        };
+        // A long send is finished in steps; each step continues the same payment.
+        let result;
+        for (let step = 0; ; step += 1) {
+          try {
+            result = await attempt();
+            break;
+          } catch (error) {
+            if (error instanceof SendPaymentError && error.code === "send_incomplete" && step < 8) continue;
+            throw error;
+          }
+        }
+        pendingSend.current = null;
+        setSendOpen(false);
+        return { rail: "moov" as const, note: result.message ?? null };
+      }
+
+      if (splits.some((split) => (accounts as any[]).find((a) => a.id === split.stakeholder_account_id)?.partner_tenant_id)) {
+        throw new Error("External payments can be recorded for stakeholders only.");
+      }
+      await guardFinancial("disbursement.send");
 
       // Create the batch
       const { data: batch, error: batchErr } = await supabase
@@ -342,69 +485,6 @@ export function DisbursementConsole({
           approved_amount_cents: approvedCents,
         })
         .eq("id", batch.id);
-
-      // Primary rail: Moov. Nothing is paid there unless EVERY recipient is
-      // Moov-ready, so a 409 leaves the batch untouched and we fall back to the
-      // legacy rail for the whole batch.
-      let moovFallbackNote: string | null = null;
-
-      if (moovEnabled && deliverySpeed !== "external") {
-        // Does the wallet cover it? If not, pull the exact shortage first and
-        // hold the payment until the funds are actually available.
-        const { data: fundingCalc } = await supabase.functions.invoke("calculate-payment-funding", {
-          body: { tenant_id: tenant.id, payment_id: batch.id },
-        });
-
-        if ((fundingCalc as any)?.fundingRequired && (fundingCalc as any)?.auto_funding_enabled) {
-          const { data: fundData, error: fundErr } = await supabase.functions.invoke(
-            "initiate-wallet-funding",
-            { body: { tenant_id: tenant.id, payment_id: batch.id } },
-          );
-          if (fundErr) {
-            let reason: any = null;
-            try { reason = await (fundErr as any).context?.json?.(); } catch { reason = null; }
-            throw new Error(reason?.error ?? fundErr.message ?? "Could not start wallet funding.");
-          }
-          if ((fundData as any)?.funding_required !== false) {
-            return {
-              batchId: batch.id,
-              rail: "moov" as const,
-              note: `Awaiting funding — ${(Number((fundData as any)?.amount_cents ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} is transferring from your bank. The payment sends automatically once the funds are available.`,
-            };
-          }
-        }
-
-        const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
-          body: { batch_id: batch.id, source_kind: sourceKind },
-        });
-
-        if (!moovErr && (moovData as any)?.success) {
-          return { batchId: batch.id, rail: "moov" as const, note: null };
-        }
-
-
-        // Read the structured reason so we only fall back for setup gaps.
-        let reason: any = (moovData as any) ?? null;
-        if (moovErr) {
-          try {
-            reason = await (moovErr as any).context?.json?.();
-          } catch {
-            reason = null;
-          }
-        }
-        const code = reason?.error ?? "";
-        // When the user explicitly chose to pay from balance, an insufficient
-        // balance is a hard stop — don't silently pull from the bank instead.
-        if (code === "insufficient_balance" && sourceKind === "wallet") {
-          throw new Error(reason?.message ?? "Your balance does not cover this disbursement. Fund your balance first.");
-        }
-        const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
-
-        if (!recoverable) {
-          throw new Error(reason?.message ?? reason?.error ?? moovErr?.message ?? "Disbursement failed");
-        }
-        moovFallbackNote = reason?.message ?? "Sent on the legacy rail — finish payment setup to use the new rail.";
-      }
 
       if (deliverySpeed === "external") {
         console.log("Recording external manual disbursement batch for check:", checkIntakeItemId);
@@ -457,13 +537,12 @@ export function DisbursementConsole({
         return { batchId: batch.id, rail: "external" as const, note: "External payment recorded" };
       }
 
-      // Fallback rail logic removed — Actum is disabled globally.
-      throw new Error(moovFallbackNote ?? "Recipient not ready for Moov disbursement. Please connect their bank account via Moov first.");
+      throw new Error("Bank payments are currently unavailable for this organization.");
     },
     onSuccess: (result: any) => {
       toast({
-        title: "Disbursements submitted",
-        description: "Credits are on their way to each account.",
+        title: result?.rail === "external" ? "External payment recorded" : "Payment sent",
+        description: result?.note ?? "Credits are on their way to each account.",
       });
       qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
@@ -471,7 +550,41 @@ export function DisbursementConsole({
       setAdminOverride(false);
       onComplete?.();
     },
-    onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      if (e instanceof SendPaymentError) {
+        // Forget the key only when the server's answer is final for this payment
+        // (finished, or refused before anything was planned). Otherwise pressing
+        // Send again continues the same payment instead of paying it again.
+        if (e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner)_/.test(e.code))) pendingSend.current = null;
+        setSendOpen(pendingSend.current !== null);
+        if (e.send && e.code === "send_partial") {
+          // Leave only what was not sent, so the next payment sends the rest and nothing twice.
+          const next: Record<string, string> = {};
+          for (const r of e.send.recipients) {
+            if (r.unsent_cents > 0) next[r.kind === "partner" ? `partner:${r.id}` : r.id] = (r.unsent_cents / 100).toFixed(2);
+          }
+          setUsePercent(false);
+          setAllocations(next);
+        } else if (e.code === "provider_outcome_unknown") {
+          setAllocations({});
+        }
+        toast({
+          title: e.code === "send_partial"
+            ? "Partially sent"
+            : e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner)_/.test(e.code)) && e.code !== "provider_outcome_unknown"
+              ? "Payment not sent"
+              : "Check the payment history",
+          description: e.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Payment not sent", description: e.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["check-sends", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: ["payment-wallet"] });
+    },
   });
 
   if (!moovEnabled) return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Bank payments are currently unavailable for this organization.</div>;
@@ -577,38 +690,20 @@ export function DisbursementConsole({
           </div>
         )}
 
-        {/* Funding source: pay from balance (wallet) or pull from bank */}
-        {moovEnabled && (
-          <div className="space-y-2 pt-2 border-t">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Wallet className="h-3 w-3" /> Funding source
+        {/* Funding: balance first, then the linked bank for any shortfall */}
+        {moovEnabled && deliverySpeed !== "external" && (
+          <div className="space-y-1 pt-2 border-t text-[11px] text-muted-foreground">
+            <p className="text-xs font-medium flex items-center gap-1">
+              <Wallet className="h-3 w-3" /> Paid from your balance
+              {walletAvailable != null && (
+                <span className="font-normal">
+                  {" "}(${walletAvailable.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} available)
+                </span>
+              )}
             </p>
-            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Funding source">
-              {([
-                { value: "auto", label: "Bank / auto", hint: "Pull per transfer" },
-                { value: "wallet", label: "Balance", hint: walletAvailable != null ? `$${walletAvailable.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} available` : "—" },
-              ] as const).map(({ value, label, hint }) => {
-                const checked = sourceKind === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={checked}
-                    onClick={(e) => { e.preventDefault(); setSourceKind(value as any); }}
-                    className={`flex flex-col items-center rounded-md border-2 bg-popover p-2 hover:bg-accent hover:text-accent-foreground transition-colors ${
-                      checked ? "border-primary" : "border-muted"
-                    }`}
-                  >
-                    <span className="text-[11px] font-semibold">{label}</span>
-                    <span className="text-[10px] text-muted-foreground">{hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {sourceKind === "wallet" && walletAvailable != null && totalAllocatedDollars > walletAvailable && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                Balance doesn't cover ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Fund your balance in Payment Settings first.
+            {walletAvailable != null && totalAllocatedDollars > walletAvailable && (
+              <p className="text-amber-600 dark:text-amber-400">
+                Your balance is short by ${(totalAllocatedDollars - walletAvailable).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. That part is pulled from your linked bank and sent directly.
               </p>
             )}
           </div>
@@ -805,19 +900,23 @@ export function DisbursementConsole({
             </span>
           </div>
         )}
+        {sendOpen && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">
+            The last payment has not finished. Press Send with the same amounts to finish it; nothing is paid twice.
+          </p>
+        )}
         <Button
           variant="success"
           className="w-full h-auto min-h-10 py-2 whitespace-normal text-center text-xs sm:text-sm leading-snug"
           onClick={() => submitBatch.mutate()}
           disabled={
             submitBatch.isPending ||
-            isOverAllocated ||
+            (isOverAllocated && !sendOpen) ||
             totalAllocatedDollars === 0 ||
             accounts.length === 0 ||
             availableAmount <= 0 ||
             fundsHoldActive ||
-            (hasUnverifiedAllocations && !(isAdmin && adminOverride)) ||
-            (sourceKind === "wallet" && walletAvailable != null && totalAllocatedDollars > walletAvailable)
+            (hasUnverifiedAllocations && !(isAdmin && adminOverride))
 
           }
         >
@@ -846,7 +945,9 @@ export function DisbursementConsole({
 
 
         <p className="text-xs text-center text-muted-foreground">
-          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch.
+          {deliverySpeed === "external"
+            ? "Records a payment you made outside ChecksOps."
+            : "One click pays every allocated recipient. Your balance is used first; any shortfall comes straight from your linked bank."}
         </p>
       </CardContent>
     </Card>

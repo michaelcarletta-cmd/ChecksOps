@@ -449,7 +449,8 @@ test('production moov-wallet-sync requires production live reads', async () => {
 test('production money movement stays hard-blocked even with transfer posting enabled', async () => {
   await withEnv(PRODUCTION_FLAGS, async () => {
     const blocked = [
-      'moov-transfer-create', 'moov-transfer-group-create', 'moov-disburse',
+      // moov-disburse is the production send handler (aws/tests/moov-production-send.test.mjs).
+      'moov-transfer-create', 'moov-transfer-group-create',
       'moov-tenant-fee-charge', 'initiate-wallet-funding', 'process-funded-payment',
       'wallet-fund-on-clear', 'homeowner-deductible-pay', 'moov-micro-deposit-initiate',
       'moov-bank-account-add', 'moov-account-create',

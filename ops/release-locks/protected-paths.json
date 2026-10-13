@@ -254,6 +254,13 @@
         "aws/functions/api/providers/production/moov-wallet-fund.mjs",
         "aws/functions/api/providers/production/moov-fund-authz.mjs"
       ]
+    },
+    "moov-production-send": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Production sends (stakeholders by ACH credit, partners wallet to wallet or to their bank) with the bank top-up when the balance is short",
+      "paths": [
+        "aws/functions/api/providers/production/moov-send.mjs"
+      ]
     }
   }
 }

@@ -1,0 +1,39 @@
+{
+  "workstream_id": "moov-production-send",
+  "authorization": "Owner-approved production sends (step 3a): stakeholders by ACH credit and partners the check is shared with (wallet to wallet, else their bank), with the bank top-up when the wallet is short; any tenant member, two-factor once per login, no amount limit. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "providers.mjs live_sha256 is the #915 funding bytes applied 2026-10-13 (production overlay run 29). providers/production/moov-send.mjs is new and imports only members already live (moov-wallet-fund.mjs, moov-fund-authz.mjs and the parity helpers). Apply moov-send.mjs first, providers.mjs last. Sends stay off until AWS_MOOV_SEND_POST_ENABLED is set.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "a07442c49f33d100fa214ff44a85c9c5b86f16eaacc5f3daa1178fa43daef4ab",
+      "operation": "add",
+      "required_imports": [
+        "providers/production/moov-fund-authz.mjs",
+        "providers/production/moov-wallet-fund.mjs",
+        "providers/parity/moov-client.mjs",
+        "providers/parity/caller.mjs",
+        "providers/parity/db.mjs",
+        "providers/parity/moov-wallet.mjs",
+        "cognito.mjs",
+        "financial-flags.mjs",
+        "financial-ownership.mjs",
+        "ops-readiness.mjs",
+        "sandbox-flags.mjs",
+        "data.mjs",
+        "sandbox-credentials.mjs"
+      ]
+    },
+    "providers.mjs": {
+      "live_sha256": "11c6fdd85d06d3257e0564c2fa0b22e22c966439af43a962cfc511e25e79f114",
+      "accepted_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
+      "operation": "replace",
+      "required_imports": [
+        "providers/production/moov-send.mjs",
+        "providers/production/moov-wallet-fund.mjs",
+        "providers/production/moov-wallet-sync.mjs"
+      ]
+    }
+  }
+}

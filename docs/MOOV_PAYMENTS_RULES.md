@@ -32,23 +32,37 @@ that moves money must follow them. Where a rule is not built yet, it says so.
   marked `unknown` and is **never retried automatically**. Check WalletOps
   before trying again.
 
-## Sending (not built yet)
+## Sending (stakeholders and partners built; homeowners not built yet)
 
-From the Funds tab, to:
+From the Funds tab (Disburse to Stakeholders), to:
 
-- **Partners** the check was shared with: wallet to wallet.
-- **Homeowners**: through a KYC link, after Moov approval.
-- **Stakeholders**: chosen from Stakeholder Settings in a dropdown.
+- **Stakeholders** chosen in Stakeholder Settings: paid to their linked, verified
+  bank by ACH credit (standard or same day).
+- **Partners** the check was shared with (by this organization, and still shared):
+  paid wallet to wallet. A partner with no production balance account is paid to
+  their linked bank instead. Only the organization that owns the check sends.
+- **Homeowners**: through a KYC link, after Moov approval. Not built yet; the link
+  flow must be rebuilt for production.
 
 **Top-up.** When the wallet's available balance is short, the send happens at
-once as two transfers:
+once as two transfers per recipient, wallet part first:
 
 1. The available wallet amount: wallet → recipient.
 2. The shortfall: linked bank (`ach-debit-fund`) → recipient directly.
 
 The owner accepts the bank-return (NSF) risk on the second transfer. The
 shortfall is not routed through the wallet first, because pending funds
-cannot be spent.
+cannot be spent. With several recipients, the balance is used in the order they
+are listed.
+
+**When part of a send does not go through.** Transfers go out one at a time. If
+one is refused, the ones after it are canceled unsent, and the send shows
+"partially sent, $X not sent"; the user sends the rest with a new payment. An
+unclear result from Moov is marked `unknown`, stops the send and is never
+retried automatically. Each click is one request, so a retry never pays twice.
+
+Sends use the same two-factor confirmation as funding (once per login) and are
+held while `AWS_MOOV_SEND_POST_ENABLED` is off (nothing is recorded or sent).
 
 - **Sweeps** in WalletOps keep the wallet funded.
 - **Auto payouts are not used** at this time.
@@ -78,4 +92,4 @@ Production funding runs only when all of these are `true`:
 - `AWS_MOOV_TRANSFER_POST_ENABLED`
 
 With `AWS_MOOV_TRANSFER_POST_ENABLED` off, a funding request is recorded but
-nothing is sent to Moov.
+nothing is sent to Moov. Sends additionally need `AWS_MOOV_SEND_POST_ENABLED`.
