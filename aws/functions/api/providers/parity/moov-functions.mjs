@@ -560,7 +560,12 @@ const walletSync = {
       if (!local) throw error;
       wallet = { ...local, status: 'sync_failed' };
     }
-    if (!wallet) return fail('wallet_not_found', 409, { message: 'No matching Moov wallet was found for this organization.' });
+    if (wallet?.error === 'wallet_mismatch') {
+      return fail('wallet_mismatch', 409, { message: 'The recorded Moov wallet was not returned by Moov. Nothing was changed.' });
+    }
+    if (!wallet || wallet.error) {
+      return fail('wallet_not_found', 409, { message: 'No matching Moov wallet was found for this organization.' });
+    }
     const ledger = (await client.query(
       `SELECT * FROM public.payment_wallet_ledger
        WHERE wallet_id = $1::uuid ORDER BY created_at DESC NULLS LAST LIMIT $2`,

@@ -395,7 +395,8 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     }
   }
 
-  if ((providerSandboxExecutionEnabled() || isMoovProductionRead(spec, body)) && hasParityHandler(name)) {
+  if ((providerSandboxExecutionEnabled() || (executionAllowed('moov') && isMoovProductionRead(spec, body)))
+    && hasParityHandler(name)) {
     return runParityHandler(name, event, deps);
   }
 

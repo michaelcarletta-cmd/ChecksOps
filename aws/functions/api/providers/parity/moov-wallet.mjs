@@ -124,8 +124,10 @@ export async function syncWallet(client, args) {
 /**
  * Production balance refresh. Provider GETs only (wallet list and payment methods):
  * never creates a wallet, transfer or ledger entry. Updates only the local
- * payment_wallets row for this tenant/environment/wallet type. Returns null when the
- * provider has no matching wallet so the caller can report it instead of creating one.
+ * payment_wallets row for this tenant/environment/wallet type. A wallet already
+ * recorded locally must still be returned by the provider (no fallback to another
+ * wallet), and a new row never claims the wallet bound to the tenant's other wallet
+ * type. Returns { error } instead of creating or repointing a wallet.
  */
 export async function syncWalletReadOnly(client, args) {
   const walletType = args.walletType ?? 'operating';
@@ -137,10 +139,19 @@ export async function syncWalletReadOnly(client, args) {
     scopes: walletScopes.read(args.accountId),
     fetchImpl: args.fetchImpl,
   });
-  const wallet = selectProviderWallet(list, walletType, existing?.provider_wallet_id);
-  if (!wallet) return null;
+  let wallet;
+  if (existing?.provider_wallet_id) {
+    wallet = (list ?? []).find((w) => (w?.walletID ?? w?.walletId) === existing.provider_wallet_id);
+    if (!wallet) return { error: 'wallet_mismatch' };
+  } else {
+    const other = await readWallet(client, args.tenantId, args.environment, walletType === 'trust' ? 'operating' : 'trust');
+    const taken = other?.provider_wallet_id;
+    const candidates = (list ?? []).filter((w) => (w?.walletID ?? w?.walletId) !== taken);
+    wallet = selectProviderWallet(candidates, walletType, null);
+  }
+  if (!wallet) return { error: 'wallet_not_found' };
   const provider = walletBalances(wallet);
-  if (!provider.walletID) return null;
+  if (!provider.walletID) return { error: 'wallet_not_found' };
   const pmId = await walletPaymentMethodId(args.accountId, provider.walletID, args.fetchImpl);
 
   return (await client.query(
@@ -152,7 +163,7 @@ export async function syncWalletReadOnly(client, args) {
      ON CONFLICT (tenant_id, provider, environment, wallet_type) DO UPDATE SET
        provider_wallet_id = EXCLUDED.provider_wallet_id,
        provider_account_id = EXCLUDED.provider_account_id,
-       provider_payment_method_id = EXCLUDED.provider_payment_method_id,
+       provider_payment_method_id = COALESCE(EXCLUDED.provider_payment_method_id, payment_wallets.provider_payment_method_id),
        available_cents = EXCLUDED.available_cents,
        pending_cents = EXCLUDED.pending_cents,
        status = 'active',
