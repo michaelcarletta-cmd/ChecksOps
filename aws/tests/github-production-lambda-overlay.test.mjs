@@ -356,6 +356,30 @@ test('read-only Moov wallet sync members refuse to apply out of order', async ()
   );
 });
 
+test('Moov send members apply in order: the added send module, then providers.mjs last', async () => {
+  const SEND = ['providers/production/moov-send.mjs', 'providers.mjs'];
+  assert.deepEqual(PLAN.order.slice(-2), SEND);
+  assert.equal(PLAN.members['providers/production/moov-send.mjs'].operation, 'add');
+  for (const member of SEND) {
+    const { deps, calls } = applyDeps(member);
+    const result = await run(applyEnv(member), deps);
+    assert.equal(result.mutation, false, member);
+    const op = PLAN.members[member].operation;
+    assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
+  }
+  // The send module imports only members that are already live.
+  const sendImports = localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/moov-send.mjs'), 'utf8'), 'providers/production/moov-send.mjs');
+  const sendAt = PLAN.order.indexOf('providers/production/moov-send.mjs');
+  for (const dep of sendImports.filter((dep) => PLAN.members[dep]?.operation === 'add')) {
+    assert.ok(PLAN.order.indexOf(dep) < sendAt, dep);
+  }
+  assert.ok(sendImports.includes('providers/production/moov-wallet-fund.mjs'));
+  await assert.rejects(
+    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-send.mjs'] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+});
+
 test('Moov wallet funding members apply in order: wallet sync, added modules, providers.mjs last', async () => {
   const FUND = [
     'providers/production/moov-wallet-sync.mjs',
@@ -365,7 +389,8 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
     'providers/production/moov-wallet-fund.mjs',
     'providers.mjs',
   ];
-  assert.deepEqual(PLAN.order.slice(-6), FUND);
+  const positions = FUND.map((member) => PLAN.order.indexOf(member));
+  assert.ok(positions.every((pos, i) => pos >= 0 && (i === 0 || pos > positions[i - 1])), JSON.stringify(positions));
   for (const member of FUND) {
     const { deps, calls } = applyDeps(member);
     const result = await run(applyEnv(member), deps);

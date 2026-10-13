@@ -32,6 +32,7 @@ on:
           - cognito.mjs
           - auth-financial-totp.mjs
           - providers/production/moov-wallet-fund.mjs
+          - providers/production/moov-send.mjs
           - providers.mjs
       approved_commit:
         description: "Required for apply: exact main commit approved for deployment"
