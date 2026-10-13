@@ -124,7 +124,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
       setManualAmount("");
       toast({ title: "Funding started", description: "Your balance updates once the transfer settles." });
     } catch (e) {
-      toast({ title: "Could not start transfer", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "Could not fund balance", description: (e as Error).message, variant: "destructive" });
     }
   }
 
@@ -292,6 +292,9 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
             Transfer to wallet
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Pulls from your saved funding bank (or your default bank). Save a new bank choice first.
+        </p>
       </div>
 
       {/* History */}
