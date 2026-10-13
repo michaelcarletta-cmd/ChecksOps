@@ -168,6 +168,17 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             checkId: request?.checkId,
           });
           if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
+          if (request?.actionKey === "wallet.fund") {
+            // Setup checks the code without using it up, so the same code also
+            // records this login's funding confirmation on the server.
+            const stepped = await stepUpAwsTotp({
+              code: normalized.code,
+              actionKey: request.actionKey,
+              tenantId: request.tenantId,
+              checkId: null,
+            });
+            if (!stepped) throw new Error(TOTP_BOUNDARY_MESSAGE);
+          }
         } else {
           const stepped = await stepUpAwsTotp({
             code: normalized.code,
@@ -180,7 +191,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         await onFactorsChanged();
         toast({
           title: "Verified",
-          description: "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
+          description: request?.actionKey === "wallet.fund"
+            ? "Two-factor confirmed until you sign out."
+            : "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
         });
         onResolved(true);
         return;

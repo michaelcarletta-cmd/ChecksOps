@@ -319,7 +319,7 @@ test('amount change and action mismatch are rejected', async () => {
   const action = await handleMfaStepUp(eventOf({
     code,
     check_intake_item_id: CHECK,
-    action_key: 'wallet.fund',
+    action_key: 'wallet.send',
   }), depsOf(store));
   assert.equal(action.error, 'action_mismatch');
   assert.equal(store.stepups.length, 0);
@@ -521,4 +521,25 @@ test('enroll-confirm does not write financial_stepup_log or burn last_used_times
   const stepped = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
   assert.equal(stepped.ok, true, JSON.stringify(stepped));
   assert.equal(store.stepups.length, 1);
+});
+
+test('a wrong step-up code still counts against the rate limit (committed before the check)', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const wrong = code === '000000' ? '111111' : '000000';
+  const order = [];
+  const base = store.client.query;
+  store.client.query = async (sql, params) => {
+    const text = String(sql);
+    if (text.includes('consume_financial_totp_rate_limit')) order.push('rate');
+    if (text === 'COMMIT') order.push('commit');
+    if (text.includes('financial_totp_get_enrollment')) order.push('verify');
+    if (text === 'COMMIT' || text === 'BEGIN' || text.startsWith('SET TRANSACTION') || text.startsWith('SELECT set_config')) {
+      return { command: text, rows: [] };
+    }
+    return base(sql, params);
+  };
+  const result = await handleMfaStepUp(eventOf({ code: wrong, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(result.ok, false);
+  assert.deepEqual(order, ['rate', 'commit', 'verify']);
 });

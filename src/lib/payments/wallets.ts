@@ -87,23 +87,61 @@ export async function syncWallet(
   });
 }
 
-/** Pulls money from the organization's own bank account into its balance. */
+/** A funding request the server refused; `code` is the server's error code. */
+export class WalletFundError extends Error {
+  constructor(message: string, readonly code: string | null) {
+    super(message);
+    this.name = "WalletFundError";
+  }
+}
+
+/**
+ * Pulls money from the organization's own bank account into its balance.
+ * `idempotencyKey` identifies one click: retrying with the same key never
+ * sends a second transfer.
+ */
 export async function fundWallet(input: {
   tenantId: string;
   amountCents: number;
+  idempotencyKey: string;
   walletType?: WalletType;
   subLedgerId?: string | null;
   description?: string;
-  idempotencyKey?: string;
-}): Promise<{ transfer: Record<string, unknown>; wallet: Wallet; duplicate: boolean }> {
-  return invoke("moov-wallet-fund", {
-    tenant_id: input.tenantId,
-    amount_cents: input.amountCents,
-    wallet_type: input.walletType ?? "operating",
-    sub_ledger_id: input.subLedgerId ?? null,
-    description: input.description ?? null,
-    idempotency_key: input.idempotencyKey,
+}): Promise<{ transfer: Record<string, unknown>; wallet?: Wallet; duplicate: boolean; message?: string }> {
+  const { data, error } = await supabase.functions.invoke("moov-wallet-fund", {
+    body: {
+      tenant_id: input.tenantId,
+      amount_cents: input.amountCents,
+      wallet_type: input.walletType ?? "operating",
+      sub_ledger_id: input.subLedgerId ?? null,
+      description: input.description ?? null,
+      idempotency_key: input.idempotencyKey,
+    },
   });
+  type FundReply = { error?: unknown; message?: unknown };
+  const failure = (reply: FundReply | null | undefined, fallback: string) => {
+    const code = typeof reply?.error === "string" ? reply.error : null;
+    const message = typeof reply?.message === "string" && reply.message ? reply.message : code || fallback;
+    return new WalletFundError(message, code);
+  };
+  if (error) {
+    // Supabase puts a Response on `context`; AWS puts the parsed reply on `context.body` (and `data`).
+    const context = (error as { context?: { body?: unknown; json?: () => Promise<FundReply> } }).context;
+    let reply: FundReply | null = null;
+    if (typeof context?.json === "function") {
+      try {
+        reply = await context.json();
+      } catch {
+        /* keep the original message */
+      }
+    } else if (context?.body && typeof context.body === "object") {
+      reply = context.body as FundReply;
+    }
+    reply = reply ?? (data as FundReply | null) ?? null;
+    throw failure(reply, error.message ?? "Funding failed");
+  }
+  if ((data as FundReply | null)?.error) throw failure(data as FundReply, "Funding failed");
+  return data as { transfer: Record<string, unknown>; wallet?: Wallet; duplicate: boolean; message?: string };
 }
 
 /** Reads the locally stored balance without calling the provider. */

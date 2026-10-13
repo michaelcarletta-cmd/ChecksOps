@@ -766,7 +766,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "312ba6c36a8c4094643325549ef68258096792f028082e28efc3a0d630bf5409",
+        "tree_hash": "cbd782fe1088cd717894a3475c0c3b65f85b432b2cb3dd88336e518ca3619695",
         "merged": true,
         "merged_pr": null
       },
@@ -820,7 +820,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "3a54dbeda990f2b026a5bde356fc2b216ece0f9d",
-        "tree_hash": "3b34fe432c299d33921e35f452ea190a8016422dc516307962a323391dba83be",
+        "tree_hash": "fed2f72f355425f79940e3b5d0d69ccab06601531342d84e9365d9252ad6c8a1",
         "merged": false,
         "merged_pr": null
       },
@@ -838,7 +838,8 @@
       "production_validation": {
         "completed": false,
         "evidence_refs": [
-          "aws/tests/fixtures/production-moov-wallet-sync-manifest-2026-10-13.json"
+          "aws/tests/fixtures/production-moov-wallet-sync-manifest-2026-10-13.json",
+          "aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json"
         ],
         "recorded_at": null
       },
@@ -853,7 +854,60 @@
         "production overlay receipts"
       ],
       "open_pr_overlap": [],
-      "notes": "Owner-approved 2026-10-13. Read-only production Moov wallet sync; no money movement."
+      "notes": "Owner-approved 2026-10-13. Read-only production Moov wallet sync; no money movement. PR #915 (owner-approved hash update): sets the server-only financial GUCs so tenant members can save the refreshed balance under SQL 72."
+    },
+    "moov-production-fund": {
+      "id": "moov-production-fund",
+      "ownership_group": "moov-production-fund",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "a4be10ebbc8db5576755f3e20c024d581c462dd2",
+        "tree_hash": "754ac82f3386a4a1bb2311d8c3fb2c76d7d640a8d4e5e95a826a598a1dd77cc3",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/workflows/sql/72_member_payment_writes.sql",
+          "source_sha256": "5ed4d507f2b85c16d9a9cd8fccad6649325823f08b6ea5a79c2554712ee6fe7b",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        }
+      ],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Not yet deployed. After deploy, rollback is the guarded overlay of the previous live providers.mjs bytes recorded in the manifest; the added modules are inert without the providers.mjs route, and AWS_MOOV_TRANSFER_POST_ENABLED=false stops all sending."
+      },
+      "missing_evidence": [
+        "SQL 72 staging and production apply",
+        "staging acceptance",
+        "production overlay receipts"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Owner-approved 2026-10-13 (PR #915). Production WalletOps funding: linked bank to the tenant's own wallet, any tenant member, two-factor once per login, durable intent before the Moov POST."
     }
   }
 }

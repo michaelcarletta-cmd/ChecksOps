@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { useStepUp } from "@/hooks/useStepUp";
 import { loadWalletSnapshot } from "@/lib/payments/loadWalletSnapshot";
 import { resolveWalletOpsEnvironment } from "@/lib/payments/selectPaymentWallet";
 import {
   fundWallet,
   readWallet,
+  WalletFundError,
   syncWallet,
   type WalletSnapshot,
   type WalletType,
@@ -17,6 +19,7 @@ import {
 export function useWallet(walletType: WalletType = "operating") {
   const { tenantId, enabled, tenantMoovEnvironment, environmentReady } = usePaymentProviderEligibility();
   const qc = useQueryClient();
+  const { requireStepUp } = useStepUp();
   const hostname = typeof window === "undefined" ? "" : window.location.hostname;
   const walletEnvironment = resolveWalletOpsEnvironment({
     hostname,
@@ -41,14 +44,37 @@ export function useWallet(walletType: WalletType = "operating") {
   });
 
   const fund = useMutation({
-    mutationFn: (input: { amountCents: number; description?: string; subLedgerId?: string | null }) =>
-      fundWallet({
-        tenantId: tenantId!,
-        amountCents: input.amountCents,
-        walletType,
-        description: input.description,
-        subLedgerId: input.subLedgerId ?? null,
-      }),
+    mutationFn: async (input: { amountCents: number; description?: string; subLedgerId?: string | null }) => {
+      if (!tenantId) throw new Error("Organization isn't loaded yet. Try again in a moment.");
+      // One key per click: a retry below, or a resubmitted request, never funds twice.
+      const idempotencyKey = crypto.randomUUID();
+      const stepUp = {
+        actionKey: "wallet.fund",
+        checkId: null,
+        tenantId,
+        title: "Confirm funding",
+        description: "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out.",
+      };
+      const send = () =>
+        fundWallet({
+          tenantId,
+          amountCents: input.amountCents,
+          idempotencyKey,
+          walletType,
+          description: input.description,
+          subLedgerId: input.subLedgerId ?? null,
+        });
+      try {
+        return await send();
+      } catch (error) {
+        // The server decides whether this login has confirmed two-factor; ask only when it says so.
+        if (!(error instanceof WalletFundError) || error.code !== "totp_required") throw error;
+        if (!(await requireStepUp(stepUp, { force: true }))) {
+          throw new Error("Funding was cancelled. Two-factor confirmation is required.");
+        }
+        return send();
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: key });
     },

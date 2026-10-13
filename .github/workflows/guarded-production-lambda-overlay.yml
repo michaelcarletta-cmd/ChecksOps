@@ -28,6 +28,10 @@ on:
           - workflow-transitions.mjs
           - providers/parity/moov-wallet.mjs
           - providers/production/moov-wallet-sync.mjs
+          - providers/production/moov-fund-authz.mjs
+          - cognito.mjs
+          - auth-financial-totp.mjs
+          - providers/production/moov-wallet-fund.mjs
           - providers.mjs
       approved_commit:
         description: "Required for apply: exact main commit approved for deployment"

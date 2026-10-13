@@ -6,6 +6,7 @@
  * (wallet list and payment methods): no wallet, transfer or ledger is created.
  * The only write is this tenant's environment='production' payment_wallets row.
  */
+import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { MoovError, withMoovContext } from '../parity/moov-client.mjs';
 import { fail, jsonResult, moovProductionReadContext } from '../parity/caller.mjs';
 import { loadMoovAccount } from '../parity/db.mjs';
@@ -74,6 +75,12 @@ export async function handleProductionMoovWalletSync(event, deps = {}) {
       loadProviderSecrets: deps.loadProviderSecrets,
     });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
+    // Lets a tenant member (not only platform staff) save the refreshed balance (SQL 72).
+    await client.query("SELECT set_config('request.financial_execution', '1', true)");
+    await client.query('SELECT set_config($1, $2, true)', [
+      'request.aws_financial_permissions_activated',
+      financialPermissionsActivated() ? '1' : '0',
+    ]);
     const fetchImpl = deps.fetchImpl || fetch;
     try {
       const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => syncProductionWallet({

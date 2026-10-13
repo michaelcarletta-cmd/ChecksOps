@@ -13,6 +13,9 @@ export const cognitoClaimsFromEvent = (event) => {
     email: jwt.email ? String(jwt.email) : null,
     tokenUse: jwt.token_use || jwt.tokenUse || null,
     iss: jwt.iss ? String(jwt.iss) : null,
+    // Identify the sign-in (stable across token refreshes) for once-per-login step-up.
+    origin_jti: jwt.origin_jti ? String(jwt.origin_jti) : null,
+    auth_time: jwt.auth_time ? String(jwt.auth_time) : null,
   };
 };
 
@@ -40,6 +43,8 @@ export const verifyCognitoIdToken = async (token) => {
     email: payload.email ? String(payload.email) : null,
     tokenUse: payload.token_use || 'id',
     iss: payload.iss ? String(payload.iss) : `https://cognito-idp.us-east-1.amazonaws.com/${poolId}`,
+    origin_jti: payload.origin_jti ? String(payload.origin_jti) : null,
+    auth_time: payload.auth_time ? String(payload.auth_time) : null,
   };
 };
 
