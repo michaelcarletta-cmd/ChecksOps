@@ -32,8 +32,8 @@ function sha256Text(text) {
   return createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
 }
 
-function entryFromHtml(html) {
-  const match = String(html || '').match(/\/assets\/index-[^"'\\s]+\.js/);
+export function entryFromHtml(html) {
+  const match = String(html || '').match(/\/assets\/index-[^"'\s]+\.js/);
   return match ? match[0] : null;
 }
 
