@@ -37,6 +37,10 @@ export const WALLET_FUND_KEY_PREFIX = 'wallet-fund:';
 
 const REPLAYABLE_STATUSES = new Set(['ready']);
 
+/** A hung Moov POST is abandoned (and recorded as unknown) well before the Lambda times out. */
+export const MOOV_POST_TIMEOUT_MS = 20_000;
+const SETTLED_BAD = new Set(['failed', 'canceled', 'returned']);
+
 export const transferPostEnabled = () => flagTrue('AWS_MOOV_TRANSFER_POST_ENABLED');
 
 /** Whole cents, positive, and exactly representable. No business limit. */
@@ -91,8 +95,16 @@ async function logEvent(client, row) {
       ],
     );
     await client.query('RELEASE SAVEPOINT wallet_fund_event');
-  } catch {
+  } catch (error) {
     await client.query('ROLLBACK TO SAVEPOINT wallet_fund_event');
+    // The transfer row is the record of truth; surface the missing audit event in logs.
+    console.warn(JSON.stringify({
+      service: 'checksops-api',
+      event: 'wallet_fund_event_log_failed',
+      eventType: row.eventType,
+      transferId: row.transferId,
+      sqlstate: error?.code || null,
+    }));
   }
 }
 
@@ -102,16 +114,39 @@ const transferByKey = async (client, tenantId, key) => (await client.query(
   [tenantId, key],
 )).rows[0] || null;
 
-const localBankMethod = async (client, tenantId, providerAccountId) => (await client.query(
-  `SELECT id, provider_bank_account_id, provider_payment_method_id
+const connectedBanks = async (client, tenantId, providerAccountId) => (await client.query(
+  `SELECT id, provider_bank_account_id, is_default
    FROM public.payment_provider_methods
    WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
      AND provider_account_id = $3 AND connection_status = 'connected'
      AND external_recipient_id IS NULL
-   ORDER BY is_default DESC NULLS LAST, created_at DESC NULLS LAST
-   LIMIT 1`,
+   ORDER BY created_at DESC NULLS LAST`,
   [tenantId, ENVIRONMENT, providerAccountId],
-)).rows[0] || null;
+)).rows;
+
+/** The bank chosen in Automatic Funding settings, if that table and row exist. */
+async function settingsFundingBankId(client, tenantId) {
+  await client.query('SAVEPOINT wallet_fund_settings');
+  try {
+    const row = (await client.query(
+      `SELECT funding_bank_account_id FROM public.tenant_wallet_funding_settings
+       WHERE tenant_id = $1::uuid LIMIT 1`,
+      [tenantId],
+    )).rows[0];
+    await client.query('RELEASE SAVEPOINT wallet_fund_settings');
+    return row?.funding_bank_account_id || null;
+  } catch {
+    await client.query('ROLLBACK TO SAVEPOINT wallet_fund_settings');
+    return null;
+  }
+}
+
+/** Preferred bank: the Automatic Funding choice, else the one marked default. */
+export function preferredBank(banks, settingsBankId) {
+  return (settingsBankId && banks.find((b) => String(b.id) === String(settingsBankId)))
+    || banks.find((b) => b.is_default === true)
+    || null;
+}
 
 const bankIdOf = (method) => String(method?.bankAccount?.bankAccountID ?? method?.bankAccount?.bankAccountId ?? '');
 const methodIdOf = (method) => String(method?.paymentMethodID ?? method?.paymentMethodId ?? '');
@@ -153,6 +188,22 @@ const publicWallet = (row) => ({
   status: row.status,
   last_synced_at: row.last_synced_at ?? null,
 });
+
+/** A repeat of an earlier click reports that click's real outcome. */
+function duplicateResult(row) {
+  const status = String(row?.status || '');
+  if (SETTLED_BAD.has(status)) {
+    return fail('funding_failed', 409, { duplicate: true, transfer: publicTransfer(row), message: 'This funding did not go through. Nothing was sent.' });
+  }
+  if (status === 'unknown' || status === 'submitting') {
+    return fail('provider_outcome_unknown', 409, {
+      duplicate: true,
+      transfer: publicTransfer(row),
+      message: 'We could not confirm whether this funding went through. Check WalletOps before trying again.',
+    });
+  }
+  return jsonResult({ success: true, duplicate: true, transfer: publicTransfer(row), liveProviderCalled: false });
+}
 
 const publicTransfer = (row) => (row ? {
   id: row.id,
@@ -196,9 +247,7 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
     if (Number(draft.amount_cents) !== amount || draft.leg_role !== 'wallet_funding') {
       return fail('idempotency_key_reused', 409, { message: 'That request was already used for a different payment.' });
     }
-    if (!REPLAYABLE_STATUSES.has(String(draft.status))) {
-      return jsonResult({ success: true, duplicate: true, transfer: publicTransfer(draft), liveProviderCalled: false });
-    }
+    if (!REPLAYABLE_STATUSES.has(String(draft.status))) return duplicateResult(draft);
   }
 
   const account = await loadMoovAccount(client, tenantId, ENVIRONMENT);
@@ -217,7 +266,8 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
     return fail('wallet_not_ready', 409, { message: 'Your balance account is not ready to receive funds yet.' });
   }
 
-  const local = await localBankMethod(client, tenantId, account.provider_account_id);
+  const banks = await connectedBanks(client, tenantId, account.provider_account_id);
+  const local = preferredBank(banks, await settingsFundingBankId(client, tenantId));
   const methods = await moovFetch(`/accounts/${account.provider_account_id}/payment-methods`, {
     scopes: scopes.paymentMethodsRead(account.provider_account_id),
     fetchImpl,
@@ -232,7 +282,7 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
   }
   const sourceMethodId = methodIdOf(picked.method);
   const bankId = bankIdOf(picked.method);
-  const sourceLocal = local && local.provider_bank_account_id === bankId ? local.id : null;
+  const sourceLocal = banks.find((b) => String(b.provider_bank_account_id) === bankId)?.id ?? null;
   const facilitatorId = resolveFacilitatorId(ctx.moovContext.productionPlatformAccountId, methods, wallet.provider_payment_method_id);
   if (!facilitatorId) {
     return fail('facilitator_unavailable', 503, { message: 'Payments are not configured correctly. Nothing was sent.' });
@@ -297,10 +347,7 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
      RETURNING id`,
     [draft.id],
   )).rows[0];
-  if (!claimed) {
-    const current = await transferByKey(client, tenantId, key);
-    return jsonResult({ success: true, duplicate: true, transfer: publicTransfer(current), liveProviderCalled: false });
-  }
+  if (!claimed) return duplicateResult(await transferByKey(client, tenantId, key));
   await commitAndContinue(client, mapping, claims);
 
   let created;
@@ -309,7 +356,7 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
       method: 'POST',
       scopes: scopes.transfersWrite(facilitatorId),
       idempotencyKey: draft.id,
-      fetchImpl,
+      fetchImpl: (url, init = {}) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(MOOV_POST_TIMEOUT_MS) }),
       body: {
         source: { paymentMethodID: sourceMethodId },
         destination: { paymentMethodID: wallet.provider_payment_method_id },
@@ -368,6 +415,9 @@ async function fundProductionWallet({ client, mapping, claims, ctx, body, fetchI
   });
   await commitAndContinue(client, mapping, claims);
 
+  if (SETTLED_BAD.has(status)) {
+    return fail('funding_failed', 502, { transfer: publicTransfer(saved), liveProviderCalled: true, message: 'Moov did not accept this funding. Nothing was sent.' });
+  }
   return jsonResult({
     success: true,
     duplicate: false,

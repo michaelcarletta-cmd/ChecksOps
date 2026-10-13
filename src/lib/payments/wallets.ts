@@ -125,16 +125,19 @@ export async function fundWallet(input: {
     return new WalletFundError(message, code);
   };
   if (error) {
-    // AWS returns the reply body on `context.body` (and as `data`); Supabase exposes `context.json()`.
-    const context = (error as { context?: { body?: FundReply; json?: () => Promise<FundReply> } }).context;
-    let reply: FundReply | null = context?.body ?? (data as FundReply | null) ?? null;
-    if (!reply) {
+    // Supabase puts a Response on `context`; AWS puts the parsed reply on `context.body` (and `data`).
+    const context = (error as { context?: { body?: unknown; json?: () => Promise<FundReply> } }).context;
+    let reply: FundReply | null = null;
+    if (typeof context?.json === "function") {
       try {
-        reply = (await context?.json?.()) ?? null;
+        reply = await context.json();
       } catch {
         /* keep the original message */
       }
+    } else if (context?.body && typeof context.body === "object") {
+      reply = context.body as FundReply;
     }
+    reply = reply ?? (data as FundReply | null) ?? null;
     throw failure(reply, error.message ?? "Funding failed");
   }
   if ((data as FundReply | null)?.error) throw failure(data as FundReply, "Funding failed");

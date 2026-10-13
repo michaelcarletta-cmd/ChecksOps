@@ -5,6 +5,7 @@ import { handleProviderRequest } from '../functions/api/providers.mjs';
 import {
   moovRefusedTransfer,
   parseFundAmountCents,
+  preferredBank,
   resolveFacilitatorId,
   selectDebitMethod,
 } from '../functions/api/providers/production/moov-wallet-fund.mjs';
@@ -122,7 +123,7 @@ const fakeDb = ({
         return { rows: [{ id: 'wallet-row', tenant_id: params[0], environment: params[1], wallet_type: params[2], provider_wallet_id: params[4], provider_payment_method_id: params[6], available_cents: params[7], pending_cents: params[8] }] };
       }
       if (sql.includes('FROM public.payment_provider_methods')) {
-        return { rows: [{ id: '8eb5b26e-6f66-435c-a578-880fb7fc14dd', provider_bank_account_id: 'bank-1', provider_payment_method_id: 'pm-bank-credit' }] };
+        return { rows: [{ id: '8eb5b26e-6f66-435c-a578-880fb7fc14dd', provider_bank_account_id: 'bank-1', provider_payment_method_id: 'pm-bank-credit', is_default: true }] };
       }
       if (sql.includes('SELECT * FROM public.payment_transfers')) {
         return { rows: state().transfers.filter((t) => t.tenant_id === params[0] && t.idempotency_key === params[1]) };
@@ -472,8 +473,32 @@ test('staging keeps using the sandbox path (production handler not reached)', as
     const result = await run(client, moov);
     assert.equal(result.statusCode, 403);
     assert.equal(result.error, 'provider_disabled');
-    assert.equal(moov.posts().length, 0);
+    // The generic deny names the route; the production handler would say 'wallet.fund'.
+    assert.equal(result.operation, 'moov-wallet-fund');
+    assert.equal(moov.calls.length, 0);
   });
+});
+
+test('Moov answering with a failed transfer, or a repeat of a failed click, is not reported as success', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub({ postResult: { status: 200, body: { transferID: 'moov-xfer-9', status: 'failed' } } });
+    const result = await run(client, moov);
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'funding_failed');
+    assert.equal(client.committed.transfers[0].status, 'failed');
+    const again = await run(client, moov);
+    assert.equal(again.ok, false);
+    assert.equal(again.duplicate, true);
+    assert.equal(moov.posts().length, 1);
+  });
+});
+
+test('the funding bank is the Automatic Funding choice or the default; otherwise exactly one bank', async () => {
+  assert.equal(preferredBank([{ id: 'a', is_default: false }, { id: 'b', is_default: true }], 'a').id, 'a');
+  assert.equal(preferredBank([{ id: 'a', is_default: false }, { id: 'b', is_default: true }], null).id, 'b');
+  assert.equal(preferredBank([{ id: 'a', is_default: false }, { id: 'b', is_default: false }], null), null);
+  assert.equal(preferredBank([{ id: 'a', is_default: false }], 'missing'), null);
 });
 
 test('helpers', () => {
@@ -539,6 +564,8 @@ test('WalletOps asks for two-factor once per login and sends one key per click',
   // The key is created before the first send and reused by the retry after a fresh code.
   assert.ok(fundBlock.indexOf('crypto.randomUUID()') < fundBlock.indexOf('const send'));
   assert.match(fundBlock, /error\.code !== "totp_required"/);
+  // The code is asked for only when the server says this login has not confirmed it.
+  assert.equal((fundBlock.match(/requireStepUp\(/g) || []).length, 1);
   assert.match(fundBlock, /requireStepUp\(stepUp, \{ force: true \}\)/);
 
   const wallets = read('src/lib/payments/wallets.ts');

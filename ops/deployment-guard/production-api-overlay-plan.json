@@ -129,7 +129,7 @@
     },
     "providers/production/moov-wallet-fund.mjs": {
       "operation": "add",
-      "accepted_sha256": "0bb71eb365c4d2c1c6a74457b3006ddce8d5629cd529b3d4075b003b8b74d672",
+      "accepted_sha256": "33708347fbf548132256299be1bb56147e48f12074d45665cdcc4cc7ccd73b76",
       "expected_live_sha256": null,
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json"

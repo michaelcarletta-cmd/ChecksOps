@@ -64,14 +64,14 @@ export function useWallet(walletType: WalletType = "operating") {
           description: input.description,
           subLedgerId: input.subLedgerId ?? null,
         });
-      const cancelled = () => new Error("Funding was cancelled. Two-factor confirmation is required.");
-      if (!(await requireStepUp(stepUp))) throw cancelled();
       try {
         return await send();
       } catch (error) {
-        // The server decides whether this login has confirmed two-factor.
+        // The server decides whether this login has confirmed two-factor; ask only when it says so.
         if (!(error instanceof WalletFundError) || error.code !== "totp_required") throw error;
-        if (!(await requireStepUp(stepUp, { force: true }))) throw cancelled();
+        if (!(await requireStepUp(stepUp, { force: true }))) {
+          throw new Error("Funding was cancelled. Two-factor confirmation is required.");
+        }
         return send();
       }
     },
