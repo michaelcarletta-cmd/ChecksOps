@@ -100,6 +100,62 @@ test('evaluation is bound to the exact pin and the production gate', () => {
   assert.equal(evaluateSql72ProductionApply(manifest({ immediately_before_fingerprint: { sql: 'c'.repeat(64) } }), { root: ROOT, pin: PIN }).code, CODES.DEPLOYMENT_COLLISION);
 });
 
+test('a missing or wrong live hash from the inspect is refused before anything is spent', () => {
+  for (const live of [undefined, 'c'.repeat(64)]) {
+    const result = evaluateSql72ProductionApply(manifest({ live_definition_sha256: live }), { root: ROOT, pin: PIN });
+    assert.equal(result.code, CODES.SQL_COLLISION);
+    assert.deepEqual(result.details.mismatched, ['live_definition_sha256']);
+  }
+});
+
+test('CLI does not spend the receipt on a wrong phrase, a reused id or a receipt for another file', async () => {
+  const run = async (overrides, receipt, consumed, connect = neverConnect) => {
+    const input = path.join(os.tmpdir(), `sql72-prod-input-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
+    fs.writeFileSync(input, JSON.stringify(manifest(overrides)));
+    const writes = [];
+    let spent = 0;
+    const orig = { out: process.stdout.write, err: process.stderr.write };
+    process.stdout.write = (chunk) => { writes.push(String(chunk)); return true; };
+    process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+    try {
+      await sql72Main(['--apply', '--input', input], { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, {
+        root: ROOT,
+        pin: PIN,
+        enforceScriptGuard: () => ({ ok: true, details: { receipt } }),
+        consumeReceiptOnce: () => { spent += 1; return { ok: true }; },
+        connect,
+        consumedPath: consumed,
+      });
+    } finally {
+      process.stdout.write = orig.out;
+      process.stderr.write = orig.err;
+      fs.rmSync(input, { force: true });
+    }
+    return { out: writes.join(''), spent };
+  };
+  const owned = { owned_components: [PIN.filename] };
+  const phrase = await run({ authorization_phrase: 'yes' }, owned, consumedPath());
+  assert.equal(phrase.spent, 0);
+  assert.match(phrase.out, /PRODUCTION_APPROVAL_REQUIRED/);
+  const other = await run({}, { owned_components: ['aws/workflows/sql/71_review_amount_column_grant.sql'] }, consumedPath());
+  assert.equal(other.spent, 0);
+  assert.match(other.out, /RECEIPT_MISMATCH/);
+  const file = consumedPath();
+  fs.writeFileSync(file, JSON.stringify({ consumed: ['sql72-prod-reused-id'] }));
+  const reused = await run({ one_use_id: 'sql72-prod-reused-id' }, owned, file);
+  assert.equal(reused.spent, 0);
+  assert.match(reused.out, /RECEIPT_REUSED/);
+  const wrongLive = await run({ live_definition_sha256: 'c'.repeat(64) }, owned, consumedPath());
+  assert.equal(wrongLive.spent, 0);
+  assert.match(wrongLive.out, /SQL_COLLISION/);
+  // A valid run spends the receipt exactly once, then rolls back at a database that refuses every query.
+  const refusingDb = async () => ({ query: async () => { throw new Error('db-unavailable'); }, end: async () => {} });
+  const valid = await run({}, owned, consumedPath(), refusingDb);
+  assert.equal(valid.spent, 1);
+  assert.match(valid.out, /rolled back/);
+  for (const r of [phrase, other, reused, wrongLive]) assert.doesNotMatch(r.out, /should-not-connect/);
+});
+
 test('apply refuses before connecting without the phrase, a single-use id or execute', async () => {
   const noPhrase = await executeSql72ProductionApply(manifest({ authorization_phrase: 'yes' }), { root: ROOT, pin: PIN, connect: neverConnect, consumedPath: consumedPath() });
   assert.equal(noPhrase.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
@@ -174,6 +230,23 @@ test('PostgreSQL 16: production inspect and apply create exactly the five member
       ALTER TABLE public.payment_transfers ENABLE ROW LEVEL SECURITY;
       CREATE POLICY aws_write_payment_transfers ON public.payment_transfers FOR ALL TO authenticated USING (public.aws_can_write_tenant(tenant_id)) WITH CHECK (public.aws_can_write_tenant(tenant_id));`);
     await seed.end();
+
+    // Drift refusals: a revoked helper EXECUTE, then a malformed member policy; each rolls back.
+    const tweak = async (sql) => { const c = await connect(); try { await c.query(sql); } finally { await c.end(); } };
+    await tweak('REVOKE EXECUTE ON FUNCTION public.aws_financial_execution_active() FROM PUBLIC');
+    const revoked = await executeSql72ProductionApply(manifest(), { root: ROOT, pin: PIN, connect, consumedPath: consumedPath() });
+    assert.equal(revoked.code, CODES.DEPLOYMENT_COLLISION, JSON.stringify(revoked));
+    await tweak('GRANT EXECUTE ON FUNCTION public.aws_financial_execution_active() TO PUBLIC');
+    await tweak('CREATE POLICY aws_member_insert_payment_wallets ON public.payment_wallets FOR INSERT TO authenticated WITH CHECK (true)');
+    const malformed = await executeSql72ProductionApply(manifest(), { root: ROOT, pin: PIN, connect, consumedPath: consumedPath() });
+    assert.equal(malformed.code, CODES.DEPLOYMENT_COLLISION, JSON.stringify(malformed));
+    await tweak('DROP POLICY aws_member_insert_payment_wallets ON public.payment_wallets');
+    const probe = await connect();
+    try {
+      assert.equal((await probe.query("SELECT count(*)::int AS n FROM pg_policies WHERE policyname LIKE 'aws_member_%'")).rows[0].n, 0);
+    } finally {
+      await probe.end();
+    }
 
     const inspect = await inspectSql72Production({ connect, pin: PIN });
     assert.equal(inspect.ok, true, JSON.stringify(inspect));

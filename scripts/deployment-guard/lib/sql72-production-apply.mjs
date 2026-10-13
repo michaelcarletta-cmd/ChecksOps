@@ -139,6 +139,8 @@ export function evaluateSql72ProductionApply(input = {}, { root = repoRootFrom(i
     ['migration_id', pin.migration_id],
     ['source_sha256', pin.source_sha256],
     ['expected_live_definition_sha256', pin.expected_live_definition_sha256],
+    // The live hash from the inspect; checked here so a typo never spends the receipt.
+    ['live_definition_sha256', pin.expected_live_definition_sha256],
   ].filter(([key, value]) => input[key] !== value).map(([key]) => key);
   if (mismatched.length) {
     return fail(CODES.SQL_COLLISION, 'SQL 72 production apply is bound to the exact production pin', { mismatched });
