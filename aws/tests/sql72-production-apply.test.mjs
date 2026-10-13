@@ -11,7 +11,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
 
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES as STAGING_PIN } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
@@ -196,6 +195,13 @@ test('PostgreSQL 16: production inspect and apply create exactly the five member
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
+    return;
+  }
+  let pg;
+  try {
+    pg = (await import('pg')).default;
+  } catch {
+    t.skip('pg module is not installed');
     return;
   }
   const pgData = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-sql72-prod-'));
