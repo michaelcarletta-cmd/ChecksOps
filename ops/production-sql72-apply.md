@@ -10,7 +10,7 @@ platform admin/staff logins can.
 **Status:** applied to production on 2026-10-13 (workstream
 `prod-sql72-member-payment-writes-20261013`, main `c0b1a3d9`): `febc45be…` →
 `57233f0f…`, all five policies present, the 6 other policies unchanged
-(`db3788c4…`). The pin's `execute` is now `false`.
+(`db3788c4…`). The pin's `execute` is now `false`. A re-apply needs a new reviewed pin change.
 
 Pin: `ops/deployment-guard/sql72-production-apply.json`
 (before `febc45be…` = all five absent, after `57233f0f…` = all five present and
@@ -57,8 +57,7 @@ RDS (`credentialsToProductionDatabaseUrl`).
    AND of the three conditions) and every other policy on the three tables is
    byte-identical. If the tool reports the COMMIT outcome as unknown, run step 1
    before anything else.
-6. **Verify:** re-run step 1; `already_applied` must be true. Then set the pin's
-   `execute` to `false` in a follow-up so it is no longer a standing authorization.
+6. **Verify:** re-run step 1; `already_applied` must be true.
 
 ## Rollback
 

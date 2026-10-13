@@ -170,6 +170,30 @@ test('the committed pin no longer authorizes an apply', async () => {
   assert.equal(COMMITTED_PIN.execute, false);
   const refused = await executeSql72ProductionApply(manifest(), { root: ROOT, pin: COMMITTED_PIN, connect: neverConnect, consumedPath: consumedPath() });
   assert.equal(refused.code, CODES.GUARD_APPLY_FORBIDDEN);
+
+  const input = path.join(os.tmpdir(), `sql72-prod-committed-${process.pid}.json`);
+  fs.writeFileSync(input, JSON.stringify(manifest()));
+  const writes = [];
+  let spent = 0;
+  const orig = { out: process.stdout.write, err: process.stderr.write };
+  process.stdout.write = (chunk) => { writes.push(String(chunk)); return true; };
+  process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  try {
+    await sql72Main(['--apply', '--input', input], { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, {
+      root: ROOT,
+      pin: COMMITTED_PIN,
+      enforceScriptGuard: () => ({ ok: true, details: { receipt: { owned_components: [COMMITTED_PIN.filename] } } }),
+      consumeReceiptOnce: () => { spent += 1; return { ok: true }; },
+      connect: neverConnect,
+      consumedPath: consumedPath(),
+    });
+  } finally {
+    process.stdout.write = orig.out;
+    process.stderr.write = orig.err;
+    fs.rmSync(input, { force: true });
+  }
+  assert.equal(spent, 0);
+  assert.match(writes.join(''), /GUARD_APPLY_FORBIDDEN/);
 });
 
 test('the CLI refuses arbitrary SQL and an apply without the guard flag', async () => {

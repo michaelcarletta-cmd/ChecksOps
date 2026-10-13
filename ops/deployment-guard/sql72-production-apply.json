@@ -1,6 +1,6 @@
 {
   "id": "sql72-member-payment-writes-production-apply",
-  "authorization": "owner-approved 2026-10-13: production apply after staging acceptance; each run still needs the owner's approval, a production-sql receipt and the authorization phrase",
+  "authorization": "applied",
   "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
