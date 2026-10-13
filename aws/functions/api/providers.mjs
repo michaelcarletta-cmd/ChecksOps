@@ -350,10 +350,22 @@ const isMoovSweepRead = (spec, body) => {
   return action === 'get' || action === 'list' || action === 'sweeps';
 };
 
-// Production balance refresh: provider reads only (no wallet, transfer or ledger
-// creation). Every other production Moov operation stays hard-blocked.
-const isMoovProductionRead = (spec, body) => (
-  isMoovSweepRead(spec, body) || (spec?.provider === 'moov' && spec?.name === 'moov-wallet-sync')
+/**
+ * Accepted Platform Finance UI invokes only:
+ *   moov-platform-bank  action=status
+ *   platform-treasury   action=overview
+ * Unused diagnosis candidates (wallet/pnl/list/get) stay hard-blocked.
+ */
+const isPlatformFinanceRead = (spec, body) => {
+  if (spec?.provider !== 'moov') return false;
+  const action = String(body?.action ?? '').toLowerCase();
+  if (spec.name === 'moov-platform-bank') return action === 'status';
+  if (spec.name === 'platform-treasury') return action === 'overview';
+  return false;
+};
+
+const isAuthorizedMoovProductionRead = (spec, body) => (
+  isMoovSweepRead(spec, body) || isPlatformFinanceRead(spec, body)
 );
 
 export const handleFunctionInvoke = async (event, name, deps = {}) => {
@@ -382,21 +394,28 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     return denyCheckAltMutationUnderStatusRead(name);
   }
 
+  // Production WalletOps balance refresh: Moov GETs only, updates only the
+  // production payment_wallets row. Every other production Moov operation stays
+  // hard-blocked below.
+  if (spec.provider === 'moov' && name === 'moov-wallet-sync' && executionAllowed('moov')) {
+    const { handleProductionMoovWalletSync } = await import('./providers/production/moov-wallet-sync.mjs');
+    return handleProductionMoovWalletSync(event, deps);
+  }
+
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
-    if (isMoovProductionRead(spec, body)) {
-      // Read-only production Moov sweep snapshot and balance refresh are allowed while
-      // all other provider operations remain hard-blocked unless separately authorized.
+    if (isAuthorizedMoovProductionRead(spec, body)) {
+      // Read-only production Moov exceptions: sweep snapshot + Platform Finance
+      // status/overview. All other provider operations remain hard-blocked.
     } else {
-    return denyProviderExecution(spec.provider, spec.name, {
-      error: 'production_execution_blocked',
-      message: 'Production provider flags stay false. Staging never uses production Moov/CheckAlt keys. Enable AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED for sandbox/UAT ports only.',
-      tranche4HardBlock: true,
-    });
+      return denyProviderExecution(spec.provider, spec.name, {
+        error: 'production_execution_blocked',
+        message: 'Production provider flags stay false. Staging never uses production Moov/CheckAlt keys. Enable AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED for sandbox/UAT ports only.',
+        tranche4HardBlock: true,
+      });
     }
   }
 
-  if ((providerSandboxExecutionEnabled() || (executionAllowed('moov') && isMoovProductionRead(spec, body)))
-    && hasParityHandler(name)) {
+  if ((providerSandboxExecutionEnabled() || isAuthorizedMoovProductionRead(spec, body)) && hasParityHandler(name)) {
     return runParityHandler(name, event, deps);
   }
 

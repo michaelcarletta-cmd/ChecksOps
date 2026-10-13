@@ -91,6 +91,7 @@ function applyDeps(member, liveOpts = {}) {
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
   fs.copyFileSync(path.join(ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), path.join(root, 'ops/deployment-guard/production-api-overlay-plan.json'));
   for (const name of PLAN.order) {
+    fs.mkdirSync(path.dirname(path.join(root, 'aws/functions/api', name)), { recursive: true });
     fs.copyFileSync(path.join(ROOT, 'aws/functions/api', name), path.join(root, 'aws/functions/api', name));
   }
   const calls = {};
@@ -119,10 +120,13 @@ test('plan pins main bytes to the accepted reconciliation and excludes ocr/index
   assert.equal(PLAN.function_name, 'checksops-production-prep-api');
   for (const name of PLAN.order) {
     const row = PLAN.members[name];
+    // Members from a later reconciliation name their own manifest; the rest come from the 2026-10-08 one.
+    const manifest = row.manifest ? JSON.parse(fs.readFileSync(path.join(ROOT, row.manifest), 'utf8')) : MANIFEST;
+    assert.ok(manifest.members[name], name);
     assert.equal(sha(`aws/functions/api/${name}`), row.accepted_sha256, name);
-    assert.equal(row.accepted_sha256, MANIFEST.members[name].accepted_sha256, name);
-    assert.equal(row.expected_live_sha256, MANIFEST.members[name].live_sha256, name);
-    assert.equal(row.operation, MANIFEST.members[name].live_sha256 === null ? 'add' : 'replace', name);
+    assert.equal(row.accepted_sha256, manifest.members[name].accepted_sha256, name);
+    assert.equal(row.expected_live_sha256, manifest.members[name].live_sha256, name);
+    assert.equal(row.operation, manifest.members[name].live_sha256 === null ? 'add' : 'replace', name);
   }
   for (const name of ['ocr.mjs', 'index.mjs', 'workflow-delete-check.mjs']) {
     assert.ok(!PLAN.order.includes(name), name);
