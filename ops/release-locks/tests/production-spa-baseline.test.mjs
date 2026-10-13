@@ -88,8 +88,8 @@ test('production-spa lock records the accepted live baseline', () => {
   assert.equal(component.deployment_fingerprint.cloudfront_id, ACCEPTED_PRODUCTION_SPA.cloudfront_id);
   assert.notEqual(component.artifact.name, ACCEPTED_PRODUCTION_SPA.spa_bundle);
   assert.notEqual(component.artifact.name, '/assets/index-Bbftik1r.js');
-  assert.notEqual(component.artifact.name, '/assets/index-DQqpj2vP.js');
-  assert.equal(component.rollback.artifact, '/assets/index-DQqpj2vP.js');
+  assert.notEqual(component.artifact.name, '/assets/index-H3Li2tKG.js');
+  assert.equal(component.rollback.artifact, '/assets/index-H3Li2tKG.js');
   assert.equal(isSpaOnlyProductionLock(component), true);
   assert.deepEqual(component.required_sql, []);
   assert.deepEqual(component.missing_evidence, []);
