@@ -33,6 +33,7 @@ import { MortgageDeskShippingCard } from "./MortgageDeskShippingCard";
 
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { displayCase } from "@/lib/displayCase";
 
 const isUnknownServicer = (value?: string | null) =>
   !value || value.trim().toLowerCase().includes("unknown");
@@ -229,10 +230,10 @@ export function LossDraftDetailPanel({
               )}
             </div>
             {draft.check_intake_items.payee_line && (
-              <div className="text-muted-foreground truncate">{draft.check_intake_items.payee_line}</div>
+              <div className="text-muted-foreground truncate">{displayCase(draft.check_intake_items.payee_line)}</div>
             )}
             {draft.check_intake_items.carrier_name && (
-              <div className="text-muted-foreground truncate">{draft.check_intake_items.carrier_name}</div>
+              <div className="text-muted-foreground truncate">{displayCase(draft.check_intake_items.carrier_name)}</div>
             )}
             {!draft.claim_id && (
               <div className="text-[10px] text-amber-400 pt-0.5">No claim linked — managing from check intake</div>

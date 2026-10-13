@@ -15,6 +15,7 @@ import {
 import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/hooks/useWallet";
+import { displayCaseOrNull } from "@/lib/displayCase";
 import {
   AUTHORIZATION_VERSION,
   useAutoFunding,
@@ -175,7 +176,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
           <p className="text-muted-foreground">
             You authorize ChecksOps to debit{" "}
             {selectedBank
-              ? `${selectedBank.bank_name ?? "your bank"} ••••${selectedBank.last_four ?? ""}`
+              ? `${displayCaseOrNull(selectedBank.bank_name) ?? "your bank"} ••••${selectedBank.last_four ?? ""}`
               : "your selected bank account"}{" "}
             for the amount an approved payment is short by (plus any reserve target you set), up to{" "}
             {money(toCents(maxSingle))} per transfer and {money(toCents(maxDaily))} per day. Each
@@ -207,7 +208,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
             <SelectContent>
               {(banks.data ?? []).map((b: any) => (
                 <SelectItem key={b.id} value={b.id}>
-                  {b.bank_name ?? "Bank"} ••••{b.last_four ?? "????"}
+                  {displayCaseOrNull(b.bank_name) ?? "Bank"} ••••{b.last_four ?? "????"}
                 </SelectItem>
               ))}
             </SelectContent>

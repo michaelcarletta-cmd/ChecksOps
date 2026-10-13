@@ -12,6 +12,7 @@ import {
   Scale, FileWarning, ShieldCheck, Lock,
 } from "lucide-react";
 import { format } from "date-fns";
+import { displayCase } from "@/lib/displayCase";
 
 interface AgingItem {
   id: string;
@@ -195,7 +196,7 @@ export function DepositAgingDashboard() {
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="font-mono text-xs">#{item.check_number || "—"}</TableCell>
-                        <TableCell className="text-xs max-w-[100px] truncate">{item.carrier_name || "—"}</TableCell>
+                        <TableCell className="text-xs max-w-[100px] truncate">{displayCase(item.carrier_name) || "—"}</TableCell>
                         <TableCell className="text-right tabular-nums text-sm">{fmtMoney(item.amount)}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className={`text-[10px] gap-1 ${bc.color}`}>

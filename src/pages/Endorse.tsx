@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
+import { displayCase } from "@/lib/displayCase";
 
 interface EndorsementData {
   id: string;
@@ -273,7 +274,7 @@ export default function Endorse() {
 
         <div style={styles.detail}>
           <span style={styles.label}>Carrier</span>
-          <span style={styles.value}>{data.carrier_name}</span>
+          <span style={styles.value}>{displayCase(data.carrier_name)}</span>
         </div>
         <div style={styles.detail}>
           <span style={styles.label}>Check #</span>
@@ -281,7 +282,7 @@ export default function Endorse() {
         </div>
         <div style={styles.detail}>
           <span style={styles.label}>Your Name</span>
-          <span style={styles.value}>{data.payee_name}</span>
+          <span style={styles.value}>{displayCase(data.payee_name)}</span>
         </div>
         <div style={styles.amount}>{formatAmount(data.amount)}</div>
 
@@ -309,7 +310,7 @@ export default function Endorse() {
         {!alreadySigned && !isRejected && !isExpired && (
           <>
             <div style={styles.authText}>
-              <strong>Authorization:</strong> I, <strong>{data.payee_name}</strong>, authorize the endorsement of the above check. I confirm my identity as the named payee and consent to use electronic records and signatures for this endorsement.
+              <strong>Authorization:</strong> I, <strong>{displayCase(data.payee_name)}</strong>, authorize the endorsement of the above check. I confirm my identity as the named payee and consent to use electronic records and signatures for this endorsement.
             </div>
 
             <div style={{ marginTop: 20 }}>

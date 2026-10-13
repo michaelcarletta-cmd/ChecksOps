@@ -10,6 +10,7 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { returnCodeLabel, resolveReturnCode } from "@/lib/checkReturnCodes";
+import { displayCase } from "@/lib/displayCase";
 
 type ReturnedCheck = {
   id: string;
@@ -131,7 +132,7 @@ export function ReturnedChecksPanel({ searchQuery = "" }: { searchQuery?: string
               {c.check_number ? `Check #${c.check_number}` : "Check"} · {money(c.amount)}
             </div>
             <div className="truncate text-xs text-muted-foreground">
-              {[c.carrier_name, c.payee_line].filter(Boolean).join(" · ") || "—"}
+              {[displayCase(c.carrier_name), displayCase(c.payee_line)].filter(Boolean).join(" · ") || "—"}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">

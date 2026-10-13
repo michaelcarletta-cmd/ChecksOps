@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X as XIcon, Building2 } from "lucide-react";
+import { displayCase } from "@/lib/displayCase";
 
 export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const { user } = useAuth();
@@ -233,7 +234,7 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
               <SelectContent>
                 {claims.map(c => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.claim_number} — {c.policyholder_name}
+                    {c.claim_number} — {displayCase(c.policyholder_name)}
                   </SelectItem>
                 ))}
               </SelectContent>

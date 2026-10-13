@@ -33,6 +33,7 @@ import { formatDistanceToNow, format } from "date-fns";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
+import { displayCase } from "@/lib/displayCase";
 
 
 interface Props {
@@ -998,9 +999,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                     <Field label="Amount" value={check.amount != null ? `$${Number(check.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"} />
                     <Field label="Check #" value={check.check_number || "—"} />
-                    <Field label="Carrier" value={check.carrier_name || "—"} />
+                    <Field label="Carrier" value={displayCase(check.carrier_name) || "—"} />
                     <Field label="Issue date" value={formatIssueDateDisplay(check.issue_date)} />
-                    <Field label="Payee" value={check.payee_line || "—"} className="col-span-2" />
+                    <Field label="Payee" value={displayCase(check.payee_line) || "—"} className="col-span-2" />
                     {check.payee_address && <Field label="Payee address" value={check.payee_address} className="col-span-2" />}
                     {check.property_address && <Field label="Property" value={check.property_address} className="col-span-2" />}
                     {check.detected_claim_number && <Field label="Claim # (from check)" value={check.detected_claim_number} />}
@@ -1046,7 +1047,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                       value={formatIssueDateDisplay(req.date_of_loss || claim?.loss_date)}
                     />
                     <Field label="Insurance" value={req.insurance_company || claim?.insurance_company || "—"} className="col-span-2" />
-                    <Field label={<><User className="h-3 w-3 inline mr-1" />Homeowner</>} value={req.homeowner_name || claim?.policyholder_name || "—"} className="col-span-2" />
+                    <Field label={<><User className="h-3 w-3 inline mr-1" />Homeowner</>} value={displayCase(req.homeowner_name || claim?.policyholder_name) || "—"} className="col-span-2" />
                     {(req.homeowner_email || claim?.policyholder_email) && (
                       <Field label={<><Mail className="h-3 w-3 inline mr-1" />Email</>} value={req.homeowner_email || claim!.policyholder_email!} />
                     )}

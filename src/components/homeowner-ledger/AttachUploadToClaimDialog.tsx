@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2, Search, CheckCircle2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { displayCase } from "@/lib/displayCase";
 
 type Claim = {
   id: string;
@@ -150,7 +151,7 @@ export function AttachUploadToClaimDialog({
                         <div>
                           <div className="font-medium">{c.claim_number || "(no #)"}</div>
                           <div className="text-xs text-muted-foreground truncate">
-                            {c.policyholder_name || "—"}{c.policyholder_address ? ` • ${c.policyholder_address}` : ""}
+                            {displayCase(c.policyholder_name) || "—"}{c.policyholder_address ? ` • ${c.policyholder_address}` : ""}
                           </div>
                         </div>
                         {pickedId === c.id && <CheckCircle2 className="h-4 w-4 text-primary" />}

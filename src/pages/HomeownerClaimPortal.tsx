@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import { displayCaseOrNull } from "@/lib/displayCase";
 import {
   Dialog,
   DialogContent,
@@ -582,7 +583,7 @@ export default function HomeownerClaimPortal() {
                 >
                   <div className="min-w-0">
                     <div className="font-medium truncate">
-                      {c.carrier_name ?? "Insurance check"}
+                      {displayCaseOrNull(c.carrier_name) ?? "Insurance check"}
                       {c.check_number ? ` • #${c.check_number}` : ""}
                     </div>
                     <div className="text-[11px] text-muted-foreground">

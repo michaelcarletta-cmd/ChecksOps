@@ -25,6 +25,7 @@ import {
   type ClaimLedgerLinkAction,
 } from "@/lib/checkClaimLinkGuard";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
+import { displayCase } from "@/lib/displayCase";
 
 interface Props {
   checkIntakeItemId: string;
@@ -211,10 +212,10 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             ? "Claim tracker created"
             : "Linked to claim",
         description: res.updatedExisting
-          ? `${res.claimNumber}${res.policyholderName ? ` — ${res.policyholderName}` : ""}`
+          ? `${res.claimNumber}${res.policyholderName ? ` — ${displayCase(res.policyholderName)}` : ""}`
           : res.created
             ? `Now tracking funds for ${res.claimNumber}. Enter the settlement amounts to monitor releases.`
-            : `${res.claimNumber}${res.policyholderName ? ` — ${res.policyholderName}` : ""}`,
+            : `${res.claimNumber}${res.policyholderName ? ` — ${displayCase(res.policyholderName)}` : ""}`,
       });
     },
     onError: (e: any) => {
@@ -311,7 +312,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         description: created
           ? created.lines.slice(1).join(" ") || created.headline
           : res?.claim_number
-            ? `${res.claim_number}${res.policyholder_name ? ` — ${res.policyholder_name}` : ""}`
+            ? `${res.claim_number}${res.policyholder_name ? ` — ${displayCase(res.policyholder_name)}` : ""}`
             : undefined,
       });
     },
@@ -434,7 +435,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             <p className="text-xs">
               Existing claim found
               {inspectResult.claim_number ? ` — #${inspectResult.claim_number}` : ""}
-              {inspectResult.policyholder_name ? ` · ${inspectResult.policyholder_name}` : ""}
+              {inspectResult.policyholder_name ? ` · ${displayCase(inspectResult.policyholder_name)}` : ""}
             </p>
           )}
           {inspectResult?.code === "no_match" && inspectResult?.can_create === false && (
@@ -594,7 +595,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
           )}
         </div>
         {claim?.policyholder_name && (
-          <p className="text-xs text-muted-foreground truncate">{claim.policyholder_name}</p>
+          <p className="text-xs text-muted-foreground truncate">{displayCase(claim.policyholder_name)}</p>
         )}
       </CardHeader>
       <CardContent className="space-y-3">
@@ -718,7 +719,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
                     )}
                     <span className="truncate">
                       {c.check_number ? `#${c.check_number}` : "(no #)"}
-                      {c.carrier_name && <span className="text-muted-foreground"> · {c.carrier_name}</span>}
+                      {c.carrier_name && <span className="text-muted-foreground"> · {displayCase(c.carrier_name)}</span>}
                       {c.issue_date && (
                         <span className="text-muted-foreground"> · {formatIssueDateDisplay(c.issue_date)}</span>
                       )}

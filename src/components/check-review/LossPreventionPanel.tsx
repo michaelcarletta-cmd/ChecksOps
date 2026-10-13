@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { displayCase } from "@/lib/displayCase";
 
 type StuckCheck = {
   id: string;
@@ -184,7 +185,7 @@ export function LossPreventionPanel() {
                 {overdue.map((c) => (
                   <CheckRow
                     key={c.id}
-                    label={c.payee_line || c.carrier_name || c.id.slice(0, 8)}
+                    label={displayCase(c.payee_line || c.carrier_name) || c.id.slice(0, 8)}
                     status={c.status}
                     amount={c.amount}
                     extra={`${Math.round(c.hours_in_status)}h in status (SLA ${c.sla_hours}h)`}
@@ -264,8 +265,7 @@ export function LossPreventionPanel() {
                 <CheckRow
                   key={c.id}
                   label={
-                    c.payee_line ||
-                    c.carrier_name ||
+                    displayCase(c.payee_line || c.carrier_name) ||
                     c.check_number ||
                     c.id.slice(0, 8)
                   }

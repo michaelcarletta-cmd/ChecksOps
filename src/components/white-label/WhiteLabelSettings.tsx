@@ -47,6 +47,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
+import { displayCase } from "@/lib/displayCase";
 
 
 const DepositReports = lazy(() =>
@@ -425,7 +426,7 @@ function BankingSettings({ tenantId }: { tenantId: string }) {
               {accounts.map((acct: any) => (
                 <div key={acct.id} className="flex items-center justify-between rounded-md border border-border/60 px-4 py-3">
                   <div>
-                    <div className="text-sm font-medium">{acct.bank_name}</div>
+                    <div className="text-sm font-medium">{displayCase(acct.bank_name)}</div>
                     <div className="text-xs text-muted-foreground">
                       {acct.account_holder_name} · {acct.account_type} · ••••{acct.account_number_last4}
                     </div>

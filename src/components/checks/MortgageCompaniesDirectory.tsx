@@ -7,6 +7,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { displayCase } from "@/lib/displayCase";
 import {
   Building2, Mail, Phone, User, Plus, Search, Pencil, Globe, MapPin,
 } from "lucide-react";
@@ -150,7 +151,7 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
                   onClick={() => openFromCheck(name)}
                 >
                   <Plus className="h-3 w-3 mr-1" />
-                  {name}
+                  {displayCase(name)}
                 </Button>
               ))}
             </div>

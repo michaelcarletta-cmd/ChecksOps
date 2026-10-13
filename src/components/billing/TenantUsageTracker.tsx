@@ -10,6 +10,7 @@ import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
+import { displayCase } from "@/lib/displayCase";
 
 
 export function TenantUsageTracker() {
@@ -223,7 +224,7 @@ export function TenantUsageTracker() {
                             Check #{row.check_number || "—"}
                           </span>
                           <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">
-                            {row.payee_name} {row.processed_by && `· ${row.processed_by}`}
+                            {displayCase(row.payee_name)} {row.processed_by && `· ${row.processed_by}`}
                           </span>
                         </div>
                       </TableCell>

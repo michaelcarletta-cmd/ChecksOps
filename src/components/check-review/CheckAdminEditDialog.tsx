@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toDateInputValue } from "@/lib/issueDate";
+import { displayCase } from "@/lib/displayCase";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -355,8 +356,8 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
           <div className="space-y-5 py-2">
             <div className="text-xs text-muted-foreground rounded-md bg-muted/40 p-2 space-y-0.5">
               <div>Check #{data.intake.check_number ?? "—"} · ${data.intake.amount ?? "—"}</div>
-              {data.intake.payee_line && <div>Payee: {data.intake.payee_line}</div>}
-              {data.intake.carrier_name && <div>Carrier: {data.intake.carrier_name}</div>}
+              {data.intake.payee_line && <div>Payee: {displayCase(data.intake.payee_line)}</div>}
+              {data.intake.carrier_name && <div>Carrier: {displayCase(data.intake.carrier_name)}</div>}
             </div>
 
             {/* Mortgage toggle — TOP, prominent, amber-bordered */}

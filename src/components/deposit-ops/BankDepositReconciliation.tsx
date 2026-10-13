@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Banknote, ChevronDown, ChevronRight, Clock, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 interface DepositRow {
   id: string;
@@ -274,8 +275,8 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                       {g.rows.map((r) => (
                         <TableRow key={r.id}>
                           <TableCell className="whitespace-nowrap">{r.check_intake_items?.check_number ?? "—"}</TableCell>
-                          <TableCell className="max-w-[180px] truncate">{r.check_intake_items?.carrier_name ?? "—"}</TableCell>
-                          <TableCell className="max-w-[220px] truncate">{r.check_intake_items?.payee_line ?? "—"}</TableCell>
+                          <TableCell className="max-w-[180px] truncate">{displayCaseOrNull(r.check_intake_items?.carrier_name) ?? "—"}</TableCell>
+                          <TableCell className="max-w-[220px] truncate">{displayCaseOrNull(r.check_intake_items?.payee_line) ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.check_intake_items?.detected_claim_number ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap font-mono text-xs">{r.checkalt_reference ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap capitalize text-xs text-muted-foreground">

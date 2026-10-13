@@ -14,6 +14,7 @@ import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
 import { AddExternalStakeholderDialog } from "./AddExternalStakeholderDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 
 interface Props {
@@ -284,7 +285,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                           <span className="font-medium block truncate group-hover:text-accent-foreground">{p.partner_name}</span>
                           <span className="text-muted-foreground text-[10px]">
                             {p.payout_ready
-                              ? `Bank approved${p.last_four ? ` · ${p.bank_name ?? "Bank"} ••${p.last_four}` : ""}`
+                              ? `Bank approved${p.last_four ? ` · ${displayCaseOrNull(p.bank_name) ?? "Bank"} ••${p.last_four}` : ""}`
                               : "Bank not verified yet"}
                           </span>
                         </span>

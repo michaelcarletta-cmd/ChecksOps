@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Printer, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
+import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -244,12 +245,12 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
           <div ref={printRef}>
             <h1 className="text-base font-bold">Deposit Packet</h1>
             <p className="text-xs text-muted-foreground">
-              Check #{check.check_number ?? "Unknown"} · {check.carrier_name ?? "Unknown Carrier"}
+              Check #{check.check_number ?? "Unknown"} · {displayCaseOrNull(check.carrier_name) ?? "Unknown Carrier"}
             </p>
 
             <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Details</h2>
             <div className="grid grid-cols-2 gap-2">
-              <div><p className="text-[10px] text-muted-foreground">Carrier</p><p className="text-xs font-medium">{check.carrier_name ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Carrier</p><p className="text-xs font-medium">{displayCaseOrNull(check.carrier_name) ?? "—"}</p></div>
               <div><p className="text-[10px] text-muted-foreground">Amount</p><p className="text-xs font-bold">{fmtAmount(check.amount)}</p></div>
               <div><p className="text-[10px] text-muted-foreground">Check #</p><p className="text-xs font-mono">{check.check_number ?? "—"}</p></div>
               <div><p className="text-[10px] text-muted-foreground">Claim #</p><p className="text-xs">{check.detected_claim_number ?? "—"}</p></div>
@@ -261,7 +262,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
             <div className="space-y-1">
               {(check.check_payees ?? []).map((p) => (
                 <div key={p.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
-                  <span className="font-medium">{p.payee_name}</span>
+                  <span className="font-medium">{displayCase(p.payee_name)}</span>
                   <span className="text-muted-foreground">{payeeTypeLabels[p.payee_type] ?? p.payee_type}</span>
                   <span className={
                     p.endorsement_status === "signed" ? "text-emerald-400" :

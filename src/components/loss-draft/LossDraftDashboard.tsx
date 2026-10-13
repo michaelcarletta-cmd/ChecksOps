@@ -19,6 +19,7 @@ import { LossDraftDashboardCards, type LossDraftFilter } from "./LossDraftDashbo
 import { NewLossDraftDialog } from "./NewLossDraftDialog";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { matchesAmountQuery } from "@/features/check-command/status";
+import { displayCase } from "@/lib/displayCase";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -213,11 +214,11 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                                 {d.claim_number || (d.check_number ? `Check #${d.check_number}` : "No claim")}
                               </div>
                               <div className="text-xs text-muted-foreground truncate max-w-[160px]">
-                                {d.policyholder_name || d.payee_line || "—"}
+                                {displayCase(d.policyholder_name || d.payee_line) || "—"}
                               </div>
                               {!d.claim_number && (
                                 <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
-                                  {d.insurance_company || d.carrier_name}
+                                  {displayCase(d.insurance_company) || displayCase(d.carrier_name)}
                                   {d.check_amount ? ` · $${Number(d.check_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}
                                 </div>
                               )}

@@ -8,6 +8,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle2, Hourglass } from "lucide-react";
 import { format } from "date-fns";
+import { displayCase } from "@/lib/displayCase";
 
 interface SignatureStatusPanelProps {
   checkId: string;
@@ -167,7 +168,7 @@ export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
                 ) : (
                   <Hourglass className="h-3.5 w-3.5 shrink-0" />
                 )}
-                <span className="font-medium truncate">{r.payee_name}</span>
+                <span className="font-medium truncate">{displayCase(r.payee_name)}</span>
                 <span className="text-[10px] tracking-wide text-muted-foreground">
                   {PAYEE_TYPE_LABEL[r.payee_type] ?? r.payee_type}
                 </span>

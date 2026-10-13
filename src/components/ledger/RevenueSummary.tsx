@@ -8,6 +8,7 @@ import { TrendingUp, TrendingDown, DollarSign, Wallet, ArrowRight } from "lucide
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { displayCase } from "@/lib/displayCase";
 
 export function RevenueSummary() {
   const { tenant } = useTenant();
@@ -148,8 +149,8 @@ export function RevenueSummary() {
                         {check.deposited_at ? format(new Date(check.deposited_at), "MMM d, yyyy") : "—"}
                       </td>
                       <td className="p-3">
-                        <p className="font-medium text-xs">{check.freedom_claim_number || check.carrier_name || "—"}</p>
-                        {check.carrier_name && <p className="text-[10px] text-muted-foreground">{check.carrier_name}</p>}
+                        <p className="font-medium text-xs">{check.freedom_claim_number || displayCase(check.carrier_name) || "—"}</p>
+                        {check.carrier_name && <p className="text-[10px] text-muted-foreground">{displayCase(check.carrier_name)}</p>}
                       </td>
                       <td className="p-3 text-xs font-mono">{check.check_number || "—"}</td>
                       <td className="p-3 text-right font-medium text-sm text-emerald-600">

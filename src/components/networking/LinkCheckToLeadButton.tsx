@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link2, Loader2, CheckCircle2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { displayCaseOrNull } from "@/lib/displayCase";
 
 type Props = {
   leadId: string;
@@ -152,7 +153,7 @@ export function LinkCheckToLeadButton({ leadId, leadClaimNumber }: Props) {
                 >
                   <div className="min-w-0 text-xs">
                     <div className="font-medium truncate">
-                      {c.carrier_name ?? "Check"}
+                      {displayCaseOrNull(c.carrier_name) ?? "Check"}
                       {c.check_number ? ` • #${c.check_number}` : ""}
                     </div>
                     <div className="text-[10px] text-muted-foreground truncate">

@@ -27,6 +27,7 @@ import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@/lib/reviewQueueQuery";
 import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
+import { displayCase } from "@/lib/displayCase";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
@@ -503,7 +504,7 @@ export function CheckReviewQueue({
             <div className="rounded-md border-t-4 border-primary bg-primary/20 px-3 py-3 text-foreground font-semibold">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
-                <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+                <span className="font-semibold text-foreground truncate">{displayCase(group.policyholderName)}</span>
                 <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal text-muted-foreground">
@@ -532,7 +533,7 @@ export function CheckReviewQueue({
                     </span>
                   </div>
               <p className="text-xs text-muted-foreground truncate">
-                {check.carrier_name || "Unknown carrier"}
+                {displayCase(check.carrier_name) || "Unknown carrier"}
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {check.ocr_needs_verification ? (
@@ -1155,7 +1156,7 @@ export function ReviewDecisionPanel({
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">Carrier</p>
-                <p className="font-medium">{check.carrier_name || "—"}</p>
+                <p className="font-medium">{displayCase(check.carrier_name) || "—"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Check #</p>
@@ -1169,7 +1170,7 @@ export function ReviewDecisionPanel({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Payee Line</p>
-                <p className="text-xs break-words">{check.payee_line || "—"}</p>
+                <p className="text-xs break-words">{displayCase(check.payee_line) || "—"}</p>
               </div>
               {check.issue_date && (
                 <div>
@@ -1890,7 +1891,7 @@ function PayeeReconciliation({
                     )}
                     <PayeeIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{payee.payee_name}</p>
+                      <p className="text-xs font-medium truncate">{displayCase(payee.payee_name)}</p>
                       <p className="text-[10px] text-muted-foreground capitalize">
                         {payee.payee_type.replace(/_/g, " ")}
                         {hasActivity && (
@@ -1925,7 +1926,7 @@ function PayeeReconciliation({
                           variant="ghost"
                           className="h-6 w-6 p-0 text-destructive hover:text-destructive"
                           onClick={() => {
-                            if (confirm(`Remove payee "${payee.payee_name}"?`)) {
+                            if (confirm(`Remove payee "${displayCase(payee.payee_name)}"?`)) {
                               deletePayee.mutate(payee.id);
                             }
                           }}
