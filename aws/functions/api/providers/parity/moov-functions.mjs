@@ -23,7 +23,7 @@ import {
   missingRequestedCapabilities,
 } from './moov-capabilities.mjs';
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
-import { readWallet, syncWallet } from './moov-wallet.mjs';
+import { readWallet, syncWallet, syncWalletReadOnly } from './moov-wallet.mjs';
 import {
   cancelWalletFunding,
   calculatePaymentFunding,
@@ -76,12 +76,16 @@ const wrap = (handler, name) => async (event, deps = {}) => {
     : loadSandboxCredentials;
   const early = parseBody(event);
   const action = String(early?.action ?? 'get').toLowerCase();
-  const productionRead = (
+  const productionSweepRead = (
     name === 'moov-sweep-config'
     && (action === 'get' || action === 'list' || action === 'sweeps')
     && executionAllowed('moov')
   );
-  const identity = productionRead ? withIdentity : withIdentityWrite;
+  // Production balance refresh: read-only at the provider, but it updates the local
+  // payment_wallets row, so it needs a write transaction.
+  const productionWalletSync = name === 'moov-wallet-sync' && executionAllowed('moov');
+  const productionRead = productionSweepRead || productionWalletSync;
+  const identity = productionSweepRead ? withIdentity : withIdentityWrite;
   return identity(event, async ({ client, mapping, claims, body, spoof }) => {
     const ctx = productionRead
       ? await moovProductionReadContext({
@@ -535,11 +539,28 @@ const walletSync = {
     if (!['operating', 'trust'].includes(walletType)) {
       return fail("wallet_type must be 'operating' or 'trust'", 400);
     }
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const environment = ctx.environment === 'production' ? 'production' : 'sandbox';
+    const account = await loadMoovAccount(client, ctx.tenantId, environment);
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     const ledgerLimit = Math.min(Number(body.ledger_limit) || 50, 200);
     let wallet;
-    try {
+    if (environment === 'production') {
+      try {
+        wallet = await syncWalletReadOnly(client, {
+          tenantId: ctx.tenantId,
+          accountId: account.provider_account_id,
+          environment,
+          walletType,
+          skipProviderFetch: !body?.force && account.onboarding_status !== 'active',
+          fetchImpl,
+        });
+      } catch (error) {
+        const local = await readWallet(client, ctx.tenantId, environment, walletType);
+        if (!local) throw error;
+        wallet = { ...local, status: 'sync_failed' };
+      }
+      if (!wallet) return fail('wallet_not_found', 409, { message: 'No matching Moov wallet was found for this organization.' });
+    } else try {
       wallet = await syncWallet(client, {
         tenantId: ctx.tenantId,
         accountId: account.provider_account_id,
