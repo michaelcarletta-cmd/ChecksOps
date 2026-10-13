@@ -478,6 +478,25 @@ test('Platform Finance production exceptions stay limited to status and overview
       );
       assert.equal(result.statusCode, 403, `${name} ${action}`);
       assert.equal(result.error, 'production_execution_blocked', `${name} ${action}`);
+      assert.equal(result.tranche4HardBlock, true, `${name} ${action}`);
+    }
+    // status/overview pass the hard block but must still fail closed on main: no secrets, no Moov call.
+    for (const [name, action] of [['moov-platform-bank', 'status'], ['platform-treasury', 'overview']]) {
+      let secretsLoaded = false;
+      const fetch = walletReadFetch({ wallets: [] });
+      const result = await handleProviderRequest(
+        jwtEvent(`/functions/v1/${name}`, 'POST', { action, tenant_id: FREEDOM_TENANT }),
+        `/functions/v1/${name}`,
+        'POST',
+        {
+          ...PRODUCTION_DEPS(walletSyncClient(), fetch.impl),
+          loadProviderSecrets: async () => { secretsLoaded = true; return {}; },
+          loadSandboxCredentials: async () => { secretsLoaded = true; return {}; },
+        },
+      );
+      assert.equal(result.statusCode, 403, `${name} ${action}`);
+      assert.equal(fetch.calls.length, 0, `${name} ${action}`);
+      assert.equal(secretsLoaded, false, `${name} ${action}`);
     }
   });
 });

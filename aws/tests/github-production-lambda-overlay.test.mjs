@@ -121,6 +121,7 @@ test('plan pins main bytes to the accepted reconciliation and excludes ocr/index
   for (const name of PLAN.order) {
     const row = PLAN.members[name];
     // Members from a later reconciliation name their own manifest; the rest come from the 2026-10-08 one.
+    if (row.manifest) assert.match(row.manifest, /^aws\/tests\/fixtures\/production-[a-z0-9-]+-manifest-\d{4}-\d{2}-\d{2}\.json$/, name);
     const manifest = row.manifest ? JSON.parse(fs.readFileSync(path.join(ROOT, row.manifest), 'utf8')) : MANIFEST;
     assert.ok(manifest.members[name], name);
     assert.equal(sha(`aws/functions/api/${name}`), row.accepted_sha256, name);
@@ -134,7 +135,7 @@ test('plan pins main bytes to the accepted reconciliation and excludes ocr/index
   }
   // Added members land before any planned member that imports them.
   for (const [index, name] of PLAN.order.entries()) {
-    const imports = localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', name), 'utf8'));
+    const imports = localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', name), 'utf8'), name);
     for (const dep of imports.filter((dep) => PLAN.members[dep]?.operation === 'add')) {
       assert.ok(PLAN.order.indexOf(dep) < index, `${dep} before ${name}`);
     }
@@ -318,4 +319,37 @@ test('production smoke fails on unhealthy, partial or malformed /db-health and l
     assert.deepEqual(Object.keys(row).sort(), ['authentication', 'healthy', 'httpStatus', 'path', 'select1', 'status']);
     assert.equal(row.currentUser, undefined);
   }
+});
+
+test('read-only Moov wallet sync members apply in order with nested ZIP paths', async () => {
+  const MOOV = ['providers/parity/moov-wallet.mjs', 'providers/production/moov-wallet-sync.mjs', 'providers.mjs'];
+  assert.deepEqual(PLAN.order.slice(-3), MOOV);
+  for (const member of MOOV) {
+    const { deps, calls } = applyDeps(member);
+    const result = await run(applyEnv(member), deps);
+    assert.equal(result.mutation, false, member);
+    const op = PLAN.members[member].operation;
+    assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
+    const input = JSON.parse(fs.readFileSync(result.authorization.overlayInput, 'utf8'));
+    assert.deepEqual(input.member_sources, { [member]: `aws/functions/api/${member}` }, member);
+  }
+  // Imports resolve against the member's directory, including ../ and dynamic imports.
+  const syncImports = localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/moov-wallet-sync.mjs'), 'utf8'), 'providers/production/moov-wallet-sync.mjs');
+  for (const dep of ['data.mjs', 'sandbox-credentials.mjs', 'providers/parity/caller.mjs', 'providers/parity/moov-wallet.mjs']) {
+    assert.ok(syncImports.includes(dep), dep);
+  }
+  assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers.mjs'), 'utf8'), 'providers.mjs')
+    .includes('providers/production/moov-wallet-sync.mjs'));
+});
+
+test('read-only Moov wallet sync members refuse to apply out of order', async () => {
+  await assert.rejects(
+    run(applyEnv('providers/production/moov-wallet-sync.mjs'), applyDeps('providers/production/moov-wallet-sync.mjs', { pending: ['providers/parity/moov-wallet.mjs'] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  // providers.mjs before the added module: its import is not in the live ZIP yet.
+  await assert.rejects(
+    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-sync.mjs'] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
 });

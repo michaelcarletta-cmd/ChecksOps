@@ -73,17 +73,19 @@ export function resolvePlannedMember(member, { root = repoRoot, plan = loadPlan(
       expectedLiveSha256: row.expected_live_sha256 || null,
       sqlBefore: row.sql_before || null,
       sourceRelative,
-      imports: localImports(bytes.toString('utf8')),
+      imports: localImports(bytes.toString('utf8'), name),
       source: bytes.toString('utf8'),
     },
   };
 }
 
-export function localImports(source) {
+/** Relative static and dynamic imports, resolved against the member's ZIP directory. */
+export function localImports(source, fromMember = '') {
+  const dir = path.posix.dirname(fromMember);
   const found = new Set();
-  const re = /(?:from\s+|import\s*\(\s*)['"]\.\/([A-Za-z0-9._/-]+\.mjs)['"]/g;
+  const re = /(?:from\s+|import\s*\(\s*)['"](\.{1,2}\/[A-Za-z0-9._/-]+\.mjs)['"]/g;
   let match;
-  while ((match = re.exec(source))) found.add(match[1]);
+  while ((match = re.exec(source))) found.add(path.posix.normalize(path.posix.join(dir, match[1])));
   return [...found].sort();
 }
 
