@@ -67,6 +67,15 @@
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#313", "#240"]
     },
+    "moov-production-read": {
+      "classification": "UNVERIFIED",
+      "git_sha": "3a54dbeda990f2b026a5bde356fc2b216ece0f9d",
+      "deployed_artifact": "not deployed",
+      "applied_migrations": "none",
+      "environment": "unknown",
+      "missing_evidence": ["staging acceptance", "production overlay receipts"],
+      "open_pr_overlap": []
+    },
     "moov-webhooks": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",

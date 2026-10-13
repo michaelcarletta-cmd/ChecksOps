@@ -766,7 +766,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "78b1b5781689a93afa569b9c4d7b2d4324f910ab4607d61d6643fa8589d35990",
+        "tree_hash": "312ba6c36a8c4094643325549ef68258096792f028082e28efc3a0d630bf5409",
         "merged": true,
         "merged_pr": null
       },
@@ -811,6 +811,49 @@
         "#328"
       ],
       "notes": "Fail-closed control-plane metadata reconciliation only. The protected release-control tree advanced on merged main, including PR #508 production SPA baseline safeguards and subsequent guard/lock maintenance. Classification remains UNVERIFIED. This source hash update does not change production, does not authorize deployment, and does not replace the authoritative live-SPA or current-live-Lambda requirements."
+    },
+    "moov-production-read": {
+      "id": "moov-production-read",
+      "ownership_group": "moov-production-read",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "3a54dbeda990f2b026a5bde356fc2b216ece0f9d",
+        "tree_hash": "3b34fe432c299d33921e35f452ea190a8016422dc516307962a323391dba83be",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/tests/fixtures/production-moov-wallet-sync-manifest-2026-10-13.json"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Not yet deployed. After deploy, rollback is the guarded overlay of the previous live providers.mjs bytes recorded in the manifest; the added module is inert without the providers.mjs route."
+      },
+      "missing_evidence": [
+        "staging acceptance",
+        "production overlay receipts"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Owner-approved 2026-10-13. Read-only production Moov wallet sync; no money movement."
     }
   }
 }

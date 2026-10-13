@@ -239,6 +239,13 @@
         "aws/cutover/production/",
         "aws/production/LIVE_RESOURCES.md"
       ]
+    },
+    "moov-production-read": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Read-only production Moov wallet sync (WalletOps Refresh balances); provider GETs only",
+      "paths": [
+        "aws/functions/api/providers/production/moov-wallet-sync.mjs"
+      ]
     }
   }
 }
