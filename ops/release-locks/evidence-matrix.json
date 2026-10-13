@@ -76,6 +76,15 @@
       "missing_evidence": ["staging acceptance", "production overlay receipts"],
       "open_pr_overlap": []
     },
+    "moov-production-fund": {
+      "classification": "UNVERIFIED",
+      "git_sha": "a4be10ebbc8db5576755f3e20c024d581c462dd2",
+      "deployed_artifact": "not deployed",
+      "applied_migrations": "72_member_payment_writes.sql source-only",
+      "environment": "unknown",
+      "missing_evidence": ["SQL 72 staging and production apply", "staging acceptance", "production overlay receipts"],
+      "open_pr_overlap": []
+    },
     "moov-webhooks": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",

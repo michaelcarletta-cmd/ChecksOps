@@ -246,6 +246,14 @@
       "paths": [
         "aws/functions/api/providers/production/moov-wallet-sync.mjs"
       ]
+    },
+    "moov-production-fund": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Production WalletOps funding (linked bank to the tenant's own wallet) and its once-per-login two-factor binding",
+      "paths": [
+        "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+        "aws/functions/api/providers/production/moov-fund-authz.mjs"
+      ]
     }
   }
 }
