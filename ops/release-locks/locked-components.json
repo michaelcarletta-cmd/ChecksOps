@@ -752,7 +752,7 @@
       "rollback": {
         "git_sha": "25cd58522a6d50bdee0feda3a320aae8bea660bd",
         "artifact": "/assets/index-H3Li2tKG.js",
-        "notes": "Immediate previous locked baseline is /assets/index-H3Li2tKG.js (S3 index.html version njx8EFcQJgoLooW5XcmQ89oON34B0r.Q, sha256 5dda4e76ce9dd500cd184dedc6a4fc3739b2134fbc9021a100bc9730c9bcea7a; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
+        "notes": "Immediate previous locked baseline is /assets/index-H3Li2tKG.js (S3 index.html version njx8EFcQJgoLooW5XcmQ89oON34B0r.Q, index.html sha256 5dda4e76ce9dd500cd184dedc6a4fc3739b2134fbc9021a100bc9730c9bcea7a, bundle sha256 6ff5a501c9e74c21106eac61dff67a477622df559147bee9b068227a4cd8f60d; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
