@@ -543,37 +543,24 @@ const walletSync = {
     const account = await loadMoovAccount(client, ctx.tenantId, environment);
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     const ledgerLimit = Math.min(Number(body.ledger_limit) || 50, 200);
+    // Production uses the read-only sync: provider GETs only, never creates a wallet.
+    const sync = environment === 'production' ? syncWalletReadOnly : syncWallet;
     let wallet;
-    if (environment === 'production') {
-      try {
-        wallet = await syncWalletReadOnly(client, {
-          tenantId: ctx.tenantId,
-          accountId: account.provider_account_id,
-          environment,
-          walletType,
-          skipProviderFetch: !body?.force && account.onboarding_status !== 'active',
-          fetchImpl,
-        });
-      } catch (error) {
-        const local = await readWallet(client, ctx.tenantId, environment, walletType);
-        if (!local) throw error;
-        wallet = { ...local, status: 'sync_failed' };
-      }
-      if (!wallet) return fail('wallet_not_found', 409, { message: 'No matching Moov wallet was found for this organization.' });
-    } else try {
-      wallet = await syncWallet(client, {
+    try {
+      wallet = await sync(client, {
         tenantId: ctx.tenantId,
         accountId: account.provider_account_id,
-        environment: 'sandbox',
+        environment,
         walletType,
         skipProviderFetch: !body?.force && account.onboarding_status !== 'active',
         fetchImpl,
       });
     } catch (error) {
-      const local = await readWallet(client, ctx.tenantId, 'sandbox', walletType);
+      const local = await readWallet(client, ctx.tenantId, environment, walletType);
       if (!local) throw error;
       wallet = { ...local, status: 'sync_failed' };
     }
+    if (!wallet) return fail('wallet_not_found', 409, { message: 'No matching Moov wallet was found for this organization.' });
     const ledger = (await client.query(
       `SELECT * FROM public.payment_wallet_ledger
        WHERE wallet_id = $1::uuid ORDER BY created_at DESC NULLS LAST LIMIT $2`,
