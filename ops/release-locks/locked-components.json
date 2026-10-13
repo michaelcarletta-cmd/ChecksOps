@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-13T13:03:53Z (index-DQqpj2vP.js) after a guarded production upload of main d69d0dff. H3Li2tKG is the rollback; CBOwj-7W and HXTuSrE0 remain historical evidence only. Other components remain unlocked. This metadata records the verified deploy and does not itself write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-10-13T18:37:28Z (index-C7bJFkEQ.js) after a guarded production upload of main 9b89e638. DQqpj2vP is the rollback; H3Li2tKG, CBOwj-7W and HXTuSrE0 remain historical evidence only. Other components remain unlocked. This metadata records the verified deploy and does not itself write production.",
   "components": {
     "delete-check-contract": {
       "id": "delete-check-contract",
@@ -704,17 +704,17 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "d69d0dff7d50f0999e4ecd042edbd513532a883a",
+        "git_sha": "9b89e63859721321e6bfb3fdbb16c37f2fde5e06",
         "tree_hash": "3cad89d8a2e828fc1c711228df00f22f2c36bb3a5584054caa2caa84f463b1e0",
         "merged": true,
-        "merged_pr": 911
+        "merged_pr": 917
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-DQqpj2vP.js",
-        "version": "dsdDpsScIlJM4QdIIltP_MhqVLZdQ.AO",
-        "hash": "82ac7f12b0d9128f12c4537edd47c7730996a6e6027071fabf77c3ec37a59799",
+        "name": "/assets/index-C7bJFkEQ.js",
+        "version": "B_SaGgbYdSYI8OKghy_iHF_Y6DAEPnJ2",
+        "hash": "855c4b39203743e2947f0e0be98b43bac73d8eec6cc8afd9d9c8764df2089f72",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": "9f673420-a5a1-43df-a798-cc7022a4fb8d",
@@ -726,37 +726,37 @@
           "ops/release-locks/proof/production-spa-baseline.md",
           "ops/production-spa-deploy.md"
         ],
-        "recorded_at": "2026-10-13T13:03:53Z",
+        "recorded_at": "2026-10-13T18:37:28Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "d69d0dff7d50f0999e4ecd042edbd513532a883a",
-        "artifact_identity": "/assets/index-DQqpj2vP.js",
-        "evidence_producer": "guarded-production-spa-upload run 38401622446 (host-verified)",
+        "git_sha": "9b89e63859721321e6bfb3fdbb16c37f2fde5e06",
+        "artifact_identity": "/assets/index-C7bJFkEQ.js",
+        "evidence_producer": "guarded-production-spa-upload run 38447894139 (host-verified)",
         "evidence_type": "guarded production SPA upload of a fresh main build"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-DQqpj2vP.js",
-        "spa_sha256": "82ac7f12b0d9128f12c4537edd47c7730996a6e6027071fabf77c3ec37a59799",
+        "spa_bundle": "/assets/index-C7bJFkEQ.js",
+        "spa_sha256": "855c4b39203743e2947f0e0be98b43bac73d8eec6cc8afd9d9c8764df2089f72",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "dsdDpsScIlJM4QdIIltP_MhqVLZdQ.AO",
+        "cloudfront_deployment_fingerprint": "B_SaGgbYdSYI8OKghy_iHF_Y6DAEPnJ2",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": "9f673420-a5a1-43df-a798-cc7022a4fb8d",
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "a64bf65f2f6794db2bf9ca2c46f31676d93ae34ccca84fca214f8506dfca1c10",
-        "notes": "Guarded production SPA upload 2026-10-13T13:03:53Z (run 38401622446, staging acceptance run 38391456184) of main d69d0dff, whose history contains the previous locked source 25cd5852. S3 and https://checksops.com verified the candidate index.html and entry bundle; CloudFront invalidation I5G72NTHR2MPQYLA8BBC2RO8HW. Previous lock /assets/index-H3Li2tKG.js is the rollback."
+        "config_hash": "e0401ead6383de331ad77bf5bbf6f8cb198c47c38e1fbe76e2e50359bd4fa45e",
+        "notes": "Guarded production SPA upload 2026-10-13T18:37:28Z (run 38447894139, staging acceptance run 38443360189) of main 9b89e638, whose history contains the previous locked source d69d0dff. S3 and https://checksops.com verified the candidate index.html and entry bundle; CloudFront invalidation I5NA0BQGK7SBB8OKNWXV2NICVD. Previous lock /assets/index-DQqpj2vP.js is the rollback."
       },
       "rollback": {
-        "git_sha": "25cd58522a6d50bdee0feda3a320aae8bea660bd",
-        "artifact": "/assets/index-H3Li2tKG.js",
-        "notes": "Immediate previous locked baseline is /assets/index-H3Li2tKG.js (S3 index.html version njx8EFcQJgoLooW5XcmQ89oON34B0r.Q, index.html sha256 5dda4e76ce9dd500cd184dedc6a4fc3739b2134fbc9021a100bc9730c9bcea7a, bundle sha256 6ff5a501c9e74c21106eac61dff67a477622df559147bee9b068227a4cd8f60d; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
+        "git_sha": "d69d0dff7d50f0999e4ecd042edbd513532a883a",
+        "artifact": "/assets/index-DQqpj2vP.js",
+        "notes": "Immediate previous locked baseline is /assets/index-DQqpj2vP.js (S3 index.html version dsdDpsScIlJM4QdIIltP_MhqVLZdQ.AO, index.html sha256 a64bf65f2f6794db2bf9ca2c46f31676d93ae34ccca84fca214f8506dfca1c10, bundle sha256 82ac7f12b0d9128f12c4537edd47c7730996a6e6027071fabf77c3ec37a59799; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
-      "notes": "Authoritative production frontend baseline after the guarded upload of main d69d0dff to /assets/index-DQqpj2vP.js. /assets/index-H3Li2tKG.js is the rollback; CBOwj-7W and HXTuSrE0 remain historical evidence only. SPA-only lock: no SQL."
+      "notes": "Authoritative production frontend baseline after the guarded upload of main 9b89e638 to /assets/index-C7bJFkEQ.js. /assets/index-DQqpj2vP.js is the rollback; H3Li2tKG, CBOwj-7W and HXTuSrE0 remain historical evidence only. SPA-only lock: no SQL."
     },
     "production-release": {
       "id": "production-release",
@@ -766,7 +766,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "cbd782fe1088cd717894a3475c0c3b65f85b432b2cb3dd88336e518ca3619695",
+        "tree_hash": "748919e388380c4a0b8739e01503c6d4dea47b46c76834b1e0b826bd6f95f73b",
         "merged": true,
         "merged_pr": null
       },
