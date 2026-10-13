@@ -53,7 +53,16 @@ const ENVIRONMENT = 'production';
 const OPERATION = 'wallet.send';
 export const SEND_KEY_PREFIX = 'send:';
 export const SEND_LEG_ROLES = Object.freeze({ wallet: 'send_wallet', bank: 'send_bank' });
-export const MAX_RECIPIENTS = 25;
+export const MAX_RECIPIENTS = 10;
+/**
+ * The API Lambda stops at 29s. Legs are only started while this much of the
+ * request budget is left; the rest stay ready and the client continues them
+ * with the same key, so a send never runs into the Lambda timeout mid-POST.
+ */
+export const SEND_TIME_BUDGET_MS = 24_000;
+export const MIN_POST_WINDOW_MS = 8_000;
+/** Ready legs older than this are canceled unsent instead of being sent late. */
+export const READY_LEG_MAX_AGE_MS = 15 * 60_000;
 
 const ACCEPTED = new Set(['submitted', 'pending', 'processing', 'completed']);
 const SPEEDS = new Set(['standard', 'same_day']);
@@ -66,6 +75,16 @@ const bankIdOf = (method) => String(method?.bankAccount?.bankAccountID ?? method
 const methodIdOf = (method) => String(method?.paymentMethodID ?? method?.paymentMethodId ?? '');
 const walletIdOf = (method) => String(method?.wallet?.walletID ?? method?.wallet?.walletId ?? '');
 const accountIdOf = (account) => String(account?.accountID ?? account?.accountId ?? '');
+
+/** A Moov account created for this tenant (moov-account-create), not a recipient account. */
+export function isTenantAccountFor(account, tenantId) {
+  const id = String(tenantId || '').toLowerCase();
+  if (!id || !accountIdOf(account)) return false;
+  const metadata = account?.metadata && typeof account.metadata === 'object' ? account.metadata : {};
+  return String(account?.foreignID ?? account?.foreignId ?? '').toLowerCase() === id
+    && String(metadata.checksops_tenant_id || '').toLowerCase() === id
+    && !metadata.checksops_recipient_id;
+}
 
 /** Validated request, or { error }. Recipients keep the order the user gave. */
 export function parseSendRequest(body = {}) {
@@ -96,8 +115,7 @@ export function parseSendRequest(body = {}) {
     seen.add(unique);
     recipients.push(recipient);
   }
-  const claimId = body.claim_id && isUuid(String(body.claim_id)) ? String(body.claim_id) : null;
-  return { clickKey, checkId, claimId, speed, recipients, description: String(body.description || '').slice(0, 100) };
+  return { clickKey, checkId, speed, recipients, description: String(body.description || '').slice(0, 100) };
 }
 
 /** Fingerprint of what this click asked for; a reused key must ask for the same thing. */
@@ -143,6 +161,9 @@ export function selectWalletMethod(methods) {
     .filter((m) => String(m?.paymentMethodType) === 'moov-wallet' && methodIdOf(m));
   const distinct = new Set(wallets.map((m) => walletIdOf(m) || methodIdOf(m)));
   if (wallets.length && distinct.size === 1) return { method: wallets[0] };
+  // With an operating and a trust wallet, pay the account's default (operating) wallet.
+  const defaults = wallets.filter((m) => String(m?.wallet?.walletType ?? '') === 'default');
+  if (defaults.length === 1) return { method: defaults[0] };
   return { error: wallets.length ? 'partner_wallet_choice_required' : 'partner_wallet_missing' };
 }
 
@@ -274,9 +295,15 @@ export function summarizeSend(legs) {
   };
 }
 
-function sendResult(legs, { duplicate }) {
+function sendResult(legs, { duplicate, incomplete = false }) {
   const summary = summarizeSend(legs);
   const extra = { duplicate, send: summary, liveProviderCalled: !duplicate };
+  if (incomplete) {
+    return fail('send_incomplete', 409, {
+      ...extra,
+      message: 'Part of this payment is still being sent. Continue with the same payment to finish it; nothing is paid twice.',
+    });
+  }
   if (summary.unknown_cents > 0) {
     return fail('provider_outcome_unknown', 409, {
       ...extra,
@@ -301,13 +328,20 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
   for (const r of request.recipients) {
     if (r.kind === 'stakeholder') {
       const row = (await client.query(
+        // Homeowner and partner-payout rows are not paid here (homeowner sends are not built).
         `SELECT id, nickname, provider, provider_account_id, provider_bank_account_id,
-                verification_status, is_active
+                verification_status, is_active, origin, is_partner_payout, provider_environment
          FROM public.stakeholder_accounts
          WHERE id = $1::uuid AND tenant_id = $2::uuid`,
         [r.id, tenantId],
       )).rows[0];
       if (!row || row.is_active === false) return { error: 'recipient_not_found', recipient: r };
+      if ((row.origin && row.origin !== 'tenant_owned') || row.is_partner_payout === true) {
+        return { error: 'recipient_not_supported', recipient: r, name: row.nickname };
+      }
+      if (row.provider_environment && row.provider_environment !== ENVIRONMENT) {
+        return { error: 'recipient_setup_required', recipient: r, name: row.nickname };
+      }
       if (!['verified', 'admin_override'].includes(String(row.verification_status || ''))) {
         return { error: 'recipient_not_verified', recipient: r, name: row.nickname };
       }
@@ -332,8 +366,7 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
     const share = (await client.query(
       `SELECT 1 FROM public.shared_checks
        WHERE check_id = $1::uuid AND revoked_at IS NULL
-         AND ((source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid)
-           OR (source_tenant_id = $3::uuid AND target_tenant_id = $2::uuid))
+         AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid
        LIMIT 1`,
       [request.checkId, tenantId, r.id],
     )).rows[0];
@@ -345,7 +378,9 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
     } catch {
       return { error: 'partner_setup_required', recipient: r };
     }
-    const matches = (Array.isArray(accounts) ? accounts : []).filter((a) => String(a?.foreignID ?? a?.foreignId ?? '').toLowerCase() === r.id && accountIdOf(a));
+    // Only the partner's own tenant account: recipient accounts also carry a
+    // foreignID but are tagged with checksops_recipient_id and their creator's tenant.
+    const matches = (Array.isArray(accounts) ? accounts : []).filter((a) => isTenantAccountFor(a, r.id));
     if (matches.length !== 1) return { error: matches.length ? 'partner_account_ambiguous' : 'partner_setup_required', recipient: r };
     const partnerAccountId = accountIdOf(matches[0]);
     const partnerName = matches[0]?.displayName ?? matches[0]?.profile?.business?.legalBusinessName ?? 'Partner';
@@ -373,6 +408,7 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
 
 const DESTINATION_MESSAGES = {
   recipient_not_found: 'A recipient was not found for this organization.',
+  recipient_not_supported: 'Homeowner and partner payout accounts cannot be paid here yet.',
   recipient_not_verified: 'A recipient has not been verified yet.',
   recipient_setup_required: 'A recipient has not finished linking a bank for payments.',
   recipient_bank_not_ready: "A recipient's bank is not ready for this delivery speed.",
@@ -385,7 +421,7 @@ const DESTINATION_MESSAGES = {
   partner_bank_choice_required: "This partner's bank could not be determined.",
 };
 
-async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, fetchImpl }) {
+async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, fetchImpl, timeoutMs }) {
   const claimed = (await client.query(
     `UPDATE public.payment_transfers
      SET status = 'submitting', submitted_at = now()
@@ -403,7 +439,7 @@ async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, 
       method: 'POST',
       scopes: scopes.transfersWrite(facilitatorId),
       idempotencyKey: leg.id,
-      fetchImpl: (url, init = {}) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(MOOV_POST_TIMEOUT_MS) }),
+      fetchImpl: (url, init = {}) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(timeoutMs) }),
       body: {
         source: { paymentMethodID: meta.source_moov_payment_method_id },
         destination: { paymentMethodID: meta.destination_moov_payment_method_id },
@@ -441,7 +477,7 @@ async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, 
          provider_metadata = provider_metadata || $5::jsonb
      WHERE id = $1::uuid
      RETURNING *`,
-    [leg.id, providerTransferId, providerStatus, status, JSON.stringify(sanitize({ moov: created ?? {} }))],
+    [leg.id, providerTransferId, providerStatus, status, JSON.stringify({ moov: { transferID: providerTransferId, status: providerStatus } })],
   )).rows[0];
   await logEvent(client, {
     tenantId, transferId: leg.id, providerTransferId, eventType: 'wallet.send.submitted',
@@ -451,32 +487,55 @@ async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, 
   return saved;
 }
 
-/** Send the ready legs in order; after one is not accepted, cancel the rest unsent. */
-async function runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl }) {
+async function cancelLeg(client, mapping, claims, tenantId, leg, reason) {
+  const canceled = (await client.query(
+    `UPDATE public.payment_transfers
+     SET status = 'canceled', failure_reason = $2
+     WHERE id = $1::uuid AND status = 'ready' AND provider_transfer_id IS NULL
+     RETURNING id`,
+    [leg.id, reason],
+  )).rows[0];
+  if (!canceled) return;
+  await logEvent(client, { tenantId, transferId: leg.id, eventType: 'wallet.send.canceled', previousStatus: 'ready', newStatus: 'canceled', metadata: { leg: leg.leg_role, reason } });
+  await commitAndContinue(client, mapping, claims);
+}
+
+/**
+ * Send the ready legs in order. After one is not accepted, the rest are canceled
+ * unsent. A leg is only started while the request budget allows a full POST;
+ * otherwise the send stops `incomplete` and the client continues it.
+ */
+async function runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl, clock }) {
   let stopped = false;
+  let incomplete = false;
   for (const leg of await legsByPrefix(client, tenantId, prefix)) {
     if (String(leg.status) !== 'ready') {
       if (!ACCEPTED.has(String(leg.status))) stopped = true;
       continue;
     }
     if (stopped) {
-      await client.query(
-        `UPDATE public.payment_transfers
-         SET status = 'canceled', failure_reason = 'not_sent_after_earlier_leg'
-         WHERE id = $1::uuid AND status = 'ready' AND provider_transfer_id IS NULL`,
-        [leg.id],
-      );
-      await logEvent(client, { tenantId, transferId: leg.id, eventType: 'wallet.send.canceled', previousStatus: 'ready', newStatus: 'canceled', metadata: { leg: leg.leg_role } });
-      await commitAndContinue(client, mapping, claims);
+      await cancelLeg(client, mapping, claims, tenantId, leg, 'not_sent_after_earlier_leg');
       continue;
     }
-    const result = await postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, fetchImpl });
+    const createdAt = Date.parse(leg.created_at);
+    if (Number.isFinite(createdAt) && clock.wall() - createdAt > READY_LEG_MAX_AGE_MS) {
+      await cancelLeg(client, mapping, claims, tenantId, leg, 'expired_unsent');
+      stopped = true;
+      continue;
+    }
+    const remaining = clock.remaining();
+    if (remaining < MIN_POST_WINDOW_MS) {
+      incomplete = true;
+      break;
+    }
+    const timeoutMs = Math.min(MOOV_POST_TIMEOUT_MS, remaining - 2_000);
+    const result = await postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, fetchImpl, timeoutMs });
     if (!result || !ACCEPTED.has(String(result.status))) stopped = true;
   }
-  return legsByPrefix(client, tenantId, prefix);
+  return { legs: await legsByPrefix(client, tenantId, prefix), incomplete };
 }
 
-async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl }) {
+async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl, clock }) {
   const tenantId = ctx.tenantId;
   const request = parseSendRequest(body);
   if (request.error) return fail(request.error, 400);
@@ -512,6 +571,11 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl })
   // wallet parts of other sends that have not gone out yet, so two clicks cannot
   // plan against the same balance.
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`moov-send:${tenantId}`]);
+  // A parallel request with the same key may have planned while this one waited.
+  const planned = await legsByPrefix(client, tenantId, prefix);
+  if (planned.some((leg) => leg.provider_metadata?.request_hash !== hash)) {
+    return fail('idempotency_key_reused', 409, { message: 'That request was already used for a different payment.' });
+  }
   const account = await loadMoovAccount(client, tenantId, ENVIRONMENT);
   if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
   if (account.onboarding_status !== 'active') {
@@ -529,7 +593,10 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl })
   const facilitatorId = resolveFacilitatorId(ctx.moovContext.productionPlatformAccountId, payerMethods, wallet.provider_payment_method_id);
   if (!facilitatorId) return fail('facilitator_unavailable', 503, { message: 'Payments are not configured correctly. Nothing was sent.' });
 
-  let legs = existing;
+  let legs = planned;
+  if (legs.some((leg) => (leg.provider_metadata?.facilitator_account_id || facilitatorId) !== facilitatorId)) {
+    return fail('facilitator_changed', 409, { message: 'Payment settings changed since this payment was started. Nothing more was sent.' });
+  }
   if (!legs.length) {
     const destinations = await resolveDestinations({ client, tenantId, request, fetchImpl });
     if (destinations.error) {
@@ -542,7 +609,9 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl })
     const reserved = Number((await client.query(
       `SELECT COALESCE(sum(amount_cents), 0)::bigint AS cents FROM public.payment_transfers
        WHERE tenant_id = $1::uuid AND environment = $2 AND leg_role = $3
-         AND status IN ('ready', 'submitting') AND created_at > now() - interval '15 minutes'`,
+         AND (status IN ('ready', 'submitting')
+           OR (status IN ('submitted', 'pending', 'processing') AND submitted_at > now() - interval '2 minutes'))
+         AND created_at > now() - interval '15 minutes'`,
       [tenantId, ENVIRONMENT, SEND_LEG_ROLES.wallet],
     )).rows[0]?.cents ?? 0);
     const plan = planSendLegs(destinations.resolved, Math.max(0, Number(wallet.available_cents ?? 0) - reserved));
@@ -582,7 +651,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl })
             String(request.description || `ChecksOps payment to ${p.name}`).slice(0, 128),
             account.provider_account_id, source === 'bank' ? bank.localId : null,
             p.kind === 'partner' ? p.id : null,
-            source === 'wallet' ? wallet.id : null, role, request.checkId, request.claimId,
+            source === 'wallet' ? wallet.id : null, role, request.checkId, null,
             JSON.stringify({
               checksops_kind: 'send',
               request_hash: hash,
@@ -596,6 +665,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl })
               source_moov_payment_method_id: source === 'wallet' ? wallet.provider_payment_method_id : bank.methodId,
               destination_moov_payment_method_id: p.destinationMethodId,
               stepup_id: stepUp.id,
+              facilitator_account_id: facilitatorId,
             }),
             mapping.application_user_id,
           ],
@@ -613,8 +683,18 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl })
   if (!sendPostEnabled()) {
     return fail('send_post_held', 403, { send: summarizeSend(legs), message: 'Sending payments is switched off. Nothing was sent.' });
   }
-  const final = await runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl });
-  return sendResult(final, { duplicate: false });
+  // Only one request runs a given send's legs at a time (the lock ends with the connection).
+  const lockKey = `moov-send-run:${prefix}`;
+  const runLocked = (await client.query('SELECT pg_try_advisory_lock(hashtext($1)) AS ok', [lockKey])).rows[0]?.ok;
+  if (!runLocked) {
+    return fail('send_in_progress', 409, { message: 'This payment is still being sent. Check the payment history in a moment.' });
+  }
+  try {
+    const run = await runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl, clock });
+    return sendResult(run.legs, { duplicate: false, incomplete: run.incomplete });
+  } finally {
+    await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]).catch(() => {});
+  }
 }
 
 export async function handleProductionMoovSend(event, deps = {}) {
@@ -633,16 +713,19 @@ export async function handleProductionMoovSend(event, deps = {}) {
       return { ...fail('Forbidden', 403, { error: 'cross_tenant_denied' }), ...meta };
     }
     const fetchImpl = deps.fetchImpl || fetch;
+    const wall = deps.now || Date.now;
+    const startedAt = wall();
+    const clock = { wall, remaining: () => SEND_TIME_BUDGET_MS - (wall() - startedAt) };
     try {
       const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => sendProduction({
-        client, mapping, claims, ctx, body, fetchImpl,
+        client, mapping, claims, ctx, body, fetchImpl, clock,
       }));
       return { ...result, ...meta };
     } catch (error) {
       const { isProviderNetworkError, providerEgressFailure } = await import('../../sandbox-credentials.mjs');
       if (isProviderNetworkError(error)) return { ...providerEgressFailure('moov'), ...meta };
       const status = error instanceof MoovError ? 502 : 500;
-      return { ...fail('wallet_send_failed', status, { message: 'The payment could not be started. Check the payment history before trying again.' }), ...meta };
+      return { ...fail('wallet_send_failed', status, { message: 'Something went wrong while sending. Part of the payment may have gone out; check the payment history before trying again.' }), ...meta };
     }
   }, deps);
 }

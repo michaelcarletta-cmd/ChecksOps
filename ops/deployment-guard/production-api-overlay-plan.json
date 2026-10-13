@@ -137,7 +137,7 @@
     },
     "providers/production/moov-send.mjs": {
       "operation": "add",
-      "accepted_sha256": "e4442ee5fc8b3290c4c1d42eaaa7cadc8b5a62236887bf1d715f82f6837a7cfc",
+      "accepted_sha256": "4110ae816a903c6248a741be877a03e2a4ba48cae6af62e27121dc1c8d88ab58",
       "expected_live_sha256": null,
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json"

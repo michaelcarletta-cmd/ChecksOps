@@ -69,8 +69,8 @@ const sendEvent = (body, claims = {}) => ({
 });
 
 const STAKEHOLDERS = [
-  { id: STAKEHOLDER, tenant_id: TENANT, nickname: 'Roofing Sub', provider: 'moov', provider_account_id: 'stk-acct', provider_bank_account_id: 'stk-bank', verification_status: 'verified', is_active: true },
-  { id: STAKEHOLDER_2, tenant_id: TENANT, nickname: 'Supplier', provider: 'moov', provider_account_id: 'stk2-acct', provider_bank_account_id: 'stk2-bank', verification_status: 'verified', is_active: true },
+  { id: STAKEHOLDER, tenant_id: TENANT, nickname: 'Roofing Sub', provider: 'moov', provider_account_id: 'stk-acct', provider_bank_account_id: 'stk-bank', verification_status: 'verified', is_active: true, origin: 'tenant_owned', is_partner_payout: false, provider_environment: 'production' },
+  { id: STAKEHOLDER_2, tenant_id: TENANT, nickname: 'Supplier', provider: 'moov', provider_account_id: 'stk2-acct', provider_bank_account_id: 'stk2-bank', verification_status: 'verified', is_active: true, origin: 'tenant_owned', is_partner_payout: false, provider_environment: null },
 ];
 
 /** Transactional fake: writes are visible to later reads only once committed. */
@@ -83,6 +83,10 @@ const fakeDb = ({
   checkTenant = TENANT,
   transfers = [],
   reservedCents = 0,
+  runLockBusy = false,
+  // Simulates a parallel request with the same key: these legs become committed
+  // right after this request's first read of its legs.
+  plantAfterFirstRead = null,
 } = {}) => {
   const committed = { transfers: transfers.map((t) => ({ ...t })), events: [] };
   let pending = null;
@@ -90,6 +94,7 @@ const fakeDb = ({
   const state = () => pending || committed;
   const log = [];
   let nextId = committed.transfers.length + 1;
+  let legReads = 0;
   const client = {
     log,
     committed,
@@ -107,6 +112,8 @@ const fakeDb = ({
       if (/^(SET TRANSACTION|SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)/.test(sql)) return { rows: [] };
       if (sql.startsWith('SELECT set_config')) return { rows: [{}] };
       if (sql.includes('pg_advisory_xact_lock')) return { rows: [{}] };
+      if (sql.includes('pg_try_advisory_lock')) return { rows: [{ ok: !runLockBusy }] };
+      if (sql.includes('pg_advisory_unlock')) return { rows: [{ ok: true }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === SUB ? [{ application_user_id: APP_USER, cognito_sub: SUB, email: 'tester@example.com', status: 'active' }] : [] };
       }
@@ -146,13 +153,18 @@ const fakeDb = ({
         const [check, me, them] = params;
         return {
           rows: shares.filter((s) => s.check_id === check && !s.revoked_at
-            && ((s.source_tenant_id === me && s.target_tenant_id === them) || (s.source_tenant_id === them && s.target_tenant_id === me)))
+            && s.source_tenant_id === me && s.target_tenant_id === them)
             .map(() => ({ '?column?': 1 })),
         };
       }
       if (sql.includes('COALESCE(sum(amount_cents)')) return { rows: [{ cents: reservedCents }] };
       if (sql.includes('SELECT * FROM public.payment_transfers') && sql.includes('left(idempotency_key')) {
         const [tenantId, prefix] = params;
+        legReads += 1;
+        if (legReads === 2 && plantAfterFirstRead) {
+          committed.transfers.push(...plantAfterFirstRead);
+          if (pending) pending.transfers.push(...plantAfterFirstRead.map((t) => ({ ...t })));
+        }
         return {
           rows: state().transfers
             .filter((t) => t.tenant_id === tenantId && t.idempotency_key.startsWith(prefix))
@@ -168,7 +180,7 @@ const fakeDb = ({
           tenant_id: params[0], environment: params[1], status: 'ready', idempotency_key: params[2],
           amount_cents: params[3], speed: params[4], description: params[5], source_payment_method_id: params[7],
           destination_tenant_id: params[8], wallet_id: params[9], leg_role: params[10], check_id: params[11],
-          provider_metadata: JSON.parse(params[13]), provider_transfer_id: null,
+          provider_metadata: JSON.parse(params[13]), provider_transfer_id: null, created_at: new Date().toISOString(),
         };
         state().transfers.push(row);
         return { rows: [] };
@@ -181,8 +193,8 @@ const fakeDb = ({
       }
       if (sql.includes("SET status = 'canceled'")) {
         const row = state().transfers.find((t) => t.id === params[0] && t.status === 'ready');
-        if (row) { row.status = 'canceled'; row.failure_reason = 'not_sent_after_earlier_leg'; }
-        return { rows: [] };
+        if (row) { row.status = 'canceled'; row.failure_reason = params[1]; }
+        return { rows: row ? [{ id: row.id }] : [] };
       }
       if (sql.includes('UPDATE public.payment_transfers') && sql.includes('failure_reason = $3')) {
         const row = state().transfers.find((t) => t.id === params[0] && t.status === 'submitting');
@@ -239,7 +251,7 @@ const moovStub = ({ available = 1_000_000, posts = [], partnerMethods = methods[
     }
     if (method === 'GET' && path === '/accounts') {
       const foreign = new URLSearchParams(query).get('foreignID');
-      const list = partnerAccounts ?? (foreign === PARTNER ? [{ accountID: 'partner-acct', foreignID: PARTNER, displayName: 'Partner Co' }] : []);
+      const list = partnerAccounts ?? (foreign === PARTNER ? [{ accountID: 'partner-acct', foreignID: PARTNER, displayName: 'Partner Co', metadata: { checksops_tenant_id: PARTNER } }] : []);
       return reply(200, list);
     }
     const pm = path.match(/^\/accounts\/([^/]+)\/payment-methods$/);
@@ -260,7 +272,7 @@ const moovStub = ({ available = 1_000_000, posts = [], partnerMethods = methods[
 const stakeholder = (amount, id = STAKEHOLDER) => ({ kind: 'stakeholder', stakeholder_account_id: id, amount_cents: amount });
 const partner = (amount, id = PARTNER) => ({ kind: 'partner', partner_tenant_id: id, amount_cents: amount });
 
-const run = (client, moov, body = {}, claims = {}) => handleProviderRequest(
+const run = (client, moov, body = {}, claims = {}, extraDeps = {}) => handleProviderRequest(
   sendEvent({ tenant_id: TENANT, check_id: CHECK, idempotency_key: CLICK, recipients: [stakeholder(2500)], ...body }, claims),
   '/functions/v1/moov-disburse',
   'POST',
@@ -269,6 +281,7 @@ const run = (client, moov, body = {}, claims = {}) => handleProviderRequest(
     createClient: () => client,
     loadProviderSecrets: async () => ({ MOOV_PUBLIC_KEY: 'pk', MOOV_SECRET_KEY: 'sk', MOOV_ACCOUNT_ID: 'platform-acct' }),
     fetchImpl: moov.impl,
+    ...extraDeps,
   },
 );
 
@@ -362,7 +375,13 @@ test('partners must share this check and have exactly one production account', a
       [{ shares: [] }, {}, 'partner_not_shared'],
       [{ shares: [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: PARTNER, revoked_at: '2026-10-01' }] }, {}, 'partner_not_shared'],
       [{}, { partnerAccounts: [] }, 'partner_setup_required'],
-      [{}, { partnerAccounts: [{ accountID: 'a', foreignID: PARTNER }, { accountID: 'b', foreignID: PARTNER }] }, 'partner_account_ambiguous'],
+      [{}, { partnerAccounts: [{ accountID: 'a', foreignID: PARTNER, metadata: { checksops_tenant_id: PARTNER } }, { accountID: 'b', foreignID: PARTNER, metadata: { checksops_tenant_id: PARTNER } }] }, 'partner_account_ambiguous'],
+      // A recipient account someone created with the partner's id as foreignID is not the partner.
+      [{}, { partnerAccounts: [{ accountID: 'planted', foreignID: PARTNER, metadata: { checksops_tenant_id: OTHER_TENANT, checksops_recipient_id: PARTNER } }] }, 'partner_setup_required'],
+      [{}, { partnerAccounts: [{ accountID: 'planted', foreignID: PARTNER, metadata: { checksops_tenant_id: PARTNER, checksops_recipient_id: PARTNER } }] }, 'partner_setup_required'],
+      [{}, { partnerAccounts: [{ accountID: 'untagged', foreignID: PARTNER }] }, 'partner_setup_required'],
+      // Only shares made by the sending organization count.
+      [{ shares: [{ check_id: CHECK, source_tenant_id: PARTNER, target_tenant_id: TENANT }] }, {}, 'partner_not_shared'],
       [{}, { partnerMethods: [] }, 'partner_setup_required'],
     ]) {
       const client = fakeDb(options);
@@ -387,6 +406,9 @@ test('stakeholders must belong to this organization, be verified and have a prod
       [[{ ...STAKEHOLDERS[0], provider_bank_account_id: null }], 'recipient_setup_required'],
       [[{ ...STAKEHOLDERS[0], provider_account_id: 'sandbox-only' }], 'recipient_setup_required'],
       [[{ ...STAKEHOLDERS[0], provider_bank_account_id: 'other-bank' }], 'recipient_bank_not_ready'],
+      [[{ ...STAKEHOLDERS[0], origin: 'homeowner_link' }], 'recipient_not_supported'],
+      [[{ ...STAKEHOLDERS[0], is_partner_payout: true }], 'recipient_not_supported'],
+      [[{ ...STAKEHOLDERS[0], provider_environment: 'sandbox' }], 'recipient_setup_required'],
     ]) {
       const client = fakeDb({ stakeholders });
       const moov = moovStub();
@@ -488,8 +510,8 @@ test('committed but unsent legs are resumed in order with their own Moov keys', 
     const meta = (i, source, dest) => ({ request_hash: requestHash(request), leg_index: i, recipient_index: 0, recipient_kind: 'stakeholder', recipient_id: STAKEHOLDER, source_moov_payment_method_id: source, destination_moov_payment_method_id: dest });
     const client = fakeDb({
       transfers: [
-        { id: '00000000-0000-4000-8000-0000000000a1', tenant_id: TENANT, idempotency_key: `send:${CLICK}:0:wallet`, amount_cents: 1000, leg_role: 'send_wallet', status: 'submitted', provider_transfer_id: 'w1', provider_metadata: meta(0, 'pm-wallet', 'pm-stk-std') },
-        { id: '00000000-0000-4000-8000-0000000000a2', tenant_id: TENANT, idempotency_key: `send:${CLICK}:1:bank`, amount_cents: 1500, leg_role: 'send_bank', status: 'ready', provider_transfer_id: null, provider_metadata: meta(1, 'pm-debit', 'pm-stk-std') },
+        { id: '00000000-0000-4000-8000-0000000000a1', tenant_id: TENANT, idempotency_key: `send:${CLICK}:0:wallet`, amount_cents: 1000, leg_role: 'send_wallet', status: 'submitted', provider_transfer_id: 'w1', created_at: new Date().toISOString(), provider_metadata: meta(0, 'pm-wallet', 'pm-stk-std') },
+        { id: '00000000-0000-4000-8000-0000000000a2', tenant_id: TENANT, idempotency_key: `send:${CLICK}:1:bank`, amount_cents: 1500, leg_role: 'send_bank', status: 'ready', provider_transfer_id: null, created_at: new Date().toISOString(), provider_metadata: meta(1, 'pm-debit', 'pm-stk-std') },
       ],
     });
     const moov = moovStub();
@@ -498,6 +520,108 @@ test('committed but unsent legs are resumed in order with their own Moov keys', 
     assert.equal(moov.posts().length, 1);
     assert.equal(moov.posts()[0].headers['X-Idempotency-Key'], '00000000-0000-4000-8000-0000000000a2');
     assert.deepEqual(moov.posts()[0].body.source, { paymentMethodID: 'pm-debit' });
+  });
+});
+
+const plannedLegs = (amounts, { createdAt = new Date().toISOString(), facilitator = 'platform-acct' } = {}) => {
+  const request = parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: amounts.map((a, i) => stakeholder(a, i ? STAKEHOLDER_2 : STAKEHOLDER)) });
+  return {
+    request,
+    legs: amounts.map((amount, i) => ({
+      id: `00000000-0000-4000-8000-0000000000b${i}`, tenant_id: TENANT, idempotency_key: `send:${CLICK}:${i}:wallet`, amount_cents: amount,
+      leg_role: 'send_wallet', status: 'ready', provider_transfer_id: null, created_at: createdAt,
+      provider_metadata: {
+        request_hash: requestHash(request), leg_index: i, recipient_index: i, recipient_kind: 'stakeholder', recipient_id: i ? STAKEHOLDER_2 : STAKEHOLDER,
+        source_moov_payment_method_id: 'pm-wallet', destination_moov_payment_method_id: i ? 'pm-stk2-std' : 'pm-stk-std', facilitator_account_id: facilitator,
+      },
+    })),
+  };
+};
+
+test('a parallel request with the same key that planned first is not planned again', async () => {
+  await withEnv(FLAGS, async () => {
+    const { legs } = plannedLegs([2500]);
+    const client = fakeDb({ plantAfterFirstRead: legs });
+    const moov = moovStub({ available: 1000 });
+    const result = await run(client, moov);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    // Only the other request's single leg exists and was sent; no second plan.
+    assert.equal(client.committed.transfers.length, 1);
+    assert.deepEqual(moov.posts().map((p) => p.body.amount.value), [2500]);
+  });
+});
+
+test('a send already running under the same key is not run twice', async () => {
+  await withEnv(FLAGS, async () => {
+    const { legs } = plannedLegs([400]);
+    const client = fakeDb({ transfers: legs, runLockBusy: true });
+    const moov = moovStub();
+    const result = await run(client, moov, { recipients: [stakeholder(400)] });
+    assert.equal(result.error, 'send_in_progress');
+    assert.equal(moov.posts().length, 0);
+    assert.equal(client.committed.transfers[0].status, 'ready');
+  });
+});
+
+test('legs are only started with time left; the rest continue with the same key', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    let t = 1_000_000;
+    let posted = 0;
+    const original = moov.impl;
+    moov.impl = async (url, init) => {
+      if (String(init?.method).toUpperCase() === 'POST' && String(url).endsWith('/transfers')) { posted += 1; t += 17_000; }
+      return original(url, init);
+    };
+    const body = { recipients: [stakeholder(400), stakeholder(300, STAKEHOLDER_2)] };
+    const first = await run(client, moov, body, {}, { now: () => t });
+    assert.equal(first.error, 'send_incomplete', JSON.stringify(first));
+    assert.equal(posted, 1);
+    assert.deepEqual(client.committed.transfers.map((x) => x.status), ['submitted', 'ready']);
+    const second = await run(client, moov, body, {}, { now: () => t });
+    assert.equal(second.ok, true, JSON.stringify(second));
+    assert.equal(posted, 2);
+    assert.equal(moov.posts()[1].headers['X-Idempotency-Key'], client.committed.transfers[1].id);
+  });
+});
+
+test('ready legs left unsent for too long are canceled, not sent late', async () => {
+  await withEnv(FLAGS, async () => {
+    const { legs } = plannedLegs([400], { createdAt: new Date(Date.now() - 20 * 60_000).toISOString() });
+    const client = fakeDb({ transfers: legs });
+    const moov = moovStub();
+    const result = await run(client, moov, { recipients: [stakeholder(400)] });
+    assert.equal(result.error, 'send_failed');
+    assert.equal(moov.posts().length, 0);
+    assert.equal(client.committed.transfers[0].status, 'canceled');
+    assert.equal(client.committed.transfers[0].failure_reason, 'expired_unsent');
+  });
+});
+
+test('a resumed send must use the facilitator it was planned with', async () => {
+  await withEnv(FLAGS, async () => {
+    const { legs } = plannedLegs([400], { facilitator: 'old-platform-acct' });
+    const client = fakeDb({ transfers: legs });
+    const moov = moovStub();
+    const result = await run(client, moov, { recipients: [stakeholder(400)] });
+    assert.equal(result.error, 'facilitator_changed');
+    assert.equal(moov.posts().length, 0);
+  });
+});
+
+test('a partner with operating and trust wallets is paid to the default wallet', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub({
+      partnerMethods: [
+        { paymentMethodType: 'moov-wallet', paymentMethodID: 'pm-trust', wallet: { walletID: 'pw-2', walletType: 'general' } },
+        { paymentMethodType: 'moov-wallet', paymentMethodID: 'pm-operating', wallet: { walletID: 'pw-1', walletType: 'default' } },
+      ],
+    });
+    const result = await run(client, moov, { recipients: [partner(700)] });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: 'pm-operating' });
   });
 });
 

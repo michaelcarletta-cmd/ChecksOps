@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -92,6 +92,10 @@ export function DisbursementConsole({
   const { wallet } = useWallet("operating");
   const walletAvailable = wallet ? Number(wallet.available_cents) / 100 : null;
   const { requireStepUp } = useStepUp();
+  // The key of a send whose outcome is not known yet (network error, server error,
+  // or still being sent). Pressing Send again for the same payment reuses it, so the
+  // server finishes or reports that payment instead of paying it again.
+  const pendingSend = useRef<{ signature: string; key: string } | null>(null);
 
 
 
@@ -115,7 +119,7 @@ export function DisbursementConsole({
       if (error) throw error;
       const ids = [...new Set((data ?? []).map((row: any) => row.target_tenant_id).filter(Boolean))] as string[];
       if (ids.length === 0) return [];
-      const { data: names } = await supabase.from("tenants").select("id, name").in("id", ids);
+      const { data: names } = await supabase.from("tenants_public").select("id, name").in("id", ids);
       const nameOf = new Map((names ?? []).map((t: any) => [t.id, t.name]));
       return ids.map((id) => ({ partner_tenant_id: id, partner_name: (nameOf.get(id) as string) || "Partner organization" }));
     },
@@ -343,7 +347,16 @@ export function DisbursementConsole({
           }
           return sum;
         }, 0);
-        const freshAvailable = Math.max(0, checkAmount - freshDisbursed);
+        const { data: freshSends } = await supabase
+          .from("payment_transfers")
+          .select("amount_cents,status")
+          .eq("check_id", checkIntakeItemId)
+          .in("leg_role", ["send_wallet", "send_bank"]);
+        const freshSent = (freshSends ?? []).reduce(
+          (sum: number, t: { amount_cents: number | string; status: string }) => (NOT_SENT.has(String(t.status)) ? sum : sum + (Number(t.amount_cents) || 0) / 100),
+          0,
+        );
+        const freshAvailable = Math.max(0, checkAmount - freshDisbursed - freshSent);
         const allocSum = splits.reduce((s, x) => s + x.amount, 0);
         if (allocSum > freshAvailable + 0.01) {
           throw new Error(
@@ -361,35 +374,50 @@ export function DisbursementConsole({
             ? { kind: "partner", partner_tenant_id: acct.partner_tenant_id, amount_cents }
             : { kind: "stakeholder", stakeholder_account_id: split.stakeholder_account_id, amount_cents };
         });
-        // One key per click: a retry below, or a resubmitted request, never sends twice.
-        const idempotencyKey = crypto.randomUUID();
-        const send = () =>
-          sendPayment({
-            tenantId: tenant.id,
-            checkId: checkIntakeItemId,
-            speed: deliverySpeed === "same_day" ? "same_day" : "standard",
-            recipients,
-            idempotencyKey,
-          });
-        let result;
-        try {
-          result = await send();
-        } catch (error) {
-          // The server decides whether this login has confirmed two-factor; ask only when it says so.
-          if (!(error instanceof SendPaymentError) || error.code !== "totp_required") throw error;
-          const confirmed = await requireStepUp(
-            {
-              actionKey: "wallet.fund",
-              checkId: null,
-              tenantId: tenant.id,
-              title: "Confirm payment",
-              description: "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out.",
-            },
-            { force: true },
-          );
-          if (!confirmed) throw new Error("Payment was cancelled. Two-factor confirmation is required.");
-          result = await send();
+        const speed = deliverySpeed === "same_day" ? "same_day" : "standard";
+        const signature = JSON.stringify([checkIntakeItemId, speed, recipients]);
+        // One key per payment: a retry of the same payment never sends twice.
+        if (pendingSend.current?.signature !== signature) {
+          pendingSend.current = { signature, key: crypto.randomUUID() };
         }
+        const idempotencyKey = pendingSend.current.key;
+        const send = () =>
+          sendPayment({ tenantId: tenant.id, checkId: checkIntakeItemId, speed, recipients, idempotencyKey });
+        const attempt = async () => {
+          try {
+            return await send();
+          } catch (error) {
+            // The server decides whether this login has confirmed two-factor; ask only when it says so.
+            if (!(error instanceof SendPaymentError) || error.code !== "totp_required") throw error;
+            const confirmed = await requireStepUp(
+              {
+                actionKey: "wallet.fund",
+                checkId: null,
+                tenantId: tenant.id,
+                title: "Confirm payment",
+                description: "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out.",
+              },
+              { force: true },
+            );
+            if (!confirmed) {
+              pendingSend.current = null;
+              throw new Error("Payment was cancelled. Two-factor confirmation is required.");
+            }
+            return send();
+          }
+        };
+        // A long send is finished in steps; each step continues the same payment.
+        let result;
+        for (let step = 0; ; step += 1) {
+          try {
+            result = await attempt();
+            break;
+          } catch (error) {
+            if (error instanceof SendPaymentError && error.code === "send_incomplete" && step < 8) continue;
+            throw error;
+          }
+        }
+        pendingSend.current = null;
         return { rail: "moov" as const, note: result.message ?? null };
       }
 
@@ -490,8 +518,8 @@ export function DisbursementConsole({
     },
     onSuccess: (result: any) => {
       toast({
-        title: "Disbursements submitted",
-        description: "Credits are on their way to each account.",
+        title: result?.rail === "external" ? "External payment recorded" : "Payment sent",
+        description: result?.note ?? "Credits are on their way to each account.",
       });
       qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
@@ -499,7 +527,31 @@ export function DisbursementConsole({
       setAdminOverride(false);
       onComplete?.();
     },
-    onError: (e: any) => toast({ title: "Payment not fully sent", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      if (e instanceof SendPaymentError) {
+        // Keep the key only while the outcome is unknown to the server or the network.
+        const outcomeKnown = !!e.code && !["send_incomplete", "send_in_progress", "wallet_send_failed"].includes(e.code);
+        if (outcomeKnown) pendingSend.current = null;
+        if (e.send && e.code === "send_partial") {
+          // Leave only what was not sent, so the next payment sends the rest and nothing twice.
+          const next: Record<string, string> = {};
+          for (const r of e.send.recipients) {
+            if (r.unsent_cents > 0) next[r.kind === "partner" ? `partner:${r.id}` : r.id] = (r.unsent_cents / 100).toFixed(2);
+          }
+          setUsePercent(false);
+          setAllocations(next);
+        } else if (e.code === "provider_outcome_unknown") {
+          setAllocations({});
+        }
+        toast({
+          title: e.code === "send_partial" ? "Partially sent" : e.code === "provider_outcome_unknown" ? "Check the payment history" : "Payment not sent",
+          description: e.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Payment not sent", description: e.message, variant: "destructive" });
+    },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["check-sends", checkIntakeItemId] });
       qc.invalidateQueries({ queryKey: ["payment-wallet"] });
