@@ -60,6 +60,14 @@ maintenance, Mortgage Ops). Approval already exists. Production posting is
 currently off (`AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST=false`). The September
 collection is still `submitted` and needs a status check.
 
+## Database access
+
+Payment tables only let platform admin/staff write by default. SQL 72
+(`aws/workflows/sql/72_member_payment_writes.sql`) also lets a member of the
+tenant write, but only while the server's funding or balance-refresh code is
+running (it sets the financial execution GUCs, which browsers cannot set).
+Until SQL 72 is applied, only admin/staff users can fund or refresh.
+
 ## Production switches
 
 Production funding runs only when all of these are `true`:

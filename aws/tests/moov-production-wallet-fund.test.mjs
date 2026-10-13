@@ -575,3 +575,58 @@ test('WalletOps asks for two-factor once per login and sends one key per click',
   const dialog = read('src/components/auth/StepUpDialog.tsx');
   assert.match(dialog, /request\?\.actionKey === "wallet\.fund"/);
 });
+
+test('SQL 72 lets only tenant members write, and only while the server has set the financial GUCs', async () => {
+  const fs = await import('node:fs');
+  const sql = fs.readFileSync(new URL('../../aws/workflows/sql/72_member_payment_writes.sql', import.meta.url), 'utf8');
+  const statements = sql.split('\n').filter((line) => !line.startsWith('--')).join('\n')
+    .split(';').map((s) => s.trim()).filter(Boolean);
+  const policies = statements.filter((s) => s.startsWith('CREATE POLICY'));
+  assert.deepEqual(policies.map((s) => s.match(/^CREATE POLICY (\S+) ON (\S+)\s+FOR (\w+) TO (\w+)/).slice(1)), [
+    ['aws_member_insert_payment_transfers', 'public.payment_transfers', 'INSERT', 'authenticated'],
+    ['aws_member_update_payment_transfers', 'public.payment_transfers', 'UPDATE', 'authenticated'],
+    ['aws_member_insert_payment_wallets', 'public.payment_wallets', 'INSERT', 'authenticated'],
+    ['aws_member_update_payment_wallets', 'public.payment_wallets', 'UPDATE', 'authenticated'],
+    ['aws_member_insert_payment_event_log', 'public.payment_event_log', 'INSERT', 'authenticated'],
+  ]);
+  for (const policy of policies) {
+    const clauses = policy.match(/\((?:[^()]|\([^()]*(?:\([^()]*\))*[^()]*\))*\)/g).filter((c) => c.includes('aws_'));
+    assert.equal(clauses.length, /FOR UPDATE/.test(policy) ? 2 : 1, policy);
+    for (const clause of clauses) {
+      assert.match(clause, /public\.aws_is_authenticated\(\)/, policy);
+      assert.match(clause, /COALESCE\(public\.aws_financial_execution_active\(\), false\)/, policy);
+      assert.match(clause, /tenant_id IN \(SELECT public\.aws_user_tenant_ids\(\)\)/, policy);
+      // No cross-tenant reader or platform-role shortcut.
+      assert.doesNotMatch(clause, /cross_tenant|has_role|aws_can_access_tenant|aws_can_write_tenant/, policy);
+    }
+  }
+  // Only DROP/CREATE POLICY: no grants, deletes, function changes or other tables.
+  for (const statement of statements) {
+    assert.match(statement, /^(DROP POLICY IF EXISTS aws_member_\w+ ON public\.payment_(transfers|wallets|event_log)|CREATE POLICY aws_member_)/, statement);
+  }
+});
+
+test('balance refresh sets the server-only financial GUCs before saving the wallet', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    const result = await handleProviderRequest(
+      { ...fundEvent({ tenant_id: TENANT, wallet_type: 'operating', force: true }), rawPath: '/functions/v1/moov-wallet-sync' },
+      '/functions/v1/moov-wallet-sync',
+      'POST',
+      {
+        loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+        createClient: () => client,
+        loadProviderSecrets: async () => ({ MOOV_PUBLIC_KEY: 'pk', MOOV_SECRET_KEY: 'sk', MOOV_ACCOUNT_ID: 'platform-acct' }),
+        fetchImpl: moov.impl,
+      },
+    );
+    assert.equal(result.ok, true, JSON.stringify(result));
+    const sqls = client.log.map((q) => q.sql);
+    const marker = sqls.findIndex((q) => q.includes("'request.financial_execution', '1'"));
+    const activated = client.log.findIndex((q) => q.params?.[0] === 'request.aws_financial_permissions_activated' && q.params?.[1] === '1');
+    const upsert = sqls.findIndex((q) => q.includes('INSERT INTO public.payment_wallets'));
+    assert.ok(marker >= 0 && activated >= 0 && upsert > marker && upsert > activated, JSON.stringify({ marker, activated, upsert }));
+    assert.equal(moov.posts().length, 0);
+  });
+});

@@ -356,15 +356,16 @@ test('read-only Moov wallet sync members refuse to apply out of order', async ()
   );
 });
 
-test('Moov wallet funding members apply in order, added modules first and providers.mjs last', async () => {
+test('Moov wallet funding members apply in order: wallet sync, added modules, providers.mjs last', async () => {
   const FUND = [
+    'providers/production/moov-wallet-sync.mjs',
     'providers/production/moov-fund-authz.mjs',
     'cognito.mjs',
     'auth-financial-totp.mjs',
     'providers/production/moov-wallet-fund.mjs',
     'providers.mjs',
   ];
-  assert.deepEqual(PLAN.order.slice(-5), FUND);
+  assert.deepEqual(PLAN.order.slice(-6), FUND);
   for (const member of FUND) {
     const { deps, calls } = applyDeps(member);
     const result = await run(applyEnv(member), deps);

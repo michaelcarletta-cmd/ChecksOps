@@ -3,8 +3,22 @@
   "authorization": "Owner-approved production WalletOps funding (linked bank to wallet): any tenant member, two-factor once per login, no amount limit. Each production apply still needs its own owner approval and staging acceptance.",
   "deploy_authorized": false,
   "live_lambda": "checksops-production-prep-api",
-  "notes": "cognito.mjs and auth-financial-totp.mjs live_sha256 come from the live production bundle snapshot (origin/claude/production-api-live-snapshot f78e16d99, 2026-10-11; the later #890 and #914 overlays did not touch them). providers.mjs live_sha256 is the #914 bytes applied 2026-10-13. The two production/ modules are new. Apply in the listed order: added modules before the members that import them, providers.mjs last.",
+  "notes": "cognito.mjs and auth-financial-totp.mjs live_sha256 come from the live production bundle snapshot (origin/claude/production-api-live-snapshot f78e16d99, 2026-10-11; the later #890 and #914 overlays did not touch them). providers.mjs and providers/production/moov-wallet-sync.mjs live_sha256 are the #914 bytes applied 2026-10-13; moov-wallet-sync.mjs now sets the server-only financial GUCs so tenant members can save the refreshed balance under SQL 72. The two production/ modules are new. Apply in the listed order: added modules before the members that import them, providers.mjs last.",
   "members": {
+    "providers/production/moov-wallet-sync.mjs": {
+      "live_sha256": "4c2701f4a6e5eadae91dd3b7d54ecb420ecdcc9e7996c50bef226baa1ba001d2",
+      "accepted_sha256": "812c9dfd3af0a0dfc945ea320118a8a86362d8e98165e0045b158f4743f18c5e",
+      "operation": "replace",
+      "required_imports": [
+        "financial-flags.mjs",
+        "providers/parity/moov-client.mjs",
+        "providers/parity/caller.mjs",
+        "providers/parity/db.mjs",
+        "providers/parity/moov-wallet.mjs",
+        "data.mjs",
+        "sandbox-credentials.mjs"
+      ]
+    },
     "providers/production/moov-fund-authz.mjs": {
       "live_sha256": null,
       "accepted_sha256": "290da0d4c085cfc93b849d33ec8606f61f48f128c14a17ddf484f69b9c7c7afb",
