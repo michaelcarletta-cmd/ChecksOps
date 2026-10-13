@@ -323,7 +323,9 @@ test('production smoke fails on unhealthy, partial or malformed /db-health and l
 
 test('read-only Moov wallet sync members apply in order with nested ZIP paths', async () => {
   const MOOV = ['providers/parity/moov-wallet.mjs', 'providers/production/moov-wallet-sync.mjs', 'providers.mjs'];
-  assert.deepEqual(PLAN.order.slice(-3), MOOV);
+  const positions = MOOV.map((member) => PLAN.order.indexOf(member));
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions);
+  assert.ok(!positions.includes(-1));
   for (const member of MOOV) {
     const { deps, calls } = applyDeps(member);
     const result = await run(applyEnv(member), deps);
@@ -350,6 +352,38 @@ test('read-only Moov wallet sync members refuse to apply out of order', async ()
   // providers.mjs before the added module: its import is not in the live ZIP yet.
   await assert.rejects(
     run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-sync.mjs'] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+});
+
+test('Moov wallet funding members apply in order, added modules first and providers.mjs last', async () => {
+  const FUND = [
+    'providers/production/moov-fund-authz.mjs',
+    'cognito.mjs',
+    'auth-financial-totp.mjs',
+    'providers/production/moov-wallet-fund.mjs',
+    'providers.mjs',
+  ];
+  assert.deepEqual(PLAN.order.slice(-5), FUND);
+  for (const member of FUND) {
+    const { deps, calls } = applyDeps(member);
+    const result = await run(applyEnv(member), deps);
+    assert.equal(result.mutation, false, member);
+    const op = PLAN.members[member].operation;
+    assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
+  }
+  const fundImports = localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/moov-wallet-fund.mjs'), 'utf8'), 'providers/production/moov-wallet-fund.mjs');
+  for (const dep of ['providers/production/moov-fund-authz.mjs', 'cognito.mjs', 'data.mjs', 'providers/parity/moov-wallet.mjs']) {
+    assert.ok(fundImports.includes(dep), dep);
+  }
+  assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api/auth-financial-totp.mjs'), 'utf8'), 'auth-financial-totp.mjs')
+    .includes('providers/production/moov-fund-authz.mjs'));
+  await assert.rejects(
+    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-fund.mjs'] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  await assert.rejects(
+    run(applyEnv('auth-financial-totp.mjs'), applyDeps('auth-financial-totp.mjs', { pending: ['providers/production/moov-fund-authz.mjs'] }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
 });

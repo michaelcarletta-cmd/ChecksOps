@@ -32,8 +32,12 @@ const LEGACY_VERIFIED_KEY = "checksops_stepup_verified_user";
 export type StepUpRequest = FinancialStepUpRequest;
 
 interface StepUpContextValue {
-  /** Resolves true once the user has passed two-factor for this session. */
-  requireStepUp: (request: StepUpRequest) => Promise<boolean>;
+  /**
+   * Resolves true once the user has passed two-factor for this session.
+   * `force` asks again even if this browser thinks the session is verified
+   * (the server is the authority and may say otherwise).
+   */
+  requireStepUp: (request: StepUpRequest, options?: { force?: boolean }) => Promise<boolean>;
   /** True when TOTP is already satisfied for this login session. */
   verified: boolean;
   /** True when the signed-in user has at least one verified TOTP factor. */
@@ -150,12 +154,12 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
   }, [refreshFactors]);
 
   const requireStepUp = useCallback(
-    (next: StepUpRequest) => {
+    (next: StepUpRequest, options?: { force?: boolean }) => {
       if (isCheckBoundAction(next.actionKey) && !next.checkId) {
         return Promise.resolve(false);
       }
       const nextKey = stepUpCacheKey(userId, next.actionKey, next.checkId);
-      if (cacheAllowsReuse(verifiedKey, nextKey)) return Promise.resolve(true);
+      if (!options?.force && cacheAllowsReuse(verifiedKey, nextKey)) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
         resolverRef.current = resolve;
         requestRef.current = next;

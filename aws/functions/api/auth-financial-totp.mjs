@@ -335,7 +335,37 @@ export const handleMfaVerify = async (event, deps = {}) => {
   }, deps);
 };
 
-export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spoof }) => {
+/**
+ * Wallet funding step-up is bound to the tenant and the current login, not to
+ * an amount: one code per login covers every funding request in that login.
+ */
+const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
+  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
+  const { isUuid, membershipForTenant } = await import('./financial-ownership.mjs');
+  const { WALLET_FUND_TOTP_ACTION, loginSessionBinding } = await import('./providers/production/moov-fund-authz.mjs');
+  const tenantId = String(body.tenant_id || body.tenantId || '').trim();
+  if (!isUuid(tenantId)) {
+    return { ok: false, statusCode: 400, error: 'tenant_id is required', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+  if (!membershipForTenant(memberships, tenantId)) {
+    return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const loginSession = loginSessionBinding(claims);
+  if (!loginSession) {
+    return {
+      ok: false,
+      statusCode: 401,
+      error: 'login_session_unbound',
+      message: 'Sign out and sign back in, then try again.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  return { ok: true, kind: 'login_session', tenantId, loginSession, actionKey: WALLET_FUND_TOTP_ACTION };
+};
+
+export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
   const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
   const { membershipForTenant } = await import('./financial-ownership.mjs');
   const {
@@ -343,6 +373,10 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
     serverAmountCentsFromCheck,
   } = await import('./providers/production/checkalt-authz.mjs');
   const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
+  const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
+  if (actionKey === WALLET_FUND_TOTP_ACTION) {
+    return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof });
+  }
   if (actionKey !== CHECKALT_TOTP_ACTION) {
     return {
       ok: false,
@@ -407,6 +441,34 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
 };
 
 export const insertAppStepUpLog = async (client, mapping, bound) => {
+  if (bound.kind === 'login_session') {
+    const row = (await client.query(
+      `INSERT INTO public.financial_stepup_log
+        (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
+       VALUES ($1::uuid, $2::uuid, $3, 'totp', true, $4::jsonb)
+       RETURNING id, created_at`,
+      [
+        mapping.application_user_id,
+        bound.tenantId,
+        bound.actionKey,
+        JSON.stringify({
+          login_session: bound.loginSession,
+          operation: bound.actionKey,
+          source: 'app_financial_totp',
+        }),
+      ],
+    )).rows[0];
+    return {
+      ok: true,
+      statusCode: 200,
+      recorded: true,
+      stepup_id: row.id,
+      check_id: null,
+      tenant_id: bound.tenantId,
+      amount_cents: null,
+      applicationUserId: mapping.application_user_id,
+    };
+  }
   const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
   const row = (await client.query(
     `INSERT INTO public.financial_stepup_log
@@ -457,6 +519,7 @@ export const handleMfaStepUp = async (event, deps = {}) => {
       const bound = await resolveFinancialStepUpBinding({
         client: ctx.client,
         mapping: ctx.mapping,
+        claims: ctx.claims,
         body,
         spoof: ctx.spoof,
       });

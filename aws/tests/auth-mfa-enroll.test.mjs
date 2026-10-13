@@ -319,7 +319,7 @@ test('amount change and action mismatch are rejected', async () => {
   const action = await handleMfaStepUp(eventOf({
     code,
     check_intake_item_id: CHECK,
-    action_key: 'wallet.fund',
+    action_key: 'wallet.send',
   }), depsOf(store));
   assert.equal(action.error, 'action_mismatch');
   assert.equal(store.stepups.length, 0);
