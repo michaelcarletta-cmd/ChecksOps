@@ -169,8 +169,15 @@ export function DisbursementConsole({
             provider, provider_bank_name, provider_last_four, provider_account_id, provider_bank_account_id
           )
         `)
-        .eq("check_intake_item_id", checkIntakeItemId!);
+        .eq("check_intake_item_id", checkIntakeItemId!)
+        .eq("tenant_id", tenant!.id);
       if (error) throw error;
+      const partnerIds = [...new Set((data ?? []).map((row: any) => row.partner_tenant_id).filter(Boolean))] as string[];
+      const partnerNames = new Map<string, string>();
+      if (partnerIds.length > 0) {
+        const { data: names } = await supabase.from("tenants_public").select("id, name").in("id", partnerIds);
+        for (const t of (names ?? []) as any[]) if (t.name) partnerNames.set(t.id, t.name);
+      }
       return (data ?? [])
         .map((row: any) => {
           // A partner organization added to this check is paid as a partner (to their
@@ -179,7 +186,9 @@ export function DisbursementConsole({
             return {
               id: `partner:${row.partner_tenant_id}`,
               partner_tenant_id: row.partner_tenant_id,
-              nickname: row.stakeholder_accounts?.nickname || "Partner organization",
+              nickname: partnerNames.get(row.partner_tenant_id) || "Partner organization",
+              // The partner's payout account, used only to record an external payment.
+              external_stakeholder_account_id: row.stakeholder_accounts?.id ?? null,
               account_type: "partner",
               verification_status: "verified",
               is_active: true,
@@ -463,9 +472,16 @@ export function DisbursementConsole({
         return { rail: "moov" as const, note: result.message ?? null };
       }
 
-      if (splits.some((split) => (accounts as any[]).find((a) => a.id === split.stakeholder_account_id)?.partner_tenant_id)) {
-        throw new Error("External payments can be recorded for stakeholders only.");
-      }
+      // External payments to a partner are recorded against the partner's payout account
+      // on this check; a partner that is only shared with has none.
+      const externalSplits = splits.map((split) => {
+        const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
+        if (!acct?.partner_tenant_id) return split;
+        if (!acct.external_stakeholder_account_id) {
+          throw new Error(`Add ${acct.nickname} to this check's stakeholders to record an external payment to them.`);
+        }
+        return { ...split, stakeholder_account_id: acct.external_stakeholder_account_id };
+      });
       await guardFinancial("disbursement.send");
 
       // Create the batch
@@ -490,7 +506,7 @@ export function DisbursementConsole({
       // Insert splits
       const { error: splitsErr } = await supabase
         .from("disbursement_splits")
-        .insert(splits.map((s) => ({ ...s, batch_id: batch.id })));
+        .insert(externalSplits.map((s) => ({ ...s, batch_id: batch.id })));
 
       if (splitsErr) throw splitsErr;
 

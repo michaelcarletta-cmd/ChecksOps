@@ -365,6 +365,7 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
     if (r.id === String(tenantId).toLowerCase()) return { error: 'recipient_is_sender', recipient: r };
     // A partner counts as on this check when this organization shared the check with
     // them, or added them to the check's stakeholders while the partnership is active.
+    // Sharing also adds them to the stakeholders, so a revoked share still blocks them.
     const share = (await client.query(
       `SELECT 1 AS ok
        WHERE EXISTS (
@@ -379,7 +380,11 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
                SELECT 1 FROM public.tenant_partnerships
                WHERE status = 'active' AND revoked_at IS NULL
                  AND ((inviter_tenant_id = $2::uuid AND invitee_tenant_id = $3::uuid)
-                   OR (inviter_tenant_id = $3::uuid AND invitee_tenant_id = $2::uuid))))`,
+                   OR (inviter_tenant_id = $3::uuid AND invitee_tenant_id = $2::uuid)))
+             AND NOT EXISTS (
+               SELECT 1 FROM public.shared_checks
+               WHERE check_id = $1::uuid AND revoked_at IS NOT NULL
+                 AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid))`,
       [request.checkId, tenantId, r.id],
     )).rows[0];
     if (!share) return { error: 'partner_not_shared', recipient: r };
@@ -426,7 +431,7 @@ const DESTINATION_MESSAGES = {
   recipient_bank_not_ready: "A recipient's bank is not ready for this delivery speed.",
   recipient_bank_choice_required: "A recipient's bank could not be determined.",
   recipient_is_sender: 'You cannot send to your own organization.',
-  partner_not_shared: 'That partner is not on this check. Share the check with them or add them to its stakeholders.',
+  partner_not_shared: 'That partner is not on this check, its share was revoked, or your partnership has ended.',
   partner_setup_required: "This partner hasn't finished payment setup.",
   partner_account_ambiguous: "This partner's payment account could not be determined.",
   partner_wallet_choice_required: "This partner's balance account could not be determined.",

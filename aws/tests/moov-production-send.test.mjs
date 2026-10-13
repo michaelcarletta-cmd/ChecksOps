@@ -160,7 +160,9 @@ const fakeDb = ({
         const partnered = partnerships.some((p) => p.status === 'active' && !p.revoked_at
           && ((p.inviter_tenant_id === me && p.invitee_tenant_id === them)
             || (p.inviter_tenant_id === them && p.invitee_tenant_id === me)));
-        return { rows: shared || (added && partnered) ? [{ ok: 1 }] : [] };
+        const revoked = shares.some((s) => s.check_id === check && s.revoked_at
+          && s.source_tenant_id === me && s.target_tenant_id === them);
+        return { rows: shared || (added && partnered && !revoked) ? [{ ok: 1 }] : [] };
       }
       if (sql.includes('COALESCE(sum(amount_cents)')) return { rows: [{ cents: reservedCents }] };
       if (sql.includes('SELECT * FROM public.payment_transfers') && sql.includes('left(idempotency_key')) {
@@ -405,6 +407,11 @@ test('partners must share this check and have exactly one production account', a
       [{ shares: [], partnerStakeholders: [ADDED_PARTNER], partnerships: [] }, {}, 'partner_not_shared'],
       // Added to another organization's stakeholders on this check.
       [{ shares: [], partnerStakeholders: [{ ...ADDED_PARTNER, tenant_id: OTHER_TENANT }], partnerships: [PARTNERSHIP] }, {}, 'partner_not_shared'],
+      // Sharing also adds the partner to the stakeholders; revoking the share still blocks them.
+      [{ shares: [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: PARTNER, revoked_at: '2026-10-01' }], partnerStakeholders: [ADDED_PARTNER], partnerships: [PARTNERSHIP] }, {}, 'partner_not_shared'],
+      [{ shares: [], partnerStakeholders: [ADDED_PARTNER], partnerships: [{ ...PARTNERSHIP, revoked_at: '2026-10-01' }] }, {}, 'partner_not_shared'],
+      [{ shares: [], partnerStakeholders: [{ ...ADDED_PARTNER, check_intake_item_id: OTHER_TENANT }], partnerships: [PARTNERSHIP] }, {}, 'partner_not_shared'],
+      [{ shares: [], partnerStakeholders: [{ ...ADDED_PARTNER, partner_tenant_id: OTHER_TENANT }], partnerships: [PARTNERSHIP] }, {}, 'partner_not_shared'],
     ]) {
       const client = fakeDb(options);
       const moov = moovStub(stubOptions);
