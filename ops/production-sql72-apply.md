@@ -7,6 +7,11 @@ fund the tenant's wallet and refresh its balance, but only while the API's
 funding or refresh code has set the financial execution GUCs. Until then, only
 platform admin/staff logins can.
 
+**Status:** applied to production on 2026-10-13 (workstream
+`prod-sql72-member-payment-writes-20261013`, main `c0b1a3d9`): `febc45be…` →
+`57233f0f…`, all five policies present, the 6 other policies unchanged
+(`db3788c4…`). The pin's `execute` is now `false`.
+
 Pin: `ops/deployment-guard/sql72-production-apply.json`
 (before `febc45be…` = all five absent, after `57233f0f…` = all five present and
 well-formed, the states staging applied in run 38438034883). Tool:
@@ -30,7 +35,11 @@ RDS (`credentialsToProductionDatabaseUrl`).
    runs in `BEGIN READ ONLY … ROLLBACK`. Proceed only when
    `apply_preconditions_met` is true (all five policies absent, and the three
    helper functions present and executable by `authenticated`).
-2. **Manifest** (`sql-apply`, `production`, `production-sql`): exact pin fields,
+2. **Contracts:** run `aws/tests/claim-ledger-accepted-contract.test.mjs`,
+   `aws/tests/tenant-security-compliance.test.mjs` and `aws/tests/api-write.test.mjs`
+   on the same source and record them as `contract_results` in the manifest
+   (preflight refuses `sql-apply` without them).
+3. **Manifest** (`sql-apply`, `production`, `production-sql`): exact pin fields,
    `live_definition_sha256` = `"<live hash from step 1>"`,
    `preflight_live_fingerprint` = `production_fingerprint` =
    `immediately_before_fingerprint` = `{ "sql": "<live hash from step 1>" }`,
@@ -38,9 +47,9 @@ RDS (`credentialsToProductionDatabaseUrl`).
    `authorization_phrase` `CREATE_MEMBER_PAYMENT_WRITE_POLICIES`, a new
    `one_use_id`, and `owned_components` = `["<pin filename>"]` (the tool refuses a
    receipt that does not own the pinned file).
-3. **Lease and receipt** on the same host:
+4. **Lease and receipt** on the same host:
    `node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input <manifest>`.
-4. **Apply:**
+5. **Apply:**
    `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT=<receipt> node scripts/deployment-guard/sql72-production-apply.mjs --apply --input <manifest>`.
    One transaction with an advisory lock. It refuses unless all five policies are
    absent and the helpers are executable. It rolls back unless afterwards all five
@@ -48,7 +57,7 @@ RDS (`credentialsToProductionDatabaseUrl`).
    AND of the three conditions) and every other policy on the three tables is
    byte-identical. If the tool reports the COMMIT outcome as unknown, run step 1
    before anything else.
-5. **Verify:** re-run step 1; `already_applied` must be true. Then set the pin's
+6. **Verify:** re-run step 1; `already_applied` must be true. Then set the pin's
    `execute` to `false` in a follow-up so it is no longer a standing authorization.
 
 ## Rollback

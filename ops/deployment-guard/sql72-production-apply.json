@@ -1,7 +1,7 @@
 {
   "id": "sql72-member-payment-writes-production-apply",
   "authorization": "owner-approved 2026-10-13: production apply after staging acceptance; each run still needs the owner's approval, a production-sql receipt and the authorization phrase",
-  "execute": true,
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -18,5 +18,8 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38438034883",
     "basis": "Guarded staging SQL executor apply of sql72-member-payment-writes on 2026-10-13 (inspect run 38437699913, deploy run 38437850724): febc45be… -> 57233f0f…, five aws_member_* policies present, 6 other policies unchanged. Owner accepted staging on smoke checks (overlay runs 74-85, website run 19, WalletOps opens); staging has no linked bank."
+  },
+  "production_evidence": {
+    "2026-10-13 apply": "Guarded apply on i-0c35557c4e5385406, workstream prod-sql72-member-payment-writes-20261013, main c0b1a3d9, contracts claim-ledger, tenant-isolation and financial-write-protections 37/37: febc45be… -> 57233f0f…; all five aws_member_* policies present; 6 other policies unchanged (db3788c4…). execute is false so the pin is no longer a standing authorization."
   }
 }
