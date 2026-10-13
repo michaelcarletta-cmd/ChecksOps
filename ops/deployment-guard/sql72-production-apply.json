@@ -1,0 +1,22 @@
+{
+  "id": "sql72-member-payment-writes-production-apply",
+  "authorization": "owner-approved 2026-10-13: production apply after staging acceptance; each run still needs the owner's approval, a production-sql receipt and the authorization phrase",
+  "execute": true,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/72_member_payment_writes.sql",
+  "migration_id": "72_member_payment_writes",
+  "source_sha256": "5ed4d507f2b85c16d9a9cd8fccad6649325823f08b6ea5a79c2554712ee6fe7b",
+  "expected_live_definition_sha256": "febc45bed8d64bb2001708bc83bba41b943063bec19c1165a2ca58daffdcfd26",
+  "intended_replacement_sha256": "57233f0f1fa7f204741f979779d91f92085204d9e1a31129d126f255cd26485b",
+  "authorization_phrase": "CREATE_MEMBER_PAYMENT_WRITE_POLICIES",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38438034883",
+    "basis": "Guarded staging SQL executor apply of sql72-member-payment-writes on 2026-10-13 (inspect run 38437699913, deploy run 38437850724): febc45be… -> 57233f0f…, five aws_member_* policies present, 6 other policies unchanged. Owner accepted staging on smoke checks (overlay runs 74-85, website run 19, WalletOps opens); staging has no linked bank."
+  }
+}
