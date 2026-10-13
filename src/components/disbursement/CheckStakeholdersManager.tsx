@@ -19,12 +19,6 @@ import { displayCaseOrNull } from "@/lib/displayCase";
 
 interface Props {
   checkIntakeItemId: string;
-  /**
-   * Choose a partner to pay on this check. Partners are not attached to the check;
-   * the payment server pays them only while the check is shared with them.
-   */
-  onChoosePartner?: (partner: { partner_tenant_id: string; partner_name: string }) => void;
-  chosenPartnerIds?: string[];
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -33,7 +27,7 @@ const TYPE_LABELS: Record<string, string> = {
   supplier: "Supplier", other: "Other",
 };
 
-export function CheckStakeholdersManager({ checkIntakeItemId, onChoosePartner, chosenPartnerIds = [] }: Props) {
+export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
@@ -141,12 +135,9 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onChoosePartner, c
   const visiblePartners = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     return (partnerOptions as any[]).filter(
-      (p) =>
-        !p.already_added &&
-        !chosenPartnerIds.includes(p.partner_tenant_id) &&
-        (!query || String(p.partner_name ?? "").toLowerCase().includes(query)),
+      (p) => !p.already_added && (!query || String(p.partner_name ?? "").toLowerCase().includes(query)),
     );
-  }, [partnerOptions, searchQuery, chosenPartnerIds]);
+  }, [partnerOptions, searchQuery]);
 
   const addPartnerMut = useMutation({
     mutationFn: async (partnerTenantId: string) => {
@@ -286,16 +277,9 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onChoosePartner, c
                       <button
                         key={p.partner_tenant_id}
                         className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between group transition-colors disabled:opacity-50"
-                        onClick={() => {
-                          if (onChoosePartner) {
-                            onChoosePartner({ partner_tenant_id: p.partner_tenant_id, partner_name: p.partner_name ?? "Partner" });
-                            setPickerOpen(false);
-                            return;
-                          }
-                          addPartnerMut.mutate(p.partner_tenant_id);
-                        }}
-                        disabled={onChoosePartner ? false : addPartnerMut.isPending || !p.payout_ready}
-                        title={onChoosePartner ? "Pay this partner on this check" : p.payout_ready ? "Add this partner as a stakeholder" : "This partner hasn't finished bank verification"}
+                        onClick={() => addPartnerMut.mutate(p.partner_tenant_id)}
+                        disabled={addPartnerMut.isPending || !p.payout_ready}
+                        title={p.payout_ready ? "Add this partner as a stakeholder" : "This partner hasn't finished bank verification"}
                       >
                         <span className="min-w-0">
                           <span className="font-medium block truncate group-hover:text-accent-foreground">{p.partner_name}</span>

@@ -163,7 +163,7 @@ export function DisbursementConsole({
       const { data, error } = await supabase
         .from("check_stakeholders")
         .select(`
-          added_via,
+          added_via, partner_tenant_id,
           stakeholder_accounts:stakeholder_account_id (
             id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status,
             provider, provider_bank_name, provider_last_four, provider_account_id, provider_bank_account_id
@@ -172,23 +172,35 @@ export function DisbursementConsole({
         .eq("check_intake_item_id", checkIntakeItemId!);
       if (error) throw error;
       return (data ?? [])
-        .map((row: any) => row.stakeholder_accounts ? { ...row.stakeholder_accounts, added_via: row.added_via } : null)
+        .map((row: any) => {
+          // A partner organization added to this check is paid as a partner (to their
+          // balance or bank), not through the stakeholder account their row points at.
+          if (row.partner_tenant_id) {
+            return {
+              id: `partner:${row.partner_tenant_id}`,
+              partner_tenant_id: row.partner_tenant_id,
+              nickname: row.stakeholder_accounts?.nickname || "Partner organization",
+              account_type: "partner",
+              verification_status: "verified",
+              is_active: true,
+              provider: "moov",
+              provider_account_id: "partner",
+              added_via: row.added_via,
+            };
+          }
+          return row.stakeholder_accounts ? { ...row.stakeholder_accounts, added_via: row.added_via } : null;
+        })
         .filter((a: any) => a && a.is_active)
         .sort((a: any, b: any) => Number(b.is_primary) - Number(a.is_primary));
     },
   });
 
-  // Partners chosen in the picker for this payment (the server still requires the share).
-  const [chosenPartners, setChosenPartners] = useState<{ partner_tenant_id: string; partner_name: string }[]>([]);
-
   // Partners appear next to this check's stakeholders.
   const accounts = useMemo(() => {
     const merged = [...(ownAccounts as any[])];
-    const partners: { partner_tenant_id: string; partner_name: string }[] = [...partnerStakeholders];
-    for (const p of chosenPartners) {
-      if (!partners.some((x) => x.partner_tenant_id === p.partner_tenant_id)) partners.push(p);
-    }
-    for (const p of partners) {
+    for (const p of partnerStakeholders as any[]) {
+      // A partner added to this check's stakeholders is already listed.
+      if (merged.some((a: any) => a.partner_tenant_id === p.partner_tenant_id)) continue;
       merged.push({
         id: `partner:${p.partner_tenant_id}`,
         partner_tenant_id: p.partner_tenant_id,
@@ -202,7 +214,7 @@ export function DisbursementConsole({
       });
     }
     return merged;
-  }, [ownAccounts, partnerStakeholders, chosenPartners]);
+  }, [ownAccounts, partnerStakeholders]);
 
   const partnersNeedingSetup: any[] = [];
 
@@ -677,18 +689,7 @@ export function DisbursementConsole({
         )}
 
         {/* Stakeholder manager (per-check) */}
-        {checkIntakeItemId && (
-          <CheckStakeholdersManager
-            checkIntakeItemId={checkIntakeItemId}
-            chosenPartnerIds={[
-              ...partnerStakeholders.map((p) => p.partner_tenant_id),
-              ...chosenPartners.map((p) => p.partner_tenant_id),
-            ]}
-            onChoosePartner={(p) =>
-              setChosenPartners((prev) => (prev.some((x) => x.partner_tenant_id === p.partner_tenant_id) ? prev : [...prev, p]))
-            }
-          />
-        )}
+        {checkIntakeItemId && <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} />}
 
         {partnersNeedingSetup.length > 0 && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
