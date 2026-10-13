@@ -19,7 +19,11 @@ import {
   AUTHORIZED_LEDGER_20261007193200,
   AUTHORIZED_SQL53,
   AUTHORIZED_SQL71_AMOUNT_GRANT,
+  AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  MEMBER_PAYMENT_POLICIES,
+  MEMBER_PAYMENT_REQUIRED_FUNCTIONS,
+  memberPaymentPolicyStateText,
   SQL_EXECUTOR_FUNCTION,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
@@ -29,6 +33,7 @@ import {
   isSql44AuthorizedMigration,
   isSql53AuthorizedMigration,
   isSql71AmountGrant,
+  isSql72MemberPaymentWrites,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
 import {
@@ -69,6 +74,7 @@ const LEDGER_20261007193200_FILE = path.join(
   'sql/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql',
 );
 const SQL71_AMOUNT_GRANT_FILE = path.join(ROOT, 'sql/71_review_amount_column_grant.sql');
+const SQL72_MEMBER_PAYMENT_WRITES_FILE = path.join(ROOT, 'sql/72_member_payment_writes.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -1697,6 +1703,211 @@ async function handleSql71AmountGrant({ event, authorization, identity, connect,
   }
 }
 
+// --- SQL 72: tenant-member payment write policies ---------------------------
+
+const PAYMENT_POLICIES_SQL = `
+SELECT tablename, policyname, cmd, roles::text AS roles, permissive, qual, with_check
+FROM pg_policies
+WHERE schemaname = 'public' AND tablename = ANY($1::text[])
+ORDER BY tablename, policyname
+`.trim();
+const REQUIRED_FUNCTIONS_SQL = `
+SELECT p.proname, has_function_privilege('authenticated', p.oid, 'EXECUTE') AS can_execute
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = ANY($1::text[])
+`.trim();
+const MEMBER_POLICY_CLAUSE_MARKERS = ['aws_is_authenticated()', 'aws_financial_execution_active()', 'aws_user_tenant_ids()'];
+const MEMBER_POLICY_FORBIDDEN_MARKERS = ['aws_is_cross_tenant_reader', 'has_role', 'aws_can_access_tenant', 'aws_can_write_tenant'];
+// The exact statements SQL 72 may contain, in file order: DROP then CREATE per policy.
+const SQL72_FILE_ORDER = [
+  'aws_member_insert_payment_transfers',
+  'aws_member_update_payment_transfers',
+  'aws_member_insert_payment_wallets',
+  'aws_member_update_payment_wallets',
+  'aws_member_insert_payment_event_log',
+];
+const SQL72_MEMBER_CONDITION = 'public.aws_is_authenticated() AND COALESCE(public.aws_financial_execution_active(), false) AND tenant_id IN (SELECT public.aws_user_tenant_ids())';
+const normalizeSqlStatement = (text) => String(text).replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim();
+
+export function sql72ExpectedStatements() {
+  return SQL72_FILE_ORDER.flatMap((name) => {
+    const pinned = MEMBER_PAYMENT_POLICIES.find((row) => row.name === name);
+    const clauses = pinned.cmd === 'UPDATE'
+      ? `USING (${SQL72_MEMBER_CONDITION}) WITH CHECK (${SQL72_MEMBER_CONDITION})`
+      : `WITH CHECK (${SQL72_MEMBER_CONDITION})`;
+    return [
+      `DROP POLICY IF EXISTS ${name} ON public.${pinned.table}`,
+      normalizeSqlStatement(`CREATE POLICY ${name} ON public.${pinned.table} FOR ${pinned.cmd} TO authenticated ${clauses}`),
+    ];
+  });
+}
+
+export function sql72StatementsAllowed(text) {
+  const body = String(text || '').split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
+  const statements = body.split(';').map(normalizeSqlStatement).filter(Boolean);
+  const expected = sql72ExpectedStatements();
+  return statements.length === expected.length && statements.every((statement, index) => statement === expected[index]);
+}
+
+const memberPolicyWellFormed = (row, pinned) => {
+  if (row.cmd !== pinned.cmd || row.roles !== '{authenticated}' || row.permissive !== 'PERMISSIVE') return false;
+  const clauses = pinned.cmd === 'UPDATE' ? [row.qual, row.with_check] : [row.with_check];
+  if (pinned.cmd === 'INSERT' && row.qual) return false;
+  // Every clause is a pure AND of the three conditions: an OR could loosen it.
+  return clauses.every((clause) => typeof clause === 'string'
+    && !/\bOR\b/i.test(clause)
+    && MEMBER_POLICY_CLAUSE_MARKERS.every((marker) => clause.includes(marker))
+    && MEMBER_POLICY_FORBIDDEN_MARKERS.every((marker) => !clause.includes(marker)));
+};
+
+export async function readMemberPaymentPolicyState(client) {
+  const tables = [...new Set(MEMBER_PAYMENT_POLICIES.map((row) => row.table))];
+  const rows = (await client.query(PAYMENT_POLICIES_SQL, [tables]))?.rows || [];
+  const isMember = (row) => MEMBER_PAYMENT_POLICIES.some((pinned) => pinned.name === row.policyname && pinned.table === row.tablename);
+  const others = rows.filter((row) => !isMember(row));
+  const states = MEMBER_PAYMENT_POLICIES.map((pinned) => {
+    const row = rows.find((candidate) => candidate.policyname === pinned.name && candidate.tablename === pinned.table);
+    if (!row) return 'absent';
+    return memberPolicyWellFormed(row, pinned) ? 'present' : 'malformed';
+  });
+  const stateText = memberPaymentPolicyStateText(states);
+  // Present and executable by authenticated: otherwise every policy check on these tables would error.
+  const functions = ((await client.query(REQUIRED_FUNCTIONS_SQL, [[...MEMBER_PAYMENT_REQUIRED_FUNCTIONS]]))?.rows || [])
+    .filter((row) => row.can_execute === true)
+    .map((row) => row.proname);
+  return ok({
+    member_policy_states: Object.fromEntries(MEMBER_PAYMENT_POLICIES.map((row, index) => [row.name, states[index]])),
+    other_policy_count: others.length,
+    other_policies_sha256: hashSqlDefinition(JSON.stringify(others)),
+    required_functions_present: MEMBER_PAYMENT_REQUIRED_FUNCTIONS.every((name) => functions.includes(name)),
+    live_definition_sha256: hashSqlDefinition(stateText),
+  });
+}
+
+async function handleSql72MemberPaymentWrites({ event, authorization, identity, connect, sqlFile72 }) {
+  const pin = AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES;
+  const embedded = readEmbeddedSql(sqlFile72, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!sql72StatementsAllowed(embedded.details.text)) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 72 is not the pinned member payment policy statements');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 72 executor action ${event.action}`);
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 72 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      const state = await readMemberPaymentPolicyState(client);
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          apply_preconditions_met: state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && state.details.required_functions_present === true,
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql72_member_payment_writes']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readMemberPaymentPolicyState(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 72 member payment policies are already present; refuse re-apply');
+    }
+    if (before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'member payment policies are not in the expected absent state');
+    }
+    if (!before.details.required_functions_present) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 72 helper functions are missing on the target database');
+    }
+
+    await client.query(embedded.details.text);
+
+    const after = await readMemberPaymentPolicyState(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.other_policies_sha256 !== before.details.other_policies_sha256
+      || after.details.other_policy_count !== before.details.other_policy_count) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 72 changed more than the five member payment policies', {
+        before: before.details.member_policy_states,
+        after: after.details.member_policy_states,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        member_policy_states_after: after.details.member_policy_states,
+        other_policy_count: after.details.other_policy_count,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function createHandler({
   connect = defaultConnect,
   now = () => Date.now(),
@@ -1706,6 +1917,7 @@ export function createHandler({
   sqlFile53 = SQL53_FILE,
   sqlFileLedger = LEDGER_20261007193200_FILE,
   sqlFile71 = SQL71_AMOUNT_GRANT_FILE,
+  sqlFile72 = SQL72_MEMBER_PAYMENT_WRITES_FILE,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -1741,6 +1953,10 @@ export function createHandler({
 
     if (isSql71AmountGrant(event)) {
       return handleSql71AmountGrant({ event, authorization, identity, connect, sqlFile71 });
+    }
+
+    if (isSql72MemberPaymentWrites(event)) {
+      return handleSql72MemberPaymentWrites({ event, authorization, identity, connect, sqlFile72 });
     }
 
     if (isLedger20261007193200(event)) {
