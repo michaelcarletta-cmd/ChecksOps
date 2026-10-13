@@ -137,21 +137,6 @@ export function useAutoFunding() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-funding-settings", tenantId] }),
   });
 
-  const fundManually = useMutation({
-    mutationFn: async (amountCents: number) => {
-      if (!tenantId) throw new Error("No organization selected.");
-      return invoke("initiate-wallet-funding", {
-        tenant_id: tenantId,
-        manual: true,
-        amount_cents: amountCents,
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["wallet-funding-requests", tenantId] });
-      qc.invalidateQueries({ queryKey: ["wallet"] });
-    },
-  });
-
   const cancelFunding = useMutation({
     mutationFn: async (fundingRequestId: string) => {
       if (!tenantId) throw new Error("No organization selected.");
@@ -163,7 +148,7 @@ export function useAutoFunding() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["wallet-funding-requests", tenantId] }),
   });
 
-  return { tenantId, settings, requests, banks, saveSettings, fundManually, cancelFunding };
+  return { tenantId, settings, requests, banks, saveSettings, cancelFunding };
 }
 
 /** Checks one approved payment against the wallet before anything is sent. */

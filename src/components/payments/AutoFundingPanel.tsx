@@ -56,8 +56,9 @@ const FUNDING_STATUS_LABEL: Record<string, string> = {
 
 /** Automatic funding controls: on/off, bank, strategy, limits and history. */
 export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
-  const { settings, requests, banks, saveSettings, fundManually, cancelFunding } = useAutoFunding();
-  const { wallet } = useWallet("operating");
+  const { settings, requests, banks, saveSettings, cancelFunding } = useAutoFunding();
+  // One-time transfers use the same funding path as "Add funds from bank".
+  const { wallet, fund, setupRequired } = useWallet("operating");
   const { toast } = useToast();
 
   const s = settings.data;
@@ -119,11 +120,11 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
       return;
     }
     try {
-      await fundManually.mutateAsync(cents);
+      await fund.mutateAsync({ amountCents: cents, description: "Balance funding" });
       setManualAmount("");
-      toast({ title: "Transfer started", description: "Funds post once the bank transfer settles." });
+      toast({ title: "Funding started", description: "Your balance updates once the transfer settles." });
     } catch (e) {
-      toast({ title: "Could not start transfer", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "Could not fund balance", description: (e as Error).message, variant: "destructive" });
     }
   }
 
@@ -284,13 +285,16 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
             placeholder="Amount"
             value={manualAmount}
             onChange={(e) => setManualAmount(e.target.value)}
-            disabled={!canEdit || !authorized}
+            disabled={setupRequired}
           />
-          <Button onClick={handleManualFund} disabled={!canEdit || !authorized || fundManually.isPending}>
-            {fundManually.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+          <Button onClick={handleManualFund} disabled={setupRequired || fund.isPending}>
+            {fund.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Transfer to wallet
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Pulls from your saved funding bank (or your default bank). Save a new bank choice first.
+        </p>
       </div>
 
       {/* History */}
