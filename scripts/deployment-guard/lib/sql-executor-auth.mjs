@@ -115,9 +115,10 @@ export const MEMBER_PAYMENT_REQUIRED_FUNCTIONS = Object.freeze([
   'aws_is_authenticated',
   'aws_user_tenant_ids',
 ]);
-export function memberPaymentPolicyStateText(state = 'absent') {
+/** `states`: one state for all five policies, or one per MEMBER_PAYMENT_POLICIES row. */
+export function memberPaymentPolicyStateText(states = 'absent') {
   return MEMBER_PAYMENT_POLICIES
-    .map((row) => `public.${row.table}.${row.name} ${row.cmd} TO authenticated: ${state}`)
+    .map((row, index) => `public.${row.table}.${row.name} ${row.cmd} TO authenticated: ${Array.isArray(states) ? states[index] : states}`)
     .join('\n');
 }
 export const AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES = Object.freeze({

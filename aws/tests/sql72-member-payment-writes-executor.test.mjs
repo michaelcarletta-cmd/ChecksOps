@@ -82,7 +82,7 @@ const EXISTING = [
 ];
 
 /** In-memory pg_policies. Running the embedded SQL adds the five member policies (or a variant). */
-function fakeDb({ policies = EXISTING, functions = ['aws_financial_execution_active', 'aws_is_authenticated', 'aws_user_tenant_ids'], onApply } = {}) {
+function fakeDb({ policies = EXISTING, functions = ['aws_financial_execution_active', 'aws_is_authenticated', 'aws_user_tenant_ids'], noExecute = [], onApply } = {}) {
   let committed = policies.map((row) => ({ ...row }));
   let working = null;
   const current = () => working || committed;
@@ -97,7 +97,7 @@ function fakeDb({ policies = EXISTING, functions = ['aws_financial_execution_act
         if (text === 'ROLLBACK') { working = null; return { rows: [] }; }
         if (text.includes('pg_advisory_xact_lock')) return { rows: [] };
         if (text.includes('FROM pg_policies')) return { rows: current() };
-        if (text.includes('FROM pg_proc')) return { rows: functions.map((proname) => ({ proname })) };
+        if (text.includes('FROM pg_proc')) return { rows: functions.map((proname) => ({ proname, can_execute: !noExecute.includes(proname) })) };
         if (text.includes('CREATE POLICY aws_member_')) {
           const added = MEMBER_PAYMENT_POLICIES.map((row) => ({
             tablename: row.table, policyname: row.name, cmd: row.cmd, roles: '{authenticated}', permissive: 'PERMISSIVE',
@@ -136,6 +136,11 @@ test('statement allowlist refuses anything beyond the five pinned policies', () 
   }
   assert.equal(sql72StatementsAllowed(sql.replace('FOR UPDATE TO authenticated', 'FOR INSERT TO authenticated')), false);
   assert.equal(sql72StatementsAllowed(sql.replace('TO authenticated', 'TO PUBLIC')), false);
+  assert.equal(sql72StatementsAllowed(sql.replace('TO authenticated', 'TO authenticated, anon')), false);
+  assert.equal(sql72StatementsAllowed(sql.replace('WITH CHECK (\n    public.aws_is_authenticated()', 'WITH CHECK (\n    true OR public.aws_is_authenticated()')), false);
+  // Order matters: a CREATE moved ahead of its DROP is refused.
+  const [first, second] = sql.split(';');
+  assert.equal(sql72StatementsAllowed(sql.replace(`${first};${second};`, `${second};${first};`)), false);
 });
 
 test('apply refuses before connecting unless it is the exact pin, and a tampered file is refused', async () => {
@@ -173,6 +178,10 @@ test('drift, missing helpers and collateral changes are refused and rolled back'
   const partial = fakeDb({ policies: [...EXISTING, { tablename: 'payment_wallets', policyname: 'aws_member_insert_payment_wallets', cmd: 'INSERT', roles: '{authenticated}', permissive: 'PERMISSIVE', qual: null, with_check: 'true' }] });
   assert.equal((await handlerFor(partial.connect)(policyEvent())).code, CODES.DEPLOYMENT_COLLISION);
 
+  const noExecute = fakeDb({ noExecute: ['aws_financial_execution_active'] });
+  assert.equal((await handlerFor(noExecute.connect)(policyEvent())).code, CODES.DEPLOYMENT_COLLISION);
+  assert.equal(noExecute.policies.length, 2);
+
   const noHelpers = fakeDb({ functions: ['aws_is_authenticated'] });
   const missing = await handlerFor(noHelpers.connect)(policyEvent());
   assert.equal(missing.code, CODES.DEPLOYMENT_COLLISION);
@@ -187,6 +196,11 @@ test('drift, missing helpers and collateral changes are refused and rolled back'
     ? { ...row, with_check: `(${row.with_check} OR aws_is_cross_tenant_reader())` } : row)) });
   assert.equal((await handlerFor(loose.connect)(policyEvent())).code, CODES.UNRELATED_MUTATION);
   assert.equal(loose.policies.length, 2);
+
+  const orTrue = fakeDb({ onApply: (rows) => rows.map((row) => (row.policyname === 'aws_member_update_payment_wallets'
+    ? { ...row, qual: `(true OR ${row.qual})` } : row)) });
+  assert.equal((await handlerFor(orTrue.connect)(policyEvent())).code, CODES.UNRELATED_MUTATION);
+  assert.equal(orTrue.policies.length, 2);
 });
 
 const pgSkipReason = () => {

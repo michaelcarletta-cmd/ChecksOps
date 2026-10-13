@@ -23,6 +23,7 @@ import {
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   MEMBER_PAYMENT_POLICIES,
   MEMBER_PAYMENT_REQUIRED_FUNCTIONS,
+  memberPaymentPolicyStateText,
   SQL_EXECUTOR_FUNCTION,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
@@ -1711,34 +1712,50 @@ WHERE schemaname = 'public' AND tablename = ANY($1::text[])
 ORDER BY tablename, policyname
 `.trim();
 const REQUIRED_FUNCTIONS_SQL = `
-SELECT p.proname
+SELECT p.proname, has_function_privilege('authenticated', p.oid, 'EXECUTE') AS can_execute
 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proname = ANY($1::text[])
 `.trim();
 const MEMBER_POLICY_CLAUSE_MARKERS = ['aws_is_authenticated()', 'aws_financial_execution_active()', 'aws_user_tenant_ids()'];
 const MEMBER_POLICY_FORBIDDEN_MARKERS = ['aws_is_cross_tenant_reader', 'has_role', 'aws_can_access_tenant', 'aws_can_write_tenant'];
-const SQL72_ALLOWED_STATEMENT_RE = /^(DROP POLICY IF EXISTS (aws_member_\w+) ON public\.(payment_\w+)|CREATE POLICY (aws_member_\w+) ON public\.(payment_\w+)\s+FOR (INSERT|UPDATE) TO authenticated\b[\s\S]*)$/;
+// The exact statements SQL 72 may contain, in file order: DROP then CREATE per policy.
+const SQL72_FILE_ORDER = [
+  'aws_member_insert_payment_transfers',
+  'aws_member_update_payment_transfers',
+  'aws_member_insert_payment_wallets',
+  'aws_member_update_payment_wallets',
+  'aws_member_insert_payment_event_log',
+];
+const SQL72_MEMBER_CONDITION = 'public.aws_is_authenticated() AND COALESCE(public.aws_financial_execution_active(), false) AND tenant_id IN (SELECT public.aws_user_tenant_ids())';
+const normalizeSqlStatement = (text) => String(text).replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim();
+
+export function sql72ExpectedStatements() {
+  return SQL72_FILE_ORDER.flatMap((name) => {
+    const pinned = MEMBER_PAYMENT_POLICIES.find((row) => row.name === name);
+    const clauses = pinned.cmd === 'UPDATE'
+      ? `USING (${SQL72_MEMBER_CONDITION}) WITH CHECK (${SQL72_MEMBER_CONDITION})`
+      : `WITH CHECK (${SQL72_MEMBER_CONDITION})`;
+    return [
+      `DROP POLICY IF EXISTS ${name} ON public.${pinned.table}`,
+      normalizeSqlStatement(`CREATE POLICY ${name} ON public.${pinned.table} FOR ${pinned.cmd} TO authenticated ${clauses}`),
+    ];
+  });
+}
 
 export function sql72StatementsAllowed(text) {
   const body = String(text || '').split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
-  const statements = body.split(';').map((row) => row.trim()).filter(Boolean);
-  if (statements.length !== MEMBER_PAYMENT_POLICIES.length * 2) return false;
-  return statements.every((statement) => {
-    const match = statement.match(SQL72_ALLOWED_STATEMENT_RE);
-    if (!match) return false;
-    const name = match[2] || match[4];
-    const table = match[3] || match[5];
-    const pinned = MEMBER_PAYMENT_POLICIES.find((row) => row.name === name && row.table === table);
-    if (!pinned) return false;
-    return !match[6] || match[6] === pinned.cmd;
-  });
+  const statements = body.split(';').map(normalizeSqlStatement).filter(Boolean);
+  const expected = sql72ExpectedStatements();
+  return statements.length === expected.length && statements.every((statement, index) => statement === expected[index]);
 }
 
 const memberPolicyWellFormed = (row, pinned) => {
   if (row.cmd !== pinned.cmd || row.roles !== '{authenticated}' || row.permissive !== 'PERMISSIVE') return false;
   const clauses = pinned.cmd === 'UPDATE' ? [row.qual, row.with_check] : [row.with_check];
   if (pinned.cmd === 'INSERT' && row.qual) return false;
+  // Every clause is a pure AND of the three conditions: an OR could loosen it.
   return clauses.every((clause) => typeof clause === 'string'
+    && !/\bOR\b/i.test(clause)
     && MEMBER_POLICY_CLAUSE_MARKERS.every((marker) => clause.includes(marker))
     && MEMBER_POLICY_FORBIDDEN_MARKERS.every((marker) => !clause.includes(marker)));
 };
@@ -1746,18 +1763,18 @@ const memberPolicyWellFormed = (row, pinned) => {
 export async function readMemberPaymentPolicyState(client) {
   const tables = [...new Set(MEMBER_PAYMENT_POLICIES.map((row) => row.table))];
   const rows = (await client.query(PAYMENT_POLICIES_SQL, [tables]))?.rows || [];
-  const memberNames = new Set(MEMBER_PAYMENT_POLICIES.map((row) => row.name));
-  const others = rows.filter((row) => !memberNames.has(row.policyname));
+  const isMember = (row) => MEMBER_PAYMENT_POLICIES.some((pinned) => pinned.name === row.policyname && pinned.table === row.tablename);
+  const others = rows.filter((row) => !isMember(row));
   const states = MEMBER_PAYMENT_POLICIES.map((pinned) => {
     const row = rows.find((candidate) => candidate.policyname === pinned.name && candidate.tablename === pinned.table);
     if (!row) return 'absent';
     return memberPolicyWellFormed(row, pinned) ? 'present' : 'malformed';
   });
-  const stateText = MEMBER_PAYMENT_POLICIES
-    .map((row, index) => `public.${row.table}.${row.name} ${row.cmd} TO authenticated: ${states[index]}`)
-    .join('\n');
-  const functions = (await client.query(REQUIRED_FUNCTIONS_SQL, [[...MEMBER_PAYMENT_REQUIRED_FUNCTIONS]]))?.rows
-    ?.map((row) => row.proname) || [];
+  const stateText = memberPaymentPolicyStateText(states);
+  // Present and executable by authenticated: otherwise every policy check on these tables would error.
+  const functions = ((await client.query(REQUIRED_FUNCTIONS_SQL, [[...MEMBER_PAYMENT_REQUIRED_FUNCTIONS]]))?.rows || [])
+    .filter((row) => row.can_execute === true)
+    .map((row) => row.proname);
   return ok({
     member_policy_states: Object.fromEntries(MEMBER_PAYMENT_POLICIES.map((row, index) => [row.name, states[index]])),
     other_policy_count: others.length,
