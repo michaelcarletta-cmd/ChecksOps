@@ -83,6 +83,12 @@
       "note": "Official production apply for ledger migration 20261007193200 only. Requires a sql-apply production-sql receipt owning the pinned migration, CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1, the authorization phrase and a single-use id. Refuses arbitrary SQL; inspect is BEGIN READ ONLY ... ROLLBACK."
     },
     {
+      "path": "scripts/deployment-guard/sql72-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql72-production-apply"],
+      "note": "Official production apply for SQL 72 (five tenant-member payment write policies) only. Requires a sql-apply production-sql receipt owning the pinned file, CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1, the authorization phrase and a single-use id. Refuses arbitrary SQL and any statement beyond the pinned DROP/CREATE POLICY list; inspect is BEGIN READ ONLY ... ROLLBACK."
+    },
+    {
       "path": "scripts/deployment-guard/github-sql53-production-apply.mjs",
       "classification": "SAFE",
       "capabilities": ["sql53-production-evaluate"],
