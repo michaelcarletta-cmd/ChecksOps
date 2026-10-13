@@ -163,7 +163,7 @@ export function DisbursementConsole({
       const { data, error } = await supabase
         .from("check_stakeholders")
         .select(`
-          added_via, partner_tenant_id,
+          added_via, partner_tenant_id, stakeholder_account_id,
           stakeholder_accounts:stakeholder_account_id (
             id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status,
             provider, provider_bank_name, provider_last_four, provider_account_id, provider_bank_account_id
@@ -188,7 +188,8 @@ export function DisbursementConsole({
               partner_tenant_id: row.partner_tenant_id,
               nickname: partnerNames.get(row.partner_tenant_id) || "Partner organization",
               // The partner's payout account, used only to record an external payment.
-              external_stakeholder_account_id: row.stakeholder_accounts?.id ?? null,
+              // Read from this check's row: the account itself belongs to the partner.
+              external_stakeholder_account_id: row.stakeholder_account_id ?? null,
               account_type: "partner",
               verification_status: "verified",
               is_active: true,
