@@ -130,7 +130,7 @@ test('environment check refuses any changed executor variable', () => {
 });
 
 test('only reviewed pins are selectable and candidate members mirror the ensure pack list', () => {
-  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant']);
+  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes']);
   assert.ok(Object.values(MIGRATIONS).every((pin) => AUTHORIZED_STAGING_SQL.includes(pin)));
   const { members, sourceOf } = candidateMembers(REPO_ROOT);
   assert.deepEqual(Object.keys(members).sort(), EXECUTOR_PACK_MEMBERS.map(([, to]) => to).sort());

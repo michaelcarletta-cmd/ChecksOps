@@ -45,6 +45,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['supabase/migrations/20261001193100_tenant_users_can_override_check_status.sql', 'sql/20261001193100_tenant_users_can_override_check_status.sql'],
   ['supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql', 'sql/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql'],
   ['aws/workflows/sql/71_review_amount_column_grant.sql', 'sql/71_review_amount_column_grant.sql'],
+  ['aws/workflows/sql/72_member_payment_writes.sql', 'sql/72_member_payment_writes.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

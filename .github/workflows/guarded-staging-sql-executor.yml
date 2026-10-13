@@ -20,6 +20,7 @@ on:
         options:
           - ledger-20261007193200
           - sql71-review-amount-grant
+          - sql72-member-payment-writes
       approved_commit:
         description: "Required for deploy/apply: exact main commit approved for this run"
         required: false

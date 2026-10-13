@@ -99,6 +99,37 @@ export const AUTHORIZED_SQL71_AMOUNT_GRANT = Object.freeze({
   column: 'amount',
 });
 
+// SQL 72 adds five tenant-member payment write policies. The "definition" is
+// the canonical presence state of exactly those policies, hashed: all absent
+// before, all present (well-formed) after. Every other policy on the three
+// tables must be byte-identical before and after.
+export const MEMBER_PAYMENT_POLICIES = Object.freeze([
+  Object.freeze({ table: 'payment_event_log', name: 'aws_member_insert_payment_event_log', cmd: 'INSERT' }),
+  Object.freeze({ table: 'payment_transfers', name: 'aws_member_insert_payment_transfers', cmd: 'INSERT' }),
+  Object.freeze({ table: 'payment_transfers', name: 'aws_member_update_payment_transfers', cmd: 'UPDATE' }),
+  Object.freeze({ table: 'payment_wallets', name: 'aws_member_insert_payment_wallets', cmd: 'INSERT' }),
+  Object.freeze({ table: 'payment_wallets', name: 'aws_member_update_payment_wallets', cmd: 'UPDATE' }),
+]);
+export const MEMBER_PAYMENT_REQUIRED_FUNCTIONS = Object.freeze([
+  'aws_financial_execution_active',
+  'aws_is_authenticated',
+  'aws_user_tenant_ids',
+]);
+export function memberPaymentPolicyStateText(state = 'absent') {
+  return MEMBER_PAYMENT_POLICIES
+    .map((row) => `public.${row.table}.${row.name} ${row.cmd} TO authenticated: ${state}`)
+    .join('\n');
+}
+export const AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES = Object.freeze({
+  filename: 'aws/workflows/sql/72_member_payment_writes.sql',
+  migration_id: '72_member_payment_writes',
+  commit: '2ed4d26daff49341191e8abe6eacdceabec6701f',
+  source_sha256: '5ed4d507f2b85c16d9a9cd8fccad6649325823f08b6ea5a79c2554712ee6fe7b',
+  expected_live_definition_sha256: 'febc45bed8d64bb2001708bc83bba41b943063bec19c1165a2ca58daffdcfd26',
+  intended_replacement_sha256: '57233f0f1fa7f204741f979779d91f92085204d9e1a31129d126f255cd26485b',
+  tables: Object.freeze(['public.payment_event_log', 'public.payment_transfers', 'public.payment_wallets']),
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -128,6 +159,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL40,
   AUTHORIZED_LEDGER_20261007193200,
   AUTHORIZED_SQL71_AMOUNT_GRANT,
+  AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -153,6 +185,10 @@ export function isSql71AmountGrant(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL71_AMOUNT_GRANT);
 }
 
+export function isSql72MemberPaymentWrites(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -175,6 +211,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql53AuthorizedMigration(input)) return AUTHORIZED_SQL53;
   if (isLedger20261007193200(input)) return AUTHORIZED_LEDGER_20261007193200;
   if (isSql71AmountGrant(input)) return AUTHORIZED_SQL71_AMOUNT_GRANT;
+  if (isSql72MemberPaymentWrites(input)) return AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
