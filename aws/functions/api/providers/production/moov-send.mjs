@@ -535,10 +535,15 @@ async function runLegs({ client, mapping, claims, tenantId, prefix, facilitatorI
   return { legs: await legsByPrefix(client, tenantId, prefix), incomplete };
 }
 
-async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl, clock }) {
+/** Provider reads before any POST get their own timeout, so planning cannot hang. */
+export const MOOV_READ_TIMEOUT_MS = 8_000;
+const withReadTimeout = (fetchImpl) => (url, init = {}) => fetchImpl(url, { ...init, signal: init.signal || AbortSignal.timeout(MOOV_READ_TIMEOUT_MS) });
+
+async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: postFetch, clock }) {
+  const fetchImpl = withReadTimeout(postFetch);
   const tenantId = ctx.tenantId;
   const request = parseSendRequest(body);
-  if (request.error) return fail(request.error, 400);
+  if (request.error) return fail('invalid_send_request', 400, { message: request.error });
   const prefix = `${SEND_KEY_PREFIX}${request.clickKey}:`;
   const hash = requestHash(request);
 
@@ -554,7 +559,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl, c
     'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
     [request.checkId],
   )).rows[0];
-  if (!check || String(check.tenant_id) !== String(tenantId)) return fail('Check not found for this organization.', 404);
+  if (!check || String(check.tenant_id) !== String(tenantId)) return fail('check_not_found', 404, { message: 'Check not found for this organization.' });
 
   const existing = await legsByPrefix(client, tenantId, prefix);
   if (existing.length && existing.some((leg) => leg.provider_metadata?.request_hash !== hash)) {
@@ -570,6 +575,9 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl, c
   // Plan under a per-organization lock (held until the plan commits), and count the
   // wallet parts of other sends that have not gone out yet, so two clicks cannot
   // plan against the same balance.
+  // A lock held by a stuck connection fails this request instead of hanging it.
+  await client.query("SET LOCAL lock_timeout = '10s'");
+  await client.query("SET idle_in_transaction_session_timeout = '30s'");
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`moov-send:${tenantId}`]);
   // A parallel request with the same key may have planned while this one waited.
   const planned = await legsByPrefix(client, tenantId, prefix);
@@ -690,7 +698,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl, c
     return fail('send_in_progress', 409, { message: 'This payment is still being sent. Check the payment history in a moment.' });
   }
   try {
-    const run = await runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl, clock });
+    const run = await runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl: postFetch, clock });
     return sendResult(run.legs, { duplicate: false, incomplete: run.incomplete });
   } finally {
     await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]).catch(() => {});
@@ -698,6 +706,9 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl, c
 }
 
 export async function handleProductionMoovSend(event, deps = {}) {
+  // The budget counts from the start of the request (database connect and secrets included).
+  const wall = deps.now || Date.now;
+  const startedAt = wall();
   const { withIdentityWrite } = await import('../../data.mjs');
   return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
     const ctx = await moovProductionReadContext({
@@ -713,8 +724,6 @@ export async function handleProductionMoovSend(event, deps = {}) {
       return { ...fail('Forbidden', 403, { error: 'cross_tenant_denied' }), ...meta };
     }
     const fetchImpl = deps.fetchImpl || fetch;
-    const wall = deps.now || Date.now;
-    const startedAt = wall();
     const clock = { wall, remaining: () => SEND_TIME_BUDGET_MS - (wall() - startedAt) };
     try {
       const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => sendProduction({

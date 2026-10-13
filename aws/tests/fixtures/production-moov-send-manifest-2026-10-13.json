@@ -7,7 +7,7 @@
   "members": {
     "providers/production/moov-send.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "4110ae816a903c6248a741be877a03e2a4ba48cae6af62e27121dc1c8d88ab58",
+      "accepted_sha256": "a07442c49f33d100fa214ff44a85c9c5b86f16eaacc5f3daa1178fa43daef4ab",
       "operation": "add",
       "required_imports": [
         "providers/production/moov-fund-authz.mjs",

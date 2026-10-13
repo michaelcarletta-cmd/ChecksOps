@@ -56,6 +56,18 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
+// Server answers that settle a payment for good, or refuse it before anything is
+// planned: only these let the next click start a new payment.
+const FINAL_SEND_CODES = new Set([
+  "send_failed",
+  "send_partial",
+  "provider_outcome_unknown",
+  "idempotency_key_reused",
+  "invalid_send_request",
+  "check_not_found",
+  "facilitator_changed",
+]);
+
 // Send transfers that never left (anything else counts against the check).
 const NOT_SENT = new Set(["failed", "canceled", "returned"]);
 
@@ -96,6 +108,8 @@ export function DisbursementConsole({
   // or still being sent). Pressing Send again for the same payment reuses it, so the
   // server finishes or reports that payment instead of paying it again.
   const pendingSend = useRef<{ signature: string; key: string } | null>(null);
+  // Mirrors pendingSend for rendering: the Send button stays usable to finish it.
+  const [sendOpen, setSendOpen] = useState(false);
 
 
 
@@ -325,7 +339,22 @@ export function DisbursementConsole({
         });
 
       if (splits.length === 0) throw new Error("No allocations entered");
-      if (isOverAllocated) {
+
+      const sendSpeed: "standard" | "same_day" = deliverySpeed === "same_day" ? "same_day" : "standard";
+      const recipients: SendRecipient[] = splits.map((split) => {
+        const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
+        const amount_cents = Math.round(split.amount * 100);
+        return acct?.partner_tenant_id
+          ? { kind: "partner", partner_tenant_id: acct.partner_tenant_id, amount_cents }
+          : { kind: "stakeholder", stakeholder_account_id: split.stakeholder_account_id, amount_cents };
+      });
+      const signature = JSON.stringify([checkIntakeItemId, sendSpeed, recipients]);
+      // Pressing Send again for a payment whose outcome is still open continues that
+      // payment (same key). Its own legs already count as sent, so the checks below
+      // would wrongly block it; the server settles it by its key and never pays twice.
+      const continuing = moovEnabled && deliverySpeed !== "external" && pendingSend.current?.signature === signature;
+
+      if (isOverAllocated && !continuing) {
         const over = Math.abs(remaining);
         throw new Error(
           `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. ` +
@@ -334,7 +363,7 @@ export function DisbursementConsole({
         );
       }
       // Race-condition guard: re-check server-side totals before insert
-      if (checkIntakeItemId) {
+      if (checkIntakeItemId && !continuing) {
         const { data: freshBatches } = await supabase
           .from("disbursement_batches")
           .select("status,disbursement_splits(amount,status)")
@@ -367,15 +396,7 @@ export function DisbursementConsole({
 
       if (moovEnabled && deliverySpeed !== "external") {
         if (!checkIntakeItemId) throw new Error("Payments can only be sent from a check.");
-        const recipients: SendRecipient[] = splits.map((split) => {
-          const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
-          const amount_cents = Math.round(split.amount * 100);
-          return acct?.partner_tenant_id
-            ? { kind: "partner", partner_tenant_id: acct.partner_tenant_id, amount_cents }
-            : { kind: "stakeholder", stakeholder_account_id: split.stakeholder_account_id, amount_cents };
-        });
-        const speed = deliverySpeed === "same_day" ? "same_day" : "standard";
-        const signature = JSON.stringify([checkIntakeItemId, speed, recipients]);
+        const speed = sendSpeed;
         // One key per payment: a retry of the same payment never sends twice.
         if (pendingSend.current?.signature !== signature) {
           pendingSend.current = { signature, key: crypto.randomUUID() };
@@ -401,6 +422,7 @@ export function DisbursementConsole({
             );
             if (!confirmed) {
               pendingSend.current = null;
+              setSendOpen(false);
               throw new Error("Payment was cancelled. Two-factor confirmation is required.");
             }
             return send();
@@ -418,6 +440,7 @@ export function DisbursementConsole({
           }
         }
         pendingSend.current = null;
+        setSendOpen(false);
         return { rail: "moov" as const, note: result.message ?? null };
       }
 
@@ -529,9 +552,11 @@ export function DisbursementConsole({
     },
     onError: (e: any) => {
       if (e instanceof SendPaymentError) {
-        // Keep the key only while the outcome is unknown to the server or the network.
-        const outcomeKnown = !!e.code && !["send_incomplete", "send_in_progress", "wallet_send_failed"].includes(e.code);
-        if (outcomeKnown) pendingSend.current = null;
+        // Forget the key only when the server's answer is final for this payment
+        // (finished, or refused before anything was planned). Otherwise pressing
+        // Send again continues the same payment instead of paying it again.
+        if (e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner)_/.test(e.code))) pendingSend.current = null;
+        setSendOpen(pendingSend.current !== null);
         if (e.send && e.code === "send_partial") {
           // Leave only what was not sent, so the next payment sends the rest and nothing twice.
           const next: Record<string, string> = {};
@@ -544,7 +569,11 @@ export function DisbursementConsole({
           setAllocations({});
         }
         toast({
-          title: e.code === "send_partial" ? "Partially sent" : e.code === "provider_outcome_unknown" ? "Check the payment history" : "Payment not sent",
+          title: e.code === "send_partial"
+            ? "Partially sent"
+            : e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner)_/.test(e.code)) && e.code !== "provider_outcome_unknown"
+              ? "Payment not sent"
+              : "Check the payment history",
           description: e.message,
           variant: "destructive",
         });
@@ -871,13 +900,18 @@ export function DisbursementConsole({
             </span>
           </div>
         )}
+        {sendOpen && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">
+            The last payment has not finished. Press Send with the same amounts to finish it; nothing is paid twice.
+          </p>
+        )}
         <Button
           variant="success"
           className="w-full h-auto min-h-10 py-2 whitespace-normal text-center text-xs sm:text-sm leading-snug"
           onClick={() => submitBatch.mutate()}
           disabled={
             submitBatch.isPending ||
-            isOverAllocated ||
+            (isOverAllocated && !sendOpen) ||
             totalAllocatedDollars === 0 ||
             accounts.length === 0 ||
             availableAmount <= 0 ||
