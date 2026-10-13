@@ -27,7 +27,9 @@ import { main as sql72Main } from '../../scripts/deployment-guard/sql72-producti
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const PIN = loadSql72ProductionPin(ROOT);
+const COMMITTED_PIN = loadSql72ProductionPin(ROOT);
+// The committed pin was flipped to execute:false after the 2026-10-13 apply; the apply tests exercise an execute-authorized copy.
+const PIN = { ...COMMITTED_PIN, execute: true };
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const SQL_TEXT = fs.readFileSync(path.join(ROOT, PIN.filename), 'utf8');
 
@@ -162,6 +164,36 @@ test('apply refuses before connecting without the phrase, a single-use id or exe
   assert.equal(noId.code, CODES.INVALID_MANIFEST);
   const notExecutable = await executeSql72ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, execute: false }, connect: neverConnect, consumedPath: consumedPath() });
   assert.equal(notExecutable.code, CODES.GUARD_APPLY_FORBIDDEN);
+});
+
+test('the committed pin no longer authorizes an apply', async () => {
+  assert.equal(COMMITTED_PIN.execute, false);
+  const refused = await executeSql72ProductionApply(manifest(), { root: ROOT, pin: COMMITTED_PIN, connect: neverConnect, consumedPath: consumedPath() });
+  assert.equal(refused.code, CODES.GUARD_APPLY_FORBIDDEN);
+
+  const input = path.join(os.tmpdir(), `sql72-prod-committed-${process.pid}.json`);
+  fs.writeFileSync(input, JSON.stringify(manifest()));
+  const writes = [];
+  let spent = 0;
+  const orig = { out: process.stdout.write, err: process.stderr.write };
+  process.stdout.write = (chunk) => { writes.push(String(chunk)); return true; };
+  process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  try {
+    await sql72Main(['--apply', '--input', input], { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, {
+      root: ROOT,
+      pin: COMMITTED_PIN,
+      enforceScriptGuard: () => ({ ok: true, details: { receipt: { owned_components: [COMMITTED_PIN.filename] } } }),
+      consumeReceiptOnce: () => { spent += 1; return { ok: true }; },
+      connect: neverConnect,
+      consumedPath: consumedPath(),
+    });
+  } finally {
+    process.stdout.write = orig.out;
+    process.stderr.write = orig.err;
+    fs.rmSync(input, { force: true });
+  }
+  assert.equal(spent, 0);
+  assert.match(writes.join(''), /GUARD_APPLY_FORBIDDEN/);
 });
 
 test('the CLI refuses arbitrary SQL and an apply without the guard flag', async () => {
