@@ -178,10 +178,17 @@ export function DisbursementConsole({
     },
   });
 
+  // Partners chosen in the picker for this payment (the server still requires the share).
+  const [chosenPartners, setChosenPartners] = useState<{ partner_tenant_id: string; partner_name: string }[]>([]);
+
   // Partners appear next to this check's stakeholders.
   const accounts = useMemo(() => {
     const merged = [...(ownAccounts as any[])];
-    for (const p of partnerStakeholders as any[]) {
+    const partners: { partner_tenant_id: string; partner_name: string }[] = [...partnerStakeholders];
+    for (const p of chosenPartners) {
+      if (!partners.some((x) => x.partner_tenant_id === p.partner_tenant_id)) partners.push(p);
+    }
+    for (const p of partners) {
       merged.push({
         id: `partner:${p.partner_tenant_id}`,
         partner_tenant_id: p.partner_tenant_id,
@@ -195,7 +202,7 @@ export function DisbursementConsole({
       });
     }
     return merged;
-  }, [ownAccounts, partnerStakeholders]);
+  }, [ownAccounts, partnerStakeholders, chosenPartners]);
 
   const partnersNeedingSetup: any[] = [];
 
@@ -670,7 +677,18 @@ export function DisbursementConsole({
         )}
 
         {/* Stakeholder manager (per-check) */}
-        {checkIntakeItemId && <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} />}
+        {checkIntakeItemId && (
+          <CheckStakeholdersManager
+            checkIntakeItemId={checkIntakeItemId}
+            chosenPartnerIds={[
+              ...partnerStakeholders.map((p) => p.partner_tenant_id),
+              ...chosenPartners.map((p) => p.partner_tenant_id),
+            ]}
+            onChoosePartner={(p) =>
+              setChosenPartners((prev) => (prev.some((x) => x.partner_tenant_id === p.partner_tenant_id) ? prev : [...prev, p]))
+            }
+          />
+        )}
 
         {partnersNeedingSetup.length > 0 && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
