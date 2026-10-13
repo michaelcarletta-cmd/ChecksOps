@@ -1,8 +1,9 @@
 /**
  * Display-only capitalization for names read off checks (payees, carriers, banks).
  * Checks print names in ALL CAPS; this shows them in normal capitalization without
- * changing stored values. Only all-caps words are rewritten, so text a person typed
- * in mixed case ("McDonald", "iRoofing") is left alone.
+ * changing stored values. Only all-caps words are recased, so text a person typed
+ * in mixed case ("McDonald", "iRoofing") is left alone; joining words such as
+ * "And"/"Of" after the first word are always shown in lowercase.
  */
 const KEEP_UPPER = new Set([
   "LLC", "LLP", "LP", "PC", "PA", "PLLC", "INC", "DBA", "FBO", "ISAOA", "ATIMA",
@@ -13,7 +14,7 @@ const KEEP_UPPER = new Set([
 const LOWER_CONNECTORS = new Set(["and", "of", "the", "for", "or", "in", "on", "at", "to", "by", "as"]);
 
 const isAllCaps = (word: string) => {
-  const letters = word.replace(/[^A-Za-z]/g, "");
+  const letters = word.replace(/[^\p{L}]/gu, "");
   return letters.length > 0 && letters === letters.toUpperCase();
 };
 
@@ -26,13 +27,18 @@ const capWord = (word: string) => {
 };
 
 const capPart = (part: string) => {
-  const match = part.match(/^([^A-Za-z]*)(.*?)([^A-Za-z]*)$/);
+  const match = part.match(/^([^\p{L}]*)(.*?)([^\p{L}]*)$/u);
   if (!match) return part;
   const [, lead, core, trail] = match;
   if (!core) return part;
   // Dotted initials ("J.R.") and single-letter initials stay as printed.
   if (/^([A-Za-z]\.)*[A-Za-z]$/.test(core)) return `${lead}${core.toUpperCase()}${trail}`;
-  const cased = core.split(/(['’])/).map((piece) => (/^['’]$/.test(piece) ? piece : capWord(piece))).join("");
+  const cased = core.split(/(['’])/).map((piece, index) => {
+    if (/^['’]$/.test(piece)) return piece;
+    // Possessive "'S" ("MCDONALD'S") stays lowercase.
+    if (index > 0 && /^s$/i.test(piece)) return piece.toLowerCase();
+    return capWord(piece);
+  }).join("");
   return `${lead}${cased}${trail}`;
 };
 

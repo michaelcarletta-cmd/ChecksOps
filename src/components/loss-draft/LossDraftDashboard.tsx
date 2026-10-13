@@ -218,7 +218,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                               </div>
                               {!d.claim_number && (
                                 <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
-                                  {d.insurance_company || displayCase(d.carrier_name)}
+                                  {displayCase(d.insurance_company) || displayCase(d.carrier_name)}
                                   {d.check_amount ? ` · $${Number(d.check_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}
                                 </div>
                               )}

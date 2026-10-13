@@ -13,6 +13,9 @@ test('all-caps check names render in normal capitalization', () => {
   assert.equal(displayCase('STATE FARM FIRE AND CASUALTY COMPANY'), 'State Farm Fire and Casualty Company');
   assert.equal(displayCase('THE HARTFORD'), 'The Hartford');
   assert.equal(displayCase('JOHN MCDONALD JR'), 'John McDonald Jr');
+  assert.equal(displayCase('JOSÉ GARCÍA PEÑA'), 'José García Peña');
+  assert.equal(displayCase('ÉLAN ROOFING'), 'Élan Roofing');
+  assert.equal(displayCase("MCDONALD'S ROOFING"), "McDonald's Roofing");
 });
 
 test('acronyms, initials, numbers and mixed-case text are preserved', () => {
