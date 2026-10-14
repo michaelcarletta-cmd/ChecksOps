@@ -58,7 +58,11 @@ BEGIN
     END IF;
   END IF;
 
-  IF _is_live AND NOT _was_live AND NOT _trusted THEN
+  -- Becoming live, or a live row getting a (new) invitee, needs that invitee's writer.
+  IF _is_live AND NOT _trusted AND (
+    NOT _was_live
+    OR (TG_OP = 'UPDATE' AND NEW.invitee_tenant_id IS DISTINCT FROM OLD.invitee_tenant_id)
+  ) THEN
     IF NEW.invitee_tenant_id IS NULL
        OR NOT (
          NEW.invitee_tenant_id IN (SELECT public.aws_user_tenant_ids())
