@@ -31,6 +31,8 @@ import {
   PARTNERSHIP_WRITER_SETTING,
   PARTNERSHIP_WRITER_VALUE,
   partnershipConsentStateText,
+  PARTNERSHIP_CONNECT_BODY_SHA256,
+  PARTNERSHIP_CONNECT_CONFIG,
   SQL_EXECUTOR_FUNCTION,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
@@ -2040,6 +2042,16 @@ function classifyPartnershipTrigger(row) {
     : 'different';
 }
 
+function classifyPartnershipConnect(row) {
+  if (!row) return 'missing_function';
+  const rest = (row.proconfig || []).filter((entry) => !String(entry).startsWith(`${PARTNERSHIP_WRITER_SETTING}=`));
+  return row.prosecdef === true
+    && sameConfig(rest, PARTNERSHIP_CONNECT_CONFIG)
+    && hashSqlDefinition(String(row.prosrc ?? '')) === PARTNERSHIP_CONNECT_BODY_SHA256
+    ? 'pinned'
+    : 'different';
+}
+
 function classifyPartnershipMarker(row) {
   if (!row) return 'missing_function';
   const entries = (row.proconfig || []).filter((entry) => String(entry).startsWith(`${PARTNERSHIP_WRITER_SETTING}=`));
@@ -2070,6 +2082,8 @@ export async function readPartnershipConsentState(client, expectedBody) {
     trigger: classifyPartnershipTrigger(guardTrigger),
     marker: classifyPartnershipMarker(connectRow),
     policies: PARTNERSHIP_RETIRED_POLICIES.map((name) => (policies.some((row) => row.policyname === name) ? 'present' : 'absent')),
+    connect: classifyPartnershipConnect(connectRow),
+    otherTriggers: otherTriggers.length === 0 ? 'none' : 'present',
   };
   // Everything SQL 76 must leave alone: the table's RLS flags, every other
   // policy and trigger on it, and aws_connect_partner_by_code apart from the marker.
@@ -2089,6 +2103,8 @@ export async function readPartnershipConsentState(client, expectedBody) {
       trigger: state.trigger,
       marker: state.marker,
       policies: Object.fromEntries(PARTNERSHIP_RETIRED_POLICIES.map((name, index) => [name, state.policies[index]])),
+      connect: state.connect,
+      other_triggers: state.otherTriggers,
     },
     other_policy_count: otherPolicies.length,
     other_trigger_count: otherTriggers.length,

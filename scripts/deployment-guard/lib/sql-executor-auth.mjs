@@ -161,15 +161,30 @@ export const PARTNERSHIP_CONSENT_REQUIRED_FUNCTIONS = Object.freeze([
  * `state.policies`: one state for all five retired policies, or one per
  * PARTNERSHIP_RETIRED_POLICIES row.
  */
+// sha256 of aws_connect_partner_by_code's body (prosrc) in aws/rls/sql/32_partner_share_lifecycle.sql.
+// SQL 76 makes that function the trusted writer, so its live body must be exactly
+// the reviewed one (a test re-derives this from the file).
+export const PARTNERSHIP_CONNECT_BODY_SHA256 = '1d8e36deefc46bf447b57f13d510a8a9184f61783c8e181fef4150384c327a08';
+export const PARTNERSHIP_CONNECT_CONFIG = Object.freeze(['search_path=public', 'row_security=off']);
+/**
+ * `connect`: aws_connect_partner_by_code itself (SECURITY DEFINER, the SQL 32 body
+ * and config apart from the marker): pinned | different | missing_function.
+ * `otherTriggers`: none | present (any other trigger on tenant_partnerships could
+ * run after the guard and change the row).
+ */
 export function partnershipConsentStateText({
   guard = 'absent',
   trigger = 'absent',
   marker = 'unset',
   policies = 'present',
+  connect = 'pinned',
+  otherTriggers = 'none',
 } = {}) {
   return [
     `${PARTNERSHIP_CONSENT_GUARD_FUNCTION} RETURNS trigger: ${guard}`,
     `public.tenant_partnerships trigger ${PARTNERSHIP_CONSENT_TRIGGER} BEFORE INSERT OR UPDATE FOR EACH ROW: ${trigger}`,
+    `public.tenant_partnerships other triggers: ${otherTriggers}`,
+    `${PARTNERSHIP_CONNECT_FUNCTION} body and config: ${connect}`,
     `${PARTNERSHIP_CONNECT_FUNCTION} SET ${PARTNERSHIP_WRITER_SETTING}: ${marker}`,
     ...PARTNERSHIP_RETIRED_POLICIES.map((name, index) => (
       `public.tenant_partnerships policy "${name}": ${Array.isArray(policies) ? policies[index] : policies}`
@@ -181,6 +196,8 @@ export const PARTNERSHIP_CONSENT_APPLIED_STATE = Object.freeze({
   trigger: 'pinned',
   marker: 'pinned',
   policies: 'absent',
+  connect: 'pinned',
+  otherTriggers: 'none',
 });
 // A later guarded production apply tool (SQL 72's used the phrase
 // CREATE_MEMBER_PAYMENT_WRITE_POLICIES) would use GUARD_PARTNERSHIP_ACTIVATION.
@@ -190,15 +207,15 @@ export const AUTHORIZED_SQL76_PARTNERSHIP_CONSENT = Object.freeze({
   migration_id: '76_tenant_partnership_invitee_consent',
   // The commit that authored the current file bytes. Re-pin if the branch is
   // rebased or squashed before it reaches main.
-  commit: '026ec703b8fd3322553f39a14ca6d1f6105a6153',
-  source_sha256: 'e169c293c87322f8b9671adb9b24741e21dbda2ac375fcaebb6432ee5dadec7b',
+  commit: 'a153cfc514668b94388b5d5e6e83d0763fb1ef32',
+  source_sha256: 'c319bcb016ee7bd1b6d67703f14727c82b42adbd15cd125087d18462e4d2ea4e',
   // PLACEHOLDER (not executable): the pre-apply state depends on which of the
   // five retired policies the target database actually carries. Set it, after
   // review, to the live_definition_sha256 a read-only staging executor inspect
   // reports. While it is null the executor and the guarded workflow refuse apply.
   expected_live_definition_sha256: null,
   // Code-derived: sha256(partnershipConsentStateText(PARTNERSHIP_CONSENT_APPLIED_STATE)).
-  intended_replacement_sha256: '99e8c016f631ca6ae9ce66ca422d54a8cd0f93cc6463b864450555c7dd84aaa8',
+  intended_replacement_sha256: 'a30db07d5da7c87ecc3e22a77df1ba819a2c3be51c4f074956e0f32ea5e58301',
   table: 'public.tenant_partnerships',
 });
 
