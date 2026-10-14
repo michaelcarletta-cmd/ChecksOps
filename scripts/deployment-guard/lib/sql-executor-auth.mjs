@@ -209,11 +209,12 @@ export const AUTHORIZED_SQL76_PARTNERSHIP_CONSENT = Object.freeze({
   // rebased or squashed before it reaches main.
   commit: 'a153cfc514668b94388b5d5e6e83d0763fb1ef32',
   source_sha256: 'c319bcb016ee7bd1b6d67703f14727c82b42adbd15cd125087d18462e4d2ea4e',
-  // PLACEHOLDER (not executable): the pre-apply state depends on which of the
-  // five retired policies the target database actually carries. Set it, after
-  // review, to the live_definition_sha256 a read-only staging executor inspect
-  // reports. While it is null the executor and the guarded workflow refuse apply.
-  expected_live_definition_sha256: null,
+  // Reviewed live value: guarded staging SQL executor read-live run 38541967571
+  // (2026-10-14) reported LIVE_DEFINITION_SHA256 7c5276d8…: guard and trigger
+  // absent, marker unset, connect function pinned, no other triggers, and the
+  // five retired policies already absent. Equals
+  // sha256(partnershipConsentStateText({ policies: 'absent' })).
+  expected_live_definition_sha256: '7c5276d8d04973c51f28238ec32091d77b01613c79dc8961d4dbc4bfd92d20d8',
   // Code-derived: sha256(partnershipConsentStateText(PARTNERSHIP_CONSENT_APPLIED_STATE)).
   intended_replacement_sha256: 'a30db07d5da7c87ecc3e22a77df1ba819a2c3be51c4f074956e0f32ea5e58301',
   table: 'public.tenant_partnerships',

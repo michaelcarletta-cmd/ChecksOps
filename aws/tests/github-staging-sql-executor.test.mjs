@@ -553,7 +553,11 @@ test('read-live report prints only non-sensitive fields and a LIVE_DEFINITION_SH
   ]);
   assert.equal(details.migration_id, SQL76_PIN.migration_id);
   assert.equal(details.intended_replacement_sha256, SQL76_PIN.intended_replacement_sha256);
-  assert.equal(details.pinned_expected_live_definition_sha256, null);
+  assert.equal(details.pinned_expected_live_definition_sha256, SQL76_PIN.expected_live_definition_sha256);
+  assert.equal(details.pinned_expected_live_definition_sha256, '7c5276d8d04973c51f28238ec32091d77b01613c79dc8961d4dbc4bfd92d20d8');
+  // The fixture's live hash ('1' x 64) is not the reviewed pin.
+  assert.equal(details.matches_pinned_expected, false);
+  assert.equal(details.live_definition_sha256, '1'.repeat(64));
   assert.equal(details.consent_state.policies['Inviter can create partnerships'], 'present');
   const text = writes.join('');
   assert.match(text, new RegExp(`^LIVE_DEFINITION_SHA256: ${'1'.repeat(64)}$`, 'm'));
@@ -570,6 +574,17 @@ test('read-live report prints only non-sensitive fields and a LIVE_DEFINITION_SH
     ...SQL76_INSPECT_RECEIPT, consent_state: { guard: 'CREATE POLICY x USING (true)' },
   } } } }, { migration: 'sql76-tenant-partnership-consent', pin: SQL76_PIN });
   assert.equal(odd.details.consent_state.guard, 'unrecognized');
+
+  // A live hash equal to the committed pin is reported as matching it.
+  const matching = readLiveSummary({ ok: true, details: { ok: true, details: { receipt: {
+    ...SQL76_INSPECT_RECEIPT,
+    before_hash: SQL76_PIN.expected_live_definition_sha256,
+    after_hash: SQL76_PIN.expected_live_definition_sha256,
+    live_definition_sha256: SQL76_PIN.expected_live_definition_sha256,
+  } } } }, { migration: 'sql76-tenant-partnership-consent', pin: SQL76_PIN });
+  assert.equal(matching.ok, true);
+  assert.equal(matching.details.matches_pinned_expected, true);
+  assert.equal(matching.details.pinned_expected_live_definition_sha256, SQL76_PIN.expected_live_definition_sha256);
 
   // Anything but an inspect result, or a failure, fails with only code and message.
   fs.writeFileSync(out, JSON.stringify({ ok: true, details: { ok: true, details: { receipt: { ...SQL76_INSPECT_RECEIPT, result: 'applied' } } } }));
