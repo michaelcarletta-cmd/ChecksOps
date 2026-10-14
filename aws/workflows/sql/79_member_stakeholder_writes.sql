@@ -9,6 +9,10 @@
 -- (aws_user_tenant_ids()). Partner tenants a check is shared with, and
 -- cross-tenant readers who are not members, gain nothing. There is no UPDATE
 -- grant on either table, so no UPDATE policy is added.
+-- A member's check_stakeholders insert must also be a manual link on a check
+-- the row's tenant owns (the EXISTS runs under check_intake_items RLS, which
+-- lets a member read its own tenant's checks). Removal rows are already bound
+-- to the owner's share of the check by their composite foreign key.
 -- Plain CREATE POLICY: re-applying fails instead of silently replacing a policy.
 --
 -- Writer: aws/functions/api/write-check-workflow.mjs (executeCheckStakeholders,
@@ -19,6 +23,11 @@ CREATE POLICY aws_member_insert_check_stakeholders ON public.check_stakeholders
   WITH CHECK (
     public.aws_is_authenticated()
     AND tenant_id IN (SELECT public.aws_user_tenant_ids())
+    AND EXISTS (
+      SELECT 1 FROM public.check_intake_items c
+      WHERE c.id = check_intake_item_id AND c.tenant_id = check_stakeholders.tenant_id
+    )
+    AND added_via = 'manual'
   );
 
 CREATE POLICY aws_member_delete_check_stakeholders ON public.check_stakeholders
