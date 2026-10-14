@@ -102,6 +102,10 @@ test('PostgreSQL 16: claim-files reads need an exact stored path; suffix rows no
       await client.query('INSERT INTO check_files (file_path) VALUES ($1)', [stored]);
       assert.equal(await authorized(VICTIM_KEY), true, stored);
     }
+    // A Supabase URL for another bucket does not authorize the same name in claim-files.
+    await reset();
+    await client.query('INSERT INTO check_files (file_path) VALUES ($1)', [`https://proj.supabase.co/storage/v1/object/public/tenant-logos/${VICTIM_KEY}`]);
+    assert.equal(await authorized(VICTIM_KEY), false);
     // A different file of the same check does not authorize the image.
     await reset();
     await client.query('INSERT INTO check_files (file_path) VALUES ($1)', [`checks/${VICTIM}/back.jpg`]);

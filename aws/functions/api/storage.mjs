@@ -43,16 +43,19 @@ export const clampExpires = (value, fallback = DEFAULT_EXPIRES, max = MAX_EXPIRE
 
 /**
  * A stored path, reduced the way normalizePath reduces a request: drop the
- * query string, a leading Supabase storage URL prefix (any bucket), and
- * leading slashes. Compared for equality only, never as a suffix: a suffix
+ * query string, a leading Supabase storage URL prefix for this same bucket,
+ * and leading slashes. A URL for another bucket is left whole, so it cannot
+ * authorize a same-named object here. Compared for equality only, never as a suffix: a suffix
  * match let a caller store `checks/<own>/x/checks/<other>/front.jpg` on a
  * visible row and then read `checks/<other>/front.jpg`.
  */
-export const storedPathSql = (col) =>
-  `regexp_replace(split_part(COALESCE(${col}, ''), '?', 1), '^(https?://[^/]+/storage/v1/object/(sign|public|authenticated)/[^/]+/|/+)', '')`;
+export const storedPathSql = (col, bucket) => {
+  if (!/^[a-z0-9-]+$/.test(String(bucket || ''))) throw new Error(`invalid bucket for storedPathSql: ${bucket}`);
+  return `regexp_replace(split_part(COALESCE(${col}, ''), '?', 1), '^(https?://[^/]+/storage/v1/object/(sign|public|authenticated)/${bucket}/|/+)', '')`;
+};
 
-const columnMatchSql = (table, columns) => {
-  const tests = columns.map((col) => `(${col} = ANY($1::text[]) OR ${storedPathSql(col)} = $2)`);
+const columnMatchSql = (table, columns, bucket) => {
+  const tests = columns.map((col) => `(${col} = ANY($1::text[]) OR ${storedPathSql(col, bucket)} = $2)`);
   return `SELECT 1 FROM ${table} WHERE ${tests.join(' OR ')} LIMIT 1`;
 };
 
@@ -62,47 +65,47 @@ const depositSibling = (column, suffix) =>
 /** Read auth for check images, endorsed deposit JPEGs, `.deposit2.jpg`, and `.checkalt.jpg` siblings. */
 export const CHECK_INTAKE_CLAIM_FILES_AUTH_SQL = `SELECT 1 FROM check_intake_items WHERE ${[
   ...['front_image_path', 'back_image_path', 'back_image_original_path', 'back_image_deposit_path']
-    .map((col) => `(${col} = ANY($1::text[]) OR ${storedPathSql(col)} = $2)`),
+    .map((col) => `(${col} = ANY($1::text[]) OR ${storedPathSql(col, 'claim-files')} = $2)`),
   `(${depositSibling('front_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_original_path', '.deposit2.jpg')} OR ${depositSibling('back_image_deposit_path', '.deposit2.jpg')})`,
   `(${depositSibling('front_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_original_path', '.checkalt.jpg')} OR ${depositSibling('back_image_deposit_path', '.checkalt.jpg')})`,
 ].join(' OR ')} LIMIT 1`;
 
 export const BUCKET_AUTH_SQL = {
   'claim-files': [
-    columnMatchSql('check_files', ['file_path']),
-    columnMatchSql('claim_files', ['file_path']),
+    columnMatchSql('check_files', ['file_path'], 'claim-files'),
+    columnMatchSql('claim_files', ['file_path'], 'claim-files'),
     CHECK_INTAKE_CLAIM_FILES_AUTH_SQL,
-    columnMatchSql('homeowner_check_uploads', ['file_path']),
-    columnMatchSql('signature_requests', ['document_path', 'final_pdf_path']),
-    columnMatchSql('cash_job_attachments', ['file_path']),
+    columnMatchSql('homeowner_check_uploads', ['file_path'], 'claim-files'),
+    columnMatchSql('signature_requests', ['document_path', 'final_pdf_path'], 'claim-files'),
+    columnMatchSql('cash_job_attachments', ['file_path'], 'claim-files'),
   ],
   'endorsement-packets': [
-    columnMatchSql('check_intake_items', ['endorsement_packet_path']),
+    columnMatchSql('check_intake_items', ['endorsement_packet_path'], 'endorsement-packets'),
   ],
   'deposit-attachments': [
-    columnMatchSql('deposit_attachments', ['file_path']),
+    columnMatchSql('deposit_attachments', ['file_path'], 'deposit-attachments'),
   ],
   'loss-draft-documents': [
-    columnMatchSql('loss_draft_documents', ['file_path']),
+    columnMatchSql('loss_draft_documents', ['file_path'], 'loss-draft-documents'),
   ],
   'tenant-documents': [
-    columnMatchSql('tenant_documents', ['file_path']),
+    columnMatchSql('tenant_documents', ['file_path'], 'tenant-documents'),
   ],
   'homeowner-uploads': [
-    columnMatchSql('homeowner_ledger_check_uploads', ['front_path', 'back_path']),
+    columnMatchSql('homeowner_ledger_check_uploads', ['front_path', 'back_path'], 'homeowner-uploads'),
   ],
   'tenant-logos': [
-    columnMatchSql('tenants', ['logo_url']),
+    columnMatchSql('tenants', ['logo_url'], 'tenant-logos'),
   ],
   'company-branding': [
-    columnMatchSql('company_branding', ['letterhead_url']),
+    columnMatchSql('company_branding', ['letterhead_url'], 'company-branding'),
   ],
   'contractor-documents': [],
   'document-templates': [
-    columnMatchSql('tenant_documents', ['file_path']),
+    columnMatchSql('tenant_documents', ['file_path'], 'document-templates'),
   ],
   'email-assets': [
-    columnMatchSql('tenants', ['logo_url']),
+    columnMatchSql('tenants', ['logo_url'], 'email-assets'),
   ],
   'claim-files-backup': [],
 };
@@ -497,15 +500,15 @@ export const isPublicBrandingPath = async (client, bucket, rel) => {
   if (bucket === 'company-branding') {
     const branding = await client.query(
       `SELECT 1 FROM public.company_branding
-       WHERE ${storedPathSql('letterhead_url')} = $1
+       WHERE ${storedPathSql('letterhead_url', 'company-branding')} = $1
        LIMIT 1`,
       [rel],
     );
     if (branding.rows.length) return true;
     const tenants = await client.query(
       `SELECT 1 FROM public.tenants
-       WHERE ${storedPathSql('invoice_letterhead_url')} = $1
-          OR ${storedPathSql('logo_url')} = $1
+       WHERE ${storedPathSql('invoice_letterhead_url', 'company-branding')} = $1
+          OR ${storedPathSql('logo_url', 'company-branding')} = $1
        LIMIT 1`,
       [rel],
     );
