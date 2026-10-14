@@ -158,14 +158,12 @@ const fakeDb = ({
         const pair = (p) => (p.inviter_tenant_id === me && p.invitee_tenant_id === them)
           || (p.inviter_tenant_id === them && p.invitee_tenant_id === me);
         const time = (v) => (v ? Date.parse(v) : -Infinity);
-        const partnered = partnerships.some((p, i) => {
-          if (p.status !== 'active' || p.revoked_at || !pair(p)) return false;
-          const since = time(p.accepted_at ?? p.created_at);
-          const endedSince = partnerships.some((q, k) => k !== i && q.revoked_at && pair(q) && time(q.revoked_at) >= since);
-          const unsharedSince = shares.some((x) => x.check_id === check && x.revoked_at
+        const live = partnerships.filter((p) => p.status === 'active' && !p.revoked_at && pair(p));
+        const since = live.length ? Math.min(...live.map((p) => Math.min(time(p.accepted_at ?? p.created_at), Date.now()))) : null;
+        const partnered = since !== null
+          && !partnerships.some((q) => q.revoked_at && pair(q) && time(q.revoked_at) >= since)
+          && !shares.some((x) => x.check_id === check && x.revoked_at
             && x.source_tenant_id === me && x.target_tenant_id === them && time(x.revoked_at) >= since);
-          return !endedSince && !unsharedSince;
-        });
         return { rows: shared || partnered ? [{ ok: 1 }] : [] };
       }
       if (sql.includes('COALESCE(sum(amount_cents)')) return { rows: [{ cents: reservedCents }] };
@@ -414,7 +412,8 @@ test('the partner rule no longer reads check_stakeholders', () => {
   assert.doesNotMatch(rule, /check_stakeholders/);
   assert.match(rule, /p\.status = 'active' AND p\.revoked_at IS NULL/);
   // Ended rows and un-shares count only since the partnership was last accepted.
-  assert.equal((rule.match(/revoked_at >= COALESCE\(p\.accepted_at, p\.created_at, '-infinity'::timestamptz\)/g) || []).length, 2);
+  assert.match(rule, /min\(LEAST\(COALESCE\(p\.accepted_at, p\.created_at, '-infinity'::timestamptz\), now\(\)\)\) AS since/);
+  assert.equal((rule.match(/revoked_at >= live\.since/g) || []).length, 2);
 });
 
 test('partners must share this check and have exactly one production account', async () => {

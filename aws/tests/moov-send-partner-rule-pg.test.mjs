@@ -62,6 +62,11 @@ const CASES = [
   ['other-direction row ended after acceptance', [partnership(THEM, ME), partnership(ME, THEM, { status: 'revoked', revoked_at: '2026-10-05' })], [], false],
   ['other-direction row ended before acceptance', [partnership(THEM, ME, { accepted_at: '2026-10-07' }), partnership(ME, THEM, { status: 'revoked', revoked_at: '2026-10-05' })], [], true],
   ['no accepted_at falls back to created_at', [partnership(ME, THEM, { accepted_at: null, created_at: '2026-10-06' })], [share({ revoked_at: '2026-10-05' })], true],
+  // Two active rows (legacy, one per direction): the earliest acceptance counts.
+  ['two active rows, un-share between their acceptances', [partnership(ME, THEM, { accepted_at: '2026-10-01' }), partnership(THEM, ME, { accepted_at: '2026-10-05' })], [share({ revoked_at: '2026-10-03' })], false],
+  // A future accepted_at is capped at now, so it cannot excuse an un-share made after now.
+  ['future accepted_at', [partnership(ME, THEM, { accepted_at: '2999-01-01' })], [share({ revoked_at: '2998-01-01' })], false],
+  ['un-share at the acceptance instant', [partnership(ME, THEM, { accepted_at: '2026-10-05' })], [share({ revoked_at: '2026-10-05' })], false],
   ['no timestamps: any un-share blocks', [partnership(ME, THEM, { accepted_at: null, created_at: null })], [share({ revoked_at: '2026-10-05' })], false],
 ];
 
