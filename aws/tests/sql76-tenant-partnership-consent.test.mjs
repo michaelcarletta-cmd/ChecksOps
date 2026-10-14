@@ -23,7 +23,16 @@ const statementsOf = (sql) => sql
   .replace(/\$\$[\s\S]*?\$\$/g, () => '$$BODY$$')
   .split(';').map((s) => s.trim()).filter(Boolean);
 
-test('SQL 76 only adds the consent trigger and the connect marker', () => {
+// Supabase-era write and cross-tenant admin policies SQL 76 retires.
+const RETIRED_POLICIES = [
+  'Inviter can create partnerships',
+  'Partners can update partnerships',
+  'Admins can create any partnership',
+  'Admins can view any partnership',
+  'Admins can update any partnership',
+];
+
+test('SQL 76 only adds the consent trigger and the connect marker, and retires the old policies', () => {
   const statements = statementsOf(read(SQL76));
   const allowed = [
     /^CREATE OR REPLACE FUNCTION public\.aws_tenant_partnership_consent_guard\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SET search_path = public\s+AS \$\$BODY\$\$$/,
@@ -32,6 +41,7 @@ test('SQL 76 only adds the consent trigger and the connect marker', () => {
     /^DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public\.tenant_partnerships$/,
     /^CREATE TRIGGER aws_tenant_partnership_consent_guard\s+BEFORE INSERT OR UPDATE ON public\.tenant_partnerships\s+FOR EACH ROW\s+EXECUTE FUNCTION public\.aws_tenant_partnership_consent_guard\(\)$/,
     /^ALTER FUNCTION public\.aws_connect_partner_by_code\(text, uuid\)\s+SET checksops\.partnership_writer = 'aws_connect_partner_by_code'$/,
+    ...RETIRED_POLICIES.map((name) => new RegExp(`^DROP POLICY IF EXISTS "${name}" ON public\\.tenant_partnerships$`)),
   ];
   assert.equal(statements.length, allowed.length, JSON.stringify(statements));
   statements.forEach((statement, index) => assert.match(statement, allowed[index], statement));
@@ -50,11 +60,19 @@ test('SQL 76 only adds the consent trigger and the connect marker', () => {
 
 test('SQL 76 rollback and review files are scoped and the review is read-only', () => {
   const rollback = statementsOf(read(SQL76_ROLLBACK));
-  assert.deepEqual(rollback.map((s) => s.replace(/\s+/g, ' ')), [
+  const flat = rollback.map((s) => s.replace(/\s+/g, ' '));
+  assert.deepEqual(flat.slice(0, 3), [
     'DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public.tenant_partnerships',
     'DROP FUNCTION IF EXISTS public.aws_tenant_partnership_consent_guard()',
     'ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid) RESET checksops.partnership_writer',
   ]);
+  // The rest only restores the retired policies, each dropped then re-created.
+  const rest = flat.slice(3);
+  assert.equal(rest.length, RETIRED_POLICIES.length * 2);
+  RETIRED_POLICIES.forEach((name, i) => {
+    assert.equal(rest[2 * i], `DROP POLICY IF EXISTS "${name}" ON public.tenant_partnerships`);
+    assert.match(rest[2 * i + 1], new RegExp(`^CREATE POLICY "${name}" ON public\\.tenant_partnerships FOR (INSERT|UPDATE|SELECT) TO authenticated `));
+  });
   const review = statementsOf(read(SQL76_REVIEW));
   assert.equal(review.length, 1);
   assert.match(review[0], /^WITH live AS/);
@@ -326,11 +344,11 @@ BEGIN
   r := public._exec('${OTHER_USER}', format($q$UPDATE public.tenant_partnerships SET inviter_tenant_id = '${UNRELATED}' WHERE id = %L$q$, pid));
   PERFORM public._ok('05b_retarget_inviter_denied', (r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE '%partnership_tenants_immutable%', r::text);
 
-  -- Unrelated tenant admin: the copied Supabase policy "Admins can update any
-  -- partnership" (has_role admin, no tenant check) lets the UPDATE through RLS;
-  -- the guard still refuses to make the row live.
+  -- Unrelated tenant admin: SQL 76 retires "Admins can update any partnership",
+  -- so RLS no longer lets the UPDATE reach the row (and the guard would refuse it).
   r := public._exec('${UNRELATED_USER}', format($q$UPDATE public.tenant_partnerships SET status = 'active' WHERE id = %L$q$, pid));
-  PERFORM public._ok('06_unrelated_admin_accept_denied', (r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE denied_consent, r::text);
+  PERFORM public._ok('06_unrelated_admin_accept_denied',
+    ((r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE denied_consent) OR ((r->>'ok')::boolean AND (r->>'rows')::int = 0), r::text);
 
   -- Invitee accepts.
   r := public._exec('${OTHER_USER}', format($q$UPDATE public.tenant_partnerships SET status = 'active', accepted_at = now() WHERE id = %L$q$, pid));
@@ -394,6 +412,8 @@ BEGIN
   PERFORM public._ok('25b_revoked', st = 'revoked', st);
 END $$;
 `);
+  const policyCount = () => scalar(`SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'tenant_partnerships' AND policyname IN (${RETIRED_POLICIES.map((n) => `'${n}'`).join(', ')})`);
+  assert.equal(policyCount(), '0', 'SQL 76 retires the Supabase-era write and admin policies');
   const results = JSON.parse(scalar(`SELECT coalesce(json_object_agg(test, json_build_object('ok', ok, 'detail', detail) ORDER BY test), '{}'::json) FROM public._results`));
   const failed = Object.entries(results).filter(([, row]) => row.ok !== true);
   assert.equal(failed.length, 0, `failed cases: ${JSON.stringify(failed, null, 2)}`);
@@ -436,4 +456,5 @@ SELECT (public.aws_connect_partner_by_code('${OTHER_CODE}', '${SOURCE}'::uuid))-
   assert.equal(scalar(`SELECT count(*) FROM pg_trigger WHERE tgname = 'aws_tenant_partnership_consent_guard'`), '0');
   assert.equal(scalar(`SELECT count(*) FROM pg_proc WHERE proname = 'aws_tenant_partnership_consent_guard'`), '0');
   assert.equal(scalar(`SELECT coalesce(array_to_string(proconfig, ','), '') FROM pg_proc WHERE proname = 'aws_connect_partner_by_code'`), 'search_path=public,row_security=off');
+  assert.equal(policyCount(), String(RETIRED_POLICIES.length), 'rollback restores the retired policies');
 });

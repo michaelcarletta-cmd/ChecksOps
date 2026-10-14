@@ -86,3 +86,14 @@ CREATE TRIGGER aws_tenant_partnership_consent_guard
 
 ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid)
   SET checksops.partnership_writer = 'aws_connect_partner_by_code';
+
+-- Retire the Supabase-era write and admin policies copied to AWS. Writes go
+-- through the definer-rights lifecycle functions in 32_partner_share_lifecycle.sql;
+-- aws_write_tenant_partnerships and aws_select_tenant_partnerships stay. The admin
+-- policies let any user_roles admin read or write every tenant's partnerships;
+-- ChecksOps has no cross-tenant admin role.
+DROP POLICY IF EXISTS "Inviter can create partnerships" ON public.tenant_partnerships;
+DROP POLICY IF EXISTS "Partners can update partnerships" ON public.tenant_partnerships;
+DROP POLICY IF EXISTS "Admins can create any partnership" ON public.tenant_partnerships;
+DROP POLICY IF EXISTS "Admins can view any partnership" ON public.tenant_partnerships;
+DROP POLICY IF EXISTS "Admins can update any partnership" ON public.tenant_partnerships;
