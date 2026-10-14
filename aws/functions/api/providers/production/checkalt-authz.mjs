@@ -5,6 +5,12 @@ import { formatCheckAltUserAmount } from '../amounts.mjs';
 import { productionCheckAltExecutionAllowed } from './checkalt-holds.mjs';
 
 export const CHECKALT_TOTP_ACTION = 'deposit.submit';
+export const CHECKALT_APPROVE_ACTION = 'deposit.approve';
+/** Check-bound financial TOTP actions: tenant, check and amount are server-derived. */
+export const FINANCIAL_CHECKALT_STEPUP_ACTIONS = Object.freeze([
+  CHECKALT_TOTP_ACTION,
+  CHECKALT_APPROVE_ACTION,
+]);
 export const CHECKALT_DUAL_CONTROL_ACTION = 'checkalt.dual_control';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
 export const DUAL_CONTROL_TTL_MS = 24 * 60 * 60 * 1000;
@@ -181,6 +187,8 @@ export async function authorizeCheckAltProduction({
   memberships,
   check,
   requireStepUp = true,
+  actionKey = CHECKALT_TOTP_ACTION,
+  allowDualControl = true,
 } = {}) {
   const userId = mapping?.application_user_id;
   if (!userId) return denyCheckAltAuthz('identity_required', { statusCode: 401 });
@@ -206,20 +214,22 @@ export async function authorizeCheckAltProduction({
     const totpRows = await loadRecentStepUp(client, {
       userId,
       tenantId: check.tenant_id,
-      actionKey: CHECKALT_TOTP_ACTION,
+      actionKey,
       checkId: check.id,
       amountCents,
       sinceMs: TOTP_STEPUP_TTL_MS,
     });
     totpRow = totpRows[0] || null;
     totpOk = Boolean(totpRow);
-    dualRow = await loadDualControlApproval(client, {
-      tenantId: check.tenant_id,
-      checkId: check.id,
-      amountCents,
-      excludeUserId: userId,
-    });
-    dualControlOk = Boolean(dualRow);
+    if (allowDualControl) {
+      dualRow = await loadDualControlApproval(client, {
+        tenantId: check.tenant_id,
+        checkId: check.id,
+        amountCents,
+        excludeUserId: userId,
+      });
+      dualControlOk = Boolean(dualRow);
+    }
   }
   const evaluation = evaluateCheckAltProductionAuthorization({
     identityOk: true,
