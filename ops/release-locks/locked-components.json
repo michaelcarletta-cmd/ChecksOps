@@ -864,7 +864,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b03e47eec7d598ccd6f09b1a07a0b7dfc91bf8bb",
-        "tree_hash": "92f5faa5e52b6ccfa11b995922b38bb5a30753e86acb01ff841e5e4a9247bd31",
+        "tree_hash": "e619f9024e8ae7e2b9c950aa87ecc180ba01b9721568a4182039c4eb4b6022af",
         "merged": false,
         "merged_pr": null
       },
@@ -897,7 +897,7 @@
         "production overlay receipts"
       ],
       "open_pr_overlap": [],
-      "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72)."
+      "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72). PR #923 (owner-approved hash update 2026-10-14): partners added to the check stakeholders can be paid while the partnership is active and the share was not revoked."
     },
     "moov-production-fund": {
       "id": "moov-production-fund",

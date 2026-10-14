@@ -356,10 +356,11 @@ test('read-only Moov wallet sync members refuse to apply out of order', async ()
   );
 });
 
-test('Moov send members apply in order: the added send module, then providers.mjs last', async () => {
+test('Moov send members apply in order: the send module, then providers.mjs last', async () => {
   const SEND = ['providers/production/moov-send.mjs', 'providers.mjs'];
   assert.deepEqual(PLAN.order.slice(-2), SEND);
-  assert.equal(PLAN.members['providers/production/moov-send.mjs'].operation, 'add');
+  // Live since overlay run 31; later send fixes replace it.
+  assert.equal(PLAN.members['providers/production/moov-send.mjs'].operation, 'replace');
   for (const member of SEND) {
     const { deps, calls } = applyDeps(member);
     const result = await run(applyEnv(member), deps);

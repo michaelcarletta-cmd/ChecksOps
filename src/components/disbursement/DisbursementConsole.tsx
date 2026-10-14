@@ -163,16 +163,43 @@ export function DisbursementConsole({
       const { data, error } = await supabase
         .from("check_stakeholders")
         .select(`
-          added_via,
+          added_via, partner_tenant_id, stakeholder_account_id,
           stakeholder_accounts:stakeholder_account_id (
             id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status,
             provider, provider_bank_name, provider_last_four, provider_account_id, provider_bank_account_id
           )
         `)
-        .eq("check_intake_item_id", checkIntakeItemId!);
+        .eq("check_intake_item_id", checkIntakeItemId!)
+        .eq("tenant_id", tenant!.id);
       if (error) throw error;
+      const partnerIds = [...new Set((data ?? []).map((row: any) => row.partner_tenant_id).filter(Boolean))] as string[];
+      const partnerNames = new Map<string, string>();
+      if (partnerIds.length > 0) {
+        const { data: names } = await supabase.from("tenants_public").select("id, name").in("id", partnerIds);
+        for (const t of (names ?? []) as any[]) if (t.name) partnerNames.set(t.id, t.name);
+      }
       return (data ?? [])
-        .map((row: any) => row.stakeholder_accounts ? { ...row.stakeholder_accounts, added_via: row.added_via } : null)
+        .map((row: any) => {
+          // A partner organization added to this check is paid as a partner (to their
+          // balance or bank), not through the stakeholder account their row points at.
+          if (row.partner_tenant_id) {
+            return {
+              id: `partner:${row.partner_tenant_id}`,
+              partner_tenant_id: row.partner_tenant_id,
+              nickname: partnerNames.get(row.partner_tenant_id) || "Partner organization",
+              // The partner's payout account, used only to record an external payment.
+              // Read from this check's row: the account itself belongs to the partner.
+              external_stakeholder_account_id: row.stakeholder_account_id ?? null,
+              account_type: "partner",
+              verification_status: "verified",
+              is_active: true,
+              provider: "moov",
+              provider_account_id: "partner",
+              added_via: row.added_via,
+            };
+          }
+          return row.stakeholder_accounts ? { ...row.stakeholder_accounts, added_via: row.added_via } : null;
+        })
         .filter((a: any) => a && a.is_active)
         .sort((a: any, b: any) => Number(b.is_primary) - Number(a.is_primary));
     },
@@ -182,6 +209,8 @@ export function DisbursementConsole({
   const accounts = useMemo(() => {
     const merged = [...(ownAccounts as any[])];
     for (const p of partnerStakeholders as any[]) {
+      // A partner added to this check's stakeholders is already listed.
+      if (merged.some((a: any) => a.partner_tenant_id === p.partner_tenant_id)) continue;
       merged.push({
         id: `partner:${p.partner_tenant_id}`,
         partner_tenant_id: p.partner_tenant_id,
@@ -444,9 +473,16 @@ export function DisbursementConsole({
         return { rail: "moov" as const, note: result.message ?? null };
       }
 
-      if (splits.some((split) => (accounts as any[]).find((a) => a.id === split.stakeholder_account_id)?.partner_tenant_id)) {
-        throw new Error("External payments can be recorded for stakeholders only.");
-      }
+      // External payments to a partner are recorded against the partner's payout account
+      // on this check; a partner that is only shared with has none.
+      const externalSplits = splits.map((split) => {
+        const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
+        if (!acct?.partner_tenant_id) return split;
+        if (!acct.external_stakeholder_account_id) {
+          throw new Error(`Add ${acct.nickname} to this check's stakeholders to record an external payment to them.`);
+        }
+        return { ...split, stakeholder_account_id: acct.external_stakeholder_account_id };
+      });
       await guardFinancial("disbursement.send");
 
       // Create the batch
@@ -471,7 +507,7 @@ export function DisbursementConsole({
       // Insert splits
       const { error: splitsErr } = await supabase
         .from("disbursement_splits")
-        .insert(splits.map((s) => ({ ...s, batch_id: batch.id })));
+        .insert(externalSplits.map((s) => ({ ...s, batch_id: batch.id })));
 
       if (splitsErr) throw splitsErr;
 

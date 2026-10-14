@@ -6,9 +6,9 @@
   "notes": "providers.mjs live_sha256 is the #915 funding bytes applied 2026-10-13 (production overlay run 29). providers/production/moov-send.mjs is new and imports only members already live (moov-wallet-fund.mjs, moov-fund-authz.mjs and the parity helpers). Apply moov-send.mjs first, providers.mjs last. Sends stay off until AWS_MOOV_SEND_POST_ENABLED is set.",
   "members": {
     "providers/production/moov-send.mjs": {
-      "live_sha256": null,
-      "accepted_sha256": "a07442c49f33d100fa214ff44a85c9c5b86f16eaacc5f3daa1178fa43daef4ab",
-      "operation": "add",
+      "live_sha256": "a07442c49f33d100fa214ff44a85c9c5b86f16eaacc5f3daa1178fa43daef4ab",
+      "accepted_sha256": "11b5ae269abcf1f28f8b17a360894ab8719ad7139b67a62af0ebb812537ef056",
+      "operation": "replace",
       "required_imports": [
         "providers/production/moov-fund-authz.mjs",
         "providers/production/moov-wallet-fund.mjs",
