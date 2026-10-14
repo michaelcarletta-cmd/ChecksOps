@@ -82,6 +82,8 @@ const fakeDb = ({
   stakeholders = STAKEHOLDERS,
   shares = [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: PARTNER }],
   partnerships = [],
+  // check_partner_stakeholder_removals rows; null = SQL 78 not applied (no table).
+  removals = null,
   checkTenant = TENANT,
   transfers = [],
   reservedCents = 0,
@@ -150,6 +152,14 @@ const fakeDb = ({
       }
       if (sql.includes('FROM public.stakeholder_accounts')) {
         return { rows: stakeholders.filter((s) => s.id === params[0] && s.tenant_id === params[1]) };
+      }
+      if (sql.includes("to_regclass('public.check_partner_stakeholder_removals')")) {
+        return { rows: [{ present: removals !== null }] };
+      }
+      if (sql.includes('FROM public.check_partner_stakeholder_removals')) {
+        if (removals === null) { const error = new Error('relation does not exist'); error.code = '42P01'; throw error; }
+        const [check, owner, them] = params;
+        return { rows: removals.some((r) => r.check_intake_item_id === check && r.tenant_id === owner && r.partner_tenant_id === them) ? [{ removed: 1 }] : [] };
       }
       if (sql.includes('FROM public.shared_checks')) {
         const [check, me, them] = params;
@@ -452,6 +462,42 @@ test('partners must share this check and have exactly one production account', a
     }
     const self = await run(fakeDb(), moovStub(), { recipients: [partner(700, TENANT)] });
     assert.equal(self.error, 'recipient_is_sender');
+  });
+});
+
+test('a partner the owner removed from this check\'s stakeholders is not paid on it', async () => {
+  await withEnv(FLAGS, async () => {
+    const removed = { check_intake_item_id: CHECK, tenant_id: TENANT, partner_tenant_id: PARTNER };
+    for (const options of [
+      { removals: [removed] },
+      // Removal applies on the partnership path too (no live share needed to pay).
+      { removals: [removed], shares: [], partnerships: [PARTNERSHIP] },
+    ]) {
+      const client = fakeDb(options);
+      const moov = moovStub();
+      const result = await run(client, moov, { recipients: [partner(700)] });
+      assert.equal(result.statusCode, 409, JSON.stringify(result));
+      assert.equal(result.error, 'partner_removed_from_check');
+      assert.match(result.message, /removed from this check's stakeholders/);
+      assert.equal(moov.posts().length, 0);
+      assert.equal(moov.calls.some((c) => c.path === '/accounts'), false);
+      assert.equal(client.committed.transfers.length, 0);
+    }
+    // Removals on another check, by another owner or of another partner do not apply.
+    for (const removals of [
+      [],
+      [{ ...removed, check_intake_item_id: '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f' }],
+      [{ ...removed, tenant_id: OTHER_TENANT }],
+      [{ ...removed, partner_tenant_id: OTHER_TENANT }],
+    ]) {
+      const result = await run(fakeDb({ removals }), moovStub(), { recipients: [partner(700)] });
+      assert.equal(result.ok, true, JSON.stringify(result));
+    }
+    // Without SQL 78 (no table) nobody is removed and the removal table is never queried.
+    const client = fakeDb({ removals: null });
+    const result = await run(client, moovStub(), { recipients: [partner(700)] });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(client.log.some((q) => q.sql.includes('FROM public.check_partner_stakeholder_removals')), false);
   });
 });
 

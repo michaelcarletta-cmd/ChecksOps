@@ -322,6 +322,24 @@ function sendResult(legs, { duplicate, incomplete = false }) {
   return jsonResult({ success: true, ...extra, message: 'Payment sent. Bank transfers usually arrive in 1–3 business days.' });
 }
 
+/**
+ * The check owner removed this partner from the check's stakeholders (SQL 78).
+ * Re-sharing the check with the partner, or deleting the removal, undoes it.
+ * Where SQL 78 is not applied the table is absent: nobody has been removed.
+ */
+export async function partnerRemovedFromCheck(client, { checkId, tenantId, partnerTenantId }) {
+  const present = (await client.query(
+    "SELECT to_regclass('public.check_partner_stakeholder_removals') IS NOT NULL AS present",
+  )).rows[0]?.present === true;
+  if (!present) return false;
+  const removed = (await client.query(
+    `SELECT 1 AS removed FROM public.check_partner_stakeholder_removals
+     WHERE check_intake_item_id = $1::uuid AND tenant_id = $2::uuid AND partner_tenant_id = $3::uuid`,
+    [checkId, tenantId, partnerTenantId],
+  )).rows[0];
+  return Boolean(removed);
+}
+
 /** Resolve where each recipient is paid. Reads only; nothing is created. */
 async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
   const resolved = [];
@@ -399,6 +417,9 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
       [request.checkId, tenantId, r.id],
     )).rows[0];
     if (!share) return { error: 'partner_not_shared', recipient: r };
+    if (await partnerRemovedFromCheck(client, { checkId: request.checkId, tenantId, partnerTenantId: r.id })) {
+      return { error: 'partner_removed_from_check', recipient: r };
+    }
     // Tenant accounts are created with foreignID = tenant id.
     let accounts;
     try {
@@ -443,6 +464,7 @@ const DESTINATION_MESSAGES = {
   recipient_bank_choice_required: "A recipient's bank could not be determined.",
   recipient_is_sender: 'You cannot send to your own organization.',
   partner_not_shared: 'You are not partners with that organization, or this check was un-shared with them.',
+  partner_removed_from_check: "That partner was removed from this check's stakeholders. Add them back to the check before paying them.",
   partner_setup_required: "This partner hasn't finished payment setup.",
   partner_account_ambiguous: "This partner's payment account could not be determined.",
   partner_wallet_choice_required: "This partner's balance account could not be determined.",

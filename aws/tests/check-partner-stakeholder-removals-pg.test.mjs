@@ -1,8 +1,9 @@
 /**
  * Partner stakeholder removals (SQL 78) against PostgreSQL 16: the real table,
- * RLS and grants from aws/workflows/sql/78, the real /data/write executor and
- * the share RPC (SQL 32) that clears a removal. Also: without the table
- * (production before SQL 78) sharing still works.
+ * RLS and grants from aws/workflows/sql/78, the real /data/write executor, the
+ * share RPC (SQL 32) that clears a removal, and the send handler's partner rule
+ * plus its removal check. Also: without the table (production before SQL 78)
+ * sharing and sending still work.
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -13,12 +14,20 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { executeAllowlistedWrite } from '../functions/api/write.mjs';
 import { executePartnerShareRpc } from '../functions/api/partner-share-lifecycle.mjs';
+import { partnerRemovedFromCheck } from '../functions/api/providers/production/moov-send.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SQL_DIR = path.join(ROOT, 'rls/sql');
 const SQL_78 = path.join(ROOT, 'workflows/sql/78_check_partner_stakeholder_removals.sql');
 const AUTH_UID_SQL = path.join(ROOT, 'identity/sql/02_auth_uid_guc.sql');
 const PG_BIN = '/usr/lib/postgresql/16/bin';
+const SEND = fs.readFileSync(path.join(ROOT, 'functions/api/providers/production/moov-send.mjs'), 'utf8');
+const SHARE_RULE = (() => {
+  const start = SEND.indexOf('const share = (await client.query(');
+  const match = SEND.slice(start).match(/`([\s\S]*?)`/);
+  assert.ok(start >= 0 && match, 'partner rule not found in moov-send.mjs');
+  return match[1];
+})();
 
 const OWNER_TENANT = '11111111-1111-4111-8111-111111111111';
 const PARTNER = '22222222-2222-4222-8222-222222222222';
@@ -104,7 +113,7 @@ INSERT INTO public.tenant_partnerships (inviter_tenant_id, invitee_tenant_id, in
 VALUES ('${OWNER_TENANT}', '${PARTNER}', 'PARTNER1', 'active', '${OWNER}', now() - interval '1 day');
 `;
 
-test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executor and share RPC', { timeout: 180000, skip: pgSkip }, async (t) => {
+test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executor, share RPC and send rule', { timeout: 180000, skip: pgSkip }, async (t) => {
   const { default: pg } = await import('pg');
   const server = serverUser || {};
   const pgData = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-partner-removals-'));
@@ -163,6 +172,13 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     const share = (user, checkId = CHECK, partner = PARTNER) => as(user, () => executePartnerShareRpc({
       client, name: 'share_check_with_partner', args: { _check_id: checkId, _target_tenant_id: partner },
     }));
+    /** The send handler's authorization for paying `partner` on `checkId`: share rule, then removals. */
+    const canPay = (checkId = CHECK, partner = PARTNER) => as(OWNER, async () => {
+      const shared = (await client.query(SHARE_RULE, [checkId, OWNER_TENANT, partner])).rows.length === 1;
+      if (!shared) return 'partner_not_shared';
+      const removed = await partnerRemovedFromCheck(client, { checkId, tenantId: OWNER_TENANT, partnerTenantId: partner });
+      return removed ? 'partner_removed_from_check' : 'ok';
+    });
     const rows = async () => (await client.query('SELECT * FROM public.check_partner_stakeholder_removals')).rows;
 
     // Grants are SELECT/INSERT/DELETE only.
@@ -177,8 +193,9 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     assert.equal(result.error, 'partner_not_shared');
     assert.equal(result.statusCode, 409);
 
-    // Owner shares the check.
+    // Owner shares the check; partner is a stakeholder and can be paid.
     assert.equal((await share(OWNER)).data.ok, true);
+    assert.equal(await canPay(), 'ok');
 
     // A member of the owner tenant removes the partner; tenant_id/removed_by are server-derived.
     result = await remove(OWNER, CHECK, PARTNER, { tenant_id: OTHER, removed_by: OTHER_USER });
@@ -187,6 +204,7 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     assert.equal(result.rows[0].tenant_id, OWNER_TENANT);
     assert.equal(result.rows[0].removed_by, OWNER);
     const removalId = result.rows[0].id;
+    assert.equal(await canPay(), 'partner_removed_from_check');
 
     // Idempotent: removing again returns the same row.
     result = await remove(OWNER);
@@ -219,6 +237,7 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     const current = (await rows())[0];
     result = await write(OWNER, { op: 'delete', filters: [{ column: 'id', op: 'eq', value: current.id }] });
     assert.equal(result.rows.length, 1, JSON.stringify(result));
+    assert.equal(await canPay(), 'ok');
 
     // Delete by check + partner.
     await remove(OWNER);
@@ -242,7 +261,7 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     assert.equal((await remove(OWNER, CHECK_UNSHARED)).error, 'partner_not_shared');
     assert.equal((await remove(OWNER, CHECK, OTHER)).error, 'partner_not_shared');
 
-    // Re-share clears a removal.
+    // Re-share clears a removal (the partnership-path send would otherwise still be refused).
     await client.query('UPDATE public.shared_checks SET revoked_at = NULL WHERE check_id = $1', [CHECK]);
     await remove(OWNER);
     await client.query('UPDATE public.shared_checks SET revoked_at = now() WHERE check_id = $1', [CHECK]);
@@ -250,11 +269,14 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     result = await share(OWNER);
     assert.equal(result.data.reactivated, true);
     assert.equal((await rows()).length, 0);
+    assert.equal(await canPay(), 'ok');
     // Sharing an already-live share again also re-adds the partner.
     await remove(OWNER);
+    assert.equal(await canPay(), 'partner_removed_from_check');
     result = await share(OWNER);
     assert.equal(result.data.created, false);
     assert.equal((await rows()).length, 0);
+    assert.equal(await canPay(), 'ok');
     // A refused share (partner of nobody) clears nothing and fails as before.
     await remove(OWNER);
     await assert.rejects(share(OWNER, CHECK, OTHER), /not_a_partner/);
@@ -262,8 +284,9 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     // A non-owner cannot share, so cannot clear the removal either.
     await assert.rejects(share(PARTNER_USER), /not_authorized/);
     assert.equal((await rows()).length, 1);
+    assert.equal(await canPay(), 'partner_removed_from_check');
 
-    // Without SQL 78 (production today): sharing still works.
+    // Without SQL 78 (production today): sharing and the send check still work.
     await client.query('BEGIN');
     await client.query('DROP TABLE public.check_partner_stakeholder_removals');
     await client.query('SET LOCAL ROLE checksops');
@@ -273,6 +296,9 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
         client, name: 'share_check_with_partner', args: { _check_id: CHECK, _target_tenant_id: PARTNER },
       });
       assert.equal(result.data.ok, true);
+      const shared = (await client.query(SHARE_RULE, [CHECK, OWNER_TENANT, PARTNER])).rows.length;
+      assert.equal(shared, 1);
+      assert.equal(await partnerRemovedFromCheck(client, { checkId: CHECK, tenantId: OWNER_TENANT, partnerTenantId: PARTNER }), false);
       // The transaction is still usable (no aborted statement).
       assert.equal((await client.query('SELECT 1 AS one')).rows[0].one, 1);
     } finally {
