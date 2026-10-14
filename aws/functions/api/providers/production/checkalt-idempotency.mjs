@@ -262,6 +262,7 @@ export async function persistProviderOutcome(client, {
  */
 export async function persistAutoApproveOutcome(client, {
   rowId,
+  tenantId,
   phase = 'outcome',
   approved = false,
   skipReason = null,
@@ -269,12 +270,17 @@ export async function persistAutoApproveOutcome(client, {
   attempts = null,
   maxCents = null,
 }) {
+  if (!rowId || !tenantId) return null;
   const isApproved = phase === 'outcome' && approved === true;
+  // Classified codes only; raw provider or error text never lands in the row.
+  const reasonCode = skipReason == null
+    ? null
+    : (/^[a-z_]{1,40}$/.test(String(skipReason)) ? String(skipReason) : 'auto_approve_error');
   const payload = JSON.stringify(sanitizeAuditDetails({
     _auto_approve: {
       phase,
       approved: isApproved,
-      skip_reason: skipReason || null,
+      skip_reason: reasonCode,
       attempts,
       max_cents: maxCents,
       at: new Date().toISOString(),
@@ -287,12 +293,14 @@ export async function persistAutoApproveOutcome(client, {
   return (await client.query(
     `UPDATE public.checkalt_deposits
      SET status = CASE WHEN $2::boolean AND status = 'pending_approval' THEN 'submitted' ELSE status END,
-         approved_at = CASE WHEN $2::boolean THEN COALESCE(approved_at, now()) ELSE approved_at END,
+         approved_at = CASE WHEN $2::boolean AND status = 'pending_approval'
+           THEN COALESCE(approved_at, now()) ELSE approved_at END,
          last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $3::jsonb,
          updated_at = now()
      WHERE id = $1::uuid
+       AND tenant_id = $4::uuid
      RETURNING *`,
-    [rowId, isApproved, payload],
+    [rowId, isApproved, payload, tenantId],
   )).rows[0] || null;
 }
 
