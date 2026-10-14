@@ -32,7 +32,7 @@ const RETIRED_POLICIES = [
   'Admins can update any partnership',
 ];
 
-test('SQL 76 only adds the consent trigger and the connect marker, and retires the old policies', () => {
+test('SQL 76 only adds the consent trigger and retires the old policies', () => {
   const statements = statementsOf(read(SQL76));
   const allowed = [
     /^CREATE OR REPLACE FUNCTION public\.aws_tenant_partnership_consent_guard\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SET search_path = public\s+AS \$\$BODY\$\$$/,
@@ -40,7 +40,6 @@ test('SQL 76 only adds the consent trigger and the connect marker, and retires t
     /^REVOKE ALL ON FUNCTION public\.aws_tenant_partnership_consent_guard\(\) FROM PUBLIC$/,
     /^DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public\.tenant_partnerships$/,
     /^CREATE TRIGGER aws_tenant_partnership_consent_guard\s+BEFORE INSERT OR UPDATE ON public\.tenant_partnerships\s+FOR EACH ROW\s+EXECUTE FUNCTION public\.aws_tenant_partnership_consent_guard\(\)$/,
-    /^ALTER FUNCTION public\.aws_connect_partner_by_code\(text, uuid\)\s+SET checksops\.partnership_writer = 'aws_connect_partner_by_code'$/,
     ...RETIRED_POLICIES.map((name) => new RegExp(`^DROP POLICY IF EXISTS "${name}" ON public\\.tenant_partnerships$`)),
   ];
   assert.equal(statements.length, allowed.length, JSON.stringify(statements));
@@ -53,23 +52,25 @@ test('SQL 76 only adds the consent trigger and the connect marker, and retires t
   assert.match(body, /NEW\.invitee_tenant_id IN \(SELECT public\.aws_user_tenant_ids\(\)\)/);
   assert.match(body, /public\.aws_can_write_tenant\(NEW\.invitee_tenant_id\)/);
   assert.doesNotMatch(body, /cross_tenant|has_role|inviter_tenant_id IN|aws_can_write_tenant\(NEW\.inviter/);
-  assert.match(body, /current_setting\('checksops\.partnership_writer', true\) = 'aws_connect_partner_by_code'/);
-  // Never set_config: the marker comes only from the function-level SET clause.
-  assert.doesNotMatch(read(SQL76), /set_config/);
+  // Trusted writer: the connect frame directly under the writing statement in
+  // PG_CONTEXT, run as connect's owner. No setting can make a writer trusted.
+  assert.match(body, /GET DIAGNOSTICS _ctx = PG_CONTEXT;/);
+  assert.match(body, /\\nPL\/pgSQL function aws_connect_partner_by_code\\\(text,uuid\\\) line \[0-9\]\+ at SQL statement\(\\n\|\$\)'/);
+  assert.match(body, /AND current_user = \(\s+SELECT pg_catalog\.pg_get_userbyid\(p\.proowner\)/);
+  assert.doesNotMatch(read(SQL76), /set_config|current_setting|ALTER FUNCTION/);
 });
 
 test('SQL 76 rollback and review files are scoped and the review is read-only', () => {
   const rollback = statementsOf(read(SQL76_ROLLBACK));
   const flat = rollback.map((s) => s.replace(/\s+/g, ' '));
-  // Exactly these three statements: the retired Supabase-era policies stay retired.
+  // Exactly these two statements: the retired Supabase-era policies stay retired.
   assert.deepEqual(flat, [
     'DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public.tenant_partnerships',
     'DROP FUNCTION IF EXISTS public.aws_tenant_partnership_consent_guard()',
-    'ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid) RESET checksops.partnership_writer',
   ]);
   const rollbackSql = read(SQL76_ROLLBACK).split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
   assert.doesNotMatch(rollbackSql, /CREATE\s+POLICY/i);
-  assert.doesNotMatch(rollbackSql, /\b(GRANT|CREATE|INSERT|UPDATE|DELETE)\b/i);
+  assert.doesNotMatch(rollbackSql, /\b(GRANT|CREATE|INSERT|UPDATE|DELETE|ALTER)\b/i);
   const review = statementsOf(read(SQL76_REVIEW));
   assert.equal(review.length, 1);
   assert.match(review[0], /^WITH live AS/);
@@ -278,11 +279,33 @@ RESET ROLE;
   assert.equal(scalar(`SELECT status FROM public.tenant_partnerships WHERE invite_code = 'PRE76BUG'`), 'active');
   psql(['-d', dbName, '-c', `DELETE FROM public.tenant_partnerships WHERE invite_code = 'PRE76BUG'`]);
 
-  file(SQL76);
-  file(SQL76); // idempotent
+  // Apply as a non-superuser that owns the table, like the AWS database user
+  // (Postgres 15+ refuses such a role a function-level SET of a custom setting).
+  psql(['-d', dbName, '-c', `
+CREATE ROLE sql76_owner NOSUPERUSER;
+GRANT CREATE ON SCHEMA public TO sql76_owner;
+ALTER TABLE public.tenant_partnerships OWNER TO sql76_owner;
+`]);
+  const asOwner = (f) => psql(['-d', dbName, '-c', 'SET ROLE sql76_owner', '-f', f]);
+  asOwner(SQL76);
+  asOwner(SQL76); // idempotent
 
   psql(['-d', dbName], `
 CREATE TABLE public._results (test text PRIMARY KEY, ok boolean NOT NULL, detail text);
+-- Definer functions owned like connect that write a live row: never trusted.
+CREATE OR REPLACE FUNCTION public._spoof_writer(_code text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.tenant_partnerships (inviter_tenant_id, invitee_tenant_id, invite_code, status)
+  VALUES ('${SOURCE}', '${UNRELATED}', _code, 'active');
+END; $$;
+CREATE OR REPLACE FUNCTION public.aws_connect_partner_by_code(_code text, _x text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.tenant_partnerships (inviter_tenant_id, invitee_tenant_id, invite_code, status)
+  VALUES ('${SOURCE}', '${UNRELATED}', _code, 'active');
+END; $$;
+GRANT EXECUTE ON FUNCTION public._spoof_writer(text), public.aws_connect_partner_by_code(text, text) TO checksops;
 CREATE OR REPLACE FUNCTION public._ok(_t text, _ok boolean, _d text DEFAULT '') RETURNS void
 LANGUAGE plpgsql AS $$ BEGIN INSERT INTO public._results VALUES (_t, coalesce(_ok, false), _d) ON CONFLICT (test) DO UPDATE SET ok = EXCLUDED.ok, detail = EXCLUDED.detail; END; $$;
 -- Run one statement as checksops with request.app_user_id set, like the API.
@@ -426,8 +449,19 @@ BEGIN
   SELECT status INTO st FROM public.tenant_partnerships WHERE id = cid;
   PERFORM public._ok('20b_connect_row_active', st = 'active', st);
 
-  -- The marker does not outlive the function call.
-  PERFORM public._ok('21_marker_not_leaked', coalesce(current_setting('checksops.partnership_writer', true), '') = '', current_setting('checksops.partnership_writer', true));
+  -- SQL 76 leaves connect itself unchanged (no SET marker).
+  PERFORM public._ok('21_connect_config_unchanged',
+    (SELECT array_to_string(proconfig, ',') FROM pg_proc WHERE oid = 'public.aws_connect_partner_by_code(text, uuid)'::regprocedure) = 'search_path=public,row_security=off', '');
+
+  -- Not trusted: another function, a lookalike signature, or forged context text.
+  r := public._exec('${OWNER}', $q$SELECT public._spoof_writer('SPOOF001')$q$);
+  PERFORM public._ok('26_other_definer_function_denied', (r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE denied_consent, r::text);
+  r := public._exec('${OWNER}', $q$SELECT public.aws_connect_partner_by_code('SPOOF002', 'x')$q$);
+  PERFORM public._ok('27_lookalike_signature_denied', (r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE denied_consent, r::text);
+  -- Dynamic SQL whose text forges the connect frame (the inviter reactivating its
+  -- revoked row): it runs as checksops, not connect's owner.
+  r := public._exec('${OWNER}', format(E'UPDATE public.tenant_partnerships SET status = \\'active\\', revoked_at = NULL WHERE id = %L /*"\\nPL/pgSQL function aws_connect_partner_by_code(text,uuid) line 1 at SQL statement\\n*/', pid));
+  PERFORM public._ok('28_forged_context_denied', (r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE denied_consent, r::text);
 
   -- Settings revoke from either side still works, then reconnect by code reactivates.
   r := public._exec('${PARTNER_USER}', format('SELECT public.aws_revoke_tenant_partnership(%L::uuid)', cid));
@@ -447,7 +481,7 @@ END $$;
   const results = JSON.parse(scalar(`SELECT coalesce(json_object_agg(test, json_build_object('ok', ok, 'detail', detail) ORDER BY test), '{}'::json) FROM public._results`));
   const failed = Object.entries(results).filter(([, row]) => row.ok !== true);
   assert.equal(failed.length, 0, `failed cases: ${JSON.stringify(failed, null, 2)}`);
-  assert.equal(Object.keys(results).length, 31);
+  assert.equal(Object.keys(results).length, 34);
 
   // Review query: reconnect by code, then classify the live rows.
   psql(['-d', dbName, '-c', `
@@ -462,16 +496,8 @@ RESET ROLE;
     { code: PARTNER_CODE, evidence: 'invitee_partner_code' },
   ]);
 
-  // Re-applying SQL 32 drops the marker: connect fails closed until SQL 76 is re-applied.
+  // Re-applying SQL 32 leaves connect the trusted writer (SQL 76 never changed it).
   file(path.join(SQL_DIR, '32_partner_share_lifecycle.sql'));
-  const failClosed = run(path.join(PG_BIN, 'psql'), [...psqlArgs, '-d', dbName, '-c', `
-SELECT set_config('request.app_user_id', '${OWNER}', false);
-SET ROLE checksops;
-SELECT public.aws_connect_partner_by_code('${OTHER_CODE}', '${SOURCE}'::uuid);
-`]);
-  assert.notEqual(failClosed.status, 0);
-  assert.match(failClosed.stderr, /partnership_invitee_consent_required/);
-  file(SQL76);
   const ok = scalar(`
 SELECT set_config('request.app_user_id', '${OWNER}', false);
 SET ROLE checksops;
@@ -485,11 +511,11 @@ SELECT (public.aws_connect_partner_by_code('${OTHER_CODE}', '${SOURCE}'::uuid))-
   const allPolicies = () => scalar(`SELECT string_agg(policyname || ':' || cmd || ':' || coalesce(qual, '') || ':' || coalesce(with_check, ''), E'\\n' ORDER BY policyname) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'tenant_partnerships'`);
   const policiesBeforeRollback = allPolicies();
   assert.match(policiesBeforeRollback, /^aws_write_tenant_partnerships:/m);
-  file(SQL76_ROLLBACK);
-  file(SQL76_ROLLBACK);
+  asOwner(SQL76_ROLLBACK);
+  asOwner(SQL76_ROLLBACK);
   assert.equal(scalar(`SELECT count(*) FROM pg_trigger WHERE tgname = 'aws_tenant_partnership_consent_guard'`), '0');
   assert.equal(scalar(`SELECT count(*) FROM pg_proc WHERE proname = 'aws_tenant_partnership_consent_guard'`), '0');
-  assert.equal(scalar(`SELECT coalesce(array_to_string(proconfig, ','), '') FROM pg_proc WHERE proname = 'aws_connect_partner_by_code'`), 'search_path=public,row_security=off');
+  assert.equal(scalar(`SELECT coalesce(array_to_string(proconfig, ','), '') FROM pg_proc WHERE oid = 'public.aws_connect_partner_by_code(text, uuid)'::regprocedure`), 'search_path=public,row_security=off');
   assert.equal(policyCount(), '0', 'rollback keeps the retired policies absent');
   // Every other policy on the table is untouched by the rollback.
   assert.equal(allPolicies(), policiesBeforeRollback);

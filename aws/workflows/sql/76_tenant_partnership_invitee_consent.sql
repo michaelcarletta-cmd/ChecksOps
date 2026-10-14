@@ -22,15 +22,17 @@
 --
 -- Trusted writer: aws_connect_partner_by_code (Settings > Partner Code). The
 -- redeemer entering the invitee's own Partner Code is the consent this product
--- uses today, so the function keeps creating and reactivating live rows. It is
--- marked with a function-level SET of checksops.partnership_writer, which
--- Postgres restores when the function returns, so the marker never leaks into
--- the rest of the caller's transaction. Browsers cannot set GUCs and the API
--- runs no client SQL, the same boundary as request.app_user_id itself.
+-- uses today, so the function keeps creating and reactivating live rows. The
+-- guard recognises it from PG_CONTEXT, the call stack Postgres itself builds:
+-- the row must be written by a statement directly inside
+-- aws_connect_partner_by_code(text,uuid), and current_user must be that
+-- function's owner (connect runs with its owner's rights). No caller can set
+-- either. A function-level SET of a custom setting is not used: Postgres 15+
+-- lets only a superuser attach one, and the AWS database user is not one.
 --
--- If 32_partner_share_lifecycle.sql is re-applied (CREATE OR REPLACE drops the
--- function's SET list), connect fails closed with
--- partnership_invitee_consent_required until this file is re-applied.
+-- The guard does not change aws_connect_partner_by_code, so re-applying
+-- 32_partner_share_lifecycle.sql keeps connect working. The staging executor
+-- pins that function's body, so a changed connect body is refused before apply.
 --
 -- Idempotent: safe to re-run.
 
@@ -40,13 +42,25 @@ LANGUAGE plpgsql
 SET search_path = public
 AS $$
 DECLARE
-  _trusted boolean := COALESCE(
-    current_setting('checksops.partnership_writer', true) = 'aws_connect_partner_by_code',
-    false
-  );
+  _ctx text;
+  _trusted boolean := false;
   _was_live boolean := false;
   _is_live boolean := NEW.status = 'active' AND NEW.revoked_at IS NULL;
 BEGIN
+  -- Trusted writer: a statement directly inside aws_connect_partner_by_code,
+  -- running as its owner. PG_CONTEXT lists this guard first, then the writing
+  -- statement, then the function that ran it.
+  GET DIAGNOSTICS _ctx = PG_CONTEXT;
+  _trusted := COALESCE(
+    _ctx ~ '^PL/pgSQL function aws_tenant_partnership_consent_guard\(\) line [0-9]+ at GET DIAGNOSTICS\nSQL statement "[^"]*"\nPL/pgSQL function aws_connect_partner_by_code\(text,uuid\) line [0-9]+ at SQL statement(\n|$)'
+    AND current_user = (
+      SELECT pg_catalog.pg_get_userbyid(p.proowner)
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = pg_catalog.to_regprocedure('public.aws_connect_partner_by_code(text, uuid)')
+    ),
+    false
+  );
+
   IF TG_OP = 'UPDATE' THEN
     _was_live := OLD.status = 'active' AND OLD.revoked_at IS NULL;
     IF NOT _trusted AND (
@@ -78,7 +92,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.aws_tenant_partnership_consent_guard() IS
-  'BEFORE INSERT/UPDATE guard on tenant_partnerships: only an invitee-tenant writer (or aws_connect_partner_by_code) can make a row active, the tenant pair is immutable, revoke/decline is always allowed.';
+  'BEFORE INSERT/UPDATE guard on tenant_partnerships: only an invitee-tenant writer (or a statement inside aws_connect_partner_by_code) can make a row active, the tenant pair is immutable, revoke/decline is always allowed.';
 
 REVOKE ALL ON FUNCTION public.aws_tenant_partnership_consent_guard() FROM PUBLIC;
 
@@ -87,9 +101,6 @@ CREATE TRIGGER aws_tenant_partnership_consent_guard
   BEFORE INSERT OR UPDATE ON public.tenant_partnerships
   FOR EACH ROW
   EXECUTE FUNCTION public.aws_tenant_partnership_consent_guard();
-
-ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid)
-  SET checksops.partnership_writer = 'aws_connect_partner_by_code';
 
 -- Retire the Supabase-era write and admin policies copied to AWS. Writes go
 -- through the definer-rights lifecycle functions in 32_partner_share_lifecycle.sql;
