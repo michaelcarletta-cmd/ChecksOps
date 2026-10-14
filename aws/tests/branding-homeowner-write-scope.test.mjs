@@ -60,3 +60,64 @@ test('homeowner-uploads: no client uploads or deletes', async () => {
     assert.equal(result.error, 'bucket_not_allowed', path);
   }
 });
+
+test('tenant-logos and company-branding: a stored logo_url/letterhead_url never authorizes delete or move', async () => {
+  const { handleStorageDelete, handleStorageMove } = await import('../functions/api/storage-write.mjs');
+  const { LOOKUP_MAPPING_SQL } = await import('../functions/api/identity.mjs');
+  process.env.FILES_BUCKET = process.env.FILES_BUCKET || 'files-test';
+  const SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
+  const victimLogo = `${OTHER}/logo-1.png`;
+  const victimLetterhead = 'letterhead_1739999999999.png';
+  // The caller's own tenant row points logo_url at another tenant's key, and a
+  // letterhead row is visible: neither may authorize the object.
+  const client = {
+    connect: async () => {},
+    end: async () => {},
+    async query(sql, params = []) {
+      const text = String(sql);
+      if (text === 'BEGIN' || text === 'ROLLBACK' || text === 'COMMIT') return { rows: [] };
+      if (text.startsWith('SELECT set_config')) return { rows: [{}] };
+      if (text === LOOKUP_MAPPING_SQL) return { rows: [{ application_user_id: USER, cognito_sub: SUB, status: 'active' }] };
+      if (/is_platform_owner/.test(text)) return { rows: [{ is_platform: false, is_master: false }] };
+      if (/tenant_users WHERE user_id = \$1::uuid AND tenant_id/.test(text)) return { rows: params[1] === OWN ? [{}] : [] };
+      if (/FROM tenants|FROM public\.tenants|company_branding/.test(text)) return { rows: [{}] };
+      return { rows: [] };
+    },
+  };
+  const sent = [];
+  const deps = {
+    forceStorageWrites: true,
+    loadDatabaseCredentials: async () => ({ username: 'checksops', password: 'x', host: 'h' }),
+    createClient: () => client,
+    s3: {
+      async send(command) {
+        sent.push(command.constructor.name);
+        if (command.constructor.name === 'HeadObjectCommand') {
+          const error = new Error('NotFound');
+          error.name = 'NotFound';
+          throw error;
+        }
+        return {};
+      },
+    },
+  };
+  const event = (path, body) => ({
+    rawPath: path,
+    headers: { authorization: 'Bearer t' },
+    body: JSON.stringify(body),
+    requestContext: { stage: 'staging', http: { method: 'POST', path }, authorizer: { jwt: { claims: { sub: SUB, token_use: 'id' } } } },
+  });
+  for (const [bucket, path, to] of [
+    ['tenant-logos', victimLogo, `${OWN}/stolen.png`],
+    ['company-branding', victimLetterhead, 'letterhead_1740000000000.png'],
+  ]) {
+    const del = await handleStorageDelete(event('/storage/delete', { bucket, path }), deps);
+    assert.equal(del.error, 'storage_forbidden', `${bucket} delete: ${JSON.stringify(del)}`);
+    const move = await handleStorageMove(event('/storage/move', { bucket, from: path, to }), deps);
+    assert.equal(move.error, 'storage_forbidden', `${bucket} move: ${JSON.stringify(move)}`);
+  }
+  assert.deepEqual(sent.filter((name) => /Delete|Copy/.test(name)), []);
+  // The caller's own logo is still deletable.
+  const own = await handleStorageDelete(event('/storage/delete', { bucket: 'tenant-logos', path: `${OWN}/logo-1.png` }), deps);
+  assert.equal(own.ok, true, JSON.stringify(own));
+});

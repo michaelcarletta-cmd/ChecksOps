@@ -87,7 +87,7 @@ const isPlatformOwner = async (client) => {
 /** tenant-logos: exactly {tenantId}/{file}. */
 const TENANT_LOGO_PATH = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/[A-Za-z0-9._=-]+$/i;
 /** company-branding: one shared folder of timestamped letterheads; new files only. */
-const COMPANY_BRANDING_PATH = /^(invoice_)?letterhead_\d+\.[A-Za-z0-9]{1,8}$/;
+const COMPANY_BRANDING_PATH = /^(invoice_)?letterhead_\d+\.[A-Za-z0-9]{1,32}$/;
 
 export const authorizeStorageWritePath = async (client, bucket, objectPath, userId) => {
   const denied = denyBucket(bucket);

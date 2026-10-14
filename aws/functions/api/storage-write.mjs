@@ -48,11 +48,18 @@ const authorizeWritePath = async (client, bucket, objectPath, userId) => (
   authorizeStorageWritePath(client, bucket, objectPath, userId)
 );
 
+const SCOPED_ONLY_BUCKETS = new Set(['tenant-logos', 'company-branding']);
+
 const authorizeDeletePath = async (client, bucket, objectPath, userId) => {
   const writeAuth = await authorizeWritePath(client, bucket, objectPath, userId);
   // A create-only grant (shared company-branding folder) never deletes.
   if (writeAuth.ok && !writeAuth.createOnly) return writeAuth;
   if (writeAuth.error === 'bucket_not_allowed' || writeAuth.error === 'invalid_path') return writeAuth;
+  // Branding buckets: the path scope is the whole grant. A tenants.logo_url or
+  // letterhead_url row can point at any key, so it never authorizes a delete.
+  if (SCOPED_ONLY_BUCKETS.has(bucket)) {
+    return { ok: false, statusCode: 403, error: 'storage_forbidden', message: 'Not authorized for this object' };
+  }
   const rel = normalizePath(objectPath, bucket);
   if (!rel) return { ok: false, statusCode: 400, error: 'invalid_path' };
   const existing = await authorizeObject(client, bucket, rel);
