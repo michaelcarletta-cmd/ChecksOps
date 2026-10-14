@@ -926,15 +926,15 @@ const OTHER_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const ACCOUNT_ID = '5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a';
 const LINK_ID = '6b6b6b6b-6b6b-4b6b-8b6b-6b6b6b6b6b6b';
 
-/** mockClient plus check_stakeholders answers: own active accounts, writability, existing links. */
-const stakeholderClient = ({ canWrite = true, accounts = [ACCOUNT_ID], linked = false, deletable = true } = {}) => {
+/** mockClient plus check_stakeholders answers: own active accounts, membership/writability, existing links. */
+const stakeholderClient = ({ member = false, canWrite = true, accounts = [ACCOUNT_ID], linked = false, deletable = true } = {}) => {
   const base = mockClient();
   const query = base.query;
   base.query = async (sql, params) => {
     const text = String(sql);
-    if (text.includes('aws_can_write_tenant($1::uuid) AS ok')) {
+    if (text.includes('$1::uuid IN (SELECT public.aws_user_tenant_ids())') && text.includes('AS ok')) {
       base.queries.push({ sql, params });
-      return { rows: [{ ok: canWrite && params[0] === OWN_TENANT }] };
+      return { rows: [{ ok: (member || canWrite) && params[0] === OWN_TENANT }] };
     }
     if (text.includes('FROM public.stakeholder_accounts')) {
       base.queries.push({ sql, params });
@@ -1026,7 +1026,7 @@ test('check_stakeholders delete is by id only, on the owner\'s own check, and re
   assert.equal(result.ok, true, JSON.stringify(result));
   const del = client.queries.find((q) => String(q.sql).includes('DELETE FROM public.check_stakeholders'));
   assert.match(String(del.sql), /c\.tenant_id = cs\.tenant_id/);
-  assert.match(String(del.sql), /aws_can_write_tenant\(cs\.tenant_id\)/);
+  assert.match(String(del.sql), /\(cs\.tenant_id IN \(SELECT public\.aws_user_tenant_ids\(\)\) OR public\.aws_can_write_tenant\(cs\.tenant_id\)\)/);
   assert.deepEqual(del.params, [LINK_ID]);
 
   const denied = await stakeholderWrite(stakeholderClient({ deletable: false }), { op: 'delete', filters: [{ column: 'id', op: 'eq', value: LINK_ID }] });
@@ -1047,15 +1047,15 @@ test('check_stakeholders delete is by id only, on the owner\'s own check, and re
 const PARTNER_TENANT = '7c1d2e3f-4a5b-4c6d-8e7f-901234567890';
 const REMOVAL_ID = '7d7d7d7d-7d7d-4d7d-8d7d-7d7d7d7d7d7d';
 
-/** mockClient plus check_partner_stakeholder_removals answers: writability, live shares, existing removals. */
-const partnerRemovalClient = ({ canWrite = true, shared = [PARTNER_TENANT], removed = false, deletable = true } = {}) => {
+/** mockClient plus check_partner_stakeholder_removals answers: membership/writability, live shares, existing removals. */
+const partnerRemovalClient = ({ member = false, canWrite = true, shared = [PARTNER_TENANT], removed = false, deletable = true } = {}) => {
   const base = mockClient();
   const query = base.query;
   base.query = async (sql, params) => {
     const text = String(sql);
-    if (text.includes('aws_can_write_tenant($1::uuid) AS ok')) {
+    if (text.includes('$1::uuid IN (SELECT public.aws_user_tenant_ids())') && text.includes('AS ok')) {
       base.queries.push({ sql, params });
-      return { rows: [{ ok: canWrite && params[0] === OWN_TENANT }] };
+      return { rows: [{ ok: (member || canWrite) && params[0] === OWN_TENANT }] };
     }
     if (text.includes('FROM public.shared_checks')) {
       base.queries.push({ sql, params });
@@ -1158,7 +1158,7 @@ test('check_partner_stakeholder_removals delete by id or by check + partner, sco
   assert.equal(result.ok, true, JSON.stringify(result));
   let del = byId.queries.find((q) => String(q.sql).includes('DELETE FROM public.check_partner_stakeholder_removals'));
   assert.match(String(del.sql), /c\.tenant_id = r\.tenant_id/);
-  assert.match(String(del.sql), /aws_can_write_tenant\(r\.tenant_id\)/);
+  assert.match(String(del.sql), /\(r\.tenant_id IN \(SELECT public\.aws_user_tenant_ids\(\)\) OR public\.aws_can_write_tenant\(r\.tenant_id\)\)/);
   assert.deepEqual(del.params, [REMOVAL_ID]);
 
   const byPair = partnerRemovalClient();
@@ -1191,4 +1191,25 @@ test('check_partner_stakeholder_removals delete by id or by check + partner, sco
     op: 'delete', filters: [{ column: 'tenant_id', op: 'eq', value: OWN_TENANT }],
   });
   assert.equal(byTenant.ok, false);
+});
+
+test('check_stakeholders and partner removals: a plain member of the owner tenant may write; the gate is membership or writer', async () => {
+  for (const [label, write, values, insertSql] of [
+    ['check_stakeholders', stakeholderWrite, { check_intake_item_id: CHECK_ID, stakeholder_account_id: ACCOUNT_ID }, 'INSERT INTO public.check_stakeholders'],
+    ['check_partner_stakeholder_removals', partnerRemovalWrite, { check_intake_item_id: CHECK_ID, partner_tenant_id: PARTNER_TENANT }, 'INSERT INTO public.check_partner_stakeholder_removals'],
+  ]) {
+    const factory = label === 'check_stakeholders' ? stakeholderClient : partnerRemovalClient;
+    // Member of the owner tenant without an admin/staff role.
+    const memberClient = factory({ member: true, canWrite: false });
+    const allowed = await write(memberClient, { op: 'insert', values });
+    assert.equal(allowed.ok, true, `${label}: ${JSON.stringify(allowed)}`);
+    const gate = memberClient.queries.find((q) => String(q.sql).includes('AS ok'));
+    assert.match(String(gate.sql), /\$1::uuid IN \(SELECT public\.aws_user_tenant_ids\(\)\)\s+OR public\.aws_can_write_tenant\(\$1::uuid\)/, label);
+    assert.deepEqual(gate.params, [OWN_TENANT], label);
+    // Neither a member of the owner tenant nor its writer (e.g. a partner the check is shared with).
+    const outsider = factory({ member: false, canWrite: false });
+    const refused = await write(outsider, { op: 'insert', values });
+    assert.equal(refused.error, 'rls_denied', label);
+    assert.equal(outsider.queries.some((q) => String(q.sql).includes(insertSql)), false, label);
+  }
 });
