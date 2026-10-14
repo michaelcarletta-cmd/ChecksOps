@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +8,7 @@ import { acquireLease } from './lib/lease.mjs';
 import { issueReceiptWithSigner } from './lib/receipt.mjs';
 import { signReceiptWithKms } from './lib/kms-issuer.mjs';
 import { validateZipMemberName } from './lib/lambda-owned-members.mjs';
-import { hashZipMembers } from './lib/zip-members.mjs';
+import { readZipMembers } from './lib/zip-members.mjs';
 
 const FUNCTION_NAME = 'checksops-staging-api';
 const REGION = 'us-east-1';
@@ -182,10 +183,12 @@ async function inspectLive(member, { lambda = null, fetchImpl = fetch, loadSdk =
     throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'failed to download current live staging Lambda ZIP', { status: response?.status || null });
   }
   const zip = Buffer.from(await response.arrayBuffer());
-  const members = hashZipMembers(zip);
+  const members = readZipMembers(zip);
   const present = Object.hasOwn(members, member);
-  const memberSha256 = present ? members[member] : null;
+  const memberBytes = present ? members[member] : null;
+  const memberSha256 = present ? createHash('sha256').update(memberBytes).digest('hex') : null;
   return {
+    memberBytes,
     functionName: FUNCTION_NAME,
     codeSha256,
     revisionId,
@@ -193,6 +196,28 @@ async function inspectLive(member, { lambda = null, fetchImpl = fetch, loadSdk =
     memberState: present ? 'PRESENT' : 'ABSENT',
     memberSha256,
   };
+}
+
+/**
+ * Inspect-only: writes the live member's exact bytes to `dir` so a reviewer can
+ * reconcile against it. The file name flattens the member path; the bytes are
+ * re-hashed and must equal the inspected live member SHA-256.
+ */
+export function exportLiveMember(live, dir) {
+  if (live.memberState !== 'PRESENT' || !live.memberBytes) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member requires a member that is present live', { member: live.member });
+  }
+  if (!/\.(mjs|js|json)$/.test(live.member)) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member is limited to .mjs, .js and .json source members', { member: live.member });
+  }
+  const exported = createHash('sha256').update(live.memberBytes).digest('hex');
+  if (exported !== live.memberSha256) {
+    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'exported bytes do not match the inspected live member hash');
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, live.member.replace(/[^A-Za-z0-9._-]/g, '__'));
+  fs.writeFileSync(file, live.memberBytes);
+  return { file, sha256: exported };
 }
 
 function appendGithubOutput(values, env = process.env) {
@@ -223,8 +248,18 @@ export async function run(env = process.env, deps = {}) {
     owned_member: live.member,
   }, env);
 
+  const exportDir = String(env.CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR || '').trim();
+  const { memberBytes, ...liveSummary } = live;
   if (mode === 'inspect') {
-    return { ok: true, mode, identity, live, mutation: false };
+    let exported = null;
+    if (exportDir) {
+      exported = exportLiveMember(live, exportDir);
+      appendGithubOutput({ exported_member_file: exported.file, exported_member_sha256: exported.sha256 }, env);
+    }
+    return { ok: true, mode, identity, live: liveSummary, exported, mutation: false };
+  }
+  if (exportDir) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member is inspect-only');
   }
 
   const receiptInput = buildOverlayReceiptInput(
@@ -278,7 +313,7 @@ export async function run(env = process.env, deps = {}) {
     ok: true,
     mode,
     identity,
-    live,
+    live: liveSummary,
     mutation: false,
     authorization: {
       lease: lease.details.lease,

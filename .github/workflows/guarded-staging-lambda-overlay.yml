@@ -39,6 +39,11 @@ on:
         required: true
         default: false
         type: boolean
+      export_live_member:
+        description: "Inspect only. Default false. Upload the live member's exact bytes (re-hashed against the inspected SHA-256) as a 1-day artifact for source reconciliation. Never writes to AWS."
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -69,9 +74,13 @@ jobs:
           INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
           INPUT_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
           INPUT_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY: ${{ inputs.accept_public_validator_unhealthy }}
+          INPUT_EXPORT_LIVE_MEMBER: ${{ inputs.export_live_member }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging deploy only runs from main"; exit 2; }
+          if [ "$INPUT_EXPORT_LIVE_MEMBER" = "true" ]; then
+            test "$INPUT_MODE" = "inspect" || { echo "export_live_member is inspect-only"; exit 2; }
+          fi
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
           if [ "$INPUT_MODE" = "apply" ]; then
             test -n "$INPUT_APPROVED_COMMIT" || { echo "apply requires approved_commit"; exit 2; }
@@ -186,7 +195,17 @@ jobs:
           CHECKSOPS_STAGING_OVERLAY_OPERATION: ${{ inputs.operation }}
           CHECKSOPS_STAGING_OVERLAY_MEMBER: ${{ inputs.member }}
           CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ${{ inputs.expected_live_member_sha256 }}
+          CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR: ${{ inputs.export_live_member && format('{0}/live-member-export', runner.temp) || '' }}
         run: node scripts/deployment-guard/github-staging-lambda-overlay.mjs
+
+      - name: Upload exported live member (inspect only)
+        if: ${{ inputs.mode == 'inspect' && inputs.export_live_member }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: staging-live-member-${{ github.run_id }}
+          path: ${{ steps.preflight.outputs.exported_member_file }}
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Record inspected live state
         shell: bash
@@ -199,6 +218,7 @@ jobs:
           LIVE_REVISION_ID: ${{ steps.preflight.outputs.live_revision_id }}
           LIVE_MEMBER_STATE: ${{ steps.preflight.outputs.live_member_state }}
           LIVE_MEMBER_SHA256: ${{ steps.preflight.outputs.live_member_sha256 }}
+          EXPORTED_MEMBER_SHA256: ${{ steps.preflight.outputs.exported_member_sha256 }}
         run: |
           {
             echo "### Staging Lambda overlay preflight"
@@ -210,6 +230,7 @@ jobs:
             echo "- Live RevisionId: \`$LIVE_REVISION_ID\`"
             echo "- Live member state: \`$LIVE_MEMBER_STATE\`"
             echo "- Live member SHA-256: \`$LIVE_MEMBER_SHA256\`"
+            echo "- Exported live member SHA-256: \`$EXPORTED_MEMBER_SHA256\`"
             echo "- Accept public validator unhealthy: \`$INPUT_ACCEPT_PUBLIC_VALIDATOR_UNHEALTHY\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
