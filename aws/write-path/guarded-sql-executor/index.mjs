@@ -20,10 +20,19 @@ import {
   AUTHORIZED_SQL53,
   AUTHORIZED_SQL71_AMOUNT_GRANT,
   AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
+  AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   MEMBER_PAYMENT_POLICIES,
   MEMBER_PAYMENT_REQUIRED_FUNCTIONS,
   memberPaymentPolicyStateText,
+  PARTNERSHIP_CONSENT_REQUIRED_FUNCTIONS,
+  PARTNERSHIP_CONSENT_TRIGGER,
+  PARTNERSHIP_RETIRED_POLICIES,
+  PARTNERSHIP_WRITER_SETTING,
+  PARTNERSHIP_WRITER_VALUE,
+  partnershipConsentStateText,
+  PARTNERSHIP_CONNECT_BODY_SHA256,
+  PARTNERSHIP_CONNECT_CONFIG,
   SQL_EXECUTOR_FUNCTION,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
@@ -34,6 +43,7 @@ import {
   isSql53AuthorizedMigration,
   isSql71AmountGrant,
   isSql72MemberPaymentWrites,
+  isSql76PartnershipConsent,
   isTenantUsersSameCheckPermissions,
 } from './lib/sql-executor-auth.mjs';
 import {
@@ -75,6 +85,7 @@ const LEDGER_20261007193200_FILE = path.join(
 );
 const SQL71_AMOUNT_GRANT_FILE = path.join(ROOT, 'sql/71_review_amount_column_grant.sql');
 const SQL72_MEMBER_PAYMENT_WRITES_FILE = path.join(ROOT, 'sql/72_member_payment_writes.sql');
+const SQL76_PARTNERSHIP_CONSENT_FILE = path.join(ROOT, 'sql/76_tenant_partnership_invitee_consent.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -1908,6 +1919,364 @@ async function handleSql72MemberPaymentWrites({ event, authorization, identity, 
   }
 }
 
+// --- SQL 76: tenant partnership invitee consent guard -----------------------
+
+const PARTNERSHIP_TABLE_SQL = `
+SELECT c.relrowsecurity, c.relforcerowsecurity
+FROM pg_class c
+WHERE c.oid = to_regclass('public.tenant_partnerships')
+`.trim();
+const PARTNERSHIP_GUARD_SQL = `
+SELECT p.prosrc, l.lanname, p.prosecdef, p.proconfig::text[] AS proconfig,
+  format_type(p.prorettype, NULL) AS rettype, p.pronargs::int AS pronargs,
+  EXISTS (
+    SELECT 1 FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a
+    WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE'
+  ) AS public_execute
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+JOIN pg_language l ON l.oid = p.prolang
+WHERE n.nspname = 'public' AND p.proname = 'aws_tenant_partnership_consent_guard'
+`.trim();
+const PARTNERSHIP_TRIGGERS_SQL = `
+SELECT t.tgname, t.tgtype::int AS tgtype, t.tgenabled::text AS tgenabled, t.tgnargs::int AS tgnargs,
+  t.tgattr::text AS tgattr, t.tgqual IS NOT NULL AS has_qual,
+  pn.nspname || '.' || p.proname AS function_name, pg_get_triggerdef(t.oid) AS definition
+FROM pg_trigger t
+JOIN pg_proc p ON p.oid = t.tgfoid
+JOIN pg_namespace pn ON pn.oid = p.pronamespace
+WHERE t.tgrelid = to_regclass('public.tenant_partnerships') AND NOT t.tgisinternal
+ORDER BY t.tgname
+`.trim();
+const PARTNERSHIP_CONNECT_SQL = `
+SELECT p.prosrc, p.prosecdef, p.proconfig::text[] AS proconfig
+FROM pg_proc p
+WHERE p.oid = to_regprocedure('public.aws_connect_partner_by_code(text, uuid)')
+`.trim();
+// ROW (1) | BEFORE (2) | INSERT (4) | UPDATE (16)
+const SQL76_TRIGGER_TYPE = 23;
+const SQL76_GUARD_FUNCTION_NAME = 'public.aws_tenant_partnership_consent_guard';
+const SQL76_MARKER_ENTRY = `${PARTNERSHIP_WRITER_SETTING}=${PARTNERSHIP_WRITER_VALUE}`;
+const SQL76_BODY_PLACEHOLDER = '$$BODY$$';
+// The exact statements SQL 76 may contain, in file order. The function body is
+// pinned by the file's source_sha256 and checked separately.
+export const SQL76_EXPECTED_STATEMENTS = Object.freeze([
+  /^CREATE OR REPLACE FUNCTION public\.aws_tenant_partnership_consent_guard\(\) RETURNS trigger LANGUAGE plpgsql SET search_path = public AS \$\$BODY\$\$$/,
+  /^COMMENT ON FUNCTION public\.aws_tenant_partnership_consent_guard\(\) IS '[^']*'$/,
+  /^REVOKE ALL ON FUNCTION public\.aws_tenant_partnership_consent_guard\(\) FROM PUBLIC$/,
+  /^DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public\.tenant_partnerships$/,
+  /^CREATE TRIGGER aws_tenant_partnership_consent_guard BEFORE INSERT OR UPDATE ON public\.tenant_partnerships FOR EACH ROW EXECUTE FUNCTION public\.aws_tenant_partnership_consent_guard\(\)$/,
+  /^ALTER FUNCTION public\.aws_connect_partner_by_code\(text, uuid\) SET checksops\.partnership_writer = 'aws_connect_partner_by_code'$/,
+  ...PARTNERSHIP_RETIRED_POLICIES.map((name) => new RegExp(`^DROP POLICY IF EXISTS "${name}" ON public\\.tenant_partnerships$`)),
+]);
+const SQL76_BODY_REQUIRED_MARKERS = [
+  "current_setting('checksops.partnership_writer', true) = 'aws_connect_partner_by_code'",
+  'NEW.invitee_tenant_id IN (SELECT public.aws_user_tenant_ids())',
+  'COALESCE(public.aws_can_write_tenant(NEW.invitee_tenant_id), false)',
+  "RAISE EXCEPTION 'partnership_invitee_consent_required' USING ERRCODE = '42501'",
+  "RAISE EXCEPTION 'partnership_tenants_immutable' USING ERRCODE = '42501'",
+  'RETURN NEW;',
+];
+const SQL76_BODY_FORBIDDEN = [
+  /\bEXECUTE\b/i,
+  /set_config/i,
+  /SECURITY\s+DEFINER/i,
+  /has_role/i,
+  /cross_tenant/i,
+  /aws_can_write_tenant\(\s*NEW\.inviter/i,
+  /inviter_tenant_id\s+IN\b/i,
+  /\b(INSERT|DELETE|TRUNCATE|GRANT|REVOKE|ALTER|DROP|CREATE|PERFORM)\b/i,
+  // TG_OP = 'UPDATE' is the only UPDATE the guard may name (stripped before this check).
+  /\bUPDATE\b/i,
+];
+
+/** The guard function body exactly as Postgres stores it in prosrc, or null. */
+export function sql76GuardBody(text) {
+  const parts = String(text || '').split('$$');
+  return parts.length === 3 ? parts[1] : null;
+}
+
+export function sql76StatementsAllowed(text) {
+  const raw = String(text || '');
+  const body = sql76GuardBody(raw);
+  if (body == null) return false;
+  if (!SQL76_BODY_REQUIRED_MARKERS.every((marker) => body.includes(marker))) return false;
+  if (SQL76_BODY_FORBIDDEN.some((pattern) => pattern.test(body.replace(/'UPDATE'/g, "''")))) return false;
+  const outside = raw.replace(`$$${body}$$`, () => SQL76_BODY_PLACEHOLDER);
+  const statements = outside
+    .split('\n').filter((line) => !/^\s*--/.test(line)).join('\n')
+    .split(';').map(normalizeSqlStatement).filter(Boolean);
+  return statements.length === SQL76_EXPECTED_STATEMENTS.length
+    && statements.every((statement, index) => SQL76_EXPECTED_STATEMENTS[index].test(statement));
+}
+
+const sameConfig = (actual, expected) => Array.isArray(actual)
+  && actual.length === expected.length
+  && actual.every((entry, index) => entry === expected[index]);
+
+function classifyPartnershipGuard(rows, expectedBody) {
+  if (rows.length === 0) return 'absent';
+  if (rows.length !== 1) return 'different';
+  const [row] = rows;
+  return row.lanname === 'plpgsql'
+    && row.prosecdef === false
+    && row.rettype === 'trigger'
+    && Number(row.pronargs) === 0
+    && sameConfig(row.proconfig, ['search_path=public'])
+    && row.public_execute === false
+    && typeof expectedBody === 'string'
+    && row.prosrc === expectedBody
+    ? 'pinned'
+    : 'different';
+}
+
+function classifyPartnershipTrigger(row) {
+  if (!row) return 'absent';
+  return row.function_name === SQL76_GUARD_FUNCTION_NAME
+    && Number(row.tgtype) === SQL76_TRIGGER_TYPE
+    && row.tgenabled === 'O'
+    && Number(row.tgnargs) === 0
+    && String(row.tgattr || '') === ''
+    && row.has_qual === false
+    ? 'pinned'
+    : 'different';
+}
+
+function classifyPartnershipConnect(row) {
+  if (!row) return 'missing_function';
+  const rest = (row.proconfig || []).filter((entry) => !String(entry).startsWith(`${PARTNERSHIP_WRITER_SETTING}=`));
+  return row.prosecdef === true
+    && sameConfig(rest, PARTNERSHIP_CONNECT_CONFIG)
+    && hashSqlDefinition(String(row.prosrc ?? '')) === PARTNERSHIP_CONNECT_BODY_SHA256
+    ? 'pinned'
+    : 'different';
+}
+
+function classifyPartnershipMarker(row) {
+  if (!row) return 'missing_function';
+  const entries = (row.proconfig || []).filter((entry) => String(entry).startsWith(`${PARTNERSHIP_WRITER_SETTING}=`));
+  if (entries.length === 0) return 'unset';
+  return entries.length === 1 && entries[0] === SQL76_MARKER_ENTRY ? 'pinned' : 'different';
+}
+
+/**
+ * Read-only fingerprint of what SQL 76 touches on public.tenant_partnerships.
+ * `expectedBody` is the guard body from the embedded file (prosrc must equal it
+ * for the guard to read as pinned).
+ */
+export async function readPartnershipConsentState(client, expectedBody) {
+  const table = ((await client.query(PARTNERSHIP_TABLE_SQL))?.rows || [])[0] || null;
+  const guardRows = (await client.query(PARTNERSHIP_GUARD_SQL))?.rows || [];
+  const triggers = (await client.query(PARTNERSHIP_TRIGGERS_SQL))?.rows || [];
+  const connectRow = ((await client.query(PARTNERSHIP_CONNECT_SQL))?.rows || [])[0] || null;
+  const policies = (await client.query(PAYMENT_POLICIES_SQL, [['tenant_partnerships']]))?.rows || [];
+  const functions = ((await client.query(REQUIRED_FUNCTIONS_SQL, [[...PARTNERSHIP_CONSENT_REQUIRED_FUNCTIONS]]))?.rows || [])
+    .filter((row) => row.can_execute === true)
+    .map((row) => row.proname);
+
+  const guardTrigger = triggers.find((row) => row.tgname === PARTNERSHIP_CONSENT_TRIGGER) || null;
+  const otherTriggers = triggers.filter((row) => row.tgname !== PARTNERSHIP_CONSENT_TRIGGER);
+  const otherPolicies = policies.filter((row) => !PARTNERSHIP_RETIRED_POLICIES.includes(row.policyname));
+  const state = {
+    guard: classifyPartnershipGuard(guardRows, expectedBody),
+    trigger: classifyPartnershipTrigger(guardTrigger),
+    marker: classifyPartnershipMarker(connectRow),
+    policies: PARTNERSHIP_RETIRED_POLICIES.map((name) => (policies.some((row) => row.policyname === name) ? 'present' : 'absent')),
+    connect: classifyPartnershipConnect(connectRow),
+    otherTriggers: otherTriggers.length === 0 ? 'none' : 'present',
+  };
+  // Everything SQL 76 must leave alone: the table's RLS flags, every other
+  // policy and trigger on it, and aws_connect_partner_by_code apart from the marker.
+  const connectRest = connectRow
+    ? {
+      prosrc: connectRow.prosrc,
+      prosecdef: connectRow.prosecdef,
+      proconfig: (connectRow.proconfig || []).filter((entry) => !String(entry).startsWith(`${PARTNERSHIP_WRITER_SETTING}=`)),
+    }
+    : null;
+  return ok({
+    table_present: Boolean(table),
+    connect_function_present: Boolean(connectRow),
+    required_functions_present: PARTNERSHIP_CONSENT_REQUIRED_FUNCTIONS.every((name) => functions.includes(name)),
+    consent_state: {
+      guard: state.guard,
+      trigger: state.trigger,
+      marker: state.marker,
+      policies: Object.fromEntries(PARTNERSHIP_RETIRED_POLICIES.map((name, index) => [name, state.policies[index]])),
+      connect: state.connect,
+      other_triggers: state.otherTriggers,
+    },
+    other_policy_count: otherPolicies.length,
+    other_trigger_count: otherTriggers.length,
+    preserved_sha256: hashSqlDefinition(JSON.stringify({
+      table,
+      other_policies: otherPolicies,
+      other_triggers: otherTriggers,
+      connect: connectRest,
+    })),
+    live_definition_sha256: hashSqlDefinition(partnershipConsentStateText(state)),
+  });
+}
+
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+/**
+ * A test may supply `pin` only as the committed pin with a reviewed
+ * expected_live_definition_sha256 filled in; every other field must match.
+ */
+function sql76PinIsCommitted(pin) {
+  const committed = AUTHORIZED_SQL76_PARTNERSHIP_CONSENT;
+  return Boolean(pin) && ['filename', 'migration_id', 'commit', 'source_sha256', 'intended_replacement_sha256', 'table']
+    .every((key) => pin[key] === committed[key]);
+}
+
+async function handleSql76PartnershipConsent({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile76,
+  pin = AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
+}) {
+  if (!sql76PinIsCommitted(pin)) {
+    return fail(CODES.SQL_COLLISION, 'SQL 76 pin does not match the committed allowlist entry');
+  }
+  const embedded = readEmbeddedSql(sqlFile76, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!sql76StatementsAllowed(embedded.details.text)) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 76 is not the pinned partnership consent statements');
+  }
+  const expectedBody = sql76GuardBody(embedded.details.text);
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 76 executor action ${event.action}`);
+  }
+  const pinExecutable = SHA256_HEX_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, 'SQL 76 pin has no reviewed pre-apply live definition hash yet; apply is refused');
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 76 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  const prerequisitesMet = (details) => details.table_present === true
+    && details.connect_function_present === true
+    && details.required_functions_present === true;
+  try {
+    client = await connect();
+    if (readOnly) {
+      const state = await readPartnershipConsentState(client, expectedBody);
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && prerequisitesMet(state.details),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql76_tenant_partnership_invitee_consent']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readPartnershipConsentState(client, expectedBody);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 76 partnership consent guard is already applied; refuse re-apply');
+    }
+    if (before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'tenant_partnerships consent state is not the expected pre-apply state', {
+        consent_state: before.details.consent_state,
+      });
+    }
+    if (!prerequisitesMet(before.details)) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 76 prerequisites (table, aws_connect_partner_by_code, helper functions) are missing on the target database');
+    }
+
+    await client.query(embedded.details.text);
+
+    const after = await readPartnershipConsentState(client, expectedBody);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.preserved_sha256 !== before.details.preserved_sha256
+      || after.details.other_policy_count !== before.details.other_policy_count
+      || after.details.other_trigger_count !== before.details.other_trigger_count) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 76 changed more than the consent guard, the connect marker and the five retired policies', {
+        before: before.details.consent_state,
+        after: after.details.consent_state,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        consent_state_after: after.details.consent_state,
+        other_policy_count: after.details.other_policy_count,
+        other_trigger_count: after.details.other_trigger_count,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function createHandler({
   connect = defaultConnect,
   now = () => Date.now(),
@@ -1918,6 +2287,8 @@ export function createHandler({
   sqlFileLedger = LEDGER_20261007193200_FILE,
   sqlFile71 = SQL71_AMOUNT_GRANT_FILE,
   sqlFile72 = SQL72_MEMBER_PAYMENT_WRITES_FILE,
+  sqlFile76 = SQL76_PARTNERSHIP_CONSENT_FILE,
+  sql76Pin = AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -1957,6 +2328,10 @@ export function createHandler({
 
     if (isSql72MemberPaymentWrites(event)) {
       return handleSql72MemberPaymentWrites({ event, authorization, identity, connect, sqlFile72 });
+    }
+
+    if (isSql76PartnershipConsent(event)) {
+      return handleSql76PartnershipConsent({ event, authorization, identity, connect, sqlFile76, pin: sql76Pin });
     }
 
     if (isLedger20261007193200(event)) {

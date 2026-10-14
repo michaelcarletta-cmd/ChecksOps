@@ -131,6 +131,94 @@ export const AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES = Object.freeze({
   tables: Object.freeze(['public.payment_event_log', 'public.payment_transfers', 'public.payment_wallets']),
 });
 
+// SQL 76 guards tenant_partnerships activation: a BEFORE INSERT OR UPDATE
+// trigger (only the invitee side, or aws_connect_partner_by_code, can make a
+// row live), the trusted-writer marker on aws_connect_partner_by_code, and the
+// retirement of five Supabase-era write/admin policies. The "definition" is the
+// canonical state text of exactly those objects, hashed. Each object is
+// classified against the embedded file (guard function and trigger: absent |
+// pinned | different; marker: missing_function | unset | pinned | different;
+// each retired policy: present | absent). Every other policy and trigger on
+// tenant_partnerships, and the rest of aws_connect_partner_by_code, must be
+// byte-identical before and after.
+export const PARTNERSHIP_CONSENT_GUARD_FUNCTION = 'public.aws_tenant_partnership_consent_guard()';
+export const PARTNERSHIP_CONSENT_TRIGGER = 'aws_tenant_partnership_consent_guard';
+export const PARTNERSHIP_CONNECT_FUNCTION = 'public.aws_connect_partner_by_code(text, uuid)';
+export const PARTNERSHIP_WRITER_SETTING = 'checksops.partnership_writer';
+export const PARTNERSHIP_WRITER_VALUE = 'aws_connect_partner_by_code';
+export const PARTNERSHIP_RETIRED_POLICIES = Object.freeze([
+  'Inviter can create partnerships',
+  'Partners can update partnerships',
+  'Admins can create any partnership',
+  'Admins can view any partnership',
+  'Admins can update any partnership',
+]);
+export const PARTNERSHIP_CONSENT_REQUIRED_FUNCTIONS = Object.freeze([
+  'aws_can_write_tenant',
+  'aws_user_tenant_ids',
+]);
+/**
+ * `state.policies`: one state for all five retired policies, or one per
+ * PARTNERSHIP_RETIRED_POLICIES row.
+ */
+// sha256 of aws_connect_partner_by_code's body (prosrc) in aws/rls/sql/32_partner_share_lifecycle.sql.
+// SQL 76 makes that function the trusted writer, so its live body must be exactly
+// the reviewed one (a test re-derives this from the file).
+export const PARTNERSHIP_CONNECT_BODY_SHA256 = '1d8e36deefc46bf447b57f13d510a8a9184f61783c8e181fef4150384c327a08';
+export const PARTNERSHIP_CONNECT_CONFIG = Object.freeze(['search_path=public', 'row_security=off']);
+/**
+ * `connect`: aws_connect_partner_by_code itself (SECURITY DEFINER, the SQL 32 body
+ * and config apart from the marker): pinned | different | missing_function.
+ * `otherTriggers`: none | present (any other trigger on tenant_partnerships could
+ * run after the guard and change the row).
+ */
+export function partnershipConsentStateText({
+  guard = 'absent',
+  trigger = 'absent',
+  marker = 'unset',
+  policies = 'present',
+  connect = 'pinned',
+  otherTriggers = 'none',
+} = {}) {
+  return [
+    `${PARTNERSHIP_CONSENT_GUARD_FUNCTION} RETURNS trigger: ${guard}`,
+    `public.tenant_partnerships trigger ${PARTNERSHIP_CONSENT_TRIGGER} BEFORE INSERT OR UPDATE FOR EACH ROW: ${trigger}`,
+    `public.tenant_partnerships other triggers: ${otherTriggers}`,
+    `${PARTNERSHIP_CONNECT_FUNCTION} body and config: ${connect}`,
+    `${PARTNERSHIP_CONNECT_FUNCTION} SET ${PARTNERSHIP_WRITER_SETTING}: ${marker}`,
+    ...PARTNERSHIP_RETIRED_POLICIES.map((name, index) => (
+      `public.tenant_partnerships policy "${name}": ${Array.isArray(policies) ? policies[index] : policies}`
+    )),
+  ].join('\n');
+}
+export const PARTNERSHIP_CONSENT_APPLIED_STATE = Object.freeze({
+  guard: 'pinned',
+  trigger: 'pinned',
+  marker: 'pinned',
+  policies: 'absent',
+  connect: 'pinned',
+  otherTriggers: 'none',
+});
+// A later guarded production apply tool (SQL 72's used the phrase
+// CREATE_MEMBER_PAYMENT_WRITE_POLICIES) would use GUARD_PARTNERSHIP_ACTIVATION.
+export const SQL76_PROPOSED_AUTHORIZATION_PHRASE = 'GUARD_PARTNERSHIP_ACTIVATION';
+export const AUTHORIZED_SQL76_PARTNERSHIP_CONSENT = Object.freeze({
+  filename: 'aws/workflows/sql/76_tenant_partnership_invitee_consent.sql',
+  migration_id: '76_tenant_partnership_invitee_consent',
+  // The commit that authored the current file bytes. Re-pin if the branch is
+  // rebased or squashed before it reaches main.
+  commit: 'a153cfc514668b94388b5d5e6e83d0763fb1ef32',
+  source_sha256: 'c319bcb016ee7bd1b6d67703f14727c82b42adbd15cd125087d18462e4d2ea4e',
+  // PLACEHOLDER (not executable): the pre-apply state depends on which of the
+  // five retired policies the target database actually carries. Set it, after
+  // review, to the live_definition_sha256 a read-only staging executor inspect
+  // reports. While it is null the executor and the guarded workflow refuse apply.
+  expected_live_definition_sha256: null,
+  // Code-derived: sha256(partnershipConsentStateText(PARTNERSHIP_CONSENT_APPLIED_STATE)).
+  intended_replacement_sha256: 'a30db07d5da7c87ecc3e22a77df1ba819a2c3be51c4f074956e0f32ea5e58301',
+  table: 'public.tenant_partnerships',
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -161,6 +249,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_LEDGER_20261007193200,
   AUTHORIZED_SQL71_AMOUNT_GRANT,
   AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
+  AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -190,6 +279,10 @@ export function isSql72MemberPaymentWrites(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES);
 }
 
+export function isSql76PartnershipConsent(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL76_PARTNERSHIP_CONSENT);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -213,6 +306,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isLedger20261007193200(input)) return AUTHORIZED_LEDGER_20261007193200;
   if (isSql71AmountGrant(input)) return AUTHORIZED_SQL71_AMOUNT_GRANT;
   if (isSql72MemberPaymentWrites(input)) return AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES;
+  if (isSql76PartnershipConsent(input)) return AUTHORIZED_SQL76_PARTNERSHIP_CONSENT;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
