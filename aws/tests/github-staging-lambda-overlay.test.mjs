@@ -8,6 +8,7 @@ import { mock, test } from 'node:test';
 import {
   buildOverlayReceiptInput,
   DIAGNOSTIC_VALIDATOR_MEMBER,
+  exportLiveMember,
   isAcceptedPublicValidatorUnhealthy,
   run,
   validateAcceptPublicValidatorUnhealthy,
@@ -327,6 +328,63 @@ test('inspect still reports PRESENT and the exact reviewed member hash', async (
   assert.equal(result.live.memberState, 'PRESENT');
   assert.equal(result.live.memberSha256, hashZipMembers(deps.zip)[env.CHECKSOPS_STAGING_OVERLAY_MEMBER]);
   assert.equal(result.authorization, undefined);
+});
+
+test('export_live_member writes only the exact live bytes, inspect-only, never to AWS', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'overlay-export-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const deps = inspectionDeps(true);
+  const result = await run({ ...env, CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR: dir }, deps);
+  assert.equal(result.mutation, false);
+  assert.equal(result.authorization, undefined);
+  assert.equal(result.live.memberBytes, undefined);
+  assert.equal(deps.calls.length, 1);
+  assert.equal(fs.readFileSync(result.exported.file, 'utf8'), 'reviewed live member');
+  assert.equal(result.exported.sha256, result.live.memberSha256);
+  assert.equal(path.dirname(result.exported.file), dir);
+
+  // A nested member is flattened into the export directory.
+  const nested = await run({ ...env, CHECKSOPS_STAGING_OVERLAY_MEMBER: 'index.mjs', CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR: dir }, inspectionDeps(true));
+  assert.equal(path.dirname(nested.exported.file), dir);
+
+  // Absent members and apply mode refuse; apply refuses before any lease or receipt.
+  await assert.rejects(run({ ...env, CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR: dir }, inspectionDeps(false)), { code: 'INVALID_MANIFEST' });
+  const applyDeps = inspectionDeps(true);
+  await assert.rejects(run({
+    ...env,
+    CHECKSOPS_STAGING_DEPLOY_MODE: 'apply',
+    CHECKSOPS_STAGING_OVERLAY_OPERATION: 'replace',
+    CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: hashZipMembers(deps.zip)[env.CHECKSOPS_STAGING_OVERLAY_MEMBER],
+    CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR: dir,
+  }, applyDeps), { code: 'INVALID_MANIFEST' });
+  // Refused before any AWS read.
+  assert.equal(applyDeps.calls.length, 0);
+  assert.ok(!fs.existsSync(path.join(process.cwd(), '.deployment-guard', 'github-staging-overlay-input.json')));
+});
+
+test('exportLiveMember refuses non-source members and bytes that do not match the inspected hash', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'overlay-export-'));
+  try {
+    const bytes = Buffer.from('x');
+    const live = { member: 'a.mjs', memberState: 'PRESENT', memberBytes: bytes, memberSha256: hashZipMembers(writeZipMembers({ 'a.mjs': 'x' }))['a.mjs'] };
+    assert.equal(fs.readFileSync(exportLiveMember(live, dir).file, 'utf8'), 'x');
+    assert.throws(() => exportLiveMember({ ...live, member: 'bin/tool' }, dir), { code: 'INVALID_MANIFEST' });
+    assert.throws(() => exportLiveMember({ ...live, memberSha256: 'f'.repeat(64) }, dir), { code: 'DEPLOYMENT_COLLISION' });
+    assert.throws(() => exportLiveMember({ ...live, member: 'config.json' }, dir), { code: 'INVALID_MANIFEST' });
+    for (const secret of ['-----BEGIN PRIVATE KEY-----', 'const k = "AKIAABCDEFGHIJKLMNOP";']) {
+      const leaked = Buffer.from(secret);
+      const leakedSha = hashZipMembers(writeZipMembers({ 'a.mjs': secret }))['a.mjs'];
+      assert.throws(() => exportLiveMember({ ...live, memberBytes: leaked, memberSha256: leakedSha }, dir), { code: 'DEPLOYMENT_COLLISION' });
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('workflow export_live_member defaults false, is inspect-only and uploads a 1-day artifact', () => {
+  assert.match(workflow, /export_live_member:\n        description:.*\n        required: true\n        default: false\n        type: boolean/);
+  assert.match(workflow, /export_live_member is inspect-only/);
+  assert.match(workflow, /if: \$\{\{ inputs\.mode == 'inspect' && inputs\.export_live_member \}\}\n        uses: actions\/upload-artifact@[0-9a-f]{40}\n[\s\S]*?retention-days: 1/);
 });
 
 test('inspect refuses incomplete live fingerprints even for an absent member', async () => {
