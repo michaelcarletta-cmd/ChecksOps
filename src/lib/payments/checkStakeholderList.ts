@@ -94,8 +94,12 @@ export function buildCheckStakeholderRows(input: {
     if (p?.partner_tenant_id) sharedNames.set(lower(p.partner_tenant_id), p.partner_name);
   }
 
+  const liveShared = new Set((input.sharedPartners ?? []).map((p) => lower(p.partner_tenant_id)));
+
   for (const s of input.checkStakeholders ?? []) {
     const acct = s.stakeholder_accounts ?? null;
+    // A partner added because the check was shared leaves when the check is unshared.
+    if (s.partner_tenant_id && s.added_via === "partner_share" && !liveShared.has(lower(s.partner_tenant_id))) continue;
     // An account switched off in Stakeholder Settings is no longer offered.
     if (acct && acct.is_active === false) continue;
     if (s.partner_tenant_id) {
@@ -286,10 +290,10 @@ export const formatUsdCents = (cents: number) =>
 
 /**
  * Who the payment screen offers for allocation: this check's own payees, then
- * shared and chosen partners not listed yet, minus partners removed as
- * stakeholders on this check.
+ * shared and chosen partners not listed yet. Partners added by sharing leave
+ * once the check is unshared.
  */
-export function mergeDisbursementPayees<T extends { id: string; partner_tenant_id?: string | null }>(input: {
+export function mergeDisbursementPayees<T extends { id: string; partner_tenant_id?: string | null; added_via?: string | null }>(input: {
   ownAccounts: T[];
   sharedPartners: PartnerRef[];
   selectedPartners: PartnerRef[];
@@ -298,7 +302,11 @@ export function mergeDisbursementPayees<T extends { id: string; partner_tenant_i
 }): T[] {
   const removed = input.removedPartnerIds;
   const isRemoved = (id: string | null | undefined) => !!id && removed.has(lower(id));
-  const merged = (input.ownAccounts ?? []).filter((a) => !isRemoved(a.partner_tenant_id));
+  const liveShared = new Set((input.sharedPartners ?? []).map((p) => lower(p.partner_tenant_id)));
+  // A partner added because the check was shared leaves when the check is unshared.
+  const unshared = (a: T) =>
+    !!a.partner_tenant_id && a.added_via === "partner_share" && !liveShared.has(lower(a.partner_tenant_id));
+  const merged = (input.ownAccounts ?? []).filter((a) => !isRemoved(a.partner_tenant_id) && !unshared(a));
   const partnerRows = [
     ...(input.sharedPartners ?? []).map((p) => ({ ...p, added_via: "partner_share" })),
     ...(input.selectedPartners ?? []).map((p) => ({ ...p, added_via: "partner_selected" })),

@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search, UserPlus, Send, Undo2 } from "lucide-react";
+import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search, UserPlus, Send } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
@@ -26,7 +26,7 @@ import { AddExternalStakeholderDialog } from "./AddExternalStakeholderDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { displayCaseOrNull } from "@/lib/displayCase";
 import { useSelectedPartners } from "@/lib/payments/selectedPartners";
-import { checkStakeholderQueryKeys, partnerRemovalsTable, useCheckStakeholderList } from "@/hooks/useCheckStakeholderList";
+import { useCheckStakeholderList } from "@/hooks/useCheckStakeholderList";
 import { formatUsdCents, releasedForRow, type CheckStakeholderRow } from "@/lib/payments/checkStakeholderList";
 
 
@@ -77,11 +77,11 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
     },
   });
 
-  // One list: saved stakeholders, partners the check is shared with (unless
-  // removed), and partners chosen in the picker, with what each was sent so far.
+  // One list: saved stakeholders, partners the check is shared with, and
+  // partners chosen in the picker, with what each was sent so far. A partner
+  // the check is shared with stays listed until the check is unshared.
   const { rows, released } = useCheckStakeholderList(checkIntakeItemId, tenant?.id);
   const activeRows = rows.filter((r) => r.status === "active");
-  const removedRows = rows.filter((r) => r.status === "removed");
   const listedKeys = useMemo(() => new Set(rows.map((r) => r.key)), [rows]);
 
   const { data: allAccounts = [] } = useQuery({
@@ -232,71 +232,21 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
     onError: (e: any) => toast({ title: "Couldn't remove", description: e.message, variant: "destructive" }),
   });
 
-  const refreshPartnerRows = () => {
-    qc.invalidateQueries({ queryKey: checkStakeholderQueryKeys.removals(checkIntakeItemId) });
-    qc.invalidateQueries({ queryKey: ["partner-recipients", checkIntakeItemId] });
-    qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
-    qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkIntakeItemId] });
-    qc.invalidateQueries({ queryKey: ["partner-payout-options", checkIntakeItemId] });
-  };
-
-  // A partner the check is shared with stays shared; they are only taken off
-  // this check's stakeholders (and its payment list) until added back.
-  const removePartnerMut = useMutation({
-    mutationFn: async (row: CheckStakeholderRow) => {
-      const { error } = await partnerRemovalsTable().insert({
-        check_intake_item_id: checkIntakeItemId,
-        partner_tenant_id: row.partnerTenantId,
-      });
-      if (error) throw error;
-    },
-    onSuccess: (_data, row) => {
-      if (row.partnerTenantId) unselectPartner(row.partnerTenantId);
-      refreshPartnerRows();
-      toast({ title: "Stakeholder removed", description: `${row.name} is still shared on this check but won't be paid from it.` });
-    },
-    onError: (e: { code?: string; message?: string }, row) => {
-      refreshPartnerRows();
-      if (e?.code === "partner_not_shared") {
-        toast({ title: "No longer shared", description: `This check is no longer shared with ${row.name}, so there is nothing to remove.` });
-        return;
-      }
-      toast({ title: "Couldn't remove", description: e?.message, variant: "destructive" });
-    },
-  });
-
-  const restorePartnerMut = useMutation({
-    mutationFn: async (row: CheckStakeholderRow) => {
-      const { error } = await partnerRemovalsTable()
-        .delete()
-        .eq("check_intake_item_id", checkIntakeItemId)
-        .eq("partner_tenant_id", row.partnerTenantId);
-      if (error) throw error;
-    },
-    onSuccess: (_data, row) => {
-      refreshPartnerRows();
-      toast({ title: "Stakeholder added back", description: `${row.name} is back in the payment list for this check.` });
-    },
-    onError: (e: { message?: string }) => {
-      refreshPartnerRows();
-      toast({ title: "Couldn't add back", description: e?.message, variant: "destructive" });
-    },
-  });
-
   const confirmRemoval = () => {
     const row = pendingRemoval;
     setPendingRemoval(null);
     if (!row) return;
     if (row.kind === "partner") {
-      if (row.sharedLive) removePartnerMut.mutate(row);
-      else if (row.checkStakeholderId) removeMut.mutate(row.checkStakeholderId);
+      // Shared partners are never offered for removal; unsharing removes them.
+      if (row.sharedLive) return;
+      if (row.checkStakeholderId) removeMut.mutate(row.checkStakeholderId);
       else if (row.partnerTenantId) unselectPartner(row.partnerTenantId);
       return;
     }
     if (row.checkStakeholderId) removeMut.mutate(row.checkStakeholderId);
   };
 
-  const removing = removeMut.isPending || removePartnerMut.isPending;
+  const removing = removeMut.isPending;
 
   const moovAllowed = PAYMENT_FLAGS.USE_MOOV;
 
@@ -516,51 +466,27 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
                       <Send className="h-3 w-3 mr-1" /> Pay
                     </Button>
                   )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6"
-                    onClick={() => setPendingRemoval(row)}
-                    disabled={removing}
-                    title="Remove from this check's stakeholders"
-                    aria-label={`Remove ${row.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
+                  {row.kind === "partner" && row.sharedLive ? (
+                    <span className="text-muted-foreground text-[10px]" title="Unshare the check to remove them">
+                      Shared — unshare to remove
+                    </span>
+                  ) : (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => setPendingRemoval(row)}
+                      disabled={removing}
+                      title="Remove from this check's stakeholders"
+                      aria-label={`Remove ${row.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {removedRows.length > 0 && (
-        <div className="space-y-1">
-          {removedRows.map((row) => (
-            <div key={row.key} className="flex items-center justify-between gap-2 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2 min-w-0 flex-wrap opacity-70">
-                <span className="font-medium truncate">{row.name}</span>
-                <Badge variant="outline" className="text-[9px]" title="Still shared on this check, but not a stakeholder">
-                  <Handshake className="h-2.5 w-2.5 mr-0.5" /> Partner
-                </Badge>
-                <Badge variant="outline" className="text-[9px]">Removed</Badge>
-                <span className="text-[10px]">Released {formatUsdCents(releasedForRow(released, row))}</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 text-[10px] px-2 shrink-0"
-                onClick={() => restorePartnerMut.mutate(row)}
-                disabled={restorePartnerMut.isPending}
-                title="Add them back as a stakeholder on this check"
-              >
-                {restorePartnerMut.isPending && restorePartnerMut.variables?.key === row.key
-                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  : <Undo2 className="h-3 w-3 mr-1" />}
-                Add back
-              </Button>
-            </div>
-          ))}
         </div>
       )}
 
@@ -569,9 +495,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {pendingRemoval?.name ?? "this stakeholder"}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingRemoval?.kind === "partner" && pendingRemoval.sharedLive
-                ? "They stay shared on this check, but are taken off its stakeholders and payment list. You can add them back any time."
-                : "They are taken off this check's stakeholders and payment list. Payments already sent are not affected."}
+              They are taken off this check's stakeholders and payment list. Payments already sent are not affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
