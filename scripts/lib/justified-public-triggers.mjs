@@ -89,9 +89,16 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     trigger: 'trg_apply_tenant_moov_ga_defaults',
     functionName: 'apply_tenant_moov_ga_defaults',
   }),
+  // SQL 76 (aws/workflows/sql/76_tenant_partnership_invitee_consent.sql): only the
+  // invitee side or Partner Code redemption can make a partnership live.
+  Object.freeze({
+    table: 'tenant_partnerships',
+    trigger: 'aws_tenant_partnership_consent_guard',
+    functionName: 'aws_tenant_partnership_consent_guard',
+  }),
 ]);
 
-export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 172;
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 173;
 
 const unqualified = (value) => {
   const text = String(value || '');

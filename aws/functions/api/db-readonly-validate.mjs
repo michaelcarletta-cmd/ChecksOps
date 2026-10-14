@@ -52,7 +52,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 172;
+export const EXPECTED_PUBLIC_TRIGGERS = 173;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
@@ -102,6 +102,13 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'tenants',
     trigger: 'trg_apply_tenant_moov_ga_defaults',
     functionName: 'apply_tenant_moov_ga_defaults',
+  }),
+  // SQL 76 (aws/workflows/sql/76_tenant_partnership_invitee_consent.sql): only the
+  // invitee side or Partner Code redemption can make a partnership live.
+  Object.freeze({
+    table: 'tenant_partnerships',
+    trigger: 'aws_tenant_partnership_consent_guard',
+    functionName: 'aws_tenant_partnership_consent_guard',
   }),
 ]);
 

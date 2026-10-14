@@ -40,7 +40,7 @@ const verifyStagingToken = (token) => createStagingVerifier().verify(token);
 
 const safeCount = (value) => Number.isSafeInteger(value) && value >= 0;
 const INVENTORY_LIMIT = 256;
-const EXPECTED_PUBLIC_TRIGGERS = 172;
+const EXPECTED_PUBLIC_TRIGGERS = 173;
 
 export const projectPublicTriggerInventory = (catalog = {}) => {
   if (!Array.isArray(catalog.publicTriggerInventory)) return null;
