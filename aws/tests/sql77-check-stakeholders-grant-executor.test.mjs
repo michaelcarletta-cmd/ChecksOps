@@ -2,9 +2,9 @@
  * Staging VPC executor support for SQL 77
  * (GRANT SELECT, INSERT, DELETE ON public.check_stakeholders TO checksops, authenticated).
  *
- * The committed pin has no reviewed pre-apply hash yet (a staging read-live run
- * reports it), so apply is refused with it. The apply paths below run on
- * EXECUTABLE_PIN, a copy pinned to the SELECT-only state the AWS restore left.
+ * The committed pin's pre-apply hash is the SELECT-only state a staging
+ * read-live run reported; EXECUTABLE_PIN must equal it. Apply also needs
+ * row-level security and the aws_write_check_stakeholders policy.
  * The PostgreSQL 16 test applies as a non-superuser table owner, like the AWS
  * database user.
  */
@@ -38,9 +38,10 @@ const SQL_FILE = path.join(ROOT, PIN.filename);
 const NOW = '2026-10-14T17:30:00.000Z';
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 
+// The staging state read live before apply: checksops SELECT, authenticated nothing.
 const SELECT_ONLY = Object.freeze({
   checksops: { SELECT: 'granted' },
-  authenticated: { SELECT: 'granted' },
+  authenticated: {},
 });
 const SELECT_ONLY_SHA256 = sha(stakeholderGrantStateText(SELECT_ONLY));
 const EXECUTABLE_PIN = Object.freeze({ ...PIN, expected_live_definition_sha256: SELECT_ONLY_SHA256 });
@@ -89,10 +90,12 @@ const neverConnect = async () => {
   throw new Error('should-not-connect');
 };
 
-test('pin matches the SQL file and its commit; intended is code-derived; no reviewed pre-apply hash yet', () => {
+test('pin matches the SQL file and its commit; intended is code-derived; expected is the staging SELECT-only state', () => {
   assert.equal(sha(fs.readFileSync(SQL_FILE)), PIN.source_sha256);
   assert.equal(sha(stakeholderGrantStateText(STAKEHOLDER_GRANT_APPLIED_STATE)), PIN.intended_replacement_sha256);
-  assert.equal(PIN.expected_live_definition_sha256, null);
+  assert.equal(PIN.expected_live_definition_sha256, SELECT_ONLY_SHA256);
+  assert.equal(PIN.expected_live_definition_sha256, '714659325ea58a54fdc2ad39b35224308f8f9df92629c3c53b8e3c6fe3faa4e7');
+  assert.deepEqual(EXECUTABLE_PIN, PIN);
   assert.match(fs.readFileSync(SQL_FILE, 'utf8'),
     /^GRANT SELECT, INSERT, DELETE ON TABLE public\.check_stakeholders TO checksops, authenticated;$/m);
   assert.doesNotMatch(fs.readFileSync(SQL_FILE, 'utf8').replace(/^--.*$/gm, ''), /UPDATE/);
@@ -106,7 +109,7 @@ test('pin matches the SQL file and its commit; intended is code-derived; no revi
 });
 
 test('apply refuses before connecting: unreviewed pin, read-live sentinel, wrong hash, tampered file', async () => {
-  const unreviewed = await handlerFor(neverConnect, { sql77Pin: PIN })(grantEvent());
+  const unreviewed = await handlerFor(neverConnect, { sql77Pin: { ...PIN, expected_live_definition_sha256: null } })(grantEvent());
   assert.equal(unreviewed.code, CODES.SQL_COLLISION);
   assert.match(unreviewed.message, /no reviewed pre-apply live definition hash/);
   const sentinel = await handlerFor(neverConnect)(grantEvent({ expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
@@ -135,8 +138,7 @@ function fakeDb({ acl = [
   { grantee: 'owner_role', privilege_type: 'SELECT', is_grantable: false },
   { grantee: 'owner_role', privilege_type: 'INSERT', is_grantable: false },
   { grantee: 'checksops', privilege_type: 'SELECT', is_grantable: false },
-  { grantee: 'authenticated', privilege_type: 'SELECT', is_grantable: false },
-], present = true, onApply } = {}) {
+], present = true, rls = { rls_enabled: true, write_policy_present: true }, onApply } = {}) {
   let committed = acl.map((row) => ({ ...row }));
   let working = null;
   const current = () => working || committed;
@@ -154,6 +156,7 @@ function fakeDb({ acl = [
         if (text === 'ROLLBACK') { working = null; return { rows: [] }; }
         if (text.includes('pg_advisory_xact_lock')) return { rows: [] };
         if (text.includes('IS NOT NULL AS present')) return { rows: [{ present }] };
+        if (text.includes('AS rls_enabled')) return { rows: [{ ...rls }] };
         if (text.includes('aclexplode')) return { rows: current().map((row) => ({ ...row })) };
         if (text.includes('GRANT SELECT, INSERT, DELETE ON TABLE public.check_stakeholders')) {
           for (const grantee of ['checksops', 'authenticated']) {
@@ -174,7 +177,7 @@ function fakeDb({ acl = [
 
 test('inspect only SELECTs and reports the privilege state; the committed pin is not executable yet', async () => {
   const db = fakeDb();
-  const inspect = await handlerFor(db.connect, { sql77Pin: PIN })(grantEvent({
+  const inspect = await handlerFor(db.connect, { sql77Pin: { ...PIN, expected_live_definition_sha256: null } })(grantEvent({
     action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL,
   }));
   assert.equal(inspect.ok, true, JSON.stringify(inspect));
@@ -184,6 +187,8 @@ test('inspect only SELECTs and reports the privilege state; the committed pin is
   assert.equal(receipt.pin_executable, false);
   assert.equal(receipt.apply_preconditions_met, false);
   assert.equal(receipt.update_granted, false);
+  assert.equal(receipt.rls_enabled, true);
+  assert.equal(receipt.write_policy_present, true);
   assert.deepEqual(receipt.privilege_state.checksops, { SELECT: 'granted', INSERT: 'absent', UPDATE: 'absent', DELETE: 'absent' });
   assert.ok(db.seen.every((text) => /^\s*SELECT\b/i.test(text)), JSON.stringify(db.seen));
 });
@@ -207,9 +212,22 @@ test('apply lands exactly on the intended state once; replay, re-grant, UPDATE d
   ] });
   assert.equal((await handlerFor(withUpdate.connect)(grantEvent())).code, CODES.DEPLOYMENT_COLLISION);
 
-  const different = fakeDb({ acl: [{ grantee: 'checksops', privilege_type: 'SELECT', is_grantable: false }] });
+  const different = fakeDb({ acl: [
+    { grantee: 'checksops', privilege_type: 'SELECT', is_grantable: false },
+    { grantee: 'authenticated', privilege_type: 'SELECT', is_grantable: false },
+  ] });
   assert.equal((await handlerFor(different.connect)(grantEvent())).code, CODES.DEPLOYMENT_COLLISION);
-  assert.equal(different.acl.length, 1);
+  assert.equal(different.acl.length, 2);
+
+  for (const rls of [{ rls_enabled: false, write_policy_present: true }, { rls_enabled: true, write_policy_present: false }]) {
+    const unguarded = fakeDb({ rls });
+    const inspected = await handlerFor(unguarded.connect)(grantEvent({ action: 'inspect' }));
+    assert.equal(inspected.details.receipt.apply_preconditions_met, false, JSON.stringify(rls));
+    const refused = await handlerFor(unguarded.connect)(grantEvent());
+    assert.equal(refused.code, CODES.DEPLOYMENT_COLLISION, JSON.stringify(rls));
+    assert.match(refused.message, /row-level security/);
+    assert.equal(unguarded.acl.length, 3);
+  }
 
   for (const [label, onApply] of [
     ['another grantee changed', (rows) => { rows.push({ grantee: 'anon', privilege_type: 'SELECT', is_grantable: false }); }],
@@ -219,7 +237,7 @@ test('apply lands exactly on the intended state once; replay, re-grant, UPDATE d
     const collateral = fakeDb({ onApply });
     const refused = await handlerFor(collateral.connect)(grantEvent());
     assert.equal(refused.code, CODES.UNRELATED_MUTATION, label);
-    assert.equal(collateral.acl.length, 4, label);
+    assert.equal(collateral.acl.length, 3, label);
   }
 
   const missing = fakeDb({ present: false });
@@ -278,7 +296,10 @@ test('PostgreSQL 16: a non-superuser owner applies SQL 77 through the real handl
         stakeholder_account_id uuid NOT NULL, tenant_id uuid NOT NULL,
         added_via text NOT NULL DEFAULT 'manual', partner_tenant_id uuid, added_by uuid,
         UNIQUE (check_intake_item_id, stakeholder_account_id));
-      GRANT SELECT ON public.check_stakeholders TO checksops, authenticated;`);
+      GRANT SELECT ON public.check_stakeholders TO checksops;
+      ALTER TABLE public.check_stakeholders ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY aws_write_check_stakeholders ON public.check_stakeholders FOR ALL TO authenticated
+        USING (true) WITH CHECK (true);`);
     await owner.end();
 
     const insertAsApi = async () => {

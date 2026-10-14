@@ -248,9 +248,9 @@ export const AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT = Object.freeze({
   // rebased or squashed before it reaches main.
   commit: 'b70fadfb1e50baa0c5a32a0b17ecda8edd3981ed',
   source_sha256: 'ed7f1c809b8c66c63e60c4d3504b3cbcbf8088ad1336f418b72a26f528029ec1',
-  // Not reviewed yet: a staging read-live run reports the live value, and a
-  // later reviewed change pins it. Until then apply is refused.
-  expected_live_definition_sha256: null,
+  // Staging read-live (run 38569427366, 2026-10-14): checksops SELECT only,
+  // authenticated nothing, no UPDATE anywhere.
+  expected_live_definition_sha256: '714659325ea58a54fdc2ad39b35224308f8f9df92629c3c53b8e3c6fe3faa4e7',
   // Code-derived: sha256(stakeholderGrantStateText(STAKEHOLDER_GRANT_APPLIED_STATE)).
   intended_replacement_sha256: 'e4d49fface305abc732bb225824e4f113e4a0a6ef4f5f2a145bdf3b0324043d1',
   table: STAKEHOLDER_GRANT_TABLE,
