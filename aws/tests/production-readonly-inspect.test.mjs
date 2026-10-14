@@ -394,6 +394,9 @@ test('inspects pinned production AWS reads and reports SPA locks, Lambda flags, 
   assert.equal(report.api.target_matches_pinned_lambda, true);
   assert.equal(report.lambda.workflow_flags.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED, false);
   assert.equal(report.lambda.workflow_flags.AWS_PROVIDER_EXECUTION_ENABLED, false);
+  // The Check Alt status-refresh flag is read too (boolean or null, never its raw value).
+  assert.ok(Object.hasOwn(report.lambda.workflow_flags, 'AWS_CHECKALT_STATUS_RECONCILE_ENABLED'));
+  assert.ok([true, false, null].includes(report.lambda.workflow_flags.AWS_CHECKALT_STATUS_RECONCILE_ENABLED));
   assert.equal(report.lambda.package.status, 'complete');
   assert.equal(report.lambda.package.code_sha256, LAMBDA_CODE_SHA);
   assert.equal(report.lambda.package.code_sha256_matches_configuration, true);
