@@ -17,7 +17,10 @@ test('choosing a partner in the check picker calls no disabled RPC and writes no
 test('chosen partners join the payment list and are sent as partner recipients', () => {
   const consoleSrc = read('src/components/disbursement/DisbursementConsole.tsx');
   assert.match(consoleSrc, /useSelectedPartners\(checkIntakeItemId\)/);
-  assert.match(consoleSrc, /added_via: "partner_selected"/);
+  // Picker-selected partners are merged into the payees by the shared list model.
+  assert.match(consoleSrc, /mergeDisbursementPayees(<[^>]*>)?\(/);
+  const listSrc = read('src/lib/payments/checkStakeholderList.ts');
+  assert.match(listSrc, /added_via: "partner_selected"/);
   // Partner rows are sent as { kind: "partner", partner_tenant_id }.
   assert.match(consoleSrc, /kind: "partner", partner_tenant_id: acct\.partner_tenant_id/);
   const store = read('src/lib/payments/selectedPartners.ts');
