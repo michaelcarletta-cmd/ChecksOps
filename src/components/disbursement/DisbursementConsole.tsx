@@ -24,8 +24,8 @@ import { useStepUp } from "@/hooks/useStepUp";
 import { sendPayment, SendPaymentError, type SendRecipient } from "@/lib/payments/sends";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { useSelectedPartners } from "@/lib/payments/selectedPartners";
-import { NOT_SENT, mergeDisbursementPayees, removedPartnerIds as computeRemovedPartnerIds } from "@/lib/payments/checkStakeholderList";
-import { batchHistoryQuery, checkSendsQuery, partnerRemovalsQuery, sharedPartnersQuery } from "@/hooks/useCheckStakeholderList";
+import { NOT_SENT, mergeDisbursementPayees } from "@/lib/payments/checkStakeholderList";
+import { batchHistoryQuery, checkSendsQuery, sharedPartnersQuery } from "@/hooks/useCheckStakeholderList";
 
 interface Props {
   checkIntakeItemId?: string;
@@ -120,14 +120,10 @@ export function DisbursementConsole({
 
   // Partners this check is shared with are paid wallet to wallet (or to their bank
   // when they have no balance account); the server checks the share again.
-  const { data: partnerStakeholders = [] } = useQuery(sharedPartnersQuery(checkIntakeItemId, tenant?.id));
+  const { data: partnerStakeholders = [], isSuccess: sharesKnown } = useQuery(sharedPartnersQuery(checkIntakeItemId, tenant?.id));
 
-  // Partners removed as stakeholders on this check stay off the payment list.
-  const { data: partnerRemovals = [] } = useQuery(partnerRemovalsQuery(checkIntakeItemId));
-  const removedPartners = useMemo(
-    () => computeRemovedPartnerIds(partnerStakeholders, partnerRemovals),
-    [partnerStakeholders, partnerRemovals],
-  );
+  // Shared partners stay on the payment list while the check is shared.
+  const removedPartners = useMemo(() => new Set<string>(), []);
 
   // Sends recorded by the payment server for this check (one row per transfer).
   const { data: sentTransfers = [] } = useQuery(checkSendsQuery(checkIntakeItemId));
@@ -186,12 +182,13 @@ export function DisbursementConsole({
   // server checks the partnership when the payment is sent).
   const { partners: selectedPartners } = useSelectedPartners(checkIntakeItemId);
 
-  // Partners appear next to this check's stakeholders, unless removed from this check.
+  // Partners appear next to this check's stakeholders while the check is shared.
   const accounts = useMemo(
     () =>
       mergeDisbursementPayees<any>({
         ownAccounts: ownAccounts as any[],
         sharedPartners: partnerStakeholders,
+        sharesKnown,
         selectedPartners,
         removedPartnerIds: removedPartners,
         makePartner: (p) => ({
@@ -206,7 +203,7 @@ export function DisbursementConsole({
           added_via: p.added_via,
         }),
       }),
-    [ownAccounts, partnerStakeholders, selectedPartners, removedPartners],
+    [ownAccounts, partnerStakeholders, sharesKnown, selectedPartners, removedPartners],
   );
 
   // "Pay" in the stakeholder list focuses that recipient's amount here, so the

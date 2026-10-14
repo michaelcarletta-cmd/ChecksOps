@@ -123,18 +123,18 @@ export const batchHistoryQuery = (checkIntakeItemId: string | undefined, deposit
   },
 });
 
-/** The one list of payees for a check, with removal status and amounts sent so far. */
+/** The one list of payees for a check, with amounts sent so far. */
 export function useCheckStakeholderList(checkId: string | undefined, tenantId: string | undefined) {
   const id = checkId ?? "";
   const stakeholders = useQuery(checkStakeholdersQuery(id));
   const shared = useQuery(sharedPartnersQuery(checkId, tenantId));
-  const removals = useQuery(partnerRemovalsQuery(checkId));
   const sends = useQuery(checkSendsQuery(checkId));
   const batches = useQuery(batchHistoryQuery(checkId));
   const { partners: selectedPartners } = useSelectedPartners(checkId);
 
   const sharedPartners = useMemo(() => shared.data ?? [], [shared.data]);
-  const removalRows = useMemo(() => removals.data ?? [], [removals.data]);
+  // Shared partners stay listed while the check is shared; unsharing removes them.
+  const removalRows = useMemo<PartnerRemovalRecord[]>(() => [], []);
 
   const rows = useMemo(
     () =>
@@ -143,8 +143,9 @@ export function useCheckStakeholderList(checkId: string | undefined, tenantId: s
         sharedPartners,
         removals: removalRows,
         selectedPartners,
+        sharesKnown: shared.isSuccess,
       }),
-    [stakeholders.data, sharedPartners, removalRows, selectedPartners],
+    [stakeholders.data, sharedPartners, removalRows, selectedPartners, shared.isSuccess],
   );
   const removedPartnerIds = useMemo(() => computeRemovedPartnerIds(sharedPartners, removalRows), [sharedPartners, removalRows]);
   const released = useMemo(

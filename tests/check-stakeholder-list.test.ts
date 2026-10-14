@@ -209,3 +209,67 @@ test("without removals, partners merge once next to the check's stakeholders", (
     [`partner:${P3}`, "partner_selected"],
   ]);
 });
+
+test("a partner added by sharing leaves the list once the check is unshared", () => {
+  const checkStakeholders = [
+    { id: "cs-p1", added_via: "partner_share", partner_tenant_id: P1, stakeholder_account_id: ACCT2, stakeholder_accounts: null, partner: null },
+    { id: "cs-p2", added_via: "partner_selected", partner_tenant_id: P2, stakeholder_account_id: ACCT, stakeholder_accounts: null, partner: null },
+  ];
+  const shared = buildCheckStakeholderRows({
+    checkStakeholders,
+    sharedPartners: [{ partner_tenant_id: P1, partner_name: "Roof Partners" }],
+    removals: [],
+  });
+  assert.deepEqual(shared.map((r) => [r.key, r.sharedLive]), [
+    [`partner:${P1}`, true],
+    [`partner:${P2}`, false],
+  ]);
+  const unshared = buildCheckStakeholderRows({ checkStakeholders, sharedPartners: [], removals: [] });
+  // The partner chosen in the picker stays; the shared one is gone.
+  assert.deepEqual(unshared.map((r) => r.key), [`partner:${P2}`]);
+});
+
+test("unshared partners drop out of the payees; chosen partners stay", () => {
+  const ownAccounts = [
+    { id: "a1", partner_tenant_id: P1, added_via: "partner_share" },
+    { id: "a2", partner_tenant_id: P2, added_via: "partner_selected" },
+    { id: "a3", partner_tenant_id: null, added_via: "manual" },
+  ];
+  const kept = mergeDisbursementPayees({
+    ownAccounts,
+    sharedPartners: [],
+    selectedPartners: [],
+    removedPartnerIds: new Set<string>(),
+    makePartner: (p) => ({ id: `partner:${p.partner_tenant_id}`, partner_tenant_id: p.partner_tenant_id, added_via: p.added_via }),
+  });
+  assert.deepEqual(kept.map((a) => a.id), ["a2", "a3"]);
+  const stillShared = mergeDisbursementPayees({
+    ownAccounts,
+    sharedPartners: [{ partner_tenant_id: P1.toUpperCase(), partner_name: "Roof Partners" }],
+    selectedPartners: [],
+    removedPartnerIds: new Set<string>(),
+    makePartner: (p) => ({ id: `partner:${p.partner_tenant_id}`, partner_tenant_id: p.partner_tenant_id, added_via: p.added_via }),
+  });
+  assert.deepEqual(stillShared.map((a) => a.id), ["a1", "a2", "a3"]);
+});
+
+test("while the check's shares are unknown, no partner row is hidden", () => {
+  const rows = buildCheckStakeholderRows({
+    checkStakeholders: [
+      { id: "cs-p1", added_via: "partner_share", partner_tenant_id: P1, stakeholder_account_id: ACCT2, stakeholder_accounts: null, partner: null },
+    ],
+    sharedPartners: [],
+    removals: [],
+    sharesKnown: false,
+  });
+  assert.deepEqual(rows.map((r) => r.key), [`partner:${P1}`]);
+  const payees = mergeDisbursementPayees({
+    ownAccounts: [{ id: "a1", partner_tenant_id: P1, added_via: "partner_share" }],
+    sharedPartners: [],
+    selectedPartners: [],
+    removedPartnerIds: new Set<string>(),
+    sharesKnown: false,
+    makePartner: (p) => ({ id: `partner:${p.partner_tenant_id}`, partner_tenant_id: p.partner_tenant_id, added_via: p.added_via }),
+  });
+  assert.deepEqual(payees.map((a) => a.id), ["a1"]);
+});
