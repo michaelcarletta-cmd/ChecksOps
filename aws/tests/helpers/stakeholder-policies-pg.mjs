@@ -2,7 +2,8 @@
  * PostgreSQL 16 fixture for the check stakeholder tables: the real AWS RLS
  * helper files (aws/rls/sql), public.check_stakeholders with its real policies
  * (copied out of 12_final_select_policies.sql and 24_complete_write_policies.sql)
- * and the real SQL 77 grant, and the real SQL 78 table. SQL 79 is left to the
+ * and the real SQL 77 grant, check_intake_items with RLS and its real SELECT
+ * policy, and the real SQL 78 table. SQL 79 is left to the
  * caller. Used by the SQL 79 executor and member-write tests.
  */
 import { spawnSync } from 'node:child_process';
@@ -128,6 +129,9 @@ export async function applyBaseSchema(client) {
   await client.query('REVOKE ALL ON TABLE public.check_stakeholders FROM checksops, authenticated');
   await client.query('GRANT SELECT ON TABLE public.check_stakeholders TO checksops');
   await client.query(file(SQL_77));
+  // The real check_intake_items SELECT policy: SQL 79's EXISTS runs under it.
+  await client.query('ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY');
+  await client.query(policyBlock('12_final_select_policies.sql', 'aws_select_check_intake_items'));
   await client.query('ALTER TABLE public.check_stakeholders ENABLE ROW LEVEL SECURITY');
   await client.query(policyBlock('12_final_select_policies.sql', 'aws_select_check_stakeholders'));
   await client.query(policyBlock('24_complete_write_policies.sql', 'aws_write_check_stakeholders'));

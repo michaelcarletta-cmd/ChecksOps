@@ -66,7 +66,7 @@ CREATE TABLE public.check_intake_items (
   id uuid PRIMARY KEY, tenant_id uuid, status text, deposited_at timestamptz, payee_line text, claim_id uuid);
 CREATE TABLE public.claims (id uuid PRIMARY KEY, org_id uuid);
 -- SQL 79 also adds policies here; this test only uses the removals table.
-CREATE TABLE public.check_stakeholders (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), check_intake_item_id uuid, tenant_id uuid NOT NULL);
+CREATE TABLE public.check_stakeholders (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), check_intake_item_id uuid, tenant_id uuid NOT NULL, added_via text NOT NULL DEFAULT 'manual');
 CREATE TABLE public.deposit_items (id uuid PRIMARY KEY, check_id uuid);
 CREATE TABLE public.signature_requests (id uuid PRIMARY KEY, check_intake_item_id uuid, claim_id uuid);
 CREATE TABLE public.loss_draft_tracking (id uuid PRIMARY KEY, claim_id uuid);

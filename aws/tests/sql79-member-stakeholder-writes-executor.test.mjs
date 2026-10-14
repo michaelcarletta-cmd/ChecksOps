@@ -94,7 +94,7 @@ test('pin matches the SQL file and its commit; both hashes are the code-derived 
   assert.equal(PIN.expected_live_definition_sha256, sha(memberStakeholderWritesStateText(MEMBER_STAKEHOLDER_PRE_STATE)));
   assert.equal(PIN.expected_live_definition_sha256, 'd9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4');
   assert.equal(PIN.intended_replacement_sha256, sha(memberStakeholderWritesStateText(MEMBER_STAKEHOLDER_APPLIED_STATE)));
-  assert.equal(PIN.intended_replacement_sha256, 'c9c41944e66025b9b1175855a3d4f2f7e26c657f8fb908eb44930c79bd930ef6');
+  assert.equal(PIN.intended_replacement_sha256, '878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7');
   assert.equal(text.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim(), SQL79_NORMALIZED_STATEMENTS);
   const body = text.replace(/^--.*$/gm, '');
   assert.doesNotMatch(body, /UPDATE|DROP |GRANT|ALTER|SECURITY DEFINER|aws_can_write_tenant|aws_is_cross_tenant_reader|aws_financial_execution_active| OR /i);

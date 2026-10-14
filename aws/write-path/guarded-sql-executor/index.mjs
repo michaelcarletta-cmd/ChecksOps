@@ -2601,8 +2601,14 @@ ORDER BY 1, 2
 export const SQL79_NORMALIZED_STATEMENTS = MEMBER_STAKEHOLDER_TABLES.flatMap((table) => {
   const [insert, remove] = MEMBER_STAKEHOLDER_NEW_POLICIES[table];
   const condition = '( public.aws_is_authenticated() AND tenant_id IN (SELECT public.aws_user_tenant_ids()) );';
+  // check_stakeholders: also a manual link on a check the row's tenant owns.
+  const insertCondition = table === STAKEHOLDER_GRANT_TABLE
+    ? '( public.aws_is_authenticated() AND tenant_id IN (SELECT public.aws_user_tenant_ids()) AND EXISTS ('
+      + ' SELECT 1 FROM public.check_intake_items c WHERE c.id = check_intake_item_id AND c.tenant_id = check_stakeholders.tenant_id'
+      + " ) AND added_via = 'manual' );"
+    : condition;
   return [
-    `CREATE POLICY ${insert.name} ON ${table} FOR INSERT TO authenticated WITH CHECK ${condition}`,
+    `CREATE POLICY ${insert.name} ON ${table} FOR INSERT TO authenticated WITH CHECK ${insertCondition}`,
     `CREATE POLICY ${remove.name} ON ${table} FOR DELETE TO authenticated USING ${condition}`,
   ];
 }).join(' ');

@@ -362,6 +362,8 @@ const reviewedPolicy = (name, cmd, using, withCheck) => Object.freeze({
 const STAKEHOLDER_SELECT_EXPR = '(public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id))';
 const STAKEHOLDER_WRITE_EXPR = 'public.aws_can_write_tenant(tenant_id)';
 export const MEMBER_STAKEHOLDER_MEMBER_EXPR = '(public.aws_is_authenticated() AND (tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)))';
+// check_stakeholders inserts also need a manual link on a check the row's tenant owns.
+export const MEMBER_STAKEHOLDER_LINK_INSERT_EXPR = "(public.aws_is_authenticated() AND (tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)) AND (EXISTS ( SELECT 1\n   FROM public.check_intake_items c\n  WHERE ((c.id = check_stakeholders.check_intake_item_id) AND (c.tenant_id = check_stakeholders.tenant_id)))) AND (added_via = 'manual'::text))";
 const MEMBER_STAKEHOLDER_SHORT = Object.freeze({
   [STAKEHOLDER_GRANT_TABLE]: 'check_stakeholders',
   [PARTNER_STAKEHOLDER_REMOVALS_TABLE]: 'check_partner_stakeholder_removals',
@@ -373,7 +375,8 @@ export const MEMBER_STAKEHOLDER_REVIEWED_POLICIES = Object.freeze(Object.fromEnt
 ])])));
 /** The four policies SQL 79 adds, by table. */
 export const MEMBER_STAKEHOLDER_NEW_POLICIES = Object.freeze(Object.fromEntries(MEMBER_STAKEHOLDER_TABLES.map((table) => [table, Object.freeze([
-  reviewedPolicy(`aws_member_insert_${MEMBER_STAKEHOLDER_SHORT[table]}`, 'INSERT', null, MEMBER_STAKEHOLDER_MEMBER_EXPR),
+  reviewedPolicy(`aws_member_insert_${MEMBER_STAKEHOLDER_SHORT[table]}`, 'INSERT', null,
+    table === STAKEHOLDER_GRANT_TABLE ? MEMBER_STAKEHOLDER_LINK_INSERT_EXPR : MEMBER_STAKEHOLDER_MEMBER_EXPR),
   reviewedPolicy(`aws_member_delete_${MEMBER_STAKEHOLDER_SHORT[table]}`, 'DELETE', MEMBER_STAKEHOLDER_MEMBER_EXPR, null),
 ])])));
 const memberStakeholderState = (withNew) => ({
@@ -393,14 +396,14 @@ export const AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES = Object.freeze({
   migration_id: '79_member_stakeholder_writes',
   // The commit that authored the current file bytes. Re-pin if the branch is
   // rebased or squashed before it reaches main.
-  commit: 'ad6457b4caa6f3072d780fa3ec3074113d12927a',
-  source_sha256: '07369ba19f576382a6ad370939db633cd817a46770bba0a6ec99bf127b16f7ce',
+  commit: '41a3231a211fda0d0bde8a8346e0496e0d7d43c6',
+  source_sha256: '87556017ffbb97625af328c55cc468f1938566ad5760eac883375c187c1d1231',
   // Code-derived: sha256(memberStakeholderWritesStateText(MEMBER_STAKEHOLDER_PRE_STATE)),
   // the state SQL 12/24/77/78 leave. A staging read-live run should confirm it before apply.
   expected_live_definition_sha256: 'd9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4',
   // Code-derived: sha256(memberStakeholderWritesStateText(MEMBER_STAKEHOLDER_APPLIED_STATE)),
   // re-derived from the real catalog by aws/tests/sql79-member-stakeholder-writes-executor.test.mjs.
-  intended_replacement_sha256: 'c9c41944e66025b9b1175855a3d4f2f7e26c657f8fb908eb44930c79bd930ef6',
+  intended_replacement_sha256: '878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7',
   table: STAKEHOLDER_GRANT_TABLE,
   tables: MEMBER_STAKEHOLDER_TABLES,
 });

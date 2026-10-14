@@ -110,6 +110,18 @@ test('PostgreSQL 16: SQL 79 lets plain members of the owner tenant write check s
     await assert.rejects(direct(A_MEMBER,
       'INSERT INTO public.check_stakeholders (check_intake_item_id, stakeholder_account_id, tenant_id) VALUES ($1, $2, $3)',
       [CHECK_B, ACCOUNT_B, TENANT_B]), /row-level security/);
+    // The member insert policy also needs a manual link on a check the row's tenant owns.
+    const insertLink = 'INSERT INTO public.check_stakeholders (check_intake_item_id, stakeholder_account_id, tenant_id, added_via) VALUES ($1, $2, $3, $4)';
+    await assert.rejects(direct(A_MEMBER, insertLink, [CHECK_B, ACCOUNT_A, TENANT_A, 'manual']), /row-level security/);
+    await assert.rejects(direct(A_MEMBER, insertLink, [CHECK_A, ACCOUNT_B, TENANT_A, 'partner_share']), /row-level security/);
+    // B shared check B with A: A's member still cannot link on B's check under tenant A.
+    await client.query(`INSERT INTO public.shared_checks (check_id, source_tenant_id, target_tenant_id) VALUES ('${CHECK_B}', '${TENANT_B}', '${TENANT_A}')`);
+    await assert.rejects(direct(A_MEMBER, insertLink, [CHECK_B, ACCOUNT_A, TENANT_A, 'manual']), /row-level security/);
+    await client.query(`DELETE FROM public.shared_checks WHERE check_id = '${CHECK_B}'`);
+    // The same insert, manual and on A's own check, passes (the EXISTS reads the check under its RLS).
+    const manual = await direct(A_MEMBER, `${insertLink} RETURNING id`, [CHECK_A, ACCOUNT_B, TENANT_A, 'manual']);
+    assert.equal(manual.rowCount, 1);
+    assert.equal((await direct(A_MEMBER, 'DELETE FROM public.check_stakeholders WHERE id = $1', [manual.rows[0].id])).rowCount, 1);
     assert.equal(await count('public.check_stakeholders'), 1);
     result = await write(A_MEMBER, 'check_stakeholders', { op: 'delete', filters: [{ column: 'id', op: 'eq', value: linkId }] });
     assert.equal(result.rows.length, 1, JSON.stringify(result));
