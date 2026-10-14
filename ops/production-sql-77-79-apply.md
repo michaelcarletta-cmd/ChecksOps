@@ -20,7 +20,7 @@ Tool: `scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --mi
 
 | | expected pre-state | intended post-state | staging apply |
 |---|---|---|---|
-| `sql77` | `71465932…` (checksops SELECT only, authenticated nothing) | `e4d49ffa…` (both SELECT/INSERT/DELETE, no UPDATE) | run #26 [38574715440](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440) (see the pin's `todo`) |
+| `sql77` | `71465932…` (checksops SELECT only, authenticated nothing) | `e4d49ffa…` (both SELECT/INSERT/DELETE, no UPDATE) | run #26 [38574715440](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440) |
 | `sql78` | `4031dea6…` (table absent) | `3d650a56…` | run #31 [38602758947](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38602758947) |
 | `sql79` | `d9bc8921…` (reviewed policies only, pinned helper bodies) | `878d6441…` | run #34 [38612871864](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864) |
 

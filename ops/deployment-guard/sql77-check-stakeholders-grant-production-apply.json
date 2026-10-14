@@ -20,7 +20,6 @@
   "staging_acceptance": {
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440",
-    "basis": "Guarded staging SQL executor run #26 (38574715440, main 06dcdd9ae, 2026-10-14) is the only apply-mode run between the SQL 77 staging read-live (run #22, 38569427366) and the SQL 78 runs; read-live run #28 (38578637419) followed it. Pre 71465932… = checksops SELECT only; intended e4d49ffa… = checksops and authenticated SELECT/INSERT/DELETE, no UPDATE.",
-    "todo": "Confirm from the run #26 log (needs a signed-in GitHub session) that its migration input was sql77-check-stakeholders-grant and its after_hash was e4d49ffa…; the public run list and job steps show only that #26 ran in apply mode."
+    "basis": "Guarded staging SQL executor apply run #26 (38574715440, main 06dcdd9ae, pin commit b70fadfb, 2026-10-14). Its receipt names sql_file aws/workflows/sql/77_check_stakeholders_write_grant.sql, before_hash 71465932\u2026 (checksops SELECT only) and after_hash e4d49ffa\u2026 (checksops and authenticated SELECT/INSERT/DELETE, no UPDATE), result applied."
   }
 }
