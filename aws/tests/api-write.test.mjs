@@ -920,3 +920,126 @@ test('unrelated intake writes still use the generic allowlisted UPDATE', async (
   assert.equal(String(update.sql).includes('detected_claim_number'), false);
   assert.equal(String(update.sql).includes('claim_id'), false);
 });
+
+const OWN_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const OTHER_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
+const ACCOUNT_ID = '5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a';
+const LINK_ID = '6b6b6b6b-6b6b-4b6b-8b6b-6b6b6b6b6b6b';
+
+/** mockClient plus check_stakeholders answers: own active accounts, writability, existing links. */
+const stakeholderClient = ({ canWrite = true, accounts = [ACCOUNT_ID], linked = false, deletable = true } = {}) => {
+  const base = mockClient();
+  const query = base.query;
+  base.query = async (sql, params) => {
+    const text = String(sql);
+    if (text.includes('aws_can_write_tenant($1::uuid) AS ok')) {
+      base.queries.push({ sql, params });
+      return { rows: [{ ok: canWrite && params[0] === OWN_TENANT }] };
+    }
+    if (text.includes('FROM public.stakeholder_accounts')) {
+      base.queries.push({ sql, params });
+      return { rows: accounts.includes(params[0]) && params[1] === OWN_TENANT ? [{ id: params[0] }] : [] };
+    }
+    if (text.includes('INSERT INTO public.check_stakeholders')) {
+      base.queries.push({ sql, params });
+      return { rows: linked ? [] : [{ id: LINK_ID, check_intake_item_id: params[0], stakeholder_account_id: params[1], tenant_id: params[2] }] };
+    }
+    if (text.includes('SELECT * FROM public.check_stakeholders')) {
+      base.queries.push({ sql, params });
+      return { rows: linked ? [{ id: LINK_ID, stakeholder_account_id: params[1], tenant_id: params[2] }] : [] };
+    }
+    if (text.includes('DELETE FROM public.check_stakeholders')) {
+      base.queries.push({ sql, params });
+      return { rows: deletable ? [{ id: params[0] }] : [] };
+    }
+    return query(sql, params);
+  };
+  return base;
+};
+
+const stakeholderWrite = (client, body) => handleWrite(jwtEvent('/data/write', 'POST', { table: 'check_stakeholders', ...body }), depsFor(client));
+
+test('check_stakeholders insert links an own active account; tenant, added_via and added_by are server-derived', async () => {
+  const client = stakeholderClient();
+  const result = await stakeholderWrite(client, {
+    op: 'insert',
+    values: {
+      check_intake_item_id: CHECK_ID,
+      stakeholder_account_id: ACCOUNT_ID,
+      tenant_id: OTHER_TENANT,
+      added_via: 'partner_share',
+      added_by: SPOOF_ID,
+    },
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.check_stakeholders'));
+  assert.ok(insert);
+  assert.deepEqual(insert.params, [CHECK_ID, ACCOUNT_ID, OWN_TENANT, APP_ID]);
+  assert.match(String(insert.sql), /'manual'/);
+  assert.doesNotMatch(String(insert.sql), /partner_tenant_id/);
+});
+
+test('check_stakeholders refuses partner fields, updates, another organization\'s account, and a non-writable check', async () => {
+  const partner = await stakeholderWrite(stakeholderClient(), {
+    op: 'insert',
+    values: { check_intake_item_id: CHECK_ID, stakeholder_account_id: ACCOUNT_ID, partner_tenant_id: OTHER_TENANT },
+  });
+  assert.equal(partner.ok, false);
+  assert.equal(partner.error, 'column_not_allowlisted');
+
+  const update = await stakeholderWrite(stakeholderClient(), {
+    op: 'update', values: { stakeholder_account_id: ACCOUNT_ID }, filters: [{ column: 'id', op: 'eq', value: LINK_ID }],
+  });
+  assert.equal(update.ok, false);
+  assert.equal(update.error, 'operation_not_allowlisted');
+
+  for (const [options, label] of [
+    [{ accounts: [] }, 'account of another organization or inactive'],
+    [{ canWrite: false }, 'check the caller cannot write (e.g. a partner viewing a shared check)'],
+  ]) {
+    const client = stakeholderClient(options);
+    const result = await stakeholderWrite(client, {
+      op: 'insert', values: { check_intake_item_id: CHECK_ID, stakeholder_account_id: ACCOUNT_ID },
+    });
+    assert.equal(result.ok, false, label);
+    assert.equal(result.error, 'rls_denied', label);
+    assert.equal(client.queries.some((q) => String(q.sql).includes('INSERT INTO public.check_stakeholders')), false, label);
+  }
+
+  const missing = await stakeholderWrite(stakeholderClient(), { op: 'insert', values: { check_intake_item_id: CHECK_ID } });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.error, 'missing_required_field');
+});
+
+test('check_stakeholders insert of an existing link returns it instead of failing', async () => {
+  const client = stakeholderClient({ linked: true });
+  const result = await stakeholderWrite(client, {
+    op: 'insert', values: { check_intake_item_id: CHECK_ID, stakeholder_account_id: ACCOUNT_ID },
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.ok(client.queries.some((q) => String(q.sql).includes('SELECT * FROM public.check_stakeholders')));
+});
+
+test('check_stakeholders delete is by id only, on the owner\'s own check, and refuses other filters', async () => {
+  const client = stakeholderClient();
+  const result = await stakeholderWrite(client, { op: 'delete', filters: [{ column: 'id', op: 'eq', value: LINK_ID }] });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const del = client.queries.find((q) => String(q.sql).includes('DELETE FROM public.check_stakeholders'));
+  assert.match(String(del.sql), /c\.tenant_id = cs\.tenant_id/);
+  assert.match(String(del.sql), /aws_can_write_tenant\(cs\.tenant_id\)/);
+  assert.deepEqual(del.params, [LINK_ID]);
+
+  const denied = await stakeholderWrite(stakeholderClient({ deletable: false }), { op: 'delete', filters: [{ column: 'id', op: 'eq', value: LINK_ID }] });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.error, 'rls_denied');
+
+  const byAccount = await stakeholderWrite(stakeholderClient(), {
+    op: 'delete', filters: [{ column: 'stakeholder_account_id', op: 'eq', value: ACCOUNT_ID }],
+  });
+  assert.equal(byAccount.ok, false);
+  assert.equal(byAccount.error, 'column_not_allowlisted');
+
+  const noId = await stakeholderWrite(stakeholderClient(), { op: 'delete', filters: [] });
+  assert.equal(noId.ok, false);
+  assert.equal(noId.error, 'invalid_uuid');
+});
