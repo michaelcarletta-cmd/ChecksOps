@@ -59,8 +59,8 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
-      if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
+      if (/SELECT id, tenant_id(?:, deposited_at, payee_line, claim_id)?\s+FROM public\.check_intake_items/.test(sql)) {
+        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a', deposited_at: null, payee_line: null, claim_id: null }] };
       }
       if (/review_save_detected_claim_number/.test(sql)) {
         return {
@@ -870,7 +870,7 @@ test('Review claim # save denies invalid, missing, and cross-tenant checks witho
   const missingClient = mockClient();
   const originalMissing = missingClient.query.bind(missingClient);
   missingClient.query = async (sql, params) => {
-    if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) return { rows: [] };
+    if (/SELECT id, tenant_id(?:, deposited_at, payee_line, claim_id)?\s+FROM public\.check_intake_items/.test(sql)) return { rows: [] };
     return originalMissing(sql, params);
   };
   const missing = await handleWrite(jwtEvent('/data/write', 'POST', {

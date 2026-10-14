@@ -231,8 +231,18 @@ test('write allowlist was not broadened for branding restoration', () => {
       'logo_url',
       'name',
       'primary_color',
-    ],
+      // Live staging platform-admin tenant create (reconciled from the deployed allowlist).
+      'slug',
+    ].sort(),
   );
+  // Create needs name + slug; billing/provider flags are never client-writable.
+  assert.deepEqual([...WRITE_ALLOWLIST.tenants.ops].sort(), ['insert', 'update']);
+  assert.deepEqual(WRITE_ALLOWLIST.tenants.requiredForWrite.insert, ['name', 'slug']);
+  for (const column of ['payment_provider', 'moov_allowlisted', 'moov_environment', 'is_test_account',
+    'mortgage_ops_initial_rate_cents', 'mortgage_ops_additional_rate_cents']) {
+    assert.equal(WRITE_ALLOWLIST.tenants.columns.has(column), false, column);
+    assert.equal(WRITE_ALLOWLIST.tenants.clientIgnored.has(column), true, column);
+  }
   assert.equal(WRITE_ALLOWLIST.company_branding.columns.has('logo_url'), false);
   assert.equal(WRITE_ALLOWLIST.company_branding.columns.has('updated_at'), false);
   assert.equal(WRITE_ALLOWLIST.tenants.columns.has('invoice_accent_color'), false);
