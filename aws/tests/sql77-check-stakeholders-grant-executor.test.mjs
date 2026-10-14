@@ -135,7 +135,7 @@ test('apply refuses before connecting: unreviewed pin, read-live sentinel, wrong
 
 const WRITE_POLICY = Object.freeze({
   name: 'aws_write_check_stakeholders', permissive: true, cmd: 'ALL', roles: ['authenticated'],
-  using: 'aws_can_write_tenant(tenant_id)', with_check: 'aws_can_write_tenant(tenant_id)',
+  using: 'public.aws_can_write_tenant(tenant_id)', with_check: 'public.aws_can_write_tenant(tenant_id)',
 });
 const SELECT_POLICY = Object.freeze({
   name: 'aws_select_check_stakeholders', permissive: true, cmd: 'SELECT', roles: ['authenticated'],
@@ -168,6 +168,7 @@ function fakeDb({ acl = [
         if (text.includes('AS rls_enabled')) return { rows: [{ rls_enabled: rlsEnabled }] };
         if (text.includes('FROM pg_policy pol')) return { rows: policies.map((policy) => ({ ...policy })) };
         if (text.includes('AS bypasses')) return { rows: [{ bypasses }] };
+        if (text.includes("set_config('search_path'")) return { rows: [{ set_config: 'pg_catalog' }] };
         if (text.includes('aclexplode')) return { rows: current().map((row) => ({ ...row })) };
         if (text.includes('GRANT SELECT, INSERT, DELETE ON TABLE public.check_stakeholders')) {
           for (const grantee of ['checksops', 'authenticated']) {
@@ -234,7 +235,7 @@ test('apply lands exactly on the intended state once; replay, re-grant, UPDATE d
   assert.equal((await handlerFor(different.connect)(grantEvent())).code, CODES.DEPLOYMENT_COLLISION);
   assert.equal(different.acl.length, 2);
 
-  // Spacing, schema prefix and outer parentheses in the deparsed policy still match.
+  // Spacing, case and outer parentheses in the deparsed policy still match.
   const reformatted = fakeDb({ policies: [SELECT_POLICY, {
     ...WRITE_POLICY, using: '(public.aws_can_write_tenant(tenant_id))', with_check: 'public.aws_can_write_tenant( tenant_id )',
   }] });
@@ -243,6 +244,9 @@ test('apply lands exactly on the intended state once; replay, re-grant, UPDATE d
   for (const [label, options] of [
     ['RLS off', { rlsEnabled: false }],
     ['no write policy', { policies: [SELECT_POLICY] }],
+    ['write policy function without schema', { policies: [SELECT_POLICY, { ...WRITE_POLICY, using: 'aws_can_write_tenant(tenant_id)', with_check: 'aws_can_write_tenant(tenant_id)' }] }],
+    ['write policy function in another schema', { policies: [SELECT_POLICY, { ...WRITE_POLICY, using: 'evil.aws_can_write_tenant(tenant_id)', with_check: 'evil.aws_can_write_tenant(tenant_id)' }] }],
+    ['write policy OR true', { policies: [SELECT_POLICY, { ...WRITE_POLICY, using: '(public.aws_can_write_tenant(tenant_id) OR true)' }] }],
     ['write policy allows any row', { policies: [SELECT_POLICY, { ...WRITE_POLICY, using: 'true', with_check: 'true' }] }],
     ['write policy checks only USING', { policies: [SELECT_POLICY, { ...WRITE_POLICY, with_check: null }] }],
     ['write policy for PUBLIC', { policies: [SELECT_POLICY, { ...WRITE_POLICY, roles: ['public'] }] }],
@@ -374,6 +378,38 @@ test('PostgreSQL 16: a non-superuser owner applies SQL 77 through the real handl
     const loosened = await handler(grantEvent());
     assert.equal(loosened.code, CODES.DEPLOYMENT_COLLISION, JSON.stringify(loosened));
     await alter('public.aws_can_write_tenant(tenant_id)');
+
+    // On the real catalog: a look-alike function in another schema, a BYPASSRLS
+    // member of authenticated, and the owner reachable through authenticated
+    // are each refused; undoing each lets the check pass again.
+    const asOwner = async (sql) => {
+      const owner = await connectAs('sql77_owner');
+      await owner.query(sql);
+      await owner.end();
+    };
+    const refusedThenRestored = async (label, breakIt, restore) => {
+      await breakIt();
+      const refused = await handler(grantEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
+      assert.equal(refused.details.receipt.tenant_guard_ok, false, label);
+      assert.equal((await handler(grantEvent())).code, CODES.DEPLOYMENT_COLLISION, label);
+      await restore();
+      const again = await handler(grantEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
+      assert.equal(again.details.receipt.tenant_guard_ok, true, label);
+    };
+    await refusedThenRestored('function in another schema',
+      () => asOwner(`CREATE SCHEMA sql77_owner;
+        CREATE FUNCTION sql77_owner.aws_can_write_tenant(uuid) RETURNS boolean LANGUAGE sql STABLE AS 'SELECT true';
+        ALTER POLICY aws_write_check_stakeholders ON public.check_stakeholders
+          USING (sql77_owner.aws_can_write_tenant(tenant_id)) WITH CHECK (sql77_owner.aws_can_write_tenant(tenant_id))`),
+      () => asOwner(`ALTER POLICY aws_write_check_stakeholders ON public.check_stakeholders
+          USING (public.aws_can_write_tenant(tenant_id)) WITH CHECK (public.aws_can_write_tenant(tenant_id));
+        DROP SCHEMA sql77_owner CASCADE`));
+    await refusedThenRestored('BYPASSRLS member of authenticated',
+      () => admin.query('CREATE ROLE sql77_svc BYPASSRLS IN ROLE authenticated'),
+      () => admin.query('DROP ROLE sql77_svc'));
+    await refusedThenRestored('owner reachable through authenticated',
+      () => admin.query('GRANT sql77_owner TO authenticated'),
+      () => admin.query('REVOKE sql77_owner FROM authenticated'));
 
     const event = grantEvent();
     const applied = await handler(event);
