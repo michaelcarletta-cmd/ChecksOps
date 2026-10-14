@@ -34,12 +34,15 @@ accepted contracts, takes the `staging/staging-sql` lease and issues a
 KMS-signed receipt bound to executor action `inspect`
 (`preflight_live_fingerprint.action = "inspect"`, expected live definition =
 the read-live sentinel in `lib/sql-executor-read-live.mjs`). The official
-`sql-executor-invoke.mjs` refuses any other action with that receipt, and every
-pin's apply path refuses the sentinel before connecting. The executor's inspect
-path only runs catalog `SELECT`s: no `BEGIN`, no migration file, no one-use id
-consumption. The run prints only non-sensitive fields and a
-`LIVE_DEFINITION_SHA256:` line; that value is what a reviewer pins as the
-pre-apply hash before `apply`.
+`sql-executor-invoke.mjs` refuses any other action with that receipt, and the
+read-live-selectable pins (ledger, 71, 72, 76) refuse the sentinel in apply
+before connecting. The executor's inspect path only runs `SELECT`s (catalog
+reads; the ledger pin also counts `homeowner_ledger_events`): no `BEGIN`, no
+migration file, no one-use id consumption. The run prints only non-sensitive
+fields and a `LIVE_DEFINITION_SHA256:` line, and only for a result whose SQL
+file and commit match the selected pin; failures print only an error code and a
+fixed message. That value is what a reviewer pins as the pre-apply hash before
+`apply`.
 
 ## Run order for one migration
 

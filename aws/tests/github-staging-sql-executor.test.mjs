@@ -578,6 +578,23 @@ test('read-live report prints only non-sensitive fields and a LIVE_DEFINITION_SH
   fs.writeFileSync(err, JSON.stringify({ ok: false, code: 'RECEIPT_MISMATCH', message: 'bound', details: { receipt_action: 'inspect' } }));
   assert.throws(() => reportReadLive(out, err, env, () => {}), (error) => error.code === 'RECEIPT_MISMATCH' && Object.keys(error.details || {}).length === 0);
   assert.throws(() => reportReadLive(out, err, { CHECKSOPS_SQL_EXECUTOR_MIGRATION: 'nope' }, () => {}), (error) => error.code === CODES.SQL_COLLISION);
+
+  // Executor and driver error text is never echoed: only the code and a fixed message.
+  const leaky = readLiveSummary({ ok: false, code: 'DEPLOYMENT_COLLISION', message: 'no pg_hba.conf entry for host "10.0.3.17", user "checksops_admin", database "checksops"' },
+    { migration: 'sql76-tenant-partnership-consent', pin: SQL76_PIN });
+  assert.equal(leaky.ok, false);
+  assert.equal(leaky.code, 'DEPLOYMENT_COLLISION');
+  for (const hidden of ['10.0.3.17', 'checksops_admin', 'pg_hba']) assert.ok(!leaky.message.includes(hidden), hidden);
+  const oddCode = readLiveSummary({ ok: false, code: 'select * from x', message: 'boom' }, { migration: 'sql76-tenant-partnership-consent', pin: SQL76_PIN });
+  assert.equal(oddCode.code, CODES.DEPLOYMENT_COLLISION);
+
+  // A result for another file or commit cannot be reported as this pin's live hash.
+  for (const other of [{ sql_file: 'aws/workflows/sql/44_other.sql' }, { commit: 'f'.repeat(40) }, { sql_file: undefined }]) {
+    const wrong = readLiveSummary({ ok: true, details: { ok: true, details: { receipt: { ...SQL76_INSPECT_RECEIPT, ...other } } } },
+      { migration: 'sql76-tenant-partnership-consent', pin: SQL76_PIN });
+    assert.equal(wrong.ok, false, JSON.stringify(other));
+    assert.equal(wrong.code, CODES.UNRELATED_MUTATION);
+  }
 });
 
 test('workflow read-live mode can only read, sign, and invoke action inspect', () => {
