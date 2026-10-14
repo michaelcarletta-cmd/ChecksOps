@@ -349,13 +349,16 @@ test('export_live_member writes only the exact live bytes, inspect-only, never t
 
   // Absent members and apply mode refuse; apply refuses before any lease or receipt.
   await assert.rejects(run({ ...env, CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR: dir }, inspectionDeps(false)), { code: 'INVALID_MANIFEST' });
+  const applyDeps = inspectionDeps(true);
   await assert.rejects(run({
     ...env,
     CHECKSOPS_STAGING_DEPLOY_MODE: 'apply',
     CHECKSOPS_STAGING_OVERLAY_OPERATION: 'replace',
     CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: hashZipMembers(deps.zip)[env.CHECKSOPS_STAGING_OVERLAY_MEMBER],
     CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR: dir,
-  }, inspectionDeps(true)), { code: 'INVALID_MANIFEST' });
+  }, applyDeps), { code: 'INVALID_MANIFEST' });
+  // Refused before any AWS read.
+  assert.equal(applyDeps.calls.length, 0);
   assert.ok(!fs.existsSync(path.join(process.cwd(), '.deployment-guard', 'github-staging-overlay-input.json')));
 });
 
@@ -367,6 +370,12 @@ test('exportLiveMember refuses non-source members and bytes that do not match th
     assert.equal(fs.readFileSync(exportLiveMember(live, dir).file, 'utf8'), 'x');
     assert.throws(() => exportLiveMember({ ...live, member: 'bin/tool' }, dir), { code: 'INVALID_MANIFEST' });
     assert.throws(() => exportLiveMember({ ...live, memberSha256: 'f'.repeat(64) }, dir), { code: 'DEPLOYMENT_COLLISION' });
+    assert.throws(() => exportLiveMember({ ...live, member: 'config.json' }, dir), { code: 'INVALID_MANIFEST' });
+    for (const secret of ['-----BEGIN PRIVATE KEY-----', 'const k = "AKIAABCDEFGHIJKLMNOP";']) {
+      const leaked = Buffer.from(secret);
+      const leakedSha = hashZipMembers(writeZipMembers({ 'a.mjs': secret }))['a.mjs'];
+      assert.throws(() => exportLiveMember({ ...live, memberBytes: leaked, memberSha256: leakedSha }, dir), { code: 'DEPLOYMENT_COLLISION' });
+    }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -203,16 +203,22 @@ async function inspectLive(member, { lambda = null, fetchImpl = fetch, loadSdk =
  * reconcile against it. The file name flattens the member path; the bytes are
  * re-hashed and must equal the inspected live member SHA-256.
  */
+const EXPORT_SECRET_RE = /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}/;
+
 export function exportLiveMember(live, dir) {
   if (live.memberState !== 'PRESENT' || !live.memberBytes) {
     throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member requires a member that is present live', { member: live.member });
   }
-  if (!/\.(mjs|js|json)$/.test(live.member)) {
-    throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member is limited to .mjs, .js and .json source members', { member: live.member });
+  if (!/\.(mjs|js)$/.test(live.member)) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member is limited to .mjs and .js source members', { member: live.member });
   }
   const exported = createHash('sha256').update(live.memberBytes).digest('hex');
   if (exported !== live.memberSha256) {
     throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'exported bytes do not match the inspected live member hash');
+  }
+  // Same refusal as the SH-2 source reconciliation: never upload live source carrying key material.
+  if (EXPORT_SECRET_RE.test(live.memberBytes.toString('utf8'))) {
+    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'live member looks like it contains key material; export refused', { member: live.member });
   }
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, live.member.replace(/[^A-Za-z0-9._-]/g, '__'));
@@ -238,6 +244,10 @@ export async function run(env = process.env, deps = {}) {
     throw new GuardError(requested.code, requested.message, requested.details || {});
   }
   const identity = workflowIdentity(env);
+  const exportDir = String(env.CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR || '').trim();
+  if (exportDir && mode !== 'inspect') {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member is inspect-only');
+  }
   const live = await inspectLive(requested.details.member, deps);
 
   appendGithubOutput({
@@ -248,7 +258,6 @@ export async function run(env = process.env, deps = {}) {
     owned_member: live.member,
   }, env);
 
-  const exportDir = String(env.CHECKSOPS_STAGING_EXPORT_LIVE_MEMBER_DIR || '').trim();
   const { memberBytes, ...liveSummary } = live;
   if (mode === 'inspect') {
     let exported = null;
@@ -257,9 +266,6 @@ export async function run(env = process.env, deps = {}) {
       appendGithubOutput({ exported_member_file: exported.file, exported_member_sha256: exported.sha256 }, env);
     }
     return { ok: true, mode, identity, live: liveSummary, exported, mutation: false };
-  }
-  if (exportDir) {
-    throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member is inspect-only');
   }
 
   const receiptInput = buildOverlayReceiptInput(

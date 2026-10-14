@@ -40,7 +40,7 @@ on:
         default: false
         type: boolean
       export_live_member:
-        description: "Inspect only. Default false. Upload the live member's exact bytes (re-hashed against the inspected SHA-256) as a 1-day artifact for source reconciliation. Never writes to AWS."
+        description: "Inspect only. Default false. Upload the live .mjs/.js member's exact bytes (re-hashed against the inspected SHA-256, refused if it carries key material) as a 1-day artifact for source reconciliation. Never writes to AWS."
         required: true
         default: false
         type: boolean

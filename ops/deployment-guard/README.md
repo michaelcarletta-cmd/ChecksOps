@@ -78,6 +78,11 @@ exactly one member in `owned_member_ops.add` or `.replace`, never both.
 Only the official overlay writer mutates the current live ZIP, preserving all
 unrelated member contents and refusing member appearance or fingerprint drift.
 
+For source reconciliation, `inspect` with `export_live_member: true` uploads the
+live `.mjs`/`.js` member's exact bytes as a 1-day artifact. The bytes are
+re-hashed against the inspected SHA-256, and the export is refused if the member
+is absent or carries key material. `apply` refuses it before any AWS call.
+
 Never:
 
 - `aws lambda update-function-code` directly
