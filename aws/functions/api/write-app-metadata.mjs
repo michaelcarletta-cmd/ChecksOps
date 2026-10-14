@@ -4,6 +4,47 @@
 import { ident } from './data.mjs';
 import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs';
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
+import { tenantMoovDefaults } from './tenant-moov-defaults.mjs';
+import { matchLossDraftDocumentPath, matchTenantDocumentPath, normalizePath } from './storage-paths.mjs';
+
+/*
+ * Stored file paths are read grants: storage.mjs authorizes an object for any
+ * visible row holding exactly that path. So a writer must only accept a path
+ * inside the row's own scope, never free text pointing at someone else's key.
+ */
+const lowerId = (value) => String(value || '').toLowerCase();
+
+/** cash-job uploads: {tenantId}/cash-jobs/{cashJobId}/... in claim-files. */
+const cashJobAttachmentPath = (value, { tenantId, jobId }) => {
+  const rel = normalizePath(value, 'claim-files');
+  if (!rel || rel.length > 512) return null;
+  return rel.toLowerCase().startsWith(`${lowerId(tenantId)}/cash-jobs/${lowerId(jobId)}/`) ? rel : null;
+};
+
+/** Library uploads: {tenantId}/library/... in tenant-documents. */
+const tenantLibraryPath = (value, tenantId) => {
+  const rel = normalizePath(value, 'tenant-documents');
+  if (!rel || rel.length > 512) return null;
+  return matchTenantDocumentPath(rel) === lowerId(tenantId) ? rel : null;
+};
+
+/**
+ * Loss-draft files: the draft's own upload folder
+ * ({claimId}/{lossDraftId}/{docId}/... in loss-draft-documents), or a
+ * generated document for the draft's own claim (docs/{scope}/{claimId}/...,
+ * legacy checks/{claimId}/checksops-templates/...).
+ */
+const lossDraftFilePath = (value, { lossDraftId, claimId }) => {
+  const rel = normalizePath(value, 'loss-draft-documents');
+  if (!rel || rel.length > 512) return null;
+  if (matchLossDraftDocumentPath(rel) === lowerId(lossDraftId)) return rel;
+  const claim = lowerId(claimId);
+  if (!claim) return null;
+  const parts = rel.toLowerCase().split('/');
+  if (parts[0] === 'docs' && parts.length >= 4 && parts[2] === claim) return rel;
+  if (parts[0] === 'checks' && parts[1] === claim && parts[2] === 'checksops-templates' && parts.length >= 4) return rel;
+  return null;
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -90,8 +131,10 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     if (!isAllowedTenantDocumentDocType(docType)) {
       return { error: 'category_not_allowlisted', field: 'doc_type' };
     }
-    const filePath = clip(values.file_path, 512);
-    if (filePath?.error || !filePath) return filePath?.error || { error: 'missing_required_field', field: 'file_path' };
+    const rawPath = clip(values.file_path, 512);
+    if (rawPath?.error || !rawPath) return rawPath?.error || { error: 'missing_required_field', field: 'file_path' };
+    const filePath = tenantLibraryPath(rawPath, tenantId);
+    if (!filePath) return { error: 'path_not_allowlisted', field: 'file_path', message: 'file_path must be under {tenantId}/library/' };
     const fileName = clip(values.file_name, 255);
     if (fileName?.error) return fileName;
     const mime = clip(values.mime_type, 120);
@@ -169,7 +212,7 @@ export const executeLossDraftDocuments = async ({ client, mapping, op, values, f
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
   const existing = (await client.query(
-    `SELECT d.id, d.loss_draft_id, ld.check_intake_item_id, ci.tenant_id
+    `SELECT d.id, d.loss_draft_id, ld.claim_id, ld.check_intake_item_id, ci.tenant_id
      FROM public.loss_draft_documents d
      JOIN public.loss_draft_tracking ld ON ld.id = d.loss_draft_id
      LEFT JOIN public.check_intake_items ci ON ci.id = ld.check_intake_item_id
@@ -205,6 +248,11 @@ export const executeLossDraftDocuments = async ({ client, mapping, op, values, f
       if (text?.error) return text;
       out[col] = text;
     }
+  }
+  if (out.file_path) {
+    const scoped = lossDraftFilePath(out.file_path, { lossDraftId: existing.loss_draft_id, claimId: existing.claim_id });
+    if (!scoped) return { error: 'path_not_allowlisted', field: 'file_path', message: "file_path must be this loss draft's own document" };
+    out.file_path = scoped;
   }
   if ('is_submitted' in values) {
     out.is_submitted = values.is_submitted === true || values.is_submitted === 'true';
@@ -513,7 +561,44 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
   return { rows };
 };
 
-export const executeTenantsNarrow = async ({ client, mapping, values, filters }) => {
+const actorIsPlatformAdmin = async (client, userId) => {
+  const owner = (await client.query(
+    `SELECT COALESCE(public.is_platform_owner(), false) AS is_owner,
+            COALESCE(public.is_master_owner(), false) AS is_master`,
+  )).rows[0] || {};
+  if (owner.is_owner === true || owner.is_master === true) return true;
+  const role = (await client.query(
+    `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
+    [userId],
+  )).rows[0];
+  return Boolean(role);
+};
+
+export const executeTenantsCreate = async ({ client, mapping, values }) => {
+  if (!(await actorIsPlatformAdmin(client, mapping.application_user_id))) {
+    return { error: 'not_authorized', message: 'Platform admin required to create a tenant' };
+  }
+  const name = clip(values.name, 200);
+  if (name?.error || !name) return name?.error || { error: 'missing_required_field', field: 'name' };
+  const slug = clip(values.slug, 80);
+  if (slug?.error || !slug) return slug?.error || { error: 'missing_required_field', field: 'slug' };
+  const normalizedSlug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  if (!normalizedSlug) return { error: 'invalid_field', field: 'slug' };
+  const defaults = tenantMoovDefaults();
+  const rows = (await client.query(
+    `INSERT INTO public.tenants
+       (name, slug, payment_provider, moov_allowlisted, moov_environment)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [name, normalizedSlug, defaults.payment_provider, defaults.moov_allowlisted, defaults.moov_environment],
+  )).rows;
+  return { rows };
+};
+
+export const executeTenantsNarrow = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    return executeTenantsCreate({ client, mapping, values });
+  }
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
   if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
@@ -807,8 +892,15 @@ export const executeCashJobAttachments = async ({ client, mapping, op, values, f
     if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
       return { error: 'not_authorized', message: 'Not a member of tenant' };
     }
-    const filePath = clip(values.file_path, 512);
-    if (filePath?.error || !filePath) return filePath?.error || { error: 'missing_required_field', field: 'file_path' };
+    const job = (await client.query(
+      'SELECT 1 FROM public.cash_jobs WHERE id = $1::uuid AND tenant_id = $2::uuid LIMIT 1',
+      [jobId, tenantId],
+    )).rows[0];
+    if (!job) return { error: 'rls_denied', message: 'cash job not found in this tenant' };
+    const rawPath = clip(values.file_path, 512);
+    if (rawPath?.error || !rawPath) return rawPath?.error || { error: 'missing_required_field', field: 'file_path' };
+    const filePath = cashJobAttachmentPath(rawPath, { tenantId, jobId });
+    if (!filePath) return { error: 'path_not_allowlisted', field: 'file_path', message: 'file_path must be under {tenantId}/cash-jobs/{cashJobId}/' };
     const fileName = clip(values.file_name, 255);
     if (fileName?.error || !fileName) return fileName?.error || { error: 'missing_required_field', field: 'file_name' };
     const rows = (await client.query(
@@ -911,7 +1003,7 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
     case 'referral_alerts':
       return executeReferralAlerts({ client, values, filters });
     case 'tenants':
-      return executeTenantsNarrow({ client, mapping, values, filters });
+      return executeTenantsNarrow({ client, mapping, op, values, filters });
     case 'privacy_notice_acknowledgments':
       return executePrivacyAck({ client, mapping, values });
     case 'tenant_users':
