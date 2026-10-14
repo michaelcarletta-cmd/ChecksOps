@@ -1749,18 +1749,41 @@ FROM pg_policy pol
 WHERE pol.polrelid = to_regclass('public.check_stakeholders')
 ORDER BY 1
 `.trim();
+// Every role the grant reaches (checksops, authenticated, and any role that
+// inherits from or can SET ROLE to either) must be held to RLS on this table:
+// not superuser or BYPASSRLS, and unable to act as the table owner or to grant
+// itself the owner or a superuser/BYPASSRLS role (ADMIN OPTION). FORCE RLS is
+// no exemption: a role that can act as the owner can turn it off. Other
+// superusers already hold every privilege (and pg_has_role is always true for
+// them), so they are not counted as reached.
 const STAKEHOLDER_BYPASS_SQL = `
-SELECT COALESCE(bool_or(rolsuper OR rolbypassrls), false) AS bypasses
-FROM pg_roles
-WHERE rolname IN ('checksops', 'authenticated')
+SELECT COALESCE(bool_or(
+  r.rolsuper OR r.rolbypassrls
+  OR pg_has_role(r.oid, c.relowner, 'USAGE') OR pg_has_role(r.oid, c.relowner, 'SET')
+  OR pg_has_role(r.oid, c.relowner, 'USAGE WITH ADMIN OPTION')
+  OR EXISTS (
+    SELECT 1 FROM pg_roles b
+    WHERE (b.rolsuper OR b.rolbypassrls) AND b.oid <> r.oid
+      AND pg_has_role(r.oid, b.oid, 'USAGE WITH ADMIN OPTION'))
+), true) AS bypasses
+FROM pg_roles r
+CROSS JOIN pg_class c
+WHERE c.oid = to_regclass('public.check_stakeholders')
+  AND (r.rolname IN ('checksops', 'authenticated')
+    OR (NOT r.rolsuper AND (
+      pg_has_role(r.oid, 'checksops', 'USAGE') OR pg_has_role(r.oid, 'checksops', 'SET')
+      OR pg_has_role(r.oid, 'authenticated', 'USAGE') OR pg_has_role(r.oid, 'authenticated', 'SET'))))
 `.trim();
+// pg_get_expr omits a function's schema whenever search_path would find it;
+// with only pg_catalog on the path, the reviewed function prints as public.*.
+const STAKEHOLDER_POLICY_SEARCH_PATH_SQL = "SELECT set_config('search_path', 'pg_catalog', false)";
 const STAKEHOLDER_WRITE_POLICY = 'aws_write_check_stakeholders';
 // aws/rls/sql/24_complete_write_policies.sql: USING and WITH CHECK are both this.
-const STAKEHOLDER_WRITE_CONDITION = 'aws_can_write_tenant(tenant_id)';
+const STAKEHOLDER_WRITE_CONDITION = 'public.aws_can_write_tenant(tenant_id)';
 
-/** Compares policy expressions without schema prefix, case, spacing or outer parentheses. */
+/** Compares policy expressions without case, spacing or outer parentheses. */
 function normalizePolicyExpr(expr) {
-  let text = String(expr ?? '').toLowerCase().replace(/\s+/g, '').replace(/\bpublic\./g, '');
+  let text = String(expr ?? '').toLowerCase().replace(/\s+/g, '');
   while (text.startsWith('(') && text.endsWith(')')) text = text.slice(1, -1);
   return text;
 }
@@ -1798,6 +1821,7 @@ export async function readStakeholderGrantState(client) {
   const present = (await client.query(STAKEHOLDER_TABLE_SQL))?.rows?.[0]?.present === true;
   if (!present) return fail(CODES.SQL_COLLISION, 'public.check_stakeholders is missing');
   const rls = (await client.query(STAKEHOLDER_RLS_SQL))?.rows?.[0] || {};
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
   const policyState = stakeholderPolicyState((await client.query(STAKEHOLDER_POLICIES_SQL))?.rows || []);
   const bypassesRls = (await client.query(STAKEHOLDER_BYPASS_SQL))?.rows?.[0]?.bypasses !== false;
   const rlsEnabled = rls.rls_enabled === true;
