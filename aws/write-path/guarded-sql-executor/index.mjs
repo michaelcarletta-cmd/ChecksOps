@@ -1734,11 +1734,59 @@ ORDER BY 1, 2, 3
 const STAKEHOLDER_TABLE_SQL = "SELECT to_regclass('public.check_stakeholders') IS NOT NULL AS present";
 // Row-level security and the write policy are what keep the grant inside one tenant.
 const STAKEHOLDER_RLS_SQL = `
-SELECT c.relrowsecurity AS rls_enabled,
-  EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'aws_write_check_stakeholders') AS write_policy_present
+SELECT c.relrowsecurity AS rls_enabled
 FROM pg_class c
 WHERE c.oid = to_regclass('public.check_stakeholders')
 `.trim();
+const STAKEHOLDER_POLICIES_SQL = `
+SELECT pol.polname AS name,
+  pol.polpermissive AS permissive,
+  CASE pol.polcmd WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT' WHEN 'w' THEN 'UPDATE' WHEN 'd' THEN 'DELETE' ELSE 'ALL' END AS cmd,
+  ARRAY(SELECT CASE WHEN r = 0 THEN 'public' ELSE pg_get_userbyid(r)::text END FROM unnest(pol.polroles) r ORDER BY 1)::text[] AS roles,
+  pg_get_expr(pol.polqual, pol.polrelid) AS using,
+  pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+FROM pg_policy pol
+WHERE pol.polrelid = to_regclass('public.check_stakeholders')
+ORDER BY 1
+`.trim();
+const STAKEHOLDER_BYPASS_SQL = `
+SELECT COALESCE(bool_or(rolsuper OR rolbypassrls), false) AS bypasses
+FROM pg_roles
+WHERE rolname IN ('checksops', 'authenticated')
+`.trim();
+const STAKEHOLDER_WRITE_POLICY = 'aws_write_check_stakeholders';
+// aws/rls/sql/24_complete_write_policies.sql: USING and WITH CHECK are both this.
+const STAKEHOLDER_WRITE_CONDITION = 'aws_can_write_tenant(tenant_id)';
+
+/** Compares policy expressions without schema prefix, case, spacing or outer parentheses. */
+function normalizePolicyExpr(expr) {
+  let text = String(expr ?? '').toLowerCase().replace(/\s+/g, '').replace(/\bpublic\./g, '');
+  while (text.startsWith('(') && text.endsWith(')')) text = text.slice(1, -1);
+  return text;
+}
+
+/**
+ * Whether the reviewed write policy is the only permissive policy that can let
+ * INSERT or DELETE through, and still limits both to the row's own tenant.
+ */
+function stakeholderPolicyState(policies) {
+  const write = policies.find((policy) => policy.name === STAKEHOLDER_WRITE_POLICY);
+  const roles = Array.isArray(write?.roles) ? write.roles : [];
+  const writePolicyAsExpected = Boolean(write)
+    && write.permissive === true
+    && write.cmd === 'ALL'
+    && roles.length === 1 && roles[0] === 'authenticated'
+    && normalizePolicyExpr(write.using) === STAKEHOLDER_WRITE_CONDITION
+    && normalizePolicyExpr(write.with_check) === STAKEHOLDER_WRITE_CONDITION;
+  const otherWritePolicies = policies.filter((policy) => policy.name !== STAKEHOLDER_WRITE_POLICY
+    && policy.permissive !== false
+    && ['ALL', 'INSERT', 'DELETE'].includes(policy.cmd));
+  return {
+    write_policy_present: Boolean(write),
+    write_policy_as_expected: writePolicyAsExpected,
+    other_write_policy_count: otherWritePolicies.length,
+  };
+}
 // The file may hold only comments and this one statement.
 const SQL77_SINGLE_STATEMENT_RE = /^(?:\s*--[^\n]*\n)*\s*GRANT SELECT, INSERT, DELETE ON TABLE public\.check_stakeholders TO checksops, authenticated;\s*$/;
 
@@ -1750,6 +1798,9 @@ export async function readStakeholderGrantState(client) {
   const present = (await client.query(STAKEHOLDER_TABLE_SQL))?.rows?.[0]?.present === true;
   if (!present) return fail(CODES.SQL_COLLISION, 'public.check_stakeholders is missing');
   const rls = (await client.query(STAKEHOLDER_RLS_SQL))?.rows?.[0] || {};
+  const policyState = stakeholderPolicyState((await client.query(STAKEHOLDER_POLICIES_SQL))?.rows || []);
+  const bypassesRls = (await client.query(STAKEHOLDER_BYPASS_SQL))?.rows?.[0]?.bypasses !== false;
+  const rlsEnabled = rls.rls_enabled === true;
   const acl = (await client.query(STAKEHOLDER_ACL_SQL))?.rows || [];
   const privilegeState = Object.fromEntries(STAKEHOLDER_GRANTEES.map((grantee) => [
     grantee,
@@ -1764,8 +1815,14 @@ export async function readStakeholderGrantState(client) {
     .sort();
   return ok({
     table_present: true,
-    rls_enabled: rls.rls_enabled === true,
-    write_policy_present: rls.write_policy_present === true,
+    rls_enabled: rlsEnabled,
+    ...policyState,
+    grantee_bypasses_rls: bypassesRls,
+    // Every condition that keeps an INSERT or DELETE inside the row's own tenant.
+    tenant_guard_ok: rlsEnabled
+      && policyState.write_policy_as_expected
+      && policyState.other_write_policy_count === 0
+      && !bypassesRls,
     privilege_state: privilegeState,
     update_granted: STAKEHOLDER_GRANTEES.some((grantee) => privilegeState[grantee].UPDATE === 'granted'),
     preserved_acl_sha256: hashSqlDefinition(preserved.join('\n')),
@@ -1845,8 +1902,7 @@ async function handleSql77CheckStakeholdersGrant({
           apply_preconditions_met: pinExecutable
             && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
             && state.details.update_granted === false
-            && state.details.rls_enabled === true
-            && state.details.write_policy_present === true,
+            && state.details.tenant_guard_ok === true,
         },
       });
     }
@@ -1869,11 +1925,14 @@ async function handleSql77CheckStakeholdersGrant({
       await rollback();
       return fail(CODES.UNRELATED_MUTATION, 'SQL 77 grant is already in place; refuse re-grant');
     }
-    if (before.details.rls_enabled !== true || before.details.write_policy_present !== true) {
+    if (before.details.tenant_guard_ok !== true) {
       await rollback();
-      return fail(CODES.DEPLOYMENT_COLLISION, 'check_stakeholders needs row-level security and aws_write_check_stakeholders before SQL 77', {
+      return fail(CODES.DEPLOYMENT_COLLISION, 'check_stakeholders needs row-level security with only the reviewed aws_write_check_stakeholders write policy before SQL 77', {
         rls_enabled: before.details.rls_enabled,
         write_policy_present: before.details.write_policy_present,
+        write_policy_as_expected: before.details.write_policy_as_expected,
+        other_write_policy_count: before.details.other_write_policy_count,
+        grantee_bypasses_rls: before.details.grantee_bypasses_rls,
       });
     }
     if (before.details.update_granted) {

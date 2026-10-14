@@ -133,12 +133,21 @@ test('apply refuses before connecting: unreviewed pin, read-live sentinel, wrong
   }
 });
 
+const WRITE_POLICY = Object.freeze({
+  name: 'aws_write_check_stakeholders', permissive: true, cmd: 'ALL', roles: ['authenticated'],
+  using: 'aws_can_write_tenant(tenant_id)', with_check: 'aws_can_write_tenant(tenant_id)',
+});
+const SELECT_POLICY = Object.freeze({
+  name: 'aws_select_check_stakeholders', permissive: true, cmd: 'SELECT', roles: ['authenticated'],
+  using: 'aws_can_read_tenant(tenant_id)', with_check: null,
+});
+
 /** Fake catalog: ACL rows; running the embedded GRANT adds the three privileges (or a variant via onApply). */
 function fakeDb({ acl = [
   { grantee: 'owner_role', privilege_type: 'SELECT', is_grantable: false },
   { grantee: 'owner_role', privilege_type: 'INSERT', is_grantable: false },
   { grantee: 'checksops', privilege_type: 'SELECT', is_grantable: false },
-], present = true, rls = { rls_enabled: true, write_policy_present: true }, onApply } = {}) {
+], present = true, rlsEnabled = true, policies = [SELECT_POLICY, WRITE_POLICY], bypasses = false, onApply } = {}) {
   let committed = acl.map((row) => ({ ...row }));
   let working = null;
   const current = () => working || committed;
@@ -156,7 +165,9 @@ function fakeDb({ acl = [
         if (text === 'ROLLBACK') { working = null; return { rows: [] }; }
         if (text.includes('pg_advisory_xact_lock')) return { rows: [] };
         if (text.includes('IS NOT NULL AS present')) return { rows: [{ present }] };
-        if (text.includes('AS rls_enabled')) return { rows: [{ ...rls }] };
+        if (text.includes('AS rls_enabled')) return { rows: [{ rls_enabled: rlsEnabled }] };
+        if (text.includes('FROM pg_policy pol')) return { rows: policies.map((policy) => ({ ...policy })) };
+        if (text.includes('AS bypasses')) return { rows: [{ bypasses }] };
         if (text.includes('aclexplode')) return { rows: current().map((row) => ({ ...row })) };
         if (text.includes('GRANT SELECT, INSERT, DELETE ON TABLE public.check_stakeholders')) {
           for (const grantee of ['checksops', 'authenticated']) {
@@ -175,7 +186,7 @@ function fakeDb({ acl = [
   };
 }
 
-test('inspect only SELECTs and reports the privilege state; the committed pin is not executable yet', async () => {
+test('inspect only SELECTs and reports the privilege and tenant-guard state; a pin without an expected hash is not executable', async () => {
   const db = fakeDb();
   const inspect = await handlerFor(db.connect, { sql77Pin: { ...PIN, expected_live_definition_sha256: null } })(grantEvent({
     action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL,
@@ -189,6 +200,10 @@ test('inspect only SELECTs and reports the privilege state; the committed pin is
   assert.equal(receipt.update_granted, false);
   assert.equal(receipt.rls_enabled, true);
   assert.equal(receipt.write_policy_present, true);
+  assert.equal(receipt.write_policy_as_expected, true);
+  assert.equal(receipt.other_write_policy_count, 0);
+  assert.equal(receipt.grantee_bypasses_rls, false);
+  assert.equal(receipt.tenant_guard_ok, true);
   assert.deepEqual(receipt.privilege_state.checksops, { SELECT: 'granted', INSERT: 'absent', UPDATE: 'absent', DELETE: 'absent' });
   assert.ok(db.seen.every((text) => /^\s*SELECT\b/i.test(text)), JSON.stringify(db.seen));
 });
@@ -219,15 +234,38 @@ test('apply lands exactly on the intended state once; replay, re-grant, UPDATE d
   assert.equal((await handlerFor(different.connect)(grantEvent())).code, CODES.DEPLOYMENT_COLLISION);
   assert.equal(different.acl.length, 2);
 
-  for (const rls of [{ rls_enabled: false, write_policy_present: true }, { rls_enabled: true, write_policy_present: false }]) {
-    const unguarded = fakeDb({ rls });
+  // Spacing, schema prefix and outer parentheses in the deparsed policy still match.
+  const reformatted = fakeDb({ policies: [SELECT_POLICY, {
+    ...WRITE_POLICY, using: '(public.aws_can_write_tenant(tenant_id))', with_check: 'public.aws_can_write_tenant( tenant_id )',
+  }] });
+  assert.equal((await handlerFor(reformatted.connect)(grantEvent())).ok, true);
+
+  for (const [label, options] of [
+    ['RLS off', { rlsEnabled: false }],
+    ['no write policy', { policies: [SELECT_POLICY] }],
+    ['write policy allows any row', { policies: [SELECT_POLICY, { ...WRITE_POLICY, using: 'true', with_check: 'true' }] }],
+    ['write policy checks only USING', { policies: [SELECT_POLICY, { ...WRITE_POLICY, with_check: null }] }],
+    ['write policy for PUBLIC', { policies: [SELECT_POLICY, { ...WRITE_POLICY, roles: ['public'] }] }],
+    ['write policy for INSERT only', { policies: [SELECT_POLICY, { ...WRITE_POLICY, cmd: 'INSERT' }] }],
+    ['write policy restrictive', { policies: [SELECT_POLICY, { ...WRITE_POLICY, permissive: false }] }],
+    ['extra permissive INSERT policy', { policies: [SELECT_POLICY, WRITE_POLICY, { name: 'open_insert', permissive: true, cmd: 'INSERT', roles: ['authenticated'], using: null, with_check: 'true' }] }],
+    ['extra permissive DELETE policy', { policies: [SELECT_POLICY, WRITE_POLICY, { name: 'open_delete', permissive: true, cmd: 'DELETE', roles: ['public'], using: 'true', with_check: null }] }],
+    ['a grantee bypasses RLS', { bypasses: true }],
+    ['bypass unknown', { bypasses: null }],
+  ]) {
+    const unguarded = fakeDb(options);
     const inspected = await handlerFor(unguarded.connect)(grantEvent({ action: 'inspect' }));
-    assert.equal(inspected.details.receipt.apply_preconditions_met, false, JSON.stringify(rls));
+    assert.equal(inspected.details.receipt.tenant_guard_ok, false, label);
+    assert.equal(inspected.details.receipt.apply_preconditions_met, false, label);
     const refused = await handlerFor(unguarded.connect)(grantEvent());
-    assert.equal(refused.code, CODES.DEPLOYMENT_COLLISION, JSON.stringify(rls));
-    assert.match(refused.message, /row-level security/);
-    assert.equal(unguarded.acl.length, 3);
+    assert.equal(refused.code, CODES.DEPLOYMENT_COLLISION, label);
+    assert.match(refused.message, /row-level security/, label);
+    assert.equal(unguarded.acl.length, 3, label);
   }
+
+  // A restrictive extra policy only narrows writes, so it does not block.
+  const narrowed = fakeDb({ policies: [SELECT_POLICY, WRITE_POLICY, { name: 'narrow', permissive: false, cmd: 'ALL', roles: ['authenticated'], using: 'false', with_check: 'false' }] });
+  assert.equal((await handlerFor(narrowed.connect)(grantEvent())).ok, true);
 
   for (const [label, onApply] of [
     ['another grantee changed', (rows) => { rows.push({ grantee: 'anon', privilege_type: 'SELECT', is_grantable: false }); }],
@@ -298,8 +336,9 @@ test('PostgreSQL 16: a non-superuser owner applies SQL 77 through the real handl
         UNIQUE (check_intake_item_id, stakeholder_account_id));
       GRANT SELECT ON public.check_stakeholders TO checksops;
       ALTER TABLE public.check_stakeholders ENABLE ROW LEVEL SECURITY;
+      CREATE FUNCTION public.aws_can_write_tenant(uuid) RETURNS boolean LANGUAGE sql STABLE AS 'SELECT true';
       CREATE POLICY aws_write_check_stakeholders ON public.check_stakeholders FOR ALL TO authenticated
-        USING (true) WITH CHECK (true);`);
+        USING (public.aws_can_write_tenant(tenant_id)) WITH CHECK (public.aws_can_write_tenant(tenant_id));`);
     await owner.end();
 
     const insertAsApi = async () => {
@@ -322,7 +361,19 @@ test('PostgreSQL 16: a non-superuser owner applies SQL 77 through the real handl
     const inspect = await handler(grantEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
     assert.equal(inspect.ok, true, JSON.stringify(inspect));
     assert.equal(inspect.details.receipt.live_definition_sha256, SELECT_ONLY_SHA256);
+    assert.equal(inspect.details.receipt.tenant_guard_ok, true, JSON.stringify(inspect.details.receipt));
     assert.equal(inspect.details.receipt.apply_preconditions_met, true);
+
+    // A loosened write policy on the real catalog is refused.
+    const alter = async (cond) => {
+      const owner = await connectAs('sql77_owner');
+      await owner.query(`ALTER POLICY aws_write_check_stakeholders ON public.check_stakeholders USING (${cond}) WITH CHECK (${cond})`);
+      await owner.end();
+    };
+    await alter('true');
+    const loosened = await handler(grantEvent());
+    assert.equal(loosened.code, CODES.DEPLOYMENT_COLLISION, JSON.stringify(loosened));
+    await alter('public.aws_can_write_tenant(tenant_id)');
 
     const event = grantEvent();
     const applied = await handler(event);
