@@ -1955,6 +1955,69 @@
       "reason": "PR #953 (owner-approved 2026-10-14) requires a deposit.approve two-factor proof for Check Alt approval and overlaps Cursor PR #324 on this file. #953 supersedes #434; #437, #450 and #324 must rebase onto main before any later merge.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 433,
+      "path": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #433 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 373,
+      "path": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #373 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 364,
+      "path": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #364 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 433,
+      "path": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #433 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 373,
+      "path": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #373 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 433,
+      "path": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #433 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 332,
+      "path": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #332 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 327,
+      "path": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #327 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 324,
+      "path": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #324 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

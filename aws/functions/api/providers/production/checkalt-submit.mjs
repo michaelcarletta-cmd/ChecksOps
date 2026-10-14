@@ -12,6 +12,7 @@ import {
   loadDepositByIdempotency,
   loadDepositsForCheck,
   markHttpAttempted,
+  persistAutoApproveOutcome,
   persistProviderOutcome,
   pickBlockingDeposit,
   replayDepositResponse,
@@ -63,6 +64,339 @@ const referenceOf = (json) => {
   return null;
 };
 
+/*
+ * Post-process auto-approval (Cursor PR #433 port, fail-closed ceiling).
+ *
+ * CheckAlt process status 40 (pending_approval) needs a second
+ * /fincapture/deposit/approve call. The submit flow makes that call itself only
+ * after its own committed /deposit/process parked the item, and only when the
+ * tenant policy is enabled, auto_approve_max_cents is a set integer ceiling, the
+ * server-side amount is at or below it, CheckAlt rated the item "Low Risk", and
+ * CheckAlt did not flag it. A blank ceiling does NOT mean unlimited. It never
+ * POSTs /deposit/process, never inserts a deposit, and never requires or
+ * satisfies the manual-approve TOTP (checkalt-approve.mjs). Replays never reach
+ * it (they return before any provider HTTP). Any provider, lock, timeout or
+ * persist ambiguity leaves the row pending_approval for a Manager.
+ *
+ * Runs under an overall deadline (API Gateway / Lambda allow 29s) so the user
+ * always gets the deposit id, reference and status back instead of a 504.
+ */
+export const AUTO_APPROVE_BACKOFF_MS = Object.freeze([1000, 2000, 3000]);
+export const AUTO_APPROVE_MAX_ATTEMPTS = AUTO_APPROVE_BACKOFF_MS.length + 1;
+export const AUTO_APPROVE_DEADLINE_MS = 20000;
+export const AUTO_APPROVE_REQUEST_TIMEOUT_MS = 5000;
+export const AUTO_APPROVE_MIN_REQUEST_MS = 1000;
+/** Headroom kept back when the Lambda context's remaining time is known. */
+export const AUTO_APPROVE_LAMBDA_HEADROOM_MS = 5000;
+
+/** Short classified codes only. Raw provider or error text is logged, never stored or returned. */
+export const AUTO_APPROVE_SKIP_REASONS = Object.freeze([
+  'not_pending_approval',
+  'missing_reference',
+  'invalid_reference',
+  'auto_approve_disabled',
+  'flagged_by_checkalt',
+  'risk_not_low',
+  'invalid_amount',
+  'missing_auto_approve_ceiling',
+  'over_max_amount',
+  'provider_declined',
+  'locked_exhausted',
+  'auth_failed',
+  'auto_approve_timeout',
+  'auto_approve_error',
+  'auto_approve_persist_failed',
+]);
+
+const AUTO_APPROVE_FLAG_TEXT_RE = /duplicate|fraud|risk|exception|warning|hold|suspect|mismatch|unreadable/;
+const LOW_RISK_RE = /^low risk$/i;
+
+const optionalCents = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const cents = Number(value);
+  return Number.isInteger(cents) && cents >= 0 ? cents : null;
+};
+
+/**
+ * Tenant row wins as a whole when present; the global row is used only without one.
+ * Submit always has a tenant row (it refuses an unregistered tenant) and passes
+ * no global row, so the global checkalt_config setting is ignored at submit time.
+ */
+export const resolveAutoApprovePolicy = (tenant = null, globalCfg = null) => {
+  const source = tenant ? 'checkalt_tenant_accounts' : (globalCfg ? 'checkalt_config' : 'none');
+  const row = tenant || globalCfg || null;
+  return {
+    enabled: row?.auto_approve_enabled === true,
+    maxCents: optionalCents(row?.auto_approve_max_cents),
+    source,
+  };
+};
+
+export const depositIsFlagged = (providerJson = {}) => {
+  const json = providerJson && typeof providerJson === 'object' ? providerJson : {};
+  for (const key of ['exceptions', 'warnings', 'riskFactors', 'errors']) {
+    if (Array.isArray(json[key]) && json[key].length > 0) return true;
+  }
+  if (json.amountDiscrepancyDetected === true || json.amountDiscrepancyDetected === 'true') return true;
+  // Risk is judged separately by riskIsLow(); do not regex riskRatingDescription here.
+  const flagText = [
+    json.statusDescription,
+    JSON.stringify(json.warnings ?? ''),
+    JSON.stringify(json.exceptions ?? ''),
+  ].join(' ').toLowerCase();
+  return AUTO_APPROVE_FLAG_TEXT_RE.test(flagText);
+};
+
+/** process sends performRiskAssessment: true. Only an explicit "Low Risk" is clean. */
+export const riskIsLow = (providerJson = {}) => {
+  const description = providerJson && typeof providerJson === 'object'
+    ? providerJson.riskRatingDescription
+    : null;
+  return typeof description === 'string' && LOW_RISK_RE.test(description.trim());
+};
+
+/** CheckAlt references are positive integers sent as JSON numbers. */
+export const safeCheckAltReference = (reference) => {
+  const text = String(reference ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) return null;
+  const value = Number(text);
+  return Number.isSafeInteger(value) ? value : null;
+};
+
+export const decideAutoApprove = ({
+  processRequiresApproval = false,
+  reference = null,
+  enabled = false,
+  maxCents = null,
+  amountCents = null,
+  flagged = false,
+  riskLow = false,
+} = {}) => {
+  if (!processRequiresApproval) return { approve: false, skipReason: 'not_pending_approval' };
+  if (reference === null || reference === undefined || String(reference).trim() === '') {
+    return { approve: false, skipReason: 'missing_reference' };
+  }
+  if (safeCheckAltReference(reference) === null) return { approve: false, skipReason: 'invalid_reference' };
+  if (enabled !== true) return { approve: false, skipReason: 'auto_approve_disabled' };
+  if (flagged) return { approve: false, skipReason: 'flagged_by_checkalt' };
+  if (riskLow !== true) return { approve: false, skipReason: 'risk_not_low' };
+  if (!Number.isInteger(amountCents) || amountCents <= 0) return { approve: false, skipReason: 'invalid_amount' };
+  if (!Number.isInteger(maxCents) || maxCents < 0) return { approve: false, skipReason: 'missing_auto_approve_ceiling' };
+  if (amountCents > maxCents) return { approve: false, skipReason: 'over_max_amount' };
+  return { approve: true, skipReason: null };
+};
+
+export const isCheckAltApproveLockError = (status, json = {}) => {
+  if (Number(status) !== 404) return false;
+  const msg = String(json?.message ?? json?.statusDescription ?? '').toLowerCase();
+  return msg.includes('locate transaction') || msg.includes('locked');
+};
+
+const isTimeoutError = (error) => error?.name === 'TimeoutError' || error?.name === 'AbortError';
+
+const logAutoApprove = (fields) => {
+  try {
+    console.warn(JSON.stringify({ event: 'checkalt_auto_approve', ...fields }));
+  } catch {
+    /* logging is best-effort */
+  }
+};
+
+const providerDetail = (json) => String(json?.statusDescription ?? json?.message ?? '').slice(0, 200);
+
+/**
+ * Retries only HTTP 404 + locate/locked (CheckAlt has not accepted the approve),
+ * and only while the deadline leaves room for another bounded request.
+ */
+export async function attemptAutoApproveWithLockRetry({
+  cfg,
+  credentials,
+  fetchImpl,
+  reference,
+  depositId = null,
+  deadline = Date.now() + AUTO_APPROVE_DEADLINE_MS,
+  now = Date.now,
+  requestTimeoutMs = AUTO_APPROVE_REQUEST_TIMEOUT_MS,
+  sleepFn = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
+  const referenceNumber = safeCheckAltReference(reference);
+  let lastJson = null;
+  let lastStatus = 0;
+  const done = (attempts, extra) => ({ approved: false, json: lastJson, status: lastStatus, attempts, ...extra });
+  const timedOut = (attempts, detail) => {
+    logAutoApprove({ deposit_id: depositId, code: 'auto_approve_timeout', attempts, http_status: lastStatus, detail });
+    return done(attempts, { skipReason: 'auto_approve_timeout' });
+  };
+  if (referenceNumber === null) return done(0, { skipReason: 'invalid_reference' });
+  for (let attempt = 0; attempt < AUTO_APPROVE_MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      const wait = AUTO_APPROVE_BACKOFF_MS[attempt - 1];
+      if (deadline - now() < wait + AUTO_APPROVE_MIN_REQUEST_MS) return timedOut(attempt, 'deadline_before_retry');
+      await sleepFn(wait);
+    }
+    const remaining = deadline - now();
+    if (remaining < AUTO_APPROVE_MIN_REQUEST_MS) return timedOut(attempt, 'deadline_before_request');
+    // Equivalent to AbortSignal.timeout, but a referenced timer we clear, so the
+    // abort fires even when nothing else holds the event loop open.
+    const controller = new AbortController();
+    const { signal } = controller;
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException('CheckAlt approve request timed out', 'TimeoutError'));
+    }, Math.max(1, Math.min(requestTimeoutMs, remaining)));
+    const boundedFetch = (url, options = {}) => fetchImpl(url, { ...options, signal });
+    try {
+      const resp = await checkAltFetch({
+        cfg,
+        credentials,
+        path: '/fincapture/deposit/approve',
+        body: { fiKey: cfg.fi_key, referenceNumber, action: 1 },
+        fetchImpl: boundedFetch,
+        jwtCache,
+      });
+      lastJson = (await parseProviderJson(resp)).json;
+      lastStatus = resp.status;
+      if (resp.ok && lastJson?.success === true) {
+        return { approved: true, json: lastJson, status: lastStatus, attempts: attempt + 1 };
+      }
+      if (lastStatus === 401 || lastStatus === 403) {
+        logAutoApprove({ deposit_id: depositId, code: 'auth_failed', attempts: attempt + 1, http_status: lastStatus, detail: providerDetail(lastJson) });
+        return done(attempt + 1, { skipReason: 'auth_failed' });
+      }
+      if (!isCheckAltApproveLockError(lastStatus, lastJson)) {
+        logAutoApprove({ deposit_id: depositId, code: 'provider_declined', attempts: attempt + 1, http_status: lastStatus, detail: providerDetail(lastJson) });
+        return done(attempt + 1, { skipReason: 'provider_declined' });
+      }
+    } catch (error) {
+      if (isTimeoutError(error) || signal.aborted) return timedOut(attempt + 1, 'request_timeout');
+      logAutoApprove({
+        deposit_id: depositId,
+        code: 'auto_approve_error',
+        attempts: attempt + 1,
+        detail: String(error?.message || error).slice(0, 200),
+      });
+      return done(attempt + 1, { skipReason: 'auto_approve_error' });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  logAutoApprove({ deposit_id: depositId, code: 'locked_exhausted', attempts: AUTO_APPROVE_MAX_ATTEMPTS, http_status: lastStatus, detail: providerDetail(lastJson) });
+  return done(AUTO_APPROVE_MAX_ATTEMPTS, { skipReason: 'locked_exhausted' });
+}
+
+/** Never throws. Persist failures, timeouts and provider errors leave pending_approval. */
+export async function maybeAutoApproveAfterProcess({
+  client,
+  row,
+  acct,
+  amountCents,
+  providerJson,
+  cfg,
+  credentials,
+  fetchImpl,
+  commit = async () => {},
+  sleepFn,
+  deadline = Date.now() + AUTO_APPROVE_DEADLINE_MS,
+  now = Date.now,
+  requestTimeoutMs = AUTO_APPROVE_REQUEST_TIMEOUT_MS,
+} = {}) {
+  const policy = resolveAutoApprovePolicy(acct || null, null);
+  let decision = decideAutoApprove({
+    processRequiresApproval: row?.status === 'pending_approval',
+    reference: row?.checkalt_reference ?? null,
+    enabled: policy.enabled,
+    maxCents: policy.maxCents,
+    amountCents,
+    flagged: depositIsFlagged(providerJson),
+    riskLow: riskIsLow(providerJson),
+  });
+  if (decision.approve && deadline - now() < AUTO_APPROVE_MIN_REQUEST_MS) {
+    decision = { approve: false, skipReason: 'auto_approve_timeout' };
+  }
+  const persist = (fields) => persistAutoApproveOutcome(client, {
+    rowId: row.id,
+    tenantId: row.tenant_id,
+    maxCents: policy.maxCents,
+    ...fields,
+  });
+  const result = (extra) => ({
+    attempted: false,
+    approved: false,
+    approvePosted: false,
+    skipReason: decision.skipReason,
+    maxCents: policy.maxCents,
+    policySource: policy.source,
+    saved: null,
+    ...extra,
+  });
+  if (!decision.approve) {
+    let saved = null;
+    try {
+      saved = await persist({ phase: 'skipped', skipReason: decision.skipReason });
+      await commit();
+    } catch {
+      saved = null;
+    }
+    return result({ saved });
+  }
+
+  // Durable evidence before the approve POST. If it cannot be written and committed, do not POST.
+  try {
+    const marked = await persist({ phase: 'attempting' });
+    if (!marked) throw new Error('auto_approve_marker_missing');
+    await commit();
+  } catch {
+    return result({ skipReason: 'auto_approve_persist_failed' });
+  }
+
+  const outcome = await attemptAutoApproveWithLockRetry({
+    cfg,
+    credentials,
+    fetchImpl,
+    reference: row.checkalt_reference,
+    depositId: row.id,
+    deadline,
+    now,
+    requestTimeoutMs,
+    sleepFn,
+  });
+  let saved = null;
+  try {
+    saved = await persist({
+      phase: 'outcome',
+      approved: outcome.approved === true,
+      skipReason: outcome.approved ? null : outcome.skipReason,
+      approvePayload: outcome.json,
+      attempts: outcome.attempts,
+    });
+    await commit();
+  } catch {
+    saved = null;
+  }
+  return result({
+    attempted: true,
+    approved: outcome.approved === true,
+    approvePosted: outcome.attempts > 0,
+    skipReason: outcome.approved ? null : outcome.skipReason,
+    attempts: outcome.attempts,
+    persistFailed: !saved,
+    saved,
+  });
+}
+
+/**
+ * About 20s from handler start. The API Lambda handler does not receive a
+ * context today; if a getRemainingTimeInMillis is injected, the earlier bound wins.
+ */
+export const autoApproveDeadline = ({ startedAt, now = Date.now, deps = {} } = {}) => {
+  const budget = Number.isInteger(deps.autoApproveDeadlineMs) ? deps.autoApproveDeadlineMs : AUTO_APPROVE_DEADLINE_MS;
+  let deadline = startedAt + budget;
+  if (typeof deps.getRemainingTimeInMillis === 'function') {
+    const remaining = Number(deps.getRemainingTimeInMillis());
+    if (Number.isFinite(remaining)) deadline = Math.min(deadline, now() + remaining - AUTO_APPROVE_LAMBDA_HEADROOM_MS);
+  }
+  return deadline;
+};
+
 async function resolveSsoKey({ cfg, credentials, acct, fetchImpl }) {
   if (acct.sso_key && acct.sso_key !== acct.sso_user_id) return acct.sso_key;
   try {
@@ -90,6 +424,8 @@ export async function handleProductionCheckAltSubmit({
   fetchImpl = fetch,
   deps = {},
 } = {}) {
+  const now = typeof deps.now === 'function' ? deps.now : Date.now;
+  const handlerStartedAt = now();
   const amountSpoof = rejectUntrustedAmountFields(body);
   if (amountSpoof) {
     return { ...amountSpoof, liveProviderCalled: false, productionExecution: false, spoofFieldsIgnored: spoof };
@@ -420,6 +756,31 @@ export async function handleProductionCheckAltSubmit({
         applicationUserId: mapping.application_user_id,
       };
     }
+    let autoApprove = null;
+    if (saved?.status === 'pending_approval') {
+      try {
+        autoApprove = await maybeAutoApproveAfterProcess({
+          client,
+          row: saved,
+          acct,
+          amountCents: userAmount,
+          providerJson: json,
+          cfg: loadedCfg.cfg,
+          credentials: loadedCfg.credentials,
+          fetchImpl,
+          commit: () => commitDurableAttempt(client, mapping, claims),
+          sleepFn: deps.sleepFn,
+          now,
+          deadline: autoApproveDeadline({ startedAt: handlerStartedAt, now, deps }),
+          requestTimeoutMs: Number.isInteger(deps.autoApproveRequestTimeoutMs)
+            ? deps.autoApproveRequestTimeoutMs
+            : AUTO_APPROVE_REQUEST_TIMEOUT_MS,
+        });
+      } catch {
+        autoApprove = { attempted: false, approved: false, approvePosted: false, skipReason: 'auto_approve_error' };
+      }
+      if (autoApprove?.saved) saved = autoApprove.saved;
+    }
     return {
       ok: resp.ok && !isRejected,
       statusCode: resp.ok ? 200 : 502,
@@ -430,6 +791,17 @@ export async function handleProductionCheckAltSubmit({
       deposit_id: saved.id,
       checkalt_reference: saved.checkalt_reference,
       status: saved.status,
+      approved_at: saved.approved_at ?? null,
+      auto_approve: autoApprove
+        ? {
+          attempted: autoApprove.attempted === true,
+          approved: autoApprove.approved === true,
+          approvePosted: autoApprove.approvePosted === true,
+          skipReason: autoApprove.skipReason || null,
+          maxCents: autoApprove.maxCents ?? null,
+          persistFailed: autoApprove.persistFailed === true,
+        }
+        : null,
       userAmount,
       scale: 'integer_cents',
       imagePipeline: images.imagePipeline,

@@ -84,7 +84,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
           Auto-Deposit
         </CardTitle>
         <CardDescription className="text-xs">
-          Automatically approve clean deposits for your organization. Deposits with any
+          Automatically approve clean deposits at or under your ceiling. Deposits with any
           flags (duplicate, risk, image quality, mismatch, etc.) always route to manual review.
         </CardDescription>
       </CardHeader>
@@ -123,7 +123,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
 
             <div className="space-y-1.5">
               <Label htmlFor="auto-approve-max" className="text-xs">
-                Auto-approve ceiling (optional)
+                Auto-approve ceiling (required for automatic approval)
               </Label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">$</span>
@@ -132,7 +132,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="No limit"
+                  placeholder="e.g. 2000.00"
                   value={maxDollars}
                   onChange={(e) => setMaxDollars(e.target.value)}
                   disabled={!enabled || isLoading}
@@ -140,7 +140,8 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
                 />
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Deposits above this amount still go to manual review. Leave blank for no ceiling.
+                Deposits above this amount still go to manual review. A blank ceiling turns
+                automatic approval off; every deposit then waits for manual approval.
               </p>
             </div>
 
