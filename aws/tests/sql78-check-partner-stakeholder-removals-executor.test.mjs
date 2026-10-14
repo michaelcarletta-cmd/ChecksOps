@@ -64,9 +64,16 @@ const APPLIED = Object.freeze({
     { name: 'check_partner_stakeholder_removals_not_self', def: 'CHECK ((partner_tenant_id <> tenant_id))' },
     { name: 'check_partner_stakeholder_removals_partner_tenant_id_fkey', def: 'FOREIGN KEY (partner_tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE' },
     { name: 'check_partner_stakeholder_removals_pkey', def: 'PRIMARY KEY (id)' },
-    { name: 'check_partner_stakeholder_removals_removed_by_fkey', def: 'FOREIGN KEY (removed_by) REFERENCES public.identity_accounts(application_user_id)' },
+    { name: 'check_partner_stakeholder_removals_removed_by_fkey', def: 'FOREIGN KEY (removed_by) REFERENCES public.identity_accounts(application_user_id) ON DELETE SET NULL' },
+    { name: 'check_partner_stakeholder_removals_share_fkey', def: 'FOREIGN KEY (check_intake_item_id, tenant_id, partner_tenant_id) REFERENCES public.shared_checks(check_id, source_tenant_id, target_tenant_id) ON DELETE CASCADE' },
     { name: 'check_partner_stakeholder_removals_tenant_id_fkey', def: 'FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE' },
-    { name: 'check_partner_stakeholder_removals_unique', def: 'UNIQUE (check_intake_item_id, partner_tenant_id)' },
+    { name: 'check_partner_stakeholder_removals_unique', def: 'UNIQUE (check_intake_item_id, tenant_id, partner_tenant_id)' },
+  ],
+  indexes: [
+    { name: 'check_partner_stakeholder_removals_partner_tenant_id_idx', def: 'CREATE INDEX check_partner_stakeholder_removals_partner_tenant_id_idx ON public.check_partner_stakeholder_removals USING btree (partner_tenant_id)' },
+    { name: 'check_partner_stakeholder_removals_pkey', def: 'CREATE UNIQUE INDEX check_partner_stakeholder_removals_pkey ON public.check_partner_stakeholder_removals USING btree (id)' },
+    { name: 'check_partner_stakeholder_removals_tenant_id_idx', def: 'CREATE INDEX check_partner_stakeholder_removals_tenant_id_idx ON public.check_partner_stakeholder_removals USING btree (tenant_id)' },
+    { name: 'check_partner_stakeholder_removals_unique', def: 'CREATE UNIQUE INDEX check_partner_stakeholder_removals_unique ON public.check_partner_stakeholder_removals USING btree (check_intake_item_id, tenant_id, partner_tenant_id)' },
   ],
   rls_enabled: true,
   rls_forced: false,
@@ -126,7 +133,7 @@ test('pin matches the SQL file and its commit; expected is the absent state; int
   assert.equal(PIN.expected_live_definition_sha256, ABSENT_SHA256);
   assert.equal(PIN.expected_live_definition_sha256, '4031dea6c0fbb70af1b17befa7ffb161fec40227cda080cd87c222dec674d269');
   assert.equal(PIN.intended_replacement_sha256, APPLIED_SHA256);
-  assert.equal(PIN.intended_replacement_sha256, 'd9f75f8e7327f5fc5b2a45adeb47ceb6ac20c3237ae7660ab1235eddcf501430');
+  assert.equal(PIN.intended_replacement_sha256, '3d650a56a2fd8a4ccfaeaf795ac0de8c4d0b849a748c1769400397d62e92dd40');
   assert.equal(text.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim(), SQL78_NORMALIZED_STATEMENTS);
   assert.doesNotMatch(text.replace(/^--.*$/gm, ''), /UPDATE|SECURITY DEFINER|BYPASSRLS|DROP /);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(PIN));
@@ -177,13 +184,16 @@ const PREREQS = Object.freeze({
   required_roles_present: true,
   references_granted: true,
   schema_create_granted: true,
+  share_key_present: true,
 });
+// Staging's restore role gives checksops SELECT on new tables by default.
+const DEFAULT_ACL = Object.freeze([{ scope: 'public', grantee: 'checksops', privilege_type: 'SELECT', is_grantable: false }]);
 
 /**
  * Fake catalog. Running the embedded file creates the table in the APPLIED
  * shape (onApply may then change the working copy); ROLLBACK discards it.
  */
-function fakeDb({ present = false, table = APPLIED, prereqs = PREREQS, bypasses = false, onApply, failOnApply = false } = {}) {
+function fakeDb({ present = false, table = APPLIED, prereqs = PREREQS, bypasses = false, defaultAcl = DEFAULT_ACL, onApply, failOnApply = false } = {}) {
   let committed = {
     present,
     table: clone(table),
@@ -203,7 +213,8 @@ function fakeDb({ present = false, table = APPLIED, prereqs = PREREQS, bypasses 
         seen.push(text);
         const db = current();
         const t = db.table;
-        if (text === 'BEGIN') { working = clone(committed); return { rows: [] }; }
+        if (text === 'BEGIN' || text === 'BEGIN READ ONLY') { working = clone(committed); return { rows: [] }; }
+        if (text.startsWith('SET LOCAL lock_timeout')) return { rows: [] };
         if (text === 'COMMIT') { committed = working; working = null; return { rows: [] }; }
         if (text === 'ROLLBACK') { working = null; return { rows: [] }; }
         if (text.includes('pg_advisory_xact_lock')) return { rows: [] };
@@ -211,6 +222,8 @@ function fakeDb({ present = false, table = APPLIED, prereqs = PREREQS, bypasses 
         if (text.includes('AS removals_present')) return { rows: [{ removals_present: db.present }] };
         if (text.includes('AS required_tables_present')) return { rows: [{ ...prereqs }] };
         if (text.includes('AS removals_bypasses')) return { rows: [{ removals_bypasses: bypasses }] };
+        if (text.includes('pg_default_acl')) return { rows: clone(defaultAcl) };
+        if (text.includes('pg_get_indexdef')) return { rows: db.present ? clone(t.indexes) : [] };
         if (text.includes('polrelid::regclass::text')) return { rows: clone(db.otherPolicies) };
         if (text.includes('relnamespace')) return { rows: clone(db.relations) };
         if (text.includes('FROM pg_attribute a')) {
@@ -252,7 +265,13 @@ test('inspect only SELECTs and reports the absent state and prerequisites; a pin
   assert.equal(receipt.tenant_guard_ok, false);
   assert.equal(receipt.pin_executable, true);
   assert.equal(receipt.apply_preconditions_met, true);
-  assert.ok(db.seen.every((text) => /^\s*(SELECT|WITH)\b/i.test(text)), JSON.stringify(db.seen));
+  assert.equal(receipt.share_key_present, true);
+  assert.equal(receipt.default_acl_as_expected, true);
+  assert.deepEqual(receipt.default_acl_entries, ['public checksops SELECT']);
+  assert.equal(receipt.default_acl_entry_count, 1);
+  assert.equal(db.seen[0], 'BEGIN READ ONLY');
+  assert.equal(db.seen.at(-1), 'ROLLBACK');
+  assert.ok(db.seen.slice(1, -1).every((text) => /^\s*(SELECT|WITH)\b/i.test(text)), JSON.stringify(db.seen));
 
   const unreviewed = await handlerFor(fakeDb().connect, { sql78Pin: { ...PIN, expected_live_definition_sha256: null } })(removalsEvent({
     action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL,
@@ -281,6 +300,7 @@ test('apply creates exactly the reviewed table once; replay, re-create, missing 
   assert.equal(applied.details.receipt.after_hash, PIN.intended_replacement_sha256);
   assert.equal(applied.details.receipt.tenant_guard_ok, true);
   assert.equal(db.committed.present, true);
+  assert.equal(db.seen[db.seen.indexOf('BEGIN') + 1], "SET LOCAL lock_timeout = '5s'");
   assert.equal((await handler(event)).code, CODES.SQL_COLLISION);
   const again = await handler(removalsEvent());
   assert.equal(again.code, CODES.UNRELATED_MUTATION);
@@ -292,6 +312,10 @@ test('apply creates exactly the reviewed table once; replay, re-create, missing 
     ['grantee role missing', { prereqs: { ...PREREQS, required_roles_present: false } }],
     ['no REFERENCES', { prereqs: { ...PREREQS, references_granted: false } }],
     ['no schema CREATE', { prereqs: { ...PREREQS, schema_create_granted: false } }],
+    ['shared_checks key missing', { prereqs: { ...PREREQS, share_key_present: false } }],
+    ['default UPDATE for checksops', { defaultAcl: [...DEFAULT_ACL, { scope: 'public', grantee: 'checksops', privilege_type: 'UPDATE', is_grantable: false }] }],
+    ['global default for another role', { defaultAcl: [{ scope: 'global', grantee: 'anon', privilege_type: 'SELECT', is_grantable: false }] }],
+    ['default with grant option', { defaultAcl: [{ scope: 'public', grantee: 'authenticated', privilege_type: 'SELECT', is_grantable: true }] }],
     ['prerequisites unknown', { prereqs: {} }],
     ['a grantee bypasses RLS', { bypasses: true }],
     ['bypass unknown', { bypasses: null }],
@@ -306,6 +330,10 @@ test('apply creates exactly the reviewed table once; replay, re-create, missing 
   }
 
   // A table already there (whatever its shape) is never re-created.
+  // A PUBLIC default is removed by the file's REVOKE ALL FROM PUBLIC.
+  const publicDefault = fakeDb({ defaultAcl: [...DEFAULT_ACL, { scope: 'global', grantee: 'PUBLIC', privilege_type: 'SELECT', is_grantable: false }] });
+  assert.equal((await handlerFor(publicDefault.connect)(removalsEvent())).ok, true);
+
   const different = fakeDb({ present: true, table: { ...APPLIED, rls_enabled: false } });
   assert.equal((await handlerFor(different.connect)(removalsEvent())).code, CODES.UNRELATED_MUTATION);
   assert.ok(!different.seen.some((text) => text.includes('CREATE TABLE')));
@@ -321,6 +349,7 @@ test('apply creates exactly the reviewed table once; replay, re-create, missing 
     ['other owner', (d) => { d.table.owner_is_executor = false; }],
     ['extra column', (d) => { d.table.columns.push({ name: 'note', type: 'text', not_null: false, default: null }); }],
     ['constraint dropped', (d) => { d.table.constraints.pop(); }],
+    ['index missing', (d) => { d.table.indexes.shift(); }],
     ['another relation created', (d) => { d.relations.push({ relname: 'evil', relkind: 'r' }); }],
     ['another table policy changed', (d) => { d.otherPolicies[0].polqual = 'false'; }],
   ]) {
@@ -394,6 +423,14 @@ test('PostgreSQL 16: a non-superuser owner creates the table through the real ha
       CREATE TABLE public.tenants (id uuid PRIMARY KEY, name text);
       CREATE TABLE public.check_intake_items (id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES public.tenants(id));
       CREATE TABLE public.identity_accounts (application_user_id uuid PRIMARY KEY, email text);
+      CREATE TABLE public.shared_checks (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        check_id uuid NOT NULL REFERENCES public.check_intake_items(id) ON DELETE CASCADE,
+        source_tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+        target_tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+        revoked_at timestamptz,
+        CONSTRAINT shared_checks_no_self_share CHECK (source_tenant_id <> target_tenant_id),
+        CONSTRAINT shared_checks_unique_active UNIQUE (check_id, source_tenant_id, target_tenant_id));
       ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
       CREATE FUNCTION public.aws_is_cross_tenant_reader() RETURNS boolean LANGUAGE sql STABLE AS 'SELECT false';
       CREATE FUNCTION public.aws_can_access_tenant(_tenant_id uuid) RETURNS boolean LANGUAGE sql STABLE
@@ -403,7 +440,10 @@ test('PostgreSQL 16: a non-superuser owner creates the table through the real ha
       CREATE POLICY aws_select_check_intake_items ON public.check_intake_items FOR SELECT TO authenticated
         USING (public.aws_can_access_tenant(tenant_id));
       INSERT INTO public.tenants (id, name) VALUES ('${TENANT_A}', 'a'), ('${TENANT_B}', 'b'), ('${TENANT_P}', 'partner');
-      INSERT INTO public.check_intake_items (id, tenant_id) VALUES ('${CHECK_A}', '${TENANT_A}'), ('${CHECK_B}', '${TENANT_B}');`);
+      INSERT INTO public.check_intake_items (id, tenant_id) VALUES ('${CHECK_A}', '${TENANT_A}'), ('${CHECK_B}', '${TENANT_B}');
+      -- A shares check A with P; B shares check B with A and with P.
+      INSERT INTO public.shared_checks (check_id, source_tenant_id, target_tenant_id) VALUES
+        ('${CHECK_A}', '${TENANT_A}', '${TENANT_P}'), ('${CHECK_B}', '${TENANT_B}', '${TENANT_A}'), ('${CHECK_B}', '${TENANT_B}', '${TENANT_P}');`);
     await owner.end();
 
     const handler = handlerFor(() => connectAs('sql78_owner'));
@@ -413,15 +453,21 @@ test('PostgreSQL 16: a non-superuser owner creates the table through the real ha
     assert.equal(inspect.details.receipt.prerequisites_ok, true, JSON.stringify(inspect.details.receipt));
     assert.equal(inspect.details.receipt.grantee_bypasses_rls, false);
     assert.equal(inspect.details.receipt.apply_preconditions_met, true);
+    assert.equal(inspect.details.receipt.share_key_present, true);
+    assert.equal(inspect.details.receipt.default_acl_as_expected, true);
+    assert.deepEqual(inspect.details.receipt.default_acl_entries, ['public checksops SELECT']);
 
     // On the real catalog: a missing policy function, a BYPASSRLS member of
     // authenticated, and the would-be owner reachable through authenticated are
     // each refused before the file runs; undoing each lets the check pass.
-    const refusedThenRestored = async (label, breakIt, restore) => {
+    const refusedThenRestored = async (label, breakIt, restore, flag) => {
       await breakIt();
       const refused = await handler(removalsEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
+      assert.equal(refused.ok, true, `${label}: ${JSON.stringify(refused)}`);
       assert.equal(refused.details.receipt.apply_preconditions_met, false, label);
-      assert.equal((await handler(removalsEvent())).code, CODES.DEPLOYMENT_COLLISION, label);
+      if (flag) assert.equal(refused.details.receipt[flag], false, label);
+      const applyRefused = await handler(removalsEvent());
+      assert.equal(applyRefused.code, CODES.DEPLOYMENT_COLLISION, `${label}: ${JSON.stringify(applyRefused)}`);
       await restore();
       const again = await handler(removalsEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
       assert.equal(again.details.receipt.apply_preconditions_met, true, label);
@@ -433,13 +479,35 @@ test('PostgreSQL 16: a non-superuser owner creates the table through the real ha
     };
     await refusedThenRestored('policy function missing',
       () => asOwner('ALTER FUNCTION public.aws_is_cross_tenant_reader() RENAME TO aws_is_cross_tenant_reader_off'),
-      () => asOwner('ALTER FUNCTION public.aws_is_cross_tenant_reader_off() RENAME TO aws_is_cross_tenant_reader'));
+      () => asOwner('ALTER FUNCTION public.aws_is_cross_tenant_reader_off() RENAME TO aws_is_cross_tenant_reader'), 'required_functions_present');
     await refusedThenRestored('BYPASSRLS member of authenticated',
       () => admin.query('CREATE ROLE sql78_svc BYPASSRLS IN ROLE authenticated'),
       () => admin.query('DROP ROLE sql78_svc'));
     await refusedThenRestored('owner reachable through authenticated',
       () => admin.query('GRANT sql78_owner TO authenticated'),
       () => admin.query('REVOKE sql78_owner FROM authenticated'));
+    await refusedThenRestored('shared_checks key missing',
+      () => asOwner('ALTER TABLE public.shared_checks DROP CONSTRAINT shared_checks_unique_active'),
+      () => asOwner('ALTER TABLE public.shared_checks ADD CONSTRAINT shared_checks_unique_active UNIQUE (target_tenant_id, check_id, source_tenant_id)'), 'share_key_present');
+    await refusedThenRestored('shared_checks key over a different column set',
+      async () => {
+        await asOwner('ALTER TABLE public.shared_checks DROP CONSTRAINT shared_checks_unique_active');
+        await asOwner('ALTER TABLE public.shared_checks ADD CONSTRAINT shared_checks_pair UNIQUE (check_id, target_tenant_id)');
+      },
+      async () => {
+        await asOwner('ALTER TABLE public.shared_checks DROP CONSTRAINT shared_checks_pair');
+        await asOwner('ALTER TABLE public.shared_checks ADD CONSTRAINT shared_checks_unique_active UNIQUE (check_id, source_tenant_id, target_tenant_id)');
+      }, 'share_key_present');
+    await refusedThenRestored('default privileges would grant UPDATE',
+      () => asOwner('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT UPDATE ON TABLES TO checksops'),
+      () => asOwner('ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE UPDATE ON TABLES FROM checksops'), 'default_acl_as_expected');
+    await refusedThenRestored('global default privileges for another role',
+      () => admin.query('CREATE ROLE sql78_anon').then(() => asOwner('ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO sql78_anon')),
+      () => asOwner('ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM sql78_anon').then(() => admin.query('DROP ROLE sql78_anon')), 'default_acl_as_expected');
+    // A missing grantee role is reported, not raised.
+    await refusedThenRestored('authenticated role missing',
+      () => admin.query('ALTER ROLE authenticated RENAME TO sql78_authenticated_off'),
+      () => admin.query('ALTER ROLE sql78_authenticated_off RENAME TO authenticated'), 'required_roles_present');
 
     const event = removalsEvent();
     const applied = await handler(event);
@@ -473,9 +541,18 @@ test('PostgreSQL 16: a non-superuser owner creates the table through the real ha
       const insertOwn = await attempt(`INSERT INTO public.check_partner_stakeholder_removals (check_intake_item_id, tenant_id, partner_tenant_id)
         VALUES ('${CHECK_A}', '${TENANT_A}', '${TENANT_P}')`);
       assert.deepEqual(insertOwn, { ok: true, rowCount: 1 });
+      // B shared check B with A, but only B's writers may record B's removals.
       const insertOther = await attempt(`INSERT INTO public.check_partner_stakeholder_removals (check_intake_item_id, tenant_id, partner_tenant_id)
         VALUES ('${CHECK_B}', '${TENANT_B}', '${TENANT_A}')`);
       assert.deepEqual(insertOther, { ok: false, code: '42501' });
+      // Passing itself off as the owner of B's check: no such share by A.
+      const posing = await attempt(`INSERT INTO public.check_partner_stakeholder_removals (check_intake_item_id, tenant_id, partner_tenant_id)
+        VALUES ('${CHECK_B}', '${TENANT_A}', '${TENANT_P}')`);
+      assert.deepEqual(posing, { ok: false, code: '23503' });
+      // A's own check, but A never shared it with B.
+      const noShare = await attempt(`INSERT INTO public.check_partner_stakeholder_removals (check_intake_item_id, tenant_id, partner_tenant_id)
+        VALUES ('${CHECK_A}', '${TENANT_A}', '${TENANT_B}')`);
+      assert.deepEqual(noShare, { ok: false, code: '23503' });
       const self = await attempt(`INSERT INTO public.check_partner_stakeholder_removals (check_intake_item_id, tenant_id, partner_tenant_id)
         VALUES ('${CHECK_A}', '${TENANT_A}', '${TENANT_A}')`);
       assert.deepEqual(self, { ok: false, code: '23514' });

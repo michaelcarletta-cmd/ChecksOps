@@ -68,8 +68,12 @@ const BOOLEAN_KEYS = Object.freeze([
   'references_granted',
   'schema_create_granted',
   'prerequisites_ok',
+  'share_key_present',
+  'default_acl_as_expected',
 ]);
-const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count', 'other_write_policy_count']);
+const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count', 'other_write_policy_count', 'default_acl_entry_count']);
+// Hashes of pinned-object state (not secrets); shown so a reviewer can compare runs.
+const SHA256_KEYS = Object.freeze(['default_acl_sha256']);
 // Label maps: values must be short lowercase labels; keys are pinned object names.
 const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state']);
 
@@ -126,6 +130,9 @@ export function readLiveSummary(invokeResult, { migration, pin } = {}) {
   }
   for (const key of COUNT_KEYS) {
     if (Number.isInteger(receipt[key]) && receipt[key] >= 0) summary[key] = receipt[key];
+  }
+  for (const key of SHA256_KEYS) {
+    if (SHA256_RE.test(String(receipt[key] || ''))) summary[key] = receipt[key];
   }
   for (const key of LABEL_MAP_KEYS) {
     if (receipt[key] && typeof receipt[key] === 'object') summary[key] = labelsOnly(receipt[key]);

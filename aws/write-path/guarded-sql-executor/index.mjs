@@ -2029,7 +2029,8 @@ const REMOVALS_PREREQUISITES_SQL = `
 SELECT
   to_regclass('public.check_intake_items') IS NOT NULL
     AND to_regclass('public.tenants') IS NOT NULL
-    AND to_regclass('public.identity_accounts') IS NOT NULL AS required_tables_present,
+    AND to_regclass('public.identity_accounts') IS NOT NULL
+    AND to_regclass('public.shared_checks') IS NOT NULL AS required_tables_present,
   to_regprocedure('public.aws_can_access_tenant(uuid)') IS NOT NULL
     AND to_regprocedure('public.aws_can_write_tenant(uuid)') IS NOT NULL
     AND to_regprocedure('public.aws_is_cross_tenant_reader()') IS NOT NULL
@@ -2038,8 +2039,42 @@ SELECT
     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') AS required_roles_present,
   COALESCE(has_table_privilege(to_regclass('public.check_intake_items'), 'REFERENCES')
     AND has_table_privilege(to_regclass('public.tenants'), 'REFERENCES')
-    AND has_table_privilege(to_regclass('public.identity_accounts'), 'REFERENCES'), false) AS references_granted,
-  has_schema_privilege('public', 'CREATE') AS schema_create_granted
+    AND has_table_privilege(to_regclass('public.identity_accounts'), 'REFERENCES')
+    AND has_table_privilege(to_regclass('public.shared_checks'), 'REFERENCES'), false) AS references_granted,
+  has_schema_privilege('public', 'CREATE') AS schema_create_granted,
+  -- The share FK needs a primary key or unique constraint over exactly these columns.
+  EXISTS (
+    SELECT 1 FROM pg_constraint k
+    WHERE k.conrelid = to_regclass('public.shared_checks') AND k.contype IN ('p', 'u')
+      AND ARRAY(SELECT a.attname::text FROM unnest(k.conkey) n
+        JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = n ORDER BY 1)
+        = ARRAY['check_id', 'source_tenant_id', 'target_tenant_id']
+  ) AS share_key_present
+`.trim();
+// Default privileges that would apply to the new table: the executing role's
+// entries for schema public and its global entries (namespace 0), owner
+// excluded. They are "as expected" when every entry is either for PUBLIC (the
+// file's REVOKE ALL FROM PUBLIC removes it) or a SELECT, INSERT or DELETE for
+// checksops or authenticated without grant option (the file's GRANT gives that
+// anyway). Exactly then the post-apply non-owner ACL is the reviewed one.
+const REMOVALS_DEFAULT_ACL_SQL = `
+SELECT CASE WHEN d.defaclnamespace = 0 THEN 'global' ELSE 'public' END AS scope,
+  COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type, a.is_grantable
+FROM pg_default_acl d
+CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE d.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+  AND d.defaclobjtype = 'r'
+  AND (d.defaclnamespace = 0 OR d.defaclnamespace = 'public'::regnamespace)
+  AND a.grantee <> d.defaclrole
+ORDER BY 1, 2, 3, 4
+`.trim();
+const REMOVALS_INDEXES_SQL = `
+SELECT c.relname AS name, pg_get_indexdef(i.indexrelid) AS def
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+WHERE i.indrelid = to_regclass('${REMOVALS_TABLE}')
+ORDER BY 1
 `.trim();
 const REMOVALS_COLUMNS_SQL = `
 SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS not_null,
@@ -2084,14 +2119,18 @@ WHERE c.oid = to_regclass('${REMOVALS_TABLE}') AND a.grantee <> c.relowner
 ORDER BY 1, 2, 3
 `.trim();
 // SQL 77's bypass check, against the role that owns the table, or before the
-// table exists, the role that would own it (the one running the file).
+// table exists, the role that would own it (the one running the file). The
+// grantees are looked up by oid so a missing role reads as unknown (NULL,
+// treated as bypassing) instead of raising.
 const REMOVALS_BYPASS_SQL = `
 WITH o AS (
   SELECT COALESCE(
     (SELECT c.relowner FROM pg_class c WHERE c.oid = to_regclass('${REMOVALS_TABLE}')),
     (SELECT oid FROM pg_roles WHERE rolname = current_user)) AS owner
+), g AS (
+  SELECT oid FROM pg_roles WHERE rolname IN ('checksops', 'authenticated')
 )
-SELECT COALESCE(bool_or(
+SELECT CASE WHEN (SELECT count(*) FROM g) <> 2 THEN NULL ELSE COALESCE(bool_or(
   r.rolsuper OR r.rolbypassrls
   OR pg_has_role(r.oid, o.owner, 'USAGE') OR pg_has_role(r.oid, o.owner, 'SET')
   OR pg_has_role(r.oid, o.owner, 'USAGE WITH ADMIN OPTION')
@@ -2099,14 +2138,13 @@ SELECT COALESCE(bool_or(
     SELECT 1 FROM pg_roles b
     WHERE (b.rolsuper OR b.rolbypassrls) AND b.oid <> r.oid
       AND pg_has_role(r.oid, b.oid, 'USAGE WITH ADMIN OPTION'))
-), true) AS removals_bypasses
+), true) END AS removals_bypasses
 FROM pg_roles r
 CROSS JOIN o
 WHERE o.owner IS NOT NULL
-  AND (r.rolname IN ('checksops', 'authenticated')
-    OR (NOT r.rolsuper AND (
-      pg_has_role(r.oid, 'checksops', 'USAGE') OR pg_has_role(r.oid, 'checksops', 'SET')
-      OR pg_has_role(r.oid, 'authenticated', 'USAGE') OR pg_has_role(r.oid, 'authenticated', 'SET'))))
+  AND (r.oid IN (SELECT oid FROM g)
+    OR (NOT r.rolsuper AND EXISTS (
+      SELECT 1 FROM g WHERE pg_has_role(r.oid, g.oid, 'USAGE') OR pg_has_role(r.oid, g.oid, 'SET'))))
 `.trim();
 // Everything else in schema public: relations (minus the new table and its
 // indexes) and the policies of every other table must not change.
@@ -2140,11 +2178,17 @@ export const SQL78_NORMALIZED_STATEMENTS = [
   'check_intake_item_id uuid NOT NULL REFERENCES public.check_intake_items(id) ON DELETE CASCADE,',
   'tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,',
   'partner_tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,',
-  'removed_by uuid REFERENCES public.identity_accounts(application_user_id),',
+  'removed_by uuid REFERENCES public.identity_accounts(application_user_id) ON DELETE SET NULL,',
   'created_at timestamptz NOT NULL DEFAULT now(),',
-  'CONSTRAINT check_partner_stakeholder_removals_unique UNIQUE (check_intake_item_id, partner_tenant_id),',
-  'CONSTRAINT check_partner_stakeholder_removals_not_self CHECK (partner_tenant_id <> tenant_id)',
+  'CONSTRAINT check_partner_stakeholder_removals_unique UNIQUE (check_intake_item_id, tenant_id, partner_tenant_id),',
+  'CONSTRAINT check_partner_stakeholder_removals_not_self CHECK (partner_tenant_id <> tenant_id),',
+  'CONSTRAINT check_partner_stakeholder_removals_share_fkey FOREIGN KEY (check_intake_item_id, tenant_id, partner_tenant_id)',
+  'REFERENCES public.shared_checks (check_id, source_tenant_id, target_tenant_id) ON DELETE CASCADE',
   ');',
+  'CREATE INDEX check_partner_stakeholder_removals_tenant_id_idx',
+  'ON public.check_partner_stakeholder_removals (tenant_id);',
+  'CREATE INDEX check_partner_stakeholder_removals_partner_tenant_id_idx',
+  'ON public.check_partner_stakeholder_removals (partner_tenant_id);',
   'ALTER TABLE public.check_partner_stakeholder_removals ENABLE ROW LEVEL SECURITY;',
   'CREATE POLICY aws_select_check_partner_stakeholder_removals ON public.check_partner_stakeholder_removals',
   'FOR SELECT TO authenticated',
@@ -2197,14 +2241,31 @@ export async function readPartnerStakeholderRemovalsState(client) {
     required_roles_present: prereq.required_roles_present === true,
     references_granted: prereq.references_granted === true,
     schema_create_granted: prereq.schema_create_granted === true,
+    share_key_present: prereq.share_key_present === true,
   };
   const prerequisitesOk = Object.values(prerequisites).every(Boolean);
   const bypassesRls = (await client.query(REMOVALS_BYPASS_SQL))?.rows?.[0]?.removals_bypasses !== false;
+  const defaultAcl = ((await client.query(REMOVALS_DEFAULT_ACL_SQL))?.rows || []).map((row) => ({
+    scope: row.scope, grantee: row.grantee, privilege: row.privilege_type, grantable: row.is_grantable === true,
+  }));
+  const defaultAclEntries = defaultAcl
+    .map((row) => `${row.scope} ${row.grantee} ${row.privilege}${row.grantable ? ' with grant option' : ''}`)
+    .sort();
+  const defaults = {
+    default_acl_as_expected: defaultAcl.every((row) => row.grantee === 'PUBLIC' || (
+      ['checksops', 'authenticated'].includes(row.grantee)
+      && ['SELECT', 'INSERT', 'DELETE'].includes(row.privilege)
+      && row.grantable === false)),
+    default_acl_entries: defaultAclEntries,
+    default_acl_entry_count: defaultAclEntries.length,
+    default_acl_sha256: hashSqlDefinition(defaultAclEntries.join('\n')),
+  };
   if (!present) {
     return ok({
       table_present: false,
       ...prerequisites,
       prerequisites_ok: prerequisitesOk,
+      ...defaults,
       grantee_bypasses_rls: bypassesRls,
       tenant_guard_ok: false,
       live_definition_sha256: hashSqlDefinition(partnerStakeholderRemovalsStateText({ present: false })),
@@ -2214,6 +2275,7 @@ export async function readPartnerStakeholderRemovalsState(client) {
     name: row.name, type: row.type, not_null: row.not_null === true, default: row.default_expr ?? null,
   }));
   const constraints = ((await client.query(REMOVALS_CONSTRAINTS_SQL))?.rows || []).map((row) => ({ name: row.name, def: row.def }));
+  const indexes = ((await client.query(REMOVALS_INDEXES_SQL))?.rows || []).map((row) => ({ name: row.name, def: row.def }));
   const rls = (await client.query(REMOVALS_RLS_SQL))?.rows?.[0] || {};
   const policies = (await client.query(REMOVALS_POLICIES_SQL))?.rows || [];
   const acl = ((await client.query(REMOVALS_ACL_SQL))?.rows || []).map((row) => ({
@@ -2225,6 +2287,7 @@ export async function readPartnerStakeholderRemovalsState(client) {
     present: true,
     columns,
     constraints,
+    indexes,
     rls_enabled: rlsEnabled,
     rls_forced: rls.rls_forced === true,
     policies,
@@ -2235,6 +2298,7 @@ export async function readPartnerStakeholderRemovalsState(client) {
     table_present: true,
     ...prerequisites,
     prerequisites_ok: prerequisitesOk,
+    ...defaults,
     rls_enabled: rlsEnabled,
     rls_forced: state.rls_forced,
     owner_is_executor: state.owner_is_executor,
@@ -2318,7 +2382,10 @@ async function handleSql78PartnerStakeholderRemovals({
   try {
     client = await connect();
     if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
       const state = await readPartnerStakeholderRemovalsState(client);
+      await rollback();
       if (!state.ok) return state;
       return ok({
         authorization: authorization.details,
@@ -2336,6 +2403,7 @@ async function handleSql78PartnerStakeholderRemovals({
             && state.details.table_present === false
             && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
             && state.details.prerequisites_ok === true
+            && state.details.default_acl_as_expected === true
             && state.details.grantee_bypasses_rls === false,
         },
       });
@@ -2343,6 +2411,7 @@ async function handleSql78PartnerStakeholderRemovals({
 
     await client.query('BEGIN');
     inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql78_check_partner_stakeholder_removals']);
     if (isConsumed(event.one_use_id)) {
       await rollback();
@@ -2364,13 +2433,20 @@ async function handleSql78PartnerStakeholderRemovals({
     }
     if (before.details.prerequisites_ok !== true || before.details.grantee_bypasses_rls !== false) {
       await rollback();
-      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 78 prerequisites are not met (referenced tables, policy functions, roles, REFERENCES, schema CREATE, or a grantee that bypasses row-level security)', {
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 78 prerequisites are not met (referenced tables, shared_checks key, policy functions, roles, REFERENCES, schema CREATE, or a grantee that bypasses row-level security)', {
         required_tables_present: before.details.required_tables_present,
+        share_key_present: before.details.share_key_present,
         required_functions_present: before.details.required_functions_present,
         required_roles_present: before.details.required_roles_present,
         references_granted: before.details.references_granted,
         schema_create_granted: before.details.schema_create_granted,
         grantee_bypasses_rls: before.details.grantee_bypasses_rls,
+      });
+    }
+    if (before.details.default_acl_as_expected !== true) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'default privileges for new tables in schema public would grant more than SQL 78 leaves; refuse before creating the table', {
+        default_acl_entries: before.details.default_acl_entries,
       });
     }
     if (before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
