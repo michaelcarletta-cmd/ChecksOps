@@ -47,6 +47,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/71_review_amount_column_grant.sql', 'sql/71_review_amount_column_grant.sql'],
   ['aws/workflows/sql/72_member_payment_writes.sql', 'sql/72_member_payment_writes.sql'],
   ['aws/workflows/sql/76_tenant_partnership_invitee_consent.sql', 'sql/76_tenant_partnership_invitee_consent.sql'],
+  ['aws/workflows/sql/77_check_stakeholders_write_grant.sql', 'sql/77_check_stakeholders_write_grant.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

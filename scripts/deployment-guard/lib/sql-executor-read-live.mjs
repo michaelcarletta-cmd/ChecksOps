@@ -10,7 +10,7 @@
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
  *      expected live definition, which no reviewed pin can equal, so the
- *      read-live-selectable pins (ledger, 71, 72, 76) refuse apply with it
+ *      read-live-selectable pins (ledger, 71, 72, 76, 77) refuse apply with it
  *      before connecting.
  *
  * Failures print only an error code and a fixed message: executor and driver
@@ -54,10 +54,11 @@ const BOOLEAN_KEYS = Object.freeze([
   'exists',
   'amount_update_granted',
   'table_level_update',
+  'update_granted',
 ]);
 const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count']);
 // Label maps: values must be short lowercase labels; keys are pinned object names.
-const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states']);
+const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state']);
 
 function labelsOnly(value) {
   if (typeof value === 'string') return LABEL_RE.test(value) ? value : 'unrecognized';
