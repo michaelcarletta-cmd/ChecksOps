@@ -363,9 +363,11 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
     }
 
     if (r.id === String(tenantId).toLowerCase()) return { error: 'recipient_is_sender', recipient: r };
-    // A partner counts as on this check when this organization shared the check with
-    // them, or added them to the check's stakeholders while the partnership is active.
-    // Sharing also adds them to the stakeholders, so a revoked share still blocks them.
+    // A partner can be paid on this organization's check when the check is shared with
+    // them, or the partnership is active (both sides agreed: SQL 76 lets only the
+    // invitee or Partner Code redemption activate it). Choosing a partner in the
+    // payment picker needs no share. A share of this check that was revoked still
+    // blocks them unless it was shared again.
     const share = (await client.query(
       `SELECT 1 AS ok
        WHERE EXISTS (
@@ -373,10 +375,6 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
            WHERE check_id = $1::uuid AND revoked_at IS NULL
              AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid)
          OR (EXISTS (
-               SELECT 1 FROM public.check_stakeholders
-               WHERE check_intake_item_id = $1::uuid
-                 AND tenant_id = $2::uuid AND partner_tenant_id = $3::uuid)
-             AND EXISTS (
                SELECT 1 FROM public.tenant_partnerships
                WHERE status = 'active' AND revoked_at IS NULL
                  AND ((inviter_tenant_id = $2::uuid AND invitee_tenant_id = $3::uuid)
@@ -431,7 +429,7 @@ const DESTINATION_MESSAGES = {
   recipient_bank_not_ready: "A recipient's bank is not ready for this delivery speed.",
   recipient_bank_choice_required: "A recipient's bank could not be determined.",
   recipient_is_sender: 'You cannot send to your own organization.',
-  partner_not_shared: 'That partner is not on this check, its share was revoked, or your partnership has ended.',
+  partner_not_shared: 'You are not partners with that organization, or this check was un-shared with them.',
   partner_setup_required: "This partner hasn't finished payment setup.",
   partner_account_ambiguous: "This partner's payment account could not be determined.",
   partner_wallet_choice_required: "This partner's balance account could not be determined.",

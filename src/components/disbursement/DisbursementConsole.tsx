@@ -23,6 +23,7 @@ import { useWallet } from "@/hooks/useWallet";
 import { useStepUp } from "@/hooks/useStepUp";
 import { sendPayment, SendPaymentError, type SendRecipient } from "@/lib/payments/sends";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
+import { useSelectedPartners } from "@/lib/payments/selectedPartners";
 
 interface Props {
   checkIntakeItemId?: string;
@@ -205,11 +206,19 @@ export function DisbursementConsole({
     },
   });
 
+  // Partners chosen in this check's stakeholder picker (nothing is written; the
+  // server checks the partnership when the payment is sent).
+  const { partners: selectedPartners } = useSelectedPartners(checkIntakeItemId);
+
   // Partners appear next to this check's stakeholders.
   const accounts = useMemo(() => {
     const merged = [...(ownAccounts as any[])];
-    for (const p of partnerStakeholders as any[]) {
-      // A partner added to this check's stakeholders is already listed.
+    const partnerRows = [
+      ...(partnerStakeholders as any[]).map((p) => ({ ...p, added_via: "partner_share" })),
+      ...selectedPartners.map((p) => ({ ...p, added_via: "partner_selected" })),
+    ];
+    for (const p of partnerRows) {
+      // A partner already listed (on this check's stakeholders or shared) appears once.
       if (merged.some((a: any) => a.partner_tenant_id === p.partner_tenant_id)) continue;
       merged.push({
         id: `partner:${p.partner_tenant_id}`,
@@ -220,11 +229,11 @@ export function DisbursementConsole({
         is_active: true,
         provider: "moov",
         provider_account_id: "partner",
-        added_via: "partner_share",
+        added_via: p.added_via,
       });
     }
     return merged;
-  }, [ownAccounts, partnerStakeholders]);
+  }, [ownAccounts, partnerStakeholders, selectedPartners]);
 
   const partnersNeedingSetup: any[] = [];
 
