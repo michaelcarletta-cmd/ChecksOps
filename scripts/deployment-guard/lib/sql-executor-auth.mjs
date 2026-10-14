@@ -209,7 +209,7 @@ export const AUTHORIZED_SQL76_PARTNERSHIP_CONSENT = Object.freeze({
   migration_id: '76_tenant_partnership_invitee_consent',
   // The commit that authored the current file bytes. Re-pin if the branch is
   // rebased or squashed before it reaches main.
-  commit: 'a153cfc514668b94388b5d5e6e83d0763fb1ef32',
+  commit: '1c50372203dccb5fee63a729c5bf1a25e062e7c6',
   source_sha256: '46cc8bf9cb2a72c52301e015523693be1aea20513261d4256cf9f8f4e9aaae62',
   // Reviewed live value: guarded staging SQL executor read-live run 38541967571
   // (2026-10-14) reported LIVE_DEFINITION_SHA256 7c5276d8…: guard and trigger
