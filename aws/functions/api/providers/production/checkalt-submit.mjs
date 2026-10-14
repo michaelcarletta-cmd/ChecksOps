@@ -12,6 +12,7 @@ import {
   loadDepositByIdempotency,
   loadDepositsForCheck,
   markHttpAttempted,
+  persistAutoApproveOutcome,
   persistProviderOutcome,
   pickBlockingDeposit,
   replayDepositResponse,
@@ -62,6 +63,223 @@ const referenceOf = (json) => {
   if (json?.reference != null) return String(json.reference);
   return null;
 };
+
+/*
+ * Post-process auto-approval (Cursor PR #433 port, fail-closed ceiling).
+ *
+ * CheckAlt process status 40 (pending_approval) needs a second
+ * /fincapture/deposit/approve call. The submit flow makes that call itself only
+ * after its own committed /deposit/process parked the item, and only when the
+ * tenant policy is enabled, auto_approve_max_cents is a set integer ceiling, the
+ * server-side amount is at or below it, and CheckAlt did not flag the item.
+ * A blank ceiling does NOT mean unlimited. It never POSTs /deposit/process, never
+ * inserts a deposit, and never requires or satisfies the manual-approve TOTP (checkalt-approve.mjs).
+ * Replays never reach it (they return before any provider HTTP). Any provider,
+ * lock or persist ambiguity leaves the row pending_approval for a Manager.
+ */
+export const AUTO_APPROVE_MAX_ATTEMPTS = 5;
+export const AUTO_APPROVE_BACKOFF_MS = Object.freeze([1500, 2500, 4000, 6000, 8000]);
+
+const AUTO_APPROVE_FLAG_TEXT_RE = /duplicate|fraud|risk|exception|warning|hold|suspect|mismatch|unreadable/;
+
+const optionalCents = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const cents = Number(value);
+  return Number.isInteger(cents) && cents >= 0 ? cents : null;
+};
+
+/** Tenant row wins as a whole when present; the global row is used only without one. */
+export const resolveAutoApprovePolicy = (tenant = null, globalCfg = null) => {
+  const source = tenant ? 'checkalt_tenant_accounts' : (globalCfg ? 'checkalt_config' : 'none');
+  const row = tenant || globalCfg || null;
+  return {
+    enabled: row?.auto_approve_enabled === true,
+    maxCents: optionalCents(row?.auto_approve_max_cents),
+    source,
+  };
+};
+
+export const depositIsFlagged = (providerJson = {}) => {
+  const json = providerJson && typeof providerJson === 'object' ? providerJson : {};
+  for (const key of ['exceptions', 'warnings', 'riskFactors', 'errors']) {
+    if (Array.isArray(json[key]) && json[key].length > 0) return true;
+  }
+  if (json.amountDiscrepancyDetected === true || json.amountDiscrepancyDetected === 'true') return true;
+  // Clean process-40 payloads carry riskRating / riskRatingDescription; do not regex those.
+  const flagText = [
+    json.statusDescription,
+    JSON.stringify(json.warnings ?? ''),
+    JSON.stringify(json.exceptions ?? ''),
+  ].join(' ').toLowerCase();
+  return AUTO_APPROVE_FLAG_TEXT_RE.test(flagText);
+};
+
+export const decideAutoApprove = ({
+  processRequiresApproval = false,
+  reference = null,
+  enabled = false,
+  maxCents = null,
+  amountCents = null,
+  flagged = false,
+} = {}) => {
+  if (!processRequiresApproval) return { approve: false, skipReason: 'not_pending_approval' };
+  if (!reference) return { approve: false, skipReason: 'missing_reference' };
+  if (enabled !== true) return { approve: false, skipReason: 'auto_approve_disabled' };
+  if (flagged) return { approve: false, skipReason: 'flagged_by_checkalt' };
+  if (!Number.isInteger(amountCents) || amountCents <= 0) return { approve: false, skipReason: 'invalid_amount' };
+  if (!Number.isInteger(maxCents) || maxCents < 0) return { approve: false, skipReason: 'missing_auto_approve_ceiling' };
+  if (amountCents > maxCents) return { approve: false, skipReason: 'over_max_amount' };
+  return { approve: true, skipReason: null };
+};
+
+export const isCheckAltApproveLockError = (status, json = {}) => {
+  if (Number(status) !== 404) return false;
+  const msg = String(json?.message ?? json?.statusDescription ?? '').toLowerCase();
+  return msg.includes('locate transaction') || msg.includes('locked');
+};
+
+/** Retries only HTTP 404 + locate/locked (CheckAlt has not accepted the approve). */
+export async function attemptAutoApproveWithLockRetry({
+  cfg,
+  credentials,
+  fetchImpl,
+  reference,
+  sleepFn = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
+  let lastJson = null;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < AUTO_APPROVE_MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await sleepFn(AUTO_APPROVE_BACKOFF_MS[attempt - 1] ?? 8000);
+    try {
+      const resp = await checkAltFetch({
+        cfg,
+        credentials,
+        path: '/fincapture/deposit/approve',
+        body: { fiKey: cfg.fi_key, referenceNumber: Number(reference), action: 1 },
+        fetchImpl,
+        jwtCache,
+      });
+      lastJson = (await parseProviderJson(resp)).json;
+      lastStatus = resp.status;
+      if (resp.ok && lastJson?.success === true) {
+        return { approved: true, json: lastJson, status: lastStatus, attempts: attempt + 1 };
+      }
+      if (!isCheckAltApproveLockError(lastStatus, lastJson)) {
+        return {
+          approved: false,
+          json: lastJson,
+          status: lastStatus,
+          attempts: attempt + 1,
+          skipReason: `auto_approve_failed:${lastJson?.statusDescription ?? lastJson?.message ?? lastStatus}`,
+        };
+      }
+    } catch (error) {
+      return {
+        approved: false,
+        json: lastJson,
+        status: lastStatus,
+        attempts: attempt + 1,
+        skipReason: `auto_approve_error:${String(error?.message || error).slice(0, 180)}`,
+      };
+    }
+  }
+  return {
+    approved: false,
+    json: lastJson,
+    status: lastStatus,
+    attempts: AUTO_APPROVE_MAX_ATTEMPTS,
+    skipReason: `auto_approve_failed:${lastJson?.statusDescription ?? lastJson?.message ?? lastStatus}`,
+  };
+}
+
+/** Never throws. Persist failures and provider errors leave pending_approval. */
+export async function maybeAutoApproveAfterProcess({
+  client,
+  row,
+  acct,
+  amountCents,
+  providerJson,
+  cfg,
+  credentials,
+  fetchImpl,
+  commit = async () => {},
+  sleepFn,
+} = {}) {
+  const policy = resolveAutoApprovePolicy(acct || null, null);
+  const decision = decideAutoApprove({
+    processRequiresApproval: row?.status === 'pending_approval',
+    reference: row?.checkalt_reference || null,
+    enabled: policy.enabled,
+    maxCents: policy.maxCents,
+    amountCents,
+    flagged: depositIsFlagged(providerJson),
+  });
+  const result = (extra) => ({
+    attempted: false,
+    approved: false,
+    approvePosted: false,
+    skipReason: decision.skipReason,
+    maxCents: policy.maxCents,
+    policySource: policy.source,
+    saved: null,
+    ...extra,
+  });
+  if (!decision.approve) {
+    let saved = null;
+    try {
+      saved = await persistAutoApproveOutcome(client, {
+        rowId: row.id,
+        phase: 'skipped',
+        skipReason: decision.skipReason,
+        maxCents: policy.maxCents,
+      });
+      await commit();
+    } catch {
+      saved = null;
+    }
+    return result({ saved });
+  }
+
+  // Durable evidence before the approve POST. If it cannot be written, do not POST.
+  try {
+    await persistAutoApproveOutcome(client, { rowId: row.id, phase: 'attempting', maxCents: policy.maxCents });
+    await commit();
+  } catch {
+    return result({ skipReason: 'auto_approve_persist_failed' });
+  }
+
+  const outcome = await attemptAutoApproveWithLockRetry({
+    cfg,
+    credentials,
+    fetchImpl,
+    reference: row.checkalt_reference,
+    sleepFn,
+  });
+  let saved = null;
+  try {
+    saved = await persistAutoApproveOutcome(client, {
+      rowId: row.id,
+      phase: 'outcome',
+      approved: outcome.approved === true,
+      skipReason: outcome.approved ? null : outcome.skipReason,
+      approvePayload: outcome.json,
+      attempts: outcome.attempts,
+      maxCents: policy.maxCents,
+    });
+    await commit();
+  } catch {
+    saved = null;
+  }
+  return result({
+    attempted: true,
+    approved: outcome.approved === true,
+    approvePosted: true,
+    skipReason: outcome.approved ? null : outcome.skipReason,
+    attempts: outcome.attempts,
+    persistFailed: !saved,
+    saved,
+  });
+}
 
 async function resolveSsoKey({ cfg, credentials, acct, fetchImpl }) {
   if (acct.sso_key && acct.sso_key !== acct.sso_user_id) return acct.sso_key;
@@ -420,6 +638,26 @@ export async function handleProductionCheckAltSubmit({
         applicationUserId: mapping.application_user_id,
       };
     }
+    let autoApprove = null;
+    if (saved?.status === 'pending_approval') {
+      try {
+        autoApprove = await maybeAutoApproveAfterProcess({
+          client,
+          row: saved,
+          acct,
+          amountCents: userAmount,
+          providerJson: json,
+          cfg: loadedCfg.cfg,
+          credentials: loadedCfg.credentials,
+          fetchImpl,
+          commit: () => commitDurableAttempt(client, mapping, claims),
+          sleepFn: deps.sleepFn,
+        });
+      } catch {
+        autoApprove = { attempted: false, approved: false, approvePosted: false, skipReason: 'auto_approve_error' };
+      }
+      if (autoApprove?.saved) saved = autoApprove.saved;
+    }
     return {
       ok: resp.ok && !isRejected,
       statusCode: resp.ok ? 200 : 502,
@@ -430,6 +668,17 @@ export async function handleProductionCheckAltSubmit({
       deposit_id: saved.id,
       checkalt_reference: saved.checkalt_reference,
       status: saved.status,
+      approved_at: saved.approved_at ?? null,
+      auto_approve: autoApprove
+        ? {
+          attempted: autoApprove.attempted === true,
+          approved: autoApprove.approved === true,
+          approvePosted: autoApprove.approvePosted === true,
+          skipReason: autoApprove.skipReason || null,
+          maxCents: autoApprove.maxCents ?? null,
+          persistFailed: autoApprove.persistFailed === true,
+        }
+        : null,
       userAmount,
       scale: 'integer_cents',
       imagePipeline: images.imagePipeline,

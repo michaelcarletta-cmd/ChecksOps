@@ -125,6 +125,12 @@ export async function loadProductionTenantAccount(client, tenantId) {
     deposit_account_number: row.deposit_account_number || null,
     sso_key: ssoFromPayload || row.sso_user_id || null,
     auto_approve_enabled: Boolean(row.auto_approve_enabled),
+    // NULL / blank / non-integer stays null. Number(null) is 0, so test the raw value first.
+    auto_approve_max_cents: row.auto_approve_max_cents === null || row.auto_approve_max_cents === undefined
+      || row.auto_approve_max_cents === '' || !Number.isInteger(Number(row.auto_approve_max_cents))
+      || Number(row.auto_approve_max_cents) < 0
+      ? null
+      : Number(row.auto_approve_max_cents),
     source: 'checkalt_tenant_accounts',
   };
 }

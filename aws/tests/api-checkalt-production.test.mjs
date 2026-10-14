@@ -223,7 +223,8 @@ const identityClient = (store) => ({
           sso_user_id: 'depositor-prod',
           deposit_account_number: '1234567890',
           last_register_payload: { sso_key: 'sso-prod' },
-          auto_approve_enabled: true,
+          auto_approve_enabled: store.autoApproveEnabled !== false,
+          auto_approve_max_cents: store.autoApproveMaxCents ?? null,
         }],
       };
     }
@@ -335,6 +336,22 @@ const identityClient = (store) => ({
       row.last_status_payload = { provider_http_attempted: true };
       return { rows: [row] };
     }
+    if (text.includes('UPDATE public.checkalt_deposits') && text.includes('approved_at')) {
+      store.autoApprovePersists = (store.autoApprovePersists || 0) + 1;
+      if (store.autoApprovePersistFails > 0) {
+        store.autoApprovePersistFails -= 1;
+        throw new Error('simulated_rds_failure');
+      }
+      const row = store.deposits.find((item) => item.id === params[0]);
+      if (!row) return { rows: [] };
+      if (params[1] === true) {
+        if (row.status === 'pending_approval') row.status = 'submitted';
+        row.approved_at = row.approved_at || new Date().toISOString();
+      }
+      const extra = typeof params[2] === 'string' ? JSON.parse(params[2]) : params[2];
+      row.last_status_payload = { ...(row.last_status_payload || {}), ...(extra || {}) };
+      return { rows: [row] };
+    }
     if (text.includes('UPDATE public.checkalt_deposits') && text.includes('failure_class')) {
       if (store.persistOutcomeFails > 0) {
         store.persistOutcomeFails -= 1;
@@ -379,15 +396,23 @@ const fetchImpl = (store) => async (url, options = {}) => {
     return {
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ referenceNumber: 9001, status: 127 }),
+      text: async () => JSON.stringify(store.processPayload || { referenceNumber: 9001, status: 127 }),
     };
   }
   if (target.includes('/fincapture/deposit/approve')) {
     store.approvePosts += 1;
+    store.approveBodies = store.approveBodies || [];
+    try { store.approveBodies.push(JSON.parse(options.body || '{}')); } catch { store.approveBodies.push(options.body); }
+    if (store.approveThrow) throw store.approveThrow;
+    const queued = Array.isArray(store.approveSequence) && store.approveSequence.length
+      ? store.approveSequence.shift()
+      : null;
+    const http = queued?.http || store.approveHttp || { ok: true, status: 200 };
+    const approveJson = queued?.json || store.approvePayload;
     return {
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(store.approvePayload || {
+      ok: http.ok !== false,
+      status: http.status || 200,
+      text: async () => JSON.stringify(approveJson || {
         success: true, status: 'Approved', statusDescription: 'OK',
       }),
     };
@@ -432,6 +457,7 @@ const submitDeps = (store, extra = {}) => ({
   fetchImpl: extra.fetchImpl || fetchImpl(store),
   loadProductionSecrets: extra.loadProductionSecrets || (async () => productionSecrets()),
   downloadClaimFile: extra.downloadClaimFile || (async (filePath) => store.files[filePath] || null),
+  sleepFn: extra.sleepFn || (async (ms) => { (store.sleeps = store.sleeps || []).push(ms); }),
 });
 
 const grantStepUp = (store, {
@@ -1431,4 +1457,189 @@ test('submit still accepts only a deposit.submit step-up', async () => {
   const denied = await submitOnce(approveOnly);
   assert.equal(denied.error, 'step_up_required');
   assert.equal(approveOnly.processPosts, 0);
+});
+
+const PROCESS_40 = (reference = 9001, extra = {}) => ({
+  success: true,
+  referenceNumber: reference,
+  status: 40,
+  statusDescription: 'Pending Approval',
+  riskRating: 2,
+  riskRatingDescription: 'Low Risk',
+  amountDiscrepancyDetected: false,
+  errors: [],
+  ...extra,
+});
+
+const autoApproveStore = ({ enabled = true, maxCents = 200000, amount, payload } = {}) => {
+  const store = createStore(amount === undefined ? {} : { checkOverrides: { amount } });
+  store.processPayload = payload || PROCESS_40();
+  store.autoApproveEnabled = enabled;
+  store.autoApproveMaxCents = maxCents;
+  grantStepUp(store, amount === undefined ? {} : { amountCents: Math.round(amount * 100) });
+  return store;
+};
+
+test('auto-approve: status 40 under the ceiling posts one approve and persists submitted + approved_at', async () => {
+  const store = autoApproveStore();
+  store.approvePayload = { success: true, status: 127, statusDescription: 'Approved' };
+  const result = await submitOnce(store);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.status, 'submitted');
+  assert.equal(result.checkalt_reference, '9001');
+  assert.ok(result.approved_at);
+  assert.deepEqual(
+    { ...result.auto_approve },
+    { attempted: true, approved: true, approvePosted: true, skipReason: null, maxCents: 200000, persistFailed: false },
+  );
+  assert.equal(store.processPosts, 1);
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.deposits.length, 1);
+  const row = store.deposits[0];
+  assert.equal(row.status, 'submitted');
+  assert.ok(row.approved_at);
+  assert.equal(row.cleared_at, undefined);
+  assert.equal(row.last_status_payload._auto_approve.phase, 'outcome');
+  assert.equal(row.last_status_payload._auto_approve.approved, true);
+  assert.deepEqual(store.approveBodies[0], { fiKey: 'prod-fi-key', referenceNumber: 9001, action: 1 });
+});
+
+test('auto-approve: exact ceiling approves; one cent over stays pending_approval', async () => {
+  const exact = autoApproveStore({ amount: 2000 });
+  const exactResult = await submitOnce(exact);
+  assert.equal(exactResult.status, 'submitted');
+  assert.equal(exactResult.auto_approve.approved, true);
+  assert.equal(exact.approvePosts, 1);
+
+  const over = autoApproveStore({ amount: 2000.01 });
+  const overResult = await submitOnce(over);
+  assert.equal(overResult.status, 'pending_approval');
+  assert.equal(overResult.auto_approve.skipReason, 'over_max_amount');
+  assert.equal(overResult.auto_approve.approvePosted, false);
+  assert.equal(over.processPosts, 1);
+  assert.equal(over.approvePosts, 0);
+  assert.equal(over.deposits[0].approved_at, undefined);
+  assert.equal(over.deposits[0].last_status_payload._auto_approve.skip_reason, 'over_max_amount');
+});
+
+test('auto-approve: blank ceiling, disabled, flagged and missing reference skip and stay pending_approval', async () => {
+  const cases = [
+    { name: 'blank ceiling', store: autoApproveStore({ maxCents: null }), reason: 'missing_auto_approve_ceiling' },
+    { name: 'empty-string ceiling', store: autoApproveStore({ maxCents: '' }), reason: 'missing_auto_approve_ceiling' },
+    { name: 'disabled', store: autoApproveStore({ enabled: false }), reason: 'auto_approve_disabled' },
+    { name: 'exceptions', store: autoApproveStore({ payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) }), reason: 'flagged_by_checkalt' },
+    { name: 'warnings', store: autoApproveStore({ payload: PROCESS_40(9001, { warnings: ['x'] }) }), reason: 'flagged_by_checkalt' },
+    { name: 'riskFactors', store: autoApproveStore({ payload: PROCESS_40(9001, { riskFactors: ['velocity'] }) }), reason: 'flagged_by_checkalt' },
+    { name: 'errors', store: autoApproveStore({ payload: PROCESS_40(9001, { errors: ['e'] }) }), reason: 'flagged_by_checkalt' },
+    { name: 'amountDiscrepancyDetected', store: autoApproveStore({ payload: PROCESS_40(9001, { amountDiscrepancyDetected: true }) }), reason: 'flagged_by_checkalt' },
+    { name: 'statusDescription text', store: autoApproveStore({ payload: PROCESS_40(9001, { statusDescription: 'Pending Approval - Suspect Item' }) }), reason: 'flagged_by_checkalt' },
+    { name: 'missing reference', store: autoApproveStore({ payload: { status: 40, statusDescription: 'Pending Approval' } }), reason: 'missing_reference' },
+  ];
+  for (const { name, store, reason } of cases) {
+    const result = await submitOnce(store);
+    assert.equal(result.status, 'pending_approval', name);
+    assert.equal(result.auto_approve.attempted, false, name);
+    assert.equal(result.auto_approve.approvePosted, false, name);
+    assert.equal(result.auto_approve.skipReason, reason, name);
+    assert.equal(store.processPosts, 1, name);
+    assert.equal(store.approvePosts, 0, name);
+    assert.equal(store.deposits[0].status, 'pending_approval', name);
+    assert.equal(store.deposits[0].approved_at, undefined, name);
+    assert.equal(store.deposits[0].last_status_payload._auto_approve.skip_reason, reason, name);
+  }
+});
+
+test('auto-approve: process status other than 40 never calls approve', async () => {
+  const store = autoApproveStore({ payload: { referenceNumber: 9008, status: 127, statusDescription: 'Approved' } });
+  const result = await submitOnce(store);
+  assert.equal(result.status, 'submitted');
+  assert.equal(result.auto_approve, null);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.autoApprovePersists || 0, 0);
+});
+
+test('auto-approve: replayed submit neither re-processes nor approves a second time', async () => {
+  const store = autoApproveStore();
+  const first = await submitOnce(store);
+  assert.equal(first.status, 'submitted');
+  assert.equal(store.approvePosts, 1);
+  const replay = await submitOnce(store);
+  assert.equal(replay.duplicate, true);
+  assert.equal(replay.replayed, true);
+  assert.equal(store.processPosts, 1);
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.deposits.length, 1);
+
+  // A row parked pending_approval (skipped or failed auto-approve) replays without an approve.
+  const parked = autoApproveStore({ maxCents: null });
+  await submitOnce(parked);
+  parked.autoApproveMaxCents = 200000;
+  const parkedReplay = await submitOnce(parked);
+  assert.equal(parkedReplay.status, 'pending_approval');
+  assert.equal(parked.processPosts, 1);
+  assert.equal(parked.approvePosts, 0);
+});
+
+test('auto-approve: provider decline, HTTP error, network error and persist failure leave pending_approval', async () => {
+  const declined = autoApproveStore();
+  declined.approvePayload = { success: false, status: 40, statusDescription: 'Declined' };
+  const declinedResult = await submitOnce(declined);
+  assert.equal(declinedResult.status, 'pending_approval');
+  assert.equal(declinedResult.auto_approve.approved, false);
+  assert.equal(declinedResult.auto_approve.approvePosted, true);
+  assert.match(declinedResult.auto_approve.skipReason, /^auto_approve_failed:Declined/);
+  assert.equal(declined.approvePosts, 1);
+  assert.equal(declined.deposits[0].approved_at, undefined);
+
+  const http500 = autoApproveStore();
+  http500.approveHttp = { ok: false, status: 500 };
+  http500.approvePayload = { message: 'upstream' };
+  const httpResult = await submitOnce(http500);
+  assert.equal(httpResult.status, 'pending_approval');
+  assert.equal(http500.approvePosts, 1);
+
+  const network = autoApproveStore();
+  network.approveThrow = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' });
+  const networkResult = await submitOnce(network);
+  assert.equal(networkResult.statusCode, 200);
+  assert.equal(networkResult.status, 'pending_approval');
+  assert.equal(networkResult.checkalt_reference, '9001');
+  assert.match(networkResult.auto_approve.skipReason, /^auto_approve_error/);
+  assert.equal(network.approvePosts, 1);
+  assert.equal(network.processPosts, 1);
+  assert.equal(network.deposits[0].status, 'pending_approval');
+
+  const markerFails = autoApproveStore();
+  markerFails.autoApprovePersistFails = 1;
+  const markerResult = await submitOnce(markerFails);
+  assert.equal(markerResult.status, 'pending_approval');
+  assert.equal(markerResult.auto_approve.skipReason, 'auto_approve_persist_failed');
+  assert.equal(markerFails.approvePosts, 0);
+});
+
+test('auto-approve: lock 404 retries with backoff, then succeeds; exhausted lock stays pending', async () => {
+  const lock = { http: { ok: false, status: 404 }, json: { message: 'Unable to locate transaction' } };
+  const retried = autoApproveStore();
+  retried.approveSequence = [lock, lock, { http: { ok: true, status: 200 }, json: { success: true, status: 127 } }];
+  const retriedResult = await submitOnce(retried);
+  assert.equal(retriedResult.status, 'submitted');
+  assert.equal(retried.approvePosts, 3);
+  assert.deepEqual(retried.sleeps, [1500, 2500]);
+  assert.equal(retried.processPosts, 1);
+
+  const exhausted = autoApproveStore();
+  exhausted.approveSequence = [lock, lock, lock, lock, lock, lock];
+  const exhaustedResult = await submitOnce(exhausted);
+  assert.equal(exhaustedResult.status, 'pending_approval');
+  assert.equal(exhausted.approvePosts, 5);
+  assert.equal(exhausted.processPosts, 1);
+});
+
+test('auto-approve never consults or mints the deposit.approve step-up', async () => {
+  const store = autoApproveStore();
+  await submitOnce(store);
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.stepups.some((row) => row.action_key === 'deposit.approve'), false);
+  const src = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-submit.mjs'), 'utf8');
+  assert.doesNotMatch(src, /CHECKALT_APPROVE_ACTION|deposit\.approve/);
 });
