@@ -24,15 +24,27 @@
 -- redeemer entering the invitee's own Partner Code is the consent this product
 -- uses today, so the function keeps creating and reactivating live rows. The
 -- guard recognises it from PG_CONTEXT, the call stack Postgres itself builds:
--- the row must be written by a statement directly inside
--- aws_connect_partner_by_code(text,uuid), and current_user must be that
--- function's owner (connect runs with its owner's rights). No caller can set
--- either. A function-level SET of a custom setting is not used: Postgres 15+
--- lets only a superuser attach one, and the AWS database user is not one.
+--   * current_user must be connect's owner (connect runs with its owner's
+--     rights). This is the main boundary: the API role is not the owner.
+--   * The writing statement must be one of connect's own three row writes
+--     (matched by sha256 of the text PG_CONTEXT prints), run directly by
+--     aws_connect_partner_by_code(text,uuid). Postgres prints statement text
+--     unescaped, so the hash, not the frame shape, is what stops dynamic SQL
+--     run as the owner from passing itself off as connect.
+-- A function-level SET of a custom setting is not used: Postgres 15+ lets only
+-- a superuser attach one, and the AWS database user is not one.
+--
+-- Fails closed (connect is refused, nothing is opened) if connect's write
+-- statements change, if connect or this guard lose SET search_path = public
+-- (frames would print schema-qualified), or if server messages are translated
+-- (lc_messages is superuser-only; AWS uses English). The pattern is an E''
+-- string so standard_conforming_strings cannot change it.
 --
 -- The guard does not change aws_connect_partner_by_code, so re-applying
--- 32_partner_share_lifecycle.sql keeps connect working. The staging executor
--- pins that function's body, so a changed connect body is refused before apply.
+-- 32_partner_share_lifecycle.sql unchanged keeps connect working. If connect's
+-- write statements ever change, update the hashes here (a repo test derives
+-- them from SQL 32). The staging executor pins connect's body and refuses apply
+-- when the API role owns connect or is a member of its owner.
 --
 -- Idempotent: safe to re-run.
 
@@ -43,16 +55,25 @@ SET search_path = public
 AS $$
 DECLARE
   _ctx text;
+  _stmt text;
   _trusted boolean := false;
   _was_live boolean := false;
   _is_live boolean := NEW.status = 'active' AND NEW.revoked_at IS NULL;
 BEGIN
-  -- Trusted writer: a statement directly inside aws_connect_partner_by_code,
-  -- running as its owner. PG_CONTEXT lists this guard first, then the writing
-  -- statement, then the function that ran it.
+  -- Trusted writer: one of aws_connect_partner_by_code's own write statements,
+  -- run directly by it as its owner. PG_CONTEXT lists this guard first, then the
+  -- writing statement, then the function that ran it. Postgres prints statement
+  -- text unescaped, so the statement must hash to exactly one of connect's three
+  -- row writes in SQL 32 (reactivate, new row, and the reactivate in its
+  -- unique_violation retry); a dynamic statement cannot reproduce them.
   GET DIAGNOSTICS _ctx = PG_CONTEXT;
+  _stmt := substring(_ctx from E'^PL/pgSQL function aws_tenant_partnership_consent_guard\\(\\) line [0-9]+ at GET DIAGNOSTICS\nSQL statement "([^"]*)"\nPL/pgSQL function aws_connect_partner_by_code\\(text,uuid\\) line [0-9]+ at SQL statement(?:\n|$)');
   _trusted := COALESCE(
-    _ctx ~ '^PL/pgSQL function aws_tenant_partnership_consent_guard\(\) line [0-9]+ at GET DIAGNOSTICS\nSQL statement "[^"]*"\nPL/pgSQL function aws_connect_partner_by_code\(text,uuid\) line [0-9]+ at SQL statement(\n|$)'
+    encode(pg_catalog.sha256(convert_to(_stmt, 'UTF8')), 'hex') IN (
+      'c8fc47f91e83fcf246df089dc86d9a1f91d7dfc14196f5d77e0a393920bcfd48',
+      'd5f42d0e619e1c484f63e71077e27c6cbcbf7b5bd8d279d65f6a3b6192f6e414',
+      '993e0708fac80457d614485ba16be98a6869ceb9b74bca9200eb6db16b803867'
+    )
     AND current_user = (
       SELECT pg_catalog.pg_get_userbyid(p.proowner)
       FROM pg_catalog.pg_proc p

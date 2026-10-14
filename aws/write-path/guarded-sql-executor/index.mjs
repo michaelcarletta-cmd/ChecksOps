@@ -1948,8 +1948,12 @@ JOIN pg_namespace pn ON pn.oid = p.pronamespace
 WHERE t.tgrelid = to_regclass('public.tenant_partnerships') AND NOT t.tgisinternal
 ORDER BY t.tgname
 `.trim();
+// api_role_owns_connect: the API role (checksops) owns connect or is a member of
+// its owner. The SQL 76 guard trusts connect's owner, so that must be false.
 const PARTNERSHIP_CONNECT_SQL = `
-SELECT p.prosrc, p.prosecdef, p.proconfig::text[] AS proconfig
+SELECT p.prosrc, p.prosecdef, p.proconfig::text[] AS proconfig,
+  CASE WHEN to_regrole('checksops') IS NULL THEN NULL
+       ELSE pg_has_role('checksops', p.proowner, 'MEMBER') END AS api_role_owns_connect
 FROM pg_proc p
 WHERE p.oid = to_regprocedure('public.aws_connect_partner_by_code(text, uuid)')
 `.trim();
@@ -1968,9 +1972,19 @@ export const SQL76_EXPECTED_STATEMENTS = Object.freeze([
   /^CREATE TRIGGER aws_tenant_partnership_consent_guard BEFORE INSERT OR UPDATE ON public\.tenant_partnerships FOR EACH ROW EXECUTE FUNCTION public\.aws_tenant_partnership_consent_guard\(\)$/,
   ...PARTNERSHIP_RETIRED_POLICIES.map((name) => new RegExp(`^DROP POLICY IF EXISTS "${name}" ON public\\.tenant_partnerships$`)),
 ]);
+// sha256 of each aws_connect_partner_by_code row write as PG_CONTEXT prints it
+// (the SQL 32 statement text without INTO _existing): reactivate, create, and
+// the reactivate in the unique_violation retry. A test re-derives them from SQL 32.
+export const SQL76_CONNECT_WRITE_STATEMENT_SHA256 = Object.freeze([
+  'c8fc47f91e83fcf246df089dc86d9a1f91d7dfc14196f5d77e0a393920bcfd48',
+  'd5f42d0e619e1c484f63e71077e27c6cbcbf7b5bd8d279d65f6a3b6192f6e414',
+  '993e0708fac80457d614485ba16be98a6869ceb9b74bca9200eb6db16b803867',
+]);
 const SQL76_BODY_REQUIRED_MARKERS = [
   'GET DIAGNOSTICS _ctx = PG_CONTEXT;',
-  `_ctx ~ '^PL/pgSQL function aws_tenant_partnership_consent_guard\\(\\) line [0-9]+ at GET DIAGNOSTICS\\nSQL statement "[^"]*"\\nPL/pgSQL function aws_connect_partner_by_code\\(text,uuid\\) line [0-9]+ at SQL statement(\\n|$)'`,
+  `_stmt := substring(_ctx from E'^PL/pgSQL function aws_tenant_partnership_consent_guard\\\\(\\\\) line [0-9]+ at GET DIAGNOSTICS\\nSQL statement "([^"]*)"\\nPL/pgSQL function aws_connect_partner_by_code\\\\(text,uuid\\\\) line [0-9]+ at SQL statement(?:\\n|$)');`,
+  // Exactly these three hashes, no more.
+  `encode(pg_catalog.sha256(convert_to(_stmt, 'UTF8')), 'hex') IN (\n${SQL76_CONNECT_WRITE_STATEMENT_SHA256.map((hash) => `      '${hash}'`).join(',\n')}\n    )\n`,
   'AND current_user = (',
   'SELECT pg_catalog.pg_get_userbyid(p.proowner)',
   "WHERE p.oid = pg_catalog.to_regprocedure('public.aws_connect_partner_by_code(text, uuid)')",
@@ -2051,6 +2065,7 @@ function classifyPartnershipConnect(row) {
   if (!row) return 'missing_function';
   const rest = (row.proconfig || []).filter((entry) => !String(entry).startsWith(`${PARTNERSHIP_WRITER_SETTING}=`));
   return row.prosecdef === true
+    && row.api_role_owns_connect === false
     && sameConfig(rest, PARTNERSHIP_CONNECT_CONFIG)
     && hashSqlDefinition(String(row.prosrc ?? '')) === PARTNERSHIP_CONNECT_BODY_SHA256
     ? 'pinned'
@@ -2091,7 +2106,7 @@ export async function readPartnershipConsentState(client, expectedBody) {
     otherTriggers: otherTriggers.length === 0 ? 'none' : 'present',
   };
   // Everything SQL 76 must leave alone: the table's RLS flags, every other
-  // policy and trigger on it, and aws_connect_partner_by_code apart from the marker.
+  // policy and trigger on it, and aws_connect_partner_by_code apart from any marker entry.
   const connectRest = connectRow
     ? {
       prosrc: connectRow.prosrc,

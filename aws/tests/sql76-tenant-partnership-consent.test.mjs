@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,9 +56,25 @@ test('SQL 76 only adds the consent trigger and retires the old policies', () => 
   // Trusted writer: the connect frame directly under the writing statement in
   // PG_CONTEXT, run as connect's owner. No setting can make a writer trusted.
   assert.match(body, /GET DIAGNOSTICS _ctx = PG_CONTEXT;/);
-  assert.match(body, /\\nPL\/pgSQL function aws_connect_partner_by_code\\\(text,uuid\\\) line \[0-9\]\+ at SQL statement\(\\n\|\$\)'/);
+  assert.ok(body.includes(`\\nPL/pgSQL function aws_connect_partner_by_code\\\\(text,uuid\\\\) line [0-9]+ at SQL statement(?:\\n|$)');`));
+  // An E'' literal: standard_conforming_strings cannot change the pattern.
+  assert.match(body, /substring\(_ctx from E'\^PL\/pgSQL function/);
   assert.match(body, /AND current_user = \(\s+SELECT pg_catalog\.pg_get_userbyid\(p\.proowner\)/);
   assert.doesNotMatch(read(SQL76), /set_config|current_setting|ALTER FUNCTION/);
+});
+
+test('the trusted statement hashes are exactly connect\'s three row writes in SQL 32', () => {
+  const sql32 = read(path.join(SQL_DIR, '32_partner_share_lifecycle.sql'));
+  const connectBody = sql32.match(/CREATE OR REPLACE FUNCTION public\.aws_connect_partner_by_code\([\s\S]*?\nAS \$\$([\s\S]*?)\$\$;/)[1];
+  // PG_CONTEXT prints each statement as written, without its INTO clause.
+  const writes = connectBody.match(/(?:INSERT INTO|UPDATE) public\.tenant_partnerships[\s\S]*?(?= INTO _existing;)/g);
+  assert.equal(writes.length, 3);
+  // The guard's pattern stops at the first double quote.
+  for (const write of writes) assert.doesNotMatch(write, /"/);
+  const derived = writes.map((write) => createHash('sha256').update(write).digest('hex'));
+  const body = read(SQL76).match(/AS \$\$([\s\S]*?)\$\$/)[1];
+  const listed = body.match(/'hex'\) IN \(([^)]*)\)/)[1].match(/[0-9a-f]{64}/g);
+  assert.deepEqual(listed, derived);
 });
 
 test('SQL 76 rollback and review files are scoped and the review is read-only', () => {
@@ -462,6 +479,15 @@ BEGIN
   -- revoked row): it runs as checksops, not connect's owner.
   r := public._exec('${OWNER}', format(E'UPDATE public.tenant_partnerships SET status = \\'active\\', revoked_at = NULL WHERE id = %L /*"\\nPL/pgSQL function aws_connect_partner_by_code(text,uuid) line 1 at SQL statement\\n*/', pid));
   PERFORM public._ok('28_forged_context_denied', (r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE denied_consent, r::text);
+  -- The same forged text run as connect's owner: the frame shape matches, the statement hash does not.
+  BEGIN
+    PERFORM set_config('request.app_user_id', '${OWNER}', true);
+    EXECUTE format(E'UPDATE public.tenant_partnerships SET status = \\'active\\', revoked_at = NULL WHERE id = %L /*"\\nPL/pgSQL function aws_connect_partner_by_code(text,uuid) line 1 at SQL statement\\n*/', pid);
+    PERFORM public._ok('29_forged_context_as_owner_denied', false, 'update succeeded');
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM public._ok('29_forged_context_as_owner_denied', SQLERRM ILIKE denied_consent, SQLERRM);
+  END;
+  PERFORM set_config('request.app_user_id', '', true);
 
   -- Settings revoke from either side still works, then reconnect by code reactivates.
   r := public._exec('${PARTNER_USER}', format('SELECT public.aws_revoke_tenant_partnership(%L::uuid)', cid));
@@ -481,7 +507,7 @@ END $$;
   const results = JSON.parse(scalar(`SELECT coalesce(json_object_agg(test, json_build_object('ok', ok, 'detail', detail) ORDER BY test), '{}'::json) FROM public._results`));
   const failed = Object.entries(results).filter(([, row]) => row.ok !== true);
   assert.equal(failed.length, 0, `failed cases: ${JSON.stringify(failed, null, 2)}`);
-  assert.equal(Object.keys(results).length, 34);
+  assert.equal(Object.keys(results).length, 35);
 
   // Review query: reconnect by code, then classify the live rows.
   psql(['-d', dbName, '-c', `
@@ -495,6 +521,18 @@ RESET ROLE;
     { code: 'LEGACY01', evidence: 'inviter_only_code_mismatch' },
     { code: PARTNER_CODE, evidence: 'invitee_partner_code' },
   ]);
+
+  // A fresh session with standard_conforming_strings off compiles the guard the same way.
+  const nonStandard = scalar(`
+SET standard_conforming_strings = off;
+SELECT set_config('request.app_user_id', '${OWNER}', false);
+SET ROLE checksops;
+SELECT (public.aws_revoke_tenant_partnership(p.id))->>'ok' FROM public.tenant_partnerships p
+  WHERE p.inviter_tenant_id = '${SOURCE}' AND p.invitee_tenant_id = '${PARTNER}';
+SELECT (public.aws_connect_partner_by_code('${PARTNER_CODE}', '${SOURCE}'::uuid))->>'reactivated';
+`);
+  // The reactivate is a real row write through the guard.
+  assert.match(nonStandard, /true$/);
 
   // Re-applying SQL 32 leaves connect the trusted writer (SQL 76 never changed it).
   file(path.join(SQL_DIR, '32_partner_share_lifecycle.sql'));
