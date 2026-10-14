@@ -1,8 +1,9 @@
 /**
  * Partner stakeholder removals (SQL 78) against PostgreSQL 16: the real table,
  * RLS and grants from aws/workflows/sql/78, the real /data/write executor and
- * the share RPC (SQL 32) that clears a removal. Also: without the table
- * (production before SQL 78) sharing still works.
+ * the share RPC (SQL 32) that clears a removal. A plain member of the owner
+ * tenant (no admin/staff role) is refused by RLS until SQL 79's member policies.
+ * Also: without the table (production before SQL 78) sharing still works.
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -17,6 +18,7 @@ import { executePartnerShareRpc } from '../functions/api/partner-share-lifecycle
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SQL_DIR = path.join(ROOT, 'rls/sql');
 const SQL_78 = path.join(ROOT, 'workflows/sql/78_check_partner_stakeholder_removals.sql');
+const SQL_79 = path.join(ROOT, 'workflows/sql/79_member_stakeholder_writes.sql');
 const AUTH_UID_SQL = path.join(ROOT, 'identity/sql/02_auth_uid_guc.sql');
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 
@@ -26,6 +28,7 @@ const OTHER = '33333333-3333-4333-8333-333333333333';
 const OWNER = 'a1000000-0000-4000-8000-000000000001';
 const PARTNER_USER = 'a1000000-0000-4000-8000-000000000002';
 const OTHER_USER = 'a1000000-0000-4000-8000-000000000003';
+const MEMBER = 'a1000000-0000-4000-8000-000000000004';
 const CHECK = 'c1000000-0000-4000-8000-000000000001';
 const CHECK_UNSHARED = 'c1000000-0000-4000-8000-000000000002';
 
@@ -62,6 +65,8 @@ CREATE TABLE public.tenant_partner_code_aliases (id uuid PRIMARY KEY DEFAULT gen
 CREATE TABLE public.check_intake_items (
   id uuid PRIMARY KEY, tenant_id uuid, status text, deposited_at timestamptz, payee_line text, claim_id uuid);
 CREATE TABLE public.claims (id uuid PRIMARY KEY, org_id uuid);
+-- SQL 79 also adds policies here; this test only uses the removals table.
+CREATE TABLE public.check_stakeholders (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), check_intake_item_id uuid, tenant_id uuid NOT NULL, added_via text NOT NULL DEFAULT 'manual');
 CREATE TABLE public.deposit_items (id uuid PRIMARY KEY, check_id uuid);
 CREATE TABLE public.signature_requests (id uuid PRIMARY KEY, check_intake_item_id uuid, claim_id uuid);
 CREATE TABLE public.loss_draft_tracking (id uuid PRIMARY KEY, claim_id uuid);
@@ -92,10 +97,11 @@ const SEED = `
 INSERT INTO public.tenants (id, name, partner_code) VALUES
   ('${OWNER_TENANT}', 'Owner Co', 'OWNER001'), ('${PARTNER}', 'Partner Co', 'PARTNER1'), ('${OTHER}', 'Other Co', 'OTHER001');
 INSERT INTO public.identity_accounts (application_user_id, status) VALUES
-  ('${OWNER}', 'active'), ('${PARTNER_USER}', 'active'), ('${OTHER_USER}', 'active');
+  ('${OWNER}', 'active'), ('${PARTNER_USER}', 'active'), ('${OTHER_USER}', 'active'), ('${MEMBER}', 'active');
 INSERT INTO public.user_roles (user_id, role) VALUES ('${OWNER}', 'staff'), ('${PARTNER_USER}', 'admin'), ('${OTHER_USER}', 'admin');
 INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES
-  ('${OWNER_TENANT}', '${OWNER}', 'member'), ('${PARTNER}', '${PARTNER_USER}', 'admin'), ('${OTHER}', '${OTHER_USER}', 'admin');
+  ('${OWNER_TENANT}', '${OWNER}', 'member'), ('${PARTNER}', '${PARTNER_USER}', 'admin'), ('${OTHER}', '${OTHER_USER}', 'admin'),
+  ('${OWNER_TENANT}', '${MEMBER}', 'member');
 INSERT INTO public.check_intake_items (id, tenant_id, status) VALUES
   ('${CHECK}', '${OWNER_TENANT}', 'received'), ('${CHECK_UNSHARED}', '${OWNER_TENANT}', 'received');
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO checksops, authenticated;
@@ -261,6 +267,37 @@ test('PostgreSQL 16: partner stakeholder removals (SQL 78) via the write executo
     assert.equal((await rows()).length, 1);
     // A non-owner cannot share, so cannot clear the removal either.
     await assert.rejects(share(PARTNER_USER), /not_authorized/);
+    assert.equal((await rows()).length, 1);
+
+    // A plain member of the owner tenant (no user_roles row): the API lets it
+    // through (member of the check owner's tenant), RLS refuses until SQL 79.
+    await client.query('DELETE FROM public.check_partner_stakeholder_removals');
+    await assert.rejects(remove(MEMBER), /row-level security/);
+    assert.equal((await rows()).length, 0);
+    await client.query(file(SQL_79));
+    result = await remove(MEMBER, CHECK, PARTNER, { tenant_id: OTHER, removed_by: OWNER });
+    assert.equal(result.error, undefined, JSON.stringify(result));
+    assert.equal(result.rows[0].tenant_id, OWNER_TENANT);
+    assert.equal(result.rows[0].removed_by, MEMBER);
+    // Partners and other tenants are still refused, by the API and by RLS.
+    for (const user of [PARTNER_USER, OTHER_USER]) {
+      assert.equal((await write(user, {
+        op: 'delete',
+        filters: [{ column: 'check_intake_item_id', op: 'eq', value: CHECK }, { column: 'partner_tenant_id', op: 'eq', value: PARTNER }],
+      })).error, 'rls_denied', user);
+      await assert.rejects(as(user, () => client.query(
+        'INSERT INTO public.check_partner_stakeholder_removals (check_intake_item_id, tenant_id, partner_tenant_id) VALUES ($1, $2, $3)',
+        [CHECK_UNSHARED, OWNER_TENANT, PARTNER],
+      )), /row-level security/, user);
+    }
+    await assert.rejects(as(MEMBER, () => client.query('UPDATE public.check_partner_stakeholder_removals SET removed_by = NULL')), /permission denied/);
+    result = await write(MEMBER, {
+      op: 'delete',
+      filters: [{ column: 'check_intake_item_id', op: 'eq', value: CHECK }, { column: 'partner_tenant_id', op: 'eq', value: PARTNER }],
+    });
+    assert.equal(result.rows.length, 1, JSON.stringify(result));
+    assert.equal((await rows()).length, 0);
+    await remove(MEMBER);
     assert.equal((await rows()).length, 1);
 
     // Without SQL 78 (production today): sharing still works.

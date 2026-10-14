@@ -500,6 +500,19 @@ const executePayees = async ({ client, mapping, op, values, filters }) => {
 };
 
 /**
+ * Stakeholder writes on a check (check_stakeholders and
+ * check_partner_stakeholder_removals) are open to any member of the check
+ * owner's tenant (tenant_users, via aws_user_tenant_ids(); SQL 79's member
+ * policies) and to that tenant's writers (aws_can_write_tenant). A partner the
+ * check is shared with is not a member of the owner's tenant, so it is refused.
+ */
+const canWriteCheckStakeholders = async (client, tenantId) => (await client.query(
+  `SELECT ($1::uuid IN (SELECT public.aws_user_tenant_ids())
+     OR public.aws_can_write_tenant($1::uuid)) AS ok`,
+  [tenantId],
+)).rows[0]?.ok === true;
+
+/**
  * check_stakeholders: link one of the check owner's own active saved stakeholder
  * accounts to the check, or remove a link. tenant_id, added_via and added_by are
  * server-derived; a partner row can never be written here.
@@ -511,11 +524,7 @@ const executeCheckStakeholders = async ({ client, mapping, op, values, filters }
     const invalid = requireUuid('stakeholder_account_id', values.stakeholder_account_id);
     if (invalid) return invalid;
     const tenantId = looked.check.tenant_id;
-    const writable = (await client.query(
-      'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
-      [tenantId],
-    )).rows[0];
-    if (writable?.ok !== true) return { error: 'rls_denied', message: 'check not writable' };
+    if (!(await canWriteCheckStakeholders(client, tenantId))) return { error: 'rls_denied', message: 'check not writable' };
     const account = (await client.query(
       `SELECT id FROM public.stakeholder_accounts
        WHERE id = $1::uuid AND tenant_id = $2::uuid AND is_active IS TRUE`,
@@ -552,7 +561,7 @@ const executeCheckStakeholders = async ({ client, mapping, op, values, filters }
      WHERE cs.id = $1::uuid
        AND c.id = cs.check_intake_item_id
        AND c.tenant_id = cs.tenant_id
-       AND public.aws_can_write_tenant(cs.tenant_id)
+       AND (cs.tenant_id IN (SELECT public.aws_user_tenant_ids()) OR public.aws_can_write_tenant(cs.tenant_id))
      RETURNING cs.*`,
     [linkId],
   )).rows;
@@ -573,11 +582,7 @@ const executeCheckPartnerStakeholderRemovals = async ({ client, mapping, op, val
     const invalid = requireUuid('partner_tenant_id', values.partner_tenant_id);
     if (invalid) return invalid;
     const tenantId = looked.check.tenant_id;
-    const writable = (await client.query(
-      'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
-      [tenantId],
-    )).rows[0];
-    if (writable?.ok !== true) return { error: 'rls_denied', message: 'check not writable' };
+    if (!(await canWriteCheckStakeholders(client, tenantId))) return { error: 'rls_denied', message: 'check not writable' };
     const share = (await client.query(
       `SELECT target_tenant_id FROM public.shared_checks
        WHERE check_id = $1::uuid AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid
@@ -620,7 +625,7 @@ const executeCheckPartnerStakeholderRemovals = async ({ client, mapping, op, val
        WHERE r.id = $1::uuid
          AND c.id = r.check_intake_item_id
          AND c.tenant_id = r.tenant_id
-         AND public.aws_can_write_tenant(r.tenant_id)
+         AND (r.tenant_id IN (SELECT public.aws_user_tenant_ids()) OR public.aws_can_write_tenant(r.tenant_id))
        RETURNING r.*`,
       [removalId],
     )).rows;
@@ -642,7 +647,7 @@ const executeCheckPartnerStakeholderRemovals = async ({ client, mapping, op, val
        AND r.partner_tenant_id = $2::uuid
        AND c.id = r.check_intake_item_id
        AND c.tenant_id = r.tenant_id
-       AND public.aws_can_write_tenant(r.tenant_id)
+       AND (r.tenant_id IN (SELECT public.aws_user_tenant_ids()) OR public.aws_can_write_tenant(r.tenant_id))
      RETURNING r.*`,
     [checkId, partnerTenantId],
   )).rows;

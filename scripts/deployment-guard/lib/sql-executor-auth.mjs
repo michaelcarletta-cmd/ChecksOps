@@ -310,6 +310,104 @@ export const AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS = Object.freeze({
   table: PARTNER_STAKEHOLDER_REMOVALS_TABLE,
 });
 
+// SQL 79 adds tenant-member INSERT and DELETE policies to public.check_stakeholders
+// and public.check_partner_stakeholder_removals. The "definition" is the
+// canonical state text of both tables' row-level security (enabled, forced,
+// whether the executor role owns the table, every policy as pg_get_expr prints
+// it with only pg_catalog on the search_path) plus the sha256 of
+// pg_get_functiondef for the two functions the new policies call, hashed. The
+// function hashes pin aws_user_tenant_ids() to the reviewed body (tenant_users
+// rows of auth.uid() only, no partner or shared tenants).
+export const MEMBER_STAKEHOLDER_TABLES = Object.freeze([STAKEHOLDER_GRANT_TABLE, PARTNER_STAKEHOLDER_REMOVALS_TABLE]);
+export const MEMBER_STAKEHOLDER_FUNCTIONS = Object.freeze(['public.aws_user_tenant_ids()', 'public.aws_is_authenticated()']);
+// sha256(pg_get_functiondef) on PostgreSQL 16 of the definitions in
+// aws/rls/sql/02_helpers.sql and aws/rls/sql/20_write_helpers.sql.
+export const MEMBER_STAKEHOLDER_FUNCTION_SHA256 = Object.freeze({
+  'public.aws_user_tenant_ids()': 'd18f604e0b82c2a71625a0f49311f3d1cfebd5d25830bb4d790333a8b598a42f',
+  'public.aws_is_authenticated()': '5bfd3730b011857480c77910bf44e8736418c7537df24338a7e66d682dc43800',
+});
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+/**
+ * `state` is { tables: { [table]: { present, rls_enabled, rls_forced,
+ * owner_is_executor, policies: [{name,permissive,cmd,roles,using,with_check}] } },
+ * functions: { [signature]: sha256 | null } }.
+ */
+export function memberStakeholderWritesStateText(state = {}) {
+  const lines = [];
+  for (const table of MEMBER_STAKEHOLDER_TABLES) {
+    const row = state?.tables?.[table];
+    if (row?.present !== true) {
+      lines.push(`table ${table}: absent`);
+      continue;
+    }
+    lines.push(`table ${table}: present`);
+    lines.push(`${table} row level security: ${row.rls_enabled === true ? 'enabled' : 'disabled'}`);
+    lines.push(`${table} force row level security: ${row.rls_forced === true ? 'on' : 'off'}`);
+    lines.push(`${table} owner: ${row.owner_is_executor === true ? 'executor role' : 'another role'}`);
+    for (const policy of [...(row.policies || [])].sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
+      lines.push(`${table} policy ${policy.name} ${policy.permissive === false ? 'restrictive' : 'permissive'} ${policy.cmd} to ${[...(policy.roles || [])].sort().join(',')} using ${policy.using ?? '-'} with check ${policy.with_check ?? '-'}`);
+    }
+  }
+  for (const signature of MEMBER_STAKEHOLDER_FUNCTIONS) {
+    const hash = state?.functions?.[signature];
+    lines.push(`function ${signature}: ${SHA256_HEX_RE.test(String(hash || '')) ? `definition sha256 ${hash}` : 'absent'}`);
+  }
+  return lines.join('\n');
+}
+const reviewedPolicy = (name, cmd, using, withCheck) => Object.freeze({
+  name, permissive: true, cmd, roles: Object.freeze(['authenticated']), using, with_check: withCheck,
+});
+// As PostgreSQL 16 prints them (aws/rls/sql/12_final_select_policies.sql,
+// 24_complete_write_policies.sql, aws/workflows/sql/78 and 79).
+const STAKEHOLDER_SELECT_EXPR = '(public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id))';
+const STAKEHOLDER_WRITE_EXPR = 'public.aws_can_write_tenant(tenant_id)';
+export const MEMBER_STAKEHOLDER_MEMBER_EXPR = '(public.aws_is_authenticated() AND (tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)))';
+// check_stakeholders inserts also need a manual link on a check the row's tenant owns.
+export const MEMBER_STAKEHOLDER_LINK_INSERT_EXPR = "(public.aws_is_authenticated() AND (tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)) AND (EXISTS ( SELECT 1\n   FROM public.check_intake_items c\n  WHERE ((c.id = check_stakeholders.check_intake_item_id) AND (c.tenant_id = check_stakeholders.tenant_id)))) AND (added_via = 'manual'::text))";
+const MEMBER_STAKEHOLDER_SHORT = Object.freeze({
+  [STAKEHOLDER_GRANT_TABLE]: 'check_stakeholders',
+  [PARTNER_STAKEHOLDER_REMOVALS_TABLE]: 'check_partner_stakeholder_removals',
+});
+/** The two policies each table has before SQL 79. */
+export const MEMBER_STAKEHOLDER_REVIEWED_POLICIES = Object.freeze(Object.fromEntries(MEMBER_STAKEHOLDER_TABLES.map((table) => [table, Object.freeze([
+  reviewedPolicy(`aws_select_${MEMBER_STAKEHOLDER_SHORT[table]}`, 'SELECT', STAKEHOLDER_SELECT_EXPR, null),
+  reviewedPolicy(`aws_write_${MEMBER_STAKEHOLDER_SHORT[table]}`, 'ALL', STAKEHOLDER_WRITE_EXPR, STAKEHOLDER_WRITE_EXPR),
+])])));
+/** The four policies SQL 79 adds, by table. */
+export const MEMBER_STAKEHOLDER_NEW_POLICIES = Object.freeze(Object.fromEntries(MEMBER_STAKEHOLDER_TABLES.map((table) => [table, Object.freeze([
+  reviewedPolicy(`aws_member_insert_${MEMBER_STAKEHOLDER_SHORT[table]}`, 'INSERT', null,
+    table === STAKEHOLDER_GRANT_TABLE ? MEMBER_STAKEHOLDER_LINK_INSERT_EXPR : MEMBER_STAKEHOLDER_MEMBER_EXPR),
+  reviewedPolicy(`aws_member_delete_${MEMBER_STAKEHOLDER_SHORT[table]}`, 'DELETE', MEMBER_STAKEHOLDER_MEMBER_EXPR, null),
+])])));
+const memberStakeholderState = (withNew) => ({
+  tables: Object.fromEntries(MEMBER_STAKEHOLDER_TABLES.map((table) => [table, {
+    present: true,
+    rls_enabled: true,
+    rls_forced: false,
+    owner_is_executor: true,
+    policies: [...MEMBER_STAKEHOLDER_REVIEWED_POLICIES[table], ...(withNew ? MEMBER_STAKEHOLDER_NEW_POLICIES[table] : [])],
+  }])),
+  functions: { ...MEMBER_STAKEHOLDER_FUNCTION_SHA256 },
+});
+export const MEMBER_STAKEHOLDER_PRE_STATE = Object.freeze(memberStakeholderState(false));
+export const MEMBER_STAKEHOLDER_APPLIED_STATE = Object.freeze(memberStakeholderState(true));
+export const AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES = Object.freeze({
+  filename: 'aws/workflows/sql/79_member_stakeholder_writes.sql',
+  migration_id: '79_member_stakeholder_writes',
+  // The commit that authored the current file bytes. Re-pin if the branch is
+  // rebased or squashed before it reaches main.
+  commit: '41a3231a211fda0d0bde8a8346e0496e0d7d43c6',
+  source_sha256: '87556017ffbb97625af328c55cc468f1938566ad5760eac883375c187c1d1231',
+  // Code-derived: sha256(memberStakeholderWritesStateText(MEMBER_STAKEHOLDER_PRE_STATE)),
+  // the state SQL 12/24/77/78 leave. A staging read-live run should confirm it before apply.
+  expected_live_definition_sha256: 'd9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4',
+  // Code-derived: sha256(memberStakeholderWritesStateText(MEMBER_STAKEHOLDER_APPLIED_STATE)),
+  // re-derived from the real catalog by aws/tests/sql79-member-stakeholder-writes-executor.test.mjs.
+  intended_replacement_sha256: '878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7',
+  table: STAKEHOLDER_GRANT_TABLE,
+  tables: MEMBER_STAKEHOLDER_TABLES,
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -343,6 +441,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
   AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
   AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
+  AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -384,6 +483,10 @@ export function isSql78PartnerStakeholderRemovals(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS);
 }
 
+export function isSql79MemberStakeholderWrites(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -410,6 +513,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql76PartnershipConsent(input)) return AUTHORIZED_SQL76_PARTNERSHIP_CONSENT;
   if (isSql77CheckStakeholdersGrant(input)) return AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT;
   if (isSql78PartnerStakeholderRemovals(input)) return AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS;
+  if (isSql79MemberStakeholderWrites(input)) return AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
