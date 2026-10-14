@@ -8,8 +8,14 @@
  * apply:   require the live executor to carry exactly main's package, run the
  *          accepted contracts, evaluate, lease, and issue a KMS-signed
  *          sql-executor-invoke receipt for the official sql-executor-invoke.mjs.
+ * read-live: like apply, but the receipt and invoke input are bound to the
+ *          executor's read-only action 'inspect' (see lib/sql-executor-read-live.mjs).
+ *          It reads the pinned migration's live database state and never writes.
+ *          It neither requires nor accepts CHECKSOPS_EXPECTED_LIVE_DEFINITION_SHA256.
  *
  * This script never deploys, invokes the executor, or applies SQL itself.
+ * `--read-live-report <invoke stdout> [<invoke stderr>]` prints only the
+ * non-sensitive read-live fields of an invoke result.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -22,6 +28,12 @@ import { evaluateDeployment } from './lib/guard.mjs';
 import { signReceiptWithKms } from './lib/kms-issuer.mjs';
 import { acquireLease } from './lib/lease.mjs';
 import { issueReceiptWithSigner } from './lib/receipt.mjs';
+import {
+  READ_LIVE_ACTION,
+  READ_LIVE_EXPECTED_SENTINEL,
+  readLiveSummary,
+  readLiveSummaryMarkdown,
+} from './lib/sql-executor-read-live.mjs';
 import {
   AUTHORIZED_LEDGER_20261007193200,
   AUTHORIZED_SQL71_AMOUNT_GRANT,
@@ -156,9 +168,11 @@ export function runContractTests(registry, { runner = defaultContractRunner } = 
   return results;
 }
 
-export function buildInvokeInput(identity, pin, { now, contractResults, buildTimestamp }) {
+export const MODES = Object.freeze(['inspect', 'deploy', 'apply', 'read-live']);
+
+export function buildInvokeInput(identity, pin, { now, contractResults, buildTimestamp, readLive = false }) {
   const input = {
-    action: 'apply',
+    action: readLive ? READ_LIVE_ACTION : 'apply',
     workstream_id: identity.workstreamId,
     branch: identity.branch,
     // The executor allowlist binds each pin to the commit that authored the file.
@@ -172,22 +186,29 @@ export function buildInvokeInput(identity, pin, { now, contractResults, buildTim
     migration_id: pin.migration_id,
     source_sha256: pin.source_sha256,
     intended_replacement_sha256: pin.intended_replacement_sha256,
-    expected_live_definition_sha256: pin.expected_live_definition_sha256,
-    one_use_id: identity.oneUseId,
+    // read-live: a sentinel no reviewed pin can equal, so this package can never pass an apply pin check.
+    expected_live_definition_sha256: readLive ? READ_LIVE_EXPECTED_SENTINEL : pin.expected_live_definition_sha256,
+    one_use_id: readLive ? `${identity.oneUseId}-read-live` : identity.oneUseId,
     expiry: new Date(now + RECEIPT_TTL_MS).toISOString(),
     function_name: SQL_EXECUTOR_FUNCTION,
     build_timestamp: buildTimestamp,
     contract_results: contractResults,
     workflow_commit: identity.commit,
   };
-  input.preflight_live_fingerprint = authorizationFingerprint(input);
+  // The signed receipt carries this fingerprint; for read-live it binds the action.
+  input.preflight_live_fingerprint = readLive
+    ? { ...authorizationFingerprint(input), action: READ_LIVE_ACTION }
+    : authorizationFingerprint(input);
   return input;
 }
 
 export async function run(env = process.env, deps = {}) {
   const mode = String(env.CHECKSOPS_SQL_EXECUTOR_MODE || 'inspect').trim();
-  if (!['inspect', 'deploy', 'apply'].includes(mode)) {
-    throw new GuardError(CODES.INVALID_MANIFEST, 'mode must be inspect, deploy, or apply');
+  if (!MODES.includes(mode)) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'mode must be inspect, deploy, apply, or read-live');
+  }
+  if (mode === 'read-live' && String(env.CHECKSOPS_EXPECTED_LIVE_DEFINITION_SHA256 || '').trim()) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'read-live does not accept an expected live definition; it only reports the live one');
   }
   const migrationKey = String(env.CHECKSOPS_SQL_EXECUTOR_MIGRATION || '').trim();
   const pin = Object.prototype.hasOwnProperty.call(MIGRATIONS, migrationKey) ? MIGRATIONS[migrationKey] : null;
@@ -239,7 +260,9 @@ export async function run(env = process.env, deps = {}) {
     return { ok: true, ...report, mutation: false };
   }
 
-  if (String(env.CHECKSOPS_EXPECTED_EXECUTOR_CODE_SHA256 || '') !== config.CodeSha256) {
+  const expectedCode = String(env.CHECKSOPS_EXPECTED_EXECUTOR_CODE_SHA256 || '');
+  // read-live requires main's exact package below; a prior inspect's CodeSha256 is optional but must match when given.
+  if ((mode !== 'read-live' || expectedCode) && expectedCode !== config.CodeSha256) {
     throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'live executor CodeSha256 differs from the inspected value', {
       expected: env.CHECKSOPS_EXPECTED_EXECUTOR_CODE_SHA256 || null,
       live: config.CodeSha256,
@@ -256,12 +279,13 @@ export async function run(env = process.env, deps = {}) {
     return { ok: true, ...report, deploy_allowed: true, mutation: false };
   }
 
-  // apply
+  // apply and read-live
   if (summary.current !== true) {
-    throw new GuardError(CODES.STALE_PACKAGE, 'deploy main\'s executor before apply; the live executor lacks this handler', summary);
+    throw new GuardError(CODES.STALE_PACKAGE, `deploy main's executor before ${mode}; the live executor lacks this handler`, summary);
   }
+  const readLive = mode === 'read-live';
   const expectedLive = String(env.CHECKSOPS_EXPECTED_LIVE_DEFINITION_SHA256 || '');
-  if (!SHA256_RE.test(expectedLive) || expectedLive !== pin.expected_live_definition_sha256) {
+  if (!readLive && (!SHA256_RE.test(expectedLive) || expectedLive !== pin.expected_live_definition_sha256)) {
     throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'expected live definition must be the pinned pre-apply definition from a fresh staging inspect', {
       provided: expectedLive || null,
       pinned: pin.expected_live_definition_sha256,
@@ -273,6 +297,7 @@ export async function run(env = process.env, deps = {}) {
     now,
     contractResults,
     buildTimestamp: env.CHECKSOPS_BUILD_TIMESTAMP || new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    readLive,
   });
   const evaluated = evaluateDeployment(input, { root: repoRoot, env, registry });
   if (!evaluated.ok) {
@@ -301,18 +326,63 @@ export async function run(env = process.env, deps = {}) {
     workstream_id: input.workstream_id,
     pin_commit: input.commit,
     one_use_id: input.one_use_id,
+    invoke_action: input.action,
   }, env);
   return {
     ok: true,
     ...report,
+    invoke_action: input.action,
     contracts: contractResults,
     mutation: false,
     authorization: { lease: lease.details.lease, receiptFile: issued.details.file, inputFile },
   };
 }
 
+function parseJsonOutput(file) {
+  if (!file || !fs.existsSync(file)) return null;
+  const text = fs.readFileSync(file, 'utf8').trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf('{');
+    try { return start >= 0 ? JSON.parse(text.slice(start)) : null; } catch { return null; }
+  }
+}
+
+/**
+ * Report a read-live invoke without echoing the executor's raw result. Prints a
+ * `LIVE_DEFINITION_SHA256:` line, writes the step summary, and fails on any
+ * invoke failure with only its code and message.
+ */
+export function reportReadLive(stdoutFile, stderrFile, env = process.env, write = (text) => process.stdout.write(text)) {
+  const migration = String(env.CHECKSOPS_SQL_EXECUTOR_MIGRATION || '').trim();
+  const pin = Object.prototype.hasOwnProperty.call(MIGRATIONS, migration) ? MIGRATIONS[migration] : null;
+  if (!pin) throw new GuardError(CODES.SQL_COLLISION, 'migration is not an allowlisted staging executor pin', { migration });
+  const result = parseJsonOutput(stdoutFile) || parseJsonOutput(stderrFile) || { ok: false, message: 'read-live invoke produced no result' };
+  const summary = readLiveSummary(result, { migration, pin });
+  if (!summary.ok) throw new GuardError(summary.code, summary.message, {});
+  const details = summary.details;
+  write(`${JSON.stringify(details, null, 2)}\n`);
+  write(`LIVE_DEFINITION_SHA256: ${details.live_definition_sha256 ?? 'null'}\n`);
+  if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${readLiveSummaryMarkdown(details)}\n`);
+  return details;
+}
+
 const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isDirect) {
+const reportIndex = process.argv.indexOf('--read-live-report');
+if (isDirect && reportIndex >= 0) {
+  try {
+    reportReadLive(process.argv[reportIndex + 1], process.argv[reportIndex + 2]);
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      ok: false,
+      code: error?.code || CODES.DEPLOYMENT_COLLISION,
+      message: error?.message || String(error),
+    }, null, 2)}\n`);
+    process.exitCode = 2;
+  }
+} else if (isDirect) {
   run().then((result) => {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   }).catch((error) => {
