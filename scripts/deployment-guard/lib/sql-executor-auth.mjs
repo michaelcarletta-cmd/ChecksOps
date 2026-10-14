@@ -256,6 +256,60 @@ export const AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT = Object.freeze({
   table: STAKEHOLDER_GRANT_TABLE,
 });
 
+// SQL 78 creates public.check_partner_stakeholder_removals. The "definition" is
+// the canonical state text of that table (columns, constraints, indexes, RLS,
+// policies, non-owner ACL, whether the executor role owns it), hashed; while the table is
+// absent it is the fixed absent text below. The owner's own ACL entries and the
+// owner's name are left out so the text does not depend on the role name or on
+// the server version's owner privilege set (PostgreSQL 17+ adds MAINTAIN), and
+// PostgreSQL 18 NOT NULL constraint rows are covered by the column lines.
+export const PARTNER_STAKEHOLDER_REMOVALS_TABLE = 'public.check_partner_stakeholder_removals';
+export const PARTNER_STAKEHOLDER_REMOVALS_ABSENT_TEXT = `table ${PARTNER_STAKEHOLDER_REMOVALS_TABLE}: absent`;
+/**
+ * `state` is { present, columns: [{name,type,not_null,default}], constraints:
+ * [{name,def}], indexes: [{name,def}], rls_enabled, rls_forced, policies: [{name,permissive,cmd,roles,
+ * using,with_check}], acl: [{grantee,privilege,grantable}], owner_is_executor }.
+ */
+export function partnerStakeholderRemovalsStateText(state = {}) {
+  if (state?.present !== true) return PARTNER_STAKEHOLDER_REMOVALS_ABSENT_TEXT;
+  const lines = [`table ${PARTNER_STAKEHOLDER_REMOVALS_TABLE}: present`];
+  for (const column of state.columns || []) {
+    lines.push(`column ${column.name} ${column.type}${column.not_null ? ' not null' : ''}${column.default == null ? '' : ` default ${column.default}`}`);
+  }
+  for (const constraint of [...(state.constraints || [])].sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
+    lines.push(`constraint ${constraint.name}: ${constraint.def}`);
+  }
+  for (const index of [...(state.indexes || [])].sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
+    lines.push(`index ${index.name}: ${index.def}`);
+  }
+  lines.push(`row level security: ${state.rls_enabled === true ? 'enabled' : 'disabled'}`);
+  lines.push(`force row level security: ${state.rls_forced === true ? 'on' : 'off'}`);
+  for (const policy of [...(state.policies || [])].sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
+    lines.push(`policy ${policy.name} ${policy.permissive === false ? 'restrictive' : 'permissive'} ${policy.cmd} to ${[...(policy.roles || [])].sort().join(',')} using ${policy.using ?? '-'} with check ${policy.with_check ?? '-'}`);
+  }
+  for (const entry of [...(state.acl || [])].map((row) => `grant ${row.grantee} ${row.privilege}${row.grantable === true ? ' with grant option' : ''}`).sort()) {
+    lines.push(entry);
+  }
+  lines.push(`owner: ${state.owner_is_executor === true ? 'executor role' : 'another role'}`);
+  return lines.join('\n');
+}
+export const AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS = Object.freeze({
+  filename: 'aws/workflows/sql/78_check_partner_stakeholder_removals.sql',
+  migration_id: '78_check_partner_stakeholder_removals',
+  // The commit that authored the current file bytes. Re-pin if the branch is
+  // rebased or squashed before it reaches main.
+  commit: '0d08a894c635c8790347e2e6e14b5383a0e3bef1',
+  source_sha256: 'd4a33174a546e0623f22397db93eb4c622214f6ff2336e65c110449162797420',
+  // Code-derived: the table does not exist before SQL 78, so the pre-apply
+  // state is sha256(PARTNER_STAKEHOLDER_REMOVALS_ABSENT_TEXT). A staging
+  // read-live run should confirm it before apply.
+  expected_live_definition_sha256: '4031dea6c0fbb70af1b17befa7ffb161fec40227cda080cd87c222dec674d269',
+  // The state read back after applying the file on PostgreSQL 16 as a
+  // non-superuser owner whose default privileges are as expected (aws/tests/sql78-check-partner-stakeholder-removals-executor.test.mjs).
+  intended_replacement_sha256: '3d650a56a2fd8a4ccfaeaf795ac0de8c4d0b849a748c1769400397d62e92dd40',
+  table: PARTNER_STAKEHOLDER_REMOVALS_TABLE,
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -288,6 +342,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
   AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
   AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
+  AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -325,6 +380,10 @@ export function isSql77CheckStakeholdersGrant(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT);
 }
 
+export function isSql78PartnerStakeholderRemovals(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -350,6 +409,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql72MemberPaymentWrites(input)) return AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES;
   if (isSql76PartnershipConsent(input)) return AUTHORIZED_SQL76_PARTNERSHIP_CONSENT;
   if (isSql77CheckStakeholdersGrant(input)) return AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT;
+  if (isSql78PartnerStakeholderRemovals(input)) return AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;

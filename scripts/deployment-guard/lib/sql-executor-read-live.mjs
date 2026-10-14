@@ -10,7 +10,7 @@
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
  *      expected live definition, which no reviewed pin can equal, so the
- *      read-live-selectable pins (ledger, 71, 72, 76, 77) refuse apply with it
+ *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78) refuse apply with it
  *      before connecting.
  *
  * Failures print only an error code and a fixed message: executor and driver
@@ -60,8 +60,20 @@ const BOOLEAN_KEYS = Object.freeze([
   'write_policy_as_expected',
   'grantee_bypasses_rls',
   'tenant_guard_ok',
+  'rls_forced',
+  'owner_is_executor',
+  'select_policy_as_expected',
+  'required_tables_present',
+  'required_roles_present',
+  'references_granted',
+  'schema_create_granted',
+  'prerequisites_ok',
+  'share_key_present',
+  'default_acl_as_expected',
 ]);
-const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count', 'other_write_policy_count']);
+const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count', 'other_write_policy_count', 'default_acl_entry_count']);
+// Hashes of pinned-object state (not secrets); shown so a reviewer can compare runs.
+const SHA256_KEYS = Object.freeze(['default_acl_sha256']);
 // Label maps: values must be short lowercase labels; keys are pinned object names.
 const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state']);
 
@@ -118,6 +130,9 @@ export function readLiveSummary(invokeResult, { migration, pin } = {}) {
   }
   for (const key of COUNT_KEYS) {
     if (Number.isInteger(receipt[key]) && receipt[key] >= 0) summary[key] = receipt[key];
+  }
+  for (const key of SHA256_KEYS) {
+    if (SHA256_RE.test(String(receipt[key] || ''))) summary[key] = receipt[key];
   }
   for (const key of LABEL_MAP_KEYS) {
     if (receipt[key] && typeof receipt[key] === 'object') summary[key] = labelsOnly(receipt[key]);

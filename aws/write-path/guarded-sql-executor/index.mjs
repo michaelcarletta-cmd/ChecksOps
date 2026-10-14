@@ -22,6 +22,7 @@ import {
   AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
   AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
   AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
+  AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   MEMBER_PAYMENT_POLICIES,
   MEMBER_PAYMENT_REQUIRED_FUNCTIONS,
@@ -34,6 +35,8 @@ import {
   partnershipConsentStateText,
   PARTNERSHIP_CONNECT_BODY_SHA256,
   PARTNERSHIP_CONNECT_CONFIG,
+  PARTNER_STAKEHOLDER_REMOVALS_TABLE,
+  partnerStakeholderRemovalsStateText,
   SQL_EXECUTOR_FUNCTION,
   classifySql53CreateLive,
   evaluateSqlExecutorAuthorization,
@@ -46,6 +49,7 @@ import {
   isSql72MemberPaymentWrites,
   isSql76PartnershipConsent,
   isSql77CheckStakeholdersGrant,
+  isSql78PartnerStakeholderRemovals,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
   STAKEHOLDER_GRANTEES,
@@ -92,6 +96,7 @@ const SQL71_AMOUNT_GRANT_FILE = path.join(ROOT, 'sql/71_review_amount_column_gra
 const SQL72_MEMBER_PAYMENT_WRITES_FILE = path.join(ROOT, 'sql/72_member_payment_writes.sql');
 const SQL76_PARTNERSHIP_CONSENT_FILE = path.join(ROOT, 'sql/76_tenant_partnership_invitee_consent.sql');
 const SQL77_CHECK_STAKEHOLDERS_GRANT_FILE = path.join(ROOT, 'sql/77_check_stakeholders_write_grant.sql');
+const SQL78_PARTNER_STAKEHOLDER_REMOVALS_FILE = path.join(ROOT, 'sql/78_check_partner_stakeholder_removals.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -2014,6 +2019,490 @@ async function handleSql77CheckStakeholdersGrant({
   }
 }
 
+// --- SQL 78: check_partner_stakeholder_removals table ------------------------
+
+const REMOVALS_TABLE = PARTNER_STAKEHOLDER_REMOVALS_TABLE;
+const REMOVALS_PRESENT_SQL = `SELECT to_regclass('${REMOVALS_TABLE}') IS NOT NULL AS removals_present`;
+// What the CREATE TABLE, its policies and its grant need. REFERENCES is checked
+// for the role that runs the file, which becomes the table owner.
+const REMOVALS_PREREQUISITES_SQL = `
+SELECT
+  to_regclass('public.check_intake_items') IS NOT NULL
+    AND to_regclass('public.tenants') IS NOT NULL
+    AND to_regclass('public.identity_accounts') IS NOT NULL
+    AND to_regclass('public.shared_checks') IS NOT NULL AS required_tables_present,
+  to_regprocedure('public.aws_can_access_tenant(uuid)') IS NOT NULL
+    AND to_regprocedure('public.aws_can_write_tenant(uuid)') IS NOT NULL
+    AND to_regprocedure('public.aws_is_cross_tenant_reader()') IS NOT NULL
+    AND to_regprocedure('pg_catalog.gen_random_uuid()') IS NOT NULL AS required_functions_present,
+  EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') AS required_roles_present,
+  COALESCE(has_table_privilege(to_regclass('public.check_intake_items'), 'REFERENCES')
+    AND has_table_privilege(to_regclass('public.tenants'), 'REFERENCES')
+    AND has_table_privilege(to_regclass('public.identity_accounts'), 'REFERENCES')
+    AND has_table_privilege(to_regclass('public.shared_checks'), 'REFERENCES'), false) AS references_granted,
+  has_schema_privilege('public', 'CREATE') AS schema_create_granted,
+  -- The share FK needs a primary key or unique constraint over exactly these columns.
+  EXISTS (
+    SELECT 1 FROM pg_constraint k
+    WHERE k.conrelid = to_regclass('public.shared_checks') AND k.contype IN ('p', 'u')
+      AND ARRAY(SELECT a.attname::text FROM unnest(k.conkey) n
+        JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = n ORDER BY 1)
+        = ARRAY['check_id', 'source_tenant_id', 'target_tenant_id']
+  ) AS share_key_present
+`.trim();
+// Default privileges that would apply to the new table: the executing role's
+// entries for schema public and its global entries (namespace 0), owner
+// excluded. They are "as expected" when every entry is either for PUBLIC (the
+// file's REVOKE ALL FROM PUBLIC removes it) or a SELECT, INSERT or DELETE for
+// checksops or authenticated without grant option (the file's GRANT gives that
+// anyway). Exactly then the post-apply non-owner ACL is the reviewed one.
+const REMOVALS_DEFAULT_ACL_SQL = `
+SELECT CASE WHEN d.defaclnamespace = 0 THEN 'global' ELSE 'public' END AS scope,
+  COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type, a.is_grantable
+FROM pg_default_acl d
+CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE d.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+  AND d.defaclobjtype = 'r'
+  AND (d.defaclnamespace = 0 OR d.defaclnamespace = 'public'::regnamespace)
+  AND a.grantee <> d.defaclrole
+ORDER BY 1, 2, 3, 4
+`.trim();
+const REMOVALS_INDEXES_SQL = `
+SELECT c.relname AS name, pg_get_indexdef(i.indexrelid) AS def
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+WHERE i.indrelid = to_regclass('${REMOVALS_TABLE}')
+ORDER BY 1
+`.trim();
+const REMOVALS_COLUMNS_SQL = `
+SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS not_null,
+  pg_get_expr(d.adbin, d.adrelid) AS default_expr
+FROM pg_attribute a
+LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE a.attrelid = to_regclass('${REMOVALS_TABLE}') AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum
+`.trim();
+// PostgreSQL 18 also stores NOT NULL as constraint rows (contype 'n'); the
+// column lines already carry not null, so only these kinds are listed.
+const REMOVALS_CONSTRAINTS_SQL = `
+SELECT con.conname AS name, pg_get_constraintdef(con.oid) AS def
+FROM pg_constraint con
+WHERE con.conrelid = to_regclass('${REMOVALS_TABLE}') AND con.contype IN ('p', 'u', 'f', 'c', 'x')
+ORDER BY 1
+`.trim();
+const REMOVALS_RLS_SQL = `
+SELECT c.relrowsecurity AS rls_enabled, c.relforcerowsecurity AS rls_forced,
+  c.relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user) AS owner_is_executor
+FROM pg_class c
+WHERE c.oid = to_regclass('${REMOVALS_TABLE}')
+`.trim();
+const REMOVALS_POLICIES_SQL = `
+SELECT pol.polname AS name,
+  pol.polpermissive AS permissive,
+  CASE pol.polcmd WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT' WHEN 'w' THEN 'UPDATE' WHEN 'd' THEN 'DELETE' ELSE 'ALL' END AS cmd,
+  ARRAY(SELECT CASE WHEN r = 0 THEN 'public' ELSE pg_get_userbyid(r)::text END FROM unnest(pol.polroles) r ORDER BY 1)::text[] AS roles,
+  pg_get_expr(pol.polqual, pol.polrelid) AS using,
+  pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+FROM pg_policy pol
+WHERE pol.polrelid = to_regclass('${REMOVALS_TABLE}')
+ORDER BY 1
+`.trim();
+// Non-owner ACL entries: the owner's own privileges differ by server version.
+const REMOVALS_ACL_SQL = `
+SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type, a.is_grantable
+FROM pg_class c
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.oid = to_regclass('${REMOVALS_TABLE}') AND a.grantee <> c.relowner
+ORDER BY 1, 2, 3
+`.trim();
+// SQL 77's bypass check, against the role that owns the table, or before the
+// table exists, the role that would own it (the one running the file). The
+// grantees are looked up by oid so a missing role reads as unknown (NULL,
+// treated as bypassing) instead of raising.
+const REMOVALS_BYPASS_SQL = `
+WITH o AS (
+  SELECT COALESCE(
+    (SELECT c.relowner FROM pg_class c WHERE c.oid = to_regclass('${REMOVALS_TABLE}')),
+    (SELECT oid FROM pg_roles WHERE rolname = current_user)) AS owner
+), g AS (
+  SELECT oid FROM pg_roles WHERE rolname IN ('checksops', 'authenticated')
+)
+SELECT CASE WHEN (SELECT count(*) FROM g) <> 2 THEN NULL ELSE COALESCE(bool_or(
+  r.rolsuper OR r.rolbypassrls
+  OR pg_has_role(r.oid, o.owner, 'USAGE') OR pg_has_role(r.oid, o.owner, 'SET')
+  OR pg_has_role(r.oid, o.owner, 'USAGE WITH ADMIN OPTION')
+  OR EXISTS (
+    SELECT 1 FROM pg_roles b
+    WHERE (b.rolsuper OR b.rolbypassrls) AND b.oid <> r.oid
+      AND pg_has_role(r.oid, b.oid, 'USAGE WITH ADMIN OPTION'))
+), true) END AS removals_bypasses
+FROM pg_roles r
+CROSS JOIN o
+WHERE o.owner IS NOT NULL
+  AND (r.oid IN (SELECT oid FROM g)
+    OR (NOT r.rolsuper AND EXISTS (
+      SELECT 1 FROM g WHERE pg_has_role(r.oid, g.oid, 'USAGE') OR pg_has_role(r.oid, g.oid, 'SET'))))
+`.trim();
+// Everything else in schema public: relations (minus the new table and its
+// indexes) and the policies of every other table must not change.
+const REMOVALS_SCHEMA_RELATIONS_SQL = `
+SELECT c.relname, c.relkind::text AS relkind
+FROM pg_class c
+WHERE c.relnamespace = 'public'::regnamespace
+  AND c.oid IS DISTINCT FROM to_regclass('${REMOVALS_TABLE}')
+  AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indexrelid = c.oid AND i.indrelid = to_regclass('${REMOVALS_TABLE}'))
+ORDER BY 1, 2
+`.trim();
+const REMOVALS_OTHER_POLICIES_SQL = `
+SELECT pol.polrelid::regclass::text AS table_name, pol.polname, pol.polcmd::text AS polcmd,
+  pol.polpermissive, pol.polroles::text AS polroles,
+  pg_get_expr(pol.polqual, pol.polrelid) AS polqual,
+  pg_get_expr(pol.polwithcheck, pol.polrelid) AS polwithcheck
+FROM pg_policy pol
+WHERE pol.polrelid IS DISTINCT FROM to_regclass('${REMOVALS_TABLE}')
+ORDER BY 1, 2
+`.trim();
+const REMOVALS_SELECT_POLICY = 'aws_select_check_partner_stakeholder_removals';
+const REMOVALS_WRITE_POLICY = 'aws_write_check_partner_stakeholder_removals';
+// aws/rls/sql/12_final_select_policies.sql and 24_complete_write_policies.sql
+// (check_stakeholders), normalized by normalizePolicyExpr.
+const REMOVALS_SELECT_CONDITION = 'public.aws_is_cross_tenant_reader()orpublic.aws_can_access_tenant(tenant_id)';
+const REMOVALS_WRITE_CONDITION = 'public.aws_can_write_tenant(tenant_id)';
+// The reviewed file, comments removed and whitespace collapsed.
+export const SQL78_NORMALIZED_STATEMENTS = [
+  'CREATE TABLE public.check_partner_stakeholder_removals (',
+  'id uuid PRIMARY KEY DEFAULT gen_random_uuid(),',
+  'check_intake_item_id uuid NOT NULL REFERENCES public.check_intake_items(id) ON DELETE CASCADE,',
+  'tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,',
+  'partner_tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,',
+  'removed_by uuid REFERENCES public.identity_accounts(application_user_id) ON DELETE SET NULL,',
+  'created_at timestamptz NOT NULL DEFAULT now(),',
+  'CONSTRAINT check_partner_stakeholder_removals_unique UNIQUE (check_intake_item_id, tenant_id, partner_tenant_id),',
+  'CONSTRAINT check_partner_stakeholder_removals_not_self CHECK (partner_tenant_id <> tenant_id),',
+  'CONSTRAINT check_partner_stakeholder_removals_share_fkey FOREIGN KEY (check_intake_item_id, tenant_id, partner_tenant_id)',
+  'REFERENCES public.shared_checks (check_id, source_tenant_id, target_tenant_id) ON DELETE CASCADE',
+  ');',
+  'CREATE INDEX check_partner_stakeholder_removals_tenant_id_idx',
+  'ON public.check_partner_stakeholder_removals (tenant_id);',
+  'CREATE INDEX check_partner_stakeholder_removals_partner_tenant_id_idx',
+  'ON public.check_partner_stakeholder_removals (partner_tenant_id);',
+  'ALTER TABLE public.check_partner_stakeholder_removals ENABLE ROW LEVEL SECURITY;',
+  'CREATE POLICY aws_select_check_partner_stakeholder_removals ON public.check_partner_stakeholder_removals',
+  'FOR SELECT TO authenticated',
+  'USING (public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id));',
+  'CREATE POLICY aws_write_check_partner_stakeholder_removals ON public.check_partner_stakeholder_removals',
+  'FOR ALL TO authenticated',
+  'USING (public.aws_can_write_tenant(tenant_id))',
+  'WITH CHECK (public.aws_can_write_tenant(tenant_id));',
+  'REVOKE ALL ON TABLE public.check_partner_stakeholder_removals FROM PUBLIC;',
+  'GRANT SELECT, INSERT, DELETE ON TABLE public.check_partner_stakeholder_removals TO checksops, authenticated;',
+].join(' ');
+
+function normalizeSql78(text) {
+  return String(text).replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function removalsPolicyState(policies) {
+  const select = policies.find((policy) => policy.name === REMOVALS_SELECT_POLICY);
+  const write = policies.find((policy) => policy.name === REMOVALS_WRITE_POLICY);
+  const onlyAuthenticated = (policy) => Array.isArray(policy?.roles) && policy.roles.length === 1 && policy.roles[0] === 'authenticated';
+  const selectAsExpected = Boolean(select) && select.permissive === true && select.cmd === 'SELECT'
+    && onlyAuthenticated(select)
+    && normalizePolicyExpr(select.using) === REMOVALS_SELECT_CONDITION
+    && select.with_check == null;
+  const writeAsExpected = Boolean(write) && write.permissive === true && write.cmd === 'ALL'
+    && onlyAuthenticated(write)
+    && normalizePolicyExpr(write.using) === REMOVALS_WRITE_CONDITION
+    && normalizePolicyExpr(write.with_check) === REMOVALS_WRITE_CONDITION;
+  return {
+    select_policy_as_expected: selectAsExpected,
+    write_policy_present: Boolean(write),
+    write_policy_as_expected: writeAsExpected,
+    other_policy_count: policies.filter((policy) => policy.name !== REMOVALS_SELECT_POLICY && policy.name !== REMOVALS_WRITE_POLICY).length,
+  };
+}
+
+/**
+ * Read-only fingerprint of public.check_partner_stakeholder_removals and of
+ * what SQL 78 needs to create it.
+ */
+export async function readPartnerStakeholderRemovalsState(client) {
+  // pg_get_expr / pg_get_constraintdef / regclass print schema-qualified names
+  // with only pg_catalog on the path.
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const present = (await client.query(REMOVALS_PRESENT_SQL))?.rows?.[0]?.removals_present === true;
+  const prereq = (await client.query(REMOVALS_PREREQUISITES_SQL))?.rows?.[0] || {};
+  const prerequisites = {
+    required_tables_present: prereq.required_tables_present === true,
+    required_functions_present: prereq.required_functions_present === true,
+    required_roles_present: prereq.required_roles_present === true,
+    references_granted: prereq.references_granted === true,
+    schema_create_granted: prereq.schema_create_granted === true,
+    share_key_present: prereq.share_key_present === true,
+  };
+  const prerequisitesOk = Object.values(prerequisites).every(Boolean);
+  const bypassesRls = (await client.query(REMOVALS_BYPASS_SQL))?.rows?.[0]?.removals_bypasses !== false;
+  const defaultAcl = ((await client.query(REMOVALS_DEFAULT_ACL_SQL))?.rows || []).map((row) => ({
+    scope: row.scope, grantee: row.grantee, privilege: row.privilege_type, grantable: row.is_grantable === true,
+  }));
+  const defaultAclEntries = defaultAcl
+    .map((row) => `${row.scope} ${row.grantee} ${row.privilege}${row.grantable ? ' with grant option' : ''}`)
+    .sort();
+  const defaults = {
+    default_acl_as_expected: defaultAcl.every((row) => row.grantee === 'PUBLIC' || (
+      ['checksops', 'authenticated'].includes(row.grantee)
+      && ['SELECT', 'INSERT', 'DELETE'].includes(row.privilege)
+      && row.grantable === false)),
+    default_acl_entries: defaultAclEntries,
+    default_acl_entry_count: defaultAclEntries.length,
+    default_acl_sha256: hashSqlDefinition(defaultAclEntries.join('\n')),
+  };
+  if (!present) {
+    return ok({
+      table_present: false,
+      ...prerequisites,
+      prerequisites_ok: prerequisitesOk,
+      ...defaults,
+      grantee_bypasses_rls: bypassesRls,
+      tenant_guard_ok: false,
+      live_definition_sha256: hashSqlDefinition(partnerStakeholderRemovalsStateText({ present: false })),
+    });
+  }
+  const columns = ((await client.query(REMOVALS_COLUMNS_SQL))?.rows || []).map((row) => ({
+    name: row.name, type: row.type, not_null: row.not_null === true, default: row.default_expr ?? null,
+  }));
+  const constraints = ((await client.query(REMOVALS_CONSTRAINTS_SQL))?.rows || []).map((row) => ({ name: row.name, def: row.def }));
+  const indexes = ((await client.query(REMOVALS_INDEXES_SQL))?.rows || []).map((row) => ({ name: row.name, def: row.def }));
+  const rls = (await client.query(REMOVALS_RLS_SQL))?.rows?.[0] || {};
+  const policies = (await client.query(REMOVALS_POLICIES_SQL))?.rows || [];
+  const acl = ((await client.query(REMOVALS_ACL_SQL))?.rows || []).map((row) => ({
+    grantee: row.grantee, privilege: row.privilege_type, grantable: row.is_grantable === true,
+  }));
+  const policyState = removalsPolicyState(policies);
+  const rlsEnabled = rls.rls_enabled === true;
+  const state = {
+    present: true,
+    columns,
+    constraints,
+    indexes,
+    rls_enabled: rlsEnabled,
+    rls_forced: rls.rls_forced === true,
+    policies,
+    acl,
+    owner_is_executor: rls.owner_is_executor === true,
+  };
+  return ok({
+    table_present: true,
+    ...prerequisites,
+    prerequisites_ok: prerequisitesOk,
+    ...defaults,
+    rls_enabled: rlsEnabled,
+    rls_forced: state.rls_forced,
+    owner_is_executor: state.owner_is_executor,
+    ...policyState,
+    grantee_bypasses_rls: bypassesRls,
+    // Every condition that keeps reads and writes inside the row's own tenant.
+    tenant_guard_ok: rlsEnabled
+      && policyState.select_policy_as_expected
+      && policyState.write_policy_as_expected
+      && policyState.other_policy_count === 0
+      && !bypassesRls,
+    update_granted: acl.some((row) => row.privilege === 'UPDATE'),
+    live_definition_sha256: hashSqlDefinition(partnerStakeholderRemovalsStateText(state)),
+  });
+}
+
+async function readPublicSchemaSnapshot(client) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const relations = (await client.query(REMOVALS_SCHEMA_RELATIONS_SQL))?.rows || [];
+  const policies = (await client.query(REMOVALS_OTHER_POLICIES_SQL))?.rows || [];
+  return {
+    relations_sha256: hashSqlDefinition(relations.map((row) => `${row.relname}:${row.relkind}`).join('\n')),
+    other_policies_sha256: hashSqlDefinition(policies.map((row) => JSON.stringify([
+      row.table_name, row.polname, row.polcmd, row.polpermissive, row.polroles, row.polqual, row.polwithcheck,
+    ])).join('\n')),
+  };
+}
+
+const SQL78_SHA256_RE = /^[0-9a-f]{64}$/;
+
+/** A test may supply `pin` only as the committed pin with a reviewed expected hash filled in. */
+function sql78PinIsCommitted(pin) {
+  const committed = AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS;
+  return Boolean(pin) && ['filename', 'migration_id', 'commit', 'source_sha256', 'intended_replacement_sha256', 'table']
+    .every((key) => pin[key] === committed[key]);
+}
+
+async function handleSql78PartnerStakeholderRemovals({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile78,
+  pin = AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
+}) {
+  if (!sql78PinIsCommitted(pin)) {
+    return fail(CODES.SQL_COLLISION, 'SQL 78 pin does not match the committed allowlist entry');
+  }
+  const embedded = readEmbeddedSql(sqlFile78, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (normalizeSql78(embedded.details.text) !== SQL78_NORMALIZED_STATEMENTS) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 78 is not exactly the reviewed statements');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 78 executor action ${event.action}`);
+  }
+  const pinExecutable = SQL78_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, 'SQL 78 pin has no reviewed pre-apply live definition hash yet; apply is refused');
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 78 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readPartnerStakeholderRemovalsState(client);
+      await rollback();
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && state.details.table_present === false
+            && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && state.details.prerequisites_ok === true
+            && state.details.default_acl_as_expected === true
+            && state.details.grantee_bypasses_rls === false,
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql78_check_partner_stakeholder_removals']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readPartnerStakeholderRemovalsState(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.table_present) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'public.check_partner_stakeholder_removals is already in place; refuse re-create', {
+        live_definition_sha256: before.details.live_definition_sha256,
+        matches_intended: before.details.live_definition_sha256 === pin.intended_replacement_sha256,
+      });
+    }
+    if (before.details.prerequisites_ok !== true || before.details.grantee_bypasses_rls !== false) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 78 prerequisites are not met (referenced tables, shared_checks key, policy functions, roles, REFERENCES, schema CREATE, or a grantee that bypasses row-level security)', {
+        required_tables_present: before.details.required_tables_present,
+        share_key_present: before.details.share_key_present,
+        required_functions_present: before.details.required_functions_present,
+        required_roles_present: before.details.required_roles_present,
+        references_granted: before.details.references_granted,
+        schema_create_granted: before.details.schema_create_granted,
+        grantee_bypasses_rls: before.details.grantee_bypasses_rls,
+      });
+    }
+    if (before.details.default_acl_as_expected !== true) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'default privileges for new tables in schema public would grant more than SQL 78 leaves; refuse before creating the table', {
+        default_acl_entries: before.details.default_acl_entries,
+      });
+    }
+    if (before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'check_partner_stakeholder_removals is not the expected pre-apply state');
+    }
+    const schemaBefore = await readPublicSchemaSnapshot(client);
+
+    await client.query(embedded.details.text);
+
+    const after = await readPartnerStakeholderRemovalsState(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const schemaAfter = await readPublicSchemaSnapshot(client);
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.tenant_guard_ok !== true
+      || schemaAfter.relations_sha256 !== schemaBefore.relations_sha256
+      || schemaAfter.other_policies_sha256 !== schemaBefore.other_policies_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 78 did not land exactly on the reviewed table, or changed something else in schema public', {
+        after_hash: after.details.live_definition_sha256,
+        tenant_guard_ok: after.details.tenant_guard_ok,
+        relations_unchanged: schemaAfter.relations_sha256 === schemaBefore.relations_sha256,
+        other_policies_unchanged: schemaAfter.other_policies_sha256 === schemaBefore.other_policies_sha256,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        tenant_guard_ok: after.details.tenant_guard_ok,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 // --- SQL 72: tenant-member payment write policies ---------------------------
 
 const PAYMENT_POLICIES_SQL = `
@@ -2611,6 +3100,8 @@ export function createHandler({
   sql76Pin = AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
   sqlFile77 = SQL77_CHECK_STAKEHOLDERS_GRANT_FILE,
   sql77Pin = AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
+  sqlFile78 = SQL78_PARTNER_STAKEHOLDER_REMOVALS_FILE,
+  sql78Pin = AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -2658,6 +3149,10 @@ export function createHandler({
 
     if (isSql77CheckStakeholdersGrant(event)) {
       return handleSql77CheckStakeholdersGrant({ event, authorization, identity, connect, sqlFile77, pin: sql77Pin });
+    }
+
+    if (isSql78PartnerStakeholderRemovals(event)) {
+      return handleSql78PartnerStakeholderRemovals({ event, authorization, identity, connect, sqlFile78, pin: sql78Pin });
     }
 
     if (isLedger20261007193200(event)) {
