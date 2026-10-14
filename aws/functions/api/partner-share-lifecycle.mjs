@@ -58,6 +58,30 @@ const statusForSql = (error) => {
   return 403;
 };
 
+/**
+ * Sharing a check (again) with a partner makes that partner one of the check's
+ * stakeholders again: drop any removal the owner recorded (SQL 78). Same
+ * transaction as the share. The removal is keyed by the check owner, which is the
+ * share's source tenant (aws_share_check_with_partner uses the check's tenant_id).
+ * Where SQL 78 is not applied yet the table is absent and there is nothing to clear.
+ */
+export const clearPartnerStakeholderRemoval = async (client, checkId, partnerTenantId) => {
+  const present = (await client.query(
+    "SELECT to_regclass('public.check_partner_stakeholder_removals') IS NOT NULL AS present",
+  )).rows[0]?.present === true;
+  if (!present) return { cleared: 0, tablePresent: false };
+  const deleted = await client.query(
+    `DELETE FROM public.check_partner_stakeholder_removals r
+     USING public.check_intake_items c
+     WHERE r.check_intake_item_id = $1::uuid
+       AND r.partner_tenant_id = $2::uuid
+       AND c.id = r.check_intake_item_id
+       AND r.tenant_id = c.tenant_id`,
+    [checkId, partnerTenantId],
+  );
+  return { cleared: Number(deleted?.rowCount || 0), tablePresent: true };
+};
+
 export const executePartnerShareRpc = async ({ client, name, args }) => {
   if (name === 'connect_partner_by_code') {
     const code = String(arg(args, '_code', 'code') || '');
@@ -79,7 +103,9 @@ export const executePartnerShareRpc = async ({ client, name, args }) => {
       'SELECT public.aws_share_check_with_partner($1::uuid, $2::uuid) AS result',
       [checkId, targetTenantId],
     );
-    return { data: { ...result.rows[0]?.result, ignoredSourceTenantId: Boolean(ignoredSource) } };
+    const data = result.rows[0]?.result;
+    if (data?.ok === true) await clearPartnerStakeholderRemoval(client, checkId, targetTenantId);
+    return { data: { ...data, ignoredSourceTenantId: Boolean(ignoredSource) } };
   }
   if (name === 'revoke_shared_check') {
     const shareId = arg(args, '_share_id', 'share_id', 'id');

@@ -24,6 +24,7 @@
   "check_intake_mortgage_draws",
   "check_message_reads",
   "check_messages",
+  "check_partner_stakeholder_removals",
   "check_payees",
   "check_payment_directions",
   "check_reconciliation_alerts",

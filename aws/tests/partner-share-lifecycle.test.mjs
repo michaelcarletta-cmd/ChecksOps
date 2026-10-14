@@ -109,3 +109,68 @@ test('Settings holds Partner Code entry; check Share uses active-partner dropdow
   assert.equal(/placeholder="e\.g\. AB3K7X9P"/.test(share), false);
   assert.equal(/redeemCode/.test(share), false);
 });
+
+const shareClient = ({ shareResult = { ok: true, created: false, reactivated: true, share_id: 's1' }, tablePresent = true, shareThrows = null } = {}) => {
+  const calls = [];
+  return {
+    calls,
+    query: async (sql, params) => {
+      calls.push({ sql: String(sql), params });
+      if (String(sql).includes('aws_share_check_with_partner')) {
+        if (shareThrows) throw shareThrows;
+        return { rows: [{ result: shareResult }] };
+      }
+      if (String(sql).includes("to_regclass('public.check_partner_stakeholder_removals')")) {
+        return { rows: [{ present: tablePresent }] };
+      }
+      if (String(sql).includes('DELETE FROM public.check_partner_stakeholder_removals')) {
+        if (!tablePresent) { const error = new Error('relation does not exist'); error.code = '42P01'; throw error; }
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [] };
+    },
+  };
+};
+
+test('sharing a check again clears the owner\'s removal of that partner, in the same transaction', async () => {
+  const checkId = 'c1111111-1111-4111-8111-111111111111';
+  const partnerId = '22222222-2222-4222-8222-222222222222';
+  for (const shareResult of [
+    { ok: true, created: false, reactivated: true, share_id: 's1' },
+    { ok: true, created: true, reactivated: false, share_id: 's1' },
+    { ok: true, created: false, reactivated: false, share_id: 's1' },
+  ]) {
+    const client = shareClient({ shareResult });
+    const shared = await executePartnerShareRpc({
+      client, name: 'share_check_with_partner', args: { _check_id: checkId, _target_tenant_id: partnerId },
+    });
+    assert.equal(shared.data.ok, true);
+    assert.equal(client.calls[0].sql.includes('aws_share_check_with_partner'), true);
+    const del = client.calls.find((c) => c.sql.includes('DELETE FROM public.check_partner_stakeholder_removals'));
+    assert.ok(del, JSON.stringify(shareResult));
+    assert.deepEqual(del.params, [checkId, partnerId]);
+    // Keyed by the check owner (the share's source tenant), never a client value.
+    assert.match(del.sql, /r\.tenant_id = c\.tenant_id/);
+    assert.match(del.sql, /c\.id = r\.check_intake_item_id/);
+  }
+
+  // Without SQL 78 (production today) sharing works and the table is never touched.
+  const absent = shareClient({ tablePresent: false });
+  const shared = await executePartnerShareRpc({
+    client: absent, name: 'share_check_with_partner', args: { _check_id: checkId, _target_tenant_id: partnerId },
+  });
+  assert.equal(shared.data.ok, true);
+  assert.equal(absent.calls.some((c) => c.sql.includes('DELETE FROM public.check_partner_stakeholder_removals')), false);
+
+  // A refused share clears nothing.
+  const refused = shareClient({ shareThrows: Object.assign(new Error('not_a_partner'), { code: '42501' }) });
+  await assert.rejects(executePartnerShareRpc({
+    client: refused, name: 'share_check_with_partner', args: { _check_id: checkId, _target_tenant_id: partnerId },
+  }));
+  assert.equal(refused.calls.some((c) => c.sql.includes('check_partner_stakeholder_removals')), false);
+
+  // Revoking a share leaves any removal in place (the share row and removal both stay).
+  const revoke = shareClient();
+  await executePartnerShareRpc({ client: revoke, name: 'revoke_shared_check', args: { _share_id: 'a1111111-1111-4111-8111-111111111111' } });
+  assert.equal(revoke.calls.some((c) => c.sql.includes('check_partner_stakeholder_removals')), false);
+});
