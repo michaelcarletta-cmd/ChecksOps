@@ -138,7 +138,7 @@ test('environment check refuses any changed executor variable', () => {
 });
 
 test('only reviewed pins are selectable and candidate members mirror the ensure pack list', () => {
-  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant']);
+  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant', 'sql78-check-partner-stakeholder-removals']);
   assert.ok(Object.values(MIGRATIONS).every((pin) => AUTHORIZED_STAGING_SQL.includes(pin)));
   const { members, sourceOf } = candidateMembers(REPO_ROOT);
   assert.deepEqual(Object.keys(members).sort(), EXECUTOR_PACK_MEMBERS.map(([, to]) => to).sort());
@@ -504,6 +504,7 @@ test('every selectable pin refuses apply with the read-live sentinel before conn
     sqlFile72: file(MIGRATIONS['sql72-member-payment-writes']),
     sqlFile76: file(MIGRATIONS['sql76-tenant-partnership-consent']),
     sqlFile77: file(MIGRATIONS['sql77-check-stakeholders-grant']),
+    sqlFile78: file(MIGRATIONS['sql78-check-partner-stakeholder-removals']),
   });
   for (const [key, pin] of Object.entries(MIGRATIONS)) {
     const event = {
