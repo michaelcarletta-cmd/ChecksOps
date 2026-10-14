@@ -76,6 +76,27 @@ jobs:
             '```',
             '',
           ].join('\n'));
+          // Compact copy for the job log: flags and the API files whose live bytes differ from this commit.
+          const lambda = JSON.parse(evidence).lambda || {};
+          const { createHash } = await import('node:crypto');
+          const mainSha = (file) => {
+            try { return createHash('sha256').update(fs.readFileSync(file)).digest('hex'); } catch { return null; }
+          };
+          let matching = 0;
+          const differing = [];
+          for (const member of lambda.package?.members || []) {
+            if (!/\.(m?js|json)$/.test(member.path) || member.path.startsWith('node_modules/')) continue;
+            const main = mainSha(`aws/functions/api/${member.path}`);
+            if (main && main === member.sha256) matching += 1;
+            else differing.push({ path: member.path, live_sha256: member.sha256, main_sha256: main });
+          }
+          console.log(JSON.stringify({
+            lambda_code_sha256: lambda.code_sha256 ?? null,
+            package_status: lambda.package?.status ?? null,
+            workflow_flags: lambda.workflow_flags ?? null,
+            members_matching_main: matching,
+            members_differing_from_main: differing,
+          }, null, 2));
           NODE
 
       - name: Preserve redacted production inspection evidence
