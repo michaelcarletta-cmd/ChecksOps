@@ -165,6 +165,22 @@ export const WRITE_ALLOWLIST = {
       reason: 'Payee record management. Does not send endorsement email or invoke Moov/KYC.',
     },
   },
+  check_stakeholders: {
+    tranche: 2,
+    ops: new Set(['insert', 'delete']),
+    columns: new Set(['check_intake_item_id', 'stakeholder_account_id']),
+    identityColumn: 'added_by',
+    requiredForWrite: { insert: ['check_intake_item_id', 'stakeholder_account_id'], delete: [] },
+    filterColumns: new Set(['id']),
+    resource: 'check',
+    // The server always writes added_via = 'manual'; partner rows come only from sharing.
+    clientIgnored: new Set(['id', 'added_via']),
+    frontend: {
+      file: 'src/components/disbursement/CheckStakeholdersManager.tsx add/remove',
+      op: 'insert/delete',
+      reason: "Links one of the organization's own active saved stakeholders to its own check (or removes a link). Lists who can be paid; sending re-checks the account. No money movement.",
+    },
+  },
   check_endorsements: {
     tranche: 2,
     ops: new Set(['update', 'delete']),
