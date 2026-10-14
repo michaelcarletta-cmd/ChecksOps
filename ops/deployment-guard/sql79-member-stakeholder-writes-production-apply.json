@@ -1,0 +1,25 @@
+{
+  "id": "sql79-member-stakeholder-writes-production-apply",
+  "migration": "sql79",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/79_member_stakeholder_writes.sql",
+  "migration_id": "79_member_stakeholder_writes",
+  "staging_pin_commit": "41a3231a211fda0d0bde8a8346e0496e0d7d43c6",
+  "source_sha256": "87556017ffbb97625af328c55cc468f1938566ad5760eac883375c187c1d1231",
+  "expected_live_definition_sha256": "d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4",
+  "intended_replacement_sha256": "878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7",
+  "authorization_phrase": "CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES",
+  "predecessors": ["sql77", "sql78"],
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864",
+    "basis": "Guarded staging SQL executor apply run #34 (38612871864, main 4ca9e1763, 2026-10-14) of sql79-member-stakeholder-writes: d9bc8921… -> 878d6441…, the four aws_member_* policies present."
+  }
+}

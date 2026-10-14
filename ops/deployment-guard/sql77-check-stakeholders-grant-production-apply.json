@@ -1,0 +1,26 @@
+{
+  "id": "sql77-check-stakeholders-grant-production-apply",
+  "migration": "sql77",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/77_check_stakeholders_write_grant.sql",
+  "migration_id": "77_check_stakeholders_write_grant",
+  "staging_pin_commit": "b70fadfb1e50baa0c5a32a0b17ecda8edd3981ed",
+  "source_sha256": "ed7f1c809b8c66c63e60c4d3504b3cbcbf8088ad1336f418b72a26f528029ec1",
+  "expected_live_definition_sha256": "714659325ea58a54fdc2ad39b35224308f8f9df92629c3c53b8e3c6fe3faa4e7",
+  "intended_replacement_sha256": "e4d49fface305abc732bb225824e4f113e4a0a6ef4f5f2a145bdf3b0324043d1",
+  "authorization_phrase": "GRANT_CHECK_STAKEHOLDERS_WRITE",
+  "predecessors": [],
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440",
+    "basis": "Guarded staging SQL executor run #26 (38574715440, main 06dcdd9ae, 2026-10-14) is the only apply-mode run between the SQL 77 staging read-live (run #22, 38569427366) and the SQL 78 runs; read-live run #28 (38578637419) followed it. Pre 71465932… = checksops SELECT only; intended e4d49ffa… = checksops and authenticated SELECT/INSERT/DELETE, no UPDATE.",
+    "todo": "Confirm from the run #26 log (needs a signed-in GitHub session) that its migration input was sql77-check-stakeholders-grant and its after_hash was e4d49ffa…; the public run list and job steps show only that #26 ran in apply mode."
+  }
+}

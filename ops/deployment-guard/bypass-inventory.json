@@ -89,6 +89,12 @@
       "note": "Official production apply for SQL 72 (five tenant-member payment write policies) only. Requires a sql-apply production-sql receipt owning the pinned file, CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1, the authorization phrase and a single-use id. Refuses arbitrary SQL and any statement beyond the pinned DROP/CREATE POLICY list; inspect is BEGIN READ ONLY ... ROLLBACK."
     },
     {
+      "path": "scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql77-production-apply", "sql78-production-apply", "sql79-production-apply"],
+      "note": "Official production apply for SQL 77 (check_stakeholders grant), SQL 78 (check_partner_stakeholder_removals table) and SQL 79 (four member stakeholder policies) only, one --migration per run, in that order. Requires a sql-apply production-sql receipt owning that migration's pinned file, a pin with execute true, CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1, that pin's authorization phrase and a single-use id. Reuses the staging executor's fingerprints and exact-statement checks; refuses arbitrary SQL, a missing dependency or an unapplied predecessor, and rolls back unless everything else in schema public is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK."
+    },
+    {
       "path": "scripts/deployment-guard/github-sql53-production-apply.mjs",
       "classification": "SAFE",
       "capabilities": ["sql53-production-evaluate"],

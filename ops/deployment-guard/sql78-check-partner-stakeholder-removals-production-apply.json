@@ -1,0 +1,25 @@
+{
+  "id": "sql78-check-partner-stakeholder-removals-production-apply",
+  "migration": "sql78",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/78_check_partner_stakeholder_removals.sql",
+  "migration_id": "78_check_partner_stakeholder_removals",
+  "staging_pin_commit": "0d08a894c635c8790347e2e6e14b5383a0e3bef1",
+  "source_sha256": "d4a33174a546e0623f22397db93eb4c622214f6ff2336e65c110449162797420",
+  "expected_live_definition_sha256": "4031dea6c0fbb70af1b17befa7ffb161fec40227cda080cd87c222dec674d269",
+  "intended_replacement_sha256": "3d650a56a2fd8a4ccfaeaf795ac0de8c4d0b849a748c1769400397d62e92dd40",
+  "authorization_phrase": "CREATE_CHECK_PARTNER_STAKEHOLDER_REMOVALS",
+  "predecessors": ["sql77"],
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38602758947",
+    "basis": "Guarded staging SQL executor apply run #31 (38602758947, main c6841346e, 2026-10-14) of sql78-check-partner-stakeholder-removals: 4031dea6… (table absent) -> 3d650a56… (the reviewed table, indexes, RLS, two policies and grants)."
+  }
+}

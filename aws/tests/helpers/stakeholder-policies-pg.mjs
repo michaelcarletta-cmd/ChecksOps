@@ -115,8 +115,12 @@ export function policyBlock(file, policyName) {
   return text.slice(start, end + 1);
 }
 
-/** Builds the schema as superuser 'ubuntu' (who then owns every table). */
-export async function applyBaseSchema(client) {
+/**
+ * Builds the schema as superuser 'ubuntu' (who then owns every table).
+ * `through` is the last of SQL 77 and 78 to apply (76 = neither, the state
+ * before SQL 77; 77 = SQL 77 only; 78 = both, the default).
+ */
+export async function applyBaseSchema(client, { through = 78 } = {}) {
   const file = (p) => fs.readFileSync(p, 'utf8');
   await client.query(STUBS);
   await client.query(file(path.join(SQL_DIR, '01_role_shim.sql')));
@@ -128,12 +132,12 @@ export async function applyBaseSchema(client) {
   await client.query('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO checksops, authenticated');
   await client.query('REVOKE ALL ON TABLE public.check_stakeholders FROM checksops, authenticated');
   await client.query('GRANT SELECT ON TABLE public.check_stakeholders TO checksops');
-  await client.query(file(SQL_77));
+  if (through >= 77) await client.query(file(SQL_77));
   // The real check_intake_items SELECT policy: SQL 79's EXISTS runs under it.
   await client.query('ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY');
   await client.query(policyBlock('12_final_select_policies.sql', 'aws_select_check_intake_items'));
   await client.query('ALTER TABLE public.check_stakeholders ENABLE ROW LEVEL SECURITY');
   await client.query(policyBlock('12_final_select_policies.sql', 'aws_select_check_stakeholders'));
   await client.query(policyBlock('24_complete_write_policies.sql', 'aws_write_check_stakeholders'));
-  await client.query(file(SQL_78));
+  if (through >= 78) await client.query(file(SQL_78));
 }
