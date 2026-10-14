@@ -21,6 +21,7 @@ on:
           - ledger-20261007193200
           - sql71-review-amount-grant
           - sql72-member-payment-writes
+          - sql76-tenant-partnership-consent
       approved_commit:
         description: "Required for deploy/apply: exact main commit approved for this run"
         required: false
@@ -101,6 +102,7 @@ jobs:
           node --test aws/tests/ledger-20261007193200-executor.test.mjs
           node --test aws/tests/sql-executor-auth.test.mjs
           node --test aws/tests/sql72-member-payment-writes-executor.test.mjs
+          node --test aws/tests/sql76-tenant-partnership-consent-executor.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
           node scripts/deployment-guard/scan-bypass.mjs
