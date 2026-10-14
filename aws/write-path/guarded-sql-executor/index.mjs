@@ -1751,14 +1751,20 @@ ORDER BY 1
 `.trim();
 // Every role the grant reaches (checksops, authenticated, and any role that
 // inherits from or can SET ROLE to either) must be held to RLS on this table:
-// not superuser, not BYPASSRLS, and unable to act as the table owner unless
-// RLS is forced. Other superusers already hold every privilege (and
-// pg_has_role is always true for them), so they are not counted as reached.
+// not superuser or BYPASSRLS, and unable to act as the table owner or to grant
+// itself the owner or a superuser/BYPASSRLS role (ADMIN OPTION). FORCE RLS is
+// no exemption: a role that can act as the owner can turn it off. Other
+// superusers already hold every privilege (and pg_has_role is always true for
+// them), so they are not counted as reached.
 const STAKEHOLDER_BYPASS_SQL = `
 SELECT COALESCE(bool_or(
   r.rolsuper OR r.rolbypassrls
-  OR (pg_has_role(r.oid, c.relowner, 'USAGE') AND NOT c.relforcerowsecurity)
-  OR (pg_has_role(r.oid, c.relowner, 'SET') AND NOT c.relforcerowsecurity)
+  OR pg_has_role(r.oid, c.relowner, 'USAGE') OR pg_has_role(r.oid, c.relowner, 'SET')
+  OR pg_has_role(r.oid, c.relowner, 'USAGE WITH ADMIN OPTION')
+  OR EXISTS (
+    SELECT 1 FROM pg_roles b
+    WHERE (b.rolsuper OR b.rolbypassrls) AND b.oid <> r.oid
+      AND pg_has_role(r.oid, b.oid, 'USAGE WITH ADMIN OPTION'))
 ), true) AS bypasses
 FROM pg_roles r
 CROSS JOIN pg_class c

@@ -410,6 +410,23 @@ test('PostgreSQL 16: a non-superuser owner applies SQL 77 through the real handl
     await refusedThenRestored('owner reachable through authenticated',
       () => admin.query('GRANT sql77_owner TO authenticated'),
       () => admin.query('REVOKE sql77_owner FROM authenticated'));
+    await refusedThenRestored('member of authenticated holds ADMIN on the owner',
+      () => admin.query(`CREATE ROLE sql77_adm IN ROLE authenticated;
+        GRANT sql77_owner TO sql77_adm WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`),
+      () => admin.query('DROP ROLE sql77_adm'));
+    await refusedThenRestored('member of authenticated holds ADMIN on a BYPASSRLS role',
+      () => admin.query(`CREATE ROLE sql77_bypass BYPASSRLS; CREATE ROLE sql77_adm2 IN ROLE authenticated;
+        GRANT sql77_bypass TO sql77_adm2 WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`),
+      () => admin.query('DROP ROLE sql77_adm2; DROP ROLE sql77_bypass'));
+    await refusedThenRestored('FORCE RLS does not exempt an owner-capable role',
+      async () => {
+        await asOwner('ALTER TABLE public.check_stakeholders FORCE ROW LEVEL SECURITY');
+        await admin.query('CREATE ROLE sql77_owner_member IN ROLE authenticated; GRANT sql77_owner TO sql77_owner_member');
+      },
+      async () => {
+        await admin.query('DROP ROLE sql77_owner_member');
+        await asOwner('ALTER TABLE public.check_stakeholders NO FORCE ROW LEVEL SECURITY');
+      });
 
     const event = grantEvent();
     const applied = await handler(event);
