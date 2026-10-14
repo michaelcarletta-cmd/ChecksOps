@@ -4,7 +4,11 @@ import { checkAltFetch } from '../parity/checkalt-client.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
-import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
+import {
+  authorizeCheckAltProduction,
+  CHECKALT_APPROVE_ACTION,
+  serverAmountCentsFromCheck,
+} from './checkalt-authz.mjs';
 import {
   loadExistingProductionDeposit,
   reconcileProductionCheckAltDeposit,
@@ -23,6 +27,11 @@ const fail = (error, statusCode, extra = {}) => ({
   action_taken: false,
   productionExecution: extra.productionExecution === true,
   ...extra,
+});
+
+const denyStepUp = (authz) => fail('step_up_required', 403, {
+  message: 'Enter a current two-factor code to approve this deposit.',
+  evaluation: authz.evaluation,
 });
 
 const membershipsOf = async (client, userId) => {
@@ -104,17 +113,53 @@ export async function handleProductionCheckAltApprove({
     });
   }
 
-  const check = (await client.query(
+  const checkRow = (await client.query(
     `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
     [row.check_intake_item_id],
-  )).rows[0] || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
+  )).rows[0] || null;
+
+  const requireStepUp = actionName === 'approve';
+  // Approve binds the proof to the check, so it needs the check itself; it never
+  // compares the deposit row with a stand-in built from that same row.
+  if (requireStepUp && !checkRow) {
+    return fail('deposit_binding_mismatch', 409, {
+      message: 'The check for this deposit could not be found. Approve was not sent.',
+      spoofFieldsIgnored: spoof,
+      deposit_id: row.id,
+    });
+  }
+  const check = checkRow || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
+  if (requireStepUp) {
+    // The deposit.approve step-up is bound to the check's tenant, id and
+    // server-side amount. Approve only when the deposit row being approved is
+    // that same tenant, check and amount, so the proof covers this deposit.
+    const rowCents = row.amount_cents !== undefined && row.amount_cents !== null && row.amount_cents !== ''
+      ? Number(row.amount_cents)
+      : serverAmountCentsFromCheck({ amount: row.amount });
+    const checkCents = serverAmountCentsFromCheck(check);
+    if (String(check.id || '') !== String(row.check_intake_item_id || '')
+      || String(check.tenant_id || '') !== String(row.tenant_id || '')
+      || !Number.isInteger(rowCents)
+      || !Number.isInteger(checkCents)
+      || rowCents !== checkCents) {
+      return fail('deposit_binding_mismatch', 409, {
+        message: 'The deposit does not match its check tenant and amount. Approve was not sent.',
+        spoofFieldsIgnored: spoof,
+        deposit_id: row.id,
+      });
+    }
+  }
 
   const authz = await authorizeCheckAltProduction({
     client,
     mapping,
     memberships,
     check,
-    requireStepUp: false,
+    requireStepUp,
+    actionKey: CHECKALT_APPROVE_ACTION,
+    // Only this user's deposit.approve TOTP authorizes approve. A dual-control
+    // record or a deposit.submit step-up does not.
+    allowDualControl: false,
   });
   if (!authz.ok && (authz.error === 'financial_unauthorized' || authz.error === 'cross_tenant_denied')) {
     return { ...authz, createdDeposit: false, approvePosted: false, action_taken: false, spoofFieldsIgnored: spoof };
@@ -124,6 +169,12 @@ export async function handleProductionCheckAltApprove({
       message: 'Operator cannot approve production CheckAlt for another authority path.',
       spoofFieldsIgnored: spoof,
     });
+  }
+  if (requireStepUp && !authz.evaluation?.totpOk) {
+    return {
+      ...denyStepUp(authz),
+      spoofFieldsIgnored: spoof,
+    };
   }
 
   const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);

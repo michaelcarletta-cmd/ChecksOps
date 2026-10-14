@@ -325,6 +325,101 @@ test('amount change and action mismatch are rejected', async () => {
   assert.equal(store.stepups.length, 0);
 });
 
+test('deposit.approve TOTP uses the same check/amount binding as deposit.submit', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const stepped = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    tenant_id: OTHER_TENANT,
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(stepped.recorded, true);
+  assert.equal(stepped.amount_cents, 1234);
+  assert.equal(stepped.tenant_id, TENANT);
+  assert.equal(stepped.check_id, CHECK);
+  assert.equal(store.stepups.length, 1);
+  assert.equal(store.stepups[0].action_key, 'deposit.approve');
+  assert.equal(store.stepups[0].tenant_id, TENANT);
+  assert.equal(store.stepups[0].metadata.operation, 'deposit.approve');
+  assert.equal(store.stepups[0].metadata.check_id, CHECK);
+  assert.equal(store.stepups[0].metadata.amount_cents, 1234);
+  assert.equal(store.stepups[0].metadata.source, 'app_financial_totp');
+  assert.equal(Object.prototype.hasOwnProperty.call(store.stepups[0].metadata, 'login_session'), false);
+});
+
+test('deposit.approve TOTP fails closed without a check, on amount mismatch, and on replay', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const noCheck = await handleMfaStepUp(eventOf({ code, action_key: 'deposit.approve' }), depsOf(store));
+  assert.equal(noCheck.error, 'check_intake_item_id is required');
+  const amount = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    check_intake_item_id: CHECK,
+    amount_cents: 1,
+  }), depsOf(store));
+  assert.equal(amount.error, 'amount_mismatch');
+  const missing = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    check_intake_item_id: OTHER_CHECK,
+  }), depsOf(store));
+  assert.equal(missing.error, 'Check not found');
+  assert.equal(store.stepups.length, 0);
+  const first = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(first.ok, true, JSON.stringify(first));
+  const replay = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(replay.ok, false);
+  assert.equal(replay.error, 'mfa_step_up_failed');
+  const replayAsSubmit = await handleMfaStepUp(eventOf({
+    code,
+    action_key: CHECKALT_TOTP_ACTION,
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(replayAsSubmit.ok, false);
+  assert.equal(store.stepups.length, 1);
+});
+
+test('deposit.approve TOTP is refused for a check in another tenant', async () => {
+  const store = createStore({
+    checks: [{ id: CHECK, tenant_id: OTHER_TENANT, amount: 12.34, status: 'ready' }],
+    memberships: [{ tenant_id: TENANT, role: 'admin' }],
+  });
+  const { code } = await enrollTester(store);
+  const denied = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    check_intake_item_id: CHECK,
+    tenant_id: TENANT,
+  }), depsOf(store));
+  assert.equal(denied.error, 'cross_tenant_denied');
+  assert.equal(store.stepups.length, 0);
+});
+
+test('deposit.submit step-up log is unchanged', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const stepped = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(store.stepups[0].action_key, 'deposit.submit');
+  assert.deepEqual(store.stepups[0].metadata, {
+    check_id: CHECK,
+    amount_cents: 1234,
+    operation: 'deposit.submit',
+    source: 'app_financial_totp',
+  });
+});
+
 test('Cognito MFA state is ignored for financial enrollment', async () => {
   const store = createStore();
   const status = await handleMfaStatus(eventOf({}), depsOf(store));

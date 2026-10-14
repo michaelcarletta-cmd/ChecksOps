@@ -449,7 +449,7 @@ const grantStepUp = (store, {
     action_key: action,
     factor_type: action === 'checkalt.dual_control' ? 'dual_control' : 'totp',
     succeeded: true,
-    metadata: { check_id: checkId, amount_cents: amountCents, operation: 'deposit.submit' },
+    metadata: { check_id: checkId, amount_cents: amountCents, operation: action },
     created_at: createdAt,
   });
 };
@@ -1170,6 +1170,7 @@ test('empty Poll Now refreshes tenant pending_approval using stored reference', 
 
 test('refresh-before-approve blocks stale 127 Approved and does not POST approve', async () => {
   const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
   store.itemPayload = { status: 'Approved', statusDescription: 'Approved' };
   store.deposits.push({
     id: DEPOSIT_ID,
@@ -1203,6 +1204,7 @@ test('refresh-before-approve blocks stale 127 Approved and does not POST approve
 
 test('approve still posts only when CheckAlt remains pending_approval', async () => {
   const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
   store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
   store.deposits.push({
     id: DEPOSIT_ID,
@@ -1271,4 +1273,162 @@ test('production approve helper refuses a locator-less body', async () => {
   });
   assert.equal(result.error, 'deposit_locator_required');
   assert.equal(result.approvePosted, false);
+});
+
+const pendingApprovalDeposit = (store, extra = {}) => {
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '123733567',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    ...extra,
+  });
+};
+
+const approveOnce = (store, body = {}) => withEnv(productionFlags, () => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+    deposit_id: DEPOSIT_ID,
+    action: 'approve',
+    ...body,
+  }),
+  '/functions/v1/checkalt-approve-deposit',
+  'POST',
+  submitDeps(store),
+));
+
+const assertApproveRefused = (store, result, error = 'step_up_required') => {
+  assert.equal(result.error, error);
+  assert.equal(result.approvePosted, false);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.itemPosts, 0);
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+};
+
+test('approve without a deposit.approve step-up is refused before CheckAlt is called', async () => {
+  const store = createStore();
+  pendingApprovalDeposit(store);
+  assertApproveRefused(store, await approveOnce(store));
+});
+
+test('approve refuses a deposit.submit step-up and a dual-control record for the same check', async () => {
+  const submitOnly = createStore();
+  pendingApprovalDeposit(submitOnly);
+  grantStepUp(submitOnly, { action: 'deposit.submit' });
+  assertApproveRefused(submitOnly, await approveOnce(submitOnly));
+
+  const dualOnly = createStore();
+  pendingApprovalDeposit(dualOnly);
+  grantStepUp(dualOnly, { action: 'checkalt.dual_control', userId: APPROVER_APP });
+  assertApproveRefused(dualOnly, await approveOnce(dualOnly));
+});
+
+test('approve refuses a deposit.approve step-up for another check, amount, tenant, or user', async () => {
+  for (const proof of [
+    { checkId: OTHER_CHECK_ID },
+    { amountCents: 1235 },
+    { tenantId: C1C_TENANT },
+    { userId: APPROVER_APP },
+  ]) {
+    const store = createStore();
+    pendingApprovalDeposit(store);
+    grantStepUp(store, { action: 'deposit.approve', ...proof });
+    assertApproveRefused(store, await approveOnce(store));
+  }
+});
+
+test('approve refuses a deposit row whose amount or tenant differs from its check', async () => {
+  const amountDrift = createStore();
+  pendingApprovalDeposit(amountDrift, { amount: 1546.72, amount_cents: 154672 });
+  grantStepUp(amountDrift, { action: 'deposit.approve' });
+  grantStepUp(amountDrift, { action: 'deposit.approve', amountCents: 154672 });
+  assertApproveRefused(amountDrift, await approveOnce(amountDrift), 'deposit_binding_mismatch');
+
+  const tenantDrift = createStore({
+    memberships: [
+      { tenant_id: FREEDOM_TENANT, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' },
+      { tenant_id: C1C_TENANT, role: 'admin', tenant_name: 'C1C', tenant_slug: 'c1c' },
+    ],
+  });
+  pendingApprovalDeposit(tenantDrift, { tenant_id: C1C_TENANT });
+  grantStepUp(tenantDrift, { action: 'deposit.approve' });
+  grantStepUp(tenantDrift, { action: 'deposit.approve', tenantId: C1C_TENANT });
+  assertApproveRefused(tenantDrift, await approveOnce(tenantDrift), 'deposit_binding_mismatch');
+});
+
+test('approve refuses when the deposit check row is missing (no self-comparison)', async () => {
+  const store = createStore();
+  pendingApprovalDeposit(store);
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.check = { ...store.check, id: OTHER_CHECK_ID };
+  assertApproveRefused(store, await approveOnce(store), 'deposit_binding_mismatch');
+});
+
+test('approve refuses an expired deposit.approve step-up', async () => {
+  const store = createStore();
+  pendingApprovalDeposit(store);
+  grantStepUp(store, {
+    action: 'deposit.approve',
+    createdAt: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+  });
+  assertApproveRefused(store, await approveOnce(store));
+});
+
+test('a valid deposit.approve step-up approves once; replaying it never POSTs approve again', async () => {
+  const store = createStore();
+  pendingApprovalDeposit(store);
+  grantStepUp(store, { action: 'deposit.approve' });
+  const first = await approveOnce(store);
+  assert.equal(first.ok, true, JSON.stringify(first));
+  assert.equal(first.approvePosted, true);
+  assert.equal(first.createdDeposit, false);
+  assert.equal(first.checkalt_reference, '123733567');
+  assert.equal(first.status, 'submitted');
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+
+  store.itemPayload = { statusCode: 127, statusDescription: 'Approved' };
+  const replay = await approveOnce(store);
+  assert.equal(replay.approvePosted, false);
+  assert.equal(replay.action_taken, false);
+  assert.equal(replay.already_resolved, true);
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+});
+
+test('reject does not require a deposit.approve step-up', async () => {
+  const store = createStore();
+  pendingApprovalDeposit(store);
+  const result = await approveOnce(store, { action: 'reject', reject_notes: 'bad image' });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.status, 'rejected');
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+});
+
+test('valid deposit.approve step-up plus CheckAlt approve failure stays approval-specific', async () => {
+  const store = createStore();
+  pendingApprovalDeposit(store);
+  store.approvePayload = { success: false, statusDescription: 'Unable to approve' };
+  grantStepUp(store, { action: 'deposit.approve' });
+  const result = await approveOnce(store);
+  assert.equal(result.error, 'checkalt_approve_failed');
+  assert.equal(result.approvePosted, false);
+  assert.doesNotMatch(String(result.message || ''), /authenticator|verification code/i);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+});
+
+test('submit still accepts only a deposit.submit step-up', async () => {
+  const approveOnly = createStore();
+  grantStepUp(approveOnly, { action: 'deposit.approve' });
+  const denied = await submitOnce(approveOnly);
+  assert.equal(denied.error, 'step_up_required');
+  assert.equal(approveOnly.processPosts, 0);
 });

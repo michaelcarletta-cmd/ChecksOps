@@ -385,6 +385,7 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
   const { membershipForTenant } = await import('./financial-ownership.mjs');
   const {
     CHECKALT_TOTP_ACTION,
+    FINANCIAL_CHECKALT_STEPUP_ACTIONS,
     serverAmountCentsFromCheck,
   } = await import('./providers/production/checkalt-authz.mjs');
   const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
@@ -392,7 +393,12 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
   if (actionKey === WALLET_FUND_TOTP_ACTION) {
     return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof });
   }
-  if (actionKey !== CHECKALT_TOTP_ACTION) {
+  // If an older checkalt-authz.mjs is live (deploy order or rollback), keep
+  // deposit.submit working rather than failing every check-bound step-up.
+  const checkAltStepUpActions = Array.isArray(FINANCIAL_CHECKALT_STEPUP_ACTIONS)
+    ? FINANCIAL_CHECKALT_STEPUP_ACTIONS
+    : [CHECKALT_TOTP_ACTION];
+  if (!checkAltStepUpActions.includes(actionKey)) {
     return {
       ok: false,
       statusCode: 409,
@@ -484,7 +490,6 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
       applicationUserId: mapping.application_user_id,
     };
   }
-  const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
   const row = (await client.query(
     `INSERT INTO public.financial_stepup_log
       (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
@@ -497,7 +502,7 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
       JSON.stringify({
         check_id: bound.check.id,
         amount_cents: bound.amountCents,
-        operation: CHECKALT_TOTP_ACTION,
+        operation: bound.actionKey,
         source: 'app_financial_totp',
       }),
     ],
