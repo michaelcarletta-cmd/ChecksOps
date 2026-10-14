@@ -246,7 +246,7 @@ export const AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT = Object.freeze({
   migration_id: '77_check_stakeholders_write_grant',
   // The commit that authored the current file bytes. Re-pin if the branch is
   // rebased or squashed before it reaches main.
-  commit: 'PENDING_COMMIT',
+  commit: 'b70fadfb1e50baa0c5a32a0b17ecda8edd3981ed',
   source_sha256: 'ed7f1c809b8c66c63e60c4d3504b3cbcbf8088ad1336f418b72a26f528029ec1',
   // Not reviewed yet: a staging read-live run reports the live value, and a
   // later reviewed change pins it. Until then apply is refused.
