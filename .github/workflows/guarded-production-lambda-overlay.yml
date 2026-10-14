@@ -33,6 +33,9 @@ on:
           - providers/production/checkalt-authz.mjs
           - auth-financial-totp.mjs
           - providers/production/checkalt-approve.mjs
+          - providers/production/checkalt-config.mjs
+          - providers/production/checkalt-idempotency.mjs
+          - providers/production/checkalt-submit.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
