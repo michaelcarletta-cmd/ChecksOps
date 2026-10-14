@@ -43,7 +43,7 @@ test('origin/main-based manifest validates fail-closed with production-spa PRODU
   assert.equal(locked[0].id, 'production-spa');
   assert.equal(locked[0].production_active, true);
   assert.equal(locked[0].artifact.name, '/assets/index-C2eiQ5RZ.js');
-  assert.equal(locked[0].rollback.artifact, '/assets/index-C7bJFkEQ.js');
+  assert.equal(locked[0].rollback.artifact, '/assets/index-uclGj-Yl.js');
   assert.equal(inputs.manifest.fail_closed, true);
   assert.equal(validateMain([], ROOT), 0);
 });
