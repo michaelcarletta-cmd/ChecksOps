@@ -21,6 +21,7 @@ import {
   AUTHORIZED_SQL71_AMOUNT_GRANT,
   AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
   AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
+  AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   MEMBER_PAYMENT_POLICIES,
   MEMBER_PAYMENT_REQUIRED_FUNCTIONS,
@@ -44,7 +45,11 @@ import {
   isSql71AmountGrant,
   isSql72MemberPaymentWrites,
   isSql76PartnershipConsent,
+  isSql77CheckStakeholdersGrant,
   isTenantUsersSameCheckPermissions,
+  STAKEHOLDER_GRANT_PRIVILEGES,
+  STAKEHOLDER_GRANTEES,
+  stakeholderGrantStateText,
 } from './lib/sql-executor-auth.mjs';
 import {
   AUTHORIZED_SYNTHETIC_FIXTURE,
@@ -86,6 +91,7 @@ const LEDGER_20261007193200_FILE = path.join(
 const SQL71_AMOUNT_GRANT_FILE = path.join(ROOT, 'sql/71_review_amount_column_grant.sql');
 const SQL72_MEMBER_PAYMENT_WRITES_FILE = path.join(ROOT, 'sql/72_member_payment_writes.sql');
 const SQL76_PARTNERSHIP_CONSENT_FILE = path.join(ROOT, 'sql/76_tenant_partnership_invitee_consent.sql');
+const SQL77_CHECK_STAKEHOLDERS_GRANT_FILE = path.join(ROOT, 'sql/77_check_stakeholders_write_grant.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -1714,6 +1720,198 @@ async function handleSql71AmountGrant({ event, authorization, identity, connect,
   }
 }
 
+// --- SQL 77: check_stakeholders SELECT/INSERT/DELETE grant -------------------
+
+// Direct ACL entries of public.check_stakeholders (owner defaults when relacl is NULL).
+const STAKEHOLDER_ACL_SQL = `
+SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type, a.is_grantable
+FROM pg_class c
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.oid = to_regclass('public.check_stakeholders')
+ORDER BY 1, 2, 3
+`.trim();
+const STAKEHOLDER_TABLE_SQL = "SELECT to_regclass('public.check_stakeholders') IS NOT NULL AS present";
+// The file may hold only comments and this one statement.
+const SQL77_SINGLE_STATEMENT_RE = /^(?:\s*--[^\n]*\n)*\s*GRANT SELECT, INSERT, DELETE ON TABLE public\.check_stakeholders TO checksops, authenticated;\s*$/;
+
+/**
+ * Read-only fingerprint of the SQL 77 grant: the two grantees' direct SELECT,
+ * INSERT, UPDATE and DELETE privileges, plus a hash of every other ACL entry.
+ */
+export async function readStakeholderGrantState(client) {
+  const present = (await client.query(STAKEHOLDER_TABLE_SQL))?.rows?.[0]?.present === true;
+  if (!present) return fail(CODES.SQL_COLLISION, 'public.check_stakeholders is missing');
+  const acl = (await client.query(STAKEHOLDER_ACL_SQL))?.rows || [];
+  const privilegeState = Object.fromEntries(STAKEHOLDER_GRANTEES.map((grantee) => [
+    grantee,
+    Object.fromEntries(STAKEHOLDER_GRANT_PRIVILEGES.map((privilege) => [
+      privilege,
+      acl.some((row) => row.grantee === grantee && row.privilege_type === privilege) ? 'granted' : 'absent',
+    ])),
+  ]));
+  const preserved = acl
+    .filter((row) => !(STAKEHOLDER_GRANTEES.includes(row.grantee) && STAKEHOLDER_GRANT_PRIVILEGES.includes(row.privilege_type)))
+    .map((row) => `${row.grantee}:${row.privilege_type}:${row.is_grantable === true}`)
+    .sort();
+  return ok({
+    table_present: true,
+    privilege_state: privilegeState,
+    update_granted: STAKEHOLDER_GRANTEES.some((grantee) => privilegeState[grantee].UPDATE === 'granted'),
+    preserved_acl_sha256: hashSqlDefinition(preserved.join('\n')),
+    live_definition_sha256: hashSqlDefinition(stakeholderGrantStateText(privilegeState)),
+  });
+}
+
+const SQL77_SHA256_RE = /^[0-9a-f]{64}$/;
+
+/** A test may supply `pin` only as the committed pin with a reviewed expected hash filled in. */
+function sql77PinIsCommitted(pin) {
+  const committed = AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT;
+  return Boolean(pin) && ['filename', 'migration_id', 'commit', 'source_sha256', 'intended_replacement_sha256', 'table']
+    .every((key) => pin[key] === committed[key]);
+}
+
+async function handleSql77CheckStakeholdersGrant({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile77,
+  pin = AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
+}) {
+  if (!sql77PinIsCommitted(pin)) {
+    return fail(CODES.SQL_COLLISION, 'SQL 77 pin does not match the committed allowlist entry');
+  }
+  const embedded = readEmbeddedSql(sqlFile77, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!SQL77_SINGLE_STATEMENT_RE.test(embedded.details.text)) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 77 is not the single pinned GRANT statement');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 77 executor action ${event.action}`);
+  }
+  const pinExecutable = SQL77_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, 'SQL 77 pin has no reviewed pre-apply live definition hash yet; apply is refused');
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 77 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      const state = await readStakeholderGrantState(client);
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && state.details.update_granted === false,
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql77_check_stakeholders_grant']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readStakeholderGrantState(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 77 grant is already in place; refuse re-grant');
+    }
+    if (before.details.update_granted) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'a grantee already has UPDATE on check_stakeholders; not the expected state');
+    }
+    if (before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'check_stakeholders privileges are not the expected pre-apply state', {
+        privilege_state: before.details.privilege_state,
+      });
+    }
+
+    await client.query(embedded.details.text);
+
+    const after = await readStakeholderGrantState(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.preserved_acl_sha256 !== before.details.preserved_acl_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 77 changed more than SELECT/INSERT/DELETE for checksops and authenticated', {
+        before: before.details.privilege_state,
+        after: after.details.privilege_state,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        privilege_state_before: before.details.privilege_state,
+        privilege_state_after: after.details.privilege_state,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 // --- SQL 72: tenant-member payment write policies ---------------------------
 
 const PAYMENT_POLICIES_SQL = `
@@ -2309,6 +2507,8 @@ export function createHandler({
   sqlFile72 = SQL72_MEMBER_PAYMENT_WRITES_FILE,
   sqlFile76 = SQL76_PARTNERSHIP_CONSENT_FILE,
   sql76Pin = AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
+  sqlFile77 = SQL77_CHECK_STAKEHOLDERS_GRANT_FILE,
+  sql77Pin = AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -2352,6 +2552,10 @@ export function createHandler({
 
     if (isSql76PartnershipConsent(event)) {
       return handleSql76PartnershipConsent({ event, authorization, identity, connect, sqlFile76, pin: sql76Pin });
+    }
+
+    if (isSql77CheckStakeholdersGrant(event)) {
+      return handleSql77CheckStakeholdersGrant({ event, authorization, identity, connect, sqlFile77, pin: sql77Pin });
     }
 
     if (isLedger20261007193200(event)) {

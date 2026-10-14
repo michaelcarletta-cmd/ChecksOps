@@ -224,6 +224,38 @@ export const AUTHORIZED_SQL76_PARTNERSHIP_CONSENT = Object.freeze({
   table: 'public.tenant_partnerships',
 });
 
+// SQL 77 grants SELECT, INSERT, DELETE on public.check_stakeholders to checksops
+// and authenticated. The "definition" is the canonical state text of exactly
+// those grantees' direct SELECT/INSERT/UPDATE/DELETE table privileges (from the
+// table ACL), hashed. Every other ACL entry must be identical before and after.
+export const STAKEHOLDER_GRANT_TABLE = 'public.check_stakeholders';
+export const STAKEHOLDER_GRANTEES = Object.freeze(['checksops', 'authenticated']);
+export const STAKEHOLDER_GRANT_PRIVILEGES = Object.freeze(['SELECT', 'INSERT', 'UPDATE', 'DELETE']);
+/** `state[grantee][privilege]` is 'granted' | 'absent' (missing reads as absent). */
+export function stakeholderGrantStateText(state = {}) {
+  return STAKEHOLDER_GRANTEES.flatMap((grantee) => STAKEHOLDER_GRANT_PRIVILEGES.map((privilege) => (
+    `${grantee} ${privilege} ON ${STAKEHOLDER_GRANT_TABLE}: ${state?.[grantee]?.[privilege] === 'granted' ? 'granted' : 'absent'}`
+  ))).join('\n');
+}
+export const STAKEHOLDER_GRANT_APPLIED_STATE = Object.freeze(Object.fromEntries(STAKEHOLDER_GRANTEES.map((grantee) => [
+  grantee,
+  Object.freeze({ SELECT: 'granted', INSERT: 'granted', UPDATE: 'absent', DELETE: 'granted' }),
+])));
+export const AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT = Object.freeze({
+  filename: 'aws/workflows/sql/77_check_stakeholders_write_grant.sql',
+  migration_id: '77_check_stakeholders_write_grant',
+  // The commit that authored the current file bytes. Re-pin if the branch is
+  // rebased or squashed before it reaches main.
+  commit: 'PENDING_COMMIT',
+  source_sha256: 'ed7f1c809b8c66c63e60c4d3504b3cbcbf8088ad1336f418b72a26f528029ec1',
+  // Not reviewed yet: a staging read-live run reports the live value, and a
+  // later reviewed change pins it. Until then apply is refused.
+  expected_live_definition_sha256: null,
+  // Code-derived: sha256(stakeholderGrantStateText(STAKEHOLDER_GRANT_APPLIED_STATE)).
+  intended_replacement_sha256: 'e4d49fface305abc732bb225824e4f113e4a0a6ef4f5f2a145bdf3b0324043d1',
+  table: STAKEHOLDER_GRANT_TABLE,
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -255,6 +287,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL71_AMOUNT_GRANT,
   AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES,
   AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
+  AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -288,6 +321,10 @@ export function isSql76PartnershipConsent(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL76_PARTNERSHIP_CONSENT);
 }
 
+export function isSql77CheckStakeholdersGrant(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -312,6 +349,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql71AmountGrant(input)) return AUTHORIZED_SQL71_AMOUNT_GRANT;
   if (isSql72MemberPaymentWrites(input)) return AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES;
   if (isSql76PartnershipConsent(input)) return AUTHORIZED_SQL76_PARTNERSHIP_CONSENT;
+  if (isSql77CheckStakeholdersGrant(input)) return AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
