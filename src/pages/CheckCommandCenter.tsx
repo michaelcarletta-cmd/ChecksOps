@@ -48,6 +48,7 @@ import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
+import { useSearchParams } from "react-router-dom";
 
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
@@ -292,7 +293,8 @@ export default function CheckCommandCenter() {
   const canMoveChecks = useCanMoveChecks();
   const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState("endorsements");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "endorsements");
   const [classFilter, setClassFilter] = useState<string>("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -308,6 +310,16 @@ export default function CheckCommandCenter() {
   useEffect(() => {
     if (reviewCheckId) scrollReviewPanelToTop();
   }, [reviewCheckId, scrollReviewPanelToTop]);
+
+  // Sync activeTab with URL search params
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+      setSelectedCheck(null);
+      setReviewCheckId(null);
+    }
+  }, [searchParams, activeTab]);
   // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [markReturnedCheck, setMarkReturnedCheck] = useState<{ id: string; label: string } | null>(null);
@@ -467,7 +479,7 @@ export default function CheckCommandCenter() {
     }
 
     clearBulk();
-    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+    qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
     qc.invalidateQueries({ queryKey: ["check-review-queue"] });
     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
   }, [bulkSelected, user?.id, clearBulk, qc, tenantId]);
@@ -1131,8 +1143,8 @@ export default function CheckCommandCenter() {
   const pollCheckOpsRealtime = useCallback(() => {
     if (!tenantId) return;
     qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
-    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-    qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+    qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
+    qc.invalidateQueries({ queryKey: ["check-intake-items-deposited", tenantId] });
     qc.invalidateQueries({ queryKey: ["check-intake-items", "disbursed_externally"] });
     qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
@@ -1146,16 +1158,16 @@ export default function CheckCommandCenter() {
       .channel(`checkops-realtime-${tenantId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "disbursement_splits", filter: `tenant_id=eq.${tenantId}` }, () => {
         qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
-        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-        qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items-deposited", tenantId] });
         qc.invalidateQueries({ queryKey: ["check-intake-items", "disbursed_externally"] });
         qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
         qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
         qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", tenantId] });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "check_intake_items", filter: `tenant_id=eq.${tenantId}` }, () => {
-        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-        qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items-deposited", tenantId] });
         qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
         qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       })
@@ -1183,7 +1195,9 @@ export default function CheckCommandCenter() {
               <CheckUploadForm
                 onSuccess={() => {
                   setUploadDialogOpen(false);
-                  qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                  qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
+                  qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                  qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
                 }}
               />
             </DialogContent>
@@ -1214,7 +1228,7 @@ export default function CheckCommandCenter() {
         )}
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSearchParams({ tab: v }, { replace: true }); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Unified gradient nav cards — all primary navigation */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-2 md:gap-3">
           {(() => {
@@ -1626,7 +1640,7 @@ export default function CheckCommandCenter() {
                   )}
                   <CheckDetailPanel
                     checkId={selectedCheck}
-                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] })}
                     onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
@@ -1803,7 +1817,7 @@ export default function CheckCommandCenter() {
                   )}
                   <CheckDetailPanel
                     checkId={selectedCheck}
-                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] })}
                     onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
@@ -1886,7 +1900,7 @@ export default function CheckCommandCenter() {
                           checkId={reviewCheckId}
                           duplicateInfo={undefined} // ReviewQueue is rendered in the same tab, so CheckReviewConsole logic applies
                           onComplete={() => {
-                            qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                            qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
                             qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
                             setReviewCheckId(null);
                           }}
@@ -2173,7 +2187,7 @@ export default function CheckCommandCenter() {
                                       onDeleted={() => {
                                         optimisticRemove(qc, [check.id]);
                                         setSelectedCheck(null);
-                                        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                                        qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
                                         qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
                                       }}
                                       size="icon"
@@ -2325,7 +2339,7 @@ export default function CheckCommandCenter() {
                   )}
                   <CheckDetailPanel
                     checkId={selectedCheck}
-                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] })}
                     onDeleted={() => setSelectedCheck(null)}
                   />
                 </div>
@@ -2351,10 +2365,10 @@ export default function CheckCommandCenter() {
           open={!!markReturnedCheck}
           onOpenChange={(open) => { if (!open) setMarkReturnedCheck(null); }}
           onRecorded={() => {
-            qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-            qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
-            qc.invalidateQueries({ queryKey: ["returned-checks-count"] });
-            qc.invalidateQueries({ queryKey: ["returned-checks"] });
+            qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
+            qc.invalidateQueries({ queryKey: ["check-intake-items-deposited", tenantId] });
+            qc.invalidateQueries({ queryKey: ["returned-checks-count", tenantId] });
+            qc.invalidateQueries({ queryKey: ["returned-checks", tenantId] });
           }}
         />
       )}
@@ -3456,7 +3470,7 @@ function CheckDetailPanel({
       toast({ title: "Decision reverted", description: "Check returned to review queue." });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
-      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
       onRefresh();
     } catch (e: any) {
       rollbackStage();
@@ -3545,7 +3559,7 @@ function CheckDetailPanel({
       setBranchApprovedAt(null);
       setShowForceMove(false);
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
@@ -3590,7 +3604,7 @@ function CheckDetailPanel({
         });
       }
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
       qc.invalidateQueries({ queryKey: ["checkalt-image-compliance", checkId] });
@@ -3882,7 +3896,7 @@ function CheckDetailPanel({
               checkNumber={check.check_number}
               onDeleted={() => {
                 onRefresh();
-                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
                 qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
                 onDeleted?.();
               }}
@@ -4712,7 +4726,7 @@ function CheckDetailPanel({
                   <StatusOverride
                     checkId={checkId}
                     currentStatus={check.status}
-                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] }); onRefresh(); }}
                   />
                 </div>
                 <ReuploadCheckImageButton
@@ -4738,7 +4752,7 @@ function CheckDetailPanel({
                   checkNumber={check.check_number}
                   onDeleted={() => {
                     onRefresh();
-                    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                    qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
                     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
                     onDeleted?.();
                   }}
