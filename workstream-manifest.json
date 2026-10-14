@@ -1,0 +1,14 @@
+{
+  "workstream_id": "checkcommandcenter-tab-persistence",
+  "branch": "kilo/candid-lark-dcq",
+  "commit": "985e4ddbb85b0bfcc8f3277b21984cfbaaa96a59",
+  "operator": "kilo-agent",
+  "target_environment": "staging",
+  "target_component": "checksops-production-frontend",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/pages/CheckCommandCenter.tsx"
+  ],
+  "preflight_live_fingerprint": "",
+  "clean_build": true
+}
