@@ -4,9 +4,11 @@
  * handler against tenant_partnerships with the retired policies, the real
  * aws_connect_partner_by_code from SQL 32 and the live helper function names.
  *
- * The committed pin has no pre-apply live hash yet (expected_live_definition_sha256
- * is null), so apply paths run on a copy with a reviewed hash filled in; the
- * committed pin itself must refuse apply.
+ * The committed pin's expected_live_definition_sha256 is the reviewed staging
+ * read-live value (run 38541967571): the AWS state where the five retired
+ * policies are already absent. Most fake-DB and PostgreSQL apply paths still run
+ * on EXECUTABLE_PIN, a copy pinned to the all-retired-present state; the
+ * committed pin is exercised against the AWS state and must refuse any other.
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -56,6 +58,12 @@ const SQL32_CONNECT_BODY = (() => {
 const ALL_PRESENT_BEFORE = sha(partnershipConsentStateText({}));
 const ALL_PRESENT_BEFORE_SHA256 = '219007090acfeba71518ec999d386eca3a9ef40c5c7336c5115abf7a3e183f1c';
 const EXECUTABLE_PIN = Object.freeze({ ...PIN, expected_live_definition_sha256: ALL_PRESENT_BEFORE });
+// The reviewed staging state (and the committed pin): guard and trigger absent,
+// marker unset, connect pinned, no other triggers, all five retired policies absent.
+const ALL_ABSENT_BEFORE = sha(partnershipConsentStateText({ policies: 'absent' }));
+const COMMITTED_LIVE_SHA256 = '7c5276d8d04973c51f28238ec32091d77b01613c79dc8961d4dbc4bfd92d20d8';
+// A copy of the committed pin with no reviewed hash: the executor must refuse apply.
+const UNREVIEWED_PIN = Object.freeze({ ...PIN, expected_live_definition_sha256: null });
 
 const { module: executorModule } = await importGuardedSqlExecutor();
 const { createHandler, sql76StatementsAllowed, sql76GuardBody } = executorModule;
@@ -169,16 +177,23 @@ function fakeDb({
   };
 }
 
-test('pin matches the SQL file and its commit, and is not executable until a live hash is reviewed', () => {
+test('pin matches the SQL file and its commit, and its expected live hash is the reviewed all-retired-absent state', () => {
   assert.equal(sha(fs.readFileSync(SQL_FILE)), PIN.source_sha256);
   assert.equal(sha(partnershipConsentStateText(PARTNERSHIP_CONSENT_APPLIED_STATE)), PIN.intended_replacement_sha256);
-  assert.equal(PIN.expected_live_definition_sha256, null);
+  assert.equal(PIN.expected_live_definition_sha256, COMMITTED_LIVE_SHA256);
+  assert.equal(PIN.expected_live_definition_sha256, ALL_ABSENT_BEFORE);
+  assert.match(PIN.expected_live_definition_sha256, /^[0-9a-f]{64}$/);
+  // Neither the all-present fixture state nor the applied state.
+  assert.notEqual(PIN.expected_live_definition_sha256, ALL_PRESENT_BEFORE);
+  assert.notEqual(PIN.expected_live_definition_sha256, PIN.intended_replacement_sha256);
+  assert.notEqual(PIN.expected_live_definition_sha256, READ_LIVE_EXPECTED_SENTINEL);
   assert.equal(SQL76_PROPOSED_AUTHORIZATION_PHRASE, 'GUARD_PARTNERSHIP_ACTIVATION');
   assert.ok(AUTHORIZED_STAGING_SQL.includes(PIN));
   assert.equal(MIGRATIONS['sql76-tenant-partnership-consent'], PIN);
   assert.equal(resolveAuthorizedMigration({ filename: PIN.filename, migration_id: PIN.migration_id }), PIN);
   assert.ok(EXECUTOR_PACK_MEMBERS.some(([from, to]) => from === PIN.filename && to === 'sql/76_tenant_partnership_invitee_consent.sql'));
   assert.equal(evaluateSqlExecutorAuthorization(consentEvent(), { now: Date.parse(NOW) }).ok, true);
+  assert.equal(evaluateSqlExecutorAuthorization(consentEvent({ expected_live_definition_sha256: PIN.expected_live_definition_sha256 }), { now: Date.parse(NOW) }).ok, true);
   assert.equal(sql76StatementsAllowed(SQL_TEXT), true);
   const atCommit = spawnSync('git', ['show', `${PIN.commit}:${PIN.filename}`], { cwd: ROOT, maxBuffer: 1024 * 1024 });
   if (atCommit.status === 0) assert.equal(sha(atCommit.stdout), PIN.source_sha256);
@@ -221,19 +236,85 @@ test('statement allowlist refuses anything beyond the pinned SQL 76 statements',
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace(trigger, '').replace('ALTER FUNCTION public.aws_connect', `${trigger}ALTER FUNCTION public.aws_connect`)), false);
 });
 
-test('the committed pin refuses apply before connecting; inspect still reports the live hash', async () => {
-  const committed = (connect) => handlerFor(connect, { sql76Pin: PIN });
-  const refused = await committed(neverConnect)(consentEvent());
-  assert.equal(refused.code, CODES.SQL_COLLISION);
-  assert.match(refused.message, /no reviewed pre-apply live definition hash/);
+// The AWS state the reviewed staging read-live reported: only the two aws_* policies.
+const awsStateDb = (options = {}) => fakeDb({ policies: [...OTHER_POLICIES], ...options });
+const committedEvent = (overrides = {}) => consentEvent({ expected_live_definition_sha256: PIN.expected_live_definition_sha256, ...overrides });
 
-  const db = fakeDb();
-  const inspect = await committed(db.connect)(consentEvent({ action: 'inspect' }));
+test('the committed pin applies only from the reviewed AWS state; any other live state or expected hash is refused', async () => {
+  const committed = (connect) => handlerFor(connect, { sql76Pin: PIN });
+
+  // A wrong expected hash in the event is refused before connecting.
+  for (const expected of [ALL_PRESENT_BEFORE, 'b'.repeat(64)]) {
+    const refused = await committed(neverConnect)(consentEvent({ expected_live_definition_sha256: expected }));
+    assert.equal(refused.ok, false, expected);
+    assert.equal(refused.code, CODES.SQL_COLLISION, expected);
+    assert.match(refused.message, /apply is bound to the exact allowlisted pin/, expected);
+  }
+  // Expected == intended is rejected by authorization itself, also before connecting.
+  const sameAsIntended = await committed(neverConnect)(consentEvent({ expected_live_definition_sha256: PIN.intended_replacement_sha256 }));
+  assert.equal(sameAsIntended.ok, false);
+  assert.equal(sameAsIntended.code, CODES.INVALID_MANIFEST);
+  // A pin without a reviewed hash still refuses apply before connecting.
+  const unreviewed = await handlerFor(neverConnect, { sql76Pin: UNREVIEWED_PIN })(consentEvent());
+  assert.equal(unreviewed.code, CODES.SQL_COLLISION);
+  assert.match(unreviewed.message, /no reviewed pre-apply live definition hash/);
+
+  // AWS state: inspect reports the reviewed hash and apply lands on the intended state.
+  const db = awsStateDb();
+  const awsHandler = committed(db.connect);
+  const inspect = await awsHandler(committedEvent({ action: 'inspect' }));
   assert.equal(inspect.ok, true, JSON.stringify(inspect));
-  assert.equal(inspect.details.receipt.live_definition_sha256, ALL_PRESENT_BEFORE);
-  assert.equal(inspect.details.receipt.pin_executable, false);
-  assert.equal(inspect.details.receipt.apply_preconditions_met, false);
-  assert.equal(db.state.policies.length, 7);
+  assert.equal(inspect.details.receipt.live_definition_sha256, COMMITTED_LIVE_SHA256);
+  assert.equal(inspect.details.receipt.pin_executable, true);
+  assert.equal(inspect.details.receipt.apply_preconditions_met, true);
+  assert.equal(inspect.details.receipt.other_policy_count, 2);
+  assert.equal(inspect.details.receipt.other_trigger_count, 0);
+  assert.equal(inspect.details.receipt.consent_state.connect, 'pinned');
+  assert.equal(inspect.details.receipt.consent_state.other_triggers, 'none');
+  assert.deepEqual(db.state.guard, []);
+  const event = committedEvent();
+  const applied = await awsHandler(event);
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  assert.equal(applied.details.receipt.before_hash, COMMITTED_LIVE_SHA256);
+  assert.equal(applied.details.receipt.after_hash, PIN.intended_replacement_sha256);
+  assert.deepEqual(applied.details.receipt.consent_state_after.policies, Object.fromEntries(PARTNERSHIP_RETIRED_POLICIES.map((n) => [n, 'absent'])));
+  assert.equal(db.state.guard.length, 1);
+  assert.deepEqual(db.state.policies.map((row) => row.policyname), OTHER_POLICIES.map((row) => row.policyname));
+  // Replay of the applied one_use_id and a fresh re-apply are both refused
+  // (checked before another handler resets the consumed-id store).
+  assert.equal((await awsHandler(event)).code, CODES.SQL_COLLISION);
+  assert.equal((await awsHandler(committedEvent())).code, CODES.UNRELATED_MUTATION);
+
+  // Retired policies still present: refused, nothing changed, consent_state reported.
+  const present = fakeDb();
+  const presentInspect = await committed(present.connect)(committedEvent({ action: 'inspect' }));
+  assert.equal(presentInspect.details.receipt.live_definition_sha256, ALL_PRESENT_BEFORE);
+  assert.equal(presentInspect.details.receipt.pin_executable, true);
+  assert.equal(presentInspect.details.receipt.apply_preconditions_met, false);
+  const presentRefused = await committed(present.connect)(committedEvent());
+  assert.equal(presentRefused.ok, false);
+  assert.equal(presentRefused.code, CODES.DEPLOYMENT_COLLISION, presentRefused.message);
+  assert.ok(presentRefused.details?.consent_state, JSON.stringify(presentRefused));
+  assert.equal(presentRefused.details.consent_state.policies['Inviter can create partnerships'], 'present');
+  assert.equal(present.state.policies.length, 7);
+  assert.deepEqual(present.state.guard, []);
+  assert.equal(present.state.triggers.length, 0);
+
+  // Drifted connect body in the otherwise reviewed AWS state: refused, nothing changed.
+  const drifted = awsStateDb({ connectRow: { ...CONNECT, prosrc: `${SQL32_CONNECT_BODY}-- drift\n` } });
+  const driftInspect = await committed(drifted.connect)(committedEvent({ action: 'inspect' }));
+  assert.equal(driftInspect.details.receipt.consent_state.connect, 'different');
+  assert.notEqual(driftInspect.details.receipt.live_definition_sha256, COMMITTED_LIVE_SHA256);
+  assert.equal(driftInspect.details.receipt.apply_preconditions_met, false);
+  const driftRefused = await committed(drifted.connect)(committedEvent());
+  assert.equal(driftRefused.ok, false);
+  assert.equal(driftRefused.code, CODES.DEPLOYMENT_COLLISION, driftRefused.message);
+  assert.equal(driftRefused.details?.consent_state?.connect, 'different');
+  assert.deepEqual(drifted.state.guard, []);
+  assert.equal(drifted.state.triggers.length, 0);
+  assert.equal(drifted.state.policies.length, 2);
+  assert.equal(drifted.state.connect.prosrc, `${SQL32_CONNECT_BODY}-- drift\n`);
+  assert.deepEqual(drifted.state.connect.proconfig, [...CONNECT.proconfig]);
 });
 
 /** A client that answers only catalog SELECTs and throws on anything else (BEGIN, DDL, the migration file). */
@@ -266,7 +347,9 @@ test('inspect (the read-live action) only SELECTs: no BEGIN, no lock, no migrati
       assert.equal(result.details.receipt.result, 'inspect');
       assert.equal(result.details.receipt.live_definition_sha256, ALL_PRESENT_BEFORE);
       assert.equal(result.details.receipt.before_hash, result.details.receipt.after_hash);
-      assert.equal(result.details.receipt.pin_executable, pin === EXECUTABLE_PIN);
+      // Both the committed pin and the all-present copy carry a reviewed hash.
+      assert.equal(result.details.receipt.pin_executable, true);
+      assert.equal(result.details.receipt.apply_preconditions_met, pin === EXECUTABLE_PIN);
       assert.ok(seen.length > 0);
       assert.ok(!seen.some((text) => text === SQL_TEXT || text.includes('CREATE TRIGGER')));
       // Nothing changed and the one_use_id was not consumed: the same id can still be inspected.
@@ -275,6 +358,23 @@ test('inspect (the read-live action) only SELECTs: no BEGIN, no lock, no migrati
       assert.equal(fs.existsSync(process.env.SQL_EXECUTOR_CONSUMED_PATH), false);
       assert.equal((await handler(event)).ok, true);
     }
+  }
+  // The committed pin against the reviewed AWS state: still SELECT-only, even though apply would be allowed.
+  for (const expected of [READ_LIVE_EXPECTED_SENTINEL, PIN.expected_live_definition_sha256]) {
+    const db = awsStateDb();
+    const seen = [];
+    const handler = handlerFor(selectOnly(db, seen), { sql76Pin: PIN });
+    const event = consentEvent({ action: 'inspect', expected_live_definition_sha256: expected });
+    const result = await handler(event);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.details.receipt.live_definition_sha256, COMMITTED_LIVE_SHA256);
+    assert.equal(result.details.receipt.pin_executable, true);
+    assert.equal(result.details.receipt.apply_preconditions_met, true);
+    assert.ok(!seen.some((text) => text === SQL_TEXT || text.includes('CREATE TRIGGER')));
+    assert.equal(db.state.policies.length, 2);
+    assert.deepEqual(db.state.guard, []);
+    assert.equal(fs.existsSync(process.env.SQL_EXECUTOR_CONSUMED_PATH), false);
+    assert.equal((await handler(event)).ok, true);
   }
   // The strict client is real: apply (BEGIN) through it fails and nothing is written.
   const db = fakeDb();
@@ -424,8 +524,8 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
   await admin.query('CREATE ROLE authenticated NOLOGIN');
   await admin.query('CREATE ROLE checksops LOGIN IN ROLE authenticated');
   await admin.query('CREATE DATABASE sql76');
-  const connect = async (user = 'ubuntu') => {
-    const client = new pg.Client({ host: pgData, port, user, database: 'sql76' });
+  const connect = async (user = 'ubuntu', database = 'sql76') => {
+    const client = new pg.Client({ host: pgData, port, user, database });
     await client.connect();
     return client;
   };
@@ -483,9 +583,16 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
     assert.equal(connectRow.prosecdef, true);
     assert.deepEqual(connectRow.proconfig, [...PARTNERSHIP_CONNECT_CONFIG]);
     await seed.end();
+    // A copy in the reviewed AWS state: the five retired policies already absent.
+    await admin.query('CREATE DATABASE sql76aws TEMPLATE sql76');
+    const awsSeed = await connect('ubuntu', 'sql76aws');
+    for (const policyname of PARTNERSHIP_RETIRED_POLICIES) {
+      await awsSeed.query(`DROP POLICY "${policyname}" ON public.tenant_partnerships`);
+    }
+    await awsSeed.end();
 
-    // read-live: the committed pin (no reviewed hash), the sentinel package, and a
-    // session that PostgreSQL itself keeps read-only (any write would fail 25006).
+    // read-live: the committed pin, the sentinel package, and a session that
+    // PostgreSQL itself keeps read-only (any write would fail 25006).
     const readOnlyConnect = async () => {
       const client = await connect();
       await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
@@ -497,14 +604,39 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
     }));
     assert.equal(readLive.ok, true, JSON.stringify(readLive));
     assert.equal(readLive.details.receipt.live_definition_sha256, ALL_PRESENT_BEFORE_SHA256);
-    assert.equal(readLive.details.receipt.pin_executable, false);
+    // The committed pin is reviewed, but this all-present fixture is not its state.
+    assert.equal(readLive.details.receipt.pin_executable, true);
     assert.equal(readLive.details.receipt.apply_preconditions_met, false);
+    assert.notEqual(readLive.details.receipt.live_definition_sha256, PIN.expected_live_definition_sha256);
+    // The committed pin refuses apply on the all-present database and writes nothing.
+    const committedRefused = await handlerFor(() => connect(), { sql76Pin: PIN })(consentEvent({
+      expected_live_definition_sha256: PIN.expected_live_definition_sha256,
+    }));
+    assert.equal(committedRefused.code, CODES.DEPLOYMENT_COLLISION, JSON.stringify(committedRefused));
     const check = await connect();
     const { rows: [counts] } = await check.query(
       "SELECT (SELECT count(*)::int FROM pg_policies WHERE tablename = 'tenant_partnerships') AS policies, (SELECT count(*)::int FROM pg_trigger WHERE tgrelid = 'public.tenant_partnerships'::regclass AND NOT tgisinternal) AS triggers",
     );
     assert.deepEqual(counts, { policies: 7, triggers: 0 });
     await check.end();
+
+    // Real catalog in the reviewed AWS state reads back as the committed pin, and
+    // the committed pin applies there to the intended state exactly once.
+    const awsHandler = handlerFor(() => connect('ubuntu', 'sql76aws'), { sql76Pin: PIN });
+    const awsInspect = await awsHandler(consentEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
+    assert.equal(awsInspect.ok, true, JSON.stringify(awsInspect));
+    assert.equal(awsInspect.details.receipt.live_definition_sha256, COMMITTED_LIVE_SHA256, JSON.stringify(awsInspect.details.receipt.consent_state));
+    assert.equal(awsInspect.details.receipt.pin_executable, true);
+    assert.equal(awsInspect.details.receipt.apply_preconditions_met, true);
+    const awsEvent = consentEvent({ expected_live_definition_sha256: PIN.expected_live_definition_sha256 });
+    const awsApplied = await awsHandler(awsEvent);
+    assert.equal(awsApplied.ok, true, JSON.stringify(awsApplied));
+    assert.equal(awsApplied.details.receipt.before_hash, COMMITTED_LIVE_SHA256);
+    assert.equal(awsApplied.details.receipt.after_hash, PIN.intended_replacement_sha256);
+    assert.equal(awsApplied.details.receipt.other_policy_count, 2);
+    assert.equal(awsApplied.details.receipt.other_trigger_count, 0);
+    assert.equal((await awsHandler(awsEvent)).code, CODES.SQL_COLLISION);
+    assert.equal((await awsHandler(consentEvent({ expected_live_definition_sha256: PIN.expected_live_definition_sha256 }))).code, CODES.UNRELATED_MUTATION);
 
     const handler = handlerFor(() => connect());
     const inspect = await handler(consentEvent({ action: 'inspect' }));
