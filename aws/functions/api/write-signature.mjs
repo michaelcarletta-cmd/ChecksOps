@@ -37,17 +37,19 @@ const asDocumentPath = (value) => {
   return { value: rel };
 };
 
-const escapeLike = (value) => String(value).toLowerCase();
+const lowerId = (value) => String(value).toLowerCase();
 
 /** Paths the app writes for one check (generated PDFs, check files, images). */
 const checkScopedPrefixes = (checkId) => [
-  `check-intake/${escapeLike(checkId)}/`,
-  `checks/${escapeLike(checkId)}/`,
-  `checks/reupload/${escapeLike(checkId)}/`,
+  `check-intake/${lowerId(checkId)}/`,
+  `checks/${lowerId(checkId)}/`,
+  `checks/reupload/${lowerId(checkId)}/`,
 ];
 
 /**
  * A signature document must belong to the request's own check or claim.
+ * loss_draft_documents.file_path is not trusted here: members can set it to
+ * any string, so loss-draft documents must sit in the check or claim folders.
  * Storage read access is granted to any signature_requests.document_path the
  * caller can see, so an unscoped path would let one tenant read (and send to
  * an outside signer) another tenant's file.
@@ -57,7 +59,7 @@ export const authorizeSignatureDocumentPath = async (client, { path, claimId, ch
   const lower = rel.toLowerCase();
   if (!rel || rel.includes('..')) return false;
   if (checkId && checkScopedPrefixes(checkId).some((prefix) => lower.startsWith(prefix))) return true;
-  if (claimId && lower.startsWith(`signatures/${escapeLike(claimId)}/`)) return true;
+  if (claimId && lower.startsWith(`signatures/${lowerId(claimId)}/`)) return true;
   if (!new RegExp(`^${UUID_PATTERN}$`, 'i').test(String(checkId || claimId || ''))) return false;
   const rows = (await client.query(
     `SELECT 1 FROM public.check_files
@@ -67,12 +69,6 @@ export const authorizeSignatureDocumentPath = async (client, { path, claimId, ch
      SELECT 1 FROM public.claim_files
       WHERE $3::uuid IS NOT NULL AND claim_id = $3::uuid
         AND split_part(file_path, '?', 1) = $1::text
-     UNION ALL
-     SELECT 1 FROM public.loss_draft_documents d
-       JOIN public.loss_draft_tracking t ON t.id = d.loss_draft_id
-      WHERE split_part(d.file_path, '?', 1) = $1::text
-        AND (($3::uuid IS NOT NULL AND t.claim_id = $3::uuid)
-          OR ($2::uuid IS NOT NULL AND t.check_intake_item_id = $2::uuid))
      LIMIT 1`,
     [rel, checkId || null, claimId || null],
   )).rows;

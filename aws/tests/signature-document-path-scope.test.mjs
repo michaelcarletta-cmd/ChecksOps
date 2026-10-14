@@ -86,7 +86,7 @@ test('the request\'s own check folders and claim signature folder are accepted w
   assert.equal(inserted(crossed), false);
 });
 
-test('a file recorded on the request\'s own check, claim or loss draft is accepted', async () => {
+test('a file recorded on the request\'s own check or claim is accepted', async () => {
   const client = fakeClient({ filesFound: true });
   const result = await insert(client, { check_intake_item_id: CHECK, document_path: 'claims/attachments/report.pdf' });
   assert.equal(result.error, undefined, JSON.stringify(result));
@@ -109,7 +109,7 @@ const pgSkip = (() => {
 })();
 const run = (bin, args, opts = {}) => spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
 
-test('PostgreSQL 16: the ownership lookup matches only the request\'s own check, claim and loss draft files', { timeout: 120000, skip: pgSkip }, async (t) => {
+test('PostgreSQL 16: the ownership lookup matches only the request\'s own check and claim files; loss-draft paths are not trusted', { timeout: 120000, skip: pgSkip }, async (t) => {
   const { default: pg } = await import('pg');
   const server = serverUser || {};
   const pgData = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-sig-path-'));
@@ -144,7 +144,8 @@ test('PostgreSQL 16: the ownership lookup matches only the request\'s own check,
     const own = { claimId: CLAIM, checkId: CHECK };
     assert.equal(await ask('own/check.pdf', own), true);
     assert.equal(await ask('own/claim.pdf', own), true);
-    assert.equal(await ask('own/loss.pdf', own), true);
+    // A member can set loss_draft_documents.file_path to anything, so it never authorizes.
+    assert.equal(await ask('own/loss.pdf', own), false);
     assert.equal(await ask('own/claim.pdf', { claimId: CLAIM, checkId: null }), true);
     assert.equal(await ask('own/check.pdf', { claimId: CLAIM, checkId: null }), false);
     for (const foreign of ['other/check.pdf', 'other/claim.pdf', 'other/loss.pdf', 'missing.pdf']) {
