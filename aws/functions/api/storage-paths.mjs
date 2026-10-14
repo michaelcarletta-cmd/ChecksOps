@@ -94,6 +94,65 @@ export const s3KeyFor = (bucket, objectPath) => {
   return `${FILES_PREFIX}${bucket}/${rel}`;
 };
 
+export const CLEAN_STEM_EXTENSIONS = Object.freeze(['.jpg', '.jpeg', '.png']);
+
+const ENDORSED_FILENAME_RE = /^(.*)_endorsed(?:_\d+)?\.[^.]+$/i;
+
+const fileNameOf = (path) => {
+  const normalized = String(path || '').replace(/\/+$/, '');
+  const slash = normalized.lastIndexOf('/');
+  return slash === -1 ? normalized : normalized.slice(slash + 1);
+};
+
+const parentDirectory = (path) => {
+  const normalized = String(path || '').replace(/\/+$/, '');
+  const slash = normalized.lastIndexOf('/');
+  return slash === -1 ? '' : normalized.slice(0, slash);
+};
+
+export const isGeneratedBackArtifactPath = (path) => {
+  const p = String(path ?? '').trim();
+  if (!p) return false;
+  return (
+    /_endorsed(?:_\d+)?\.[^.]+$/i.test(p)
+    || /endorsed_deposit_[^/]+\.[^.]+$/i.test(p)
+    || /\.svg(\?|$)/i.test(p)
+    || /\.checkalt\.jpg(\?|$)/i.test(p)
+  );
+};
+
+export const isRecognizedEndorsedGeneratedPath = (path) => {
+  const raw = String(path ?? '').trim().split('?')[0];
+  if (!raw) return false;
+  if (/endorsed_deposit_[^/]+\.[^.]+$/i.test(raw)) return false;
+  if (/\.checkalt\.jpg$/i.test(raw)) return false;
+  return ENDORSED_FILENAME_RE.test(fileNameOf(raw));
+};
+
+export const endorsedGeneratedStem = (path) => {
+  const raw = String(path ?? '').trim().split('?')[0];
+  if (!raw || !isRecognizedEndorsedGeneratedPath(raw)) return null;
+  const directory = parentDirectory(raw);
+  const match = fileNameOf(raw).match(ENDORSED_FILENAME_RE);
+  const stem = match?.[1]?.trim() || '';
+  if (!stem || stem.includes('/') || isGeneratedBackArtifactPath(stem)) return null;
+  const candidates = CLEAN_STEM_EXTENSIONS.map((ext) => (directory ? `${directory}/${stem}${ext}` : `${stem}${ext}`));
+  return { directory, stem, candidates };
+};
+
+export const isExactCleanStemOfGeneratedPointer = (cleanPath, generatedPath) => {
+  const rel = String(cleanPath ?? '').trim().split('?')[0];
+  if (!rel || isGeneratedBackArtifactPath(rel)) return false;
+  const derived = endorsedGeneratedStem(generatedPath);
+  return Boolean(derived?.candidates.includes(rel));
+};
+
+export const isNarrowCleanStemPath = (path) => {
+  const rel = String(path ?? '').trim().split('?')[0];
+  if (!rel || isGeneratedBackArtifactPath(rel)) return false;
+  return /\.(jpg|jpeg|png)$/i.test(rel);
+};
+
 const CHECK_UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 
 const CHECK_WRITE_PREFIXES = [

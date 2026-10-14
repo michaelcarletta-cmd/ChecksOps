@@ -3,17 +3,25 @@ import pg from 'pg';
 import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { loadDatabaseCredentials } from './secrets.mjs';
-import { buildClientConfig, sanitizePublicError } from './db-health.mjs';
+import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { parseBody, ignoredSpoof, withIdentity } from './data.mjs';
 import {
   APP_BUCKET_SET,
   PUBLIC_BRANDING_BUCKETS,
   SKIP_BUCKET_SET,
+  endorsedGeneratedStem,
+  isExactCleanStemOfGeneratedPointer,
+  isNarrowCleanStemPath,
   normalizePath,
   pathCandidates,
   s3KeyFor,
 } from './storage-paths.mjs';
 import { MORTGAGE_LIBRARY_STORAGE_AUTH_SQL } from './mortgage-library-docs.mjs';
+import {
+  isUuid,
+  normalizeTenantLogoObjectPath,
+  storedLogoMatchesRequest,
+} from './tenant-logo-path.mjs';
 
 const { Client } = pg;
 
@@ -33,8 +41,18 @@ export const clampExpires = (value, fallback = DEFAULT_EXPIRES, max = MAX_EXPIRE
   return Math.min(max, Math.max(MIN_EXPIRES, Math.floor(n)));
 };
 
+/**
+ * A stored path, reduced the way normalizePath reduces a request: drop the
+ * query string, a leading Supabase storage URL prefix (any bucket), and
+ * leading slashes. Compared for equality only, never as a suffix: a suffix
+ * match let a caller store `checks/<own>/x/checks/<other>/front.jpg` on a
+ * visible row and then read `checks/<other>/front.jpg`.
+ */
+export const storedPathSql = (col) =>
+  `regexp_replace(split_part(COALESCE(${col}, ''), '?', 1), '^(https?://[^/]+/storage/v1/object/(sign|public|authenticated)/[^/]+/|/+)', '')`;
+
 const columnMatchSql = (table, columns) => {
-  const tests = columns.map((col) => `(${col} = ANY($1::text[]) OR split_part(${col}, '?', 1) LIKE '%' || $2)`);
+  const tests = columns.map((col) => `(${col} = ANY($1::text[]) OR ${storedPathSql(col)} = $2)`);
   return `SELECT 1 FROM ${table} WHERE ${tests.join(' OR ')} LIMIT 1`;
 };
 
@@ -43,10 +61,8 @@ const depositSibling = (column, suffix) =>
 
 /** Read auth for check images, endorsed deposit JPEGs, `.deposit2.jpg`, and `.checkalt.jpg` siblings. */
 export const CHECK_INTAKE_CLAIM_FILES_AUTH_SQL = `SELECT 1 FROM check_intake_items WHERE ${[
-  '(front_image_path = ANY($1::text[]) OR split_part(front_image_path, \'?\', 1) LIKE \'%\' || $2)',
-  '(back_image_path = ANY($1::text[]) OR split_part(back_image_path, \'?\', 1) LIKE \'%\' || $2)',
-  '(back_image_original_path = ANY($1::text[]) OR split_part(back_image_original_path, \'?\', 1) LIKE \'%\' || $2)',
-  '(back_image_deposit_path = ANY($1::text[]) OR split_part(back_image_deposit_path, \'?\', 1) LIKE \'%\' || $2)',
+  ...['front_image_path', 'back_image_path', 'back_image_original_path', 'back_image_deposit_path']
+    .map((col) => `(${col} = ANY($1::text[]) OR ${storedPathSql(col)} = $2)`),
   `(${depositSibling('front_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_original_path', '.deposit2.jpg')} OR ${depositSibling('back_image_deposit_path', '.deposit2.jpg')})`,
   `(${depositSibling('front_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_original_path', '.checkalt.jpg')} OR ${depositSibling('back_image_deposit_path', '.checkalt.jpg')})`,
 ].join(' OR ')} LIMIT 1`;
@@ -160,6 +176,47 @@ export const authorizeObject = async (client, bucket, objectPath, { userId } = {
   return { authorized: false, reason: 'not_authorized', rel, candidates };
 };
 
+/** Read-only: find generated back pointers that reconstruct to this exact clean stem. */
+export const CLEAN_STEM_POINTER_LOOKUP_SQL = `SELECT back_image_path, back_image_original_path, back_image_deposit_path
+FROM check_intake_items
+WHERE regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '_endorsed(_[0-9]+)?\\.[^.]+$', '', 'i') || $1 = $2
+   OR regexp_replace(split_part(COALESCE(back_image_original_path, ''), '?', 1), '_endorsed(_[0-9]+)?\\.[^.]+$', '', 'i') || $1 = $2
+   OR regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '_endorsed(_[0-9]+)?\\.[^.]+$', '', 'i') || $1 = $2
+LIMIT 10`;
+
+const extensionOf = (rel) => {
+  const match = String(rel || '').match(/(\.[^.]+)$/);
+  return match ? match[1].toLowerCase() : '';
+};
+
+export const authorizeCleanStemSibling = async (client, bucket, objectPath) => {
+  if (bucket !== 'claim-files') return { authorized: false, reason: 'wrong_bucket' };
+  const relRaw = normalizePath(objectPath, bucket);
+  if (!relRaw) return { authorized: false, reason: 'invalid_path' };
+  const rel = relRaw.split('?')[0];
+  if (!isNarrowCleanStemPath(rel)) return { authorized: false, reason: 'not_clean_stem' };
+  const ext = extensionOf(rel);
+  if (!['.jpg', '.jpeg', '.png'].includes(ext)) return { authorized: false, reason: 'not_clean_stem' };
+  const result = await client.query(CLEAN_STEM_POINTER_LOOKUP_SQL, [ext, rel]);
+  for (const row of result.rows || []) {
+    for (const pointer of [row.back_image_path, row.back_image_original_path, row.back_image_deposit_path]) {
+      if (!endorsedGeneratedStem(pointer)) continue;
+      if (isExactCleanStemOfGeneratedPointer(rel, pointer)) {
+        return { authorized: true, rel, via: 'endorsed_clean_stem', generatedPointer: pointer };
+      }
+    }
+  }
+  return { authorized: false, reason: 'not_authorized', rel };
+};
+
+export const authorizeSignedObject = async (client, bucket, objectPath, { userId } = {}) => {
+  const auth = await authorizeObject(client, bucket, objectPath, { userId });
+  if (auth.authorized) return auth;
+  const stem = await authorizeCleanStemSibling(client, bucket, objectPath);
+  if (stem.authorized) return { ...stem, candidates: auth.candidates || pathCandidates(bucket, objectPath) };
+  return auth;
+};
+
 const presignGet = async (deps, key, { expiresIn, downloadName, contentType, maxExpires } = {}) => {
   const sign = deps.getSignedUrl || getSignedUrl;
   const s3 = defaultS3(deps);
@@ -189,12 +246,78 @@ const objectExists = async (deps, key) => {
   }
 };
 
+const getObjectBytes = async (deps, key) => {
+  const s3 = defaultS3(deps);
+  const out = await s3.send(new GetObjectCommand({
+    Bucket: filesBucket(),
+    Key: key,
+  }));
+  let bytes = Buffer.alloc(0);
+  if (Buffer.isBuffer(out?.Body)) bytes = out.Body;
+  else if (out?.Body?.transformToByteArray) bytes = Buffer.from(await out.Body.transformToByteArray());
+  else if (typeof out?.bytes !== 'undefined') bytes = Buffer.from(out.bytes);
+  return {
+    bytes,
+    contentType: out?.ContentType || 'image/png',
+  };
+};
+
+export const handleBrandingLogo = async (event, deps = {}) => {
+  const query = event?.queryStringParameters || {};
+  const rawPath = String(event?.rawPath || event?.requestContext?.http?.path || '');
+  const fromPath = rawPath.match(/\/branding\/logo\/([0-9a-fA-F-]{36})/)?.[1];
+  const tenantId = String(fromPath || query.tenantId || query.tenant_id || '').trim();
+  const spoof = ignoredSpoof(event, parseBody(event));
+  if (!isUuid(tenantId)) {
+    return { ok: false, statusCode: 400, error: 'invalid_tenant', spoofFieldsIgnored: spoof };
+  }
+  let client;
+  try {
+    client = await publicClient(deps);
+    const row = (await client.query(
+      `SELECT id::text AS id, logo_url FROM tenants_public WHERE id = $1::uuid LIMIT 1`,
+      [tenantId],
+    )).rows[0];
+    const objectPath = normalizeTenantLogoObjectPath(row?.logo_url);
+    if (!objectPath) {
+      return { ok: false, statusCode: 404, error: 'logo_not_found', spoofFieldsIgnored: spoof };
+    }
+    const key = s3KeyFor('tenant-logos', objectPath);
+    if (!(await objectExists(deps, key))) {
+      return { ok: false, statusCode: 404, error: 'object_not_in_s3', spoofFieldsIgnored: spoof };
+    }
+    const object = await getObjectBytes(deps, key);
+    return {
+      ok: true,
+      statusCode: 200,
+      binary: true,
+      contentType: /^image\//i.test(object.contentType) ? object.contentType : 'image/png',
+      body: object.bytes,
+      tenantId: tenantId.toLowerCase(),
+      path: objectPath,
+      spoofFieldsIgnored: spoof,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'branding_logo_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 export const handleStorageSign = async (event, deps = {}) => withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
   const bucket = String(body.bucket || '').trim();
   const denied = denyBucket(bucket);
   if (denied) return { ...denied, spoofFieldsIgnored: spoof };
   const objectPath = body.path || body.paths?.[0];
-  const auth = await authorizeObject(client, bucket, objectPath, { userId: mapping.application_user_id });
+  const auth = await authorizeSignedObject(client, bucket, objectPath, { userId: mapping.application_user_id });
   if (!auth.authorized) {
     return {
       ok: false,
@@ -245,7 +368,7 @@ export const handleStorageSignMany = async (event, deps = {}) => withIdentity(ev
   const expiresIn = clampExpires(body.expiresIn || body.expires_in, DEFAULT_EXPIRES);
   const data = [];
   for (const objectPath of paths) {
-    const auth = await authorizeObject(client, bucket, objectPath, { userId: mapping.application_user_id });
+    const auth = await authorizeSignedObject(client, bucket, objectPath, { userId: mapping.application_user_id });
     if (!auth.authorized) {
       data.push({ path: objectPath, signedUrl: null, error: 'storage_forbidden' });
       continue;
@@ -329,28 +452,60 @@ const publicClient = async (deps) => {
   return client;
 };
 
+
+export const recordPublicSignerViewed = async (deps, { tokenHash, alreadyViewed }) => {
+  if (!tokenHash || alreadyViewed) return { recorded: false, reason: 'skipped' };
+  let writer = deps.writeClient;
+  let owned = false;
+  if (!writer) {
+    const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
+    const createClient = deps.createWriteClient || deps.createClient || ((config) => new Client(config));
+    const credentials = await loadCredentials();
+    writer = createClient(buildWriteClientConfig(credentials, { queryTimeoutMillis: 8000 }));
+    owned = true;
+    await writer.connect();
+  }
+  try {
+    const row = (await writer.query(
+      'SELECT public.aws_public_signature_mark_viewed($1) AS doc',
+      [tokenHash],
+    )).rows[0]?.doc;
+    if (!row?.ok) {
+      return { recorded: false, error: row?.error || 'viewed_denied' };
+    }
+    return { recorded: row.recorded === true, viewed_at: row.viewed_at || null };
+  } catch (error) {
+    return { recorded: false, error: sanitizePublicError(error) };
+  } finally {
+    if (owned) {
+      try { await writer.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 export const isPublicBrandingPath = async (client, bucket, rel) => {
   if (!PUBLIC_BRANDING_BUCKETS.includes(bucket)) return false;
   if (bucket === 'email-assets') return rel === 'checksops-logo.png';
   if (bucket === 'tenant-logos') {
+    const requested = normalizeTenantLogoObjectPath(rel);
+    if (!requested) return false;
     const result = await client.query(
-      `SELECT 1 FROM tenants_public WHERE logo_url IS NOT NULL AND split_part(logo_url, '?', 1) LIKE '%' || $1 LIMIT 1`,
-      [rel],
+      `SELECT logo_url FROM tenants_public WHERE logo_url IS NOT NULL`,
     );
-    return result.rows.length > 0;
+    return (result.rows || []).some((row) => storedLogoMatchesRequest(row.logo_url, requested));
   }
   if (bucket === 'company-branding') {
     const branding = await client.query(
       `SELECT 1 FROM public.company_branding
-       WHERE split_part(COALESCE(letterhead_url, ''), '?', 1) LIKE '%' || $1
+       WHERE ${storedPathSql('letterhead_url')} = $1
        LIMIT 1`,
       [rel],
     );
     if (branding.rows.length) return true;
     const tenants = await client.query(
       `SELECT 1 FROM public.tenants
-       WHERE split_part(COALESCE(invoice_letterhead_url, ''), '?', 1) LIKE '%' || $1
-          OR split_part(COALESCE(logo_url, ''), '?', 1) LIKE '%' || $1
+       WHERE ${storedPathSql('invoice_letterhead_url')} = $1
+          OR ${storedPathSql('logo_url')} = $1
        LIMIT 1`,
       [rel],
     );
@@ -461,10 +616,17 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
       expiresIn: SIGNING_DOCUMENT_EXPIRES,
       maxExpires: SIGNING_DOCUMENT_EXPIRES,
     });
+    const view = await recordPublicSignerViewed(deps, {
+      tokenHash,
+      alreadyViewed: Boolean(row.signer?.viewed_at),
+    });
     return {
       ok: true,
       statusCode: 200,
-      signer: row.signer,
+      signer: {
+        ...row.signer,
+        viewed_at: row.signer?.viewed_at || (view.recorded ? new Date().toISOString() : row.signer?.viewed_at),
+      },
       request: {
         ...row.request,
         claims: row.claim,
@@ -472,6 +634,7 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
       fields: row.fields || [],
       presets: row.presets || [],
       signedUrl,
+      viewedRecorded: view.recorded === true,
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {
