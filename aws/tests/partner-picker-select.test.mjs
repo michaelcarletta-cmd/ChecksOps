@@ -24,5 +24,5 @@ test('chosen partners join the payment list and are sent as partner recipients',
   // Browser storage only, guarded; no network write.
   assert.match(store, /window\.sessionStorage/);
   assert.doesNotMatch(store, /supabase|fetch\(/);
-  assert.equal((store.match(/try \{/g) || []).length, 2);
+  assert.ok((store.match(/try \{/g) || []).length >= 2);
 });

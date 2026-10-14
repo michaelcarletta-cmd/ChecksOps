@@ -17,9 +17,14 @@ export const selectedPartnersQueryKey = (checkId: string) => ["selected-partners
 function readStored(checkId: string): SelectedPartner[] {
   try {
     const parsed = JSON.parse(window.sessionStorage.getItem(storageKey(checkId)) || "[]");
-    return Array.isArray(parsed)
-      ? parsed.filter((p) => p && typeof p.partner_tenant_id === "string" && typeof p.partner_name === "string")
-      : [];
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    return parsed.filter((p) => {
+      if (!p || typeof p.partner_tenant_id !== "string" || typeof p.partner_name !== "string") return false;
+      if (seen.has(p.partner_tenant_id)) return false;
+      seen.add(p.partner_tenant_id);
+      return true;
+    });
   } catch {
     return [];
   }
@@ -66,5 +71,15 @@ export function useSelectedPartners(checkId: string | null | undefined) {
     [update],
   );
 
-  return { partners, add, remove };
+  /** Drops chosen partners that are no longer partners (e.g. the partnership ended). */
+  const keepOnly = useCallback(
+    (partnerTenantIds: Set<string>) =>
+      update((current) => {
+        const kept = current.filter((p) => partnerTenantIds.has(p.partner_tenant_id));
+        return kept.length === current.length ? current : kept;
+      }),
+    [update],
+  );
+
+  return { partners, add, remove, keepOnly };
 }

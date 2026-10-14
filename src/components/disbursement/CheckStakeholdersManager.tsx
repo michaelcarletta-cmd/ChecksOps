@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -94,7 +94,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
 
   // Partner organizations of this tenant, with whether their bank account is
   // approved and ready to receive money.
-  const { data: partnerOptions = [] } = useQuery({
+  const { data: partnerOptions = [], isSuccess: partnerOptionsLoaded } = useQuery({
     queryKey: ["partner-payout-options", checkIntakeItemId],
     enabled: !!checkIntakeItemId && !!tenant?.id,
     queryFn: async () => {
@@ -135,7 +135,13 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
 
   // Choosing a partner adds them to this check's payment list without sharing the
   // check or writing anything; the payment server checks the partnership on send.
-  const { partners: selectedPartners, add: selectPartner, remove: unselectPartner } = useSelectedPartners(checkIntakeItemId);
+  const { partners: selectedPartners, add: selectPartner, remove: unselectPartner, keepOnly } = useSelectedPartners(checkIntakeItemId);
+
+  // A chosen partner whose partnership has ended drops out of the payment list.
+  useEffect(() => {
+    if (!partnerOptionsLoaded || selectedPartners.length === 0) return;
+    keepOnly(new Set((partnerOptions as any[]).map((p) => p.partner_tenant_id)));
+  }, [partnerOptionsLoaded, partnerOptions, selectedPartners.length, keepOnly]);
 
   const visiblePartners = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();

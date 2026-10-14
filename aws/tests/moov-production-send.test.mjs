@@ -155,12 +155,18 @@ const fakeDb = ({
         const [check, me, them] = params;
         const shared = shares.some((s) => s.check_id === check && !s.revoked_at
           && s.source_tenant_id === me && s.target_tenant_id === them);
-        const partnered = partnerships.some((p) => p.status === 'active' && !p.revoked_at
-          && ((p.inviter_tenant_id === me && p.invitee_tenant_id === them)
-            || (p.inviter_tenant_id === them && p.invitee_tenant_id === me)));
-        const revoked = shares.some((s) => s.check_id === check && s.revoked_at
-          && s.source_tenant_id === me && s.target_tenant_id === them);
-        return { rows: shared || (partnered && !revoked) ? [{ ok: 1 }] : [] };
+        const pair = (p) => (p.inviter_tenant_id === me && p.invitee_tenant_id === them)
+          || (p.inviter_tenant_id === them && p.invitee_tenant_id === me);
+        const time = (v) => (v ? Date.parse(v) : -Infinity);
+        const partnered = partnerships.some((p, i) => {
+          if (p.status !== 'active' || p.revoked_at || !pair(p)) return false;
+          const since = time(p.accepted_at ?? p.created_at);
+          const endedSince = partnerships.some((q, k) => k !== i && q.revoked_at && pair(q) && time(q.revoked_at) >= since);
+          const unsharedSince = shares.some((x) => x.check_id === check && x.revoked_at
+            && x.source_tenant_id === me && x.target_tenant_id === them && time(x.revoked_at) >= since);
+          return !endedSince && !unsharedSince;
+        });
+        return { rows: shared || partnered ? [{ ok: 1 }] : [] };
       }
       if (sql.includes('COALESCE(sum(amount_cents)')) return { rows: [{ cents: reservedCents }] };
       if (sql.includes('SELECT * FROM public.payment_transfers') && sql.includes('left(idempotency_key')) {
@@ -387,12 +393,28 @@ test('a partner chosen in the picker is paid on an active partnership, with no s
   });
 });
 
+test('reconnecting after a partnership ended pays again on checks its end un-shared', async () => {
+  await withEnv(FLAGS, async () => {
+    // The old partnership ended on 10-03 (revoking the share); the pair reconnected on 10-07.
+    const client = fakeDb({
+      shares: [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: PARTNER, revoked_at: '2026-10-03' }],
+      partnerships: [
+        { ...PARTNERSHIP, accepted_at: '2026-10-07' },
+        { inviter_tenant_id: TENANT, invitee_tenant_id: PARTNER, status: 'revoked', revoked_at: '2026-10-03' },
+      ],
+    });
+    const result = await run(client, moovStub(), { recipients: [partner(700)] });
+    assert.equal(result.ok, true, JSON.stringify(result));
+  });
+});
+
 test('the partner rule no longer reads check_stakeholders', () => {
   const source = fs.readFileSync(new URL('../functions/api/providers/production/moov-send.mjs', import.meta.url), 'utf8');
   const rule = source.slice(source.indexOf('const share = (await client.query('), source.indexOf("if (!share) return { error: 'partner_not_shared'"));
   assert.doesNotMatch(rule, /check_stakeholders/);
-  assert.match(rule, /status = 'active' AND revoked_at IS NULL/);
-  assert.match(rule, /revoked_at IS NOT NULL/);
+  assert.match(rule, /p\.status = 'active' AND p\.revoked_at IS NULL/);
+  // Ended rows and un-shares count only since the partnership was last accepted.
+  assert.equal((rule.match(/revoked_at >= COALESCE\(p\.accepted_at, p\.created_at, '-infinity'::timestamptz\)/g) || []).length, 2);
 });
 
 test('partners must share this check and have exactly one production account', async () => {
@@ -415,8 +437,11 @@ test('partners must share this check and have exactly one production account', a
       [{ shares: [], partnerships: [{ ...PARTNERSHIP, status: 'pending' }] }, {}, 'partner_not_shared'],
       [{ shares: [], partnerships: [{ ...PARTNERSHIP, inviter_tenant_id: OTHER_TENANT }] }, {}, 'partner_not_shared'],
       [{ shares: [], partnerships: [{ ...PARTNERSHIP, invitee_tenant_id: OTHER_TENANT }] }, {}, 'partner_not_shared'],
-      // Un-sharing this check with the partner still blocks them, partnership or not.
+      // Un-sharing this check with the partner since the partnership was accepted blocks them.
       [{ shares: [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: PARTNER, revoked_at: '2026-10-01' }], partnerships: [PARTNERSHIP] }, {}, 'partner_not_shared'],
+      [{ shares: [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: PARTNER, revoked_at: '2026-10-05' }], partnerships: [{ ...PARTNERSHIP, accepted_at: '2026-10-02' }] }, {}, 'partner_not_shared'],
+      // The pair's row in the other direction was ended after this one was accepted.
+      [{ shares: [], partnerships: [{ ...PARTNERSHIP, accepted_at: '2026-10-02' }, { inviter_tenant_id: TENANT, invitee_tenant_id: PARTNER, status: 'revoked', revoked_at: '2026-10-05' }] }, {}, 'partner_not_shared'],
     ]) {
       const client = fakeDb(options);
       const moov = moovStub(stubOptions);

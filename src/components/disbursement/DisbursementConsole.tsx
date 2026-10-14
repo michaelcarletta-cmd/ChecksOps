@@ -488,7 +488,7 @@ export function DisbursementConsole({
         const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
         if (!acct?.partner_tenant_id) return split;
         if (!acct.external_stakeholder_account_id) {
-          throw new Error(`Add ${acct.nickname} to this check's stakeholders to record an external payment to them.`);
+          throw new Error(`${acct.nickname} can be paid here by balance or bank. To record an external payment, use a saved stakeholder account instead.`);
         }
         return { ...split, stakeholder_account_id: acct.external_stakeholder_account_id };
       });

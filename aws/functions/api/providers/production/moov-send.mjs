@@ -366,23 +366,32 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
     // A partner can be paid on this organization's check when the check is shared with
     // them, or the partnership is active (both sides agreed: SQL 76 lets only the
     // invitee or Partner Code redemption activate it). Choosing a partner in the
-    // payment picker needs no share. A share of this check that was revoked still
-    // blocks them unless it was shared again.
+    // payment picker needs no share. Since the partnership was last accepted, this
+    // check must not have been un-shared with them and no other row for the pair (the
+    // pair can have one row per direction) may have been ended. Ending a partnership
+    // revokes its shares, so those older revocations do not block a reconnected pair.
     const share = (await client.query(
       `SELECT 1 AS ok
        WHERE EXISTS (
            SELECT 1 FROM public.shared_checks
            WHERE check_id = $1::uuid AND revoked_at IS NULL
              AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid)
-         OR (EXISTS (
-               SELECT 1 FROM public.tenant_partnerships
-               WHERE status = 'active' AND revoked_at IS NULL
-                 AND ((inviter_tenant_id = $2::uuid AND invitee_tenant_id = $3::uuid)
-                   OR (inviter_tenant_id = $3::uuid AND invitee_tenant_id = $2::uuid)))
+         OR EXISTS (
+           SELECT 1 FROM public.tenant_partnerships p
+           WHERE p.status = 'active' AND p.revoked_at IS NULL
+             AND ((p.inviter_tenant_id = $2::uuid AND p.invitee_tenant_id = $3::uuid)
+               OR (p.inviter_tenant_id = $3::uuid AND p.invitee_tenant_id = $2::uuid))
              AND NOT EXISTS (
-               SELECT 1 FROM public.shared_checks
-               WHERE check_id = $1::uuid AND revoked_at IS NOT NULL
-                 AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid))`,
+               SELECT 1 FROM public.tenant_partnerships q
+               WHERE q.id <> p.id AND q.revoked_at IS NOT NULL
+                 AND q.revoked_at >= COALESCE(p.accepted_at, p.created_at, '-infinity'::timestamptz)
+                 AND ((q.inviter_tenant_id = $2::uuid AND q.invitee_tenant_id = $3::uuid)
+                   OR (q.inviter_tenant_id = $3::uuid AND q.invitee_tenant_id = $2::uuid)))
+             AND NOT EXISTS (
+               SELECT 1 FROM public.shared_checks s
+               WHERE s.check_id = $1::uuid AND s.revoked_at IS NOT NULL
+                 AND s.revoked_at >= COALESCE(p.accepted_at, p.created_at, '-infinity'::timestamptz)
+                 AND s.source_tenant_id = $2::uuid AND s.target_tenant_id = $3::uuid))`,
       [request.checkId, tenantId, r.id],
     )).rows[0];
     if (!share) return { error: 'partner_not_shared', recipient: r };
