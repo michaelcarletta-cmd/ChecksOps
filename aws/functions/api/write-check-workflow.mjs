@@ -732,7 +732,7 @@ const executeMessages = async ({ client, mapping, op, values, filters }) => {
 const FILE_CATEGORIES = new Set(['other', 'supporting', 'manual', 'check_image']);
 const FILE_SOURCES = new Set(['manual', 'reupload']);
 
-const executeCheckFiles = async ({ client, mapping, op, values, filters }) => {
+export const executeCheckFiles = async ({ client, mapping, op, values, filters }) => {
   if (op === 'insert') {
     const checkId = values.check_intake_item_id;
     const looked = await lookupCheck(client, checkId);
@@ -840,10 +840,24 @@ const executeCheckFiles = async ({ client, mapping, op, values, filters }) => {
   // check_files has no updated_at; strip the extra set from buildSet
   built.sets = built.sets.filter((part) => !part.startsWith('updated_at'));
   built.params.push(id);
+  const idParam = built.params.length;
+  // A linked signature request must belong to this file's own check (or, for a
+  // claim-only request, to that check's claim).
+  let sigScope = '';
+  if (out.signature_request_id) {
+    built.params.push(out.signature_request_id);
+    sigScope = `
+       AND EXISTS (
+         SELECT 1 FROM public.signature_requests sr
+         WHERE sr.id = $${built.params.length}::uuid
+           AND (sr.check_intake_item_id = check_files.check_intake_item_id
+             OR (sr.check_intake_item_id IS NULL AND sr.claim_id IS NOT NULL AND sr.claim_id = (
+               SELECT ci.claim_id FROM public.check_intake_items ci WHERE ci.id = check_files.check_intake_item_id))))`;
+  }
   const rows = (await client.query(
     `UPDATE public.check_files
      SET ${built.sets.join(', ')}
-     WHERE id = $${built.params.length}::uuid
+     WHERE id = $${idParam}::uuid${sigScope}
      RETURNING *`,
     built.params,
   )).rows;
