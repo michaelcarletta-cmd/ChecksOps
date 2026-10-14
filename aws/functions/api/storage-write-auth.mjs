@@ -77,6 +77,18 @@ const hasAnyTenantMembership = async (client, userId) => {
   return rows.length > 0;
 };
 
+const isPlatformOwner = async (client) => {
+  const row = (await client.query(
+    'SELECT COALESCE(public.is_platform_owner(), false) AS is_platform, COALESCE(public.is_master_owner(), false) AS is_master',
+  )).rows[0] || {};
+  return row.is_platform === true || row.is_master === true;
+};
+
+/** tenant-logos: exactly {tenantId}/{file}. */
+const TENANT_LOGO_PATH = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/[A-Za-z0-9._=-]+$/i;
+/** company-branding: one shared folder of timestamped letterheads; new files only. */
+const COMPANY_BRANDING_PATH = /^(invoice_)?letterhead_\d+\.[A-Za-z0-9]{1,32}$/;
+
 export const authorizeStorageWritePath = async (client, bucket, objectPath, userId) => {
   const denied = denyBucket(bucket);
   if (denied) return denied;
@@ -174,14 +186,32 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not authorized for this loss draft' };
   }
 
-  if (bucket === 'tenant-logos' || bucket === 'company-branding') {
-    if (!isBrandingUploadPath(rel)) {
-      return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'Invalid branding path' };
+  // Branding writes used to accept any short path from any member of any
+  // tenant, with upsert and delete, so one tenant could overwrite or remove
+  // another tenant's logo or letterhead.
+  if (bucket === 'tenant-logos') {
+    const tenantId = String(rel).match(TENANT_LOGO_PATH)?.[1];
+    if (!isBrandingUploadPath(rel) || !tenantId) {
+      return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'tenant-logos uploads must use {tenantId}/{file}' };
+    }
+    if (!(await hasTenantMembership(client, userId, tenantId)) && !(await isPlatformOwner(client))) {
+      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not a member of this tenant' };
+    }
+    return { ok: true, rel, tenantId: tenantId.toLowerCase(), key: s3KeyFor(bucket, rel), strategy: 'branding' };
+  }
+
+  if (bucket === 'company-branding') {
+    if (!isBrandingUploadPath(rel) || !COMPANY_BRANDING_PATH.test(rel)) {
+      return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'company-branding uploads must be a new letterhead_<time> or invoice_letterhead_<time> file' };
+    }
+    if (await isPlatformOwner(client)) {
+      return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'branding' };
     }
     if (!(await hasAnyTenantMembership(client, userId))) {
       return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Tenant membership required for branding uploads' };
     }
-    return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'branding' };
+    // Shared folder: members may add a new file, never replace or remove one.
+    return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'branding', createOnly: true };
   }
 
   if (bucket === 'deposit-attachments') {
@@ -207,14 +237,11 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     return { ok: true, rel, depositItemId: itemId, key: s3KeyFor(bucket, rel), strategy: 'deposit_attachment' };
   }
 
+  // Homeowner check photos are written only by the server-side homeowner
+  // portal (homeowner.mjs). Any member of any tenant could previously
+  // overwrite or delete them here.
   if (bucket === 'homeowner-uploads') {
-    if (!isBrandingUploadPath(rel)) {
-      return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'Invalid homeowner upload path' };
-    }
-    if (!(await hasAnyTenantMembership(client, userId))) {
-      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Membership required' };
-    }
-    return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'homeowner_upload' };
+    return { ok: false, statusCode: 403, error: 'bucket_not_allowed', message: 'homeowner-uploads are written by the homeowner portal only' };
   }
 
   return {
