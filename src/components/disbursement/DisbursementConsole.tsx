@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,8 @@ import { useStepUp } from "@/hooks/useStepUp";
 import { sendPayment, SendPaymentError, type SendRecipient } from "@/lib/payments/sends";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { useSelectedPartners } from "@/lib/payments/selectedPartners";
+import { NOT_SENT, mergeDisbursementPayees, removedPartnerIds as computeRemovedPartnerIds } from "@/lib/payments/checkStakeholderList";
+import { batchHistoryQuery, checkSendsQuery, partnerRemovalsQuery, sharedPartnersQuery } from "@/hooks/useCheckStakeholderList";
 
 interface Props {
   checkIntakeItemId?: string;
@@ -68,9 +70,6 @@ const FINAL_SEND_CODES = new Set([
   "check_not_found",
   "facilitator_changed",
 ]);
-
-// Send transfers that never left (anything else counts against the check).
-const NOT_SENT = new Set(["failed", "canceled", "returned"]);
 
 // Recipient readiness on Moov.
 const isMoovReady = (acct: any) =>
@@ -121,40 +120,17 @@ export function DisbursementConsole({
 
   // Partners this check is shared with are paid wallet to wallet (or to their bank
   // when they have no balance account); the server checks the share again.
-  const { data: partnerStakeholders = [] } = useQuery({
-    queryKey: ["partner-recipients", checkIntakeItemId, tenant?.id],
-    enabled: !!checkIntakeItemId && !!tenant?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("shared_checks")
-        .select("target_tenant_id, revoked_at")
-        .eq("check_id", checkIntakeItemId!)
-        .eq("source_tenant_id", tenant!.id)
-        .is("revoked_at", null);
-      if (error) throw error;
-      const ids = [...new Set((data ?? []).map((row: any) => row.target_tenant_id).filter(Boolean))] as string[];
-      if (ids.length === 0) return [];
-      const { data: names } = await supabase.from("tenants_public").select("id, name").in("id", ids);
-      const nameOf = new Map((names ?? []).map((t: any) => [t.id, t.name]));
-      return ids.map((id) => ({ partner_tenant_id: id, partner_name: (nameOf.get(id) as string) || "Partner organization" }));
-    },
-  });
+  const { data: partnerStakeholders = [] } = useQuery(sharedPartnersQuery(checkIntakeItemId, tenant?.id));
+
+  // Partners removed as stakeholders on this check stay off the payment list.
+  const { data: partnerRemovals = [] } = useQuery(partnerRemovalsQuery(checkIntakeItemId));
+  const removedPartners = useMemo(
+    () => computeRemovedPartnerIds(partnerStakeholders, partnerRemovals),
+    [partnerStakeholders, partnerRemovals],
+  );
 
   // Sends recorded by the payment server for this check (one row per transfer).
-  const { data: sentTransfers = [] } = useQuery({
-    queryKey: ["check-sends", checkIntakeItemId],
-    enabled: !!checkIntakeItemId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payment_transfers")
-        .select("id, amount_cents, status, leg_role, created_at, provider_metadata")
-        .eq("check_id", checkIntakeItemId!)
-        .in("leg_role", ["send_wallet", "send_bank"])
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const { data: sentTransfers = [] } = useQuery(checkSendsQuery(checkIntakeItemId));
 
   // Load stakeholder accounts whitelisted for THIS check
   const { data: ownAccounts = [], isLoading } = useQuery({
@@ -210,50 +186,50 @@ export function DisbursementConsole({
   // server checks the partnership when the payment is sent).
   const { partners: selectedPartners } = useSelectedPartners(checkIntakeItemId);
 
-  // Partners appear next to this check's stakeholders.
-  const accounts = useMemo(() => {
-    const merged = [...(ownAccounts as any[])];
-    const partnerRows = [
-      ...(partnerStakeholders as any[]).map((p) => ({ ...p, added_via: "partner_share" })),
-      ...selectedPartners.map((p) => ({ ...p, added_via: "partner_selected" })),
-    ];
-    for (const p of partnerRows) {
-      // A partner already listed (on this check's stakeholders or shared) appears once.
-      if (merged.some((a: any) => a.partner_tenant_id === p.partner_tenant_id)) continue;
-      merged.push({
-        id: `partner:${p.partner_tenant_id}`,
-        partner_tenant_id: p.partner_tenant_id,
-        nickname: p.partner_name,
-        account_type: "partner",
-        verification_status: "verified",
-        is_active: true,
-        provider: "moov",
-        provider_account_id: "partner",
-        added_via: p.added_via,
-      });
+  // Partners appear next to this check's stakeholders, unless removed from this check.
+  const accounts = useMemo(
+    () =>
+      mergeDisbursementPayees<any>({
+        ownAccounts: ownAccounts as any[],
+        sharedPartners: partnerStakeholders,
+        selectedPartners,
+        removedPartnerIds: removedPartners,
+        makePartner: (p) => ({
+          id: `partner:${p.partner_tenant_id}`,
+          partner_tenant_id: p.partner_tenant_id,
+          nickname: p.partner_name,
+          account_type: "partner",
+          verification_status: "verified",
+          is_active: true,
+          provider: "moov",
+          provider_account_id: "partner",
+          added_via: p.added_via,
+        }),
+      }),
+    [ownAccounts, partnerStakeholders, selectedPartners, removedPartners],
+  );
+
+  // "Pay" in the stakeholder list focuses that recipient's amount here, so the
+  // normal confirmation and two-factor path is used (nothing is sent directly).
+  const allocationInputs = useRef(new Map<string, HTMLInputElement>());
+  const [focusedPayee, setFocusedPayee] = useState<string | null>(null);
+  const payableKeys = useMemo(() => new Set((accounts as any[]).map((a) => String(a.id).toLowerCase())), [accounts]);
+  const focusPayee = useCallback((key: string) => {
+    const wanted = key.toLowerCase();
+    setFocusedPayee(wanted);
+    const input = allocationInputs.current.get(wanted);
+    if (input) {
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
+      input.focus({ preventScroll: true });
     }
-    return merged;
-  }, [ownAccounts, partnerStakeholders, selectedPartners]);
+  }, []);
 
   const partnersNeedingSetup: any[] = [];
 
 
 
   // Load all past splits for this check (running total of what's already disbursed)
-  const { data: pastBatches = [] } = useQuery({
-    queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId],
-    enabled: !!(checkIntakeItemId || depositItemId),
-    queryFn: async () => {
-      const query = supabase
-        .from("disbursement_batches")
-        .select(`id, status, created_at, delivery_speed, disbursement_splits(id, amount, status, return_code, stakeholder_accounts(nickname, account_type), actum_transactions(auth_code, response_reason))`)
-        .order("created_at", { ascending: false });
-      if (checkIntakeItemId) query.eq("check_intake_item_id", checkIntakeItemId);
-      else if (depositItemId) query.eq("deposit_item_id", depositItemId);
-      const { data } = await query;
-      return data ?? [];
-    },
-  });
+  const { data: pastBatches = [] } = useQuery(batchHistoryQuery(checkIntakeItemId, depositItemId));
 
 
   // Sum all prior split amounts that aren't failed/cancelled (counts pending + submitted + settled)
@@ -298,23 +274,30 @@ export function DisbursementConsole({
     return rows;
   }, [pastBatches, sentTransfers]);
 
+  // Amounts typed for someone who is no longer listed (e.g. a partner just removed)
+  // are not sent, so they don't count toward the totals either.
+  const activeAllocationValues = useMemo(() => {
+    const listed = new Set(accounts.map((a) => a.id));
+    return Object.entries(allocations).filter(([id]) => listed.has(id)).map(([, v]) => v);
+  }, [allocations, accounts]);
+
   const totalAllocated = useMemo(() => {
-    return Object.values(allocations).reduce((sum, v) => {
+    return activeAllocationValues.reduce((sum, v) => {
       const n = parseFloat(v || "0");
       return sum + (isNaN(n) ? 0 : n);
     }, 0);
-  }, [allocations]);
+  }, [activeAllocationValues]);
 
   // Sum the per-recipient rounded dollar amounts so the total matches what is actually sent
   const totalAllocatedDollars = useMemo(() => {
     return toCents(
-      Object.values(allocations).reduce((sum, v) => {
+      activeAllocationValues.reduce((sum, v) => {
         const n = parseFloat(v || "0");
         if (isNaN(n) || n <= 0) return sum;
         return sum + toCents(usePercent ? (n / 100) * availableAmount : n);
       }, 0)
     );
-  }, [allocations, usePercent, availableAmount]);
+  }, [activeAllocationValues, usePercent, availableAmount]);
 
 
   const remaining = toCents(availableAmount - totalAllocatedDollars);
@@ -715,7 +698,9 @@ export function DisbursementConsole({
         )}
 
         {/* Stakeholder manager (per-check) */}
-        {checkIntakeItemId && <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} />}
+        {checkIntakeItemId && (
+          <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} onPay={focusPayee} payableKeys={payableKeys} />
+        )}
 
         {partnersNeedingSetup.length > 0 && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
@@ -800,8 +785,9 @@ export function DisbursementConsole({
           {accounts.map((acct: any) => {
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
             const isVerified = vStatus === "verified" || vStatus === "admin_override";
+            const focused = focusedPayee === String(acct.id).toLowerCase();
             return (
-              <div key={acct.id} className="flex items-center gap-2">
+              <div key={acct.id} className={`flex items-center gap-2 rounded-md transition-colors ${focused ? "bg-accent/60 ring-1 ring-primary/40" : ""}`}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <p className="text-xs font-medium truncate">
@@ -852,6 +838,13 @@ export function DisbursementConsole({
                     step={usePercent ? "1" : "0.01"}
                     placeholder="0"
                     className="h-8 text-sm text-right"
+                    aria-label={`Amount for ${acct.nickname}`}
+                    ref={(el) => {
+                      const k = String(acct.id).toLowerCase();
+                      if (el) allocationInputs.current.set(k, el);
+                      else allocationInputs.current.delete(k);
+                    }}
+                    onBlur={() => setFocusedPayee((cur) => (cur === String(acct.id).toLowerCase() ? null : cur))}
                     value={allocations[acct.id] ?? ""}
                     onChange={(e) => setAllocations({ ...allocations, [acct.id]: e.target.value })}
                   />
@@ -972,7 +965,7 @@ export function DisbursementConsole({
           ) : hasUnverifiedAllocations && !adminOverride ? (
             <><ShieldAlert className="h-4 w-4 mr-2 shrink-0" />Verify accounts to send</>
           ) : (() => {
-              const recipientCount = Object.values(allocations).filter(v => parseFloat(v || "0") > 0).length;
+              const recipientCount = activeAllocationValues.filter(v => parseFloat(v || "0") > 0).length;
               const fee = SPEED_FEES[deliverySpeed];
               const speedLabel = SPEED_LABELS[deliverySpeed];
               const amountText = `$${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
