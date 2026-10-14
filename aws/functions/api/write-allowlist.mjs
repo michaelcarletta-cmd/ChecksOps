@@ -181,6 +181,22 @@ export const WRITE_ALLOWLIST = {
       reason: "Links one of the organization's own active saved stakeholders to its own check (or removes a link). Lists who can be paid; sending re-checks the account. No money movement.",
     },
   },
+  check_partner_stakeholder_removals: {
+    tranche: 2,
+    ops: new Set(['insert', 'delete']),
+    columns: new Set(['check_intake_item_id', 'partner_tenant_id']),
+    identityColumn: 'removed_by',
+    requiredForWrite: { insert: ['check_intake_item_id', 'partner_tenant_id'], delete: [] },
+    filterColumns: new Set(['id', 'check_intake_item_id', 'partner_tenant_id']),
+    resource: 'check',
+    // tenant_id is the check owner, always server-derived from the check.
+    clientIgnored: new Set(['id', 'tenant_id', 'created_at']),
+    frontend: {
+      file: 'src/components/disbursement/CheckStakeholdersManager.tsx remove/re-add partner',
+      op: 'insert/delete',
+      reason: 'Removes a partner the check is shared with from its default stakeholders (or undoes that). Sending to a removed partner on this check is refused. No money movement.',
+    },
+  },
   check_endorsements: {
     tranche: 2,
     ops: new Set(['update', 'delete']),

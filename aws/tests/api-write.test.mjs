@@ -1043,3 +1043,152 @@ test('check_stakeholders delete is by id only, on the owner\'s own check, and re
   assert.equal(noId.ok, false);
   assert.equal(noId.error, 'invalid_uuid');
 });
+
+const PARTNER_TENANT = '7c1d2e3f-4a5b-4c6d-8e7f-901234567890';
+const REMOVAL_ID = '7d7d7d7d-7d7d-4d7d-8d7d-7d7d7d7d7d7d';
+
+/** mockClient plus check_partner_stakeholder_removals answers: writability, live shares, existing removals. */
+const partnerRemovalClient = ({ canWrite = true, shared = [PARTNER_TENANT], removed = false, deletable = true } = {}) => {
+  const base = mockClient();
+  const query = base.query;
+  base.query = async (sql, params) => {
+    const text = String(sql);
+    if (text.includes('aws_can_write_tenant($1::uuid) AS ok')) {
+      base.queries.push({ sql, params });
+      return { rows: [{ ok: canWrite && params[0] === OWN_TENANT }] };
+    }
+    if (text.includes('FROM public.shared_checks')) {
+      base.queries.push({ sql, params });
+      return { rows: params[0] === CHECK_ID && params[1] === OWN_TENANT && shared.includes(params[2]) ? [{ target_tenant_id: params[2] }] : [] };
+    }
+    if (text.includes('INSERT INTO public.check_partner_stakeholder_removals')) {
+      base.queries.push({ sql, params });
+      return { rows: removed ? [] : [{ id: REMOVAL_ID, check_intake_item_id: params[0], tenant_id: params[1], partner_tenant_id: params[2], removed_by: params[3] }] };
+    }
+    if (text.includes('SELECT * FROM public.check_partner_stakeholder_removals')) {
+      base.queries.push({ sql, params });
+      return { rows: removed ? [{ id: REMOVAL_ID, check_intake_item_id: params[0], tenant_id: params[1], partner_tenant_id: params[2] }] : [] };
+    }
+    if (text.includes('DELETE FROM public.check_partner_stakeholder_removals')) {
+      base.queries.push({ sql, params });
+      return { rows: deletable ? [{ id: REMOVAL_ID }] : [] };
+    }
+    return query(sql, params);
+  };
+  return base;
+};
+
+const partnerRemovalWrite = (client, body) => handleWrite(
+  jwtEvent('/data/write', 'POST', { table: 'check_partner_stakeholder_removals', ...body }),
+  depsFor(client),
+);
+
+test('check_partner_stakeholder_removals insert removes a shared partner; tenant and removed_by are server-derived', async () => {
+  const client = partnerRemovalClient();
+  const result = await partnerRemovalWrite(client, {
+    op: 'insert',
+    values: {
+      check_intake_item_id: CHECK_ID,
+      partner_tenant_id: PARTNER_TENANT,
+      tenant_id: OTHER_TENANT,
+      removed_by: SPOOF_ID,
+      id: REMOVAL_ID,
+      created_at: '2020-01-01T00:00:00Z',
+    },
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const share = client.queries.find((q) => String(q.sql).includes('FROM public.shared_checks'));
+  assert.match(String(share.sql), /revoked_at IS NULL/);
+  assert.deepEqual(share.params, [CHECK_ID, OWN_TENANT, PARTNER_TENANT]);
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.check_partner_stakeholder_removals'));
+  assert.deepEqual(insert.params, [CHECK_ID, OWN_TENANT, PARTNER_TENANT, APP_ID]);
+  assert.match(String(insert.sql), /ON CONFLICT \(check_intake_item_id, tenant_id, partner_tenant_id\) DO NOTHING/);
+});
+
+test('check_partner_stakeholder_removals refuses unshared partners, non-writable checks, updates and bad ids', async () => {
+  const unshared = partnerRemovalClient({ shared: [] });
+  const notShared = await partnerRemovalWrite(unshared, {
+    op: 'insert', values: { check_intake_item_id: CHECK_ID, partner_tenant_id: PARTNER_TENANT },
+  });
+  assert.equal(notShared.ok, false);
+  assert.equal(notShared.error, 'partner_not_shared');
+  assert.equal(notShared.statusCode, 409);
+  assert.equal(unshared.queries.some((q) => String(q.sql).includes('INSERT INTO public.check_partner_stakeholder_removals')), false);
+
+  const readonly = partnerRemovalClient({ canWrite: false });
+  const denied = await partnerRemovalWrite(readonly, {
+    op: 'insert', values: { check_intake_item_id: CHECK_ID, partner_tenant_id: PARTNER_TENANT },
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.error, 'rls_denied');
+  assert.equal(readonly.queries.some((q) => String(q.sql).includes('FROM public.shared_checks')), false);
+
+  const update = await partnerRemovalWrite(partnerRemovalClient(), {
+    op: 'update', values: { partner_tenant_id: PARTNER_TENANT }, filters: [{ column: 'id', op: 'eq', value: REMOVAL_ID }],
+  });
+  assert.equal(update.error, 'operation_not_allowlisted');
+
+  const badPartner = await partnerRemovalWrite(partnerRemovalClient(), {
+    op: 'insert', values: { check_intake_item_id: CHECK_ID, partner_tenant_id: 'nope' },
+  });
+  assert.equal(badPartner.error, 'invalid_uuid');
+  assert.equal(badPartner.statusCode, 400);
+
+  const missing = await partnerRemovalWrite(partnerRemovalClient(), { op: 'insert', values: { check_intake_item_id: CHECK_ID } });
+  assert.equal(missing.error, 'missing_required_field');
+
+  const extra = await partnerRemovalWrite(partnerRemovalClient(), {
+    op: 'insert', values: { check_intake_item_id: CHECK_ID, partner_tenant_id: PARTNER_TENANT, stakeholder_account_id: ACCOUNT_ID },
+  });
+  assert.equal(extra.error, 'column_not_allowlisted');
+});
+
+test('check_partner_stakeholder_removals insert of an existing removal returns it', async () => {
+  const client = partnerRemovalClient({ removed: true });
+  const result = await partnerRemovalWrite(client, {
+    op: 'insert', values: { check_intake_item_id: CHECK_ID, partner_tenant_id: PARTNER_TENANT },
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.data[0].id, REMOVAL_ID);
+});
+
+test('check_partner_stakeholder_removals delete by id or by check + partner, scoped to the check owner', async () => {
+  const byId = partnerRemovalClient();
+  let result = await partnerRemovalWrite(byId, { op: 'delete', filters: [{ column: 'id', op: 'eq', value: REMOVAL_ID }] });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  let del = byId.queries.find((q) => String(q.sql).includes('DELETE FROM public.check_partner_stakeholder_removals'));
+  assert.match(String(del.sql), /c\.tenant_id = r\.tenant_id/);
+  assert.match(String(del.sql), /aws_can_write_tenant\(r\.tenant_id\)/);
+  assert.deepEqual(del.params, [REMOVAL_ID]);
+
+  const byPair = partnerRemovalClient();
+  result = await partnerRemovalWrite(byPair, {
+    op: 'delete',
+    filters: [
+      { column: 'check_intake_item_id', op: 'eq', value: CHECK_ID },
+      { column: 'partner_tenant_id', op: 'eq', value: PARTNER_TENANT },
+    ],
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  del = byPair.queries.find((q) => String(q.sql).includes('DELETE FROM public.check_partner_stakeholder_removals'));
+  assert.match(String(del.sql), /c\.tenant_id = r\.tenant_id/);
+  assert.deepEqual(del.params, [CHECK_ID, PARTNER_TENANT]);
+
+  const onlyCheck = await partnerRemovalWrite(partnerRemovalClient(), {
+    op: 'delete', filters: [{ column: 'check_intake_item_id', op: 'eq', value: CHECK_ID }],
+  });
+  assert.equal(onlyCheck.error, 'invalid_uuid');
+
+  const none = await partnerRemovalWrite(partnerRemovalClient(), { op: 'delete', filters: [] });
+  assert.equal(none.error, 'invalid_uuid');
+
+  const notFound = await partnerRemovalWrite(partnerRemovalClient({ deletable: false }), {
+    op: 'delete', filters: [{ column: 'id', op: 'eq', value: REMOVAL_ID }],
+  });
+  assert.equal(notFound.error, 'rls_denied');
+
+  const byTenant = await partnerRemovalWrite(partnerRemovalClient(), {
+    op: 'delete', filters: [{ column: 'tenant_id', op: 'eq', value: OWN_TENANT }],
+  });
+  assert.equal(byTenant.ok, false);
+});

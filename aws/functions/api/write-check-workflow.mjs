@@ -560,6 +560,96 @@ const executeCheckStakeholders = async ({ client, mapping, op, values, filters }
   return { rows };
 };
 
+/**
+ * check_partner_stakeholder_removals: a partner the check is shared with is one of
+ * its stakeholders by default; a row removes that partner from this check's
+ * stakeholders (delete undoes it). tenant_id (the check owner) and removed_by are
+ * server-derived; only a partner with a live share of this check can be removed.
+ */
+const executeCheckPartnerStakeholderRemovals = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const looked = await lookupCheck(client, values.check_intake_item_id);
+    if (looked.error) return looked;
+    const invalid = requireUuid('partner_tenant_id', values.partner_tenant_id);
+    if (invalid) return invalid;
+    const tenantId = looked.check.tenant_id;
+    const writable = (await client.query(
+      'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
+      [tenantId],
+    )).rows[0];
+    if (writable?.ok !== true) return { error: 'rls_denied', message: 'check not writable' };
+    const share = (await client.query(
+      `SELECT target_tenant_id FROM public.shared_checks
+       WHERE check_id = $1::uuid AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid
+         AND revoked_at IS NULL`,
+      [looked.check.id, tenantId, values.partner_tenant_id],
+    )).rows[0];
+    if (!share) {
+      return {
+        error: 'partner_not_shared',
+        statusCode: 409,
+        message: 'This check is not shared with that partner, so there is no partner stakeholder to remove.',
+      };
+    }
+    const inserted = (await client.query(
+      `INSERT INTO public.check_partner_stakeholder_removals (
+         check_intake_item_id, tenant_id, partner_tenant_id, removed_by
+       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid)
+       ON CONFLICT (check_intake_item_id, tenant_id, partner_tenant_id) DO NOTHING
+       RETURNING *`,
+      [looked.check.id, tenantId, share.target_tenant_id, mapping.application_user_id],
+    )).rows;
+    if (inserted.length) return { rows: inserted };
+    // Already removed: return the existing row instead of failing.
+    const existing = (await client.query(
+      `SELECT * FROM public.check_partner_stakeholder_removals
+       WHERE check_intake_item_id = $1::uuid AND tenant_id = $2::uuid AND partner_tenant_id = $3::uuid`,
+      [looked.check.id, tenantId, share.target_tenant_id],
+    )).rows;
+    if (!existing.length) return { error: 'rls_denied', message: 'partner removal not readable' };
+    return { rows: existing };
+  }
+
+  const removalId = eqFilter(filters, 'id');
+  if (removalId !== null) {
+    const invalid = requireUuid('id', removalId);
+    if (invalid) return invalid;
+    const rows = (await client.query(
+      `DELETE FROM public.check_partner_stakeholder_removals r
+       USING public.check_intake_items c
+       WHERE r.id = $1::uuid
+         AND c.id = r.check_intake_item_id
+         AND c.tenant_id = r.tenant_id
+         AND public.aws_can_write_tenant(r.tenant_id)
+       RETURNING r.*`,
+      [removalId],
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'partner removal not found or not writable' };
+    return { rows };
+  }
+
+  const checkId = eqFilter(filters, 'check_intake_item_id');
+  const partnerTenantId = eqFilter(filters, 'partner_tenant_id');
+  if (checkId === null && partnerTenantId === null) return { error: 'invalid_uuid', field: 'id' };
+  const invalidCheck = requireUuid('check_intake_item_id', checkId);
+  if (invalidCheck) return invalidCheck;
+  const invalidPartner = requireUuid('partner_tenant_id', partnerTenantId);
+  if (invalidPartner) return invalidPartner;
+  const rows = (await client.query(
+    `DELETE FROM public.check_partner_stakeholder_removals r
+     USING public.check_intake_items c
+     WHERE r.check_intake_item_id = $1::uuid
+       AND r.partner_tenant_id = $2::uuid
+       AND c.id = r.check_intake_item_id
+       AND c.tenant_id = r.tenant_id
+       AND public.aws_can_write_tenant(r.tenant_id)
+     RETURNING r.*`,
+    [checkId, partnerTenantId],
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'partner removal not found or not writable' };
+  return { rows };
+};
+
 const executeEndorsements = async ({ client, op, values, filters }) => {
   const id = eqFilter(filters, 'id');
   const payeeId = eqFilter(filters, 'payee_id');
@@ -1571,6 +1661,9 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'check_intake_items') return executeIntakeUpdate({ client, values, filters });
   if (table === 'check_payees') return executePayees({ client, mapping, op, values, filters });
   if (table === 'check_stakeholders') return executeCheckStakeholders({ client, mapping, op, values, filters });
+  if (table === 'check_partner_stakeholder_removals') {
+    return executeCheckPartnerStakeholderRemovals({ client, mapping, op, values, filters });
+  }
   if (table === 'check_endorsements') return executeEndorsements({ client, op, values, filters });
   if (table === 'check_endorsement_events') return executeEndorsementEvents({ client, op, filters });
   if (table === 'check_audit_log') return executeAuditLog({ client, mapping, values });
