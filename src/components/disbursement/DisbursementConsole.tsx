@@ -120,7 +120,7 @@ export function DisbursementConsole({
 
   // Partners this check is shared with are paid wallet to wallet (or to their bank
   // when they have no balance account); the server checks the share again.
-  const { data: partnerStakeholders = [] } = useQuery(sharedPartnersQuery(checkIntakeItemId, tenant?.id));
+  const { data: partnerStakeholders = [], isSuccess: sharesKnown } = useQuery(sharedPartnersQuery(checkIntakeItemId, tenant?.id));
 
   // Shared partners stay on the payment list while the check is shared.
   const removedPartners = useMemo(() => new Set<string>(), []);
@@ -188,6 +188,7 @@ export function DisbursementConsole({
       mergeDisbursementPayees<any>({
         ownAccounts: ownAccounts as any[],
         sharedPartners: partnerStakeholders,
+        sharesKnown,
         selectedPartners,
         removedPartnerIds: removedPartners,
         makePartner: (p) => ({
@@ -202,7 +203,7 @@ export function DisbursementConsole({
           added_via: p.added_via,
         }),
       }),
-    [ownAccounts, partnerStakeholders, selectedPartners, removedPartners],
+    [ownAccounts, partnerStakeholders, sharesKnown, selectedPartners, removedPartners],
   );
 
   // "Pay" in the stakeholder list focuses that recipient's amount here, so the

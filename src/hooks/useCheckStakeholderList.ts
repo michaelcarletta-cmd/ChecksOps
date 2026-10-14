@@ -143,8 +143,9 @@ export function useCheckStakeholderList(checkId: string | undefined, tenantId: s
         sharedPartners,
         removals: removalRows,
         selectedPartners,
+        sharesKnown: shared.isSuccess,
       }),
-    [stakeholders.data, sharedPartners, removalRows, selectedPartners],
+    [stakeholders.data, sharedPartners, removalRows, selectedPartners, shared.isSuccess],
   );
   const removedPartnerIds = useMemo(() => computeRemovedPartnerIds(sharedPartners, removalRows), [sharedPartners, removalRows]);
   const released = useMemo(

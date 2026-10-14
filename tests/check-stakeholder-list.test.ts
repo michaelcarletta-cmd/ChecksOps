@@ -252,3 +252,24 @@ test("unshared partners drop out of the payees; chosen partners stay", () => {
   });
   assert.deepEqual(stillShared.map((a) => a.id), ["a1", "a2", "a3"]);
 });
+
+test("while the check's shares are unknown, no partner row is hidden", () => {
+  const rows = buildCheckStakeholderRows({
+    checkStakeholders: [
+      { id: "cs-p1", added_via: "partner_share", partner_tenant_id: P1, stakeholder_account_id: ACCT2, stakeholder_accounts: null, partner: null },
+    ],
+    sharedPartners: [],
+    removals: [],
+    sharesKnown: false,
+  });
+  assert.deepEqual(rows.map((r) => r.key), [`partner:${P1}`]);
+  const payees = mergeDisbursementPayees({
+    ownAccounts: [{ id: "a1", partner_tenant_id: P1, added_via: "partner_share" }],
+    sharedPartners: [],
+    selectedPartners: [],
+    removedPartnerIds: new Set<string>(),
+    sharesKnown: false,
+    makePartner: (p) => ({ id: `partner:${p.partner_tenant_id}`, partner_tenant_id: p.partner_tenant_id, added_via: p.added_via }),
+  });
+  assert.deepEqual(payees.map((a) => a.id), ["a1"]);
+});

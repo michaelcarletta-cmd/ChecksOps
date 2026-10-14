@@ -98,6 +98,11 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
       qc.invalidateQueries({ queryKey: ["shared-checks", checkId] });
       qc.invalidateQueries({ queryKey: ["shared-with-me-checks"] });
       qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
+      // The check's stakeholder list and payment form follow its shares.
+      qc.invalidateQueries({ queryKey: ["partner-recipients", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-stakeholders", checkId] });
+      qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkId] });
+      qc.invalidateQueries({ queryKey: ["partner-payout-options", checkId] });
     },
     onError: (e: any) => {
       toast({ title: "Failed to share", description: e.message, variant: "destructive" });
@@ -116,6 +121,11 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
       qc.invalidateQueries({ queryKey: ["shared-checks", checkId] });
       qc.invalidateQueries({ queryKey: ["shared-with-me-checks"] });
       qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
+      // The check's stakeholder list and payment form follow its shares.
+      qc.invalidateQueries({ queryKey: ["partner-recipients", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-stakeholders", checkId] });
+      qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkId] });
+      qc.invalidateQueries({ queryKey: ["partner-payout-options", checkId] });
     },
   });
 
