@@ -296,7 +296,7 @@ empty payload, and checks Lambda's `ExecutedVersion` before reporting output.
 There are no workflow inputs, Cognito tokens, arbitrary SQL, artifacts, or AWS
 deployment actions. After a separately authorized deploy of this reviewed
 source, the invocation summarizer adds `triggerInventory` with sanitized public
-trigger names and the added/missing/changed comparison against the 172-name
+trigger names and the added/missing/changed comparison against the 173-name
 baseline. Trigger definitions, raw catalog rows, identities, and Cognito tokens
 are not printed. The HTTP `/db-readonly-validate` Cognito admin gate is
 unchanged. This source change does not enable the disabled deploy workflow.
