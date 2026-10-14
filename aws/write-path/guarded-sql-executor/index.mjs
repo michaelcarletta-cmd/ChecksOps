@@ -1732,6 +1732,13 @@ WHERE c.oid = to_regclass('public.check_stakeholders')
 ORDER BY 1, 2, 3
 `.trim();
 const STAKEHOLDER_TABLE_SQL = "SELECT to_regclass('public.check_stakeholders') IS NOT NULL AS present";
+// Row-level security and the write policy are what keep the grant inside one tenant.
+const STAKEHOLDER_RLS_SQL = `
+SELECT c.relrowsecurity AS rls_enabled,
+  EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'aws_write_check_stakeholders') AS write_policy_present
+FROM pg_class c
+WHERE c.oid = to_regclass('public.check_stakeholders')
+`.trim();
 // The file may hold only comments and this one statement.
 const SQL77_SINGLE_STATEMENT_RE = /^(?:\s*--[^\n]*\n)*\s*GRANT SELECT, INSERT, DELETE ON TABLE public\.check_stakeholders TO checksops, authenticated;\s*$/;
 
@@ -1742,6 +1749,7 @@ const SQL77_SINGLE_STATEMENT_RE = /^(?:\s*--[^\n]*\n)*\s*GRANT SELECT, INSERT, D
 export async function readStakeholderGrantState(client) {
   const present = (await client.query(STAKEHOLDER_TABLE_SQL))?.rows?.[0]?.present === true;
   if (!present) return fail(CODES.SQL_COLLISION, 'public.check_stakeholders is missing');
+  const rls = (await client.query(STAKEHOLDER_RLS_SQL))?.rows?.[0] || {};
   const acl = (await client.query(STAKEHOLDER_ACL_SQL))?.rows || [];
   const privilegeState = Object.fromEntries(STAKEHOLDER_GRANTEES.map((grantee) => [
     grantee,
@@ -1756,6 +1764,8 @@ export async function readStakeholderGrantState(client) {
     .sort();
   return ok({
     table_present: true,
+    rls_enabled: rls.rls_enabled === true,
+    write_policy_present: rls.write_policy_present === true,
     privilege_state: privilegeState,
     update_granted: STAKEHOLDER_GRANTEES.some((grantee) => privilegeState[grantee].UPDATE === 'granted'),
     preserved_acl_sha256: hashSqlDefinition(preserved.join('\n')),
@@ -1834,7 +1844,9 @@ async function handleSql77CheckStakeholdersGrant({
           pin_executable: pinExecutable,
           apply_preconditions_met: pinExecutable
             && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
-            && state.details.update_granted === false,
+            && state.details.update_granted === false
+            && state.details.rls_enabled === true
+            && state.details.write_policy_present === true,
         },
       });
     }
@@ -1856,6 +1868,13 @@ async function handleSql77CheckStakeholdersGrant({
     if (before.details.live_definition_sha256 === pin.intended_replacement_sha256) {
       await rollback();
       return fail(CODES.UNRELATED_MUTATION, 'SQL 77 grant is already in place; refuse re-grant');
+    }
+    if (before.details.rls_enabled !== true || before.details.write_policy_present !== true) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'check_stakeholders needs row-level security and aws_write_check_stakeholders before SQL 77', {
+        rls_enabled: before.details.rls_enabled,
+        write_policy_present: before.details.write_policy_present,
+      });
     }
     if (before.details.update_granted) {
       await rollback();

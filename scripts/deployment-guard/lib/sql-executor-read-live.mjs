@@ -55,6 +55,8 @@ const BOOLEAN_KEYS = Object.freeze([
   'amount_update_granted',
   'table_level_update',
   'update_granted',
+  'rls_enabled',
+  'write_policy_present',
 ]);
 const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count']);
 // Label maps: values must be short lowercase labels; keys are pinned object names.
