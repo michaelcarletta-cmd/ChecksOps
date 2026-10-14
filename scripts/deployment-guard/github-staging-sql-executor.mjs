@@ -375,10 +375,12 @@ if (isDirect && reportIndex >= 0) {
   try {
     reportReadLive(process.argv[reportIndex + 1], process.argv[reportIndex + 2]);
   } catch (error) {
+    // Only GuardError messages are ours (fixed text); anything else could carry
+    // driver or system detail.
     process.stderr.write(`${JSON.stringify({
       ok: false,
       code: error?.code || CODES.DEPLOYMENT_COLLISION,
-      message: error?.message || String(error),
+      message: error instanceof GuardError ? error.message : 'read-live report failed',
     }, null, 2)}\n`);
     process.exitCode = 2;
   }

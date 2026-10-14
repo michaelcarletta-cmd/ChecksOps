@@ -9,8 +9,12 @@
  *   1. the signed receipt fingerprint carries action 'inspect', and the official
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
- *      expected live definition, which no reviewed pin can equal, so every
- *      allowlisted handler refuses apply with it before connecting.
+ *      expected live definition, which no reviewed pin can equal, so the
+ *      read-live-selectable pins (ledger, 71, 72, 76) refuse apply with it
+ *      before connecting.
+ *
+ * Failures print only an error code and a fixed message: executor and driver
+ * error text can carry hostnames, roles or database names.
  */
 import { createHash } from 'node:crypto';
 import { CODES, fail, ok } from './errors.mjs';
@@ -41,6 +45,7 @@ export function checkReceiptActionBinding(receipt = {}, payload = {}) {
 }
 
 const LABEL_RE = /^[a-z_]{1,32}$/;
+const CODE_RE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const BOOLEAN_KEYS = Object.freeze([
   'table_present',
@@ -72,7 +77,12 @@ export function readLiveSummary(invokeResult, { migration, pin } = {}) {
   const inner = outer.details || {};
   const receipt = inner.details?.receipt;
   if (outer.ok !== true || inner.ok !== true || !receipt || typeof receipt !== 'object') {
-    return fail(outer.code || inner.code || CODES.DEPLOYMENT_COLLISION, String(outer.message || inner.message || 'executor read-live invoke failed').slice(0, 300));
+    const code = [inner.code, outer.code].find((value) => typeof value === 'string' && CODE_RE.test(value)) || CODES.DEPLOYMENT_COLLISION;
+    return fail(code, `executor read-live invoke failed (${code}); see the executor logs for detail`);
+  }
+  // The result must be for the selected pin, so its hash cannot be copied into another pin.
+  if (receipt.sql_file !== pin?.filename || receipt.commit !== pin?.commit) {
+    return fail(CODES.UNRELATED_MUTATION, 'executor read-live result is not for the selected migration pin');
   }
   if (receipt.result !== READ_LIVE_ACTION) {
     return fail(CODES.UNRELATED_MUTATION, 'executor did not report a read-only inspect result', { result: String(receipt.result || '').slice(0, 32) });
