@@ -57,8 +57,11 @@ const BOOLEAN_KEYS = Object.freeze([
   'update_granted',
   'rls_enabled',
   'write_policy_present',
+  'write_policy_as_expected',
+  'grantee_bypasses_rls',
+  'tenant_guard_ok',
 ]);
-const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count']);
+const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count', 'other_write_policy_count']);
 // Label maps: values must be short lowercase labels; keys are pinned object names.
 const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state']);
 
