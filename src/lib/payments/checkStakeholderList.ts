@@ -103,6 +103,7 @@ export function buildCheckStakeholderRows(input: {
       const existing = byKey.get(key);
       if (existing) {
         existing.checkStakeholderId ??= s.id;
+        existing.stakeholderAccountId ??= s.stakeholder_account_id ?? null;
         continue;
       }
       push({
@@ -266,9 +267,19 @@ export function releasedCentsByKey(input: {
   return out;
 }
 
-/** Released cents for one row (stakeholder ids compared case-insensitively). */
-export const releasedForRow = (released: Map<string, number>, row: Pick<CheckStakeholderRow, "key">) =>
-  released.get(row.key) ?? released.get(lower(row.key)) ?? 0;
+/**
+ * Released cents for one row (ids compared case-insensitively). A partner row
+ * also counts external payments recorded against its stakeholder account.
+ */
+export const releasedForRow = (
+  released: Map<string, number>,
+  row: Pick<CheckStakeholderRow, "key"> & { stakeholderAccountId?: string | null },
+) => {
+  const own = released.get(row.key) ?? released.get(lower(row.key)) ?? 0;
+  const acct = row.stakeholderAccountId ? lower(row.stakeholderAccountId) : null;
+  if (!acct || acct === lower(row.key)) return own;
+  return own + (released.get(acct) ?? 0);
+};
 
 export const formatUsdCents = (cents: number) =>
   `$${((Number(cents) || 0) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

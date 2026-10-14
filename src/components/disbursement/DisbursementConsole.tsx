@@ -274,23 +274,30 @@ export function DisbursementConsole({
     return rows;
   }, [pastBatches, sentTransfers]);
 
+  // Amounts typed for someone who is no longer listed (e.g. a partner just removed)
+  // are not sent, so they don't count toward the totals either.
+  const activeAllocationValues = useMemo(() => {
+    const listed = new Set(accounts.map((a) => a.id));
+    return Object.entries(allocations).filter(([id]) => listed.has(id)).map(([, v]) => v);
+  }, [allocations, accounts]);
+
   const totalAllocated = useMemo(() => {
-    return Object.values(allocations).reduce((sum, v) => {
+    return activeAllocationValues.reduce((sum, v) => {
       const n = parseFloat(v || "0");
       return sum + (isNaN(n) ? 0 : n);
     }, 0);
-  }, [allocations]);
+  }, [activeAllocationValues]);
 
   // Sum the per-recipient rounded dollar amounts so the total matches what is actually sent
   const totalAllocatedDollars = useMemo(() => {
     return toCents(
-      Object.values(allocations).reduce((sum, v) => {
+      activeAllocationValues.reduce((sum, v) => {
         const n = parseFloat(v || "0");
         if (isNaN(n) || n <= 0) return sum;
         return sum + toCents(usePercent ? (n / 100) * availableAmount : n);
       }, 0)
     );
-  }, [allocations, usePercent, availableAmount]);
+  }, [activeAllocationValues, usePercent, availableAmount]);
 
 
   const remaining = toCents(availableAmount - totalAllocatedDollars);
@@ -958,7 +965,7 @@ export function DisbursementConsole({
           ) : hasUnverifiedAllocations && !adminOverride ? (
             <><ShieldAlert className="h-4 w-4 mr-2 shrink-0" />Verify accounts to send</>
           ) : (() => {
-              const recipientCount = Object.values(allocations).filter(v => parseFloat(v || "0") > 0).length;
+              const recipientCount = activeAllocationValues.filter(v => parseFloat(v || "0") > 0).length;
               const fee = SPEED_FEES[deliverySpeed];
               const speedLabel = SPEED_LABELS[deliverySpeed];
               const amountText = `$${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

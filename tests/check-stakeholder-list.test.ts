@@ -159,6 +159,17 @@ test("rows with nothing sent read $0.00", () => {
   assert.equal(releasedForRow(r2, { key: ACCT.toUpperCase() }), 50);
 });
 
+test("a partner row also counts external payments recorded on its stakeholder account", () => {
+  const released = releasedCentsByKey({
+    transfers: [{ amount_cents: 2500, status: "completed", destination_tenant_id: P1 }],
+    batches: [{ status: "completed", disbursement_splits: [{ amount: 10, status: "settled", stakeholder_account_id: ACCT2 }] }],
+  });
+  assert.equal(releasedForRow(released, { key: `partner:${P1}`, stakeholderAccountId: ACCT2 }), 2500 + 1000);
+  assert.equal(releasedForRow(released, { key: `partner:${P1}`, stakeholderAccountId: null }), 2500);
+  // A stakeholder row whose key is its own account is not counted twice.
+  assert.equal(releasedForRow(released, { key: ACCT2, stakeholderAccountId: ACCT2 }), 1000);
+});
+
 const makePartner = (p: { partner_tenant_id: string; partner_name: string; added_via: string }) => ({
   id: `partner:${p.partner_tenant_id}`,
   partner_tenant_id: p.partner_tenant_id,
