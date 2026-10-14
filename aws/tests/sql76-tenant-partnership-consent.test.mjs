@@ -61,18 +61,15 @@ test('SQL 76 only adds the consent trigger and the connect marker, and retires t
 test('SQL 76 rollback and review files are scoped and the review is read-only', () => {
   const rollback = statementsOf(read(SQL76_ROLLBACK));
   const flat = rollback.map((s) => s.replace(/\s+/g, ' '));
-  assert.deepEqual(flat.slice(0, 3), [
+  // Exactly these three statements: the retired Supabase-era policies stay retired.
+  assert.deepEqual(flat, [
     'DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public.tenant_partnerships',
     'DROP FUNCTION IF EXISTS public.aws_tenant_partnership_consent_guard()',
     'ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid) RESET checksops.partnership_writer',
   ]);
-  // The rest only restores the retired policies, each dropped then re-created.
-  const rest = flat.slice(3);
-  assert.equal(rest.length, RETIRED_POLICIES.length * 2);
-  RETIRED_POLICIES.forEach((name, i) => {
-    assert.equal(rest[2 * i], `DROP POLICY IF EXISTS "${name}" ON public.tenant_partnerships`);
-    assert.match(rest[2 * i + 1], new RegExp(`^CREATE POLICY "${name}" ON public\\.tenant_partnerships FOR (INSERT|UPDATE|SELECT) TO authenticated `));
-  });
+  const rollbackSql = read(SQL76_ROLLBACK).split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
+  assert.doesNotMatch(rollbackSql, /CREATE\s+POLICY/i);
+  assert.doesNotMatch(rollbackSql, /\b(GRANT|CREATE|INSERT|UPDATE|DELETE)\b/i);
   const review = statementsOf(read(SQL76_REVIEW));
   assert.equal(review.length, 1);
   assert.match(review[0], /^WITH live AS/);
@@ -264,6 +261,9 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO checksops, authenticated;
   psql(['-d', dbName, '-c', `
 INSERT INTO public.tenant_partnerships (inviter_tenant_id, invitee_tenant_id, invite_code, status, created_by, accepted_at)
 VALUES ('${UNRELATED}', '${OTHER}', 'LEGACY01', 'active', '${UNRELATED_USER}', now());
+-- A pre-76 live open invite (invitee still NULL), for the invitee-change rule.
+INSERT INTO public.tenant_partnerships (inviter_tenant_id, invite_code, status, created_by, accepted_at)
+VALUES ('${UNRELATED}', 'OPENLIVE', 'active', '${UNRELATED_USER}', now());
 `]);
 
   // Before SQL 76 the inviter can flip its own pending row to active (the bug).
@@ -389,6 +389,36 @@ BEGIN
   r := public._exec(NULL, format($q$UPDATE public.tenant_partnerships SET status = 'active', revoked_at = NULL WHERE id = %L$q$, pid));
   PERFORM public._ok('15_no_identity_update_noop', (r->>'ok')::boolean IS NOT TRUE OR (r->>'rows')::int = 0, r::text);
 
+  -- A live row getting a (new) invitee needs that invitee's writer.
+  SELECT id INTO cid FROM public.tenant_partnerships WHERE invite_code = 'OPENLIVE';
+  r := public._exec('${UNRELATED_USER}', format($q$UPDATE public.tenant_partnerships SET invitee_tenant_id = '${PARTNER}' WHERE id = %L$q$, cid));
+  PERFORM public._ok('16_live_open_inviter_sets_invitee_denied', (r->>'ok')::boolean IS FALSE AND r->>'error' ILIKE denied_consent, r::text);
+  -- The same as the inviter with RLS out of the way (table owner): the guard itself refuses it.
+  BEGIN
+    PERFORM set_config('request.app_user_id', '${UNRELATED_USER}', true);
+    UPDATE public.tenant_partnerships SET invitee_tenant_id = '${PARTNER}' WHERE id = cid;
+    PERFORM public._ok('16b_live_open_inviter_guard_denied', false, 'update succeeded');
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM public._ok('16b_live_open_inviter_guard_denied', SQLERRM ILIKE denied_consent, SQLERRM);
+  END;
+  PERFORM set_config('request.app_user_id', '', true);
+  SELECT coalesce(invitee_tenant_id::text, 'null') INTO st FROM public.tenant_partnerships WHERE id = cid;
+  PERFORM public._ok('16c_live_open_invitee_unchanged', st = 'null', st);
+  -- The invitee's writer can redeem it. RLS does not let the invitee reach an open
+  -- row (aws_write_tenant_partnerships matches the inviter side only while invitee
+  -- is NULL), so this runs as the table owner to exercise the guard alone.
+  BEGIN
+    PERFORM set_config('request.app_user_id', '${PARTNER_USER}', true);
+    UPDATE public.tenant_partnerships SET invitee_tenant_id = '${PARTNER}' WHERE id = cid;
+    PERFORM public._ok('17_live_open_invitee_sets_invitee_ok', true, '');
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM public._ok('17_live_open_invitee_sets_invitee_ok', false, SQLERRM);
+  END;
+  PERFORM set_config('request.app_user_id', '', true);
+  SELECT coalesce(invitee_tenant_id::text, 'null') || '/' || status INTO st FROM public.tenant_partnerships WHERE id = cid;
+  PERFORM public._ok('17b_live_open_invitee_set', st = '${PARTNER}/active', st);
+  DELETE FROM public.tenant_partnerships WHERE id = cid;
+
   -- Settings > Partner Code connect still works (trusted writer).
   r := public._exec('${OWNER}', $q$SELECT public.aws_connect_partner_by_code('${PARTNER_CODE}', '${SOURCE}'::uuid)$q$);
   PERFORM public._ok('20_connect_by_code_creates_live', (r->>'ok')::boolean AND (r->'val'->>'created')::boolean, r::text);
@@ -417,7 +447,7 @@ END $$;
   const results = JSON.parse(scalar(`SELECT coalesce(json_object_agg(test, json_build_object('ok', ok, 'detail', detail) ORDER BY test), '{}'::json) FROM public._results`));
   const failed = Object.entries(results).filter(([, row]) => row.ok !== true);
   assert.equal(failed.length, 0, `failed cases: ${JSON.stringify(failed, null, 2)}`);
-  assert.equal(Object.keys(results).length, 26);
+  assert.equal(Object.keys(results).length, 31);
 
   // Review query: reconnect by code, then classify the live rows.
   psql(['-d', dbName, '-c', `
@@ -450,11 +480,17 @@ SELECT (public.aws_connect_partner_by_code('${OTHER_CODE}', '${SOURCE}'::uuid))-
   assert.match(ok, /true$/);
   assert.equal(scalar(`SELECT status FROM public.tenant_partnerships WHERE inviter_tenant_id = '${SOURCE}' AND invitee_tenant_id = '${OTHER}'`), 'active');
 
-  // Rollback removes the guard and is re-runnable.
+  // Rollback removes the guard and the marker, is re-runnable, and does not
+  // bring back the retired Supabase-era policies.
+  const allPolicies = () => scalar(`SELECT string_agg(policyname || ':' || cmd || ':' || coalesce(qual, '') || ':' || coalesce(with_check, ''), E'\\n' ORDER BY policyname) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'tenant_partnerships'`);
+  const policiesBeforeRollback = allPolicies();
+  assert.match(policiesBeforeRollback, /^aws_write_tenant_partnerships:/m);
   file(SQL76_ROLLBACK);
   file(SQL76_ROLLBACK);
   assert.equal(scalar(`SELECT count(*) FROM pg_trigger WHERE tgname = 'aws_tenant_partnership_consent_guard'`), '0');
   assert.equal(scalar(`SELECT count(*) FROM pg_proc WHERE proname = 'aws_tenant_partnership_consent_guard'`), '0');
   assert.equal(scalar(`SELECT coalesce(array_to_string(proconfig, ','), '') FROM pg_proc WHERE proname = 'aws_connect_partner_by_code'`), 'search_path=public,row_security=off');
-  assert.equal(policyCount(), String(RETIRED_POLICIES.length), 'rollback restores the retired policies');
+  assert.equal(policyCount(), '0', 'rollback keeps the retired policies absent');
+  // Every other policy on the table is untouched by the rollback.
+  assert.equal(allPolicies(), policiesBeforeRollback);
 });
