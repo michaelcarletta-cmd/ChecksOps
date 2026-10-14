@@ -130,7 +130,7 @@ const PINNED_TRIGGER = {
   function_name: 'public.aws_tenant_partnership_consent_guard', definition: 'CREATE TRIGGER aws_tenant_partnership_consent_guard ...',
 };
 // Pinned: SECURITY DEFINER, the SQL 32 config and body.
-const CONNECT = { prosrc: SQL32_CONNECT_BODY, prosecdef: true, proconfig: ['search_path=public', 'row_security=off'] };
+const CONNECT = { prosrc: SQL32_CONNECT_BODY, prosecdef: true, proconfig: ['search_path=public', 'row_security=off'], api_role_owns_connect: false };
 
 /** In-memory catalog. Running the embedded SQL applies SQL 76 (or a variant via onApply). */
 function fakeDb({
@@ -225,9 +225,15 @@ test('statement allowlist refuses anything beyond the pinned SQL 76 statements',
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('BEFORE INSERT OR UPDATE', 'BEFORE INSERT')), false);
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('FROM PUBLIC;', 'FROM anon;')), false);
   // Trusted writer: the exact connect frame directly under the writing statement, run as connect's owner.
-  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('aws_connect_partner_by_code\\(text,uuid\\) line', 'aws_connect_partner_by_code.* line')), false);
-  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('_ctx ~ \'^PL/pgSQL', '_ctx ~ \'PL/pgSQL')), false);
-  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('    AND current_user = (', '    OR current_user = (')), false);
+  const tampered = (from, to) => {
+    assert.ok(SQL_TEXT.includes(from), from);
+    return SQL_TEXT.replace(from, to);
+  };
+  assert.equal(sql76StatementsAllowed(tampered('aws_connect_partner_by_code\\\\(text,uuid\\\\) line', 'aws_connect_partner_by_code.* line')), false);
+  assert.equal(sql76StatementsAllowed(tampered("from E'^PL/pgSQL", "from E'PL/pgSQL")), false);
+  assert.equal(sql76StatementsAllowed(tampered("from E'^PL/pgSQL", "from '^PL/pgSQL")), false);
+  assert.equal(sql76StatementsAllowed(tampered('    AND current_user = (', '    OR current_user = (')), false);
+  assert.equal(sql76StatementsAllowed(tampered("'d5f42d0e619e1c484f63e71077e27c6cbcbf7b5bd8d279d65f6a3b6192f6e414'", "'d5f42d0e619e1c484f63e71077e27c6cbcbf7b5bd8d279d65f6a3b6192f6e414', '0000000000000000000000000000000000000000000000000000000000000000'")), false);
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('GET DIAGNOSTICS _ctx = PG_CONTEXT;', "_ctx := current_setting('checksops.partnership_writer', true);")), false);
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('DROP POLICY IF EXISTS "Admins can view any partnership"', 'DROP POLICY IF EXISTS "aws_select_tenant_partnerships"')), false);
   // Guard body: the consent rule cannot be loosened or widened.
@@ -457,6 +463,8 @@ test('drift, missing prerequisites and collateral changes are refused and rolled
     ['different connect body', { connectRow: { ...CONNECT, prosrc: `${SQL32_CONNECT_BODY}-- drift\n` } }, 'different'],
     ['connect not SECURITY DEFINER', { connectRow: { ...CONNECT, prosecdef: false } }, 'different'],
     ['connect with extra proconfig', { connectRow: { ...CONNECT, proconfig: [...CONNECT.proconfig, 'statement_timeout=0'] } }, 'different'],
+    ['API role owns connect (or is a member of its owner)', { connectRow: { ...CONNECT, api_role_owns_connect: true } }, 'different'],
+    ['API role missing', { connectRow: { ...CONNECT, api_role_owns_connect: null } }, 'different'],
     ['connect missing row_security=off', { connectRow: { ...CONNECT, proconfig: ['search_path=public'] } }, 'different'],
     ['extra trigger on the table', { triggers: [OTHER_TRIGGER] }, 'pinned'],
   ]) {
@@ -676,6 +684,22 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
     assert.equal(await awsAs(INVITER_USER,
       "INSERT INTO public.tenant_partnerships (inviter_tenant_id, invitee_tenant_id, invite_code, status) VALUES ($1, $2, 'AWSDIRECT', 'active')",
       [INVITER, INVITEE]), '42501');
+    // connect's unique_violation retry: a concurrent pending row for the same code
+    // commits while connect's INSERT waits; connect then reactivates it.
+    const racer = await connect('ubuntu', 'sql76aws');
+    await racer.query('BEGIN');
+    await racer.query(
+      "INSERT INTO public.tenant_partnerships (inviter_tenant_id, invitee_tenant_id, invite_code, status) VALUES ($1, $2, $3, 'pending')",
+      [INVITER, INVITEE, INVITEE_CODE],
+    );
+    const raced = awsAs(INVITER_USER, 'SELECT public.aws_connect_partner_by_code($1, $2) AS result', [INVITEE_CODE, INVITER]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await racer.query('COMMIT');
+    const retried = await raced;
+    assert.equal(retried?.ok, true, JSON.stringify(retried));
+    assert.equal(retried.reactivated, true, JSON.stringify(retried));
+    await racer.query('DELETE FROM public.tenant_partnerships WHERE invite_code = $1', [INVITEE_CODE]);
+    await racer.end();
     await awsApp.end();
 
     const handler = handlerFor(() => connect());
