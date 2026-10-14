@@ -1966,11 +1966,14 @@ export const SQL76_EXPECTED_STATEMENTS = Object.freeze([
   /^REVOKE ALL ON FUNCTION public\.aws_tenant_partnership_consent_guard\(\) FROM PUBLIC$/,
   /^DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public\.tenant_partnerships$/,
   /^CREATE TRIGGER aws_tenant_partnership_consent_guard BEFORE INSERT OR UPDATE ON public\.tenant_partnerships FOR EACH ROW EXECUTE FUNCTION public\.aws_tenant_partnership_consent_guard\(\)$/,
-  /^ALTER FUNCTION public\.aws_connect_partner_by_code\(text, uuid\) SET checksops\.partnership_writer = 'aws_connect_partner_by_code'$/,
   ...PARTNERSHIP_RETIRED_POLICIES.map((name) => new RegExp(`^DROP POLICY IF EXISTS "${name}" ON public\\.tenant_partnerships$`)),
 ]);
 const SQL76_BODY_REQUIRED_MARKERS = [
-  "current_setting('checksops.partnership_writer', true) = 'aws_connect_partner_by_code'",
+  'GET DIAGNOSTICS _ctx = PG_CONTEXT;',
+  `_ctx ~ '^PL/pgSQL function aws_tenant_partnership_consent_guard\\(\\) line [0-9]+ at GET DIAGNOSTICS\\nSQL statement "[^"]*"\\nPL/pgSQL function aws_connect_partner_by_code\\(text,uuid\\) line [0-9]+ at SQL statement(\\n|$)'`,
+  'AND current_user = (',
+  'SELECT pg_catalog.pg_get_userbyid(p.proowner)',
+  "WHERE p.oid = pg_catalog.to_regprocedure('public.aws_connect_partner_by_code(text, uuid)')",
   'NEW.invitee_tenant_id IN (SELECT public.aws_user_tenant_ids())',
   'COALESCE(public.aws_can_write_tenant(NEW.invitee_tenant_id), false)',
   "RAISE EXCEPTION 'partnership_invitee_consent_required' USING ERRCODE = '42501'",
@@ -1980,6 +1983,8 @@ const SQL76_BODY_REQUIRED_MARKERS = [
 const SQL76_BODY_FORBIDDEN = [
   /\bEXECUTE\b/i,
   /set_config/i,
+  // The trusted writer comes from PG_CONTEXT and the connect owner, never a setting.
+  /current_setting/i,
   /SECURITY\s+DEFINER/i,
   /has_role/i,
   /cross_tenant/i,
@@ -2243,7 +2248,7 @@ async function handleSql76PartnershipConsent({
       || after.details.other_policy_count !== before.details.other_policy_count
       || after.details.other_trigger_count !== before.details.other_trigger_count) {
       await rollback();
-      return fail(CODES.UNRELATED_MUTATION, 'SQL 76 changed more than the consent guard, the connect marker and the five retired policies', {
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 76 changed more than the consent guard and the five retired policies', {
         before: before.details.consent_state,
         after: after.details.consent_state,
       });

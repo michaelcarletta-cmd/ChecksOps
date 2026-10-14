@@ -159,14 +159,13 @@ function fakeDb({
         if (text.includes('FROM pg_class c')) return { rows: current().table ? [current().table] : [] };
         if (text.includes("p.proname = 'aws_tenant_partnership_consent_guard'")) return { rows: current().guard };
         if (text.includes('FROM pg_trigger')) return { rows: current().triggers };
-        if (text.includes('to_regprocedure')) return { rows: current().connect ? [current().connect] : [] };
+        if (text.includes('to_regprocedure') && !text.includes('CREATE TRIGGER')) return { rows: current().connect ? [current().connect] : [] };
         if (text.includes('FROM pg_policies')) return { rows: current().policies };
         if (text.includes('has_function_privilege')) return { rows: functions.map((proname) => ({ proname, can_execute: true })) };
         if (text.includes('CREATE TRIGGER aws_tenant_partnership_consent_guard')) {
           const next = current();
           next.guard = [{ ...PINNED_GUARD }];
           next.triggers = [...next.triggers.filter((row) => row.tgname !== PINNED_TRIGGER.tgname), { ...PINNED_TRIGGER }];
-          next.connect = { ...next.connect, proconfig: [...next.connect.proconfig, 'checksops.partnership_writer=aws_connect_partner_by_code'] };
           next.policies = next.policies.filter((row) => !PARTNERSHIP_RETIRED_POLICIES.includes(row.policyname));
           if (onApply) onApply(next);
           return { rows: [] };
@@ -216,6 +215,8 @@ test('statement allowlist refuses anything beyond the pinned SQL 76 statements',
     'ALTER TABLE public.tenant_partnerships DISABLE ROW LEVEL SECURITY;',
     "SELECT set_config('checksops.partnership_writer', 'aws_connect_partner_by_code', false);",
     'ALTER FUNCTION public.aws_tenant_partnership_consent_guard() SECURITY DEFINER;',
+    // The old marker: Postgres 15+ refuses it to a non-superuser, and the guard no longer reads it.
+    "ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid) SET checksops.partnership_writer = 'aws_connect_partner_by_code';",
   ]) {
     assert.equal(sql76StatementsAllowed(`${SQL_TEXT}\n${extra}\n`), false, extra);
   }
@@ -223,7 +224,11 @@ test('statement allowlist refuses anything beyond the pinned SQL 76 statements',
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('LANGUAGE plpgsql\nSET search_path', 'LANGUAGE plpgsql\nSECURITY DEFINER\nSET search_path')), false);
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('BEFORE INSERT OR UPDATE', 'BEFORE INSERT')), false);
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('FROM PUBLIC;', 'FROM anon;')), false);
-  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace("SET checksops.partnership_writer = 'aws_connect_partner_by_code'", "SET checksops.partnership_writer = 'anyone'")), false);
+  // Trusted writer: the exact connect frame directly under the writing statement, run as connect's owner.
+  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('aws_connect_partner_by_code\\(text,uuid\\) line', 'aws_connect_partner_by_code.* line')), false);
+  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('_ctx ~ \'^PL/pgSQL', '_ctx ~ \'PL/pgSQL')), false);
+  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('    AND current_user = (', '    OR current_user = (')), false);
+  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('GET DIAGNOSTICS _ctx = PG_CONTEXT;', "_ctx := current_setting('checksops.partnership_writer', true);")), false);
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('DROP POLICY IF EXISTS "Admins can view any partnership"', 'DROP POLICY IF EXISTS "aws_select_tenant_partnerships"')), false);
   // Guard body: the consent rule cannot be loosened or widened.
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('COALESCE(public.aws_can_write_tenant(NEW.invitee_tenant_id), false)', 'true')), false);
@@ -233,7 +238,8 @@ test('statement allowlist refuses anything beyond the pinned SQL 76 statements',
   assert.equal(sql76StatementsAllowed(SQL_TEXT.replace('NEW.invitee_tenant_id IS NULL\n       OR NOT', 'NEW.invitee_tenant_id IS NULL\n       OR public.aws_can_write_tenant(NEW.inviter_tenant_id)\n       OR NOT')), false);
   // Order matters.
   const trigger = 'DROP TRIGGER IF EXISTS aws_tenant_partnership_consent_guard ON public.tenant_partnerships;\n';
-  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace(trigger, '').replace('ALTER FUNCTION public.aws_connect', `${trigger}ALTER FUNCTION public.aws_connect`)), false);
+  const firstDrop = 'DROP POLICY IF EXISTS "Inviter can create partnerships"';
+  assert.equal(sql76StatementsAllowed(SQL_TEXT.replace(trigger, '').replace(firstDrop, `${trigger}${firstDrop}`)), false);
 });
 
 // The AWS state the reviewed staging read-live reported: only the two aws_* policies.
@@ -589,6 +595,19 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
     for (const policyname of PARTNERSHIP_RETIRED_POLICIES) {
       await awsSeed.query(`DROP POLICY "${policyname}" ON public.tenant_partnerships`);
     }
+    // Like the AWS database user: owns the table and connect, is not a superuser.
+    // Postgres 15+ refuses such a role a function-level SET of a custom setting
+    // (staging run 38548817869), so this copy applies SQL 76 as that role.
+    await awsSeed.query(`
+      CREATE ROLE sql76_owner LOGIN NOSUPERUSER;
+      GRANT CREATE ON SCHEMA public TO sql76_owner;
+      GRANT USAGE ON SCHEMA auth TO sql76_owner;
+      ALTER TABLE public.tenant_partnerships OWNER TO sql76_owner;
+      ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid) OWNER TO sql76_owner;`);
+    const legacyMarker = await awsSeed.query('SET ROLE sql76_owner')
+      .then(() => awsSeed.query("ALTER FUNCTION public.aws_connect_partner_by_code(text, uuid) SET checksops.partnership_writer = 'aws_connect_partner_by_code'"))
+      .then(() => 'allowed', (error) => error.message);
+    assert.equal(legacyMarker, 'permission denied to set parameter "checksops.partnership_writer"');
     await awsSeed.end();
 
     // read-live: the committed pin, the sentinel package, and a session that
@@ -622,7 +641,7 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
 
     // Real catalog in the reviewed AWS state reads back as the committed pin, and
     // the committed pin applies there to the intended state exactly once.
-    const awsHandler = handlerFor(() => connect('ubuntu', 'sql76aws'), { sql76Pin: PIN });
+    const awsHandler = handlerFor(() => connect('sql76_owner', 'sql76aws'), { sql76Pin: PIN });
     const awsInspect = await awsHandler(consentEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
     assert.equal(awsInspect.ok, true, JSON.stringify(awsInspect));
     assert.equal(awsInspect.details.receipt.live_definition_sha256, COMMITTED_LIVE_SHA256, JSON.stringify(awsInspect.details.receipt.consent_state));
@@ -637,6 +656,27 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
     assert.equal(awsApplied.details.receipt.other_trigger_count, 0);
     assert.equal((await awsHandler(awsEvent)).code, CODES.SQL_COLLISION);
     assert.equal((await awsHandler(consentEvent({ expected_live_definition_sha256: PIN.expected_live_definition_sha256 }))).code, CODES.UNRELATED_MUTATION);
+    // With a non-superuser owner, connect by code is still the trusted writer and a direct live insert is not.
+    const awsApp = await connect('checksops', 'sql76aws');
+    const awsAs = async (user, sql, params) => {
+      await awsApp.query('BEGIN');
+      try {
+        await awsApp.query(`SELECT set_config('request.app_user_id', '${user}', true)`);
+        const { rows } = await awsApp.query(sql, params);
+        return rows[0]?.result ?? 'allowed';
+      } catch (error) {
+        return error.code;
+      } finally {
+        await awsApp.query('ROLLBACK');
+      }
+    };
+    const awsConnected = await awsAs(INVITER_USER, 'SELECT public.aws_connect_partner_by_code($1, $2) AS result', [INVITEE_CODE, INVITER]);
+    assert.equal(awsConnected?.ok, true, JSON.stringify(awsConnected));
+    assert.equal(awsConnected.created, true, JSON.stringify(awsConnected));
+    assert.equal(await awsAs(INVITER_USER,
+      "INSERT INTO public.tenant_partnerships (inviter_tenant_id, invitee_tenant_id, invite_code, status) VALUES ($1, $2, 'AWSDIRECT', 'active')",
+      [INVITER, INVITEE]), '42501');
+    await awsApp.end();
 
     const handler = handlerFor(() => connect());
     const inspect = await handler(consentEvent({ action: 'inspect' }));
@@ -650,7 +690,7 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
     assert.equal(applied.details.receipt.after_hash, PIN.intended_replacement_sha256);
     assert.equal(applied.details.receipt.other_policy_count, 2);
     assert.equal(applied.details.receipt.other_trigger_count, 0);
-    // Real catalog round-trip: the guard, trigger and marker read back as pinned.
+    // Real catalog round-trip: the guard and trigger read back as pinned; connect carries no marker.
     const after = await handler(consentEvent({ action: 'inspect' }));
     assert.deepEqual(
       {
@@ -660,7 +700,7 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
         connect: after.details.receipt.consent_state.connect,
         other_triggers: after.details.receipt.consent_state.other_triggers,
       },
-      { guard: 'pinned', trigger: 'pinned', marker: 'pinned', connect: 'pinned', other_triggers: 'none' },
+      { guard: 'pinned', trigger: 'pinned', marker: 'unset', connect: 'pinned', other_triggers: 'none' },
     );
     assert.equal((await handler(consentEvent())).code, CODES.UNRELATED_MUTATION);
 

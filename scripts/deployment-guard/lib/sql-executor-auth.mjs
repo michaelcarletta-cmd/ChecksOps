@@ -132,15 +132,17 @@ export const AUTHORIZED_SQL72_MEMBER_PAYMENT_WRITES = Object.freeze({
 });
 
 // SQL 76 guards tenant_partnerships activation: a BEFORE INSERT OR UPDATE
-// trigger (only the invitee side, or aws_connect_partner_by_code, can make a
-// row live), the trusted-writer marker on aws_connect_partner_by_code, and the
-// retirement of five Supabase-era write/admin policies. The "definition" is the
-// canonical state text of exactly those objects, hashed. Each object is
-// classified against the embedded file (guard function and trigger: absent |
-// pinned | different; marker: missing_function | unset | pinned | different;
-// each retired policy: present | absent). Every other policy and trigger on
-// tenant_partnerships, and the rest of aws_connect_partner_by_code, must be
-// byte-identical before and after.
+// trigger (only the invitee side, or a statement inside
+// aws_connect_partner_by_code, can make a row live) and the retirement of five
+// Supabase-era write/admin policies. The "definition" is the canonical state
+// text of exactly those objects, hashed. Each object is classified against the
+// embedded file (guard function and trigger: absent | pinned | different;
+// each retired policy: present | absent). The marker line records that
+// aws_connect_partner_by_code carries no SET checksops.partnership_writer
+// (missing_function | unset | pinned | different); SQL 76 no longer sets one
+// (Postgres 15+ refuses it to a non-superuser), so it stays unset before and
+// after. Every other policy and trigger on tenant_partnerships, and the rest of
+// aws_connect_partner_by_code, must be byte-identical before and after.
 export const PARTNERSHIP_CONSENT_GUARD_FUNCTION = 'public.aws_tenant_partnership_consent_guard()';
 export const PARTNERSHIP_CONSENT_TRIGGER = 'aws_tenant_partnership_consent_guard';
 export const PARTNERSHIP_CONNECT_FUNCTION = 'public.aws_connect_partner_by_code(text, uuid)';
@@ -194,7 +196,7 @@ export function partnershipConsentStateText({
 export const PARTNERSHIP_CONSENT_APPLIED_STATE = Object.freeze({
   guard: 'pinned',
   trigger: 'pinned',
-  marker: 'pinned',
+  marker: 'unset',
   policies: 'absent',
   connect: 'pinned',
   otherTriggers: 'none',
@@ -208,15 +210,17 @@ export const AUTHORIZED_SQL76_PARTNERSHIP_CONSENT = Object.freeze({
   // The commit that authored the current file bytes. Re-pin if the branch is
   // rebased or squashed before it reaches main.
   commit: 'a153cfc514668b94388b5d5e6e83d0763fb1ef32',
-  source_sha256: 'c319bcb016ee7bd1b6d67703f14727c82b42adbd15cd125087d18462e4d2ea4e',
+  source_sha256: '46cc8bf9cb2a72c52301e015523693be1aea20513261d4256cf9f8f4e9aaae62',
   // Reviewed live value: guarded staging SQL executor read-live run 38541967571
   // (2026-10-14) reported LIVE_DEFINITION_SHA256 7c5276d8…: guard and trigger
   // absent, marker unset, connect function pinned, no other triggers, and the
   // five retired policies already absent. Equals
-  // sha256(partnershipConsentStateText({ policies: 'absent' })).
+  // sha256(partnershipConsentStateText({ policies: 'absent' })). The first apply
+  // (run 38548817869) failed on the marker statement and rolled back, so this
+  // is still the pre-apply state; the next read-live re-confirms it.
   expected_live_definition_sha256: '7c5276d8d04973c51f28238ec32091d77b01613c79dc8961d4dbc4bfd92d20d8',
   // Code-derived: sha256(partnershipConsentStateText(PARTNERSHIP_CONSENT_APPLIED_STATE)).
-  intended_replacement_sha256: 'a30db07d5da7c87ecc3e22a77df1ba819a2c3be51c4f074956e0f32ea5e58301',
+  intended_replacement_sha256: '2f195230b952217546297d932445cb8954b81441ed30222e711b50688a09df3e',
   table: 'public.tenant_partnerships',
 });
 
