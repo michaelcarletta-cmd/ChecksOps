@@ -113,12 +113,22 @@ export async function handleProductionCheckAltApprove({
     });
   }
 
-  const check = (await client.query(
+  const checkRow = (await client.query(
     `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
     [row.check_intake_item_id],
-  )).rows[0] || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
+  )).rows[0] || null;
 
   const requireStepUp = actionName === 'approve';
+  // Approve binds the proof to the check, so it needs the check itself; it never
+  // compares the deposit row with a stand-in built from that same row.
+  if (requireStepUp && !checkRow) {
+    return fail('deposit_binding_mismatch', 409, {
+      message: 'The check for this deposit could not be found. Approve was not sent.',
+      spoofFieldsIgnored: spoof,
+      deposit_id: row.id,
+    });
+  }
+  const check = checkRow || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
   if (requireStepUp) {
     // The deposit.approve step-up is bound to the check's tenant, id and
     // server-side amount. Approve only when the deposit row being approved is

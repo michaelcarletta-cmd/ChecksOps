@@ -1361,6 +1361,14 @@ test('approve refuses a deposit row whose amount or tenant differs from its chec
   assertApproveRefused(tenantDrift, await approveOnce(tenantDrift), 'deposit_binding_mismatch');
 });
 
+test('approve refuses when the deposit check row is missing (no self-comparison)', async () => {
+  const store = createStore();
+  pendingApprovalDeposit(store);
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.check = { ...store.check, id: OTHER_CHECK_ID };
+  assertApproveRefused(store, await approveOnce(store), 'deposit_binding_mismatch');
+});
+
 test('approve refuses an expired deposit.approve step-up', async () => {
   const store = createStore();
   pendingApprovalDeposit(store);

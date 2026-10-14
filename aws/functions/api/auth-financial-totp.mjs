@@ -393,7 +393,12 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
   if (actionKey === WALLET_FUND_TOTP_ACTION) {
     return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof });
   }
-  if (!FINANCIAL_CHECKALT_STEPUP_ACTIONS.includes(actionKey)) {
+  // If an older checkalt-authz.mjs is live (deploy order or rollback), keep
+  // deposit.submit working rather than failing every check-bound step-up.
+  const checkAltStepUpActions = Array.isArray(FINANCIAL_CHECKALT_STEPUP_ACTIONS)
+    ? FINANCIAL_CHECKALT_STEPUP_ACTIONS
+    : [CHECKALT_TOTP_ACTION];
+  if (!checkAltStepUpActions.includes(actionKey)) {
     return {
       ok: false,
       statusCode: 409,

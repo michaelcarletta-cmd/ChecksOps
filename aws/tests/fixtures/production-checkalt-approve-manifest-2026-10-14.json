@@ -3,7 +3,7 @@
   "authorization": "Owner-approved 2026-10-14: Check Alt deposit approval requires a deposit.approve two-factor proof bound to the tenant, check and server-side amount, so deposits Check Alt holds as pending_approval can be approved from the app. Each production apply still needs its own owner approval and staging acceptance.",
   "deploy_authorized": false,
   "live_lambda": "checksops-production-prep-api",
-  "notes": "live_sha256 values come from the read-only production inspect run 38632977883 (2026-10-14): live checkalt-authz.mjs, checkalt-approve.mjs and auth-financial-totp.mjs equal main before this change. Apply checkalt-authz.mjs first (it exports FINANCIAL_CHECKALT_STEPUP_ACTIONS, which auth-financial-totp.mjs imports at runtime), then checkalt-approve.mjs, then auth-financial-totp.mjs.",
+  "notes": "live_sha256 values come from the read-only production inspect run 38632977883 (2026-10-14): live checkalt-authz.mjs, checkalt-approve.mjs and auth-financial-totp.mjs equal main before this change. Apply checkalt-authz.mjs first (it exports FINANCIAL_CHECKALT_STEPUP_ACTIONS, which auth-financial-totp.mjs imports at runtime), then auth-financial-totp.mjs, then checkalt-approve.mjs.",
   "members": {
     "providers/production/checkalt-authz.mjs": {
       "live_sha256": "88a08b7672eda7f92c9b5f661d4c285c2e5876f109f84ff5f998da1dff148159",
@@ -17,9 +17,22 @@
         "providers/production/checkalt-holds.mjs"
       ]
     },
+    "auth-financial-totp.mjs": {
+      "live_sha256": "9abdc5289c1bcd6decb76210578dd5f040df62b0e53dc6c26aaf5ca66a4c70fb",
+      "accepted_sha256": "c625e8c2b0efa5a5093c983bcd89f3660f017e22d8143bd6a2b4d88df9ab4c4d",
+      "operation": "replace",
+      "required_imports": [
+        "providers/production/checkalt-authz.mjs",
+        "providers/production/moov-fund-authz.mjs",
+        "cognito.mjs",
+        "data.mjs",
+        "financial-ownership.mjs",
+        "identity.mjs"
+      ]
+    },
     "providers/production/checkalt-approve.mjs": {
       "live_sha256": "56e4fe14c92c698f8546493973413412b6255a6359cf99eeedd72d4654a90105",
-      "accepted_sha256": "ec3ad4fd65303a65f17893cac05dbf5a61ce4a6ed7ba51d25b3186d7a3ed39df",
+      "accepted_sha256": "4f19b9a7d582fd4132e7a9b6f65180268ccf41100e733ec63ba7bcf761f331ba",
       "operation": "replace",
       "required_imports": [
         "identity.mjs",
@@ -30,19 +43,6 @@
         "providers/production/checkalt-secrets.mjs",
         "providers/production/checkalt-authz.mjs",
         "providers/production/checkalt-poll.mjs"
-      ]
-    },
-    "auth-financial-totp.mjs": {
-      "live_sha256": "9abdc5289c1bcd6decb76210578dd5f040df62b0e53dc6c26aaf5ca66a4c70fb",
-      "accepted_sha256": "1f709768cbd416cc9d4b97f73a8f5f827974107233265240ebbf586061651bf0",
-      "operation": "replace",
-      "required_imports": [
-        "providers/production/checkalt-authz.mjs",
-        "providers/production/moov-fund-authz.mjs",
-        "cognito.mjs",
-        "data.mjs",
-        "financial-ownership.mjs",
-        "identity.mjs"
       ]
     }
   }

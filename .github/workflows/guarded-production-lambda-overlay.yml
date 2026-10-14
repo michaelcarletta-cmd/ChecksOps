@@ -31,8 +31,8 @@ on:
           - providers/production/moov-fund-authz.mjs
           - cognito.mjs
           - providers/production/checkalt-authz.mjs
-          - providers/production/checkalt-approve.mjs
           - auth-financial-totp.mjs
+          - providers/production/checkalt-approve.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
