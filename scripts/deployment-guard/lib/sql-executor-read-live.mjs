@@ -10,7 +10,7 @@
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
  *      expected live definition, which no reviewed pin can equal, so the
- *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78) refuse apply with it
+ *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79) refuse apply with it
  *      before connecting.
  *
  * Failures print only an error code and a fixed message: executor and driver
@@ -70,10 +70,16 @@ const BOOLEAN_KEYS = Object.freeze([
   'prerequisites_ok',
   'share_key_present',
   'default_acl_as_expected',
+  'tables_present',
+  'reviewed_policies_as_expected',
+  'member_policies_present',
+  'functions_as_expected',
+  'functions_executable',
+  'write_grants_present',
 ]);
 const COUNT_KEYS = Object.freeze(['other_policy_count', 'other_trigger_count', 'other_write_policy_count', 'default_acl_entry_count']);
 // Hashes of pinned-object state (not secrets); shown so a reviewer can compare runs.
-const SHA256_KEYS = Object.freeze(['default_acl_sha256']);
+const SHA256_KEYS = Object.freeze(['default_acl_sha256', 'acl_sha256']);
 // Label maps: values must be short lowercase labels; keys are pinned object names.
 const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state']);
 

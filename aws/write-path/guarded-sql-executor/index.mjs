@@ -23,7 +23,14 @@ import {
   AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
   AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
   AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
+  AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  MEMBER_STAKEHOLDER_FUNCTIONS,
+  MEMBER_STAKEHOLDER_FUNCTION_SHA256,
+  MEMBER_STAKEHOLDER_NEW_POLICIES,
+  MEMBER_STAKEHOLDER_REVIEWED_POLICIES,
+  MEMBER_STAKEHOLDER_TABLES,
+  memberStakeholderWritesStateText,
   MEMBER_PAYMENT_POLICIES,
   MEMBER_PAYMENT_REQUIRED_FUNCTIONS,
   memberPaymentPolicyStateText,
@@ -50,8 +57,10 @@ import {
   isSql76PartnershipConsent,
   isSql77CheckStakeholdersGrant,
   isSql78PartnerStakeholderRemovals,
+  isSql79MemberStakeholderWrites,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
+  STAKEHOLDER_GRANT_TABLE,
   STAKEHOLDER_GRANTEES,
   stakeholderGrantStateText,
 } from './lib/sql-executor-auth.mjs';
@@ -97,6 +106,7 @@ const SQL72_MEMBER_PAYMENT_WRITES_FILE = path.join(ROOT, 'sql/72_member_payment_
 const SQL76_PARTNERSHIP_CONSENT_FILE = path.join(ROOT, 'sql/76_tenant_partnership_invitee_consent.sql');
 const SQL77_CHECK_STAKEHOLDERS_GRANT_FILE = path.join(ROOT, 'sql/77_check_stakeholders_write_grant.sql');
 const SQL78_PARTNER_STAKEHOLDER_REMOVALS_FILE = path.join(ROOT, 'sql/78_check_partner_stakeholder_removals.sql');
+const SQL79_MEMBER_STAKEHOLDER_WRITES_FILE = path.join(ROOT, 'sql/79_member_stakeholder_writes.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -2503,6 +2513,398 @@ async function handleSql78PartnerStakeholderRemovals({
   }
 }
 
+// --- SQL 79: tenant-member stakeholder write policies -----------------------
+
+// Each query takes the table (regclass text) as $1.
+const MEMBER_TABLE_SQL = `
+SELECT to_regclass($1) IS NOT NULL AS present,
+  c.relrowsecurity AS rls_enabled, c.relforcerowsecurity AS rls_forced,
+  c.relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user) AS owner_is_executor
+FROM (SELECT to_regclass($1) AS oid) t
+LEFT JOIN pg_class c ON c.oid = t.oid
+`.trim();
+const MEMBER_POLICIES_SQL = `
+SELECT pol.polname AS name,
+  pol.polpermissive AS permissive,
+  CASE pol.polcmd WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT' WHEN 'w' THEN 'UPDATE' WHEN 'd' THEN 'DELETE' ELSE 'ALL' END AS cmd,
+  ARRAY(SELECT CASE WHEN r = 0 THEN 'public' ELSE pg_get_userbyid(r)::text END FROM unnest(pol.polroles) r ORDER BY 1)::text[] AS roles,
+  pg_get_expr(pol.polqual, pol.polrelid) AS using,
+  pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+FROM pg_policy pol
+WHERE pol.polrelid = to_regclass($1)
+ORDER BY 1
+`.trim();
+// Non-owner ACL entries (the owner's own privileges differ by server version).
+const MEMBER_ACL_SQL = `
+SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type, a.is_grantable
+FROM pg_class c
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.oid = to_regclass($1) AND a.grantee <> c.relowner
+ORDER BY 1, 2, 3
+`.trim();
+// SQL 77's bypass check against the table's owner; a missing grantee role
+// reads as unknown (NULL, treated as bypassing) instead of raising.
+const MEMBER_BYPASS_SQL = `
+WITH o AS (
+  SELECT c.relowner AS owner FROM pg_class c WHERE c.oid = to_regclass($1)
+), g AS (
+  SELECT oid FROM pg_roles WHERE rolname IN ('checksops', 'authenticated')
+)
+SELECT CASE WHEN (SELECT count(*) FROM g) <> 2 OR NOT EXISTS (SELECT 1 FROM o) THEN NULL ELSE COALESCE(bool_or(
+  r.rolsuper OR r.rolbypassrls
+  OR pg_has_role(r.oid, o.owner, 'USAGE') OR pg_has_role(r.oid, o.owner, 'SET')
+  OR pg_has_role(r.oid, o.owner, 'USAGE WITH ADMIN OPTION')
+  OR EXISTS (
+    SELECT 1 FROM pg_roles b
+    WHERE (b.rolsuper OR b.rolbypassrls) AND b.oid <> r.oid
+      AND pg_has_role(r.oid, b.oid, 'USAGE WITH ADMIN OPTION'))
+), true) END AS member_bypasses
+FROM pg_roles r
+CROSS JOIN o
+WHERE r.oid IN (SELECT oid FROM g)
+  OR (NOT r.rolsuper AND EXISTS (
+    SELECT 1 FROM g WHERE pg_has_role(r.oid, g.oid, 'USAGE') OR pg_has_role(r.oid, g.oid, 'SET')))
+`.trim();
+// $1 is the function signature. EXECUTE is checked only for roles that exist.
+const MEMBER_FUNCTION_SQL = `
+SELECT pg_get_functiondef(to_regprocedure($1)) AS def,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated')
+    THEN has_function_privilege('checksops', to_regprocedure($1), 'EXECUTE')
+      AND has_function_privilege('authenticated', to_regprocedure($1), 'EXECUTE')
+  END AS executable
+`.trim();
+const MEMBER_ROLES_SQL = `
+SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+  AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') AS required_roles_present
+`.trim();
+// Everything else in schema public: relations and the policies of every other
+// table must not change.
+const MEMBER_SCHEMA_RELATIONS_SQL = `
+SELECT c.relname, c.relkind::text AS relkind
+FROM pg_class c
+WHERE c.relnamespace = 'public'::regnamespace
+ORDER BY 1, 2
+`.trim();
+const MEMBER_OTHER_POLICIES_SQL = `
+SELECT pol.polrelid::regclass::text AS table_name, pol.polname, pol.polcmd::text AS polcmd,
+  pol.polpermissive, pol.polroles::text AS polroles,
+  pg_get_expr(pol.polqual, pol.polrelid) AS polqual,
+  pg_get_expr(pol.polwithcheck, pol.polrelid) AS polwithcheck
+FROM pg_policy pol
+WHERE pol.polrelid IS DISTINCT FROM to_regclass('${STAKEHOLDER_GRANT_TABLE}')
+  AND pol.polrelid IS DISTINCT FROM to_regclass('${PARTNER_STAKEHOLDER_REMOVALS_TABLE}')
+ORDER BY 1, 2
+`.trim();
+// The reviewed file, comments removed and whitespace collapsed.
+export const SQL79_NORMALIZED_STATEMENTS = MEMBER_STAKEHOLDER_TABLES.flatMap((table) => {
+  const [insert, remove] = MEMBER_STAKEHOLDER_NEW_POLICIES[table];
+  const condition = '( public.aws_is_authenticated() AND tenant_id IN (SELECT public.aws_user_tenant_ids()) );';
+  return [
+    `CREATE POLICY ${insert.name} ON ${table} FOR INSERT TO authenticated WITH CHECK ${condition}`,
+    `CREATE POLICY ${remove.name} ON ${table} FOR DELETE TO authenticated USING ${condition}`,
+  ];
+}).join(' ');
+
+function normalizeSql79(text) {
+  return String(text).replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const samePolicy = (a, b) => Boolean(a) && Boolean(b)
+  && a.permissive === b.permissive && a.cmd === b.cmd
+  && JSON.stringify([...(a.roles || [])].sort()) === JSON.stringify([...(b.roles || [])].sort())
+  && (a.using ?? null) === (b.using ?? null) && (a.with_check ?? null) === (b.with_check ?? null);
+
+/**
+ * Read-only fingerprint of what SQL 79 changes and depends on: both tables'
+ * row-level security and policies, the definitions of the two functions the
+ * new policies call, the tables' ACLs and the RLS bypass check.
+ */
+export async function readMemberStakeholderWritesState(client) {
+  // pg_get_expr prints schema-qualified names with only pg_catalog on the path.
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const requiredRolesPresent = (await client.query(MEMBER_ROLES_SQL))?.rows?.[0]?.required_roles_present === true;
+  const tables = {};
+  const memberPolicyStates = {};
+  let reviewedAsExpected = true;
+  let otherPolicyCount = 0;
+  let bypasses = false;
+  const aclLines = [];
+  let updateGranted = false;
+  let writeGrantsPresent = true;
+  for (const table of MEMBER_STAKEHOLDER_TABLES) {
+    const row = (await client.query(MEMBER_TABLE_SQL, [table]))?.rows?.[0] || {};
+    const present = row.present === true;
+    const policies = present ? ((await client.query(MEMBER_POLICIES_SQL, [table]))?.rows || []) : [];
+    const acl = present ? ((await client.query(MEMBER_ACL_SQL, [table]))?.rows || []) : [];
+    const tableBypasses = present ? (await client.query(MEMBER_BYPASS_SQL, [table]))?.rows?.[0]?.member_bypasses !== false : true;
+    tables[table] = {
+      present,
+      rls_enabled: row.rls_enabled === true,
+      rls_forced: row.rls_forced === true,
+      owner_is_executor: row.owner_is_executor === true,
+      policies: policies.map((policy) => ({
+        name: policy.name,
+        permissive: policy.permissive,
+        cmd: policy.cmd,
+        roles: policy.roles,
+        using: policy.using ?? null,
+        with_check: policy.with_check ?? null,
+      })),
+    };
+    const reviewed = MEMBER_STAKEHOLDER_REVIEWED_POLICIES[table];
+    const added = MEMBER_STAKEHOLDER_NEW_POLICIES[table];
+    if (!reviewed.every((expected) => samePolicy(policies.find((p) => p.name === expected.name), expected))) reviewedAsExpected = false;
+    for (const expected of added) {
+      const live = policies.find((p) => p.name === expected.name);
+      memberPolicyStates[expected.name] = !live ? 'absent' : (samePolicy(live, expected) ? 'present' : 'malformed');
+    }
+    otherPolicyCount += policies.filter((p) => ![...reviewed, ...added].some((expected) => expected.name === p.name)).length;
+    if (tableBypasses) bypasses = true;
+    for (const entry of acl) aclLines.push(`${table} ${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`);
+    if (acl.some((entry) => entry.privilege_type === 'UPDATE')) updateGranted = true;
+    for (const grantee of STAKEHOLDER_GRANTEES) {
+      for (const privilege of ['INSERT', 'DELETE']) {
+        if (!acl.some((entry) => entry.grantee === grantee && entry.privilege_type === privilege)) writeGrantsPresent = false;
+      }
+    }
+  }
+  const functions = {};
+  let functionsExecutable = true;
+  for (const signature of MEMBER_STAKEHOLDER_FUNCTIONS) {
+    const row = (await client.query(MEMBER_FUNCTION_SQL, [signature]))?.rows?.[0] || {};
+    functions[signature] = typeof row.def === 'string' ? hashSqlDefinition(row.def) : null;
+    if (row.executable !== true) functionsExecutable = false;
+  }
+  const tablesPresent = MEMBER_STAKEHOLDER_TABLES.every((table) => tables[table].present);
+  const functionsAsExpected = MEMBER_STAKEHOLDER_FUNCTIONS.every((signature) => functions[signature] === MEMBER_STAKEHOLDER_FUNCTION_SHA256[signature]);
+  const rlsEnabled = MEMBER_STAKEHOLDER_TABLES.every((table) => tables[table].rls_enabled);
+  const states = Object.values(memberPolicyStates);
+  return ok({
+    tables_present: tablesPresent,
+    rls_enabled: rlsEnabled,
+    rls_forced: MEMBER_STAKEHOLDER_TABLES.some((table) => tables[table].rls_forced),
+    owner_is_executor: MEMBER_STAKEHOLDER_TABLES.every((table) => tables[table].owner_is_executor),
+    required_roles_present: requiredRolesPresent,
+    reviewed_policies_as_expected: reviewedAsExpected,
+    member_policy_states: memberPolicyStates,
+    member_policies_present: states.every((state) => state === 'present'),
+    other_policy_count: otherPolicyCount,
+    functions_as_expected: functionsAsExpected,
+    required_functions_present: MEMBER_STAKEHOLDER_FUNCTIONS.every((signature) => functions[signature] !== null),
+    functions_executable: functionsExecutable,
+    function_definition_sha256: functions,
+    grantee_bypasses_rls: bypasses,
+    update_granted: updateGranted,
+    write_grants_present: writeGrantsPresent,
+    acl_sha256: hashSqlDefinition(aclLines.sort().join('\n')),
+    // Every condition that keeps member writes inside the caller's own tenants.
+    tenant_guard_ok: tablesPresent && rlsEnabled && reviewedAsExpected && otherPolicyCount === 0
+      && functionsAsExpected && functionsExecutable && !bypasses && !updateGranted,
+    live_definition_sha256: hashSqlDefinition(memberStakeholderWritesStateText({ tables, functions })),
+  });
+}
+
+async function readMemberSchemaSnapshot(client) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const relations = (await client.query(MEMBER_SCHEMA_RELATIONS_SQL))?.rows || [];
+  const policies = (await client.query(MEMBER_OTHER_POLICIES_SQL))?.rows || [];
+  return {
+    relations_sha256: hashSqlDefinition(relations.map((row) => `${row.relname}:${row.relkind}`).join('\n')),
+    other_policies_sha256: hashSqlDefinition(policies.map((row) => JSON.stringify([
+      row.table_name, row.polname, row.polcmd, row.polpermissive, row.polroles, row.polqual, row.polwithcheck,
+    ])).join('\n')),
+  };
+}
+
+const SQL79_SHA256_RE = /^[0-9a-f]{64}$/;
+
+/** A test may supply `pin` only as the committed pin with a reviewed expected hash filled in. */
+function sql79PinIsCommitted(pin) {
+  const committed = AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES;
+  return Boolean(pin) && ['filename', 'migration_id', 'commit', 'source_sha256', 'intended_replacement_sha256', 'table']
+    .every((key) => pin[key] === committed[key]);
+}
+
+async function handleSql79MemberStakeholderWrites({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile79,
+  pin = AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
+}) {
+  if (!sql79PinIsCommitted(pin)) {
+    return fail(CODES.SQL_COLLISION, 'SQL 79 pin does not match the committed allowlist entry');
+  }
+  const embedded = readEmbeddedSql(sqlFile79, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (normalizeSql79(embedded.details.text) !== SQL79_NORMALIZED_STATEMENTS) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 79 is not exactly the reviewed statements');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 79 executor action ${event.action}`);
+  }
+  const pinExecutable = SQL79_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, 'SQL 79 pin has no reviewed pre-apply live definition hash yet; apply is refused');
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 79 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  const prerequisites = (details) => details.tables_present === true
+    && details.required_roles_present === true
+    && details.required_functions_present === true
+    && details.functions_executable === true
+    && details.grantee_bypasses_rls === false
+    && details.update_granted === false;
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readMemberStakeholderWritesState(client);
+      await rollback();
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          prerequisites_ok: prerequisites(state.details),
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && prerequisites(state.details)
+            && state.details.tenant_guard_ok === true,
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql79_member_stakeholder_writes']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readMemberStakeholderWritesState(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256
+      || Object.values(before.details.member_policy_states).some((state) => state !== 'absent')) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'a SQL 79 member policy is already in place; refuse re-create', {
+        member_policy_states: before.details.member_policy_states,
+        matches_intended: before.details.live_definition_sha256 === pin.intended_replacement_sha256,
+      });
+    }
+    if (!prerequisites(before.details)) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 79 prerequisites are not met (both tables, grantee roles, policy functions executable, no UPDATE grant, no grantee that bypasses row-level security)', {
+        tables_present: before.details.tables_present,
+        required_roles_present: before.details.required_roles_present,
+        required_functions_present: before.details.required_functions_present,
+        functions_executable: before.details.functions_executable,
+        grantee_bypasses_rls: before.details.grantee_bypasses_rls,
+        update_granted: before.details.update_granted,
+      });
+    }
+    if (before.details.tenant_guard_ok !== true
+      || before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'check_stakeholders / check_partner_stakeholder_removals row-level security or the policy functions are not the expected pre-apply state', {
+        rls_enabled: before.details.rls_enabled,
+        rls_forced: before.details.rls_forced,
+        owner_is_executor: before.details.owner_is_executor,
+        reviewed_policies_as_expected: before.details.reviewed_policies_as_expected,
+        other_policy_count: before.details.other_policy_count,
+        functions_as_expected: before.details.functions_as_expected,
+      });
+    }
+    const schemaBefore = await readMemberSchemaSnapshot(client);
+
+    await client.query(embedded.details.text);
+
+    const after = await readMemberStakeholderWritesState(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const schemaAfter = await readMemberSchemaSnapshot(client);
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.member_policies_present !== true
+      || after.details.acl_sha256 !== before.details.acl_sha256
+      || after.details.update_granted !== false
+      || after.details.grantee_bypasses_rls !== false
+      || schemaAfter.relations_sha256 !== schemaBefore.relations_sha256
+      || schemaAfter.other_policies_sha256 !== schemaBefore.other_policies_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 79 did not land exactly on the reviewed policies, or changed something else in schema public', {
+        after_hash: after.details.live_definition_sha256,
+        member_policy_states: after.details.member_policy_states,
+        acl_unchanged: after.details.acl_sha256 === before.details.acl_sha256,
+        relations_unchanged: schemaAfter.relations_sha256 === schemaBefore.relations_sha256,
+        other_policies_unchanged: schemaAfter.other_policies_sha256 === schemaBefore.other_policies_sha256,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        member_policy_states: after.details.member_policy_states,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 // --- SQL 72: tenant-member payment write policies ---------------------------
 
 const PAYMENT_POLICIES_SQL = `
@@ -3102,6 +3504,8 @@ export function createHandler({
   sql77Pin = AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
   sqlFile78 = SQL78_PARTNER_STAKEHOLDER_REMOVALS_FILE,
   sql78Pin = AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
+  sqlFile79 = SQL79_MEMBER_STAKEHOLDER_WRITES_FILE,
+  sql79Pin = AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -3153,6 +3557,10 @@ export function createHandler({
 
     if (isSql78PartnerStakeholderRemovals(event)) {
       return handleSql78PartnerStakeholderRemovals({ event, authorization, identity, connect, sqlFile78, pin: sql78Pin });
+    }
+
+    if (isSql79MemberStakeholderWrites(event)) {
+      return handleSql79MemberStakeholderWrites({ event, authorization, identity, connect, sqlFile79, pin: sql79Pin });
     }
 
     if (isLedger20261007193200(event)) {
