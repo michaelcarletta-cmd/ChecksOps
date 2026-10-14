@@ -18,12 +18,34 @@ text, and only offers reviewed pins (today: `ledger-20261007193200`).
    `CHECKSOPS_STAGING_DEPLOYMENT_GUARD_KMS_KEY_ARN` is already set.
 
 Each mode narrows the role with an inline session policy: `inspect` can only
-read the executor, `deploy` cannot invoke or sign, `apply` cannot change code.
+read the executor, `deploy` cannot invoke or sign, `apply` and `read-live`
+cannot change code.
+
+## read-live (read-only executor inspect of a pin's live database state)
+
+`read-live` reports what the staging database currently holds for one pinned
+migration (for example `sql76-tenant-partnership-consent`) without writing.
+Inputs: `approved_commit` = main SHA; `expected_executor_code_sha256` optional
+(must match when given); `expected_live_definition_sha256` must be empty. It
+works whether the pin's `expected_live_definition_sha256` is null or set.
+
+It requires the live executor to carry exactly main's package, runs the
+accepted contracts, takes the `staging/staging-sql` lease and issues a
+KMS-signed receipt bound to executor action `inspect`
+(`preflight_live_fingerprint.action = "inspect"`, expected live definition =
+the read-live sentinel in `lib/sql-executor-read-live.mjs`). The official
+`sql-executor-invoke.mjs` refuses any other action with that receipt, and every
+pin's apply path refuses the sentinel before connecting. The executor's inspect
+path only runs catalog `SELECT`s: no `BEGIN`, no migration file, no one-use id
+consumption. The run prints only non-sensitive fields and a
+`LIVE_DEFINITION_SHA256:` line; that value is what a reviewer pins as the
+pre-apply hash before `apply`.
 
 ## Run order for one migration
 
-1. **Staging DB read-only diagnostic** (`staging-db-readonly-diagnostic.yml`):
-   record the live definition hash of the pinned function.
+1. **Staging DB read-only diagnostic** (`staging-db-readonly-diagnostic.yml`)
+   or **read-live** (after inspect/deploy show the executor is current):
+   record the live definition hash of the pinned migration.
 2. **inspect**: records the live executor `CodeSha256` and whether it already
    carries main's package. The inventory accepts a live member only when it
    equals main's bytes or a version main once carried (full git history); a

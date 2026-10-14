@@ -6,14 +6,22 @@ import { test } from 'node:test';
 
 import {
   MIGRATIONS,
+  MODES,
   candidateMembers,
+  reportReadLive,
   run,
 } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
+import {
+  READ_LIVE_EXPECTED_SENTINEL,
+  checkReceiptActionBinding,
+  readLiveSummary,
+} from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { loadContractRegistry } from '../../scripts/deployment-guard/lib/contracts.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { validateReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import {
   AUTHORIZED_LEDGER_20261007193200 as PIN,
+  AUTHORIZED_SQL76_PARTNERSHIP_CONSENT as SQL76_PIN,
   AUTHORIZED_STAGING_SQL,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import {
@@ -315,6 +323,288 @@ test('apply issues one staging-sql receipt that the official invoke script accep
   assert.equal(payload.one_use_id, 'github-staging-sql-9876-1');
   assert.equal(payload.target_environment, 'staging');
   assert.equal(payload.sql_text, undefined);
+});
+
+/** Run the official invoke script against a fake Lambda; returns { code, invoked, output }. */
+async function invokeOfficially(root, receiptFile, inputFile, commit, lambda) {
+  const { main } = await import('../../scripts/deployment-guard/sql-executor-invoke.mjs');
+  const saved = { ...process.env };
+  process.env.CHECKSOPS_DEPLOYMENT_GUARD_ROOT = root;
+  process.env.CHECKSOPS_DEPLOYMENT_GUARD_APPLY = '1';
+  process.env.CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT = receiptFile;
+  const invoked = [];
+  const writes = [];
+  const stdout = process.stdout.write;
+  const stderr = process.stderr.write;
+  process.stdout.write = (chunk) => { writes.push(String(chunk)); return true; };
+  process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  let code;
+  try {
+    code = main([
+      '--input', inputFile,
+      '--receipt', receiptFile,
+      '--workstream-id', 'github-staging-sql-9876',
+      '--commit', commit,
+    ], process.env, (name, payload) => {
+      invoked.push({ name, payload });
+      return lambda(payload);
+    });
+  } finally {
+    process.stdout.write = stdout;
+    process.stderr.write = stderr;
+    process.env = saved;
+  }
+  return { code, invoked, output: writes.join('') };
+}
+
+const SQL76_INSPECT_RECEIPT = Object.freeze({
+  workstream: 'github-staging-sql-9876',
+  commit: SQL76_PIN.commit,
+  sql_file: SQL76_PIN.filename,
+  before_hash: '1'.repeat(64),
+  after_hash: '1'.repeat(64),
+  result: 'inspect',
+  executor_identity: 'checksops-staging-guarded-sql-executor',
+  table_present: true,
+  connect_function_present: true,
+  required_functions_present: true,
+  consent_state: {
+    guard: 'absent', trigger: 'absent', marker: 'unset', connect: 'pinned', other_triggers: 'none',
+    policies: { 'Inviter can create partnerships': 'present', 'Admins can view any partnership': 'absent' },
+  },
+  other_policy_count: 2,
+  other_trigger_count: 0,
+  preserved_sha256: '2'.repeat(64),
+  live_definition_sha256: '1'.repeat(64),
+  pin_executable: false,
+  apply_preconditions_met: false,
+});
+
+test('read-live is a mode; it refuses a stale executor, unknown migrations and any expected live hash', async (t) => {
+  assert.deepEqual([...MODES], ['inspect', 'deploy', 'apply', 'read-live']);
+  const root = tempRoot(t);
+  const neverSign = () => { throw new Error('must not sign'); };
+  const stale = liveZip({ 'index.mjs': OLD_INDEX });
+  const { createHash } = await import('node:crypto');
+  const oldSha = createHash('sha256').update(OLD_INDEX).digest('hex');
+  const base = { ...BASE_ENV, CHECKSOPS_SQL_EXECUTOR_MODE: 'read-live', CHECKSOPS_SQL_EXECUTOR_MIGRATION: 'sql76-tenant-partnership-consent' };
+  await assert.rejects(run(base, {
+    root, aws: fakeAws(stale), historyOf: () => new Set([oldSha]), contractRunner: () => true, signer: neverSign,
+  }), (error) => error.code === CODES.STALE_PACKAGE);
+  await assert.rejects(run({ ...base, CHECKSOPS_SQL_EXECUTOR_MIGRATION: '76_tenant_partnership_invitee_consent' }, {
+    root, aws: fakeAws(liveZip()), historyOf: () => new Set(), contractRunner: () => true, signer: neverSign,
+  }), (error) => error.code === CODES.SQL_COLLISION);
+  await assert.rejects(run({ ...base, CHECKSOPS_EXPECTED_LIVE_DEFINITION_SHA256: '1'.repeat(64) }, {
+    root, aws: fakeAws(liveZip()), historyOf: () => new Set(), contractRunner: () => true, signer: neverSign,
+  }), (error) => error.code === CODES.INVALID_MANIFEST);
+  // An optional inspected CodeSha256 must still be live.
+  await assert.rejects(run({ ...base, CHECKSOPS_EXPECTED_EXECUTOR_CODE_SHA256: `${'B'.repeat(43)}=` }, {
+    root, aws: fakeAws(liveZip()), historyOf: () => new Set(), contractRunner: () => true, signer: neverSign,
+  }), (error) => error.code === CODES.DEPLOYMENT_COLLISION);
+  // A failing accepted contract still blocks the receipt.
+  await assert.rejects(run(base, {
+    root, aws: fakeAws(liveZip()), historyOf: () => new Set(), contractRunner: () => false, signer: (u) => u,
+  }));
+  assert.equal(fs.existsSync(path.join(root, '.deployment-guard/receipts')), false);
+});
+
+for (const [migration, pin] of [['sql76-tenant-partnership-consent', SQL76_PIN], ['ledger-20261007193200', PIN]]) {
+  test(`read-live (${migration}, pinned expected ${pin.expected_live_definition_sha256 ? 'set' : 'null'}) issues an inspect-bound receipt and never sends apply`, async (t) => {
+    const root = tempRoot(t);
+    const current = liveZip();
+    const result = await run({
+      ...BASE_ENV,
+      CHECKSOPS_SQL_EXECUTOR_MODE: 'read-live',
+      CHECKSOPS_SQL_EXECUTOR_MIGRATION: migration,
+      CHECKSOPS_BUILD_TIMESTAMP: '2026-10-14T13:00:00Z',
+    }, {
+      root, aws: fakeAws(current), historyOf: () => new Set(), contractRunner: () => true, signer: (unsigned) => unsigned,
+    });
+    assert.equal(result.invoke_action, 'inspect');
+    assert.equal(result.mutation, false);
+    const input = JSON.parse(fs.readFileSync(result.authorization.inputFile, 'utf8'));
+    assert.equal(input.action, 'inspect');
+    assert.equal(input.expected_live_definition_sha256, READ_LIVE_EXPECTED_SENTINEL);
+    assert.notEqual(input.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+    assert.equal(input.one_use_id, 'github-staging-sql-9876-1-read-live');
+    assert.equal(input.commit, pin.commit);
+    const receipt = JSON.parse(fs.readFileSync(result.authorization.receiptFile, 'utf8'));
+    assert.equal(receipt.preflight_live_fingerprint.action, 'inspect');
+    assert.equal(receipt.preflight_live_fingerprint.sql, READ_LIVE_EXPECTED_SENTINEL);
+
+    const accepted = await invokeOfficially(root, result.authorization.receiptFile, result.authorization.inputFile, pin.commit, () => ({
+      ok: true, details: { receipt: { ...SQL76_INSPECT_RECEIPT, commit: pin.commit } },
+    }));
+    assert.equal(accepted.code, 0, accepted.output);
+    assert.equal(accepted.invoked.length, 1);
+    assert.equal(accepted.invoked[0].payload.action, 'inspect');
+    assert.equal(accepted.invoked[0].payload.expected_live_definition_sha256, READ_LIVE_EXPECTED_SENTINEL);
+
+    // The same signed receipt cannot authorize an apply: relabel the input, keep the fingerprint.
+    const tampered = path.join(root, 'tampered-input.json');
+    fs.writeFileSync(tampered, JSON.stringify({ ...input, action: 'apply' }));
+    const refused = await invokeOfficially(root, result.authorization.receiptFile, tampered, pin.commit, () => {
+      throw new Error('lambda must not be invoked');
+    });
+    assert.notEqual(refused.code, 0);
+    assert.equal(refused.invoked.length, 0);
+    assert.match(refused.output, /RECEIPT_MISMATCH/);
+    assert.match(refused.output, /bound to executor action inspect/);
+
+    // Dropping the action from the input's fingerprint no longer matches the signed receipt,
+    // and the sentinel still refuses apply.
+    const stripped = path.join(root, 'stripped-input.json');
+    const { action: _dropped, ...fingerprint } = input.preflight_live_fingerprint;
+    fs.writeFileSync(stripped, JSON.stringify({ ...input, action: 'apply', preflight_live_fingerprint: fingerprint }));
+    let exitCode;
+    const exit = process.exit;
+    process.exit = (value) => { exitCode = value; throw new Error('exit'); };
+    let stale;
+    try {
+      stale = await invokeOfficially(root, result.authorization.receiptFile, stripped, pin.commit, () => {
+        throw new Error('lambda must not be invoked');
+      }).catch((error) => ({ error }));
+    } finally {
+      process.exit = exit;
+    }
+    // The guard exits 2 (DEPLOYMENT_COLLISION: stale fingerprint) before any Lambda invoke.
+    assert.ok(stale.error);
+    assert.equal(exitCode, 2);
+  });
+}
+
+test('receipt action binding: an inspect-bound receipt or a sentinel package never authorizes apply', () => {
+  const inspectReceipt = { preflight_live_fingerprint: { sql: READ_LIVE_EXPECTED_SENTINEL, action: 'inspect' } };
+  assert.equal(checkReceiptActionBinding(inspectReceipt, { action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }).ok, true);
+  assert.equal(checkReceiptActionBinding(inspectReceipt, { action: 'apply' }).code, CODES.RECEIPT_MISMATCH);
+  assert.equal(checkReceiptActionBinding(inspectReceipt, { action: 'verify_data' }).code, CODES.RECEIPT_MISMATCH);
+  // Even an unbound (apply-style) receipt cannot carry the read-live sentinel into apply.
+  assert.equal(checkReceiptActionBinding({ preflight_live_fingerprint: {} }, {
+    action: 'apply', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL,
+  }).code, CODES.RECEIPT_MISMATCH);
+  // Existing apply receipts are unaffected.
+  assert.equal(checkReceiptActionBinding({ preflight_live_fingerprint: { sql: PIN.expected_live_definition_sha256 } }, {
+    action: 'apply', expected_live_definition_sha256: PIN.expected_live_definition_sha256,
+  }).ok, true);
+  assert.ok(!AUTHORIZED_STAGING_SQL.some((pin) => [pin.expected_live_definition_sha256, pin.intended_replacement_sha256].includes(READ_LIVE_EXPECTED_SENTINEL)));
+});
+
+test('every selectable pin refuses apply with the read-live sentinel before connecting', async () => {
+  const { importGuardedSqlExecutor } = await import('./helpers/import-guarded-sql-executor.mjs');
+  const { authorizationFingerprint } = await import('../../scripts/deployment-guard/lib/sql-executor-auth.mjs');
+  const { module } = await importGuardedSqlExecutor();
+  process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = path.join(os.tmpdir(), `read-live-sentinel-${process.pid}.json`);
+  const file = (pin) => path.join(REPO_ROOT, pin.filename);
+  const handler = module.createHandler({
+    connect: async () => { throw new Error('should-not-connect'); },
+    now: () => Date.parse('2026-10-14T13:00:00Z'),
+    sqlFileLedger: file(MIGRATIONS['ledger-20261007193200']),
+    sqlFile71: file(MIGRATIONS['sql71-review-amount-grant']),
+    sqlFile72: file(MIGRATIONS['sql72-member-payment-writes']),
+    sqlFile76: file(MIGRATIONS['sql76-tenant-partnership-consent']),
+  });
+  for (const [key, pin] of Object.entries(MIGRATIONS)) {
+    const event = {
+      action: 'apply',
+      workstream_id: 'github-staging-sql-9876',
+      branch: 'main',
+      commit: pin.commit,
+      operator: 'test-agent',
+      target_environment: 'staging',
+      target_component: 'staging-sql',
+      deployment_type: 'sql-executor-invoke',
+      owned_components: [pin.filename],
+      filename: pin.filename,
+      migration_id: pin.migration_id,
+      source_sha256: pin.source_sha256,
+      intended_replacement_sha256: pin.intended_replacement_sha256,
+      expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL,
+      one_use_id: 'github-staging-sql-9876-1-read-live',
+      expiry: '2026-10-14T13:15:00Z',
+      function_name: 'checksops-staging-guarded-sql-executor',
+      build_timestamp: '2026-10-14T13:00:00Z',
+    };
+    event.preflight_live_fingerprint = { ...authorizationFingerprint(event), action: 'inspect' };
+    const refused = await handler(event);
+    assert.equal(refused.ok, false, key);
+    assert.equal(refused.code, CODES.SQL_COLLISION, `${key}: ${refused.message}`);
+    // Refused by the pin binding itself (not a missing file or a hash mismatch).
+    assert.match(String(refused.message), /apply is bound to the exact allowlisted pin|no reviewed pre-apply live definition hash/, key);
+  }
+});
+
+test('read-live report prints only non-sensitive fields and a LIVE_DEFINITION_SHA256 line', (t) => {
+  const root = tempRoot(t);
+  const out = path.join(root, 'invoke.json');
+  const err = path.join(root, 'invoke.err');
+  const summaryFile = path.join(root, 'summary.md');
+  fs.writeFileSync(out, JSON.stringify({
+    ok: true,
+    details: { ok: true, details: { authorization: { allowlist_entry: { filename: SQL76_PIN.filename } }, receipt: SQL76_INSPECT_RECEIPT } },
+  }));
+  const writes = [];
+  const env = { CHECKSOPS_SQL_EXECUTOR_MIGRATION: 'sql76-tenant-partnership-consent', GITHUB_STEP_SUMMARY: summaryFile };
+  const details = reportReadLive(out, err, env, (text) => writes.push(text));
+  assert.deepEqual(Object.keys(details).sort(), [
+    'already_applied', 'apply_preconditions_met', 'connect_function_present', 'consent_state', 'intended_replacement_sha256',
+    'live_definition_sha256', 'matches_pinned_expected', 'migration', 'migration_id', 'other_policy_count', 'other_trigger_count',
+    'pin_executable', 'pinned_expected_live_definition_sha256', 'required_functions_present', 'result', 'table_present',
+  ]);
+  assert.equal(details.migration_id, SQL76_PIN.migration_id);
+  assert.equal(details.intended_replacement_sha256, SQL76_PIN.intended_replacement_sha256);
+  assert.equal(details.pinned_expected_live_definition_sha256, null);
+  assert.equal(details.consent_state.policies['Inviter can create partnerships'], 'present');
+  const text = writes.join('');
+  assert.match(text, new RegExp(`^LIVE_DEFINITION_SHA256: ${'1'.repeat(64)}$`, 'm'));
+  for (const hidden of ['github-staging-sql-9876', 'checksops-staging-guarded-sql-executor', 'workstream', 'operator', 'allowlist_entry', '2'.repeat(64)]) {
+    assert.ok(!text.includes(hidden), hidden);
+  }
+  const md = fs.readFileSync(summaryFile, 'utf8');
+  assert.match(md, /read-live \(inspect only, no writes\)/);
+  assert.match(md, /live_definition_sha256: `1{64}`/);
+  assert.ok(!md.includes('github-staging-sql-9876'));
+
+  // Labels that are not short lowercase words are masked.
+  const odd = readLiveSummary({ ok: true, details: { ok: true, details: { receipt: {
+    ...SQL76_INSPECT_RECEIPT, consent_state: { guard: 'CREATE POLICY x USING (true)' },
+  } } } }, { migration: 'sql76-tenant-partnership-consent', pin: SQL76_PIN });
+  assert.equal(odd.details.consent_state.guard, 'unrecognized');
+
+  // Anything but an inspect result, or a failure, fails with only code and message.
+  fs.writeFileSync(out, JSON.stringify({ ok: true, details: { ok: true, details: { receipt: { ...SQL76_INSPECT_RECEIPT, result: 'applied' } } } }));
+  assert.throws(() => reportReadLive(out, err, env, () => {}), (error) => error.code === CODES.UNRELATED_MUTATION);
+  fs.writeFileSync(out, '');
+  fs.writeFileSync(err, JSON.stringify({ ok: false, code: 'RECEIPT_MISMATCH', message: 'bound', details: { receipt_action: 'inspect' } }));
+  assert.throws(() => reportReadLive(out, err, env, () => {}), (error) => error.code === 'RECEIPT_MISMATCH' && Object.keys(error.details || {}).length === 0);
+  assert.throws(() => reportReadLive(out, err, { CHECKSOPS_SQL_EXECUTOR_MIGRATION: 'nope' }, () => {}), (error) => error.code === CODES.SQL_COLLISION);
+});
+
+test('workflow read-live mode can only read, sign, and invoke action inspect', () => {
+  assert.match(workflow, /- read-live\n/);
+  assert.match(workflow, /inspect\|deploy\|apply\|read-live\) ;;/);
+  assert.match(workflow, /read-live does not accept expected_live_definition_sha256/);
+  const policy = JSON.parse(workflow.match(/\(read-live\)\n[\s\S]*?inline-session-policy: >-\n\s*(\{.*\})/)[1]);
+  assert.deepEqual(policy.Statement.flatMap((row) => row.Action).sort(), [
+    'kms:GetPublicKey', 'kms:Sign', 'lambda:GetFunction', 'lambda:GetFunctionConfiguration', 'lambda:InvokeFunction',
+  ]);
+  // ensure/deploy and apply steps never run in read-live.
+  const steps = workflow.split(/\n      - name: /).slice(1);
+  const step = (name) => steps.find((row) => row.startsWith(name));
+  assert.match(step("Deploy main's executor"), /if: \$\{\{ inputs\.mode == 'deploy' \}\}/);
+  assert.match(step('Configure executor deploy session'), /if: \$\{\{ inputs\.mode == 'deploy' \}\}/);
+  assert.match(step('Apply through'), /if: \$\{\{ inputs\.mode == 'apply' \}\}/);
+  const readStep = step('Read live state');
+  assert.match(readStep, /if: \$\{\{ inputs\.mode == 'read-live' \}\}/);
+  assert.match(readStep, /test "\$INVOKE_ACTION" = "inspect"/);
+  assert.match(readStep, /sql-executor-invoke\.mjs/);
+  assert.match(readStep, /--read-live-report invoke\.json invoke\.err/);
+  assert.doesNotMatch(readStep, /sql-executor-ensure|cat invoke|EXPECTED_LIVE_DEFINITION/);
+  assert.match(step('Cleanup'), /invoke\.err/);
+  // Every step that can change executor code or configuration is gated to deploy only.
+  for (const row of steps.filter((text) => /UpdateFunction|sql-executor-ensure/.test(text))) {
+    assert.match(row, /if: \$\{\{ inputs\.mode == 'deploy' \}\}/);
+  }
 });
 
 test('workflow is main-only, staging-only, narrows each mode, and uses the official writers', () => {

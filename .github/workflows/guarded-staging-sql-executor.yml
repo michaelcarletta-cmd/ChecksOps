@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "inspect the live executor, deploy main's executor package, or apply one allowlisted migration"
+        description: "inspect the live executor, deploy main's executor package, apply one allowlisted migration, or read-live (read-only executor inspect of the pin's live DB state)"
         required: true
         default: inspect
         type: choice
@@ -12,6 +12,7 @@ on:
           - inspect
           - deploy
           - apply
+          - read-live
       migration:
         description: "Allowlisted staging executor pin"
         required: true
@@ -23,17 +24,17 @@ on:
           - sql72-member-payment-writes
           - sql76-tenant-partnership-consent
       approved_commit:
-        description: "Required for deploy/apply: exact main commit approved for this run"
+        description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
         default: ""
         type: string
       expected_executor_code_sha256:
-        description: "Required for deploy/apply: live executor CodeSha256 from a prior inspect run"
+        description: "Required for deploy/apply (optional for read-live): live executor CodeSha256 from a prior inspect run"
         required: false
         default: ""
         type: string
       expected_live_definition_sha256:
-        description: "Required for apply: live function definition SHA-256 from a fresh staging DB read-only diagnostic"
+        description: "Required for apply (must be empty for read-live): live definition SHA-256 from a fresh read-live run"
         required: false
         default: ""
         type: string
@@ -71,13 +72,21 @@ jobs:
           test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging SQL executor only runs from main"; exit 2; }
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
           case "$INPUT_MODE" in
-            inspect|deploy|apply) ;;
-            *) echo "mode must be inspect, deploy, or apply"; exit 2 ;;
+            inspect|deploy|apply|read-live) ;;
+            *) echo "mode must be inspect, deploy, apply, or read-live"; exit 2 ;;
           esac
           if [ "$INPUT_MODE" != "inspect" ]; then
             [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "$INPUT_MODE requires approved_commit as a 40-character commit SHA"; exit 2; }
             test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+          fi
+          if [ "$INPUT_MODE" = "deploy" ] || [ "$INPUT_MODE" = "apply" ]; then
             [[ "$INPUT_EXPECTED_EXECUTOR_CODE_SHA256" =~ ^[A-Za-z0-9+/]{43}=$ ]] || { echo "$INPUT_MODE requires expected_executor_code_sha256 from inspect"; exit 2; }
+          fi
+          if [ "$INPUT_MODE" = "read-live" ]; then
+            test -z "$INPUT_EXPECTED_LIVE_DEFINITION_SHA256" || { echo "read-live does not accept expected_live_definition_sha256; it reports the live one"; exit 2; }
+            if [ -n "$INPUT_EXPECTED_EXECUTOR_CODE_SHA256" ]; then
+              [[ "$INPUT_EXPECTED_EXECUTOR_CODE_SHA256" =~ ^[A-Za-z0-9+/]{43}=$ ]] || { echo "expected_executor_code_sha256 must be a Lambda CodeSha256 when given"; exit 2; }
+            fi
           fi
           if [ "$INPUT_MODE" = "apply" ]; then
             [[ "$INPUT_EXPECTED_LIVE_DEFINITION_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "apply requires expected_live_definition_sha256 as 64 hex characters"; exit 2; }
@@ -148,6 +157,17 @@ jobs:
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["lambda:GetFunction","lambda:GetFunctionConfiguration","lambda:InvokeFunction"],"Resource":"arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-guarded-sql-executor"},{"Effect":"Allow","Action":["kms:Sign","kms:GetPublicKey"],"Resource":"*"}]}
 
+      # read-live may sign one inspect-bound receipt and invoke the executor; it cannot change code or configuration.
+      - name: Configure read-only executor invoke session (read-live)
+        if: ${{ inputs.mode == 'read-live' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_SQL_EXECUTOR_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-sql-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["lambda:GetFunction","lambda:GetFunctionConfiguration","lambda:InvokeFunction"],"Resource":"arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-guarded-sql-executor"},{"Effect":"Allow","Action":["kms:Sign","kms:GetPublicKey"],"Resource":"*"}]}
+
       - name: Verify AWS identity
         shell: bash
         run: |
@@ -158,7 +178,7 @@ jobs:
           test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingSqlExecutor/checksops-staging-sql-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
 
       - name: Load staging KMS verifier
-        if: ${{ inputs.mode == 'apply' }}
+        if: ${{ inputs.mode == 'apply' || inputs.mode == 'read-live' }}
         shell: bash
         env:
           KMS_KEY_ARN: ${{ vars.CHECKSOPS_STAGING_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
@@ -255,6 +275,30 @@ jobs:
               '- Applied: before \`' + receipt.before_hash + '\` after \`' + receipt.after_hash + '\`\n');
           "
 
+      - name: Read live state through the official receipt-gated executor invoke (inspect only)
+        if: ${{ inputs.mode == 'read-live' }}
+        shell: bash
+        env:
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          INVOKE_INPUT: ${{ steps.preflight.outputs.input_path }}
+          INVOKE_ACTION: ${{ steps.preflight.outputs.invoke_action }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_SQL_EXECUTOR_MIGRATION: ${{ inputs.migration }}
+          PIN_COMMIT: ${{ steps.preflight.outputs.pin_commit }}
+        run: |
+          set -euo pipefail
+          test "$INVOKE_ACTION" = "inspect" || { echo "read-live must invoke action inspect"; exit 2; }
+          # The raw executor result stays in files; only the non-sensitive summary is printed.
+          status=0
+          node scripts/deployment-guard/sql-executor-invoke.mjs \
+            --input "$INVOKE_INPUT" \
+            --receipt "$CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT" \
+            --workstream-id "$CHECKSOPS_WORKSTREAM_ID" \
+            --commit "$PIN_COMMIT" > invoke.json 2> invoke.err || status=$?
+          node scripts/deployment-guard/github-staging-sql-executor.mjs --read-live-report invoke.json invoke.err
+          test "$status" = "0" || { echo "read-live invoke exited $status"; exit 2; }
+
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}
-        run: rm -rf .deployment-guard deployed.json invoke.json
+        run: rm -rf .deployment-guard deployed.json invoke.json invoke.err

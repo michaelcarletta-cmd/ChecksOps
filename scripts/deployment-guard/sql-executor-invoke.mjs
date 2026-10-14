@@ -21,6 +21,7 @@ import {
   requireAuthorizedMigration,
   resolveAuthorizedMigration,
 } from './lib/sql-executor-auth.mjs';
+import { checkReceiptActionBinding } from './lib/sql-executor-read-live.mjs';
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -103,6 +104,10 @@ export function main(argv = process.argv.slice(2), env = process.env, invokeFn =
     function_name: functionName,
   }, authorized.details.receipt);
   if (!payload) return printResult(bound);
+
+  // A receipt bound to one executor action (read-live: inspect) cannot authorize another.
+  const actionBinding = checkReceiptActionBinding(authorized.details.receipt, payload);
+  if (!actionBinding.ok) return printResult(actionBinding);
 
   const evaluation = evaluateSqlExecutorAuthorization(payload);
   if (!evaluation.ok) return printResult(evaluation);

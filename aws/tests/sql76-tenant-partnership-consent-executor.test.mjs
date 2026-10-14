@@ -33,6 +33,7 @@ import {
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-executor-ensure.mjs';
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
+import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -235,6 +236,68 @@ test('the committed pin refuses apply before connecting; inspect still reports t
   assert.equal(db.state.policies.length, 7);
 });
 
+/** A client that answers only catalog SELECTs and throws on anything else (BEGIN, DDL, the migration file). */
+function selectOnly(db, seen) {
+  return async () => {
+    const client = await db.connect();
+    return {
+      end: client.end,
+      query: async (sql, params) => {
+        const text = String(sql);
+        seen.push(text);
+        if (!/^\s*SELECT\b/i.test(text) || /pg_advisory|\b(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|GRANT|REVOKE|COMMENT|TRUNCATE|BEGIN|COMMIT)\b/i.test(text.replace(/'[^']*'/g, "''"))) {
+          throw new Error(`read-only inspect issued a non-SELECT statement: ${text.slice(0, 60)}`);
+        }
+        return client.query(sql, params);
+      },
+    };
+  };
+}
+
+test('inspect (the read-live action) only SELECTs: no BEGIN, no lock, no migration file, no one_use_id consumption', async () => {
+  for (const pin of [PIN, EXECUTABLE_PIN]) {
+    for (const expected of [READ_LIVE_EXPECTED_SENTINEL, ALL_PRESENT_BEFORE]) {
+      const db = fakeDb();
+      const seen = [];
+      const handler = handlerFor(selectOnly(db, seen), { sql76Pin: pin });
+      const event = consentEvent({ action: 'inspect', expected_live_definition_sha256: expected });
+      const result = await handler(event);
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.equal(result.details.receipt.result, 'inspect');
+      assert.equal(result.details.receipt.live_definition_sha256, ALL_PRESENT_BEFORE);
+      assert.equal(result.details.receipt.before_hash, result.details.receipt.after_hash);
+      assert.equal(result.details.receipt.pin_executable, pin === EXECUTABLE_PIN);
+      assert.ok(seen.length > 0);
+      assert.ok(!seen.some((text) => text === SQL_TEXT || text.includes('CREATE TRIGGER')));
+      // Nothing changed and the one_use_id was not consumed: the same id can still be inspected.
+      assert.equal(db.state.policies.length, 7);
+      assert.deepEqual(db.state.guard, []);
+      assert.equal(fs.existsSync(process.env.SQL_EXECUTOR_CONSUMED_PATH), false);
+      assert.equal((await handler(event)).ok, true);
+    }
+  }
+  // The strict client is real: apply (BEGIN) through it fails and nothing is written.
+  const db = fakeDb();
+  const seen = [];
+  const applied = await handlerFor(selectOnly(db, seen))(consentEvent());
+  assert.equal(applied.ok, false);
+  assert.match(applied.message, /non-SELECT statement: BEGIN/);
+  assert.equal(db.state.policies.length, 7);
+});
+
+test('a read-live package (sentinel expected hash) relabelled as apply is refused before connecting', async () => {
+  for (const pin of [PIN, EXECUTABLE_PIN]) {
+    const refused = await handlerFor(neverConnect, { sql76Pin: pin })(consentEvent({
+      action: 'apply',
+      expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL,
+    }));
+    assert.equal(refused.ok, false);
+    assert.equal(refused.code, CODES.SQL_COLLISION);
+  }
+  assert.notEqual(READ_LIVE_EXPECTED_SENTINEL, ALL_PRESENT_BEFORE);
+  assert.notEqual(READ_LIVE_EXPECTED_SENTINEL, PIN.intended_replacement_sha256);
+});
+
 test('apply refuses before connecting unless it is the exact pin; tampered files and pins are refused', async () => {
   assert.equal((await handlerFor(neverConnect)(consentEvent({ expected_live_definition_sha256: 'b'.repeat(64) }))).code, CODES.SQL_COLLISION);
   const forged = await handlerFor(neverConnect, { sql76Pin: { ...EXECUTABLE_PIN, intended_replacement_sha256: 'c'.repeat(64) } })(consentEvent());
@@ -420,6 +483,28 @@ test('PostgreSQL 16: the real handler applies SQL 76 and only the invitee side c
     assert.equal(connectRow.prosecdef, true);
     assert.deepEqual(connectRow.proconfig, [...PARTNERSHIP_CONNECT_CONFIG]);
     await seed.end();
+
+    // read-live: the committed pin (no reviewed hash), the sentinel package, and a
+    // session that PostgreSQL itself keeps read-only (any write would fail 25006).
+    const readOnlyConnect = async () => {
+      const client = await connect();
+      await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+      return client;
+    };
+    const readLive = await handlerFor(readOnlyConnect, { sql76Pin: PIN })(consentEvent({
+      action: 'inspect',
+      expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL,
+    }));
+    assert.equal(readLive.ok, true, JSON.stringify(readLive));
+    assert.equal(readLive.details.receipt.live_definition_sha256, ALL_PRESENT_BEFORE_SHA256);
+    assert.equal(readLive.details.receipt.pin_executable, false);
+    assert.equal(readLive.details.receipt.apply_preconditions_met, false);
+    const check = await connect();
+    const { rows: [counts] } = await check.query(
+      "SELECT (SELECT count(*)::int FROM pg_policies WHERE tablename = 'tenant_partnerships') AS policies, (SELECT count(*)::int FROM pg_trigger WHERE tgrelid = 'public.tenant_partnerships'::regclass AND NOT tgisinternal) AS triggers",
+    );
+    assert.deepEqual(counts, { policies: 7, triggers: 0 });
+    await check.end();
 
     const handler = handlerFor(() => connect());
     const inspect = await handler(consentEvent({ action: 'inspect' }));
