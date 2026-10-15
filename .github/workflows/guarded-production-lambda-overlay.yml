@@ -22,7 +22,6 @@ on:
           - financial-remaining.mjs
           - check-deposited.mjs
           - workflow.mjs
-          - workflow-rpc.mjs
           - claim-settlement-rpc.mjs
           - data.mjs
           - workflow-transitions.mjs
@@ -30,7 +29,6 @@ on:
           - providers/production/moov-wallet-sync.mjs
           - providers/production/moov-fund-authz.mjs
           - cognito.mjs
-          - providers/production/checkalt-authz.mjs
           - auth-financial-totp.mjs
           - providers/production/checkalt-approve.mjs
           - providers/production/checkalt-config.mjs
@@ -39,6 +37,8 @@ on:
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
+          - providers/production/checkalt-authz.mjs
+          - workflow-rpc.mjs
       approved_commit:
         description: "Required for apply: exact main commit approved for deployment"
         required: false
