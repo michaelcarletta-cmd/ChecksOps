@@ -105,7 +105,7 @@
       "financial-write-protections": {
         "ok": true,
         "test": "aws/tests/api-write.test.mjs",
-        "evidence": "36/36 on a clean local checkout of 18fafde1b5d0338ca535ab54410f9850f6b09702; the runner's package lacks @aws-sdk/client-s3 and cannot load this test"
+        "evidence": "36/36 on a clean local checkout of 18fafde1b5d0338ca535ab54410f9850f6b09702; run locally because the runner's package lacked @aws-sdk/client-s3 in the SQL 77 and SQL 78 runs (not re-checked on this run)"
       }
     },
     "apply_ssm_command_id": "b443d830-9b42-467e-af94-d8f77f43d9f8",
