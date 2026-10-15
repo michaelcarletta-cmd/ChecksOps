@@ -50,6 +50,8 @@ const PINS = Object.fromEntries(Object.entries(COMMITTED).map(([key, pin]) => [k
 const SQL72_PIN = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/sql72-production-apply.json'), 'utf8'));
 const STAGING_RUNS = { sql77: '38574715440', sql78: '38602758947', sql79: '38612871864' };
 const COMMIT = 'a'.repeat(40);
+// readStakeholderGrantState's preserved_acl_sha256 on the PostgreSQL fixture (only the owner's entry).
+const FIXTURE_PRESERVED_ACL_SHA256 = '475e903f0687ec55be73599d58b151192f12e425a62877142b547c1f8c52e005';
 
 function manifest(key, overrides = {}) {
   const pin = PINS[key];
@@ -159,6 +161,7 @@ test('SQL 77 production pin: production inspect pre-state, code-derived post-sta
   assert.equal(pin.production_inspect.ssm_command_id, 'ca4ad39d');
   assert.equal(pin.production_inspect.date, '2026-10-15');
   assert.equal(pin.production_inspect.live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(pin.production_inspect.preserved_acl_sha256, 'c40af23bab9eabcb08ec6c43f00b5e45cf66e7d09892ac8f7d0227136625e43f');
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(staging.expected_live_definition_sha256, '714659325ea58a54fdc2ad39b35224308f8f9df92629c3c53b8e3c6fe3faa4e7');
   assert.equal(staging.intended_replacement_sha256, 'e4d49fface305abc732bb225824e4f113e4a0a6ef4f5f2a145bdf3b0324043d1');
@@ -174,6 +177,9 @@ test('SQL 77 and SQL 79 production rules accept only the production pre-state', 
   const production = (overrides = {}) => ({
     checksops_check_stakeholders_entries: ALL4.map((p) => `public.check_stakeholders checksops ${p} granted by prod_admin`).sort(),
     update_entries: ['public.check_stakeholders checksops UPDATE'],
+    checksops_grant_option: false,
+    column_update_entries: [],
+    authenticated_member_of_checksops: false,
     ...overrides,
   });
   const pre77 = (overrides = {}) => ({
@@ -185,7 +191,8 @@ test('SQL 77 and SQL 79 production rules accept only the production pre-state', 
     production: production(),
     ...overrides,
   });
-  assert.deepEqual(s77.preconditionFailures(pre77()), []);
+  assert.deepEqual(s77.preconditionFailures(pre77(), pin), []);
+  assert.ok(s77.preconditionFailures(pre77(), { ...pin, production_inspect: undefined }).includes('preserved_acl_as_inspected'));
   const refused77 = [
     [{ privilege_state: { checksops: privileges(ALL4), authenticated: privileges(['SELECT']) } }, 'authenticated_holds_none'],
     [{ privilege_state: { checksops: privileges(['SELECT']), authenticated: privileges([]) } }, 'checksops_holds_select_insert_update_delete'],
@@ -197,9 +204,15 @@ test('SQL 77 and SQL 79 production rules accept only the production pre-state', 
     [{ production: production({ update_entries: ['public.check_stakeholders checksops UPDATE with grant option'] }) }, 'update_only_checksops_without_grant_option'],
     [{ production: production({ update_entries: ['public.check_stakeholders PUBLIC UPDATE', 'public.check_stakeholders checksops UPDATE'] }) }, 'update_only_checksops_without_grant_option'],
     [{ production: undefined }, 'update_only_checksops_without_grant_option'],
+    [{ production: undefined }, 'checksops_without_grant_option'],
+    [{ production: production({ checksops_grant_option: true }) }, 'checksops_without_grant_option'],
+    [{ production: production({ authenticated_member_of_checksops: true }) }, 'authenticated_not_member_of_checksops'],
+    [{ production: production({ column_update_entries: ['public.check_stakeholders.added_via authenticated UPDATE'] }) }, 'no_column_update_grants'],
+    // Another ACL entry on the table than the production inspect read (e.g. PUBLIC REFERENCES).
+    [{ preserved_acl_sha256: 'f'.repeat(64) }, 'preserved_acl_as_inspected'],
   ];
   for (const [overrides, name] of refused77) {
-    assert.ok(s77.preconditionFailures(pre77(overrides)).includes(name), `${name}: ${JSON.stringify(overrides)}`);
+    assert.ok(s77.preconditionFailures(pre77(overrides), pin).includes(name), `${name}: ${JSON.stringify(overrides)}`);
   }
   const post77 = (overrides = {}) => pre77({
     privilege_state: { checksops: privileges(ALL4), authenticated: privileges(SID) },
@@ -215,6 +228,9 @@ test('SQL 77 and SQL 79 production rules accept only the production pre-state', 
     [{ production: production({ update_entries: ['public.check_stakeholders authenticated UPDATE', 'public.check_stakeholders checksops UPDATE'] }) }, 'update_only_checksops_without_grant_option'],
     [{ preserved_acl_sha256: 'd'.repeat(64) }, 'other_acl_entries_unchanged'],
     [{ live_definition_sha256: 'e'.repeat(64) }, 'intended_state'],
+    [{ production: production({ checksops_grant_option: true }) }, 'checksops_without_grant_option'],
+    [{ production: production({ authenticated_member_of_checksops: true }) }, 'authenticated_not_member_of_checksops'],
+    [{ production: production({ column_update_entries: ['public.check_stakeholders.added_via authenticated UPDATE'] }) }, 'no_column_update_grants'],
   ];
   for (const [overrides, name] of refusedPost77) {
     assert.ok(s77.postconditionFailures(pre77(), post77(overrides), pin).includes(name), `${name}: ${JSON.stringify(overrides)}`);
@@ -231,7 +247,7 @@ test('SQL 77 and SQL 79 production rules accept only the production pre-state', 
     production: production(),
     ...overrides,
   });
-  assert.deepEqual(s79.preconditionFailures(pre79()), []);
+  assert.deepEqual(s79.preconditionFailures(pre79(), pin79), []);
   for (const [overrides, name] of [
     [{ production: production({ update_entries: ['public.check_partner_stakeholder_removals authenticated UPDATE', 'public.check_stakeholders checksops UPDATE'] }) }, 'update_only_checksops_without_grant_option'],
     [{ production: production({ update_entries: [] }) }, 'update_only_checksops_without_grant_option'],
@@ -240,8 +256,11 @@ test('SQL 77 and SQL 79 production rules accept only the production pre-state', 
     [{ reviewed_policies_as_expected: false }, 'reviewed_policies_as_expected'],
     [{ functions_as_expected: false }, 'functions_as_expected'],
     [{ grantee_bypasses_rls: true }, 'grantee_does_not_bypass_rls'],
+    [{ production: production({ checksops_grant_option: true }) }, 'checksops_without_grant_option'],
+    [{ production: production({ authenticated_member_of_checksops: true }) }, 'authenticated_not_member_of_checksops'],
+    [{ production: production({ column_update_entries: ['public.check_partner_stakeholder_removals.tenant_id authenticated UPDATE'] }) }, 'no_column_update_grants'],
   ]) {
-    assert.ok(s79.preconditionFailures(pre79(overrides)).includes(name), `${name}: ${JSON.stringify(overrides)}`);
+    assert.ok(s79.preconditionFailures(pre79(overrides), pin79).includes(name), `${name}: ${JSON.stringify(overrides)}`);
   }
   const post79 = pre79({ member_policies_present: true, live_definition_sha256: pin79.intended_replacement_sha256 });
   assert.deepEqual(s79.postconditionFailures(pre79(), post79, pin79), []);
@@ -490,8 +509,11 @@ test('PostgreSQL 16: inspect and apply 77, 78 and 79 in order; order, drift and 
   };
   // Like the production admin login: a non-superuser that owns the tables.
   const connect = connectAs('prod_admin');
-  const ctx = (key) => ({ root: ROOT, migration: key, pin: PINS[key], pins: PINS, connect, consumedPath: consumedPath() });
-  const inspect = (key) => inspectMemberStakeholderProduction({ connect, migration: key, pins: PINS, root: ROOT });
+  // The fixture's other check_stakeholders ACL entries (owner only) hash differently from
+  // production's (c40af23b…), so the fixture pin records the fixture's own inspect value.
+  const PG_PINS = { ...PINS, sql77: { ...PINS.sql77, production_inspect: { ...PINS.sql77.production_inspect, preserved_acl_sha256: FIXTURE_PRESERVED_ACL_SHA256 } } };
+  const ctx = (key) => ({ root: ROOT, migration: key, pin: PG_PINS[key], pins: PG_PINS, connect, consumedPath: consumedPath() });
+  const inspect = (key) => inspectMemberStakeholderProduction({ connect, migration: key, pins: PG_PINS, root: ROOT });
   const apply = (key, overrides) => executeMemberStakeholderProductionApply(manifest(key, overrides), ctx(key));
   const snapshot = async () => {
     const client = await connect();
@@ -551,6 +573,8 @@ test('PostgreSQL 16: inspect and apply 77, 78 and 79 in order; order, drift and 
     assert.equal(early79.code, CODES.DEPLOYMENT_COLLISION);
     assert.match(early79.message, /dependencies are missing/);
 
+    const UNSHIM = 'REVOKE authenticated FROM checksops';
+    const RESHIM = 'GRANT authenticated TO checksops';
     // Production drift, each refused by inspect and apply, then undone.
     const drifts = [
       // authenticated already has SELECT: the live hash differs from the pin.
@@ -563,16 +587,30 @@ test('PostgreSQL 16: inspect and apply 77, 78 and 79 in order; order, drift and 
       ['CREATE POLICY sql77_extra ON public.check_stakeholders FOR INSERT TO authenticated WITH CHECK (true)', 'DROP POLICY sql77_extra ON public.check_stakeholders', 'no_other_write_policy', true],
       // Same hash, but row-level security is off.
       ['ALTER TABLE public.check_stakeholders DISABLE ROW LEVEL SECURITY', 'ALTER TABLE public.check_stakeholders ENABLE ROW LEVEL SECURITY', 'rls_enabled', true],
+      // Same hash, but checksops holds every privilege WITH GRANT OPTION (checksops=a*r*w*d*).
+      ['GRANT SELECT, INSERT, UPDATE, DELETE ON public.check_stakeholders TO checksops WITH GRANT OPTION',
+        'REVOKE GRANT OPTION FOR SELECT, INSERT, UPDATE, DELETE ON public.check_stakeholders FROM checksops', 'checksops_without_grant_option', true],
+      // Same hash, but another ACL entry than the production inspect read.
+      ['GRANT REFERENCES ON public.check_stakeholders TO PUBLIC', 'REVOKE REFERENCES ON public.check_stakeholders FROM PUBLIC', 'preserved_acl_as_inspected', true],
+      // Same hash, but a column-level UPDATE grant.
+      ['GRANT UPDATE (added_via) ON public.check_stakeholders TO authenticated', 'REVOKE UPDATE (added_via) ON public.check_stakeholders FROM authenticated', 'no_column_update_grants', true],
+      // Same hash, but authenticated is a member of checksops, directly or through another role.
+      // (01_role_shim.sql makes checksops a member of authenticated, which PostgreSQL will not
+      // let become a cycle, so the shim's grant is lifted for the drift and restored after.)
+      [`${UNSHIM}; GRANT checksops TO authenticated`, `REVOKE checksops FROM authenticated; ${RESHIM}`, 'authenticated_not_member_of_checksops', true, true],
+      [`${UNSHIM}; CREATE ROLE sql77_mid NOLOGIN; GRANT checksops TO sql77_mid; GRANT sql77_mid TO authenticated`,
+        `DROP ROLE sql77_mid; ${RESHIM}`, 'authenticated_not_member_of_checksops', true, true],
     ];
-    for (const [drift, undo, failure, sameHash] of drifts) {
-      await admin.query(`SET ROLE prod_admin; ${drift}; RESET ROLE`);
+    const asRole = (sql, superuser) => (superuser ? sql : `SET ROLE prod_admin; ${sql}; RESET ROLE`);
+    for (const [drift, undo, failure, sameHash, superuser] of drifts) {
+      await admin.query(asRole(drift, superuser));
       const drifted = await inspect('sql77');
       assert.equal(drifted.details.live_matches_expected, sameHash, drift);
       assert.ok(drifted.details.precondition_failures.includes(failure), `${drift}: ${JSON.stringify(drifted.details.precondition_failures)}`);
       assert.equal(drifted.details.apply_preconditions_met, false, drift);
       const refused = await apply('sql77');
       assert.equal(refused.code, CODES.DEPLOYMENT_COLLISION, `${drift}: ${JSON.stringify(refused)}`);
-      await admin.query(`SET ROLE prod_admin; ${undo}; RESET ROLE`);
+      await admin.query(asRole(undo, superuser));
       assert.equal(await aclOf('public.check_stakeholders'), preAcl, undo);
       assert.equal((await inspect('sql77')).details.apply_preconditions_met, true, undo);
     }
@@ -641,6 +679,21 @@ test('PostgreSQL 16: inspect and apply 77, 78 and 79 in order; order, drift and 
     assert.equal((await apply('sql79')).code, CODES.DEPLOYMENT_COLLISION);
     await admin.query('SET ROLE prod_admin; REVOKE UPDATE ON public.check_partner_stakeholder_removals FROM authenticated; RESET ROLE');
     assert.equal((await inspect('sql79')).details.apply_preconditions_met, true);
+    for (const [drift, undo, failure] of [
+      ['SET ROLE prod_admin; GRANT UPDATE (tenant_id) ON public.check_partner_stakeholder_removals TO authenticated; RESET ROLE',
+        'SET ROLE prod_admin; REVOKE UPDATE (tenant_id) ON public.check_partner_stakeholder_removals FROM authenticated; RESET ROLE', 'no_column_update_grants'],
+      [`${UNSHIM}; GRANT checksops TO authenticated`, `REVOKE checksops FROM authenticated; ${RESHIM}`, 'authenticated_not_member_of_checksops'],
+      ['SET ROLE prod_admin; GRANT SELECT ON public.check_stakeholders TO checksops WITH GRANT OPTION; RESET ROLE',
+        'SET ROLE prod_admin; REVOKE GRANT OPTION FOR SELECT ON public.check_stakeholders FROM checksops; RESET ROLE', 'checksops_without_grant_option'],
+    ]) {
+      await admin.query(drift);
+      const drifted79 = await inspect('sql79');
+      assert.ok(drifted79.details.precondition_failures.includes(failure), `${drift}: ${JSON.stringify(drifted79.details.precondition_failures)}`);
+      assert.equal(drifted79.details.apply_preconditions_met, false, drift);
+      assert.equal((await apply('sql79')).code, CODES.DEPLOYMENT_COLLISION, drift);
+      await admin.query(undo);
+      assert.equal((await inspect('sql79')).details.apply_preconditions_met, true, undo);
+    }
     const a79 = await apply('sql79');
     assert.equal(a79.ok, true, JSON.stringify(a79));
     assert.equal(a79.details.receipt.before_hash, PINS.sql79.expected_live_definition_sha256);

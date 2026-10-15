@@ -53,10 +53,19 @@ production-only rule (the staging executor is unchanged). SQL 77 pre-apply: ever
 other staging condition (table, RLS, reviewed write policy, no other write policy,
 no RLS bypass, `tenant_guard_ok`), `checksops` holds exactly the four privileges,
 `authenticated` holds none, and the only non-owner UPDATE on either stakeholder table
-is `checksops` on `check_stakeholders`, without grant option. Post-apply: the
-intended hash, `authenticated` exactly SELECT/INSERT/DELETE, `checksops`' ACL entries
-(grantor and grant option included) byte-identical, `preserved_acl_sha256` and the
-unrelated-catalog snapshot unchanged. The staging pre-state (`71465932…`) is refused.
+is `checksops` on `check_stakeholders`, without grant option. Also refused, before and
+after (SQL 77 and SQL 79): any grant option on any `checksops` entry on
+`check_stakeholders` (e.g. `checksops=a*r*w*d*`); `authenticated` being a member of
+`checksops`, directly or through other roles (`pg_auth_members`, recursive); and any
+column-level UPDATE grant (`pg_attribute.attacl`) on either stakeholder table to anyone
+but the table owner. SQL 77 pre-apply also requires `preserved_acl_sha256` to equal the
+production inspect's `c40af23b…` (pin `production_inspect.preserved_acl_sha256`;
+failure `preserved_acl_as_inspected`), so any other ACL entry on the table, such as
+`PUBLIC` REFERENCES, stops it. Post-apply: the intended hash, `authenticated` exactly
+SELECT/INSERT/DELETE, `checksops`' ACL entries (grantor and grant option included)
+byte-identical, `preserved_acl_sha256` and the unrelated-catalog snapshot unchanged.
+The staging pre-state (`71465932…`) is refused. These production-only reads are
+schema-qualified through `pg_namespace` and never enter a fingerprint.
 
 SQL 78 and SQL 79 pins are unchanged: SQL 78's fingerprint covers only the new table
 and SQL 79's covers RLS, policies, ownership and the helper functions, not ACLs, so
@@ -126,6 +135,10 @@ secret as SQL 72; the tool still proves the endpoint is the production RDS.
 - SQL 79: `DROP POLICY` the four `aws_member_*` policies. Admin/staff writes keep working.
 - SQL 78: `DROP TABLE public.check_partner_stakeholder_removals` (only after SQL 79 is
   rolled back and the API no longer writes it; recorded removals are lost).
-- SQL 77: `REVOKE SELECT, INSERT, DELETE ON public.check_stakeholders FROM authenticated`.
-  In production `checksops` already held all four privileges before SQL 77, so its
-  privileges are not revoked (staging: `REVOKE INSERT, DELETE … FROM checksops` too).
+- SQL 77: `REVOKE SELECT, INSERT, DELETE ON public.check_stakeholders FROM authenticated`,
+  run **as the table owner** (the role SQL 77 recorded as grantor; a REVOKE by another
+  role leaves the owner-granted entry in place). In production `checksops` already
+  held all four privileges before SQL 77, so its privileges are not revoked
+  (staging: `REVOKE INSERT, DELETE … FROM checksops` too). Then re-run the SQL 77
+  inspect: `live_definition_sha256` must read `8f2417b5…` again (and
+  `preserved_acl_sha256` `c40af23b…`).
