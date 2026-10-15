@@ -50,6 +50,9 @@
     "providers/parity/checkalt-functions.mjs",
     "mortgage-agent-compensation.mjs",
     "homeowner.mjs",
+    "write-signature.mjs",
+    "email-branding.mjs",
+    "esign.mjs",
     "providers/production/moov-wallet-fund.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
@@ -251,6 +254,27 @@
       "expected_live_sha256": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-homeowner-ledger-send-scope-manifest-2026-10-15.json"
+    },
+    "write-signature.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "867ab4e06cb1cda29802f1463f9af6c731898738e42d748da14b1780f7ad8b9c",
+      "expected_live_sha256": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+    },
+    "email-branding.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0",
+      "expected_live_sha256": "54cb79d1a62e9b62618d54c0f1e86e8ec43d9e1860a77bec32adde171a7b88cb",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+    },
+    "esign.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83",
+      "expected_live_sha256": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
     }
   },
   "do_not_overlay": [
