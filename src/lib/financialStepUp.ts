@@ -13,6 +13,19 @@ export const CHECK_BOUND_ACTIONS = Object.freeze([
 
 export type CheckBoundAction = (typeof CHECK_BOUND_ACTIONS)[number];
 
+/**
+ * Actions whose server-side proof is minted once per login (until sign-out)
+ * for the user and tenant, not per check: wallet funding and recording a
+ * Check Alt second approval.
+ */
+export const LOGIN_BOUND_ACTIONS = Object.freeze([
+  "wallet.fund",
+  "deposit.second_approve",
+] as const);
+
+export const isLoginBoundAction = (actionKey: string | null | undefined): boolean =>
+  (LOGIN_BOUND_ACTIONS as readonly string[]).includes(String(actionKey || ""));
+
 export type FinancialStepUpRequest = {
   actionKey: string;
   checkId: string | null;

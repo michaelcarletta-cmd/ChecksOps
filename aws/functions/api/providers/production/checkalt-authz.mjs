@@ -12,6 +12,13 @@ export const FINANCIAL_CHECKALT_STEPUP_ACTIONS = Object.freeze([
   CHECKALT_APPROVE_ACTION,
 ]);
 export const CHECKALT_DUAL_CONTROL_ACTION = 'checkalt.dual_control';
+/**
+ * Two-factor for recording a Check Alt second approval: once per login, like
+ * wallet.fund. The proof is bound to the recorder's user, the check's tenant
+ * and the login it was entered in (login_session from the ID token). It is not
+ * a deposit.submit or deposit.approve proof and authorizes neither.
+ */
+export const CHECKALT_SECOND_APPROVE_ACTION = 'deposit.second_approve';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
 export const DUAL_CONTROL_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -115,6 +122,57 @@ export async function loadRecentStepUp(client, {
   }));
 }
 
+/** This user's step-up for `actionKey` in this tenant, entered in this login. */
+export async function loadLoginSessionStepUp(client, {
+  userId,
+  tenantId,
+  actionKey,
+  loginSession,
+} = {}) {
+  if (!userId || !tenantId || !actionKey || !loginSession) return null;
+  return (await client.query(
+    `SELECT id, user_id, tenant_id, action_key, created_at
+     FROM public.financial_stepup_log
+     WHERE user_id = $1::uuid
+       AND tenant_id = $2::uuid
+       AND action_key = $3
+       AND succeeded IS TRUE
+       AND factor_type = 'totp'
+       AND (metadata->>'source') = 'app_financial_totp'
+       AND (metadata->>'login_session') = $4
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId, tenantId, actionKey, loginSession],
+  )).rows[0] || null;
+}
+
+/**
+ * The deposit.second_approve step-up a dual-control row cites, if it belongs
+ * to the recorder (the row's own user) and tenant. A row without one (recorded
+ * before the recorder had to enter a code) never counts.
+ */
+export async function recorderStepUpProofOk(client, row) {
+  const stepupId = String(row?.metadata?.recorder_stepup_id || '');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stepupId)) return false;
+  const proof = (await client.query(
+    `SELECT id, user_id, tenant_id, action_key
+     FROM public.financial_stepup_log
+     WHERE id = $1::uuid
+       AND user_id = $2::uuid
+       AND tenant_id = $3::uuid
+       AND action_key = $4
+       AND succeeded IS TRUE
+       AND factor_type = 'totp'
+       AND (metadata->>'source') = 'app_financial_totp'
+     LIMIT 1`,
+    [stepupId, row.user_id, row.tenant_id, CHECKALT_SECOND_APPROVE_ACTION],
+  )).rows[0];
+  return Boolean(proof
+    && String(proof.user_id) === String(row.user_id)
+    && String(proof.tenant_id) === String(row.tenant_id)
+    && proof.action_key === CHECKALT_SECOND_APPROVE_ACTION);
+}
+
 export async function loadDualControlApproval(client, {
   tenantId,
   checkId,
@@ -154,6 +212,8 @@ export async function loadDualControlApproval(client, {
     // or staff row never makes a viewer or a non-member an approver.
     const approverRoles = await loadCheckAltTenantRoles(client, row.user_id, tenantId);
     if (!roleAllowsCheckAlt(approverRoles)) continue;
+    // The second approver must have entered their own two-factor code.
+    if (!(await recorderStepUpProofOk(client, row))) continue;
     return row;
   }
   return null;
@@ -211,7 +271,7 @@ export const evaluateCheckAltProductionAuthorization = ({
         : !roleOk
           ? 'Viewers cannot submit, approve or refresh Check Alt deposits. Owner/admin/manager/operator required.'
           : !stepUpOk
-            ? 'Cognito TOTP step-up or dual-control approval from a distinct tenant owner/admin/manager/operator is required, bound to this check and amount.'
+            ? 'Cognito TOTP step-up or dual-control approval from a distinct tenant owner/admin/manager/operator (who entered their own two-factor code) is required, bound to this check and amount.'
             : !flagsOk
               ? 'Production CheckAlt holds remain on.'
               : 'CheckAlt production authorization satisfied. Holds must still be lifted by a human.',

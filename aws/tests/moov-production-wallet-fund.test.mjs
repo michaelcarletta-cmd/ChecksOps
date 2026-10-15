@@ -573,7 +573,9 @@ test('WalletOps asks for two-factor once per login and sends one key per click',
   assert.match(wallets, /context\?\.body/);
 
   const dialog = read('src/components/auth/StepUpDialog.tsx');
-  assert.match(dialog, /request\?\.actionKey === "wallet\.fund"/);
+  // Setup records this login's wallet.fund confirmation (a login-bound action).
+  assert.match(dialog, /isLoginBoundAction\(request\.actionKey\)/);
+  assert.match(read('src/lib/financialStepUp.ts'), /LOGIN_BOUND_ACTIONS = Object\.freeze\(\[\s*"wallet\.fund",/);
 });
 
 test('SQL 72 lets only tenant members write, and only while the server has set the financial GUCs', async () => {

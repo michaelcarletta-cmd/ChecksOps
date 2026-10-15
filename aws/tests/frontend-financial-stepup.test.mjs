@@ -127,3 +127,26 @@ test('browser tenant cannot alter authorization tenant', () => {
     actionKey: 'deposit.submit',
   }), false);
 });
+
+test('recording a second approval asks for the recorder\'s two-factor once per login', async () => {
+  const { isLoginBoundAction } = await import('../../src/lib/financialStepUp.ts');
+  assert.equal(isLoginBoundAction('deposit.second_approve'), true);
+  assert.equal(isLoginBoundAction('wallet.fund'), true);
+  assert.equal(isLoginBoundAction('deposit.approve'), false);
+  assert.equal(isCheckBoundAction('deposit.second_approve'), false);
+  const built = buildFinancialStepUpRequest({ actionKey: 'deposit.second_approve', checkId: CHECK_A, tenantId: TENANT_B });
+  assert.equal(built.ok, true);
+  // The server takes the tenant from the check; the check id is sent for that.
+  assert.equal(awsStepUpBody(built.request).check_intake_item_id, CHECK_A);
+
+  const fs = await import('node:fs');
+  const read = (file) => fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
+  const mfa = read('src/lib/awsMfa.ts');
+  assert.match(mfa, /CHECKALT_SECOND_APPROVE_ACTION = "deposit\.second_approve"/);
+  assert.match(mfa, /payload\?\.error === "step_up_required" && options\.requireStepUp/);
+  assert.match(mfa, /actionKey: CHECKALT_SECOND_APPROVE_ACTION,\s*checkId,/);
+  assert.match(mfa, /\{ force: true \}/);
+  const dialog = read('src/components/auth/StepUpDialog.tsx');
+  assert.match(dialog, /isLoginBoundAction\(request\.actionKey\)/);
+  assert.match(dialog, /Second Approval Verification/);
+});

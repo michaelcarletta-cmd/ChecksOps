@@ -380,10 +380,56 @@ const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, s
   return { ok: true, kind: 'login_session', tenantId, loginSession, actionKey: WALLET_FUND_TOTP_ACTION };
 };
 
+/**
+ * Check Alt second-approval step-up: once per login, like wallet funding. The
+ * tenant is the check's tenant (browser tenant_id is ignored); the proof is
+ * bound to this user, that tenant and the current login, not to one check.
+ */
+const resolveSecondApproveStepUpBinding = async ({ client, mapping, claims, body, spoof, actionKey }) => {
+  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
+  const { membershipForTenant } = await import('./financial-ownership.mjs');
+  const { loginSessionBinding } = await import('./providers/production/moov-fund-authz.mjs');
+  const checkId = body.check_intake_item_id || body.check_id || null;
+  if (!checkId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'check_intake_item_id is required',
+      message: 'The second-approval step-up tenant is taken from the check. Browser tenant_id is ignored.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  const check = (await client.query(
+    'SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid',
+    [checkId],
+  )).rows[0];
+  if (!check) {
+    return { ok: false, statusCode: 404, error: 'Check not found', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+  if (!membershipForTenant(memberships, check.tenant_id)) {
+    return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const loginSession = loginSessionBinding(claims);
+  if (!loginSession) {
+    return {
+      ok: false,
+      statusCode: 401,
+      error: 'login_session_unbound',
+      message: 'Sign out and sign back in, then try again.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  return { ok: true, kind: 'login_session', tenantId: check.tenant_id, loginSession, actionKey };
+};
+
 export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
   const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
   const { membershipForTenant } = await import('./financial-ownership.mjs');
   const {
+    CHECKALT_SECOND_APPROVE_ACTION,
     CHECKALT_TOTP_ACTION,
     FINANCIAL_CHECKALT_STEPUP_ACTIONS,
     serverAmountCentsFromCheck,
@@ -392,6 +438,11 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
   const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
   if (actionKey === WALLET_FUND_TOTP_ACTION) {
     return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof });
+  }
+  // An older live checkalt-authz.mjs has no second-approve action; the key
+  // then falls through to action_mismatch below.
+  if (CHECKALT_SECOND_APPROVE_ACTION && actionKey === CHECKALT_SECOND_APPROVE_ACTION) {
+    return resolveSecondApproveStepUpBinding({ client, mapping, claims, body, spoof, actionKey });
   }
   // If an older checkalt-authz.mjs is live (deploy order or rollback), keep
   // deposit.submit working rather than failing every check-bound step-up.

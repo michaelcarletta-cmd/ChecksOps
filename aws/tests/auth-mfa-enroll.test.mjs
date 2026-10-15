@@ -156,7 +156,7 @@ const depsOf = (store, extra = {}) => ({
     return fn({
       client: store.client,
       mapping: store.mapping,
-      claims: { sub: TESTER_SUB, email: TESTER_EMAIL },
+      claims: extra.claims || { sub: TESTER_SUB, email: TESTER_EMAIL },
       body,
       spoof: { ignored: true, bodyUserId: body.user_id || null, bodyTenantId: body.tenant_id || null },
     });
@@ -404,6 +404,70 @@ test('deposit.approve TOTP is refused for a check in another tenant', async () =
   }), depsOf(store));
   assert.equal(denied.error, 'cross_tenant_denied');
   assert.equal(store.stepups.length, 0);
+});
+
+test('deposit.second_approve TOTP is bound to this user, the check tenant and this login', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const claims = { sub: TESTER_SUB, email: TESTER_EMAIL, origin_jti: 'login-1' };
+  const stepped = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.second_approve',
+    tenant_id: OTHER_TENANT,
+    check_intake_item_id: CHECK,
+  }), depsOf(store, { claims }));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(stepped.tenant_id, TENANT);
+  assert.equal(stepped.check_id, null);
+  assert.equal(stepped.amount_cents, null);
+  assert.equal(store.stepups.length, 1);
+  assert.equal(store.stepups[0].user_id, TESTER_APP);
+  assert.equal(store.stepups[0].tenant_id, TENANT);
+  assert.equal(store.stepups[0].action_key, 'deposit.second_approve');
+  assert.deepEqual(store.stepups[0].metadata, {
+    login_session: `${TESTER_SUB}:jti:login-1`,
+    operation: 'deposit.second_approve',
+    source: 'app_financial_totp',
+  });
+});
+
+test('deposit.second_approve TOTP fails closed without a check, a tenant membership or a login binding', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const claims = { sub: TESTER_SUB, email: TESTER_EMAIL, origin_jti: 'login-1' };
+  const noCheck = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.second_approve',
+    tenant_id: TENANT,
+  }), depsOf(store, { claims }));
+  assert.equal(noCheck.error, 'check_intake_item_id is required');
+  const missing = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.second_approve',
+    check_intake_item_id: OTHER_CHECK,
+  }), depsOf(store, { claims }));
+  assert.equal(missing.error, 'Check not found');
+  const unbound = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.second_approve',
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(unbound.error, 'login_session_unbound');
+  assert.equal(store.stepups.length, 0);
+
+  const otherTenant = createStore({
+    checks: [{ id: CHECK, tenant_id: OTHER_TENANT, amount: 12.34, status: 'ready' }],
+    memberships: [{ tenant_id: TENANT, role: 'admin' }],
+  });
+  const enrolled = await enrollTester(otherTenant);
+  const denied = await handleMfaStepUp(eventOf({
+    code: enrolled.code,
+    action_key: 'deposit.second_approve',
+    check_intake_item_id: CHECK,
+    tenant_id: TENANT,
+  }), depsOf(otherTenant, { claims }));
+  assert.equal(denied.error, 'cross_tenant_denied');
+  assert.equal(otherTenant.stepups.length, 0);
 });
 
 test('deposit.submit step-up log is unchanged', async () => {

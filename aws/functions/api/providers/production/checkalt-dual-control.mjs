@@ -3,11 +3,14 @@ import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import {
   CHECKALT_DUAL_CONTROL_ACTION,
+  CHECKALT_SECOND_APPROVE_ACTION,
   CHECKALT_TOTP_ACTION,
   loadCheckAltTenantRoles,
+  loadLoginSessionStepUp,
   roleAllowsCheckAlt,
   serverAmountCentsFromCheck,
 } from './checkalt-authz.mjs';
+import { loginSessionBinding } from './moov-fund-authz.mjs';
 
 const fail = (error, statusCode, extra = {}) => ({
   ok: false,
@@ -19,7 +22,7 @@ const fail = (error, statusCode, extra = {}) => ({
 });
 
 export async function handleCheckAltDualControl(event, deps = {}) {
-  return withIdentityWrite(event, async ({ client, mapping, body, spoof }) => {
+  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
     const checkId = body.check_intake_item_id || body.check_id;
     if (!checkId) return fail('check_intake_item_id is required', 400);
     const check = (await client.query(
@@ -51,6 +54,29 @@ export async function handleCheckAltDualControl(event, deps = {}) {
         spoofFieldsIgnored: spoof,
       });
     }
+    // The recorder enters their own two-factor code, once per login: a
+    // deposit.second_approve step-up for this user, this tenant and this
+    // login. Another user's proof (the submitter's included) never matches.
+    const loginSession = loginSessionBinding(claims);
+    if (!loginSession) {
+      return fail('login_session_unbound', 401, {
+        message: 'Sign out and sign back in, then try again.',
+        spoofFieldsIgnored: spoof,
+      });
+    }
+    const stepUp = await loadLoginSessionStepUp(client, {
+      userId: mapping.application_user_id,
+      tenantId: check.tenant_id,
+      actionKey: CHECKALT_SECOND_APPROVE_ACTION,
+      loginSession,
+    });
+    if (!stepUp) {
+      return fail('step_up_required', 403, {
+        message: 'Enter a current two-factor code to record a second approval.',
+        action_key: CHECKALT_SECOND_APPROVE_ACTION,
+        spoofFieldsIgnored: spoof,
+      });
+    }
     const row = (await client.query(
       `INSERT INTO public.financial_stepup_log
         (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
@@ -66,6 +92,8 @@ export async function handleCheckAltDualControl(event, deps = {}) {
           amount_dollars: check.amount,
           operation: CHECKALT_TOTP_ACTION,
           approver_role: membership.role,
+          recorder_stepup_id: stepUp.id,
+          recorder_factor: 'totp',
         }),
       ],
     )).rows[0];

@@ -112,18 +112,57 @@ export const stepUpAwsTotp = async (input: {
   return Boolean(payload.verified || payload.ok);
 };
 
-export const recordCheckAltDualControl = async (checkId: string) => {
-  const session = readSession();
-  if (!session.idToken && !session.accessToken) throw new Error("missing_access_token");
-  const response = await fetch(`${awsApiBaseUrl()}/financial/checkalt-dual-control`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${session.idToken || session.accessToken}`,
-    },
-    body: JSON.stringify({ check_intake_item_id: checkId }),
-  });
-  const payload = await response.json().catch(() => ({}));
+export const CHECKALT_SECOND_APPROVE_ACTION = "deposit.second_approve";
+
+type SecondApproveStepUp = (
+  request: {
+    actionKey: string;
+    checkId: string | null;
+    tenantId?: string | null;
+    title?: string;
+    description?: string;
+  },
+  options?: { force?: boolean },
+) => Promise<boolean>;
+
+/**
+ * Records this user's Check Alt second approval. The server requires the
+ * recorder's own two-factor code once per login (deposit.second_approve);
+ * when it answers step_up_required, `requireStepUp` (useStepUp) asks for the
+ * code and the request is sent once more.
+ */
+export const recordCheckAltDualControl = async (
+  checkId: string,
+  options: { requireStepUp?: SecondApproveStepUp; tenantId?: string | null } = {},
+) => {
+  const send = async () => {
+    const session = readSession();
+    if (!session.idToken && !session.accessToken) throw new Error("missing_access_token");
+    const response = await fetch(`${awsApiBaseUrl()}/financial/checkalt-dual-control`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${session.idToken || session.accessToken}`,
+      },
+      body: JSON.stringify({ check_intake_item_id: checkId }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    return { response, payload };
+  };
+  let { response, payload } = await send();
+  // The server decides whether this login has confirmed two-factor; ask only when it says so.
+  if (payload?.error === "step_up_required" && options.requireStepUp) {
+    const ok = await options.requireStepUp({
+      actionKey: CHECKALT_SECOND_APPROVE_ACTION,
+      checkId,
+      tenantId: options.tenantId ?? null,
+      title: "Second Approval Verification",
+      description:
+        "Enter the 6-digit code from your authenticator app to record a second approval. You'll only be asked once until you sign out.",
+    }, { force: true });
+    if (!ok) throw new Error("Two-factor verification is required to record a second approval.");
+    ({ response, payload } = await send());
+  }
   if (!response.ok || payload?.ok === false) {
     throw new Error(String(payload?.message || payload?.error || "dual_control_failed"));
   }

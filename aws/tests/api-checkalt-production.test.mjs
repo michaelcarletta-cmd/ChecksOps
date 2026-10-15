@@ -46,6 +46,8 @@ const C1C_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
 const CHECK_ID = '44444444-4444-4444-8444-444444444444';
 const APPROVER_APP = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const ORIGIN_JTI = 'login-jti-1';
+const LOGIN_SESSION = `${COGNITO_SUB}:jti:${ORIGIN_JTI}`;
 const DEPOSIT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OTHER_CHECK_ID = '55555555-5555-4555-8555-555555555555';
 const OTHER_DEPOSIT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -61,7 +63,14 @@ const jwtEvent = (pathName, method, body, extra = {}) => ({
     stage: 'staging',
     http: { method, path: pathName },
     authorizer: extra.auth === null ? undefined : {
-      jwt: { claims: { sub: extra.sub || COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id' } },
+      jwt: {
+        claims: {
+          sub: extra.sub || COGNITO_SUB,
+          email: 'owner@freedomadj.com',
+          token_use: 'id',
+          ...(extra.claims || {}),
+        },
+      },
     },
   },
 });
@@ -232,6 +241,32 @@ const identityClient = (store) => ({
           auto_approve_max_cents: store.autoApproveMaxCents ?? null,
         }],
       };
+    }
+    if (text.includes('FROM public.financial_stepup_log') && text.includes("(metadata->>'login_session') = $4")) {
+      const [userId, tenantId, actionKey, loginSession] = params;
+      const found = store.stepups.filter((row) => (
+        row.user_id === userId
+        && row.tenant_id === tenantId
+        && row.action_key === actionKey
+        && row.succeeded === true
+        && row.factor_type === 'totp'
+        && row.metadata?.source === 'app_financial_totp'
+        && row.metadata?.login_session === loginSession
+      ));
+      return { rows: found.slice(-1) };
+    }
+    if (text.includes('FROM public.financial_stepup_log') && text.includes('WHERE id = $1::uuid')) {
+      const [id, userId, tenantId, actionKey] = params;
+      const found = store.stepups.find((row) => (
+        row.id === id
+        && row.user_id === userId
+        && row.tenant_id === tenantId
+        && row.action_key === actionKey
+        && row.succeeded === true
+        && row.factor_type === 'totp'
+        && row.metadata?.source === 'app_financial_totp'
+      ));
+      return { rows: found ? [found] : [] };
     }
     if (text.includes('FROM public.financial_stepup_log')) {
       const dual = text.includes('action_key = $2') && params[1] === 'checkalt.dual_control';
@@ -480,6 +515,27 @@ const submitDeps = (store, extra = {}) => ({
   ...(extra.deps || {}),
 });
 
+/** A deposit.second_approve step-up: once per login, bound to user, tenant and login. */
+const grantSecondApproveStepUp = (store, {
+  userId = FREEDOM_APP,
+  tenantId = FREEDOM_TENANT,
+  loginSession = LOGIN_SESSION,
+  action = 'deposit.second_approve',
+} = {}) => {
+  const row = {
+    id: crypto.randomUUID(),
+    user_id: userId,
+    tenant_id: tenantId,
+    action_key: action,
+    factor_type: 'totp',
+    succeeded: true,
+    metadata: { login_session: loginSession, operation: action, source: 'app_financial_totp' },
+    created_at: new Date().toISOString(),
+  };
+  store.stepups.push(row);
+  return row;
+};
+
 const grantStepUp = (store, {
   userId = FREEDOM_APP,
   action = 'deposit.submit',
@@ -487,15 +543,25 @@ const grantStepUp = (store, {
   tenantId = FREEDOM_TENANT,
   amountCents = 1234,
   createdAt = new Date().toISOString(),
+  // A dual-control row cites the recorder's own deposit.second_approve
+  // step-up (as the recorder route writes it). undefined: mint one for the
+  // recorder; null: the row cites none; a string: cite that id.
+  recorderStepUpId,
 } = {}) => {
+  const dual = action === 'checkalt.dual_control';
+  const metadata = { check_id: checkId, amount_cents: amountCents, operation: action };
+  if (dual && recorderStepUpId !== null) {
+    metadata.recorder_stepup_id = recorderStepUpId
+      || grantSecondApproveStepUp(store, { userId, tenantId }).id;
+  }
   store.stepups.push({
     id: crypto.randomUUID(),
     user_id: userId,
     tenant_id: tenantId,
     action_key: action,
-    factor_type: action === 'checkalt.dual_control' ? 'dual_control' : 'totp',
+    factor_type: dual ? 'dual_control' : 'totp',
     succeeded: true,
-    metadata: { check_id: checkId, amount_cents: amountCents, operation: action },
+    metadata,
     created_at: createdAt,
   });
 };
@@ -841,8 +907,8 @@ test('default holds keep the production CheckAlt path unreachable through the pu
   assert.equal(productionCheckAltExecutionAllowed(), false);
 });
 
-const dualControlOnce = (store) => handleFinancialRequest(
-  jwtEvent('/financial/checkalt-dual-control', 'POST', { check_intake_item_id: CHECK_ID }),
+const dualControlOnce = (store, claims = { origin_jti: ORIGIN_JTI }) => handleFinancialRequest(
+  jwtEvent('/financial/checkalt-dual-control', 'POST', { check_intake_item_id: CHECK_ID }, { claims }),
   '/financial/checkalt-dual-control',
   'POST',
   {
@@ -853,19 +919,113 @@ const dualControlOnce = (store) => handleFinancialRequest(
   },
 );
 
+const dualRows = (store) => store.stepups.filter((row) => row.action_key === 'checkalt.dual_control');
+
 test('dual-control records approval without calling CheckAlt; a tenant operator may record it', async () => {
   const store = createStore();
+  const proof = grantSecondApproveStepUp(store);
   const ok = await dualControlOnce(store);
   assert.equal(ok.statusCode, 200);
   assert.equal(ok.liveProviderCalled, false);
   assert.equal(ok.productionExecution, false);
-  assert.equal(store.stepups[0].action_key, 'checkalt.dual_control');
+  assert.equal(dualRows(store).length, 1);
+  assert.equal(dualRows(store)[0].user_id, FREEDOM_APP);
+  assert.equal(dualRows(store)[0].metadata.recorder_stepup_id, proof.id);
 
   const operatorStore = createStore({ role: 'operator' });
+  grantSecondApproveStepUp(operatorStore);
   const operatorOk = await dualControlOnce(operatorStore);
   assert.equal(operatorOk.statusCode, 200);
-  assert.equal(operatorStore.stepups.length, 1);
-  assert.equal(operatorStore.stepups[0].action_key, 'checkalt.dual_control');
+  assert.equal(dualRows(operatorStore).length, 1);
+});
+
+test('dual-control record: the recorder must have entered their own two-factor code in this login', async () => {
+  // No proof at all.
+  const none = createStore();
+  const noneDenied = await dualControlOnce(none);
+  assert.equal(noneDenied.statusCode, 403);
+  assert.equal(noneDenied.error, 'step_up_required');
+  assert.equal(noneDenied.action_key, 'deposit.second_approve');
+  assert.equal(dualRows(none).length, 0);
+
+  // Proofs that are not the recorder's own deposit.second_approve for this
+  // tenant and this login: another user's (e.g. the submitter's), another
+  // login's, another tenant's, or a deposit.submit / deposit.approve proof.
+  const refusedProofs = [
+    { userId: APPROVER_APP },
+    { userId: APPROVER_APP, loginSession: `${APPROVER_APP}:jti:${ORIGIN_JTI}` },
+    { loginSession: `${COGNITO_SUB}:jti:another-login` },
+    { tenantId: C1C_TENANT },
+    { action: 'deposit.submit' },
+    { action: 'deposit.approve' },
+    { action: 'wallet.fund' },
+  ];
+  for (const proof of refusedProofs) {
+    const store = createStore();
+    grantSecondApproveStepUp(store, proof);
+    const denied = await dualControlOnce(store);
+    assert.equal(denied.statusCode, 403, JSON.stringify(proof));
+    assert.equal(denied.error, 'step_up_required', JSON.stringify(proof));
+    assert.equal(dualRows(store).length, 0, JSON.stringify(proof));
+  }
+
+  // A token with no login binding fails closed.
+  const unbound = createStore();
+  grantSecondApproveStepUp(unbound);
+  const unboundDenied = await dualControlOnce(unbound, {});
+  assert.equal(unboundDenied.statusCode, 401);
+  assert.equal(unboundDenied.error, 'login_session_unbound');
+  assert.equal(dualRows(unbound).length, 0);
+
+  // Once per login: one proof covers further second approvals in this login.
+  const store = createStore();
+  grantSecondApproveStepUp(store);
+  assert.equal((await dualControlOnce(store)).statusCode, 200);
+  assert.equal((await dualControlOnce(store)).statusCode, 200);
+  assert.equal(dualRows(store).length, 2);
+});
+
+test('submit: a recorded second approval counts only with its recorder\'s own two-factor proof', async () => {
+  // Recorded without a proof (as before this change): does not replace the submitter's code.
+  const unproofed = createStore();
+  grantStepUp(unproofed, { userId: APPROVER_APP, action: 'checkalt.dual_control', recorderStepUpId: null });
+  unproofed.rolesByUser = { [APPROVER_APP]: 'operator', [FREEDOM_APP]: 'operator' };
+  const unproofedDenied = await submitOnce(unproofed);
+  assert.equal(unproofedDenied.error, 'step_up_required');
+  assert.equal(unproofed.processPosts, 0);
+
+  // A row citing the submitter's proof, not the recorder's: refused.
+  const borrowed = createStore();
+  const submitterProof = grantSecondApproveStepUp(borrowed, { userId: FREEDOM_APP });
+  grantStepUp(borrowed, {
+    userId: APPROVER_APP,
+    action: 'checkalt.dual_control',
+    recorderStepUpId: submitterProof.id,
+  });
+  borrowed.rolesByUser = { [APPROVER_APP]: 'operator', [FREEDOM_APP]: 'operator' };
+  const borrowedDenied = await submitOnce(borrowed);
+  assert.equal(borrowedDenied.error, 'step_up_required');
+  assert.equal(borrowed.processPosts, 0);
+
+  // A row citing the recorder's deposit.submit proof: refused.
+  const wrongAction = createStore();
+  const submitProof = grantSecondApproveStepUp(wrongAction, { userId: APPROVER_APP, action: 'deposit.submit' });
+  grantStepUp(wrongAction, {
+    userId: APPROVER_APP,
+    action: 'checkalt.dual_control',
+    recorderStepUpId: submitProof.id,
+  });
+  wrongAction.rolesByUser = { [APPROVER_APP]: 'operator', [FREEDOM_APP]: 'operator' };
+  assert.equal((await submitOnce(wrongAction)).error, 'step_up_required');
+  assert.equal(wrongAction.processPosts, 0);
+
+  // The recorder's own proof: the submitter needs no code of their own.
+  const proofed = createStore();
+  grantStepUp(proofed, { userId: APPROVER_APP, action: 'checkalt.dual_control' });
+  proofed.rolesByUser = { [APPROVER_APP]: 'operator', [FREEDOM_APP]: 'operator' };
+  const accepted = await submitOnce(proofed);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(proofed.processPosts, 1);
 });
 
 test('dual-control record: a tenant viewer is refused, with or without a platform admin/staff role', async () => {
@@ -1144,13 +1304,14 @@ test('dual-control second approver: platform admin counts only through their ten
 
 test('dual-control record ignores browser tenant and amount', async () => {
   const store = createStore();
+  grantSecondApproveStepUp(store);
   const ok = await handleFinancialRequest(
     jwtEvent('/financial/checkalt-dual-control', 'POST', {
       check_intake_item_id: CHECK_ID,
       tenant_id: C1C_TENANT,
       amount: 0.01,
       amount_cents: 1,
-    }),
+    }, { claims: { origin_jti: ORIGIN_JTI } }),
     '/financial/checkalt-dual-control',
     'POST',
     {
@@ -1164,9 +1325,9 @@ test('dual-control record ignores browser tenant and amount', async () => {
   assert.equal(ok.tenant_id, FREEDOM_TENANT);
   assert.equal(ok.amount_cents, 1234);
   assert.equal(ok.check_id, CHECK_ID);
-  assert.equal(store.stepups[0].tenant_id, FREEDOM_TENANT);
-  assert.equal(store.stepups[0].metadata.amount_cents, 1234);
-  assert.equal(store.stepups[0].metadata.check_id, CHECK_ID);
+  assert.equal(dualRows(store)[0].tenant_id, FREEDOM_TENANT);
+  assert.equal(dualRows(store)[0].metadata.amount_cents, 1234);
+  assert.equal(dualRows(store)[0].metadata.check_id, CHECK_ID);
 });
 
 test('history matching is reference-only; amount cannot cross-match two deposits', async () => {

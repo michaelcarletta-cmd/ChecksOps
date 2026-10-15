@@ -21,6 +21,7 @@ import {
   stepUpAwsTotp,
   verifyAwsTotp,
 } from "@/lib/awsMfa";
+import { isLoginBoundAction } from "@/lib/financialStepUp";
 import { TOTP_BOUNDARY_MESSAGE, normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
 import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
@@ -168,14 +169,15 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             checkId: request?.checkId,
           });
           if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
-          if (request?.actionKey === "wallet.fund") {
+          if (request && isLoginBoundAction(request.actionKey)) {
             // Setup checks the code without using it up, so the same code also
-            // records this login's funding confirmation on the server.
+            // records this login's confirmation (funding or second approval)
+            // on the server.
             const stepped = await stepUpAwsTotp({
               code: normalized.code,
               actionKey: request.actionKey,
               tenantId: request.tenantId,
-              checkId: null,
+              checkId: request.actionKey === "wallet.fund" ? null : request.checkId,
             });
             if (!stepped) throw new Error(TOTP_BOUNDARY_MESSAGE);
           }
@@ -191,7 +193,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         await onFactorsChanged();
         toast({
           title: "Verified",
-          description: request?.actionKey === "wallet.fund"
+          description: isLoginBoundAction(request?.actionKey)
             ? "Two-factor confirmed until you sign out."
             : "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
         });
@@ -252,7 +254,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
                 ? "Deposit Verification"
                 : request?.actionKey === "deposit.approve"
                   ? "Approval Verification"
-                  : "Confirm with two-factor")}
+                  : request?.actionKey === "deposit.second_approve"
+                    ? "Second Approval Verification"
+                    : "Confirm with two-factor")}
           </DialogTitle>
           <DialogDescription>
             {request?.description
@@ -260,7 +264,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
                 ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
                 : request?.actionKey === "deposit.approve"
                   ? "Enter the current 6-digit code from your authenticator app to authorize this approval."
-                  : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
+                  : request?.actionKey === "deposit.second_approve"
+                    ? "Enter the 6-digit code from your authenticator app to record a second approval. You'll only be asked once until you sign out."
+                    : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
           </DialogDescription>
         </DialogHeader>
 
