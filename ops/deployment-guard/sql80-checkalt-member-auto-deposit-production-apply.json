@@ -100,7 +100,7 @@
     },
     "apply_ssm_command_id": "b3221877-8d75-44e7-b76c-ae9420e2d73c",
     "earlier_ssm_command_id": "64fb1530-ab13-415f-b998-cb6ba3e757d9",
-    "earlier_ssm_note": "Issued a receipt via preflight, then stopped before evaluate on an operator script parsing error; nothing was applied by it.",
+    "earlier_ssm_note": "Issued the receipt and lease via preflight, then stopped before evaluate on an operator script parsing error; nothing was applied by it. That same unspent receipt and manifest (same one_use_id) were then used by SSM b3221877-8d75-44e7-b76c-ae9420e2d73c, which spent the receipt once.",
     "receipt": {
       "result": "applied",
       "before_hash": "dce5b13151f4b6c6fe7660e0ef9576d4a80e80ad66cfcffbad6d880ad8a07d65",

@@ -34,7 +34,8 @@ pin's `applied` and `production_evidence`:
   triggers 173, roles 29, default privileges 0, schema 1); staging acceptance run
   `38723636938`. An earlier SSM `64fb1530-ab13-415f-b998-cb6ba3e757d9` issued a receipt via
   preflight and then stopped before evaluate on an operator script parsing error; nothing
-  was applied by it.
+  was applied by it. That same unspent receipt and manifest were then used by
+  `b3221877…`, which spent the receipt once.
 - **Post-apply inspect** (same SSM `b3221877…`): live `5ad9a81c…`, `already_applied` true,
   `function_states` definition intended / comment intended, `authenticated_member_of_owner`
   false.
