@@ -1,8 +1,8 @@
 {
   "id": "sql80-checkalt-member-auto-deposit-production-apply",
   "migration": "sql80",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved the SQL 80 production pin (dce5b131 -> 5ad9a81c) and the read-only production inspect on 2026-10-15; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -35,7 +35,20 @@
     "table_owner": "checksops_admin",
     "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
     "column_update_grants": 0,
-    "note": "Owner-approved read-only production inspect of SQL 80's target on 2026-10-15 (SSM command 1b849090-4596-49ef-aa76-c2a89b58a3a1, PostgreSQL 18.3, as checksops_admin). Exactly one public.aws_save_checkalt_tenant_auto_deposit(_tenant_id uuid, _settings jsonb); sha256(pg_get_functiondef) b7989db7… is SQL 38's body (identical to staging PostgreSQL 16); SECURITY DEFINER; proconfig search_path=public, row_security=off; owner checksops_admin. Unlike staging it has no comment, and EXECUTE for PUBLIC and checksops but not authenticated: production got SQL 38's CREATE but not its COMMENT/REVOKE/GRANT. public.checkalt_tenant_accounts grants checksops arwd (UPDATE included; staging has no UPDATE for checksops or authenticated); no column-level UPDATE grants. expected_live_definition_sha256 dce5b131… is the staging executor's fingerprint (readCheckaltAutoDepositState / checkaltAutoDepositStateText) of that state, code-derived and re-read from a PostgreSQL fixture of it (aws/tests/sql80-checkalt-production-apply.test.mjs). The production rule (scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs) accepts only this pre-state."
+    "note": "Owner-approved read-only production inspect of SQL 80's target on 2026-10-15 (SSM command 1b849090-4596-49ef-aa76-c2a89b58a3a1, PostgreSQL 18.3, as checksops_admin). Exactly one public.aws_save_checkalt_tenant_auto_deposit(_tenant_id uuid, _settings jsonb); sha256(pg_get_functiondef) b7989db7… is SQL 38's body (identical to staging PostgreSQL 16); SECURITY DEFINER; proconfig search_path=public, row_security=off; owner checksops_admin. Unlike staging it has no comment, and EXECUTE for PUBLIC and checksops but not authenticated: production got SQL 38's CREATE but not its COMMENT/REVOKE/GRANT. public.checkalt_tenant_accounts grants checksops arwd (UPDATE included; staging has no UPDATE for checksops or authenticated); no column-level UPDATE grants. expected_live_definition_sha256 dce5b131… is the staging executor's fingerprint (readCheckaltAutoDepositState / checkaltAutoDepositStateText) of that state, code-derived and re-read from a PostgreSQL fixture of it (aws/tests/sql80-checkalt-production-apply.test.mjs). The production rule (scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs) accepts only this pre-state.",
+    "latest": {
+      "date": "2026-10-15",
+      "ssm_command_id": "da23b804-07c0-4c93-b686-cb8b0bb36de5",
+      "source_commit": "43377df1a",
+      "read_only": true,
+      "live_definition_sha256": "dce5b13151f4b6c6fe7660e0ef9576d4a80e80ad66cfcffbad6d880ad8a07d65",
+      "live_matches_expected": true,
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "function_acl": "{=X/checksops_admin,checksops_admin=X/checksops_admin,checksops=X/checksops_admin}",
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+      "note": "Owner-approved read-only production inspect with the official tool (sql80-checkalt-production-apply.mjs --inspect) on main 43377df1a, SSM command da23b804-07c0-4c93-b686-cb8b0bb36de5: live dce5b131… = expected_live_definition_sha256, apply_preconditions_met true, precondition_failures []; function_acl and table_acl unchanged from SSM 1b849090-4596-49ef-aa76-c2a89b58a3a1. That run predates the authenticated_not_member_of_owner precondition added in this change; the apply re-reads it inside its transaction and step 1 of ops/production-sql-80-apply.md re-runs the inspect, which prints authenticated_member_of_owner."
+    }
   },
   "intended_post_state": {
     "function_definition_sha256": "97c5bddc1ada170530fc7da9fe2cd4e3998a037571dd71d0dbe1a89bf03ab9c5",
@@ -45,9 +58,9 @@
     "note": "After the unchanged SQL 80 file: the SQL 80 body (pg_get_functiondef compared with the text reconstructed from the pinned file, sha256 97c5bddc…), the SQL 80 comment, and EXECUTE for the owner, checksops and authenticated only. PUBLIC's EXECUTE is revoked and authenticated gains EXECUTE: an intended tightening to what SQL 38 meant and staging already has. checksops keeps EXECUTE and its table arwd; the table ACL is byte-identical. intended_replacement_sha256 5ad9a81c… equals the staging pin's (the owner's own entry is not part of the fingerprint)."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor apply run of sql80-checkalt-member-auto-deposit (staging 3ef657f4… -> 5ad9a81c…) here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED.",
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938",
+    "basis": "Guarded staging SQL executor apply of sql80-checkalt-member-auto-deposit, run #39 (38723636938) on main ba2047117: staging 3ef657f4… -> 5ad9a81c…, acl_sha256 5e51925f… unchanged. Read-live run 38723779280 (#40) confirmed already_applied.",
     "production_differs": "Production's pre-state differs from staging's (no comment; PUBLIC and checksops EXECUTE instead of checksops and authenticated), so its pre-state fingerprint dce5b131… differs from staging's 3ef657f4…. The post-state 5ad9a81c… is the same. The same file bytes (source_sha256) run in both."
   }
 }

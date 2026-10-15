@@ -42,6 +42,7 @@ import {
   loadSql80ProductionPin,
   readPinnedSql80,
   sql80ProductionPostconditionFailures,
+  sql80OwnerRoles,
   sql80ProductionPreconditionFailures,
 } from '../../scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs';
 import { loadStagingSqlExecutor } from '../../scripts/deployment-guard/lib/staging-sql-executor-module.mjs';
@@ -51,9 +52,17 @@ import { applyBaseSchema, pgSkipReason, startPg } from './helpers/stakeholder-po
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLI = path.join(ROOT, 'scripts/deployment-guard/sql80-checkalt-production-apply.mjs');
 const COMMITTED = loadSql80ProductionPin(ROOT);
-const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/1';
-// The committed pin is execute:false with staging acceptance pending; apply tests use an authorized copy.
-const PIN = { ...COMMITTED, execute: true, staging_acceptance: { ok: true, reference: STAGING_REF, basis: 'test' } };
+const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938';
+// The committed pin is execute-authorized with the recorded staging acceptance; apply tests use it as is.
+const PIN = COMMITTED;
+// The pre-authorization state (execute false, staging acceptance pending), built here so the
+// refusals of a pending pin stay tested after the committed pin was authorized.
+const PENDING = Object.freeze({
+  ...COMMITTED,
+  authorization: 'pending',
+  execute: false,
+  staging_acceptance: { ok: false, reference: null, basis: 'pending' },
+});
 const SQL72_PIN = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/sql72-production-apply.json'), 'utf8'));
 const COMMIT = 'a'.repeat(40);
 const sha = (text) => createHash('sha256').update(text).digest('hex');
@@ -137,12 +146,20 @@ const PRODUCTION_PRE_STATE = Object.freeze({
   acl: [entry('PUBLIC'), entry('checksops')],
 });
 
-test('production pin: inspected pre-state, staging post-state, pending, production RDS', () => {
+test('production pin: inspected pre-state, staging post-state, execute-authorized after staging acceptance, production RDS', () => {
   assert.equal(COMMITTED.migration, 'sql80');
-  assert.equal(COMMITTED.execute, false);
-  assert.equal(COMMITTED.authorization, 'pending');
-  assert.equal(COMMITTED.staging_acceptance.ok, false);
-  assert.equal(COMMITTED.staging_acceptance.reference, null);
+  assert.equal(COMMITTED.execute, true);
+  assert.match(COMMITTED.authorization, /takes effect only when the owner reviews and merges this change/);
+  // The authorization records the owner's approval to merge the execute pin, not a run.
+  assert.match(COMMITTED.authorization, /run-time approval/);
+  assert.match(COMMITTED.authorization, /authorization phrase/);
+  assert.match(COMMITTED.authorization, /one_use_id/);
+  assert.equal(COMMITTED.staging_acceptance.ok, true);
+  assert.equal(COMMITTED.staging_acceptance.reference, STAGING_REF);
+  assert.match(COMMITTED.staging_acceptance.basis, /sql80-checkalt-member-auto-deposit/);
+  assert.match(COMMITTED.staging_acceptance.basis, /38723779280/);
+  assert.ok(COMMITTED.staging_acceptance.basis.includes(STAGING_PIN.expected_live_definition_sha256.slice(0, 8)));
+  assert.ok(COMMITTED.staging_acceptance.basis.includes(COMMITTED.intended_replacement_sha256.slice(0, 8)));
   for (const field of ['filename', 'migration_id', 'source_sha256', 'intended_replacement_sha256']) {
     assert.equal(COMMITTED[field], STAGING_PIN[field], field);
   }
@@ -165,6 +182,16 @@ test('production pin: inspected pre-state, staging post-state, pending, producti
   assert.equal(inspect.function_owner, 'checksops_admin');
   assert.equal(inspect.table_owner, 'checksops_admin');
   assert.equal(inspect.comment, null);
+  // The latest read-only inspect with the official tool, on main 43377df1a.
+  assert.equal(inspect.latest.ssm_command_id, 'da23b804-07c0-4c93-b686-cb8b0bb36de5');
+  assert.equal(inspect.latest.source_commit, '43377df1a');
+  assert.equal(inspect.latest.read_only, true);
+  assert.equal(inspect.latest.live_definition_sha256, COMMITTED.expected_live_definition_sha256);
+  assert.equal(inspect.latest.apply_preconditions_met, true);
+  assert.deepEqual(inspect.latest.precondition_failures, []);
+  assert.equal(inspect.latest.function_acl, inspect.function_acl);
+  assert.equal(inspect.latest.table_acl, inspect.table_acl);
+  assert.deepEqual(sql80OwnerRoles(COMMITTED), ['checksops_admin']);
   assert.equal(COMMITTED.intended_post_state.function_acl, POST_FN_ACL);
   assert.equal(COMMITTED.intended_post_state.table_acl, inspect.table_acl);
   assert.equal(COMMITTED.intended_post_state.function_definition_sha256, CHECKALT_AUTO_DEPOSIT_DEFINITION_SHA256.sql80);
@@ -190,6 +217,8 @@ const production = (overrides = {}) => ({
   column_update_entries: [],
   authenticated_can_update: false,
   authenticated_member_of_checksops: false,
+  owner_roles: ['checksops_admin'],
+  authenticated_member_of_owner: false,
   ...overrides,
 });
 const pre = (overrides = {}) => ({
@@ -252,11 +281,20 @@ test('the production rules accept only the inspected pre-state and the reviewed 
     [{ production: production({ authenticated_member_of_checksops: true }) }, 'authenticated_not_member_of_checksops'],
     [{ production: undefined }, 'table_acl_as_inspected'],
     [{ production: undefined }, 'authenticated_not_member_of_checksops'],
+    // authenticated in the function/table owner role (any route, INHERIT FALSE included).
+    [{ production: production({ authenticated_member_of_owner: true }) }, 'authenticated_not_member_of_owner'],
+    [{ production: production({ authenticated_member_of_owner: undefined }) }, 'authenticated_not_member_of_owner'],
+    [{ production: production({ owner_roles: [] }) }, 'authenticated_not_member_of_owner'],
+    [{ production: production({ owner_roles: ['checksops'] }) }, 'authenticated_not_member_of_owner'],
+    [{ production: undefined }, 'authenticated_not_member_of_owner'],
   ];
   for (const [overrides, name] of refusedPre) {
     assert.ok(sql80ProductionPreconditionFailures(pre(overrides), COMMITTED).includes(name), `${name}: ${JSON.stringify(overrides)}`);
   }
   assert.ok(sql80ProductionPreconditionFailures(pre(), { ...COMMITTED, production_inspect: undefined }).includes('function_acl_as_inspected'));
+  // A pin without inspected owners names no owner role, so it is refused.
+  assert.deepEqual(sql80OwnerRoles({ ...COMMITTED, production_inspect: undefined }), []);
+  assert.ok(sql80ProductionPreconditionFailures(pre(), { ...COMMITTED, production_inspect: undefined }).includes('authenticated_not_member_of_owner'));
 
   assert.deepEqual(sql80ProductionPostconditionFailures(pre(), post(), COMMITTED, REVIEWED_DEF80_SHA), []);
   const refusedPost = [
@@ -272,6 +310,7 @@ test('the production rules accept only the inspected pre-state and the reviewed 
     [{ production: production({ function_acl_entries: ['authenticated EXECUTE', 'checksops EXECUTE'], function_acl: POST_FN_ACL, function_owner: 'checksops' }) }, 'function_owner_unchanged'],
     [{ production: production({ function_acl_entries: ['authenticated EXECUTE', 'checksops EXECUTE'], function_acl: POST_FN_ACL, table_acl: '{x}' }) }, 'table_acl_unchanged'],
     [{ production: production({ function_acl_entries: ['authenticated EXECUTE', 'checksops EXECUTE'], function_acl: POST_FN_ACL, authenticated_can_update: true }) }, 'authenticated_cannot_update_table'],
+    [{ production: production({ function_acl_entries: ['authenticated EXECUTE', 'checksops EXECUTE'], function_acl: POST_FN_ACL, authenticated_member_of_owner: true }) }, 'authenticated_not_member_of_owner'],
     [{ overload_count: 2 }, 'no_overloads'],
     [{ security_definer: false }, 'security_definer'],
   ];
@@ -314,10 +353,13 @@ test('the pinned file is exactly the reviewed statements; a tampered pin or file
 });
 
 test('evaluation is bound to the exact pin, a recorded staging acceptance and the production gate', async () => {
-  // The committed pin has no staging acceptance yet.
-  const pending = await evaluateSql80ProductionApply(manifest({ staging_acceptance: { ok: true, reference: STAGING_REF } }), { root: ROOT, pin: COMMITTED });
+  // A pin whose staging acceptance is pending refuses any manifest reference.
+  const pending = await evaluateSql80ProductionApply(manifest({ staging_acceptance: { ok: true, reference: STAGING_REF } }), { root: ROOT, pin: PENDING });
   assert.equal(pending.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  const allowed = await evaluateSql80ProductionApply(manifest(), { root: ROOT, pin: PIN });
+  const okFalse = await evaluateSql80ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, staging_acceptance: { ...PIN.staging_acceptance, ok: false } } });
+  assert.equal(okFalse.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  // The committed pin allows evaluation with its own recorded reference.
+  const allowed = await evaluateSql80ProductionApply(manifest(), { root: ROOT, pin: COMMITTED });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   for (const field of ['filename', 'migration_id', 'source_sha256', 'expected_live_definition_sha256', 'intended_replacement_sha256', 'live_definition_sha256']) {
     const result = await evaluateSql80ProductionApply(manifest({ [field]: 'f'.repeat(64) }), { root: ROOT, pin: PIN });
@@ -332,19 +374,22 @@ test('evaluation is bound to the exact pin, a recorded staging acceptance and th
   assert.equal(otherApproval.ok, false);
 });
 
-test('CLI with the committed pin refuses before the guard (staging acceptance pending) and never connects', () => {
+test('CLI with the committed (execute-authorized) pin and no receipt refuses at the guard and never connects', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sql80-prod-noreceipt-'));
   try {
     const input = path.join(dir, 'sql80.json');
-    fs.writeFileSync(input, JSON.stringify(manifest({ staging_acceptance: COMMITTED.staging_acceptance })));
+    fs.writeFileSync(input, JSON.stringify(manifest()));
     for (const extra of [{ CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, {}]) {
       const result = spawnSync(process.execPath, [CLI, '--apply', '--input', input], {
         encoding: 'utf8',
         env: { PATH: process.env.PATH, HOME: dir, ...extra },
       });
-      // The committed pin's pending staging acceptance stops it first (exit 1), before any guard or connection.
-      assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
-      assert.match(result.stderr, /PRODUCTION_APPROVAL_REQUIRED/);
+      // Evaluation passes on the committed pin; without a receipt the guard stops it (exit 2)
+      // before the secret is resolved or any connection is made. The env flag does not bypass it.
+      const out = `${result.stdout}${result.stderr}`;
+      assert.equal(result.status, 2, out);
+      assert.match(out, /DEPLOYMENT_GUARD_REQUIRED/);
+      assert.doesNotMatch(out, /secretsmanager|ECONNREFUSED|rolled back/i);
     }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -360,9 +405,11 @@ test('CLI does not spend the receipt on a wrong phrase, execute false, a wrong o
   const notExecutable = await runCli(argv, { input: manifest(), deps: { pin: { ...PIN, execute: false }, enforceScriptGuard: () => owned() } });
   assert.equal(notExecutable.spent, 0);
   assert.match(notExecutable.out, /execute is not authorized/);
-  const committed = await runCli(argv, { input: manifest(), deps: { enforceScriptGuard: () => owned() } });
+  // A pending pin (staging acceptance not recorded) stops before the guard is even asked.
+  const committed = await runCli(argv, { input: manifest(), deps: { pin: PENDING, enforceScriptGuard: () => { throw new Error('guard-called'); } } });
   assert.equal(committed.spent, 0);
   assert.match(committed.out, /PRODUCTION_APPROVAL_REQUIRED/);
+  assert.doesNotMatch(committed.out, /guard-called/);
   const wrongOwner = await runCli(argv, { input: manifest(), deps: { pin: PIN, enforceScriptGuard: () => owned('aws/workflows/sql/79_member_stakeholder_writes.sql') } });
   assert.equal(wrongOwner.spent, 0);
   assert.match(wrongOwner.out, /RECEIPT_MISMATCH/);
@@ -429,7 +476,8 @@ test('apply refuses before connecting without the phrase, a single-use id, execu
   assert.equal((await run({ authorization_phrase: 'yes' })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({ one_use_id: 'x' })).code, CODES.INVALID_MANIFEST);
   assert.equal((await run({}, { ...PIN, execute: false })).code, CODES.GUARD_APPLY_FORBIDDEN);
-  assert.equal((await run({}, COMMITTED)).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await run({}, PENDING)).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await run({}, { ...PENDING, staging_acceptance: PIN.staging_acceptance })).code, CODES.GUARD_APPLY_FORBIDDEN);
   assert.equal((await run({}, { ...PIN, authorization_phrase: '' })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
@@ -561,16 +609,19 @@ for (const version of PG_VERSIONS) {
       assert.deepEqual(b.column_update_entries, []);
       assert.equal(b.authenticated_can_update_table, false);
       assert.equal(b.authenticated_member_of_checksops, false);
+      assert.deepEqual(b.owner_roles, ['checksops_admin']);
+      assert.equal(b.authenticated_member_of_owner, false);
       assert.equal(seen[0], 'BEGIN READ ONLY');
       assert.equal(seen.at(-1), 'ROLLBACK');
       assert.ok(seen.slice(1, -1).every((text) => /^\s*(SELECT|WITH|SAVEPOINT|RELEASE)\b/i.test(text)), JSON.stringify(seen));
 
       const apply = (overrides = {}, ctx = {}) => executeSql80ProductionApply(manifest(overrides), { root: ROOT, pin: fixturePin, connect, consumedPath: consumedPath(), ...ctx });
-      const refusedThenRestored = async (label, breakIt, restore, as = 'ubuntu') => {
+      const refusedThenRestored = async (label, breakIt, restore, as = 'ubuntu', failures = null) => {
         const client = as === 'ubuntu' ? admin : await connectAs(as);
         await client.query(breakIt);
         const refused = await inspect();
         assert.equal(refused.details.apply_preconditions_met, false, label);
+        if (failures) assert.deepEqual(refused.details.precondition_failures, failures, label);
         const applyRefused = await apply();
         assert.equal(applyRefused.code, CODES.DEPLOYMENT_COLLISION, `${label}: ${JSON.stringify(applyRefused)}`);
         await client.query(restore);
@@ -592,6 +643,21 @@ for (const version of PG_VERSIONS) {
       await refusedThenRestored('column UPDATE', 'GRANT UPDATE (auto_approve_enabled) ON public.checkalt_tenant_accounts TO checksops', 'REVOKE UPDATE (auto_approve_enabled) ON public.checkalt_tenant_accounts FROM checksops', 'checksops_admin');
       // authenticated in checksops cannot be built here: the role shim already makes checksops a member
       // of authenticated, so the reverse grant is circular (the rule is covered by the unit test above).
+      // authenticated in the owner role, even through an INHERIT FALSE grant (which
+      // has_any_column_privilege does not see), and through an intermediate role.
+      await admin.query('GRANT checksops_admin TO authenticated WITH INHERIT FALSE');
+      const inheritFalse = await inspect();
+      assert.equal(inheritFalse.details.authenticated_member_of_owner, true);
+      assert.equal(inheritFalse.details.authenticated_can_update_table, false);
+      assert.deepEqual(inheritFalse.details.precondition_failures, ['authenticated_not_member_of_owner']);
+      assert.equal(inheritFalse.details.live_definition_sha256, COMMITTED.expected_live_definition_sha256);
+      assert.equal(inheritFalse.details.apply_preconditions_met, false);
+      assert.equal((await apply()).code, CODES.DEPLOYMENT_COLLISION);
+      await admin.query('REVOKE checksops_admin FROM authenticated');
+      await refusedThenRestored('authenticated in the owner through another role (INHERIT FALSE)',
+        'CREATE ROLE sql80_mid NOLOGIN; GRANT checksops_admin TO sql80_mid WITH INHERIT FALSE; GRANT sql80_mid TO authenticated WITH INHERIT FALSE',
+        'REVOKE sql80_mid FROM authenticated; REVOKE checksops_admin FROM sql80_mid; DROP ROLE sql80_mid',
+        'ubuntu', ['authenticated_not_member_of_owner']);
       await refusedThenRestored('table SELECT for authenticated', 'GRANT SELECT ON public.checkalt_tenant_accounts TO authenticated', 'REVOKE SELECT ON public.checkalt_tenant_accounts FROM authenticated', 'checksops_admin');
       await refusedThenRestored('SECURITY INVOKER', `ALTER FUNCTION ${fn} SECURITY INVOKER`, `ALTER FUNCTION ${fn} SECURITY DEFINER`, 'checksops_admin');
       assert.deepEqual(await catalog(), start);

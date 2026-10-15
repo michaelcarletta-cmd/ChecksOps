@@ -7,12 +7,28 @@
 | Tool | `scripts/deployment-guard/sql80-checkalt-production-apply.mjs` (lib `scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs`) |
 | Test | `aws/tests/sql80-checkalt-production-apply.test.mjs` |
 
-**Status:** not applied to production. The pin is `authorization: "pending"`,
-`execute: false`, and its `staging_acceptance` is still pending (`reference: null`), so
-evaluate and apply refuse with `PRODUCTION_APPROVAL_REQUIRED`. The owner records the
-staging apply run of `sql80-checkalt-member-auto-deposit`, flips `execute` and records
-the approval in `authorization` in one separate reviewed change, after the read-only
-inspect below. After the apply, a follow-up change records the evidence and sets
+**Status:** not applied to production; the pin is **execute-authorized** (`execute: true`).
+The reviewed change that set it recorded:
+
+- `authorization`: the owner's approval on 2026-10-15 of the pin values (dce5b131 → 5ad9a81c)
+  and the read-only production inspect; `execute: true` takes effect only on the owner's review
+  and merge of that change. It is not an approval of any particular run:
+  each apply still needs the owner's run-time approval for that workstream (the
+  manifest's `approval`), a production-sql receipt that owns the pinned file, the
+  authorization phrase and a new `one_use_id`.
+- `staging_acceptance`: `ok: true`, reference
+  `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938` (guarded
+  staging SQL executor apply of `sql80-checkalt-member-auto-deposit`, run #39 on main
+  `ba2047117`, staging `3ef657f4…` → `5ad9a81c…`, `acl_sha256` `5e51925f…` unchanged;
+  read-live run `38723779280` (#40) confirmed `already_applied`).
+- `production_inspect.latest`: the read-only inspect with this tool, SSM command
+  `da23b804-07c0-4c93-b686-cb8b0bb36de5` (2026-10-15, main `43377df1a`): live
+  `dce5b131…` = expected, `apply_preconditions_met` true, `precondition_failures` `[]`,
+  `function_acl` and `table_acl` unchanged from SSM `1b849090-4596-49ef-aa76-c2a89b58a3a1`.
+  That run predates the `authenticated_not_member_of_owner` precondition (below), so the
+  step 1 inspect before the apply must show `authenticated_member_of_owner: false`.
+
+After the apply, a follow-up reviewed change records the evidence in the pin and sets
 `execute` back to `false`.
 
 ## What the apply changes in production (plain words)
@@ -78,8 +94,15 @@ the inspected string; table ACL and owner byte-equal to the inspected ones; the 
 non-owner table UPDATE is `checksops` without grant option; no grant option on any
 table entry; no column-level UPDATE grant; `authenticated` cannot UPDATE any column by
 any route (`has_any_column_privilege`); `authenticated` is not a member of `checksops`
-(recursive); the roles, tables and helper functions the body calls exist; the live
+(recursive); `authenticated` is not a member of the function's or the table's owner
+role (the pin's inspected `function_owner`/`table_owner`, `checksops_admin`), recursively
+through `pg_auth_members`, **INHERIT FALSE and SET FALSE grants included** (such a
+membership is invisible to `has_any_column_privilege` but still reaches the owner, e.g.
+by `SET ROLE`); the roles, tables and helper functions the body calls exist; the live
 fingerprint equals the pin's and the manifest's. The staging pre-state is refused.
+The membership flags sit beside the fingerprint (in the production-only detail, never
+hashed), so `expected_live_definition_sha256` and `intended_replacement_sha256` are
+unchanged by the owner-membership rule.
 
 **After (rolled back otherwise):** the intended fingerprint; the live definition equals
 the one reconstructed from the pinned file; the SQL 80 comment; non-owner EXECUTE
@@ -89,6 +112,19 @@ byte-identical to before; every "before" table rule still holds; and the unrelat
 catalog snapshot (relations and their ACLs, columns, constraints, policies, triggers,
 every other function in `public`, every function in `auth`, roles and memberships,
 default privileges, the schema ACL) unchanged.
+
+## PostgreSQL 18 caveat
+
+Production runs PostgreSQL 18.3; the default test fixture runs on PostgreSQL 16. The
+fingerprints and the reviewed `pg_get_functiondef` text were re-derived on 18.3 only with
+`SQL80_PG18_BIN` set (it passed for this change with the embedded 18.3 binaries, the
+owner-membership refusals included), not in CI. `pg_get_functiondef` output can differ
+between major versions. That is safe: the apply compares the live
+`pg_get_functiondef` after SQL 80 with the definition reconstructed from the pinned file
+(`sql80ReviewedFunctiondef`, sha256 `97c5bddc…`) inside the transaction, and **rolls
+back** (`UNRELATED_MUTATION`, `definition_is_reviewed_sql80` in `failed`) if they differ.
+Production is then unchanged (still `dce5b131…`); stop and fix the reconstruction in a
+reviewed change, never by editing the pin's hashes by hand.
 
 ## Where it runs
 
@@ -101,42 +137,92 @@ as SQL 72; the tool proves the endpoint is the production RDS.
 
 ## Steps (each needs owner approval)
 
+Run on `i-0c35557c4e5385406` from a checkout of reviewed main that contains the
+execute-authorized pin (staged by `.github/workflows/sql53-temporary-transfer.yml`), with
+`AWS_ENDPOINT_URL_SECRETS_MANAGER` set as above. `<main sha>` is that checkout's full
+commit.
+
 1. **Inspect (read-only):**
    `node scripts/deployment-guard/sql80-checkalt-production-apply.mjs --inspect`
    runs in `BEGIN READ ONLY … ROLLBACK` and only SELECTs. It prints the readable
    `function_acl`, `function_acl_entries` (with grantor), `function_owner`,
    `table_acl`, `table_acl_entries`, `table_owner`, `table_update_entries`,
    `column_update_entries`, `authenticated_can_update_table`,
-   `authenticated_member_of_checksops`, the staging `state`, `live_definition_sha256`,
+   `authenticated_member_of_checksops`, `owner_roles`, `authenticated_member_of_owner`,
+   `pin_execute`, the staging `state`, `live_definition_sha256`,
    `live_matches_expected`, `precondition_failures`, `already_applied` and
-   `apply_preconditions_met`. Proceed only when `apply_preconditions_met` is true
-   (`live_definition_sha256` `dce5b131…`). If anything differs, **stop**: a different
-   pre-state needs its own reviewed pin change.
-2. **Pin change (reviewed PR):** record the staging apply run in `staging_acceptance`
-   (`ok: true`, `reference`), set `execute: true` and record the approval in
-   `authorization`. Merge to main and stage main on the runner.
-3. **Contracts:** run `aws/tests/claim-ledger-accepted-contract.test.mjs`,
-   `aws/tests/tenant-security-compliance.test.mjs` and `aws/tests/api-write.test.mjs`
-   on the same source and record them as `contract_results` in the manifest.
-4. **Manifest** (`sql-apply`, `production`, `production-sql`): the pin's `filename`,
-   `migration_id`, `source_sha256`, `expected_live_definition_sha256`,
-   `intended_replacement_sha256`; `live_definition_sha256` = `"<live hash from step 1>"`;
-   `preflight_live_fingerprint` = `production_fingerprint` =
-   `immediately_before_fingerprint` = `{ "sql": "<live hash from step 1>" }`; the pin's
-   `staging_acceptance`; `approval` for this workstream; `authorization_phrase`
-   `REPLACE_CHECKALT_AUTO_DEPOSIT_SAVE`; a new `one_use_id`; `owned_components` =
-   `["aws/workflows/sql/80_checkalt_member_auto_deposit.sql"]`.
-5. **Lease and receipt** on the same host:
-   `node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input <manifest>`.
+   `apply_preconditions_met`. Proceed only when `apply_preconditions_met` is true,
+   `pin_execute` true, `live_definition_sha256` `dce5b131…`, `owner_roles`
+   `["checksops_admin"]` and `authenticated_member_of_owner` false. If anything differs,
+   **stop**: a different pre-state needs its own reviewed pin change.
+2. **Contracts:** on the same checkout run
+   `node --test aws/tests/claim-ledger-accepted-contract.test.mjs`,
+   `node --test aws/tests/tenant-security-compliance.test.mjs` and
+   `node --test aws/tests/api-write.test.mjs`, and record them as `contract_results`
+   (`claim-ledger`, `tenant-isolation`, `financial-write-protections`, each
+   `{ ok, test, evidence }`); preflight refuses `sql-apply` without them.
+3. **Manifest** (for example `sql80-manifest.json`, outside the repo):
+
+   ```json
+   {
+     "workstream_id": "prod-sql80-checkalt-member-auto-deposit-<yyyymmdd>",
+     "branch": "main",
+     "commit": "<main sha>",
+     "operator": "michaelcarletta-cmd",
+     "target_environment": "production",
+     "target_component": "production-sql",
+     "deployment_type": "sql-apply",
+     "owned_components": ["aws/workflows/sql/80_checkalt_member_auto_deposit.sql"],
+     "filename": "aws/workflows/sql/80_checkalt_member_auto_deposit.sql",
+     "migration_id": "80_checkalt_member_auto_deposit",
+     "source_sha256": "3ca77bf4d3bfe0d09645bec2d8bf86517f60a0804935fe6aff68a61f92747352",
+     "expected_live_definition_sha256": "dce5b13151f4b6c6fe7660e0ef9576d4a80e80ad66cfcffbad6d880ad8a07d65",
+     "intended_replacement_sha256": "5ad9a81cfc01ba8affc165b42986c1a6e7ce87c5f61df6a5ebcac293e00fa0db",
+     "live_definition_sha256": "<live hash from step 1>",
+     "preflight_live_fingerprint": { "sql": "<live hash from step 1>" },
+     "production_fingerprint": { "sql": "<live hash from step 1>" },
+     "immediately_before_fingerprint": { "sql": "<live hash from step 1>" },
+     "staging_acceptance": "<the pin's staging_acceptance object, verbatim>",
+     "approval": {
+       "approved": true,
+       "workstream_id": "<same workstream_id>",
+       "approved_by": "owner",
+       "statement": "<the owner's run-time approval of this apply>"
+     },
+     "authorization_phrase": "REPLACE_CHECKALT_AUTO_DEPOSIT_SAVE",
+     "one_use_id": "sql80-prod-<new uuid>",
+     "build_timestamp": "<now, ISO 8601>",
+     "contract_results": "<from step 2>"
+   }
+   ```
+
+   The tool refuses unless `filename`, `migration_id`, `source_sha256`, both pinned
+   hashes and `live_definition_sha256` equal the pin's, `staging_acceptance.reference`
+   equals the pin's, `approval.workstream_id` is this workstream, the phrase is exact,
+   `one_use_id` matches `^[A-Za-z0-9._:-]{8,128}$` and was never consumed, and the
+   receipt owns the pinned file.
+4. **Lease and receipt** on the same host:
+   `node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input sql80-manifest.json`
+   (prints the receipt path; a staging receipt cannot authorize production).
+5. **Evaluate (no connection):**
+   `node scripts/deployment-guard/sql80-checkalt-production-apply.mjs --input sql80-manifest.json`
+   must print `sql80_production_apply_allowed: true`.
 6. **Apply:**
-   `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT=<receipt> node scripts/deployment-guard/sql80-checkalt-production-apply.mjs --apply --input <manifest>`.
-   One transaction, `lock_timeout` 5s, advisory locks `sql80_checkalt_member_auto_deposit`
-   and `sql80_checkalt_member_auto_deposit_production`. If the tool reports the COMMIT
-   outcome as unknown, run step 1 before anything else.
+   `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT=<receipt> node scripts/deployment-guard/sql80-checkalt-production-apply.mjs --apply --input sql80-manifest.json`.
+   The receipt is spent only after the execute, phrase, `one_use_id`, replay and
+   receipt-ownership checks pass and the secret resolves. One transaction,
+   `lock_timeout` 5s, advisory locks `sql80_checkalt_member_auto_deposit` and
+   `sql80_checkalt_member_auto_deposit_production`; it re-reads every precondition
+   (the owner-membership rule included) inside the transaction, runs the pinned file
+   once and rolls back unless every postcondition holds, the live `pg_get_functiondef`
+   equals the reconstructed SQL 80 definition, and the unrelated catalog snapshot is
+   unchanged. If the tool reports the COMMIT outcome as unknown, run step 1 before
+   anything else.
 7. **Verify:** re-run step 1: `already_applied` true, `live_definition_sha256`
-   `5ad9a81c…`, `function_acl` as in "after" above, `table_acl` unchanged.
-8. **Record and retire:** a reviewed change records the evidence in the pin and sets
-   `execute` back to `false`.
+   `5ad9a81c…`, `function_acl` as in "after" above, `table_acl` unchanged,
+   `authenticated_member_of_owner` false.
+8. **Record and retire:** a reviewed change records the evidence (receipt, before/after
+   hashes and ACLs) in the pin and sets `execute` back to `false`.
 
 ## Rollback (a separate owner-approved operation)
 
