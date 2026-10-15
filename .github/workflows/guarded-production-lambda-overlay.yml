@@ -43,6 +43,7 @@ on:
           - providers/production/checkalt-holds.mjs
           - providers/parity/checkalt-functions.mjs
           - mortgage-agent-compensation.mjs
+          - homeowner.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs

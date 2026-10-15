@@ -1,0 +1,14 @@
+{
+  "workstream_id": "homeowner-ledger-send-scope",
+  "authorization": "Owner-approved 2026-10-15 (\"fix the tracking-link server leak\"): homeowner.mjs may be planned for production as the live production bytes 5801f18a (snapshot f78e16d99) plus the ledger-send scope fix. Each production apply still needs the owner's run-time approval, the staging acceptance run and the phrase DEPLOY homeowner.mjs TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "runHomeownerLedgerSend: owner/admin/manager/operator only; a given claim must belong to the tenant (claims.org_id or a tenant check); token reuse is exact on claim_id (a pre-claim upload link reuses only unclaimed tokens). Base is the live production file so the live view normalizer and remint sign-link are preserved.",
+  "members": {
+    "homeowner.mjs": {
+      "live_sha256": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
+      "accepted_sha256": "69785a7d3705428f8674616e63028cef637ceb872bb0fc351064cdcf1c918897",
+      "operation": "replace"
+    }
+  }
+}
