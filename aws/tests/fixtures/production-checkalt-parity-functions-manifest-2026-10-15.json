@@ -1,0 +1,14 @@
+{
+  "workstream_id": "checkalt-parity-functions",
+  "authorization": "Owner-approved 2026-10-15 (\"add the parity file to the production plan\"): providers/parity/checkalt-functions.mjs may be planned for production at main's reviewed bytes 31e08908 replacing the live 2026-09-17 bytes 3d6a0495. Each production apply still needs the owner's run-time approval, the staging acceptance run and the phrase DEPLOY providers/parity/checkalt-functions.mjs TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Production overlay of providers/parity/checkalt-functions.mjs to main's reviewed bytes (#965, #970 tenant-role gates on UAT poll/prepare-image/history/account status, #972 last-four masking). Live production and staging carried the 2026-09-17 bytes (4f5e48400, 3d6a0495); staging was replaced 3d6a0495 -> 31e08908 by guarded staging overlay run 38793348698 on 2026-10-15.",
+  "members": {
+    "providers/parity/checkalt-functions.mjs": {
+      "live_sha256": "3d6a0495dbd797ce59ef8b553a074acdff6fd6c557a27a502587f0fa728954a7",
+      "accepted_sha256": "31e08908e587aa21552f2f6dd1a2a7bbacca88e08d4febbaf64f3368f3511357",
+      "operation": "replace"
+    }
+  }
+}

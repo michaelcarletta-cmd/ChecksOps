@@ -47,6 +47,7 @@
     "providers/production/checkalt-register.mjs",
     "providers/production/checkalt-dispatch.mjs",
     "providers/production/checkalt-holds.mjs",
+    "providers/parity/checkalt-functions.mjs",
     "providers/production/moov-wallet-fund.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
@@ -227,6 +228,13 @@
       "expected_live_sha256": "01068775c824beb2406b644cb192b450d5f3a2e02c62d2c1134dd8f957a627f5",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-checkalt-onboarding-manifest-2026-10-15.json"
+    },
+    "providers/parity/checkalt-functions.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "31e08908e587aa21552f2f6dd1a2a7bbacca88e08d4febbaf64f3368f3511357",
+      "expected_live_sha256": "3d6a0495dbd797ce59ef8b553a074acdff6fd6c557a27a502587f0fa728954a7",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-checkalt-parity-functions-manifest-2026-10-15.json"
     }
   },
   "do_not_overlay": [
