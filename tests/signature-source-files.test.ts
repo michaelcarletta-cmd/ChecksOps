@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  buildSendSignatureRequestCreatePayload,
   isEligibleSignatureSourceFile,
   mergeClaimAndCheckSignatureFiles,
+  resolveSignatureRequestClaimId,
+  shouldUseSignatureClaimFallback,
   signatureRequestDocumentFields,
+  signatureRequestsRegionMode,
   signatureSourceFilesQueryKey,
+  SIGNATURE_REQUESTS_UNLINKED_COPY,
 } from "../src/lib/signature-source-files.ts";
 
 const CHECK_A = "3916f620-9d20-499b-8450-9e1a8e70a3c9";
@@ -97,20 +102,94 @@ test("signature request fields keep the selected path and check id", () => {
   assert.equal(fields.document_path, `check-intake/${CHECK_A}/files/ui.pdf`);
 });
 
+test("create payload matches the live send-signature-request contract", () => {
+  const payload = buildSendSignatureRequestCreatePayload({
+    claimId: CLAIM,
+    checkIntakeItemId: CHECK_A,
+    documentName: "UI-SIGNATURE-TEST-UNSIGNED.pdf",
+    documentPath: `check-intake/${CHECK_A}/files/ui.pdf`,
+    documentType: "other",
+    fieldData: [{ type: "signature", page: 1, x: 10, y: 20 }],
+    signers: [{ name: "Michael Carletta", email: "uat@example.com", type: "policyholder", order: 1 }],
+    skipEmail: false,
+  });
+  assert.deepEqual(Object.keys(payload), [
+    "claim_id",
+    "check_intake_item_id",
+    "document_name",
+    "document_path",
+    "document_type",
+    "field_data",
+    "signers",
+    "skipEmail",
+  ]);
+  assert.equal(payload.claim_id, CLAIM);
+  assert.equal(payload.check_intake_item_id, CHECK_A);
+  assert.equal(payload.document_name, "UI-SIGNATURE-TEST-UNSIGNED.pdf");
+  assert.equal(payload.document_path, `check-intake/${CHECK_A}/files/ui.pdf`);
+  assert.equal(payload.document_type, "other");
+  assert.equal(payload.skipEmail, false);
+  assert.deepEqual(payload.signers, [{
+    signer_name: "Michael Carletta",
+    signer_email: "uat@example.com",
+    signer_type: "policyholder",
+    signing_order: 1,
+  }]);
+  assert.equal("requestId" in payload, false);
+  assert.equal("status" in payload, false);
+});
+
 test("Files tab remounts SignatureRequests and the wizard can select check files", () => {
   const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
   const files = readFileSync("src/components/check-review/CheckFilesSection.tsx", "utf8");
+  const ccc = readFileSync("src/pages/CheckCommandCenter.tsx", "utf8");
   assert.match(files, /import \{ SignatureRequests \}/);
   assert.match(files, /<SignatureRequests/);
   assert.match(files, /checkIntakeItemId=\{checkIntakeItemId\}/);
+  assert.match(files, /claimId\?: string \| null/);
+  assert.match(files, /resolveSignatureRequestClaimId\(claimId, null\)/);
+  assert.match(files, /resolveSignatureRequestClaimId\(suppliedClaimId, checkClaim\?\.claim_id\)/);
+  assert.match(files, /enabled: shouldUseSignatureClaimFallback\(suppliedClaimId\)/);
+  assert.match(files, /data-testid="signature-requests-region"/);
+  assert.match(files, /data-testid="signature-requests-unlinked"/);
+  assert.match(files, /SIGNATURE_REQUESTS_UNLINKED_COPY/);
   assert.match(files, /\.select\("id, claim_id"\)/);
   assert.doesNotMatch(files, /claims:claim_id/);
+  assert.doesNotMatch(files, /linkedClaim\?\.id && \(\s*<SignatureRequests/);
   assert.match(files, /signatureSourceFilesQueryKey/);
+  assert.match(ccc, /<CheckFilesSection checkIntakeItemId=\{checkId\} claimId=\{check\?\.claim_id \?\? null\} \/>/);
   assert.match(wizard, /signatureSourceFilesQueryKey/);
   assert.match(wizard, /mergeClaimAndCheckSignatureFiles/);
   assert.match(wizard, /Select a file from claim\/check files/);
   assert.match(wizard, /from\("check_files"\)/);
-  assert.match(wizard, /check_intake_item_id: checkIntakeItemId \|\| null/);
+  assert.match(wizard, /buildSendSignatureRequestCreatePayload\(/);
+  assert.match(wizard, /\.from\("signature_requests"\)/);
+  assert.doesNotMatch(wizard, /\.from\("signature_requests"\)\s*\.insert\(/);
+  assert.doesNotMatch(wizard, /\.from\("signature_signers"\)\s*\.insert\(/);
+  assert.match(wizard, /functions\.invoke\("send-signature-request"/);
   assert.doesNotMatch(wizard, /file_name\.ilike\.%\.pdf/);
   assert.equal(signatureSourceFilesQueryKey(CLAIM, CHECK_A)[0], "signature-source-files");
+});
+
+test("CCC claim ID wins over a failed or empty secondary lookup", () => {
+  assert.equal(resolveSignatureRequestClaimId(CLAIM, null), CLAIM);
+  assert.equal(resolveSignatureRequestClaimId(CLAIM, undefined), CLAIM);
+  assert.equal(resolveSignatureRequestClaimId(CLAIM, ""), CLAIM);
+  assert.equal(shouldUseSignatureClaimFallback(CLAIM), false);
+  assert.equal(signatureRequestsRegionMode(resolveSignatureRequestClaimId(CLAIM, null)), "requests");
+});
+
+test("secondary lookup is used only when CCC did not supply a claim ID", () => {
+  assert.equal(resolveSignatureRequestClaimId(null, CLAIM), CLAIM);
+  assert.equal(shouldUseSignatureClaimFallback(null), true);
+  assert.equal(shouldUseSignatureClaimFallback(""), true);
+  assert.equal(signatureRequestsRegionMode(resolveSignatureRequestClaimId(null, CLAIM)), "requests");
+});
+
+test("genuinely unlinked checks stay on the visible empty state", () => {
+  assert.equal(resolveSignatureRequestClaimId(null, null), null);
+  assert.equal(resolveSignatureRequestClaimId("", undefined), null);
+  assert.equal(signatureRequestsRegionMode(null), "unlinked");
+  assert.match(SIGNATURE_REQUESTS_UNLINKED_COPY, /not linked to a claim/);
+  assert.doesNotMatch(SIGNATURE_REQUESTS_UNLINKED_COPY, /create a claim/i);
 });

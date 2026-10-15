@@ -73,6 +73,12 @@ test('signature request uses shared layout and calls mailer once', async () => {
         match: (sql) => sql.includes('aws_can_write_tenant'),
         result: () => ({ rows: [{ ok: true }] }),
       },
+      {
+        // Signature Request writers: tenant owner/admin/manager/operator.
+        match: (sql, params) => sql.includes('FROM public.tenant_users')
+          && sql.includes("'operator'") && params[0] === USER && params[1] === TENANT,
+        result: () => ({ rows: [{ '?column?': 1 }] }),
+      },
     ]),
   });
   assert.equal(result.ok, true);
