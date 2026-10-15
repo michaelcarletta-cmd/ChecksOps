@@ -34,11 +34,11 @@ on:
           - providers/production/checkalt-config.mjs
           - providers/production/checkalt-idempotency.mjs
           - providers/production/checkalt-submit.mjs
+          - providers/production/checkalt-authz.mjs
+          - workflow-rpc.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
-          - providers/production/checkalt-authz.mjs
-          - workflow-rpc.mjs
       approved_commit:
         description: "Required for apply: exact main commit approved for deployment"
         required: false
