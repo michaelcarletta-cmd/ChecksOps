@@ -21,6 +21,7 @@ import {
   CHILD_ENV_ALLOWLIST,
   GUARD_ENV_KEYS,
   LOADER_ENV_KEYS,
+  ONE_SHOT_EXCEPTION,
   ONE_SHOT_TOOLS,
   compareTreeToTarball,
   normalizeTarPath,
@@ -154,7 +155,8 @@ async function oneShot({ key = 'sql80', o = {}, pin, responses, env = { PATH: '/
     tmpDir,
     runId: 'run-1',
     now: () => new Date('2026-10-16T12:00:00.000Z'),
-    compareTree: compareTree || (async () => ({ ok: true, details: { tarball_files: 3, tarball_entries: 4 } })),
+    readTarball: async () => ({ sha256: TARBALL_SHA, index: new Map() }),
+    compareTreeToIndex: compareTree || (async () => ({ ok: true, details: { tarball_files: 3, tarball_entries: 4 } })),
     readSourceCommit: () => sourceCommit,
     ...(execArgv ? { execArgv } : {}),
   });
@@ -569,7 +571,8 @@ test('contract tests come from the registry and run on this tree with the TAP re
   const empty = { contracts: [] };
   const res = await runProductionSqlOneShot(opts('sql80'), {
     root: ROOT, env: {}, run: fakeRunner('sql80', executePin('sql80')).run, pin: executePin('sql80'), registry: empty,
-    compareTree: async () => ({ ok: true, details: { tarball_files: 1 } }),
+    readTarball: async () => ({ sha256: TARBALL_SHA, index: new Map() }),
+    compareTreeToIndex: async () => ({ ok: true, details: { tarball_files: 1 } }),
     readSourceCommit: () => `${COMMIT}\n`,
   });
   assert.equal(res.ok, false);
@@ -804,6 +807,13 @@ test('the transfer workflow runs no npm or test code where an AWS token can be m
   assert.match(jobs.contracts, /needs: package/);
   assert.match(jobs.contracts, /echo "\$\{EXPECTED\}  \$\{TARBALL\}" \| sha256sum -c -/);
   assert.match(jobs.contracts, /relevantContracts\(loadContractRegistry/);
+  // Fail closed: command substitution (a failing node exits the step) and a non-empty list.
+  assert.match(jobs.contracts, /LIST=\$\(node --input-type=module -e '/);
+  assert.match(jobs.contracts, /mapfile -t TESTS <<<"\$LIST"/);
+  assert.match(jobs.contracts, /test "\$\{#TESTS\[@\]\}" -gt 0/);
+  assert.match(jobs.contracts, /test -n "\$\{TESTS\[0\]\}"/);
+  assert.doesNotMatch(jobs.contracts, /< <\(/, 'no process substitution, whose exit status is lost');
+  assert.match(jobs.contracts, /set -euo pipefail/);
   assert.match(jobs.contracts, /test "\$\(cat \/tmp\/runner-copy\/SOURCE_COMMIT\)" = "\$\{GITHUB_SHA\}"/);
   // Provenance and the API package's own lockfile dependencies.
   assert.match(jobs.package, /printf '%s\\n' "\$\{SHA\}" > \/tmp\/pkg\/src\/SOURCE_COMMIT/);
@@ -814,4 +824,153 @@ test('the transfer workflow runs no npm or test code where an AWS token can be m
   for (const line of text.split('\n').filter((row) => /^\s*-?\s*uses: /.test(row))) {
     assert.match(line, /@[0-9a-f]{40}(?:\s|$)/, `action pinned by SHA: ${line.trim()}`);
   }
+});
+
+// --- second review: cached index, realpath, exceptions ---------------------------------------
+
+function fixtureRunnerTree() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-swap-'));
+  const src = path.join(base, 'src');
+  const pin = executePin('sql80');
+  for (const [rel, text] of [
+    [pin.filename, fs.readFileSync(path.join(ROOT, pin.filename), 'utf8')],
+    ['SOURCE_COMMIT', `${COMMIT}\n`],
+    ['t.test.mjs', "import { test } from 'node:test';\ntest('ok', () => {});\n"],
+  ]) {
+    fs.mkdirSync(path.dirname(path.join(src, rel)), { recursive: true });
+    fs.writeFileSync(path.join(src, rel), text);
+  }
+  const tarball = path.join(base, `source-${COMMIT}.tar.gz`);
+  const pack = (dir) => {
+    assert.equal(spawnSync('tar', ['-czf', tarball, '-C', dir, '.']).status, 0);
+    const sha = createHash('sha256').update(fs.readFileSync(tarball)).digest('hex');
+    fs.writeFileSync(`${tarball}.sha256`, `${sha}  source-${COMMIT}.tar.gz\n`);
+    return sha;
+  };
+  const sha = pack(src);
+  const x = path.join(base, 'x');
+  fs.mkdirSync(x);
+  assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', x]).status, 0);
+  return { pin, tarball, sha, x, pack };
+}
+
+const FIXTURE_REGISTRY = { contracts: [{ id: 'c', accepted: true, enabled: true, environments: ['production'], components: ['*'], deployment_types: ['sql-apply'], test: 't.test.mjs' }] };
+
+test('re-checks compare against the index cached from the verified bytes, so swapping tarball and tree together is caught', async () => {
+  const { pin, tarball, sha, x, pack } = fixtureRunnerTree();
+  const runner = fakeRunner('sql80', pin, {
+    contract: () => ({ status: 0, stdout: tap(1), stderr: '' }),
+    preflight: () => ({ status: 0, stdout: json({ ok: true, details: { receipt: path.join(receiptDir(x), 'production::production-sql.json') } }), stderr: '' }),
+    evaluate: () => {
+      // An attacker changes the tree and re-packs a matching tarball and sidecar on disk.
+      fs.writeFileSync(path.join(x, 't.test.mjs'), 'planted\n');
+      pack(x);
+      return { status: 0, stdout: json({ ok: true, details: { migration: 'sql80', sql80_production_apply_allowed: true } }), stderr: '' };
+    },
+  });
+  const result = await runProductionSqlOneShot(opts('sql80', { 'source-tarball': tarball, 'expected-tarball-sha256': sha }), {
+    root: x, env: { PATH: '/usr/bin' }, run: runner.run, nodePath: '/usr/bin/node', pin, registry: FIXTURE_REGISTRY,
+    tmpDir: fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-manifest-')),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.details.stopped_at, 'source-recheck-before-apply');
+  assert.deepEqual(result.details.error.details.differing, ['t.test.mjs']);
+  assert.ok(!runner.steps().includes('apply'));
+  // Re-reading the swapped tarball from disk would have passed.
+  assert.equal((await compareTreeToTarball(x, tarball)).ok, true);
+});
+
+test('the same fixture passes every real source check when nothing is swapped', async () => {
+  const { pin, tarball, sha, x } = fixtureRunnerTree();
+  const runner = fakeRunner('sql80', pin, {
+    contract: () => ({ status: 0, stdout: tap(1), stderr: '' }),
+    preflight: () => ({ status: 0, stdout: json({ ok: true, details: { receipt: path.join(receiptDir(x), 'production::production-sql.json') } }), stderr: '' }),
+  });
+  const result = await runProductionSqlOneShot(opts('sql80', { 'source-tarball': tarball, 'expected-tarball-sha256': sha }), {
+    root: x, env: { PATH: '/usr/bin' }, run: runner.run, nodePath: '/usr/bin/node', pin, registry: FIXTURE_REGISTRY,
+    tmpDir: fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-manifest-')),
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.details.error));
+  assert.equal(result.details.source.tarball_sha256, sha);
+  assert.equal(result.details.source.index, undefined, 'the cached index is not printed');
+  assert.ok(result.details.steps.some((s) => s.step === 'source-recheck-before-apply' && s.ok));
+});
+
+test('symlinks are also resolved with realpath: s -> . plus t -> s/.. is refused', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-realpath-'));
+  const src = path.join(base, 'src');
+  fs.mkdirSync(src);
+  fs.writeFileSync(path.join(src, 'a.txt'), 'a');
+  fs.symlinkSync('.', path.join(src, 's'));
+  fs.symlinkSync('s/..', path.join(src, 't'));
+  const tarball = path.join(base, `source-${COMMIT}.tar.gz`);
+  assert.equal(spawnSync('tar', ['-czf', tarball, '-C', src, '.']).status, 0);
+  const x = path.join(base, 'x');
+  fs.mkdirSync(x);
+  assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', x]).status, 0);
+  assert.equal(fs.realpathSync.native(path.join(x, 't')), fs.realpathSync.native(base), 'lexically inside, really the parent');
+  const res = await compareTreeToTarball(x, tarball);
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.details.escaping_symlinks, ['t']);
+
+  // A dangling link is refused too (it cannot be shown to stay inside).
+  fs.rmSync(path.join(src, 't'));
+  fs.symlinkSync('missing-target', path.join(src, 't'));
+  assert.equal(spawnSync('tar', ['-czf', tarball, '-C', src, '.']).status, 0);
+  const y = path.join(base, 'y');
+  fs.mkdirSync(y);
+  assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', y]).status, 0);
+  assert.deepEqual((await compareTreeToTarball(y, tarball)).details.escaping_symlinks, ['t']);
+});
+
+test('OpenSSL, ICU and compile-cache variables are refused like the other loader variables', async () => {
+  for (const key of ['OPENSSL_CONF', 'OPENSSL_MODULES', 'NODE_ICU_DATA', 'NODE_COMPILE_CACHE']) {
+    assert.ok(LOADER_ENV_KEYS.includes(key), key);
+    const { result, runner } = await oneShot({ env: { PATH: '/usr/bin', [key]: '/tmp/x' } });
+    assert.equal(result.ok, false, key);
+    assert.equal(result.code, CODES.DEPLOYMENT_GUARD_REQUIRED, key);
+    assert.equal(runner.calls.length, 0, key);
+  }
+});
+
+test('an exception in any step still returns one failure summary', async () => {
+  const boom = () => { throw new Error('runner crashed'); };
+  let { result, runner, tmpDir } = await oneShot({ responses: { evaluate: boom } });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, ONE_SHOT_EXCEPTION);
+  assert.equal(result.details.stopped_at, 'preflight (exception)');
+  assert.match(result.details.error.message, /runner crashed/);
+  assert.equal(result.details.manifest_deleted, true);
+  assert.deepEqual(fs.readdirSync(tmpDir), []);
+  assert.equal(result.details.warning, undefined);
+  assert.ok(!runner.steps().includes('apply'));
+
+  ({ result } = await oneShot({ responses: { apply: boom } }));
+  assert.equal(result.code, ONE_SHOT_EXCEPTION);
+  assert.equal(result.details.apply_child_started, true);
+  assert.match(result.details.warning, /read-only --inspect before anything else/);
+
+  ({ result } = await oneShot({ responses: { inspect: boom } }));
+  assert.equal(result.details.stopped_at, 'source (exception)');
+
+  const writes = [];
+  const orig = process.stderr.write;
+  process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  let code;
+  try {
+    code = await oneShotMain([
+      '--migration', 'sql80', '--approval-scope', 'sql80', '--commit', COMMIT, '--workstream-id', WORKSTREAM,
+      '--operator', 'michaelcarletta-cmd', '--approval-statement', STATEMENT, '--source-tarball', TARBALL,
+      '--expected-tarball-sha256', TARBALL_SHA, '--phase', 'inspect',
+    ], { PATH: '/usr/bin' }, {
+      root: ROOT, run: boom, execArgv: [], pin: executePin('sql80'), readSourceCommit: () => `${COMMIT}\n`,
+      readTarball: async () => ({ sha256: TARBALL_SHA, index: new Map() }), compareTreeToIndex: async () => ({ ok: true, details: { tarball_files: 1 } }),
+    });
+  } finally {
+    process.stderr.write = orig;
+  }
+  assert.equal(code, 1);
+  const printed = JSON.parse(writes.join(''));
+  assert.equal(printed.code, ONE_SHOT_EXCEPTION);
+  assert.equal(printed.details.stopped_at, 'source (exception)');
 });

@@ -41,7 +41,8 @@ It also refuses to start in any of these cases:
   set. There is no exception: the KMS variables are read only by the GitHub-hosted
   Lambda, SPA and staging-executor scripts, and never by `preflight.mjs` or these tools.
 - a node loader variable is set (`NODE_OPTIONS`, `NODE_PATH`, `NODE_REPL_EXTERNAL_MODULE`,
-  `NODE_PRESERVE_SYMLINKS*`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`, `DYLD_*`).
+  `NODE_PRESERVE_SYMLINKS*`, `NODE_ICU_DATA`, `NODE_COMPILE_CACHE`, `OPENSSL_CONF`,
+  `OPENSSL_MODULES`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`, `DYLD_*`).
 - node itself was started with flags.
 
 Children get only `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TZ`, `AWS_REGION`,
@@ -54,21 +55,34 @@ bundle, so they need nothing else.
 Each step must pass before the next one starts. The run prints one JSON summary and
 exits 1 at the first failure (`details.stopped_at` names the step).
 
+An unexpected exception also ends in one failure summary:
+- `code` is `ONE_SHOT_EXCEPTION`;
+- `stopped_at` is `<last completed step> (exception)`;
+- the steps completed so far are listed;
+- if the apply child had started, a `warning` says to run the read-only `--inspect`
+  before anything else.
+
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
    (`ok: true` plus a reference) and an authorization phrase. All four pins are
    `execute: false` today, so every run refuses until an owner-merged change sets one to
    true. For a read-only inspect before that change, run the tool's own `--inspect`.
 2. **Source.** All of these must hold:
    - The tarball's name is `source-<--commit>.tar.gz`.
-   - Its sha256 equals both the `.sha256` sidecar and `--expected-tarball-sha256`.
+   - The tarball is read into memory once. Its sha256 must equal both the `.sha256`
+     sidecar and `--expected-tarball-sha256`, and the file index is built from those same
+     bytes.
    - `SOURCE_COMMIT` in the tree is `--commit`. Tarballs built before that file existed
      must be staged again.
    - Every file of the running tree is byte-identical to the tarball, with the same
-     symlinks, no symlink that resolves outside the tree, and no extra files
-     (`.deployment-guard/` is ignored).
+     symlinks and no extra files (`.deployment-guard/` is ignored).
+   - No symlink resolves outside the tree, checked both lexically and with the kernel's
+     realpath. For example, `s -> .` plus `t -> s/..` is refused, and so is a dangling
+     link.
    - The migration file's sha256 equals the pin's `source_sha256`.
 
-   The tree comparison is repeated right before preflight and right before apply.
+   The tree comparison is repeated right before preflight and right before apply. Each
+   repeat compares against that cached index; the tarball file on disk is not read
+   again, so swapping the tarball and the tree together is caught.
 3. **Inspect (read-only).** Runs `<tool> --inspect`. It stops unless all of these hold:
    - `read_only`, `source_ok` and `pin_execute` are true, and there is no `state_error`;
    - no dependencies are missing, and the predecessors are applied;
@@ -140,7 +154,9 @@ extraction.
   hashes, and prints `TARBALL_SHA256 <hex>`. It runs no tests.
 - `contracts` (contents read, no AWS token). Re-verifies the handed-off tarball's sha256
   against the `package` job's output, extracts it into a fresh directory, and runs the
-  contracts the registry requires for a production `sql-apply`.
+  contracts the registry requires for a production `sql-apply`. The list is built with
+  command substitution, so a failing node exits the step, and an empty list fails the
+  job.
 - `upload` (the only job with `id-token: write`). Runs no repository or npm code. It
   re-verifies the tarball and its sidecar against the `package` job's sha256 output,
   then uploads both.

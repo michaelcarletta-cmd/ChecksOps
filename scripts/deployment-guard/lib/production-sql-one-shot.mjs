@@ -28,6 +28,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import zlib from 'node:zlib';
 import { loadContractRegistry, relevantContracts } from './contracts.mjs';
 import { CODES, fail, ok } from './errors.mjs';
@@ -67,6 +68,10 @@ export const LOADER_ENV_KEYS = Object.freeze([
   'NODE_REPL_EXTERNAL_MODULE',
   'NODE_PRESERVE_SYMLINKS',
   'NODE_PRESERVE_SYMLINKS_MAIN',
+  'NODE_ICU_DATA',
+  'NODE_COMPILE_CACHE',
+  'OPENSSL_CONF',
+  'OPENSSL_MODULES',
   'LD_PRELOAD',
   'LD_LIBRARY_PATH',
   'LD_AUDIT',
@@ -164,12 +169,6 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
 const TIMEOUT_MS = Object.freeze({ inspect: 5 * 60_000, contract: 10 * 60_000, preflight: 2 * 60_000, apply: 10 * 60_000 });
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
-
-export async function sha256File(file) {
-  const hash = createHash('sha256');
-  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-  return hash.digest('hex');
-}
 
 // --- arguments --------------------------------------------------------------
 
@@ -284,8 +283,17 @@ export function normalizeTarPath(name) {
   return rel;
 }
 
-/** Streams a .tar.gz and returns every entry with the sha256 of each regular file. */
-export async function readTarIndex(file) {
+/**
+ * Reads the tarball once into memory, so the bytes that are hashed are exactly
+ * the bytes that are indexed (no window to swap the file between the two).
+ */
+export async function readTarball(file) {
+  const raw = fs.readFileSync(file);
+  return { sha256: sha256(raw), index: await readTarIndex(raw) };
+}
+
+/** Streams a .tar.gz (path or Buffer) and returns every entry with the sha256 of each regular file. */
+export async function readTarIndex(source) {
   const entries = new Map();
   let buf = Buffer.alloc(0);
   let cur = null;
@@ -309,7 +317,8 @@ export async function readTarIndex(file) {
     else throw new Error(`unsupported tar entry type ${JSON.stringify(type)} for ${rel}`);
   };
 
-  const stream = fs.createReadStream(file).pipe(zlib.createGunzip());
+  const input = Buffer.isBuffer(source) ? Readable.from([source]) : fs.createReadStream(source);
+  const stream = input.pipe(zlib.createGunzip());
   for await (const chunk of stream) {
     buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
     let off = 0;
@@ -387,20 +396,34 @@ function walkTree(root, rel = '', out = new Map()) {
 export async function compareTreeToTarball(root, tarball) {
   let index;
   try {
-    index = await readTarIndex(tarball);
+    ({ index } = await readTarball(tarball));
   } catch (error) {
     return fail(CODES.STALE_PACKAGE, 'source tarball could not be read', { message: String(error?.message || error).slice(0, 300) });
   }
+  return compareTreeToIndex(root, index);
+}
+
+const within = (base, target) => target === base || target.startsWith(`${base}${path.sep}`);
+
+/**
+ * The tree against an index read once from the verified tarball bytes; re-checks
+ * use the same cached index, never the tarball file on disk again. Symlinks
+ * must stay inside the tree both lexically and after resolving every link
+ * (kernel realpath, fs.realpathSync.native), e.g. `s -> .` plus `t -> s/..` is refused.
+ */
+export async function compareTreeToIndex(root, index) {
   const differing = [];
   const missing = [];
   const escaping = [];
   const rootAbs = path.resolve(root);
+  let rootReal;
+  try { rootReal = fs.realpathSync.native(rootAbs); } catch { return fail(CODES.STALE_PACKAGE, 'source tree root is missing', { root: rootAbs }); }
   let files = 0;
   for (const [rel, entry] of index) {
     const abs = path.join(root, rel);
     if (entry.type === 'symlink') {
       const target = path.resolve(path.dirname(path.join(rootAbs, rel)), String(entry.linkname || ''));
-      if (!entry.linkname || path.isAbsolute(entry.linkname) || (target !== rootAbs && !target.startsWith(`${rootAbs}${path.sep}`))) {
+      if (!entry.linkname || path.isAbsolute(entry.linkname) || !within(rootAbs, target)) {
         escaping.push(rel);
         continue;
       }
@@ -411,7 +434,10 @@ export async function compareTreeToTarball(root, tarball) {
       files += 1;
       if (!stat.isFile() || sha256(fs.readFileSync(abs)) !== entry.sha256) differing.push(rel);
     } else if (entry.type === 'symlink') {
-      if (!stat.isSymbolicLink() || fs.readlinkSync(abs) !== entry.linkname) differing.push(rel);
+      if (!stat.isSymbolicLink() || fs.readlinkSync(abs) !== entry.linkname) { differing.push(rel); continue; }
+      let real = null;
+      try { real = fs.realpathSync.native(abs); } catch { /* dangling or looping: refused below */ }
+      if (real === null || !within(rootReal, real)) escaping.push(rel);
     } else if (!stat.isDirectory()) {
       differing.push(rel);
     }
@@ -453,14 +479,20 @@ export async function verifySource({ root, commit, tarball, expectedSha256, pin,
   if (!match || path.basename(match[2]) !== expectedName) {
     return fail(CODES.STALE_PACKAGE, 'the .sha256 sidecar must be one "<sha256>  source-<commit>.tar.gz" line');
   }
-  const tarballSha = await (deps.sha256File || sha256File)(tarball);
+  let read;
+  try {
+    read = await (deps.readTarball || readTarball)(tarball);
+  } catch (error) {
+    return fail(CODES.STALE_PACKAGE, 'source tarball could not be read', { message: String(error?.message || error).slice(0, 300) });
+  }
+  const { sha256: tarballSha, index } = read;
   if (tarballSha !== match[1]) {
     return fail(CODES.STALE_PACKAGE, 'source tarball sha256 differs from its sidecar', { computed: tarballSha, sidecar: match[1] });
   }
   if (tarballSha !== expectedSha256) {
     return fail(CODES.STALE_PACKAGE, 'source tarball sha256 differs from --expected-tarball-sha256 (the transfer run log)', { computed: tarballSha, expected: expectedSha256 });
   }
-  const tree = await (deps.compareTree || compareTreeToTarball)(root, tarball);
+  const tree = await (deps.compareTreeToIndex || compareTreeToIndex)(root, index);
   if (!tree.ok) return tree;
   const sourceCommit = (deps.readSourceCommit || readSourceCommit)(root);
   if (sourceCommit !== `${commit}\n`) {
@@ -487,7 +519,8 @@ export async function verifySource({ root, commit, tarball, expectedSha256, pin,
       pinned_source_sha256: pin.source_sha256,
     });
   }
-  return ok({
+  // The verified index travels beside the result (not in the printed details) for the re-checks.
+  return Object.assign(ok({
     tarball: path.basename(tarball),
     tarball_sha256: tarballSha,
     tarball_sha256_matches_sidecar: true,
@@ -498,7 +531,7 @@ export async function verifySource({ root, commit, tarball, expectedSha256, pin,
     filename: pin.filename,
     migration_source_sha256: migrationSha,
     migration_matches_pin: true,
-  });
+  }), { index });
 }
 
 // --- child processes ----------------------------------------------------------
@@ -663,12 +696,37 @@ export function buildOneShotManifest({ args, pin, inspect, contractResults, oneU
 
 // --- orchestration --------------------------------------------------------------
 
+export const ONE_SHOT_EXCEPTION = 'ONE_SHOT_EXCEPTION';
+
+/**
+ * Runs the steps; an unexpected exception anywhere still returns one failure
+ * summary (with the steps so far), so the caller always prints JSON.
+ */
 export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
-  const env = ctxIn.env || {};
-  const now = ctxIn.now || (() => new Date());
   const runId = ctxIn.runId || randomUUID();
   const steps = [];
   const summary = { ok: false, tool: 'production-sql-one-shot', run_id: runId, steps };
+  try {
+    return await runSteps(opts, ctxIn, steps, summary);
+  } catch (error) {
+    if (summary.manifest_file) summary.manifest_deleted = !fs.existsSync(path.dirname(summary.manifest_file));
+    const last = steps.at(-1)?.step || 'arguments';
+    const message = `unexpected exception after step ${last}: ${String(error?.message || error).slice(0, 300)}`;
+    const details = {
+      ...summary,
+      ok: false,
+      stopped_at: `${last} (exception)`,
+      error: { code: ONE_SHOT_EXCEPTION, message, details: { stack: String(error?.stack || '').split('\n').slice(0, 6) } },
+      ...(summary.apply_child_started ? { warning: 'The apply child was started. Its outcome is unknown: run the tool\'s read-only --inspect before anything else.' } : {}),
+    };
+    return { ok: false, code: ONE_SHOT_EXCEPTION, message, details, errors: [{ code: ONE_SHOT_EXCEPTION, message, details: {} }] };
+  }
+}
+
+async function runSteps(opts, ctxIn, steps, summary) {
+  const env = ctxIn.env || {};
+  const now = ctxIn.now || (() => new Date());
+  const runId = summary.run_id;
   const done = (result, extra = {}) => {
     const details = { ...summary, ...extra, ok: result.ok === true };
     if (!result.ok) {
@@ -724,8 +782,9 @@ export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
   steps.push({ step: 'source', ok: true });
   summary.source = source.details;
   // The tree is re-compared to the tarball right before preflight and right before apply.
+  // Against the index cached from the verified bytes; the tarball file is not trusted again.
   const recheckTree = async (step) => {
-    const again = await (ctxIn.compareTree || compareTreeToTarball)(root, args.source_tarball);
+    const again = await (ctxIn.compareTreeToIndex || compareTreeToIndex)(root, source.index);
     if (!again.ok) return again;
     steps.push({ step, ok: true });
     return null;
@@ -806,6 +865,7 @@ export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
     const beforeApply = await recheckTree('source-recheck-before-apply');
     if (beforeApply) return stop('source-recheck-before-apply', beforeApply);
     const applyEnv = { ...ctx.baseEnv, CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1', CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: receiptFile };
+    summary.apply_child_started = true;
     const apply = runTool(ctx, 'apply', [tool.script, ...tool.args, '--apply', '--input', manifestFile], { env: applyEnv, timeout: TIMEOUT_MS.apply });
     const applyRecord = apply.json?.details?.receipt;
     const applyOk = apply.status === 0 && apply.json?.ok === true

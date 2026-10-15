@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, printResult } from './lib/cli.mjs';
 import { CODES, fail } from './lib/errors.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
-import { runProductionSqlOneShot } from './lib/production-sql-one-shot.mjs';
+import { ONE_SHOT_EXCEPTION, runProductionSqlOneShot } from './lib/production-sql-one-shot.mjs';
 
 export function spawnRunner({ command, args, cwd, env, timeout }) {
   const res = spawnSync(command, args, { cwd, env, timeout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -40,14 +40,20 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
   if (positional.length) {
     return printResult(fail(CODES.INVALID_MANIFEST, 'positional arguments are not accepted', { positional }));
   }
-  const result = await runProductionSqlOneShot(opts, {
-    root: deps.root || repoRootFrom(import.meta.url),
-    env,
-    run: deps.run || spawnRunner,
-    nodePath: deps.nodePath || process.execPath,
-    execArgv: process.execArgv,
-    ...deps,
-  });
+  let result;
+  try {
+    result = await runProductionSqlOneShot(opts, {
+      root: deps.root || repoRootFrom(import.meta.url),
+      env,
+      run: deps.run || spawnRunner,
+      nodePath: deps.nodePath || process.execPath,
+      execArgv: process.execArgv,
+      ...deps,
+    });
+  } catch (error) {
+    // runProductionSqlOneShot already catches; this keeps the one-JSON-summary promise regardless.
+    result = fail(ONE_SHOT_EXCEPTION, `unexpected exception: ${String(error?.message || error).slice(0, 300)}`, { ok: false, stopped_at: 'unknown (exception)' });
+  }
   return printResult(result);
 }
 
