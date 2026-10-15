@@ -1,8 +1,8 @@
 {
   "id": "sql77-check-stakeholders-grant-production-apply",
   "migration": "sql77",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved the SQL 77 production pin (8f2417b5 -> 0cd3ab3f) and the read-only production inspects on 2026-10-15; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -23,11 +23,62 @@
     "read_only": true,
     "live_definition_sha256": "8f2417b5a97dd330185de62de29658c9a04a8b6d70672c0df7494834597ad57e",
     "preserved_acl_sha256": "c40af23bab9eabcb08ec6c43f00b5e45cf66e7d09892ac8f7d0227136625e43f",
+    "table_owner": "checksops_admin",
+    "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
     "privilege_state": {
       "checksops": { "SELECT": "granted", "INSERT": "granted", "UPDATE": "granted", "DELETE": "granted" },
       "authenticated": { "SELECT": "absent", "INSERT": "absent", "UPDATE": "absent", "DELETE": "absent" }
     },
-    "note": "Owner-approved read-only production inspect of SQL 77 on 2026-10-15 (SSM command ca4ad39d): table_present, rls_enabled, write_policy_present and write_policy_as_expected true, other_write_policy_count 0, grantee_bypasses_rls false, tenant_guard_ok true, update_granted true (checksops). Against the staging pin it reported precondition_failures [\"update_not_granted\"]. The owner approved this production-specific pin: expected pre-state is that live state (8f2417b5…); the unchanged SQL 77 file re-grants S/I/D to checksops (a no-op; checksops keeps all four privileges, UPDATE included) and grants S/I/D, not UPDATE, to authenticated. Intended post-state 0cd3ab3f… is what readStakeholderGrantState reads after applying the file to a PostgreSQL 16 fixture of that pre-state (aws/tests/sql-member-stakeholder-production-apply.test.mjs). The production rule (scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs, sql77) accepts only this pre-state: checksops' UPDATE without grant option is the only UPDATE, authenticated holds nothing, every other staging condition holds."
+    "note": "Owner-approved read-only production inspect of SQL 77 on 2026-10-15 (SSM command ca4ad39d): table_present, rls_enabled, write_policy_present and write_policy_as_expected true, other_write_policy_count 0, grantee_bypasses_rls false, tenant_guard_ok true, update_granted true (checksops). Against the staging pin it reported precondition_failures [\"update_not_granted\"]. The owner approved this production-specific pin: expected pre-state is that live state (8f2417b5…); the unchanged SQL 77 file re-grants S/I/D to checksops (a no-op; checksops keeps all four privileges, UPDATE included) and grants S/I/D, not UPDATE, to authenticated. Intended post-state 0cd3ab3f… is what readStakeholderGrantState reads after applying the file to a PostgreSQL 16 fixture of that pre-state (aws/tests/sql-member-stakeholder-production-apply.test.mjs). The production rule (scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs, sql77) accepts only this pre-state: checksops' UPDATE without grant option is the only UPDATE, authenticated holds nothing, every other staging condition holds.",
+    "latest": {
+      "date": "2026-10-15",
+      "ssm_command_id": "84e1d7c3-ccb6-44b2-bfb1-04eaee7307a6",
+      "source_commit": "4404e1af8",
+      "read_only": true,
+      "live_definition_sha256": "8f2417b5a97dd330185de62de29658c9a04a8b6d70672c0df7494834597ad57e",
+      "live_matches_expected": true,
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "preserved_acl_sha256": "c40af23bab9eabcb08ec6c43f00b5e45cf66e7d09892ac8f7d0227136625e43f",
+      "checksops_check_stakeholders_entries": [
+        "public.check_stakeholders checksops DELETE granted by checksops_admin",
+        "public.check_stakeholders checksops INSERT granted by checksops_admin",
+        "public.check_stakeholders checksops SELECT granted by checksops_admin",
+        "public.check_stakeholders checksops UPDATE granted by checksops_admin"
+      ],
+      "checksops_grant_option": false,
+      "column_update_entries": [],
+      "authenticated_member_of_checksops": false,
+      "note": "Owner-approved read-only production inspect with the official tool (sql-member-stakeholder-production-apply.mjs --migration sql77 --inspect) on main 4404e1af8, SSM command 84e1d7c3-ccb6-44b2-bfb1-04eaee7307a6: live 8f2417b5… = expected_live_definition_sha256, apply_preconditions_met true, precondition_failures [], preserved_acl_sha256 c40af23b…, checksops' four entries on check_stakeholders all granted by checksops_admin, checksops_grant_option false, column_update_entries [], authenticated_member_of_checksops false. That run predates the table_owner_as_inspected, current_user_is_table_owner and authenticated_not_member_of_owner preconditions added in this change; the apply re-reads them inside its transaction, and step 1 of ops/production-sql-77-79-apply.md re-runs the inspect, which prints them."
+    },
+    "catalog_read": {
+      "date": "2026-10-15",
+      "ssm_command_id": "316cfa35-489e-42d1-9957-3bb4b73c8923",
+      "source_commit": "60772dbf7",
+      "read_only": true,
+      "connected_as": "checksops_admin",
+      "table_owner": "checksops_admin",
+      "rls_enabled": true,
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+      "table_acl_entries": [
+        "checksops DELETE granted by checksops_admin",
+        "checksops INSERT granted by checksops_admin",
+        "checksops SELECT granted by checksops_admin",
+        "checksops UPDATE granted by checksops_admin",
+        "checksops_admin DELETE granted by checksops_admin",
+        "checksops_admin INSERT granted by checksops_admin",
+        "checksops_admin MAINTAIN granted by checksops_admin",
+        "checksops_admin REFERENCES granted by checksops_admin",
+        "checksops_admin SELECT granted by checksops_admin",
+        "checksops_admin TRIGGER granted by checksops_admin",
+        "checksops_admin TRUNCATE granted by checksops_admin",
+        "checksops_admin UPDATE granted by checksops_admin"
+      ],
+      "check_partner_stakeholder_removals_present": false,
+      "memberships": ["checksops member of authenticated", "checksops_admin member of rds_superuser"],
+      "superuser_or_bypassrls_roles": [],
+      "note": "Owner-approved read-only catalog read on main 60772dbf7 (SSM command 316cfa35-489e-42d1-9957-3bb4b73c8923), connected as checksops_admin. public.check_stakeholders: owner checksops_admin, RLS on, ACL {checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}; its full entries are checksops DELETE/INSERT/SELECT/UPDATE and checksops_admin DELETE/INSERT/MAINTAIN/REFERENCES/SELECT/TRIGGER/TRUNCATE/UPDATE, all granted by checksops_admin, so the preserved ACL c40af23b… covers only the owner's own entries: no other grantee holds any privilege. public.check_partner_stakeholder_removals does not exist yet (SQL 78 creates it). Memberships: checksops is a member of authenticated; checksops_admin is a member of rds_superuser; no role is superuser or BYPASSRLS. The apply runs as checksops_admin, the table owner and the grantor of checksops' entries, so SQL 77's GRANTs to checksops are byte-identical no-ops; only authenticated gains SELECT/INSERT/DELETE, granted by checksops_admin."
+    }
   },
   "staging_acceptance": {
     "ok": true,
