@@ -2,7 +2,7 @@
  * HomeownerOps Class A services (non-financial).
  * Public token routes + staff send/upload helpers.
  */
-import { randomBytes, createHash, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { CopyObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -14,6 +14,10 @@ import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
+import {
+  loadPendingSignaturesForHomeowner,
+  runHomeownerLedgerDocumentSignLink,
+} from './homeowner-signing-integration.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -100,20 +104,137 @@ export const notifyStaffOfHomeownerLedgerUpload = async ({
   return { notified: true, recipient: to, uploadId: uploadId || null };
 };
 
-export const assembleHomeownerLedgerView = (doc, spoof) => {
+const nameWords = (name) => String(name || '').toLowerCase().split(/[^a-z0-9]+/);
+
+/**
+ * Same rule as SQL 82/83: the homeowner name needs at least two parts of 2+
+ * letters and every one must be a whole word of the payee name. One shared
+ * surname, or 'ada' inside 'adam', is not a match.
+ */
+export const homeownerNameMatches = (homeownerName, payeeName) => {
+  const parts = nameWords(homeownerName).filter((part) => part.length >= 2);
+  if (parts.length < 2) return false;
+  const words = new Set(nameWords(payeeName));
+  return parts.every((part) => words.has(part));
+};
+
+/**
+ * An insured endorsement is this homeowner's when the contact email or the
+ * full homeowner name matches, or when it is the only open insured
+ * endorsement on that check (claim-scoped sole insured). An empty homeowner
+ * email is never a match-all.
+ */
+export const isHomeownerEndorsementParty = (endorsement, homeowner = {}, ctx = {}) => {
+  if (String(endorsement?.payee_type || '') !== 'insured') return false;
+  const email = String(homeowner.email || '').toLowerCase().trim();
+  const contactEmail = String(endorsement?.contact_email || '').toLowerCase().trim();
+  const emailHit = Boolean(email) && contactEmail === email;
+  const nameHit = homeownerNameMatches(homeowner.name, endorsement?.payee_name);
+  if (emailHit || nameHit) return true;
+  // Sole-insured fallback only when nothing contradicts it (same rule as the
+  // SQL 83 mint, which also counts every insured endorsement on the check).
+  const emailConflict = Boolean(email) && Boolean(contactEmail) && contactEmail !== email;
+  const nameConflict = Boolean(String(endorsement?.payee_name || '').trim()) && !nameHit;
+  if (emailConflict || nameConflict) return false;
+  const openInsuredCount = Number(ctx.openInsuredCount);
+  return Number.isInteger(openInsuredCount) && openInsuredCount === 1;
+};
+
+/** /endorse may only send the homeowner back to this ledger. */
+export const safeHomeownerReturnTo = (value, ledgerToken) => {
+  const token = String(ledgerToken || '').trim();
+  if (!token) return null;
+  const raw = String(value || '').trim();
+  if (!raw) return `/h/ledger/${token}`;
+  if (raw.includes('://') || raw.includes('//') || raw.includes('\\') || raw.includes('..')) {
+    return null;
+  }
+  if (raw === `/h/ledger/${token}` || raw === `/ledger/${token}`) return raw;
+  return null;
+};
+
+const publicEndorsementParty = (party = {}, homeowner = {}, ctx = {}) => {
+  const payeeType = String(party?.payee_type || '');
+  const email = String(homeowner.email || '').toLowerCase().trim();
+  const recomputed = isHomeownerEndorsementParty({
+    payee_type: payeeType,
+    payee_name: party?.payee_name,
+    contact_email: party?.contact_email,
+  }, homeowner, ctx);
+  // SQL 82 still marks every insured row is_homeowner when the token email
+  // is empty. Ignore that match-all unless the homeowner email is present or
+  // this check has exactly one open insured endorsement.
+  const sqlSaysHomeowner = party?.is_homeowner === true && payeeType === 'insured';
+  const isHomeowner = email ? Boolean(recomputed || sqlSaysHomeowner) : recomputed;
+  return {
+    endorsement_id: party.endorsement_id || party.id || null,
+    payee_name: party.payee_name ?? null,
+    payee_type: payeeType,
+    status: party.status ?? null,
+    sent_at: party.sent_at || party.request_sent_at || null,
+    is_homeowner: isHomeowner,
+    // Only a requested ('sent') insured endorsement, matching the SQL 83 allow-list.
+    can_sign: Boolean(isHomeowner && payeeType === 'insured'
+      && String(party.status || '').toLowerCase().trim() === 'sent'),
+    // Never return a raw check_endorsements.token. The endorse doorway mints at click.
+    sign_url: null,
+  };
+};
+
+export const openInsuredCountFromPendingEndorsements = (pending = []) => {
+  const counts = {};
+  if (!Array.isArray(pending)) return counts;
+  for (const check of pending) {
+    const checkId = String(check?.check_id || '');
+    if (!checkId) continue;
+    const parties = Array.isArray(check.parties) ? check.parties : [];
+    counts[checkId] = parties.filter((party) => String(party?.payee_type || '') === 'insured').length;
+  }
+  return counts;
+};
+
+/** Whitelists check + party fields; drops sign_url / tokens / contact emails. */
+export const sanitizePendingEndorsementsForHomeowner = (
+  pending = [],
+  homeowner = {},
+  openInsuredByCheck = openInsuredCountFromPendingEndorsements(pending),
+) => {
+  if (!Array.isArray(pending)) return [];
+  return pending.map((check) => {
+    const checkId = String(check?.check_id || '');
+    const openInsuredCount = openInsuredByCheck[checkId];
+    return {
+      check_id: check?.check_id ?? null,
+      check_number: check?.check_number ?? null,
+      check_amount: check?.check_amount ?? null,
+      parties: Array.isArray(check?.parties)
+        ? check.parties.map((party) => publicEndorsementParty(party, homeowner, { openInsuredCount }))
+        : [],
+    };
+  });
+};
+
+export const assembleHomeownerLedgerView = (doc, spoof, { pendingSignatures = [] } = {}) => {
   const tokenMeta = doc.token && typeof doc.token === 'object' ? doc.token : {};
   const mode = doc.mode || (tokenMeta.claim_id || doc.claim?.id ? 'claim' : 'pre_claim');
+  const homeowner = doc.homeowner || {
+    name: tokenMeta.homeowner_name || null,
+    email: tokenMeta.homeowner_email || null,
+  };
   return {
     ok: true,
     statusCode: 200,
     ...doc,
     mode,
-    homeowner: doc.homeowner || {
-      name: tokenMeta.homeowner_name || null,
-      email: tokenMeta.homeowner_email || null,
-    },
+    homeowner,
     totals: doc.totals || { received: 0, deposited: 0, released: 0, remaining: 0 },
-    pending_signatures: Array.isArray(doc.pending_signatures) ? doc.pending_signatures : [],
+    // Only the sanitized, claim-scoped list loaded by the Lambda (SQL 83).
+    // Never pass RPC-supplied signer rows or sign URLs through.
+    pending_signatures: Array.isArray(pendingSignatures) ? pendingSignatures : [],
+    pending_endorsements: sanitizePendingEndorsementsForHomeowner(
+      Array.isArray(doc.pending_endorsements) ? doc.pending_endorsements : [],
+      homeowner,
+    ),
     pending_upload_count: Number(doc.pending_upload_count || 0),
     can_upload: doc.can_upload !== false,
     allow_deductible_payment: false,
@@ -121,6 +242,29 @@ export const assembleHomeownerLedgerView = (doc, spoof) => {
     deductible_payments: [],
     spoofFieldsIgnored: spoof,
   };
+};
+
+/**
+ * Claim-scoped Signature Requests for this homeowner (SQL 83 reader). The
+ * reader may be absent until SQL 83 is applied; a SAVEPOINT keeps that
+ * failure from aborting the ledger transaction (and last_viewed_at).
+ */
+export const loadPendingSignaturesSafely = async (client, token, doc) => {
+  const tokenMeta = doc?.token && typeof doc.token === 'object' ? doc.token : {};
+  if (!tokenMeta.claim_id && doc?.mode !== 'claim') return [];
+  const homeowner = doc.homeowner || {
+    name: tokenMeta.homeowner_name || null,
+    email: tokenMeta.homeowner_email || null,
+  };
+  await client.query('SAVEPOINT homeowner_pending_signatures');
+  try {
+    const rows = await loadPendingSignaturesForHomeowner(client, token, homeowner);
+    await client.query('RELEASE SAVEPOINT homeowner_pending_signatures');
+    return rows;
+  } catch {
+    await client.query('ROLLBACK TO SAVEPOINT homeowner_pending_signatures');
+    return [];
+  }
 };
 
 export const handleHomeownerLedgerView = async (event) => {
@@ -149,8 +293,9 @@ export const handleHomeownerLedgerView = async (event) => {
       const status = doc.error === 'revoked' || doc.error === 'expired' ? 410 : 400;
       return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
     }
+    const pendingSignatures = await loadPendingSignaturesSafely(client, token, doc);
     await client.query('COMMIT');
-    return assembleHomeownerLedgerView(doc, spoof);
+    return assembleHomeownerLedgerView(doc, spoof, { pendingSignatures });
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -433,40 +578,61 @@ const signLinkStatus = (error) => {
   return 403;
 };
 
-export const handleHomeownerLedgerSignLink = async (event) => {
-  const body = parseBody(event);
-  const spoof = ignoredSpoof(event, body);
-  const token = String(body.token || '').trim();
-  const signerId = body.signer_id || body.signature_signer_id;
-  if (!token || !signerId) {
+const mapHomeownerCapabilityError = (error, spoof) => {
+  const code = String(error || 'not_found');
+  const statusCode = code === 'existing_email_link_required' ? 409 : signLinkStatus(code);
+  return { ok: false, statusCode, error: code, spoofFieldsIgnored: spoof };
+};
+
+/**
+ * Review & Sign Check doorway. SQL 83 re-checks the ledger token, exact
+ * tenant + claim, insured payee, open status and homeowner identity (or
+ * sole open insured), then returns that endorsement's /endorse token. The
+ * token is only ever returned here, never in the ledger view.
+ */
+export const runHomeownerLedgerEndorseLink = async ({ client, token, endorsementId, spoof }) => {
+  const ledgerToken = String(token || '').trim();
+  const id = String(endorsementId || '').trim();
+  if (!ledgerToken || ledgerToken.length < 8 || !id) {
     return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
   }
+  if (!UUID_RE.test(id)) {
+    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
+  }
+
+  const cap = (await client.query(
+    'SELECT public.aws_public_homeowner_ledger_endorse_capability($1, $2::uuid) AS doc',
+    [ledgerToken, id],
+  )).rows[0]?.doc;
+  if (!cap || cap.error || cap.ok !== true) {
+    return mapHomeownerCapabilityError(cap?.error || 'not_found', spoof);
+  }
+
+  const endorseToken = String(cap.endorse_token || '').trim();
+  const returnTo = safeHomeownerReturnTo(`/h/ledger/${ledgerToken}`, ledgerToken);
+  if (!endorseToken || !returnTo) {
+    return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
+  }
+  return {
+    ok: true,
+    statusCode: 200,
+    sign_url: `/endorse?token=${encodeURIComponent(endorseToken)}&return_to=${encodeURIComponent(returnTo)}`,
+    endorsement_id: cap.endorsement_id || id,
+    check_id: cap.check_id || null,
+    return_to: returnTo,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+const runPublicTokenTransaction = async (spoof, failure, run) => {
   let client;
   try {
     client = await publicDb(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const raw = randomBytes(32).toString('hex');
-    const hash = createHash('sha256').update(raw).digest('hex');
-    const remint = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_remint_signer($1, $2::uuid, $3) AS doc',
-      [token, signerId, hash],
-    )).rows[0]?.doc;
-    if (!remint?.ok) {
-      await client.query('ROLLBACK');
-      const error = remint?.error || 'not_found';
-      return { ok: false, statusCode: signLinkStatus(error), error, spoofFieldsIgnored: spoof };
-    }
-    await client.query('COMMIT');
-    const origin = String(body.origin || process.env.SIGN_BASE_URL || process.env.VITE_APP_URL || 'https://checksops.com').replace(/\/$/, '');
-    return {
-      ok: true,
-      statusCode: 200,
-      sign_url: `${origin}/sign?token=${raw}`,
-      request_id: remint.request_id || null,
-      signer_id: remint.signer_id || signerId,
-      spoofFieldsIgnored: spoof,
-    };
+    const result = await run(client);
+    await client.query(result.ok ? 'COMMIT' : 'ROLLBACK');
+    return result;
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -474,7 +640,7 @@ export const handleHomeownerLedgerSignLink = async (event) => {
     return {
       ok: false,
       statusCode: 503,
-      error: 'sign_link_failed',
+      error: failure,
       message: sanitizePublicError(error),
       spoofFieldsIgnored: spoof,
     };
@@ -483,6 +649,56 @@ export const handleHomeownerLedgerSignLink = async (event) => {
       try { await client.end(); } catch { /* ignore */ }
     }
   }
+};
+
+export const handleHomeownerLedgerEndorseLink = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  const token = String(body.token || '').trim();
+  const endorsementId = body.endorsement_id || body.endorsementId;
+  if (!token || token.length < 8 || !endorsementId) {
+    return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
+  }
+  return runPublicTokenTransaction(spoof, 'endorse_link_failed', (client) => (
+    runHomeownerLedgerEndorseLink({ client, token, endorsementId, spoof })
+  ));
+};
+
+/**
+ * Review & Sign Document doorway (SQL 83). Reuses the signer's existing
+ * /sign capability only; never rotates token_hash and never calls the
+ * legacy remint RPC.
+ */
+export const handleHomeownerLedgerDocumentSignLink = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  const token = String(body.token || '').trim();
+  const signerId = body.signer_id || body.signature_signer_id;
+  if (!token || token.length < 8 || !signerId) {
+    return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
+  }
+  return runPublicTokenTransaction(spoof, 'document_sign_link_failed', (client) => (
+    runHomeownerLedgerDocumentSignLink({ client, token, signerId, spoof })
+  ));
+};
+
+/**
+ * Retired. The legacy Homeowner sign-link reminted a signer through
+ * aws_public_homeowner_ledger_remint_signer, which is not token + claim +
+ * homeowner scoped, and echoed a caller-supplied `origin` into the link.
+ * The route stays registered so old SPA builds get a clean refusal; it
+ * never touches the database. Use homeowner-ledger-document-sign-link.
+ */
+export const handleHomeownerLedgerSignLink = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  return {
+    ok: false,
+    statusCode: 410,
+    error: 'sign_link_retired',
+    message: 'Use homeowner-ledger-document-sign-link.',
+    spoofFieldsIgnored: spoof,
+  };
 };
 
 export const runHomeownerLedgerSend = async ({
@@ -548,6 +764,10 @@ export const runHomeownerLedgerSend = async ({
   )).rows[0];
   if (!claimOwned) return { ok: false, statusCode: 403, error: 'claim_not_in_tenant', spoofFieldsIgnored: spoof };
 
+  // A ledger token is one recipient's capability (the signing doorways trust
+  // its homeowner_email/name). Reuse only this recipient's own live token on
+  // the same tenant + claim; a co-insured or a new address gets a new token.
+  const homeownerName = String(body.homeowner_name || '').trim() || null;
   let tokenRow = null;
   if (!body.rotate) {
     tokenRow = (await client.query(
@@ -556,8 +776,14 @@ export const runHomeownerLedgerSend = async ({
          AND claim_id IS NOT DISTINCT FROM $2::uuid
          AND revoked_at IS NULL
          AND (expires_at IS NULL OR expires_at > now())
+         AND lower(trim(COALESCE(homeowner_email, ''))) = lower(trim(COALESCE($3::text, '')))
+         AND (
+           $4::text IS NULL
+           OR NULLIF(trim(COALESCE(homeowner_name, '')), '') IS NULL
+           OR lower(trim(homeowner_name)) = lower(trim($4::text))
+         )
        ORDER BY created_at DESC LIMIT 1`,
-      [tenantId, claimId],
+      [tenantId, claimId, homeownerEmail || null, homeownerName],
     )).rows[0];
   }
   if (!tokenRow) {
@@ -567,14 +793,14 @@ export const runHomeownerLedgerSend = async ({
          tenant_id, claim_id, token, homeowner_email, homeowner_name, created_by, sent_by_user_id, created_at
        ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $6::uuid, now())
        RETURNING id, token`,
-      [tenantId, claimId, token, homeownerEmail || null, body.homeowner_name || null, mapping.application_user_id],
+      [tenantId, claimId, token, homeownerEmail || null, homeownerName, mapping.application_user_id],
     );
     const insertWithoutSentBy = async () => client.query(
       `INSERT INTO public.homeowner_ledger_tokens (
          tenant_id, claim_id, token, homeowner_email, homeowner_name, created_by, created_at
        ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, now())
        RETURNING id, token`,
-      [tenantId, claimId, token, homeownerEmail || null, body.homeowner_name || null, mapping.application_user_id],
+      [tenantId, claimId, token, homeownerEmail || null, homeownerName, mapping.application_user_id],
     );
     try {
       tokenRow = (await insertWithSentBy()).rows[0];
@@ -585,9 +811,11 @@ export const runHomeownerLedgerSend = async ({
     try {
       await client.query(
         `UPDATE public.homeowner_ledger_tokens
-         SET sent_by_user_id = $2::uuid, homeowner_email = COALESCE($3, homeowner_email)
+         SET sent_by_user_id = $2::uuid,
+             homeowner_email = COALESCE(NULLIF(trim(COALESCE(homeowner_email, '')), ''), $3),
+             homeowner_name = COALESCE(NULLIF(trim(COALESCE(homeowner_name, '')), ''), $4)
          WHERE id = $1::uuid`,
-        [tokenRow.id, mapping.application_user_id, homeownerEmail || null],
+        [tokenRow.id, mapping.application_user_id, homeownerEmail || null, homeownerName],
       );
     } catch {
       /* sent_by_user_id may be absent on older staging dumps */

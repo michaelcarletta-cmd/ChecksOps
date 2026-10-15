@@ -360,18 +360,24 @@ test('marks storage bytes unavailable when source metadata has unknown sizes', a
 });
 
 test('Class A route exposes a GET-only read endpoint and no provider client is used', async () => {
-  const get = await handleAppServiceRequest(
-    { queryStringParameters: {} },
-    '/functions/v1/tenant-management-v2',
-    'GET',
-  );
-  const post = await handleAppServiceRequest(
-    { queryStringParameters: { tenant_id: TENANT_ID } },
-    '/functions/v1/tenant-management-v2',
-    'POST',
-  );
-  assert.equal(get.statusCode, 400);
-  assert.equal(post.statusCode, 405);
+  // app-services.mjs is the live production router plus the homeowner
+  // signing routes. Production has never had tenant-management-v2.mjs, so the
+  // router deliberately does not route it; the route returns via the #901
+  // reconciliation. The module and its read handler stay in source.
+  assert.equal(typeof handleTenantManagementV2, 'function');
+  const direct = await handleTenantManagementV2({ queryStringParameters: {} });
+  assert.equal(direct.statusCode, 400);
+  assert.equal(direct.error, 'valid_tenant_id_required');
+  for (const method of ['GET', 'POST']) {
+    const routed = await handleAppServiceRequest(
+      { queryStringParameters: { tenant_id: TENANT_ID } },
+      '/functions/v1/tenant-management-v2',
+      method,
+    );
+    assert.equal(routed, null, `${method} tenant-management-v2 is not an app-services route`);
+  }
+  const router = fs.readFileSync(new URL('../functions/api/app-services.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(router, /tenant-management-v2/);
 
   const source = fs.readFileSync(
     new URL('../functions/api/tenant-management-v2.mjs', import.meta.url),
