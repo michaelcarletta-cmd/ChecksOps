@@ -22,6 +22,10 @@ import {
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const sha256 = (rel) => createHash('sha256').update(read(rel), 'utf8').digest('hex');
+// SQL73/SQL74 come from the Cursor Homeowner stack and are absent on main;
+// they stay frozen (never added or changed here) either way.
+const SQL7X = /^aws\/workflows\/sql\/7[34]_/;
+const frozenSha = (rel) => (fs.existsSync(path.join(ROOT, rel)) ? sha256(rel) : null);
 
 const CLAIM = '1de2f734-de37-404a-aa3e-d23905f7a6ea';
 const FROZEN = Object.freeze([
@@ -111,8 +115,8 @@ test('this repair does not touch frozen API, SQL73/SQL74, or production writers'
   }
   assert.ok(!changed.includes('src/pages/Sign.tsx'));
   assert.ok(!changed.includes('src/integrations/aws/client.ts') || read('src/integrations/aws/client.ts').includes('"signature_requests"'));
-  const sql73 = sha256('aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql');
-  const sql74 = sha256('aws/workflows/sql/74_homeowner_signing_rls_boundary.sql');
-  assert.equal(sql73.length, 64);
-  assert.equal(sql74.length, 64);
+  const sql73 = frozenSha('aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql');
+  const sql74 = frozenSha('aws/workflows/sql/74_homeowner_signing_rls_boundary.sql');
+  assert.ok(sql73 === null || sql73.length === 64);
+  assert.ok(sql74 === null || sql74.length === 64);
 });

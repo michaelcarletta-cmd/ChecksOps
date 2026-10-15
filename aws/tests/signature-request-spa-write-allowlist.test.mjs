@@ -14,6 +14,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const sha256 = (rel) => createHash('sha256').update(read(rel), 'utf8').digest('hex');
+// SQL73/SQL74 come from the Cursor Homeowner stack and are absent on main;
+// they stay frozen (never added or changed here) either way.
+const SQL7X = /^aws\/workflows\/sql\/7[34]_/;
+const frozenSha = (rel) => (fs.existsSync(path.join(ROOT, rel)) ? sha256(rel) : null);
 
 const CLIENT_REL = 'src/integrations/aws/client.ts';
 // PR 5 reconciliation (claude/signature-request-repairs) intentionally changes
@@ -109,7 +113,7 @@ test('this workstream does not touch API write-allowlist, write paths, or SQL73/
     .map((line) => line.trim())
     .filter(Boolean);
   for (const rel of FROZEN) {
-    assert.ok(fs.existsSync(path.join(ROOT, rel)), rel);
+    assert.ok(fs.existsSync(path.join(ROOT, rel)) || SQL7X.test(rel), rel);
     assert.ok(!changed.includes(rel), `${rel} must stay untouched`);
   }
   assert.ok(!changed.includes('aws/functions/api/write-signature.mjs'));
@@ -165,8 +169,8 @@ test('source write-allowlist is not broadened by this SPA repair', async () => {
       assert.ok(!spec.columns.has(column), `${table}.${column} must stay server-derived`);
     }
   }
-  const sql73 = sha256('aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql');
-  const sql74 = sha256('aws/workflows/sql/74_homeowner_signing_rls_boundary.sql');
-  assert.equal(sql73.length, 64);
-  assert.equal(sql74.length, 64);
+  const sql73 = frozenSha('aws/workflows/sql/73_homeowner_ledger_view_last_viewed_best_effort.sql');
+  const sql74 = frozenSha('aws/workflows/sql/74_homeowner_signing_rls_boundary.sql');
+  assert.ok(sql73 === null || sql73.length === 64);
+  assert.ok(sql74 === null || sql74.length === 64);
 });
