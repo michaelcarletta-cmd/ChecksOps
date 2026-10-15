@@ -127,6 +127,18 @@ test('PostgreSQL 16: SQL 81 lets only the platform owner register a production C
 
     await client.query(fs.readFileSync(SQL_81, 'utf8'));
 
+    // An unknown tenant is refused before Check Alt is called.
+    const none = [];
+    result = await register(OWNER, { tenant_id: TENANT_MISSING }, none);
+    assert.equal(result.error, 'tenant_not_found', JSON.stringify(result));
+    assert.deepEqual(none, []);
+    // Without EXECUTE on the writer the API refuses before Check Alt, too.
+    await client.query('REVOKE EXECUTE ON FUNCTION public.aws_register_checkalt_tenant_account(uuid, jsonb) FROM checksops, authenticated');
+    result = await register(OWNER, {}, none);
+    assert.equal(result.error, 'register_writer_missing', JSON.stringify(result));
+    assert.deepEqual(none, []);
+    await client.query('GRANT EXECUTE ON FUNCTION public.aws_register_checkalt_tenant_account(uuid, jsonb) TO checksops, authenticated');
+
     // Platform owner registers: one production row, full number stored, payload masked.
     const calls = [];
     result = await register(OWNER, {}, calls);
@@ -191,6 +203,7 @@ test('PostgreSQL 16: SQL 81 lets only the platform owner register a production C
     for (const [bad, detail] of [
       [{ ...good, deposit_account_number: '4444-5555' }, 'deposit_account_number'],
       [{ ...good, deposit_account_number: '123' }, 'deposit_account_number'],
+      [{ ...good, deposit_account_number: '4321' }, 'deposit_account_number'],
       [{ ...good, deposit_account_number: '1'.repeat(18) }, 'deposit_account_number'],
       [{ ...good, deposit_account_number: 44445555 }, 'deposit_account_number'],
       [{ ...good, email: 'nope' }, 'email'],

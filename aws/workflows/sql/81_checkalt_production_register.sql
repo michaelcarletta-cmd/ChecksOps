@@ -10,8 +10,9 @@
 --     tenant owners/admins/operators, platform admins and staff are refused;
 --   * only the keys sso_user_id, first_name, last_name, email,
 --     deposit_account_number and last_register_payload are accepted;
---   * deposit_account_number must be 4 to 17 digits (no spaces, dashes or
---     letters). There is no routing number: Check Alt binds the bank through
+--   * deposit_account_number must be 5 to 17 digits (no spaces, dashes or
+--     letters; at least five so the last-four mask never shows the whole
+--     number). There is no routing number: Check Alt binds the bank through
 --     the platform FI key;
 --   * last_register_payload must be a JSON object (or null) that does not
 --     contain the full account number. The Lambda masks it before the call;
@@ -86,7 +87,7 @@ BEGIN
   IF length(_email) > 254 OR _email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' THEN
     RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023', DETAIL = 'email';
   END IF;
-  IF _acct !~ '^[0-9]{4,17}$' THEN
+  IF _acct !~ '^[0-9]{5,17}$' THEN
     RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023', DETAIL = 'deposit_account_number';
   END IF;
 
@@ -138,7 +139,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.aws_register_checkalt_tenant_account(uuid, jsonb) IS
-  'Platform-owner-only production Check Alt depositor registration writer (SQL 81). Called after a successful live /fincapture/useraccount/register. Writes sso_user_id, deposit_account_number (4-17 digits), names, email, enabled, registered_at and a masked last_register_payload; never auto_approve_*. Returns the account number as last four only. Does not grant generic table INSERT/UPDATE.';
+  'Platform-owner-only production Check Alt depositor registration writer (SQL 81). Called after a successful live /fincapture/useraccount/register. Writes sso_user_id, deposit_account_number (5-17 digits), names, email, enabled, registered_at and a masked last_register_payload; never auto_approve_*. Returns the account number as last four only. Does not grant generic table INSERT/UPDATE.';
 
 REVOKE ALL ON FUNCTION public.aws_register_checkalt_tenant_account(uuid, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_register_checkalt_tenant_account(uuid, jsonb) TO checksops, authenticated;

@@ -511,11 +511,93 @@ test('Data API: non-owners cannot embed or filter into checkalt_tenant_accounts 
     const result = await handleDataQuery(jwtEvent({ table: 'tenants', select, filters }), depsFor(client));
     assert.equal(result.ok, false, select);
     assert.equal(result.statusCode, 403, select);
-    assert.equal(result.error, 'not_authorized', select);
+    // A filter on the account number itself is refused even before the owner check.
+    assert.ok(['not_authorized', 'account_number_filter_denied'].includes(result.error), `${select} ${result.error}`);
     assert.equal(client.queries.some((q) => /FROM public\.(checkalt_tenant_accounts|checkalt_config|tenants)\b/.test(q.sql)), false, select);
   }
   // Ordinary tenant reads without those tables are unaffected.
   const client = embedClient(false);
   const ok = await handleDataQuery(jwtEvent({ table: 'tenants', select: 'id, name', filters: [{ column: 'id', op: 'eq', value: FREEDOM }] }), depsFor(client));
   assert.equal(ok.ok, true, ok.message || ok.error);
+});
+
+test('Data API: last_register_payload selected without the account number is still masked, and the number is not returned', async () => {
+  const seen = [];
+  const client = identityClient({ platformOwner: true }, (sql) => {
+    seen.push(sql);
+    if (sql.includes('FROM public.checkalt_tenant_accounts')) {
+      return { rows: [{ tenant_id: FREEDOM, deposit_account_number: '90001111', last_register_payload: { note: 'acct 90001111', echo: [{ value: '90001111' }] } }] };
+    }
+    if (sql.includes('FROM public.tenants')) return { rows: [{ id: FREEDOM, name: 'Freedom' }] };
+    return { rows: [] };
+  });
+  const top = await handleDataQuery(jwtEvent({
+    table: 'checkalt_tenant_accounts',
+    select: 'tenant_id, last_register_payload',
+    filters: [{ column: 'tenant_id', op: 'eq', value: FREEDOM }],
+    maybeSingle: true,
+  }), depsFor(client));
+  assert.equal(top.ok, true, top.message || top.error);
+  assert.deepEqual(Object.keys(top.data).sort(), ['last_register_payload', 'tenant_id']);
+  assert.equal(top.data.last_register_payload.note, 'acct ****1111');
+  assert.equal(top.data.last_register_payload.echo[0].value, '****1111');
+  assert.ok(seen.some((sql) => /SELECT .*deposit_account_number.* FROM public\.checkalt_tenant_accounts/.test(sql)), 'read internally to mask');
+
+  const embedded = await handleDataQuery(jwtEvent({
+    table: 'tenants',
+    select: 'id, checkalt_tenant_accounts(last_register_payload)',
+    filters: [{ column: 'id', op: 'eq', value: FREEDOM }],
+  }), depsFor(client));
+  assert.equal(embedded.ok, true, embedded.message || embedded.error);
+  const row = embedded.data[0].checkalt_tenant_accounts[0];
+  assert.equal('deposit_account_number' in row, false);
+  assert.equal(row.last_register_payload.note, 'acct ****1111');
+  assert.equal(JSON.stringify([top, embedded]).includes('90001111'), false);
+});
+
+test('Data API: account-number columns cannot be filtered or ordered on, even by the platform owner', async () => {
+  for (const [table, extra] of [
+    ['checkalt_tenant_accounts', { filters: [{ column: 'deposit_account_number', op: 'eq', value: '90001111' }] }],
+    ['checkalt_tenant_accounts', { filters: [{ column: 'deposit_account_number', op: 'like', value: '9000%' }] }],
+    ['checkalt_tenant_accounts', { filters: [{ op: 'or', value: 'deposit_account_number.eq.90001111,tenant_id.eq.x' }] }],
+    ['checkalt_tenant_accounts', { filters: [{ column: 'last_register_payload', op: 'is', value: null }] }],
+    ['checkalt_tenant_accounts', { order: { column: 'deposit_account_number', ascending: true } }],
+    ['checkalt_config', { filters: [{ column: 'depositor_account_id', op: 'eq', value: '90001111' }] }],
+    ['checkalt_config_public', { order: { column: 'depositor_account_id' } }],
+    ['tenants', { select: 'id, checkalt_tenant_accounts(tenant_id)', filters: [{ column: 'checkalt_tenant_accounts.deposit_account_number', op: 'eq', value: '90001111' }] }],
+  ]) {
+    const client = embedClient(true);
+    const result = await handleDataQuery(jwtEvent({ table, select: '*', ...extra }), depsFor(client));
+    assert.equal(result.ok, false, `${table} ${JSON.stringify(extra)}`);
+    assert.equal(result.statusCode, 403);
+    assert.equal(result.error, 'account_number_filter_denied');
+    assert.equal(client.queries.some((q) => /FROM public\.(checkalt|tenants)/.test(q.sql)), false);
+  }
+});
+
+test('checkalt_config depositor_account_id is last four only in Data API reads and the save_checkalt_settings response', async () => {
+  for (const table of ['checkalt_config', 'checkalt_config_public']) {
+    const client = embedClient(true);
+    const result = await handleDataQuery(jwtEvent({ table, select: '*', filters: [{ column: 'singleton', op: 'eq', value: true }], maybeSingle: true }), depsFor(client));
+    assert.equal(result.ok, true, result.message || result.error);
+    assert.equal(result.data.depositor_account_id, '****1111', table);
+    assert.equal(result.data.merchant, 'lockbox5');
+  }
+  const client = identityClient({ platformOwner: true }, (sql) => {
+    if (/UPDATE public.checkalt_config/.test(sql)) return { rows: [{ singleton: true, merchant: 'lockbox5', depositor_account_id: '90001111' }] };
+    return { rows: [] };
+  });
+  const saved = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'save_checkalt_settings',
+    args: { merchant: 'lockbox5' },
+  });
+  assert.equal(saved.data.depositor_account_id, '****1111');
+  assert.equal(JSON.stringify(saved).includes('90001111'), false);
+  // The settings page no longer selects or sends the legacy global account number.
+  const settings = sourceOf('src/components/settings/CheckAltSettings.tsx');
+  assert.match(settings, /from\("checkalt_config"\)\s*\.select\("id, singleton, base_url, merchant, fi_key, business_unit, default_enabled/);
+  assert.equal(/depositor_account_id/.test(settings), false);
+  assert.equal(/\.select\("\*"\)\s*\.eq\("singleton"/.test(settings), false);
 });

@@ -241,7 +241,7 @@ const registerAccount = {
     if (body.deposit_account_number && !normalizeDepositAccountNumber(body.deposit_account_number)) {
       return fail('invalid_deposit_account_number', 400, {
         field: 'deposit_account_number',
-        message: 'Deposit account number must be 4 to 17 digits, with no spaces, dashes or letters.',
+        message: 'Deposit account number must be 5 to 17 digits, with no spaces, dashes or letters.',
         liveProviderCalled: false,
       });
     }
@@ -329,7 +329,10 @@ const verifyAccount = {
   requireAdmin: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
     const tenantId = body.tenant_id || ctx.tenantId;
-    const action = ['status', 'account'].includes(body.action) ? body.action : 'user';
+    if (!['status', 'user', 'account'].includes(body.action)) {
+      return fail('invalid_action', 400, { field: 'action', message: 'action must be status, user or account.', liveProviderCalled: false });
+    }
+    const { action } = body;
     const acct = await loadUatTenantAccount(client, tenantId);
     // UAT truth for the platform-owner card: the isolated UAT row, never production.
     const status = {

@@ -42,7 +42,7 @@ export function CheckAltSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("checkalt_config")
-        .select("*")
+        .select("id, singleton, base_url, merchant, fi_key, business_unit, default_enabled, auto_approve_enabled, auto_approve_max_cents, notes, created_at, updated_at")
         .eq("singleton", true)
         .maybeSingle();
       if (error) throw error;

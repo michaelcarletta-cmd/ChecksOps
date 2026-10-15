@@ -12,6 +12,7 @@ import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { writesEnabled } from './write-allowlist.mjs';
 import { executeClaimSettlementBreakdownWrite, SAVE_CLAIM_SETTLEMENT_BREAKDOWN } from './write-claim-settlement.mjs';
 import { executeAdminOverrideCheckStatus } from './admin-override-check-status.mjs';
+import { maskAccountNumber } from './providers/checkalt-account-mask.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -1060,7 +1061,9 @@ const executeSaveCheckaltSettings = async ({ client, mapping, args }) => {
                auto_approve_max_cents, notes, created_at, updated_at, updated_by`,
     params,
   )).rows;
-  return { data: rows[0] || null };
+  // The browser sees the legacy global account number as the last four only.
+  const row = rows[0] || null;
+  return { data: row ? { ...row, depositor_account_id: maskAccountNumber(row.depositor_account_id) } : null };
 };
 
 const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) => {

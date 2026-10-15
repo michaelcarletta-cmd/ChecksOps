@@ -89,7 +89,9 @@ const fakeClient = (state) => ({
     if (text.includes('aws_checkalt_production_config')) {
       return { rows: [{ merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com', default_enabled: true, depositor_account_id: null, business_unit: null }] };
     }
-    if (text.includes('to_regprocedure')) return { rows: [{ present: state.writerPresent !== false }] };
+    if (text.includes('has_function_privilege')) {
+      return { rows: [{ writer_ok: state.writerPresent !== false, tenant_exists: params[0] !== state.missingTenant }] };
+    }
     if (text.includes('aws_register_checkalt_tenant_account')) {
       if (state.writerError) throw state.writerError;
       const account = JSON.parse(params[1]);
@@ -170,12 +172,12 @@ const registerBody = (extra = {}) => ({
 
 const providerHosts = (state) => [...new Set(state.calls.map((c) => new URL(c.url).host))];
 
-test('masking helpers: last four only, deep payload masking, digits-only 4-17 validation', () => {
+test('masking helpers: last four only, deep payload masking, digits-only 5-17 validation', () => {
   assert.equal(maskAccountNumber(FULL), '****6789');
   assert.equal(maskAccountNumber(null), null);
   assert.equal(accountLast4(FULL), '6789');
   assert.equal(normalizeDepositAccountNumber(' 123456789 '), FULL);
-  for (const bad of ['1234-5678', '12 34 56', 'abc', '123', '1'.repeat(18), 12, null, undefined, {}]) {
+  for (const bad of ['1234-5678', '12 34 56', 'abc', '123', '1234', '1'.repeat(18), 12, null, undefined, {}]) {
     assert.equal(normalizeDepositAccountNumber(bad), null, String(bad));
   }
   const masked = maskCheckAltPayload({
@@ -239,6 +241,8 @@ test('production register: invalid input and browser-chosen provider config are 
     [registerBody({ deposit_account_number: '1234-5678' }), 'invalid_deposit_account_number'],
     [registerBody({ deposit_account_number: '12a45678' }), 'invalid_deposit_account_number'],
     [registerBody({ deposit_account_number: '123' }), 'invalid_deposit_account_number'],
+    // Four digits would be shown in full by the last-four mask, and SQL 81 would then refuse the payload.
+    [registerBody({ deposit_account_number: '4321' }), 'invalid_deposit_account_number'],
     [registerBody({ deposit_account_number: '1'.repeat(18) }), 'invalid_deposit_account_number'],
     [registerBody({ tenant_id: 'not-a-uuid' }), 'invalid_uuid'],
     [registerBody({ email: 'nope' }), 'invalid_field'],
@@ -282,14 +286,45 @@ test('production register: SQL 81 not applied is refused before Check Alt is cal
   assert.equal(state.saved, null);
 });
 
-test('production register: writer refusal after Check Alt accepted is reported, never a silent success', async () => {
-  for (const [code, status, error] of [['42883', 503, 'register_writer_missing'], ['42501', 403, 'not_authorized'], ['P0002', 404, 'tenant_not_found']]) {
-    const state = newState({ writerError: Object.assign(new Error('x'), { code }) });
+test('production register: unknown tenant is refused before Check Alt is called', async () => {
+  const OTHER = '99999999-9999-4999-8999-999999999999';
+  const state = newState({ missingTenant: OTHER });
+  const result = await call(state, 'checkalt-register-account', registerBody({ tenant_id: OTHER }));
+  assert.equal(result.statusCode, 404);
+  assert.equal(result.error, 'tenant_not_found');
+  assert.equal(state.calls.length, 0);
+  assert.equal(state.saved, null);
+});
+
+test('production register: any save error after Check Alt accepted is register_save_failed, never a throw or silent success', async () => {
+  for (const [error, status, reason] of [
+    [Object.assign(new Error('x'), { code: '42883' }), 503, 'register_writer_missing'],
+    [Object.assign(new Error('x'), { code: '42501' }), 403, 'not_authorized'],
+    [Object.assign(new Error('x'), { code: 'P0002' }), 404, 'tenant_not_found'],
+    [Object.assign(new Error('unmasked_account_number'), { code: '22023', detail: 'last_register_payload' }), 400, 'invalid_field'],
+    [Object.assign(new Error('deadlock detected'), { code: '40P01' }), 500, 'database_error'],
+    [new Error('connection terminated'), 500, 'database_error'],
+  ]) {
+    const state = newState({ writerError: error });
     const result = await call(state, 'checkalt-register-account', registerBody());
-    assert.equal(result.statusCode, status, code);
-    assert.equal(result.error, error, code);
+    assert.equal(result.error, 'register_save_failed', error.message);
+    assert.equal(result.statusCode, status, error.message);
+    assert.equal(result.reason, reason, error.message);
     assert.equal(result.registeredWithCheckAlt, true);
+    assert.equal(result.liveProviderCalled, true);
     assert.equal(result.productionRecordsMutated, false);
+    assert.equal(JSON.stringify(result).includes(error.message === 'x' ? 'never-present' : error.message), false, 'no raw SQL text');
+    assert.equal(JSON.stringify(result).includes(FULL), false);
+  }
+});
+
+test('production verify: a missing or unknown action is 400 with no provider call', async () => {
+  for (const body of [{ tenant_id: TENANT }, { tenant_id: TENANT, action: 'history' }, { tenant_id: TENANT, action: 'USER' }]) {
+    const state = newState({ row: { tenant_id: TENANT, sso_user_id: 's', deposit_account_number: FULL, registered_at: '2025-01-01T00:00:00Z', enabled: true } });
+    const result = await call(state, 'checkalt-verify-account', body);
+    assert.equal(result.statusCode, 400, JSON.stringify(body));
+    assert.equal(result.error, 'invalid_action', JSON.stringify(body));
+    assert.equal(state.calls.length, 0, JSON.stringify(body));
   }
 });
 
@@ -382,7 +417,7 @@ test('SQL 81 is a platform-owner-only SECURITY DEFINER writer with digits-only v
   assert.match(sql, /CREATE OR REPLACE FUNCTION public\.aws_register_checkalt_tenant_account\(\s*_tenant_id uuid,\s*_account jsonb\s*\)/);
   assert.match(sql, /SECURITY DEFINER/);
   assert.match(sql, /IF NOT public\.is_platform_owner\(\) THEN/);
-  assert.match(sql, /'\^\[0-9\]\{4,17\}\$'/);
+  assert.match(sql, /'\^\[0-9\]\{5,17\}\$'/);
   assert.match(sql, /unmasked_account_number/);
   assert.equal(/auto_approve_(enabled|max_cents)\s*=/.test(sql), false);
   assert.equal(/GRANT (INSERT|UPDATE|ALL) ON TABLE/i.test(sql), false);
@@ -399,7 +434,7 @@ test('SPA: tenant card reads masked status from the server, never the table, and
   assert.match(card, /verifyMutation\.mutate\("account"\)/);
   assert.match(card, /Not registered/);
   assert.match(card, /Registered/);
-  assert.match(card, /\/\^\\d\{4,17\}\$\//);
+  assert.match(card, /\/\^\\d\{5,17\}\$\//);
   assert.equal(/from\("checkalt_tenant_accounts"\)/.test(card), false);
   assert.equal(/last_register_payload/.test(card), false);
   assert.equal(/id="[^"]*routing|routing_number/i.test(card), false, 'no routing number field');

@@ -80,8 +80,8 @@ export const PROVIDER_FUNCTIONS = [
   fn('checkalt-deposit-history', 'checkalt', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Live POST /fincapture/deposit/history with UAT ssoKey.'),
   fn('checkalt-account-status', 'checkalt', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Live getUserAccountInformation for isolated UAT depositor.'),
   fn('checkalt-test-connection', 'checkalt', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'POST /public/fincapture/authenticate { userName, password }.'),
-  fn('checkalt-register-account', 'checkalt', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Register UAT depositor into aws_provider_sandbox_objects, not production checkalt_tenant_accounts.'),
-  fn('checkalt-verify-account', 'checkalt', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'getUserAccountInformation with tenant sso_user_id, never API login.'),
+  fn('checkalt-register-account', 'checkalt', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Platform owner. Production: live /fincapture/useraccount/register, then SQL 81 writes checkalt_tenant_accounts (account number last four only in responses). Staging: UAT depositor in aws_provider_sandbox_objects, never production rows.'),
+  fn('checkalt-verify-account', 'checkalt', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Platform owner. action status (stored registration, no provider call), user (getUserAccountInformation) or account (getDepositAccountInformation) with the tenant sso_user_id, never the API login. Live answer shown masked; nothing persisted.'),
   fn('checkalt-prepare-image', 'checkalt', OP_CLASS.DEPOSIT, 'sandbox_parity', 'Fast-path prepared_path when source is under 450KB. ImageScript re-encode not ported.'),
 
   fn('plaid-link-token-create', 'plaid', OP_CLASS.BANK_CONNECTION, 'disabled', 'Creates a Plaid Link token.'),

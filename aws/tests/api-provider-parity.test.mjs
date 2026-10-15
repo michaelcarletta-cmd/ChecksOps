@@ -996,3 +996,15 @@ test('UAT Check Alt register refuses a non-digit deposit account number before c
     }
   });
 });
+
+test('UAT Check Alt verify: a missing or unknown action is 400 with no provider call', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const body of [{ tenant_id: FREEDOM_TENANT }, { tenant_id: FREEDOM_TENANT, action: 'history' }]) {
+      const { fetchImpl, calls } = uatReadFetch();
+      const result = await parityCall('checkalt-verify-account', parityClient(), fetchImpl, body);
+      assert.equal(result.statusCode, 400, JSON.stringify(body));
+      assert.equal(result.error, 'invalid_action', JSON.stringify(body));
+      assert.equal(calls.length, 0, JSON.stringify(body));
+    }
+  });
+});

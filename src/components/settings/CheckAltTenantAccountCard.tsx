@@ -17,8 +17,8 @@ import {
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { AlertTriangle, Landmark, Loader2, ShieldCheck, UserCheck, UserPlus } from "lucide-react";
 
-/** Digits only, 4-17. No routing number: Check Alt binds the bank through the platform FI key. */
-export const CHECKALT_ACCOUNT_NUMBER_PATTERN = /^\d{4,17}$/;
+/** Digits only, 5-17. No routing number: Check Alt binds the bank through the platform FI key. */
+export const CHECKALT_ACCOUNT_NUMBER_PATTERN = /^\d{5,17}$/;
 
 /** What checkalt-verify-account { action: "status" } returns. Account number is last four only. */
 type CheckAltRegistrationStatus = {
@@ -264,7 +264,7 @@ export function CheckAltTenantAccountCard() {
                   onChange={(e) => setReg({ ...reg, deposit_account_number: e.target.value })}
                 />
                 {reg.deposit_account_number && !accountNumberValid ? (
-                  <p className="text-xs text-destructive">Digits only, 4 to 17 digits.</p>
+                  <p className="text-xs text-destructive">Digits only, 5 to 17 digits.</p>
                 ) : null}
               </div>
             </div>

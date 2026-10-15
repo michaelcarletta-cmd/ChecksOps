@@ -104,7 +104,7 @@ export const validateRegisterBody = (body = {}) => {
       error: fail('invalid_deposit_account_number', 400, {
         field: 'deposit_account_number',
         productionExecution: false,
-        message: 'Deposit account number must be 4 to 17 digits, with no spaces, dashes or letters.',
+        message: 'Deposit account number must be 5 to 17 digits, with no spaces, dashes or letters.',
       }),
     };
   }
@@ -137,9 +137,17 @@ const sqlErrorResult = (error) => {
   return null;
 };
 
-export const REGISTER_WRITER_PRESENT_SQL = `SELECT to_regprocedure('public.aws_register_checkalt_tenant_account(uuid, jsonb)') IS NOT NULL AS present`;
+/**
+ * Pre-flight before any Check Alt call: the tenant exists (the platform owner
+ * reads every tenant under RLS) and this role can execute the SQL 81 writer.
+ */
+export const REGISTER_PREFLIGHT_SQL = `SELECT
+  EXISTS (SELECT 1 FROM public.tenants WHERE id = $1::uuid) AS tenant_exists,
+  COALESCE(has_function_privilege(
+    to_regprocedure('public.aws_register_checkalt_tenant_account(uuid, jsonb)'), 'EXECUTE'
+  ), false) AS writer_ok`;
 
-const loadStoredAccount =async (client, tenantId) => (await client.query(
+const loadStoredAccount = async (client, tenantId) => (await client.query(
   `SELECT tenant_id, sso_user_id, deposit_account_number, first_name, last_name, email,
           enabled, registered_at
    FROM public.checkalt_tenant_accounts
@@ -180,9 +188,12 @@ export async function handleProductionCheckAltRegister({
   if (input.error) return { ...input.error, spoofFieldsIgnored: spoof };
 
   // Never register with Check Alt when ChecksOps could not save the result.
-  const writer = (await client.query(REGISTER_WRITER_PRESENT_SQL)).rows[0];
-  if (!writer?.present) {
+  const preflight = (await client.query(REGISTER_PREFLIGHT_SQL, [input.tenantId])).rows[0];
+  if (!preflight?.writer_ok) {
     return { ...sqlErrorResult({ code: '42883' }), productionExecution: false, spoofFieldsIgnored: spoof };
+  }
+  if (!preflight.tenant_exists) {
+    return { ...sqlErrorResult({ code: 'P0002' }), productionExecution: false, spoofFieldsIgnored: spoof };
   }
 
   const loaded = await loadSecretsAndConfig(client, deps);
@@ -248,16 +259,17 @@ export async function handleProductionCheckAltRegister({
       })],
     )).rows[0]?.result;
   } catch (error) {
+    // Check Alt already accepted: never rethrow, always say so (generic, no SQL text).
     const mapped = sqlErrorResult(error);
-    if (!mapped) throw error;
-    return {
-      ...mapped,
+    return fail('register_save_failed', mapped?.statusCode || 500, {
+      reason: mapped?.error || 'database_error',
+      field: mapped?.field || undefined,
       liveProviderCalled: true,
       registeredWithCheckAlt: true,
       productionRecordsMutated: false,
-      message: `${mapped.message || mapped.error}. Check Alt accepted the registration but ChecksOps did not save it; register again once fixed.`,
+      message: 'Check Alt accepted the registration but ChecksOps did not save it. Nothing was changed in ChecksOps; register again once fixed.',
       spoofFieldsIgnored: spoof,
-    };
+    });
   }
 
   return ok({
@@ -280,7 +292,14 @@ export async function handleProductionCheckAltVerify({
   if (denied) return { ...denied, spoofFieldsIgnored: spoof };
   const tenantId = body.tenant_id;
   if (!isUuid(tenantId)) return fail('invalid_uuid', 400, { field: 'tenant_id', productionExecution: false });
-  const action = ['status', 'user', 'account'].includes(body.action) ? body.action : 'user';
+  if (!['status', 'user', 'account'].includes(body.action)) {
+    return fail('invalid_action', 400, {
+      field: 'action',
+      productionExecution: false,
+      message: 'action must be status, user or account.',
+    });
+  }
+  const { action } = body;
 
   const row = await loadStoredAccount(client, tenantId);
   const status = publicRegistrationStatus(row);

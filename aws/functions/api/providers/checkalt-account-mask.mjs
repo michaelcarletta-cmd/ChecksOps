@@ -8,8 +8,12 @@
  * never echoed back.
  */
 
-/** Digits only, 4 to 17 (US DDA/savings). No routing number: Check Alt binds the bank via the FI key. */
-export const CHECKALT_ACCOUNT_NUMBER_RE = /^\d{4,17}$/;
+/**
+ * Digits only, 5 to 17 (US DDA/savings). At least five so the masked form
+ * (****1234) never equals or contains the whole number. No routing number:
+ * Check Alt binds the bank via the FI key.
+ */
+export const CHECKALT_ACCOUNT_NUMBER_RE = /^\d{5,17}$/;
 
 export const MASK_PREFIX = '****';
 
@@ -24,7 +28,7 @@ export const maskAccountNumber = (value) => {
   return last4 ? `${MASK_PREFIX}${last4}` : MASK_PREFIX;
 };
 
-/** Returns the normalized number, or null when it is not 4-17 digits. */
+/** Returns the normalized number, or null when it is not 5-17 digits. */
 export const normalizeDepositAccountNumber = (value) => {
   if (typeof value !== 'string' && typeof value !== 'number') return null;
   const text = String(value).trim();
