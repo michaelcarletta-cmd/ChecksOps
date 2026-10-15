@@ -9,6 +9,7 @@ import { denyTableReason, WRITE_ALLOWLIST } from '../functions/api/write-allowli
 import { executeAllowlistedWrite } from '../functions/api/write.mjs';
 import {
   AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL,
+  CHECKALT_TENANT_MEMBER_SQL,
   SAFE_WRITE_RPCS,
   executeSafeWriteRpc,
 } from '../functions/api/workflow-rpc.mjs';
@@ -234,8 +235,11 @@ const memberClient = ({ memberOf = FREEDOM, tenantRole = 'operator', result } = 
       if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: false }] };
       if (sql === USER_ROLES_SQL) return { rows: [] };
       if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
-        if (/role/.test(sql)) throw new Error('the Auto-Deposit gate must not filter on tenant role');
-        return { rows: params[0] === APP_ID && params[1] === memberOf ? [{ role: tenantRole }] : [] };
+        // Honor the role allowlist exactly as the gate's SQL spells it.
+        const allowed = [...(sql.match(/lower\(role::text\) IN \(([^)]*)\)/)?.[1] || '').matchAll(/'([^']+)'/g)].map((m) => m[1]);
+        if (!allowed.length) throw new Error('the Auto-Deposit gate must filter on tenant role');
+        const ok = params[0] === APP_ID && params[1] === memberOf && allowed.includes(tenantRole);
+        return { rows: ok ? [{ role: tenantRole }] : [] };
       }
       if (sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL) {
         if (result !== undefined) return { rows: result === null ? [] : [{ result }] };
@@ -261,8 +265,8 @@ const save = (client, args) => executeSafeWriteRpc({
   args,
 });
 
-test('any tenant member (operator, viewer) can toggle Auto-Deposit and set or clear the ceiling', async () => {
-  for (const tenantRole of ['operator', 'viewer', 'member', 'admin']) {
+test('tenant operators and admins can toggle Auto-Deposit and set or clear the ceiling', async () => {
+  for (const tenantRole of ['operator', 'admin', 'owner', 'manager']) {
     const client = memberClient({ tenantRole });
     const off = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false, auto_approve_max_cents: 200000 });
     assert.equal(off.error, undefined, tenantRole);
@@ -276,6 +280,16 @@ test('any tenant member (operator, viewer) can toggle Auto-Deposit and set or cl
       { auto_approve_enabled: false, auto_approve_max_cents: 200000 },
       { auto_approve_enabled: true, auto_approve_max_cents: null },
     ]);
+  }
+});
+
+test('viewers (and unknown roles) cannot change Auto-Deposit, and nothing is written', async () => {
+  assert.match(CHECKALT_TENANT_MEMBER_SQL, /lower\(role::text\) IN \('owner', 'admin', 'manager', 'operator'\)/);
+  for (const tenantRole of ['viewer', 'Viewer', 'member', 'partner', '']) {
+    const client = memberClient({ tenantRole });
+    const denied = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false });
+    assert.equal(denied.error, 'not_authorized', tenantRole);
+    assert.equal(client.queries.some((q) => q.sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL), false, tenantRole);
   }
 });
 
@@ -314,7 +328,7 @@ test('a save that returns no stored row is an error, never a silent success', as
   assert.equal(otherRow.error, 'rls_denied');
 });
 
-test('SQL 80 replaces the persist RPC with a plain-membership gate and keeps the column whitelist', () => {
+test('SQL 80 replaces the persist RPC with an owner/admin/manager/operator gate and keeps the column whitelist', () => {
   assert.match(sql80, /CREATE OR REPLACE FUNCTION public\.aws_save_checkalt_tenant_auto_deposit\(\s*_tenant_id uuid,\s*_settings jsonb\s*\)/);
   assert.match(sql80, /SECURITY DEFINER/);
   assert.match(sql80, /SET row_security = off/);
@@ -322,7 +336,8 @@ test('SQL 80 replaces the persist RPC with a plain-membership gate and keeps the
   assert.match(gate, /is_platform_owner\(\)/);
   assert.match(gate, /tu\.user_id = auth\.uid\(\)/);
   assert.match(gate, /tu\.tenant_id = _tenant_id/);
-  assert.equal(/role/.test(gate), false);
+  assert.match(gate, /AND lower\(tu\.role::text\) IN \('owner', 'admin', 'manager', 'operator'\)/);
+  assert.equal(/viewer/.test(gate), false);
   const keyGuard = sql80.slice(sql80.indexOf('FOR _key IN'), sql80.indexOf('IF NOT ('));
   assert.match(keyGuard, /_key NOT IN \('auto_approve_enabled', 'auto_approve_max_cents'\)/);
   const updateSlice = sql80.slice(sql80.indexOf('UPDATE public.checkalt_tenant_accounts'), sql80.indexOf('RETURNING'));

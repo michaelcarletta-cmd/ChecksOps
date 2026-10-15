@@ -21,8 +21,29 @@ const read = (name) => fs.readFileSync(path.join(API, name), 'utf8');
 const sha256 = (name) => createHash('sha256').update(fs.readFileSync(path.join(API, name))).digest('hex');
 const fileSha = (rel) => createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
 
+const PLAN_PATH = path.join(ROOT, 'ops/deployment-guard/production-api-overlay-plan.json');
+
 const proof = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
 const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+const plan = JSON.parse(fs.readFileSync(PLAN_PATH, 'utf8'));
+
+/**
+ * A member whose production overlay plan entry names a newer manifest is
+ * governed by that manifest: its bytes have moved on from the 2026-10-08
+ * reconciliation by design. Returns that manifest's row for the member, or null.
+ */
+const newerManifestRow = (name) => {
+  const rel = plan.members?.[name]?.manifest;
+  if (!rel) return null;
+  const newer = JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  assert.ok(newer.members?.[name], `${rel} must list ${name}`);
+  return newer.members[name];
+};
+
+/** Chain check: the newer manifest replaces exactly the reconciled bytes. */
+const assertChainsFromReconciled = (name, row) => {
+  assert.equal(row.live_sha256, proof.members[name].reconciled_sha256, `${name} newer manifest live_sha256 must equal the 2026-10-08 reconciled bytes`);
+};
 
 test('proof pins the official live production Lambda identity', () => {
   assert.equal(proof.function_name, 'checksops-production-prep-api');
@@ -33,6 +54,11 @@ test('proof pins the official live production Lambda identity', () => {
 
 test('reconciled members match the pinned SHA-256 values', () => {
   for (const [name, row] of Object.entries(proof.members)) {
+    const newer = name === 'ocr.mjs' ? null : newerManifestRow(name);
+    if (newer) {
+      assertChainsFromReconciled(name, newer);
+      continue;
+    }
     const expected = name === 'ocr.mjs' ? row.repo_sha256 : row.reconciled_sha256;
     assert.equal(sha256(name), expected, name);
   }
@@ -141,6 +167,11 @@ test('deployment manifest pins live hashes, accepted hashes, and SQL order', () 
     assert.equal(row.live_sha256, proof.members[name].live_sha256, name);
     if (name === 'ocr.mjs') {
       assert.equal(sha256(name), row.repo_sha256);
+      continue;
+    }
+    const newer = newerManifestRow(name);
+    if (newer) {
+      assertChainsFromReconciled(name, newer);
       continue;
     }
     assert.equal(sha256(name), row.accepted_sha256, name);

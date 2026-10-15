@@ -5,10 +5,10 @@
  * through the real save_checkalt_tenant_auto_deposit RPC executor as checksops
  * (RLS on).
  *
- * Before SQL 80 a plain member (tenant role operator/viewer, no user_roles row)
- * passes the API gate but the SQL 38 RPC refuses; after SQL 80 any member of the
- * tenant can change only auto_approve_enabled and auto_approve_max_cents on that
- * tenant's row. Members of other tenants, platform admins without membership,
+ * Before SQL 80 a tenant operator (no user_roles row) passes the API gate but
+ * the SQL 38 RPC refuses; after SQL 80 an operator or admin of the tenant can
+ * change only auto_approve_enabled and auto_approve_max_cents on that tenant's
+ * row. Viewers, members of other tenants, platform admins without membership,
  * extra columns, bad ceilings and direct table UPDATEs stay refused.
  */
 import assert from 'node:assert/strict';
@@ -74,7 +74,7 @@ const autoDepositViewSql = () => {
   return text.slice(text.indexOf('DROP VIEW IF EXISTS public.checkalt_tenant_auto_deposit_public'));
 };
 
-test('PostgreSQL 16: SQL 80 lets any member of the tenant change only its Auto-Deposit settings', {
+test('PostgreSQL 16: SQL 80 lets tenant operators and admins, not viewers, change only its Auto-Deposit settings', {
   timeout: 180000, skip: pgSkipReason() || false,
 }, async () => {
   const { default: pg } = await import('pg');
@@ -126,10 +126,8 @@ test('PostgreSQL 16: SQL 80 lets any member of the tenant change only its Auto-D
     }
     assert.deepEqual((await viewRows(B_MEMBER)).map((r) => r.tenant_id), [TENANT_B]);
 
-    // SQL 38: a plain member passes the API's membership gate but the RPC refuses.
-    for (const user of [A_OPERATOR, A_VIEWER]) {
-      assert.equal((await save(user, { tenant_id: TENANT_A, auto_approve_enabled: false })).error, 'not_authorized', user);
-    }
+    // SQL 38: an operator passes the API's role gate but the RPC refuses.
+    assert.equal((await save(A_OPERATOR, { tenant_id: TENANT_A, auto_approve_enabled: false })).error, 'not_authorized');
     assert.equal((await stored(TENANT_A)).auto_approve_enabled, true);
 
     await client.query(fs.readFileSync(SQL_80, 'utf8'));
@@ -139,8 +137,11 @@ test('PostgreSQL 16: SQL 80 lets any member of the tenant change only its Auto-D
     assert.equal(result.error, undefined, JSON.stringify(result));
     assert.deepEqual(result.data, { tenant_id: TENANT_A, auto_approve_enabled: false, auto_approve_max_cents: 200000 });
     assert.equal((await stored(TENANT_A)).auto_approve_enabled, false);
-    // Viewer turns it on and clears the ceiling (blank = no automatic approval).
-    result = await save(A_VIEWER, { tenant_id: TENANT_A, auto_approve_enabled: true, auto_approve_max_cents: null });
+    // A viewer cannot change it (the setting controls automatic approval), not even directly.
+    assert.equal((await save(A_VIEWER, { tenant_id: TENANT_A, auto_approve_enabled: true })).error, 'not_authorized');
+    assert.equal((await stored(TENANT_A)).auto_approve_enabled, false);
+    // Operator turns it on and clears the ceiling (blank = no automatic approval).
+    result = await save(A_OPERATOR, { tenant_id: TENANT_A, auto_approve_enabled: true, auto_approve_max_cents: null });
     assert.equal(result.error, undefined, JSON.stringify(result));
     assert.deepEqual(await stored(TENANT_A), {
       auto_approve_enabled: true, auto_approve_max_cents: null, sso_user_id: 'sso-a', deposit_account_number: '1111', enabled: true,
@@ -150,8 +151,8 @@ test('PostgreSQL 16: SQL 80 lets any member of the tenant change only its Auto-D
     assert.equal(result.error, undefined, JSON.stringify(result));
     assert.equal((await stored(TENANT_A)).auto_approve_max_cents, 150000);
 
-    // Another tenant's member, and a platform admin with no membership, cannot change tenant A.
-    for (const user of [B_MEMBER, PLATFORM_ADMIN]) {
+    // A viewer, another tenant's member, and a platform admin with no membership cannot change tenant A.
+    for (const user of [A_VIEWER, B_MEMBER, PLATFORM_ADMIN]) {
       assert.equal((await save(user, { tenant_id: TENANT_A, auto_approve_enabled: false })).error, 'not_authorized', user);
     }
     // A's member cannot change tenant B either.
@@ -175,6 +176,7 @@ test('PostgreSQL 16: SQL 80 lets any member of the tenant change only its Auto-D
     await assert.rejects(direct(A_OPERATOR, { auto_approve_max_cents: 12.5 }), /invalid_field/);
     await assert.rejects(direct(A_OPERATOR, { auto_approve_max_cents: '100' }), /invalid_field/);
     await assert.rejects(direct(B_MEMBER, { auto_approve_enabled: false }), /not_authorized/);
+    await assert.rejects(direct(A_VIEWER, { auto_approve_enabled: false }), /not_authorized/);
 
     // A tenant with no Check Alt account: not_found, never a silent success.
     await client.query('DELETE FROM public.checkalt_tenant_accounts WHERE tenant_id = $1', [TENANT_B]);

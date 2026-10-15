@@ -1,10 +1,12 @@
--- Let any member of a tenant change that tenant's Check Alt auto-approve
--- settings, without a tenant admin/owner role.
+-- Let operators of a tenant, not only its admins, change that tenant's
+-- Check Alt auto-approve settings. Viewers stay refused: the setting controls
+-- automatic approval of deposits.
 --
 -- Replaces public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb) from
 -- aws/rls/sql/38_checkalt_auto_deposit_persist.sql. The only behavior changes:
---   * the caller must be the platform owner or ANY tenant_users member of
---     _tenant_id (SQL 38 required tenant_users.role admin/owner);
+--   * the caller must be the platform owner or a tenant_users member of
+--     _tenant_id with role owner, admin, manager or operator (SQL 38 required
+--     admin/owner); viewers and unknown roles are refused;
 --   * auto_approve_enabled must be a JSON boolean, and auto_approve_max_cents
 --     must be JSON null or a non-negative integer that fits the column.
 -- Everything else is unchanged: SECURITY DEFINER, only auto_approve_enabled and
@@ -52,6 +54,7 @@ BEGIN
       FROM public.tenant_users tu
       WHERE tu.user_id = auth.uid()
         AND tu.tenant_id = _tenant_id
+        AND lower(tu.role::text) IN ('owner', 'admin', 'manager', 'operator')
     )
   ) THEN
     RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
@@ -107,7 +110,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb) IS
-  'Tenant-member/platform-owner Auto-Deposit persist (SQL 80). Updates only auto_approve_enabled and auto_approve_max_cents on the caller''s own tenant row. Does not grant generic table UPDATE.';
+  'Tenant owner/admin/manager/operator or platform-owner Auto-Deposit persist (SQL 80); viewers refused. Updates only auto_approve_enabled and auto_approve_max_cents on the caller''s own tenant row. Does not grant generic table UPDATE.';
 
 REVOKE ALL ON FUNCTION public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb) TO checksops, authenticated;

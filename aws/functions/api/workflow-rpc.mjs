@@ -908,12 +908,14 @@ const requirePlatformOwner = async (client) => {
 };
 
 export const CHECKALT_TENANT_MEMBER_SQL = `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid`;
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')`;
 
 /**
- * Check Alt member policy: the platform owner, or ANY tenant_users member of
- * this tenant (no tenant admin/owner role). Platform admin/staff without a
- * membership of the tenant are refused.
+ * Check Alt member policy: the platform owner, or a tenant_users member of
+ * this tenant whose role is owner, admin, manager or operator. Viewers (the
+ * setting controls automatic approval of deposits) and platform admin/staff
+ * without a membership of the tenant are refused.
  */
 const requireOwnTenantMember = async (client, userId, tenantId) => {
   const owner = await requirePlatformOwner(client);
@@ -923,7 +925,7 @@ const requireOwnTenantMember = async (client, userId, tenantId) => {
   }
   const member = (await client.query(CHECKALT_TENANT_MEMBER_SQL, [userId, tenantId])).rows[0];
   if (!member) {
-    return { error: 'not_authorized', message: 'Only members of this tenant can change its Auto-Deposit settings' };
+    return { error: 'not_authorized', message: 'Only members of this tenant (not viewers) can change its Auto-Deposit settings' };
   }
   return { ok: true };
 };
@@ -1130,7 +1132,7 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
   } catch (error) {
     const message = String(error?.message || '');
     if (/not_authorized/i.test(message) || error?.code === '42501') {
-      return { error: 'not_authorized', message: 'Only members of this tenant can change its Auto-Deposit settings' };
+      return { error: 'not_authorized', message: 'Only members of this tenant (not viewers) can change its Auto-Deposit settings' };
     }
     if (/invalid_field/i.test(message) || error?.code === '22023') {
       return { error: 'invalid_field', field: 'auto_approve_max_cents' };

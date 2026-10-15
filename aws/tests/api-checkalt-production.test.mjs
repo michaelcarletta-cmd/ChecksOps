@@ -681,28 +681,53 @@ test('missing front or rear deposit JPEG fails closed before provider HTTP', asy
   assert.equal(missingRear.processPosts, 0);
 });
 
-test('any tenant member (operator, viewer) can submit with its own TOTP; without it, step-up is still required', async () => {
-  for (const role of ['operator', 'viewer']) {
-    const noTotp = createStore({ role });
-    const refused = await submitOnce(noTotp);
-    assert.equal(refused.statusCode, 403, role);
-    assert.equal(refused.error, 'step_up_required', role);
-    assert.equal(noTotp.processPosts, 0);
+const partnerMemberships = [{ tenant_id: C1C_TENANT, role: 'admin', tenant_name: 'C1C', tenant_slug: 'c1c' }];
 
-    const store = createStore({ role });
-    grantStepUp(store);
-    const result = await submitOnce(store);
-    assert.equal(result.statusCode, 200, `${role}: ${JSON.stringify(result)}`);
-    assert.equal(result.checkalt_reference, '9001');
-    assert.equal(store.processPosts, 1);
-  }
+test('a tenant operator can submit with its own TOTP; without it, step-up is still required', async () => {
+  const noTotp = createStore({ role: 'operator' });
+  const refused = await submitOnce(noTotp);
+  assert.equal(refused.statusCode, 403);
+  assert.equal(refused.error, 'step_up_required');
+  assert.equal(noTotp.processPosts, 0);
+
+  const store = createStore({ role: 'operator' });
+  grantStepUp(store);
+  const result = await submitOnce(store);
+  assert.equal(result.statusCode, 200, JSON.stringify(result));
+  assert.equal(result.checkalt_reference, '9001');
+  assert.equal(store.processPosts, 1);
 });
 
-test('Check Alt authorization is tenant membership, not an owner/admin/manager role', () => {
-  for (const roles of [[], ['operator'], ['viewer'], ['staff']]) {
+test('a tenant viewer cannot submit even with a valid TOTP', async () => {
+  const store = createStore({ role: 'viewer' });
+  grantStepUp(store);
+  const result = await submitOnce(store);
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'financial_unauthorized');
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 0);
+});
+
+test('a partner (member of another tenant the check is shared with) cannot submit', async () => {
+  const store = createStore({ memberships: partnerMemberships });
+  grantStepUp(store, { tenantId: C1C_TENANT });
+  const result = await submitOnce(store);
+  assert.equal(result.statusCode, 403);
+  // Refused by the ownership chain (user -> tenant membership -> check) before the role check.
+  assert.equal(result.error, 'tenant_membership_required');
+  assert.equal(store.processPosts, 0);
+});
+
+test('Check Alt authorization is tenant membership with an owner/admin/manager/operator role', () => {
+  for (const roles of [['operator'], ['admin'], ['owner'], ['manager'], ['Operator'], ['viewer', 'admin']]) {
     const member = evaluateCheckAltProductionAuthorization({ identityOk: true, membershipOk: true, roles, totpOk: true });
     assert.equal(member.roleOk, true, JSON.stringify(roles));
     assert.equal(member.stepUpOk, true);
+  }
+  for (const roles of [[], ['viewer'], ['staff'], ['member'], ['partner'], ['viewer', 'staff']]) {
+    const refused = evaluateCheckAltProductionAuthorization({ identityOk: true, membershipOk: true, roles, totpOk: true });
+    assert.equal(refused.roleOk, false, JSON.stringify(roles));
+    assert.equal(refused.canExecuteProductionCheckAlt, false);
   }
   const outsider = evaluateCheckAltProductionAuthorization({ identityOk: true, membershipOk: false, roles: ['admin'], totpOk: true });
   assert.equal(outsider.roleOk, false);
@@ -1467,47 +1492,97 @@ test('a valid deposit.approve step-up approves once; replaying it never POSTs ap
   assert.equal(store.processPosts, 0);
 });
 
-test('any tenant member (operator, viewer) can approve with its own deposit.approve step-up', async () => {
-  for (const role of ['operator', 'viewer']) {
-    const refused = createStore({ role });
-    pendingApprovalDeposit(refused);
-    assertApproveRefused(refused, await approveOnce(refused));
+test('a tenant operator can approve with its own deposit.approve step-up', async () => {
+  const refused = createStore({ role: 'operator' });
+  pendingApprovalDeposit(refused);
+  assertApproveRefused(refused, await approveOnce(refused));
 
-    const store = createStore({ role });
-    pendingApprovalDeposit(store);
-    grantStepUp(store, { action: 'deposit.approve' });
-    const result = await approveOnce(store);
-    assert.equal(result.ok, true, `${role}: ${JSON.stringify(result)}`);
-    assert.equal(result.approvePosted, true);
-    assert.equal(store.approvePosts, 1);
-  }
+  const store = createStore({ role: 'operator' });
+  pendingApprovalDeposit(store);
+  grantStepUp(store, { action: 'deposit.approve' });
+  const result = await approveOnce(store);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.approvePosted, true);
+  assert.equal(store.approvePosts, 1);
 });
 
-test('any tenant member (operator, viewer) can refresh Check Alt status without a step-up', async () => {
-  for (const role of ['operator', 'viewer']) {
-    const store = createStore({ role });
-    store.itemPayload = { statusCode: 127, status: 127, statusDescription: 'Approved' };
-    store.deposits.push({
-      id: DEPOSIT_ID,
-      tenant_id: FREEDOM_TENANT,
-      check_intake_item_id: CHECK_ID,
-      checkalt_reference: '9001',
-      status: 'pending_approval',
-      amount: 12.34,
-      amount_cents: 1234,
-      cleared_at: null,
-    });
-    const result = await withEnv(productionPollFlags, () => handleProviderRequest(
-      jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
-      '/functions/v1/checkalt-poll-status',
-      'POST',
-      submitDeps(store),
-    ));
-    assert.equal(result.statusCode, 200, `${role}: ${JSON.stringify(result)}`);
-    assert.equal(result.polled, 1);
-    assert.equal(store.processPosts, 0);
-    assert.equal(store.approvePosts, 0);
-  }
+test('a tenant viewer cannot approve or reject, even with a valid deposit.approve step-up', async () => {
+  const store = createStore({ role: 'viewer' });
+  pendingApprovalDeposit(store);
+  grantStepUp(store, { action: 'deposit.approve' });
+  assertApproveRefused(store, await approveOnce(store), 'financial_unauthorized');
+  assertApproveRefused(store, await approveOnce(store, { action: 'reject' }), 'financial_unauthorized');
+});
+
+test('a partner (member of another tenant) cannot approve the owner tenant deposit', async () => {
+  const store = createStore({ memberships: partnerMemberships });
+  pendingApprovalDeposit(store);
+  grantStepUp(store, { action: 'deposit.approve', tenantId: C1C_TENANT });
+  assertApproveRefused(store, await approveOnce(store), 'cross_tenant_denied');
+});
+
+const pollFor = (store, body = {}) => withEnv(productionPollFlags, () => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-poll-status', 'POST', body),
+  '/functions/v1/checkalt-poll-status',
+  'POST',
+  submitDeps(store),
+));
+
+const refreshableDeposit = (store) => {
+  store.itemPayload = { statusCode: 127, status: 127, statusDescription: 'Approved' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    cleared_at: null,
+  });
+};
+
+test('a tenant operator can refresh Check Alt status without a step-up', async () => {
+  const store = createStore({ role: 'operator' });
+  refreshableDeposit(store);
+  const result = await pollFor(store);
+  assert.equal(result.statusCode, 200, JSON.stringify(result));
+  assert.equal(result.polled, 1);
+  assert.equal(result.updated, 1);
+  assert.equal(store.itemPosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+});
+
+test('a tenant viewer cannot refresh Check Alt status: no provider call, no status change', async () => {
+  const one = createStore({ role: 'viewer' });
+  refreshableDeposit(one);
+  const denied = await pollFor(one, { deposit_id: DEPOSIT_ID });
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.error, 'financial_unauthorized');
+  assert.equal(one.itemPosts, 0);
+  assert.equal(one.deposits[0].status, 'pending_approval');
+
+  const all = createStore({ role: 'viewer' });
+  refreshableDeposit(all);
+  const sweep = await pollFor(all);
+  assert.equal(sweep.polled, 0);
+  assert.equal(sweep.updated, 0);
+  assert.equal(all.itemPosts, 0);
+  assert.equal(all.deposits[0].status, 'pending_approval');
+});
+
+test('a partner (member of another tenant) cannot refresh the owner tenant deposit', async () => {
+  const store = createStore({ memberships: partnerMemberships });
+  refreshableDeposit(store);
+  const denied = await pollFor(store, { deposit_id: DEPOSIT_ID });
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.error, 'cross_tenant_denied');
+  assert.equal(store.itemPosts, 0);
+  const sweep = await pollFor(store);
+  assert.equal(sweep.polled || 0, 0);
+  assert.equal(store.itemPosts, 0);
+  assert.equal(store.deposits[0].status, 'pending_approval');
 });
 
 test('reject does not require a deposit.approve step-up', async () => {

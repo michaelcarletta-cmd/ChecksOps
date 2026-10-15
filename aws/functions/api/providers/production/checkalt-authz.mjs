@@ -141,14 +141,26 @@ export async function loadDualControlApproval(client, {
 }
 
 /**
+ * Roles that may submit, approve, reject and refresh Check Alt deposits for a
+ * tenant they belong to. Viewers (for example partners added to a tenant to
+ * see shared checks) may not. `roles` holds the caller's tenant_users role for
+ * the check's tenant plus any platform user_roles (loadTenantRole); unknown
+ * roles fail closed.
+ */
+export const CHECKALT_OPERATOR_ROLES = Object.freeze(['owner', 'admin', 'manager', 'operator']);
+
+export const roleAllowsCheckAlt = (roles = []) =>
+  roles.some((role) => CHECKALT_OPERATOR_ROLES.includes(String(role || '').toLowerCase()));
+
+/**
  * Server-side CheckAlt production authorization.
  * Does not flip evaluateFinancialAuthorization().canExecuteProduction.
  *
- * Product policy: any member of the check's tenant may submit, approve and
- * refresh Check Alt deposits. Tenant membership (verified server-side from
- * tenant_users, never from the browser) is the authority; there is no
- * owner/admin/manager role gate. Money actions still need the step-up.
- * `roles` is recorded for audit only.
+ * Product policy: a member of the check's tenant (verified server-side from
+ * tenant_users, never from the browser) whose role is owner, admin, manager or
+ * operator may submit, approve and refresh Check Alt deposits. Viewers and
+ * members of other tenants (including partner tenants a check is shared with)
+ * may not. Money actions still need the step-up.
  */
 export const evaluateCheckAltProductionAuthorization = ({
   identityOk,
@@ -157,7 +169,7 @@ export const evaluateCheckAltProductionAuthorization = ({
   totpOk = false,
   dualControlOk = false,
 } = {}) => {
-  const roleOk = Boolean(membershipOk);
+  const roleOk = Boolean(membershipOk) && roleAllowsCheckAlt(roles);
   const stepUpOk = Boolean(totpOk || dualControlOk);
   const flagsOk = productionCheckAltExecutionAllowed();
   const canExecute = Boolean(identityOk && membershipOk && roleOk && stepUpOk && flagsOk);
@@ -178,7 +190,7 @@ export const evaluateCheckAltProductionAuthorization = ({
       : !membershipOk
         ? 'Tenant membership of the check is required.'
         : !roleOk
-          ? 'Tenant membership of the check is required.'
+          ? 'Viewers cannot submit, approve or refresh Check Alt deposits. Owner/admin/manager/operator required.'
           : !stepUpOk
             ? 'Cognito TOTP step-up or dual-control approval from a distinct owner/admin/manager is required, bound to this check and amount.'
             : !flagsOk
