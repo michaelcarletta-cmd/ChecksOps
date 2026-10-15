@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
-import { useIdentityTenantAccess } from "@/hooks/useCanMoveChecks";
+import { useCheckAltAccess } from "@/hooks/useCanMoveChecks";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { canSaveCheckAltAutoDeposit } from "@/lib/checkAltOperatorAccess";
+import { canSaveCheckAltAutoDeposit, checkAltAccessState } from "@/lib/checkAltOperatorAccess";
+import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -33,11 +34,16 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
   const tenantId = tenantIdProp ?? tenant?.id ?? null;
   const qc = useQueryClient();
   const { user } = useAuth();
-  const access = useIdentityTenantAccess(tenantId);
+  const access = useCheckAltAccess();
   const canEdit = canSaveCheckAltAutoDeposit({
-    isTenantMember: access.isTenantMember,
-    tenantRole: access.tenantRole,
+    memberships: access.memberships,
+    tenantId,
     isPlatformOwner: isPlatformOwner(user?.email, user?.id),
+  });
+  const accessState = checkAltAccessState({
+    isLoading: access.isLoading,
+    isError: access.isError,
+    allowed: canEdit,
   });
   const [enabled, setEnabled] = useState(false);
   const [maxDollars, setMaxDollars] = useState<string>("");
@@ -206,9 +212,11 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
                 {save.isPending ? "Saving..." : "Save settings"}
               </Button>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
-                Only owners, admins, managers and operators of this organization can change Auto-Deposit settings.
-              </p>
+              <CheckAltAccessNote
+                state={accessState}
+                action="change Auto-Deposit settings"
+                onRetry={() => access.retry()}
+              />
             )}
           </>
         )}

@@ -7,7 +7,7 @@ import { matchesAmountQuery } from "@/features/check-command/status";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
-import { useCanOperateCheckAlt } from "@/hooks/useCanMoveChecks";
+import { useCheckAltAccess } from "@/hooks/useCanMoveChecks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -114,7 +114,8 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   const { user } = useAuth();
   const { tenantId } = useTenantFilter();
   // Check Alt Submit/Resubmit Deposit are hidden from viewers and non-members.
-  const canOperateCheckAlt = useCanOperateCheckAlt();
+  const checkAltAccess = useCheckAltAccess();
+  const canOperateCheckAlt = checkAltAccess.canOperateIn(tenantId);
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);

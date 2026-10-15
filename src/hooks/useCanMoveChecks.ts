@@ -2,19 +2,18 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
 import { canMoveTenantChecks } from "@/lib/tenantCheckUser";
-import { canOperateCheckAlt } from "@/lib/checkAltOperatorAccess";
-import { loadTenantCheckIdentity } from "@/lib/tenantCheckIdentity";
+import {
+  canOperateCheckAltForTenant,
+  canOperateCheckAltInAnyTenant,
+  type TenantMembership,
+} from "@/lib/checkAltOperatorAccess";
+import { loadIdentityTenantMemberships, loadTenantCheckIdentity } from "@/lib/tenantCheckIdentity";
 import { useAuth } from "./useAuth";
 import { useTenantFilter } from "./useTenantFilter";
 
-/**
- * The signed-in user's membership of a tenant. Defaults to the current tenant
- * (useTenantFilter); pass a tenant id to ask about a specific tenant.
- */
-export function useIdentityTenantAccess(tenantIdOverride?: string | null) {
+export function useIdentityTenantAccess() {
   const { user, userRole } = useAuth();
-  const { tenantId: currentTenantId } = useTenantFilter();
-  const tenantId = tenantIdOverride !== undefined ? tenantIdOverride : currentTenantId;
+  const { tenantId } = useTenantFilter();
   const aws = isAwsStaging();
 
   const { data: identity } = useQuery({
@@ -66,12 +65,53 @@ export function useCanMoveChecks(): boolean {
 }
 
 /**
- * True when the user's tenant role for this tenant (default: the current
- * tenant) is owner, admin, manager or operator. Hides Check Alt submit,
- * approve, reject and refresh-status controls from viewers and non-members.
- * False while loading. UX only; the server enforces the same rule.
+ * Every tenant_users membership (tenant id + role) of the signed-in user:
+ * AWS GET /identity/me, or tenant_users on the legacy backend. isLoading
+ * covers auth still loading; isError means the memberships could not be read.
  */
-export function useCanOperateCheckAlt(tenantIdOverride?: string | null): boolean {
-  const { isTenantMember, tenantRole } = useIdentityTenantAccess(tenantIdOverride);
-  return canOperateCheckAlt({ isTenantMember, tenantRole });
+export function useTenantMemberships() {
+  const { user, loading: authLoading } = useAuth();
+  const aws = isAwsStaging();
+  const enabled = !!user?.id;
+  const query = useQuery({
+    queryKey: ["identity-tenant-memberships", aws ? "aws" : "legacy", user?.id],
+    enabled,
+    queryFn: async (): Promise<TenantMembership[]> => {
+      if (aws) return loadIdentityTenantMemberships({ apiBaseUrl: awsApiBaseUrl() });
+      const { data, error } = await supabase
+        .from("tenant_users")
+        .select("tenant_id, role")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        tenant_id: String(row.tenant_id),
+        role: row.role == null ? null : String(row.role),
+      }));
+    },
+  });
+  return {
+    memberships: query.data ?? [],
+    isLoading: authLoading || (enabled && query.isPending),
+    isError: query.isError,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Check Alt submit, approve, reject and refresh-status gating. canOperateIn
+ * answers for one tenant (a check's or a deposit row's tenant); canOperateInAny
+ * is for tenant-wide Poll Now. False while loading or on error. UX only; the
+ * server enforces the same rule.
+ */
+export function useCheckAltAccess() {
+  const { memberships, isLoading, isError, refetch } = useTenantMemberships();
+  return {
+    memberships,
+    isLoading,
+    isError,
+    retry: refetch,
+    canOperateIn: (tenantId: string | null | undefined) =>
+      canOperateCheckAltForTenant(memberships, tenantId),
+    canOperateInAny: canOperateCheckAltInAnyTenant(memberships),
+  };
 }

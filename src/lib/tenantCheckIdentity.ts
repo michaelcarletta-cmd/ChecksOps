@@ -96,3 +96,46 @@ export async function loadTenantCheckIdentity(input: {
     return { ...EMPTY_IDENTITY };
   }
 }
+
+export type IdentityTenantMembership = { tenant_id: string; role: string | null };
+
+/** Every tenant_users membership in a trusted GET /identity/me payload. */
+export function parseIdentityTenantMemberships(identity: unknown): IdentityTenantMembership[] {
+  if (!identity || typeof identity !== "object") return [];
+  const record = identity as Record<string, unknown>;
+  if (record.ok === false || !record.applicationUserId) return [];
+  const tenants = Array.isArray(record.tenants) ? record.tenants : [];
+  const out: IdentityTenantMembership[] = [];
+  for (const row of tenants) {
+    if (!row || typeof row !== "object") continue;
+    const tenantId = (row as { tenant_id?: unknown }).tenant_id;
+    if (typeof tenantId !== "string" || !tenantId) continue;
+    const role = (row as { role?: unknown }).role;
+    out.push({ tenant_id: tenantId, role: typeof role === "string" ? role : null });
+  }
+  return out;
+}
+
+/**
+ * All of the signed-in user's tenant memberships from GET /identity/me.
+ * No session or no AWS API: empty (fail closed). A failed request throws so
+ * the caller can tell "could not check" apart from "not a member".
+ */
+export async function loadIdentityTenantMemberships(input: {
+  apiBaseUrl?: string;
+  idToken?: string | null;
+  fetchImpl?: typeof fetch;
+} = {}): Promise<IdentityTenantMembership[]> {
+  const url = identityMeRequestUrl(input.apiBaseUrl ?? "");
+  const idToken = input.idToken !== undefined ? input.idToken : readIdToken();
+  if (!url || !idToken) return [];
+  const response = await (input.fetchImpl || fetch)(url, {
+    method: "GET",
+    headers: { authorization: `Bearer ${idToken}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body?.ok === false || !body?.applicationUserId) {
+    throw new Error("Couldn't load your organization access.");
+  }
+  return parseIdentityTenantMemberships(body);
+}

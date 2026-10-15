@@ -53,7 +53,9 @@ import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
-import { useCanMoveChecks, useCanOperateCheckAlt } from "@/hooks/useCanMoveChecks";
+import { useCanMoveChecks, useCheckAltAccess } from "@/hooks/useCanMoveChecks";
+import { checkAltAccessState } from "@/lib/checkAltOperatorAccess";
+import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
@@ -3032,8 +3034,14 @@ function CheckDetailPanel({
   // Check Alt Deposit/Resubmit is only for owner/admin/manager/operator members
   // of the check's tenant. Viewers and partners a check is shared with do not
   // see it; the server refuses them either way.
-  const canOperateCheckAltHere = useCanOperateCheckAlt();
-  const canDepositWithCheckAlt = isOwner && canOperateCheckAltHere;
+  const checkAltAccess = useCheckAltAccess();
+  const canDepositWithCheckAlt = isOwner && checkAltAccess.canOperateIn(checkOwnerTenantId);
+  // A shared (partner) view is never allowed, so it needs no membership load.
+  const checkAltDepositAccess = checkAltAccessState({
+    isLoading: isOwner && checkAltAccess.isLoading,
+    isError: isOwner && checkAltAccess.isError,
+    allowed: canDepositWithCheckAlt,
+  });
 
   const { data: frontImageUrl } = useQuery({
     queryKey: ["check-front-img", check?.front_image_path],
@@ -4256,6 +4264,12 @@ function CheckDetailPanel({
                                   : caRejected ? "Resubmit Deposit" : "Deposit"}
                               </Button>
                             )}
+                            <CheckAltAccessNote
+                              state={checkAltDepositAccess}
+                              action="deposit"
+                              onRetry={() => checkAltAccess.retry()}
+                              className="text-[11px] text-muted-foreground mt-1"
+                            />
                             </>
                           ) : (
                        <Button

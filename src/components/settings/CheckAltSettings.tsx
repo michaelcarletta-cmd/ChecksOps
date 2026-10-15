@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { useCanOperateCheckAlt } from "@/hooks/useCanMoveChecks";
+import { useCheckAltAccess } from "@/hooks/useCanMoveChecks";
+import { checkAltAccessState } from "@/lib/checkAltOperatorAccess";
+import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { awsApiBaseUrl } from "@/lib/awsStaging";
 import {
   checkAltProviderUserMessage,
@@ -412,9 +414,17 @@ export function CheckAltSettings() {
  */
 export function PendingApprovalDeposits() {
   const qc = useQueryClient();
-  // Viewers and non-members of the current tenant get the list without
-  // Approve, Reject or Poll Now; the server refuses those calls for them.
-  const canOperate = useCanOperateCheckAlt();
+  // The list can hold deposits of every tenant the user belongs to, and the
+  // server checks each deposit against its own tenant. Approve/Reject show
+  // per row only when the user's role in that row's tenant allows it; Poll Now
+  // (empty body, all of the user's tenants) when it is allowed in any tenant.
+  const checkAltAccess = useCheckAltAccess();
+  const canPoll = checkAltAccess.canOperateInAny;
+  const pollAccess = checkAltAccessState({
+    isLoading: checkAltAccess.isLoading,
+    isError: checkAltAccess.isError,
+    allowed: canPoll,
+  });
   const { toast } = useToast();
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
@@ -431,7 +441,7 @@ export function PendingApprovalDeposits() {
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, amount, checkalt_reference, submitted_at, last_status_payload, status_unresolved, check_intake_item_id",
+          "id, tenant_id, amount, checkalt_reference, submitted_at, last_status_payload, status_unresolved, check_intake_item_id",
         )
         .eq("status", "pending_approval")
         .order("submitted_at", { ascending: false, nullsFirst: false })
@@ -570,7 +580,7 @@ export function PendingApprovalDeposits() {
           No CheckAlt deposits awaiting approval.
         </p>
         <div className="flex items-center gap-2">
-          {canOperate && (
+          {canPoll && (
             <Button size="sm" variant="ghost" onClick={() => poll.mutate()} disabled={poll.isPending}>
               {poll.isPending
                 ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -588,7 +598,7 @@ export function PendingApprovalDeposits() {
 
   return (
     <div className="space-y-2">
-      {canOperate && (
+      {canPoll ? (
         <div className="flex items-center justify-end">
           <Button size="sm" variant="outline" onClick={() => poll.mutate()} disabled={poll.isPending}>
             {poll.isPending
@@ -597,11 +607,19 @@ export function PendingApprovalDeposits() {
             Poll Now
           </Button>
         </div>
+      ) : (
+        <CheckAltAccessNote
+          state={pollAccess}
+          action="approve, reject or refresh Check Alt deposits"
+          onRetry={() => checkAltAccess.retry()}
+          className="text-xs text-muted-foreground text-right"
+        />
       )}
       {data.map((row: any) => {
         const intake = row.check_intake_items;
         const statusDesc = row.last_status_payload?.statusDescription ?? row.last_status_payload?.reasonDescription;
         const isRejecting = rejectingId === row.id;
+        const canDecide = checkAltAccess.canOperateIn(row.tenant_id);
         return (
           <div
             key={row.id}
@@ -634,7 +652,7 @@ export function PendingApprovalDeposits() {
                   </div>
                 )}
               </div>
-              {canOperate && !isRejecting && (
+              {canDecide && !isRejecting && (
                 <div className="flex items-center gap-2 shrink-0">
                   <Button
                     size="sm"
@@ -664,7 +682,7 @@ export function PendingApprovalDeposits() {
                 </div>
               )}
             </div>
-            {canOperate && isRejecting && (
+            {canDecide && isRejecting && (
               <div className="space-y-2 border-t border-border/40 pt-2">
                 <Label className="text-xs">Reject reason (optional)</Label>
                 <Input
