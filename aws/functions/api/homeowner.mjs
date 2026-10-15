@@ -15,6 +15,8 @@ import { renderTransactionalTemplate } from './email-templates.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const { Client } = pg;
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 const filesBucket = () => process.env.FILES_BUCKET || '';
@@ -98,6 +100,29 @@ export const notifyStaffOfHomeownerLedgerUpload = async ({
   return { notified: true, recipient: to, uploadId: uploadId || null };
 };
 
+export const assembleHomeownerLedgerView = (doc, spoof) => {
+  const tokenMeta = doc.token && typeof doc.token === 'object' ? doc.token : {};
+  const mode = doc.mode || (tokenMeta.claim_id || doc.claim?.id ? 'claim' : 'pre_claim');
+  return {
+    ok: true,
+    statusCode: 200,
+    ...doc,
+    mode,
+    homeowner: doc.homeowner || {
+      name: tokenMeta.homeowner_name || null,
+      email: tokenMeta.homeowner_email || null,
+    },
+    totals: doc.totals || { received: 0, deposited: 0, released: 0, remaining: 0 },
+    pending_signatures: Array.isArray(doc.pending_signatures) ? doc.pending_signatures : [],
+    pending_upload_count: Number(doc.pending_upload_count || 0),
+    can_upload: doc.can_upload !== false,
+    allow_deductible_payment: false,
+    money: null,
+    deductible_payments: [],
+    spoofFieldsIgnored: spoof,
+  };
+};
+
 export const handleHomeownerLedgerView = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -125,16 +150,7 @@ export const handleHomeownerLedgerView = async (event) => {
       return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
     }
     await client.query('COMMIT');
-    return {
-      ok: true,
-      statusCode: 200,
-      ...doc,
-      // Keep money movement CTAs off
-      allow_deductible_payment: false,
-      money: null,
-      deductible_payments: [],
-      spoofFieldsIgnored: spoof,
-    };
+    return assembleHomeownerLedgerView(doc, spoof);
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -408,6 +424,15 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
   }
 };
 
+const signLinkStatus = (error) => {
+  if (error === 'revoked' || error === 'expired') return 410;
+  if (error === 'already_signed') return 409;
+  if (error === 'mismatch' || error === 'not_your_signature' || error === 'invalid_state') return 403;
+  if (error === 'invalid_hash' || error === 'missing_fields') return 400;
+  if (error === 'signer_not_found' || error === 'not_found' || error === 'no_claim') return 404;
+  return 403;
+};
+
 export const handleHomeownerLedgerSignLink = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -421,34 +446,25 @@ export const handleHomeownerLedgerSignLink = async (event) => {
     client = await publicDb(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const doc = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-      [token],
-    )).rows[0]?.doc;
-    if (!doc?.ok) {
-      await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: doc?.error || 'not_found', spoofFieldsIgnored: spoof };
-    }
     const raw = randomBytes(32).toString('hex');
     const hash = createHash('sha256').update(raw).digest('hex');
-    const updated = (await client.query(
-      `UPDATE public.signature_signers
-       SET token_hash = $2, updated_at = now()
-       WHERE id = $1::uuid
-       RETURNING id`,
-      [signerId, hash],
-    )).rows[0];
-    if (!updated) {
+    const remint = (await client.query(
+      'SELECT public.aws_public_homeowner_ledger_remint_signer($1, $2::uuid, $3) AS doc',
+      [token, signerId, hash],
+    )).rows[0]?.doc;
+    if (!remint?.ok) {
       await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: 'signer_not_found', spoofFieldsIgnored: spoof };
+      const error = remint?.error || 'not_found';
+      return { ok: false, statusCode: signLinkStatus(error), error, spoofFieldsIgnored: spoof };
     }
     await client.query('COMMIT');
-    const origin = String(body.origin || process.env.VITE_APP_URL || 'https://staging.checksops.com').replace(/\/$/, '');
+    const origin = String(body.origin || process.env.SIGN_BASE_URL || process.env.VITE_APP_URL || 'https://checksops.com').replace(/\/$/, '');
     return {
       ok: true,
       statusCode: 200,
-      url: `${origin}/sign/${raw}`,
-      token: raw,
+      sign_url: `${origin}/sign?token=${raw}`,
+      request_id: remint.request_id || null,
+      signer_id: remint.signer_id || signerId,
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {
@@ -479,6 +495,13 @@ export const runHomeownerLedgerSend = async ({
   }
   let tenantId = body.tenant_id || null;
   const claimId = body.claim_id || null;
+  // claim_id null = pre-claim homeowner upload link (/start-claim); otherwise one claim's tracking link.
+  if (claimId && !UUID_RE.test(String(claimId))) {
+    return { ok: false, statusCode: 400, error: 'invalid_claim_id', spoofFieldsIgnored: spoof };
+  }
+  if (tenantId && !UUID_RE.test(String(tenantId))) {
+    return { ok: false, statusCode: 400, error: 'invalid_tenant_id', spoofFieldsIgnored: spoof };
+  }
   if (claimId && !tenantId) {
     const row = (await client.query(
       `SELECT tenant_id FROM public.check_intake_items
@@ -503,12 +526,34 @@ export const runHomeownerLedgerSend = async ({
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
+  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
+  const actor = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
+     LIMIT 1`,
+    [mapping.application_user_id, tenantId],
+  )).rows[0];
+  if (!actor) return { ok: false, statusCode: 403, error: 'role_not_allowed', spoofFieldsIgnored: spoof };
+
+  // The claim must belong to this tenant (its org, or one of this tenant's checks).
+  const claimOwned = !claimId || (await client.query(
+    `SELECT 1 FROM public.claims c
+     WHERE c.id = $1::uuid
+       AND (c.org_id = $2::uuid
+         OR (c.org_id IS NULL AND EXISTS (SELECT 1 FROM public.check_intake_items ci
+                    WHERE ci.claim_id = c.id AND ci.tenant_id = $2::uuid)))
+     LIMIT 1`,
+    [claimId, tenantId],
+  )).rows[0];
+  if (!claimOwned) return { ok: false, statusCode: 403, error: 'claim_not_in_tenant', spoofFieldsIgnored: spoof };
+
   let tokenRow = null;
   if (!body.rotate) {
     tokenRow = (await client.query(
       `SELECT id, token FROM public.homeowner_ledger_tokens
        WHERE tenant_id = $1::uuid
-         AND ($2::uuid IS NULL OR claim_id = $2::uuid)
+         AND claim_id IS NOT DISTINCT FROM $2::uuid
          AND revoked_at IS NULL
          AND (expires_at IS NULL OR expires_at > now())
        ORDER BY created_at DESC LIMIT 1`,
@@ -604,20 +649,32 @@ export const runSendFileToHomeowner = async ({
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
+  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
+  const actor = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
+     LIMIT 1`,
+    [mapping.application_user_id, file.tenant_id],
+  )).rows[0];
+  if (!actor) return { ok: false, statusCode: 403, error: 'role_not_allowed', spoofFieldsIgnored: spoof };
+
   const claim = (await client.query(
     `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [file.check_id],
   )).rows[0];
   const claimId = claim?.claim_id || null;
-  const tok = (await client.query(
+  // Only this claim's homeowner: never the tenant's newest token for another claim.
+  const tok = claimId ? (await client.query(
     `SELECT token, homeowner_email, homeowner_name
      FROM public.homeowner_ledger_tokens
      WHERE tenant_id = $1::uuid
-       AND ($2::uuid IS NULL OR claim_id = $2::uuid)
+       AND claim_id = $2::uuid
        AND revoked_at IS NULL
+       AND (expires_at IS NULL OR expires_at > now())
      ORDER BY created_at DESC LIMIT 1`,
     [file.tenant_id, claimId],
-  )).rows[0];
+  )).rows[0] : null;
   const homeownerEmail = normalizeEmail(tok?.homeowner_email);
   if (!homeownerEmail) {
     return {

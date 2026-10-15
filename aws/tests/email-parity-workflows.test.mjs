@@ -232,11 +232,21 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
     mapping,
     spoof,
     send: mail,
-    body: { homeowner_email: 'home@example.com', homeowner_name: 'Ada', tenant_id: TENANT, rotate: true },
+    body: {
+      homeowner_email: 'home@example.com',
+      homeowner_name: 'Ada',
+      tenant_id: TENANT,
+      claim_id: '33333333-3333-4333-8333-333333333333',
+      rotate: true,
+    },
     client: sqlClient([
       {
         match: (sql) => sql.includes('FROM public.tenant_users'),
         result: () => ({ rows: [{ tenant_id: TENANT, '?column?': 1 }] }),
+      },
+      {
+        match: (sql) => sql.includes('FROM public.claims c'),
+        result: () => ({ rows: [{ '?column?': 1 }] }),
       },
       {
         match: (sql) => sql.includes('INSERT INTO public.homeowner_ledger_tokens'),
