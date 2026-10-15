@@ -66,7 +66,7 @@ if (
   !SPA_LOCK
   || SPA_LOCK.environment !== 'production'
   || SPA_LOCK.classification !== 'PRODUCTION_LOCKED'
-  || SPA_LOCK.artifact?.name !== '/assets/index-DmV41U_z.js'
+  || SPA_LOCK.artifact?.name !== '/assets/index-D56o3XJ6.js'
   || SPA_LOCK.deployment_fingerprint?.cloudfront_id !== DISTRIBUTION_ID
   || !SHARED_LAMBDA || SHARED_LAMBDA.target_environment !== 'production'
   || !SHARED_BUCKET || SHARED_BUCKET.target_environment !== 'production'
