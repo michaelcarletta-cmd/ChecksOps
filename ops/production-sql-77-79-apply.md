@@ -8,8 +8,8 @@ Three migrations, applied to production **in this order**, one run each:
 | `sql78` | `aws/workflows/sql/78_check_partner_stakeholder_removals.sql` | creates `public.check_partner_stakeholder_removals` (composite FK to `shared_checks`, indexes, RLS, two policies, grants) | `ops/deployment-guard/sql78-check-partner-stakeholder-removals-production-apply.json` |
 | `sql79` | `aws/workflows/sql/79_member_stakeholder_writes.sql` | four `aws_member_*` INSERT/DELETE policies on those two tables | `ops/deployment-guard/sql79-member-stakeholder-writes-production-apply.json` |
 
-**Status:** SQL 77 and SQL 78 applied to production (2026-10-15) and retired; SQL 79
-execute-authorized, not applied.
+**Status:** complete. SQL 77, SQL 78 and SQL 79 applied to production (2026-10-15)
+and retired (`execute: false` on all three pins); no pin is a standing authorization.
 
 - **SQL 77: applied 2026-10-15, retired** (`execute: false`). The pin's `authorization`
   now says it was applied and is no longer a standing authorization; a re-apply needs a
@@ -64,35 +64,44 @@ execute-authorized, not applied.
     default_privileges 0, schema 1), staging acceptance run 38602758947. Post-apply
     inspect: live `3d650a56…`, `already_applied` true, `table_owner` `checksops_admin`,
     `authenticated_member_of_owner` false.
-- **SQL 79: execute-authorized** (`execute: true`), not applied. The reviewed change that
-  sets it records:
-  - `authorization`: the owner approved the SQL 78 apply on 2026-10-15 and asked for this change
-    ("approve the SQL 78 record and SQL 79 execute PR"); the SQL 79 pin values
-    (d9bc8921 → 878d6441) are unchanged from the reviewed pin; production's read-only
-    inspect (SSM `405d41e9-4b0e-4ca5-af90-27ff2c9428f2`) matched the pre-state d9bc8921
-    (the post-state 878d6441 rests on staging run 38612871864); `execute: true` takes
-    effect only when the owner reviews and merges that change. It does not itself run or
-    approve a run: each apply still needs the owner's run-time approval for that
-    workstream, a production-sql receipt owning the pinned file, the authorization phrase
-    (`CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES`) and a new `one_use_id`. **The owner has
-    not yet approved a SQL 79 run.**
-  - `staging_acceptance` (unchanged, recorded earlier): `ok: true`, reference
-    `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864` (guarded
-    staging SQL executor apply run #34 on main `4ca9e1763`, 2026-10-14, staging
-    `d9bc8921…` → `878d6441…`, the four `aws_member_*` policies present).
-  - `production_inspect.latest`: the read-only inspect with this tool in SSM
-    `405d41e9-4b0e-4ca5-af90-27ff2c9428f2`, after the SQL 78 apply in the same command
-    (main `a81464ce4`): live `d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4`
-    = expected (`live_matches_expected` true), `predecessors` `sql77` and `sql78` applied,
-    `apply_preconditions_met` true, `precondition_failures` `[]`. It matched the pre-state
-    only; the post-state `878d6441…` rests on staging run 38612871864. That run predates the
-    SQL 79 owner checks below, so the step 1 inspect before the apply must show them passing.
-  - `production_inspect.expected_table_owner`: `checksops_admin` (the owner of both tables:
-    the SQL 77 inspects for `check_stakeholders`, the SQL 78 post-apply inspect for
-    `check_partner_stakeholder_removals`; CREATE POLICY needs the table owner).
+- **SQL 79: applied 2026-10-15, retired** (`execute: false`). The pin's `authorization`
+  now says it was applied and is no longer a standing authorization; a re-apply needs a
+  new reviewed pin change. PR #964 set `execute: true` (d9bc8921 → 878d6441, unchanged
+  from the reviewed pin); after it merged, the owner approved that one run ("approve
+  applying SQL 79 to production"). No standing authorization. Evidence (pin `applied` and
+  `production_evidence`):
+  - Main `18fafde1b5d0338ca535ab54410f9850f6b09702` (staged by sql53-temporary-transfer
+    run 38747149596), runner `i-0c35557c4e5385406`, workstream
+    `prod-sql79-member-stakeholder-writes-20261015`, `one_use_id`
+    `sql79-prod-ed5216d8-5f92-4f7a-a49b-316dad1f58e5` (consumed by the successful apply; the registry entry was not read back).
+  - Pre-apply inspect and runner contracts, SSM `4dcdfee5-da70-482a-a35b-2f2e8bcef429`:
+    live `d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4` = expected,
+    `live_matches_expected` true, `already_applied` false, `predecessors.sql77.applied`
+    true (`0cd3ab3f…`) and `predecessors.sql78.applied` true (`3d650a56…`), `current_user`
+    `checksops_admin`, `owner_roles` `["checksops_admin"]`, `authenticated_member_of_owner`
+    false, `table_owners` both `checksops_admin`, `table_acls` `check_stakeholders`
+    `{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin,authenticated=ard/checksops_admin}`
+    and `check_partner_stakeholder_removals`
+    `{checksops_admin=arwdDxtm/checksops_admin,checksops=ard/checksops_admin,authenticated=ard/checksops_admin}`,
+    policies `aws_select_*` (SELECT) and `aws_write_*` (ALL) on each table, permissive, to
+    `authenticated`; `precondition_failures` `[]`, `apply_preconditions_met` true.
+    Contracts: claim-ledger 4/4 and tenant-isolation 6/6 on the runner;
+    financial-write-protections (`api-write.test.mjs`) 36/36 on a clean local checkout of
+    the same commit (the runner's package lacks `@aws-sdk/client-s3`).
+  - Receipt, evaluate, apply and verify, SSM `b443d830-9b42-467e-af94-d8f77f43d9f8`:
+    receipt issued, evaluate allowed true, apply exit 0, result `applied`, before
+    `d9bc8921…`, after `878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7`,
+    `unrelated_catalog_sha256`
+    `c1384429ca2dc0471fcecc7023c328349cd6b827f4e2ae19a713b74272dbf56c` (relations 860,
+    columns 3413, constraints 2125, policies 364, functions 1274, triggers 173, roles 29,
+    default_privileges 0, schema 1), staging acceptance run 38612871864. Post-apply
+    inspect: live `878d6441…`, `already_applied` true, `authenticated_member_of_owner`
+    false, both `table_owners` `checksops_admin`, both `table_acls` identical to the
+    pre-apply inspect, and the policies now also `aws_member_insert_*` (INSERT) and
+    `aws_member_delete_*` (DELETE) on both tables, permissive, to `authenticated`.
 
-After each apply, a follow-up reviewed change records the evidence in that pin and sets
-`execute` back to `false`.
+Each apply was followed by a reviewed change that recorded the evidence in that pin and
+set `execute` back to `false`; all three are done.
 
 Tool: `scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --migration sql77|sql78|sql79`.
 
@@ -429,7 +438,11 @@ commit. The tool connects with the pinned `checksops_admin` secret.
 8. **Record and retire:** a reviewed change records the evidence (receipt, before/after
    hashes, ACL entries, SSM ids) in the SQL 78 pin and sets its `execute` back to `false`.
 
-## SQL 79 apply on the runner (execute-authorized; needs the owner's run-time approval)
+## SQL 79 apply on the runner (done 2026-10-15; pin retired)
+
+This is the procedure the 2026-10-15 run followed (evidence under **Status**). The SQL 79
+pin is `execute: false` again, so the tool refuses to run it; a re-apply needs a new
+reviewed pin change.
 
 Run on `i-0c35557c4e5385406` from a checkout of reviewed main that contains the
 execute-authorized SQL 79 pin (staged by `.github/workflows/sql53-temporary-transfer.yml`),
