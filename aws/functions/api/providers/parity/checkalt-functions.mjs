@@ -38,18 +38,46 @@ import {
 const jwtCache = { token: null, expiresAt: null };
 
 /**
- * Check Alt deposit actions (submit, approve, reject) follow the production
- * rule: only the caller's tenant_users role for the deposit's tenant counts
+ * Check Alt deposit actions (submit, approve, reject, poll, prepare-image) and
+ * the depositor reads (deposit history, account status) follow the production
+ * rule: only the caller's tenant_users role for the tenant acted on counts
  * (owner, admin, manager or operator). Platform user_roles admin is ignored,
- * so it never lets a viewer or a non-member act on another tenant's deposit.
+ * so it never lets a viewer or a non-member act on, or read, another tenant's
+ * Check Alt data. A missing tenant is refused (no role row can match it).
  */
-const denyUnlessCheckAltTenantRole = async (client, userId, tenantId) => {
+const denyUnlessCheckAltTenantRole = async (
+  client,
+  userId,
+  tenantId,
+  message = 'Viewers and non-members cannot submit, approve or reject Check Alt deposits. Tenant owner/admin/manager/operator required.',
+) => {
   const roles = await loadCheckAltTenantRoles(client, userId, tenantId);
   if (roleAllowsCheckAlt(roles)) return null;
-  return fail('Forbidden', 403, {
-    error: 'financial_unauthorized',
-    message: 'Viewers and non-members cannot submit, approve or reject Check Alt deposits. Tenant owner/admin/manager/operator required.',
-  });
+  return fail('Forbidden', 403, { error: 'financial_unauthorized', message });
+};
+
+/**
+ * The tenant a Check Alt list/poll/read acts on. ctx.tenantId is the tenant
+ * the caller named (resolveTenant already refused a non-member who is not a
+ * platform admin) or the caller's first membership. A platform admin naming a
+ * tenant they do not belong to still lands here, so callers must pass it
+ * through denyUnlessCheckAltTenantRole, which ignores platform admin.
+ */
+const checkAltTenantOf = (ctx) => ctx?.tenantId || null;
+
+/**
+ * UAT integration setup (requireAdmin handlers: test-connection, register,
+ * verify) keeps its existing contract: platform admin, or an owner/admin of
+ * the target tenant. checkAltParityContext only returns resolveTenant's
+ * requireAdmin refusal when body.tenant_id is set, so without this a tenant
+ * viewer who omits tenant_id fell through and could register a UAT depositor
+ * (with a caller-chosen deposit account) for their tenant.
+ */
+const denyUnlessCheckAltSetupAdmin = async (client, ctx, userId, tenantId) => {
+  if (ctx.isAdmin) return null;
+  const roles = await loadCheckAltTenantRoles(client, userId, tenantId);
+  if (roles.some((role) => role === 'owner' || role === 'admin')) return null;
+  return fail('Administrator access required', 403);
 };
 const MAX_TOTAL_B64_CHARS = 1_600_000;
 
@@ -137,6 +165,15 @@ const wrap = (handler) => async (event, deps = {}) => {
       loadSandbox: deps.loadSandboxCredentials,
     });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
+    if (handler.requireAdmin === true) {
+      const denied = await denyUnlessCheckAltSetupAdmin(
+        client,
+        ctx,
+        mapping.application_user_id,
+        body?.tenant_id || ctx.tenantId,
+      );
+      if (denied) return { ...denied, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
+    }
     try {
       const result = await handler.run({
         client, mapping, claims, body, spoof, ctx, fetchImpl: deps.fetchImpl || fetch, deps,
@@ -299,8 +336,16 @@ const verifyAccount = {
 };
 
 const accountStatus = {
-  run: async ({ client, ctx, fetchImpl }) => {
-    const acct = ctx.tenantId ? await loadUatTenantAccount(client, ctx.tenantId) : null;
+  run: async ({ client, mapping, ctx, fetchImpl }) => {
+    const tenantId = checkAltTenantOf(ctx);
+    const denied = await denyUnlessCheckAltTenantRole(
+      client,
+      mapping.application_user_id,
+      tenantId,
+      'Viewers and non-members cannot read Check Alt account status. Tenant owner/admin/manager/operator required.',
+    );
+    if (denied) return denied;
+    const acct = await loadUatTenantAccount(client, tenantId);
     if (!acct) {
       return jsonResult({
         success: true,
@@ -325,10 +370,17 @@ const accountStatus = {
 };
 
 const depositHistory = {
-  run: async ({ client, ctx, body, fetchImpl }) => {
-    const tenantId = body.tenant_id || ctx.tenantId;
-    const acct = tenantId ? await loadUatTenantAccount(client, tenantId) : null;
-    if (!acct) return fail('No tenant resolved for user', 400);
+  run: async ({ client, mapping, ctx, body, fetchImpl }) => {
+    const tenantId = checkAltTenantOf(ctx);
+    const denied = await denyUnlessCheckAltTenantRole(
+      client,
+      mapping.application_user_id,
+      tenantId,
+      'Viewers and non-members cannot read Check Alt deposit history. Tenant owner/admin/manager/operator required.',
+    );
+    if (denied) return denied;
+    const acct = await loadUatTenantAccount(client, tenantId);
+    if (!acct) return fail('No registered CheckAlt UAT account for this tenant.', 409, { error: 'account_unregistered' });
     const cfg = uatCfg(ctx.uat);
     const creds = credentialsOf(ctx.uat);
     const ssoKey = acct.sso_key || acct.sso_user_id;
@@ -355,13 +407,23 @@ const depositHistory = {
 const resolvePollStatus = (json) => resolveCheckAltProviderStatus(json || {});
 
 const pollStatus = {
-  run: async ({ client, ctx, fetchImpl }) => {
-    const acct = ctx.tenantId ? await loadUatTenantAccount(client, ctx.tenantId) : null;
+  run: async ({ client, mapping, ctx, fetchImpl }) => {
+    // Poll writes status onto up to 50 rows, so it needs the same tenant role
+    // as production poll (authorizePollRow: owner/admin/manager/operator).
+    const tenantId = checkAltTenantOf(ctx);
+    const denied = await denyUnlessCheckAltTenantRole(
+      client,
+      mapping.application_user_id,
+      tenantId,
+      'Viewers and non-members cannot refresh Check Alt deposit status. Tenant owner/admin/manager/operator required.',
+    );
+    if (denied) return denied;
+    const acct = await loadUatTenantAccount(client, tenantId);
     const ops = (await client.query(
       `SELECT id, provider_reference, metadata FROM public.aws_provider_sandbox_operations
        WHERE provider = 'checkalt' AND tenant_id = $1::uuid AND provider_reference IS NOT NULL
        ORDER BY created_at DESC NULLS LAST LIMIT 50`,
-      [ctx.tenantId],
+      [tenantId],
     )).rows;
     const cfg = uatCfg(ctx.uat);
     const creds = credentialsOf(ctx.uat);
@@ -410,8 +472,8 @@ const pollStatus = {
           await client.query(
             `UPDATE public.aws_provider_sandbox_operations
              SET status = $2, metadata = metadata || $3::jsonb, updated_at = now()
-             WHERE id = $1::uuid`,
-            [op.id, status || 'submitted', JSON.stringify({ last_poll: json, poll_source: status ? 'item_or_history' : 'item' })],
+             WHERE id = $1::uuid AND tenant_id = $4::uuid`,
+            [op.id, status || 'submitted', JSON.stringify({ last_poll: json, poll_source: status ? 'item_or_history' : 'item' }), tenantId],
           ).catch(() => {});
         }
       } catch {
@@ -673,7 +735,7 @@ const approveDeposit = {
 };
 
 const prepareImage = {
-  run: async ({ client, body, ctx, deps = {} }) => {
+  run: async ({ client, mapping, body, deps = {} }) => {
     if (!body.check_intake_item_id) return fail('check_intake_item_id is required', 400);
     const side = body.side === 'back' ? 'back' : (body.side === 'front' ? 'front' : null);
     if (!side) return fail('side must be front or back', 400);
@@ -683,7 +745,13 @@ const prepareImage = {
       [body.check_intake_item_id],
     )).rows[0];
     if (!check) return fail('Check not found', 404);
-    if (check.tenant_id !== ctx.tenantId && !ctx.isAdmin) return fail('Forbidden', 403);
+    const denied = await denyUnlessCheckAltTenantRole(
+      client,
+      mapping.application_user_id,
+      check.tenant_id,
+      'Viewers and non-members cannot prepare Check Alt deposit images. Tenant owner/admin/manager/operator required.',
+    );
+    if (denied) return denied;
     const sourcePath = side === 'front'
       ? check.front_image_path
       : (check.back_image_deposit_path || check.back_image_path);
