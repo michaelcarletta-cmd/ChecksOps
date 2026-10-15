@@ -2,9 +2,11 @@
  * One-shot orchestration of a production SQL apply on the SQL53 runner.
  *
  * Runs, in order, with a fail-closed stop at every step:
- *   1. source: the transfer tarball's sha256 against its .sha256 sidecar, the
- *      tarball name against --commit, every file of the extracted tree against
- *      the tarball (content, no extra files), and the migration file against the pin
+ *   1. source: the transfer tarball's sha256 against its .sha256 sidecar and
+ *      --expected-tarball-sha256, the tarball name and SOURCE_COMMIT against
+ *      --commit, every file of the extracted tree against the tarball (content,
+ *      no extra files, no symlink leaving the tree), and the migration file
+ *      against the pin; the tree check repeats right before steps 5 and 7
  *   2. inspect: the registered per-migration tool's read-only --inspect
  *   3. contracts: every accepted contract the registry requires for a
  *      production sql-apply, run on this tree with node --test
@@ -19,7 +21,8 @@
  * tools stay the only code that connects to the database; this module only
  * runs them as child processes through an injectable runner. It never reads,
  * writes or accepts a receipt: the receipt path comes only from the preflight
- * child's own output and is handed only to the apply child.
+ * child's own output and is handed only to the apply child. Children get only
+ * CHILD_ENV_ALLOWLIST; the manifest's temp directory is deleted after the run.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -36,14 +39,55 @@ import { SQL80_PRODUCTION_PIN_REL } from './sql80-checkalt-production-apply.mjs'
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
 export const ONE_SHOT_PHASES = Object.freeze(['inspect', 'apply']);
-export const ONE_SHOT_DEFAULT_OPERATOR = 'michaelcarletta-cmd';
 
-/** Environment variables a child must never inherit; only the apply child gets the first two, set here. */
+/**
+ * The one-shot refuses to start when any variable with this prefix (or
+ * CHECKSOPS_SKIP_DEPLOYMENT_GUARD) is set: APPLY, RECEIPT, BYPASS, ROOT
+ * (redirects the guard root), EXEC_LEGACY, and the KMS key variables. The KMS
+ * variables are read only by the GitHub-hosted Lambda/SPA/staging-executor
+ * scripts, never by preflight.mjs or the production SQL tools, so there is no
+ * legitimate exception to make here.
+ */
+export const GUARD_ENV_PREFIX = 'CHECKSOPS_DEPLOYMENT_GUARD_';
 export const GUARD_ENV_KEYS = Object.freeze([
   'CHECKSOPS_DEPLOYMENT_GUARD_APPLY',
   'CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT',
   'CHECKSOPS_DEPLOYMENT_GUARD_BYPASS',
+  'CHECKSOPS_DEPLOYMENT_GUARD_ROOT',
+  'CHECKSOPS_DEPLOYMENT_GUARD_EXEC_LEGACY',
+  'CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN',
   'CHECKSOPS_SKIP_DEPLOYMENT_GUARD',
+]);
+const isGuardEnvKey = (key) => key.startsWith(GUARD_ENV_PREFIX) || key === 'CHECKSOPS_SKIP_DEPLOYMENT_GUARD';
+
+/** Variables that change what code node or the dynamic loader runs; set means refuse. */
+export const LOADER_ENV_KEYS = Object.freeze([
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'NODE_REPL_EXTERNAL_MODULE',
+  'NODE_PRESERVE_SYMLINKS',
+  'NODE_PRESERVE_SYMLINKS_MAIN',
+  'LD_PRELOAD',
+  'LD_LIBRARY_PATH',
+  'LD_AUDIT',
+]);
+const isLoaderEnvKey = (key) => LOADER_ENV_KEYS.includes(key) || key.startsWith('DYLD_');
+
+/**
+ * The only variables a child inherits. The tools resolve the admin secret with
+ * the instance role (IMDS) in us-east-1 through the Secrets Manager VPC endpoint,
+ * and connect with the repository's RDS CA bundle; nothing else is needed.
+ */
+export const CHILD_ENV_ALLOWLIST = Object.freeze([
+  'PATH',
+  'HOME',
+  'USER',
+  'LANG',
+  'LC_ALL',
+  'TZ',
+  'AWS_REGION',
+  'AWS_DEFAULT_REGION',
+  'AWS_ENDPOINT_URL_SECRETS_MANAGER',
 ]);
 
 export const ONE_SHOT_FLAGS = Object.freeze([
@@ -51,8 +95,11 @@ export const ONE_SHOT_FLAGS = Object.freeze([
   'commit',
   'workstream-id',
   'approval-statement',
+  'approval-statement-b64',
+  'approval-scope',
   'phase',
   'source-tarball',
+  'expected-tarball-sha256',
   'operator',
   'runner',
 ]);
@@ -126,28 +173,55 @@ export async function sha256File(file) {
 
 // --- arguments --------------------------------------------------------------
 
-/** Validates flags and the caller's environment; refuses anything that could carry a receipt. */
-export function validateOneShotArgs(opts = {}, env = {}) {
+/** Strict base64 (alphabet and padding), decoded as UTF-8 that round-trips. */
+export function decodeApprovalB64(value) {
+  const text = String(value || '');
+  if (!text || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) return null;
+  const buf = Buffer.from(text, 'base64');
+  const decoded = buf.toString('utf8');
+  return Buffer.from(decoded, 'utf8').equals(buf) ? decoded : null;
+}
+
+/**
+ * Validates flags, the caller's environment and node's own flags; refuses
+ * anything that could carry a receipt or change what code runs.
+ */
+export function validateOneShotArgs(opts = {}, env = {}, { execArgv = [] } = {}) {
   const unknown = Object.keys(opts).filter((key) => !ONE_SHOT_FLAGS.includes(key));
   if (unknown.length) {
     return fail(CODES.INVALID_MANIFEST, 'unknown flag; the one-shot takes no receipt, manifest or input file', { unknown, allowed: [...ONE_SHOT_FLAGS] });
   }
-  const presetGuardEnv = GUARD_ENV_KEYS.filter((key) => env[key] !== undefined);
+  const presetGuardEnv = Object.keys(env).filter(isGuardEnvKey);
   if (presetGuardEnv.length) {
-    return fail(CODES.DEPLOYMENT_GUARD_REQUIRED, 'guard environment variables must not be set for the one-shot; the receipt comes only from its own preflight step', { preset: presetGuardEnv });
+    return fail(CODES.DEPLOYMENT_GUARD_REQUIRED, 'CHECKSOPS_DEPLOYMENT_GUARD_* variables must not be set for the one-shot; the receipt comes only from its own preflight step', { preset: presetGuardEnv });
+  }
+  const loaderEnv = Object.keys(env).filter(isLoaderEnvKey);
+  if (loaderEnv.length || execArgv.length) {
+    return fail(CODES.DEPLOYMENT_GUARD_REQUIRED, 'node loader variables or node flags are set; run the one-shot as plain `node <script>`', { preset: loaderEnv, exec_argv: [...execArgv] });
   }
   const errors = [];
-  const tool = ONE_SHOT_TOOLS[opts.migration];
+  const tool = typeof opts.migration === 'string' && Object.hasOwn(ONE_SHOT_TOOLS, opts.migration) ? ONE_SHOT_TOOLS[opts.migration] : null;
   if (!tool) errors.push(`--migration must be one of ${Object.keys(ONE_SHOT_TOOLS).join(', ')}`);
+  if (!tool || opts['approval-scope'] !== opts.migration) errors.push('--approval-scope must name the migration the owner approved and equal --migration');
   if (!ONE_SHOT_PHASES.includes(opts.phase)) errors.push('--phase must be inspect or apply');
   if (!GIT_SHA_RE.test(String(opts.commit || ''))) errors.push('--commit must be a 40-character lowercase git SHA');
   if (!WORKSTREAM_RE.test(String(opts['workstream-id'] || ''))) errors.push('--workstream-id must match ^[A-Za-z0-9._:-]{8,128}$');
-  const statement = opts['approval-statement'];
+  let statement = null;
+  const plain = opts['approval-statement'];
+  const b64 = opts['approval-statement-b64'];
+  if (plain !== undefined && b64 !== undefined) {
+    errors.push('pass exactly one of --approval-statement and --approval-statement-b64');
+  } else if (b64 !== undefined) {
+    statement = typeof b64 === 'string' ? decodeApprovalB64(b64) : null;
+    if (statement === null) errors.push('--approval-statement-b64 must be valid base64 of UTF-8 text');
+  } else {
+    statement = typeof plain === 'string' ? plain : null;
+  }
   if (typeof statement !== 'string' || statement.trim() === '') errors.push("--approval-statement (the owner's exact words) is required and must be non-empty");
   if (typeof opts['source-tarball'] !== 'string' || !opts['source-tarball']) errors.push('--source-tarball <path to source-<commit>.tar.gz> is required');
-  for (const key of ['operator', 'runner']) {
-    if (opts[key] !== undefined && (typeof opts[key] !== 'string' || !opts[key].trim())) errors.push(`--${key} needs a value`);
-  }
+  if (!SHA256_RE.test(String(opts['expected-tarball-sha256'] || ''))) errors.push('--expected-tarball-sha256 (TARBALL_SHA256 from the transfer run log) must be a 64-character lowercase sha256');
+  if (typeof opts.operator !== 'string' || !opts.operator.trim()) errors.push('--operator <login> is required');
+  if (opts.runner !== undefined && (typeof opts.runner !== 'string' || !opts.runner.trim())) errors.push('--runner needs a value');
   if (errors.length) return fail(CODES.INVALID_MANIFEST, errors[0], { errors });
   return ok({
     tool,
@@ -155,16 +229,18 @@ export function validateOneShotArgs(opts = {}, env = {}) {
     commit: opts.commit,
     workstream_id: opts['workstream-id'],
     approval_statement: statement,
+    approval_scope: opts['approval-scope'],
     source_tarball: path.resolve(opts['source-tarball']),
-    operator: opts.operator || ONE_SHOT_DEFAULT_OPERATOR,
+    expected_tarball_sha256: opts['expected-tarball-sha256'],
+    operator: opts.operator,
     runner: opts.runner || null,
   });
 }
 
-/** The inherited environment minus every guard variable. */
+/** Only the allowlisted variables; never a guard or loader variable. */
 export function childBaseEnv(env = {}) {
-  const out = { ...env };
-  for (const key of GUARD_ENV_KEYS) delete out[key];
+  const out = {};
+  for (const key of CHILD_ENV_ALLOWLIST) if (typeof env[key] === 'string') out[key] = env[key];
   return out;
 }
 
@@ -317,9 +393,18 @@ export async function compareTreeToTarball(root, tarball) {
   }
   const differing = [];
   const missing = [];
+  const escaping = [];
+  const rootAbs = path.resolve(root);
   let files = 0;
   for (const [rel, entry] of index) {
     const abs = path.join(root, rel);
+    if (entry.type === 'symlink') {
+      const target = path.resolve(path.dirname(path.join(rootAbs, rel)), String(entry.linkname || ''));
+      if (!entry.linkname || path.isAbsolute(entry.linkname) || (target !== rootAbs && !target.startsWith(`${rootAbs}${path.sep}`))) {
+        escaping.push(rel);
+        continue;
+      }
+    }
     let stat;
     try { stat = fs.lstatSync(abs); } catch { missing.push(rel); continue; }
     if (entry.type === 'file') {
@@ -332,20 +417,30 @@ export async function compareTreeToTarball(root, tarball) {
     }
   }
   const extra = [...walkTree(root)].filter(([rel]) => !index.has(rel)).map(([rel]) => rel);
-  if (differing.length || missing.length || extra.length || files === 0) {
+  if (differing.length || missing.length || extra.length || escaping.length || files === 0) {
     return fail(CODES.SOURCE_RECONCILIATION_REQUIRED, 'the running source tree is not exactly the transfer tarball', {
       tarball_files: files,
       differing: differing.slice(0, 20),
       missing: missing.slice(0, 20),
       extra: extra.slice(0, 20),
-      counts: { differing: differing.length, missing: missing.length, extra: extra.length },
+      escaping_symlinks: escaping.slice(0, 20),
+      counts: { differing: differing.length, missing: missing.length, extra: extra.length, escaping_symlinks: escaping.length },
     });
   }
   return ok({ tarball_files: files, tarball_entries: index.size });
 }
 
-/** Step 1: tarball integrity, tree == tarball, migration bytes == pin. */
-export async function verifySource({ root, commit, tarball, pin, tool }, deps = {}) {
+/** SOURCE_COMMIT as written by sql53-temporary-transfer (`<sha>\n`), or null. */
+export function readSourceCommit(root) {
+  const file = path.join(root, 'SOURCE_COMMIT');
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+}
+
+/**
+ * Step 1: tarball sha256 == the transfer run's printed hash (and the sidecar),
+ * tree == tarball, SOURCE_COMMIT == --commit, migration bytes == pin.
+ */
+export async function verifySource({ root, commit, tarball, expectedSha256, pin, tool }, deps = {}) {
   const expectedName = `source-${commit}.tar.gz`;
   if (path.basename(tarball) !== expectedName) {
     return fail(CODES.STALE_PACKAGE, 'source tarball name does not match --commit', { expected: expectedName, actual: path.basename(tarball) });
@@ -362,8 +457,18 @@ export async function verifySource({ root, commit, tarball, pin, tool }, deps = 
   if (tarballSha !== match[1]) {
     return fail(CODES.STALE_PACKAGE, 'source tarball sha256 differs from its sidecar', { computed: tarballSha, sidecar: match[1] });
   }
+  if (tarballSha !== expectedSha256) {
+    return fail(CODES.STALE_PACKAGE, 'source tarball sha256 differs from --expected-tarball-sha256 (the transfer run log)', { computed: tarballSha, expected: expectedSha256 });
+  }
   const tree = await (deps.compareTree || compareTreeToTarball)(root, tarball);
   if (!tree.ok) return tree;
+  const sourceCommit = (deps.readSourceCommit || readSourceCommit)(root);
+  if (sourceCommit !== `${commit}\n`) {
+    return fail(CODES.STALE_PACKAGE, 'SOURCE_COMMIT in the tree is not --commit (tarballs built before SOURCE_COMMIT existed must be re-staged)', {
+      source_commit: sourceCommit === null ? null : sourceCommit.slice(0, 80),
+      commit,
+    });
+  }
   const bindings = [
     ['migration', tool.key],
     ['target_environment', 'production'],
@@ -386,7 +491,9 @@ export async function verifySource({ root, commit, tarball, pin, tool }, deps = 
     tarball: path.basename(tarball),
     tarball_sha256: tarballSha,
     tarball_sha256_matches_sidecar: true,
+    tarball_sha256_matches_expected: true,
     tree_matches_tarball: true,
+    source_commit: commit,
     tarball_files: tree.details.tarball_files,
     filename: pin.filename,
     migration_source_sha256: migrationSha,
@@ -459,8 +566,9 @@ export function postApplyInspectFailures(details, pin, tool) {
 export function parseTapSummary(text) {
   const counts = {};
   for (const key of ['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo']) {
-    const match = new RegExp(`^# ${key} (\\d+)\\s*$`, 'm').exec(String(text || ''));
-    counts[key] = match ? Number(match[1]) : null;
+    // The reporter's own summary is last; an earlier line could come from test output.
+    const matches = [...String(text || '').matchAll(new RegExp(`^# ${key} (\\d+)\\s*$`, 'gm'))];
+    counts[key] = matches.length ? Number(matches.at(-1)[1]) : null;
   }
   return counts;
 }
@@ -478,7 +586,7 @@ function safeTestPath(root, rel) {
 }
 
 /** Step 3: run every required contract test on this tree; any failure stops. */
-export function runContracts(ctx, { runnerLabel, commit, runId }) {
+export function runContracts(ctx, { runnerLabel, runnerBasis, commit, runId }) {
   const contracts = requiredContracts(ctx.root, ctx.registry);
   if (!contracts.length) return fail(CODES.REGRESSION_DETECTED, 'no accepted contracts are registered for production sql-apply; refusing');
   const results = {};
@@ -511,7 +619,7 @@ export function runContracts(ctx, { runnerLabel, commit, runId }) {
     results[contract.id] = {
       ok: true,
       test: contract.test,
-      evidence: `${counts.pass}/${counts.tests} on ${runnerLabel} at ${commit} (production-sql-one-shot ${runId}, node --test)`,
+      evidence: `${counts.pass}/${counts.tests} on ${runnerLabel} (${runnerBasis}) at ${commit} (production-sql-one-shot ${runId}, node --test)`,
     };
   }
   return ok({ contract_results: results });
@@ -571,7 +679,7 @@ export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
   };
   const stop = (step, result) => { steps.push({ step, ok: false, code: result.code }); return done(result); };
 
-  const parsed = validateOneShotArgs(opts, env);
+  const parsed = validateOneShotArgs(opts, env, { execArgv: ctxIn.execArgv || [] });
   if (!parsed.ok) return stop('arguments', parsed);
   const args = parsed.details;
   const { tool } = args;
@@ -582,6 +690,8 @@ export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
     commit: args.commit,
     workstream_id: args.workstream_id,
     approval_statement: args.approval_statement,
+    approval_scope: args.approval_scope,
+    operator: args.operator,
   });
   const runnerLabel = args.runner || os.hostname();
   const runnerBasis = args.runner ? 'operator-supplied --runner (not verified by the one-shot)' : 'os.hostname() of the host that ran the one-shot';
@@ -609,10 +719,17 @@ export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
   steps.push({ step: 'pin', ok: true, pin: tool.pin_rel, execute: true, staging_acceptance: pin.staging_acceptance.reference });
 
   // 1. Source.
-  const source = await verifySource({ root, commit: args.commit, tarball: args.source_tarball, pin, tool }, ctxIn);
+  const source = await verifySource({ root, commit: args.commit, tarball: args.source_tarball, expectedSha256: args.expected_tarball_sha256, pin, tool }, ctxIn);
   if (!source.ok) return stop('source', source);
   steps.push({ step: 'source', ok: true });
   summary.source = source.details;
+  // The tree is re-compared to the tarball right before preflight and right before apply.
+  const recheckTree = async (step) => {
+    const again = await (ctxIn.compareTree || compareTreeToTarball)(root, args.source_tarball);
+    if (!again.ok) return again;
+    steps.push({ step, ok: true });
+    return null;
+  };
 
   // 2. Read-only inspect.
   const inspect = runTool(ctx, 'inspect', [tool.script, ...tool.args, '--inspect'], { env: ctx.baseEnv, timeout: TIMEOUT_MS.inspect });
@@ -625,7 +742,7 @@ export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
   steps.push({ step: 'inspect', ok: true });
 
   // 3. Contracts on this tree.
-  const contracts = runContracts(ctx, { runnerLabel, commit: args.commit, runId });
+  const contracts = runContracts(ctx, { runnerLabel, runnerBasis, commit: args.commit, runId });
   if (!contracts.ok) return stop('contracts', contracts);
   steps.push({ step: 'contracts', ok: true, ids: Object.keys(contracts.details.contract_results) });
   summary.contract_results = contracts.details.contract_results;
@@ -648,78 +765,99 @@ export async function runProductionSqlOneShot(opts = {}, ctxIn = {}) {
   const manifestFile = path.join(manifestDir, `${tool.key}-manifest.json`);
   fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
   steps.push({ step: 'manifest', ok: true, file: manifestFile });
-  Object.assign(summary, { manifest_file: manifestFile, one_use_id: oneUseId });
-
-  // 5. Preflight: lease + receipt. The receipt path is taken only from this child's output.
-  const preflight = runTool(ctx, 'preflight', [PREFLIGHT, '--acquire-lease', '--receipt', '--input', manifestFile], { env: ctx.baseEnv, timeout: TIMEOUT_MS.preflight });
-  if (preflight.status !== 0 || preflight.json?.ok !== true) return stop('preflight', childFailure('preflight', preflight));
-  const receiptFile = preflight.json.details?.receipt;
-  if (typeof receiptFile !== 'string' || path.dirname(path.resolve(root, receiptFile)) !== receiptDir(root)) {
-    return stop('preflight', fail(CODES.DEPLOYMENT_GUARD_REQUIRED, 'preflight did not issue a receipt under .deployment-guard/receipts', { receipt: receiptFile ?? null }));
-  }
-  steps.push({ step: 'preflight', ok: true, receipt_issued: true });
-  Object.assign(summary, { receipt_issued: true, receipt_file: receiptFile });
-
-  // 6. Evaluate (no connection).
-  const evaluate = runTool(ctx, 'evaluate', [tool.script, ...tool.args, '--input', manifestFile], { env: ctx.baseEnv, timeout: TIMEOUT_MS.preflight });
-  if (evaluate.status !== 0 || evaluate.json?.ok !== true || evaluate.json.details?.[tool.allowed_key] !== true || evaluate.json.details?.migration !== tool.key) {
-    return stop('evaluate', evaluate.json?.ok === true
-      ? fail(CODES.GUARD_APPLY_FORBIDDEN, `evaluate did not report ${tool.allowed_key} true`, { result: evaluate.json })
-      : childFailure('evaluate', evaluate));
-  }
-  steps.push({ step: 'evaluate', ok: true, [tool.allowed_key]: true });
-
-  // 7. Apply: the only child with the apply variables.
-  const applyEnv = { ...ctx.baseEnv, CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1', CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: receiptFile };
-  const apply = runTool(ctx, 'apply', [tool.script, ...tool.args, '--apply', '--input', manifestFile], { env: applyEnv, timeout: TIMEOUT_MS.apply });
-  const applyRecord = apply.json?.details?.receipt;
-  const applyOk = apply.status === 0 && apply.json?.ok === true
-    && applyRecord?.result === 'applied'
-    && applyRecord?.before_hash === pin.expected_live_definition_sha256
-    && applyRecord?.after_hash === pin.intended_replacement_sha256;
-
-  // 8. Post-apply inspect: also after a failed apply (a COMMIT outcome can be unknown).
-  const post = runTool(ctx, 'post-apply-inspect', [tool.script, ...tool.args, '--inspect'], { env: ctx.baseEnv, timeout: TIMEOUT_MS.inspect });
-  const postFailures = post.status === 0 && post.json?.ok === true ? postApplyInspectFailures(post.json.details, pin, tool) : ['inspect_failed'];
-  summary.post_apply_inspect = post.json?.ok === true ? pickInspect(post.json.details) : { error: post.json || post.stderr_tail };
-
-  if (!applyOk) {
-    steps.push({ step: 'apply', ok: false, code: apply.json?.code || null });
-    steps.push({ step: 'post-apply-inspect', ok: postFailures.length === 0, failed: postFailures });
-    return done(apply.json?.ok === true
-      ? fail(CODES.UNRELATED_MUTATION, 'apply reported success without the pinned before/after hashes', { result: apply.json })
-      : childFailure('apply', apply), { stopped_at: 'apply' });
-  }
-  steps.push({ step: 'apply', ok: true, result: 'applied' });
-  summary.apply_result = applyRecord;
-  if (postFailures.length) {
-    return stop('post-apply-inspect', fail(CODES.DEPLOYMENT_COLLISION, 'post-apply inspect does not show the intended state', { failed: postFailures, result: post.json || post.stderr_tail }));
-  }
-  steps.push({ step: 'post-apply-inspect', ok: true });
-
-  summary.applied = {
-    date: now().toISOString().slice(0, 10),
-    result: 'applied',
-    source_commit: args.commit,
-    source_tarball: { file: source.details.tarball, sha256: source.details.tarball_sha256 },
-    runner: runnerLabel,
-    runner_basis: runnerBasis,
-    workstream_id: args.workstream_id,
+  Object.assign(summary, {
+    manifest_file: manifestFile,
+    manifest_sha256: sha256(fs.readFileSync(manifestFile)),
     one_use_id: oneUseId,
-    one_use_id_consumed: true,
-    one_use_id_consumed_basis: 'Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.',
-    owner_approval: args.approval_statement,
-    owner_approval_basis: 'As passed in --approval-statement; the one-shot cannot verify who said it.',
-    pre_apply_inspect: summary.pre_apply_inspect,
-    contract_results: summary.contract_results,
-    one_shot_run_id: runId,
-    one_shot_note: 'One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (' + tool.allowed_key + ' true), applied (exit 0) and ran the post-apply inspect.',
-    receipt: applyRecord,
-    post_apply_inspect: summary.post_apply_inspect,
-  };
-  summary.not_observed_by_this_run = [
-    'ssm_command_id (add from SSM)',
-    'source_staged_by (the sql53-temporary-transfer run id; add from GitHub Actions)',
-  ];
-  return done(ok());
+  });
+  let result;
+  try {
+    result = await applySteps();
+  } finally {
+    // The manifest only feeds the children of this run; nothing reads it afterwards.
+    fs.rmSync(manifestDir, { recursive: true, force: true });
+  }
+  result.details.manifest_deleted = !fs.existsSync(manifestDir);
+  return result;
+
+  async function applySteps() {
+    // 5. Preflight: lease + receipt. The receipt path is taken only from this child's output.
+    const beforePreflight = await recheckTree('source-recheck-before-preflight');
+    if (beforePreflight) return stop('source-recheck-before-preflight', beforePreflight);
+    const preflight = runTool(ctx, 'preflight', [PREFLIGHT, '--acquire-lease', '--receipt', '--input', manifestFile], { env: ctx.baseEnv, timeout: TIMEOUT_MS.preflight });
+    if (preflight.status !== 0 || preflight.json?.ok !== true) return stop('preflight', childFailure('preflight', preflight));
+    const receiptFile = preflight.json.details?.receipt;
+    if (typeof receiptFile !== 'string' || path.dirname(path.resolve(root, receiptFile)) !== receiptDir(root)) {
+      return stop('preflight', fail(CODES.DEPLOYMENT_GUARD_REQUIRED, 'preflight did not issue a receipt under .deployment-guard/receipts', { receipt: receiptFile ?? null }));
+    }
+    steps.push({ step: 'preflight', ok: true, receipt_issued: true });
+    Object.assign(summary, { receipt_issued: true, receipt_file: receiptFile });
+
+    // 6. Evaluate (no connection).
+    const evaluate = runTool(ctx, 'evaluate', [tool.script, ...tool.args, '--input', manifestFile], { env: ctx.baseEnv, timeout: TIMEOUT_MS.preflight });
+    if (evaluate.status !== 0 || evaluate.json?.ok !== true || evaluate.json.details?.[tool.allowed_key] !== true || evaluate.json.details?.migration !== tool.key) {
+      return stop('evaluate', evaluate.json?.ok === true
+        ? fail(CODES.GUARD_APPLY_FORBIDDEN, `evaluate did not report ${tool.allowed_key} true`, { result: evaluate.json })
+        : childFailure('evaluate', evaluate));
+    }
+    steps.push({ step: 'evaluate', ok: true, [tool.allowed_key]: true });
+
+    // 7. Apply: the only child with the apply variables.
+    const beforeApply = await recheckTree('source-recheck-before-apply');
+    if (beforeApply) return stop('source-recheck-before-apply', beforeApply);
+    const applyEnv = { ...ctx.baseEnv, CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1', CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: receiptFile };
+    const apply = runTool(ctx, 'apply', [tool.script, ...tool.args, '--apply', '--input', manifestFile], { env: applyEnv, timeout: TIMEOUT_MS.apply });
+    const applyRecord = apply.json?.details?.receipt;
+    const applyOk = apply.status === 0 && apply.json?.ok === true
+      && applyRecord?.result === 'applied'
+      && applyRecord?.before_hash === pin.expected_live_definition_sha256
+      && applyRecord?.after_hash === pin.intended_replacement_sha256;
+
+    // 8. Post-apply inspect: also after a failed apply (a COMMIT outcome can be unknown).
+    const post = runTool(ctx, 'post-apply-inspect', [tool.script, ...tool.args, '--inspect'], { env: ctx.baseEnv, timeout: TIMEOUT_MS.inspect });
+    const postFailures = post.status === 0 && post.json?.ok === true ? postApplyInspectFailures(post.json.details, pin, tool) : ['inspect_failed'];
+    summary.post_apply_inspect = post.json?.ok === true ? pickInspect(post.json.details) : { error: post.json || post.stderr_tail };
+
+    if (!applyOk) {
+      steps.push({ step: 'apply', ok: false, code: apply.json?.code || null });
+      steps.push({ step: 'post-apply-inspect', ok: postFailures.length === 0, failed: postFailures });
+      return done(apply.json?.ok === true
+        ? fail(CODES.UNRELATED_MUTATION, 'apply reported success without the pinned before/after hashes', { result: apply.json })
+        : childFailure('apply', apply), { stopped_at: 'apply' });
+    }
+    steps.push({ step: 'apply', ok: true, result: 'applied' });
+    summary.apply_result = applyRecord;
+    if (postFailures.length) {
+      return stop('post-apply-inspect', fail(CODES.DEPLOYMENT_COLLISION, 'post-apply inspect does not show the intended state', { failed: postFailures, result: post.json || post.stderr_tail }));
+    }
+    steps.push({ step: 'post-apply-inspect', ok: true });
+
+    summary.applied = {
+      date: now().toISOString().slice(0, 10),
+      result: 'applied',
+      source_commit: args.commit,
+      source_commit_basis: 'SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run\'s log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.',
+      source_tarball: { file: source.details.tarball, sha256: source.details.tarball_sha256 },
+      runner: runnerLabel,
+      runner_basis: runnerBasis,
+      workstream_id: args.workstream_id,
+      one_use_id: oneUseId,
+      one_use_id_consumed: true,
+      one_use_id_consumed_basis: 'Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.',
+      owner_approval: args.approval_statement,
+      owner_approval_basis: `As passed in --approval-statement for --approval-scope ${args.approval_scope}; the one-shot cannot verify who said it.`,
+      operator: args.operator,
+      pre_apply_inspect: summary.pre_apply_inspect,
+      contract_results: summary.contract_results,
+      one_shot_run_id: runId,
+      one_shot_note: 'One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (' + tool.allowed_key + ' true), applied (exit 0) and ran the post-apply inspect.',
+      receipt: applyRecord,
+      post_apply_inspect: summary.post_apply_inspect,
+    };
+    summary.not_observed_by_this_run = [
+      'ssm_command_id (add from SSM)',
+      'source_staged_by (the sql53-temporary-transfer run id; add from GitHub Actions)',
+    ];
+    return done(ok());
+  }
 }

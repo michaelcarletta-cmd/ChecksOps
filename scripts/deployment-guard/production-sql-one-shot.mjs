@@ -4,10 +4,12 @@
  * or any tool registered in lib/production-sql-one-shot.mjs).
  *
  *   node scripts/deployment-guard/production-sql-one-shot.mjs \
- *     --migration sql80 --commit <main sha> --workstream-id <id> \
- *     --approval-statement "<the owner's exact words>" \
+ *     --migration sql80 --approval-scope sql80 --commit <main sha> \
+ *     --workstream-id <id> --operator <login> \
+ *     --approval-statement "<the owner's exact words>"   (or --approval-statement-b64 <base64>) \
  *     --source-tarball /path/source-<main sha>.tar.gz \
- *     --phase inspect|apply [--runner <instance id>] [--operator <login>]
+ *     --expected-tarball-sha256 <TARBALL_SHA256 from the transfer run log> \
+ *     --phase inspect|apply [--runner <instance id>]
  *
  * inspect: source checks, read-only inspect, runner contracts; writes nothing.
  * apply:   all of that again, then manifest, preflight receipt, evaluate,
@@ -15,7 +17,8 @@
  *
  * Run from the extracted transfer tarball on the SQL53 runner only (see
  * ops/production-sql-one-shot.md). It takes no receipt, manifest or input file,
- * refuses to start with any CHECKSOPS_DEPLOYMENT_GUARD_* variable set, and
+ * refuses to start with any CHECKSOPS_DEPLOYMENT_GUARD_* or node loader
+ * variable (NODE_OPTIONS, NODE_PATH, LD_PRELOAD, ...) or node flag set, and
  * refuses a pin with execute false. The per-migration tools remain the only
  * code that connects to the database. Prints one JSON summary.
  */
@@ -42,6 +45,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     env,
     run: deps.run || spawnRunner,
     nodePath: deps.nodePath || process.execPath,
+    execArgv: process.execArgv,
     ...deps,
   });
   return printResult(result);
