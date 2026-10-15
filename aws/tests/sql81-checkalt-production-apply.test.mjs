@@ -360,9 +360,11 @@ test('the pinned file is exactly the reviewed statements; a tampered pin or file
 });
 
 test('evaluation is bound to the exact pin, a recorded staging acceptance and the production gate', async () => {
-  // The committed pin's staging acceptance is pending: any manifest reference is refused.
-  const pending = await evaluateSql81ProductionApply(manifest(), { root: ROOT, pin: COMMITTED });
+  // A pending pin (no staging acceptance) refuses any manifest reference.
+  const pending = await evaluateSql81ProductionApply(manifest(), { root: ROOT, pin: PENDING });
   assert.equal(pending.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  // The committed pin refuses a manifest whose reference is not its recorded staging run.
+  assert.notEqual(STAGING_REF, COMMITTED.staging_acceptance.reference);
   const fromDisk = await evaluateSql81ProductionApply(manifest({ staging_acceptance: { ok: true, reference: STAGING_REF } }), { root: ROOT });
   assert.equal(fromDisk.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const okFalse = await evaluateSql81ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, staging_acceptance: { ...PIN.staging_acceptance, ok: false } } });
