@@ -7,6 +7,7 @@ import { matchesAmountQuery } from "@/features/check-command/status";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
+import { useCheckAltAccess } from "@/hooks/useCanMoveChecks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +113,9 @@ interface DepositOperationsConsoleProps {
 export function DepositOperationsConsole({ searchQuery = "" }: DepositOperationsConsoleProps = {}) {
   const { user } = useAuth();
   const { tenantId } = useTenantFilter();
+  // Check Alt Submit/Resubmit Deposit are hidden from viewers and non-members.
+  const checkAltAccess = useCheckAltAccess();
+  const canOperateCheckAlt = checkAltAccess.canOperateIn(tenantId);
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -494,7 +498,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                                 <Building2 className="h-3 w-3 mr-1" />Deposited
                               </Button>
                             )}
-                            {item.status === "provider_assigned" && item.provider === "checkalt" && (
+                            {canOperateCheckAlt && item.status === "provider_assigned" && item.provider === "checkalt" && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
                                 disabled={checkaltSubmitMutation.isPending}
                                 onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
@@ -525,7 +529,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                                 </Button>
                               </>
                             )}
-                            {item.status === "failed" && item.provider === "checkalt" && (
+                            {canOperateCheckAlt && item.status === "failed" && item.provider === "checkalt" && (
                               <Button size="sm" variant="outline" className="text-xs h-7 border-amber-500/50 text-amber-500"
                                 disabled={checkaltSubmitMutation.isPending}
                                 onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
