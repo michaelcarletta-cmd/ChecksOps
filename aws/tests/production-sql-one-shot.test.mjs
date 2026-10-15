@@ -32,6 +32,7 @@ import {
 } from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
 import { evaluateMemberStakeholderProductionApply } from '../../scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs';
 import { evaluateSql80ProductionApply } from '../../scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs';
+import { evaluateSql81ProductionApply } from '../../scripts/deployment-guard/lib/sql81-checkalt-production-apply.mjs';
 import { main as oneShotMain } from '../../scripts/deployment-guard/production-sql-one-shot.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -41,7 +42,14 @@ const STATEMENT = 'approve applying SQL 80 to production';
 const RECEIPT = path.join(receiptDir(ROOT), 'production::production-sql.json');
 
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
-const executePin = (key, extra = {}) => ({ ...realPin(key), execute: true, ...extra });
+// A pin whose staging acceptance is still pending (SQL 81 today) gets a placeholder reference in
+// the execute-authorized test copy; the committed pin is checked to refuse below.
+const FIXTURE_STAGING_ACCEPTANCE = Object.freeze({ ok: true, reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000', basis: 'test fixture' });
+const executePin = (key, extra = {}) => {
+  const pin = realPin(key);
+  const stagingAcceptance = pin.staging_acceptance?.ok === true ? pin.staging_acceptance : FIXTURE_STAGING_ACCEPTANCE;
+  return { ...pin, execute: true, staging_acceptance: stagingAcceptance, ...extra };
+};
 
 function tarballFixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-tarball-'));
@@ -289,7 +297,9 @@ test('the manifest is built from the pin, the inspect and the contracts, and the
     assert.equal(guard.ok, true, `${key} preflight evaluate: ${JSON.stringify(guard.errors)}`);
     const evaluation = key === 'sql80'
       ? await evaluateSql80ProductionApply(manifest, { root: ROOT, pin })
-      : await evaluateMemberStakeholderProductionApply(manifest, { root: ROOT, migration: key, pin });
+      : key === 'sql81'
+        ? await evaluateSql81ProductionApply(manifest, { root: ROOT, pin })
+        : await evaluateMemberStakeholderProductionApply(manifest, { root: ROOT, migration: key, pin });
     assert.equal(evaluation.ok, true, `${key} tool evaluate: ${JSON.stringify(evaluation.errors)}`);
     assert.equal(evaluation.details[ONE_SHOT_TOOLS[key].allowed_key], true);
   }
@@ -472,6 +482,14 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     assert.equal(result.details.stopped_at, 'pin');
     assert.equal(runner.calls.length, 0);
   }
+  // SQL 81's committed pin has no staging acceptance yet: even with execute flipped it stops at the pin.
+  const sql81 = realPin('sql81');
+  assert.equal(sql81.staging_acceptance.ok, false);
+  const { result, runner } = await oneShot({ key: 'sql81', pin: { ...sql81, execute: true }, o: { 'workstream-id': 'prod-sql81-pending-test' } });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal(result.details.stopped_at, 'pin');
+  assert.equal(runner.calls.length, 0);
 });
 
 test('source failures stop before the inspect', async () => {

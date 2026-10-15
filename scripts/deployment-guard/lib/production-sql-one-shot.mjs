@@ -36,6 +36,7 @@ import { LOCAL_STATE_DIR, receiptDir } from './paths.mjs';
 import { hashSqlDefinition } from './sql-apply.mjs';
 import { MEMBER_STAKEHOLDER_MIGRATIONS } from './sql-member-stakeholder-production-apply.mjs';
 import { SQL80_PRODUCTION_PIN_REL } from './sql80-checkalt-production-apply.mjs';
+import { SQL81_PRODUCTION_PIN_REL } from './sql81-checkalt-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
@@ -111,6 +112,7 @@ export const ONE_SHOT_FLAGS = Object.freeze([
 
 const MEMBER_TOOL = 'scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs';
 const SQL80_TOOL = 'scripts/deployment-guard/sql80-checkalt-production-apply.mjs';
+const SQL81_TOOL = 'scripts/deployment-guard/sql81-checkalt-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
 const memberTool = (key) => Object.freeze({
@@ -136,6 +138,13 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL80_PRODUCTION_PIN_REL,
     allowed_key: 'sql80_production_apply_allowed',
   }),
+  sql81: Object.freeze({
+    key: 'sql81',
+    script: SQL81_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL81_PRODUCTION_PIN_REL,
+    allowed_key: 'sql81_production_apply_allowed',
+  }),
 });
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */
@@ -150,6 +159,7 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'apply_preconditions_met',
   'precondition_failures',
   'current_user',
+  'session_user',
   'owner_roles',
   'authenticated_member_of_owner',
   'table_owner',
@@ -158,9 +168,11 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'table_acls',
   'table_acl_entries',
   'policy_entries',
+  'function_present',
   'function_owner',
   'function_acl',
   'function_acl_entries',
+  'table_write_entries',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
