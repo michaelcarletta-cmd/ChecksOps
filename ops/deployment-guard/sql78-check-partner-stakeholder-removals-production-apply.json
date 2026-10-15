@@ -53,6 +53,7 @@
     "workstream_id": "prod-sql78-check-partner-stakeholder-removals-20261015",
     "one_use_id": "sql78-prod-cb9bb8f3-3071-4350-9158-cbff4a42349b",
     "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
     "owner_approval": "merged, approve applying SQL 78 to production",
     "pre_apply_inspect": {
       "ssm_command_id": "f6287116-f2a5-48ea-861c-e4651f898e24",
@@ -121,6 +122,6 @@
     }
   },
   "production_evidence": {
-    "2026-10-15 apply": "Guarded apply on i-0c35557c4e5385406, workstream prod-sql78-check-partner-stakeholder-removals-20261015, main a81464ce4 (staged by sql53-temporary-transfer run 38742844478), owner-approved run, SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2: receipt issued, evaluate allowed, apply exit 0, 4031dea6… -> 3d650a56…; unrelated catalog 8a778ee3… unchanged; post-apply inspect already_applied true, table_owner checksops_admin, authenticated_member_of_owner false. Pre-apply inspect SSM f6287116-f2a5-48ea-861c-e4651f898e24: live 4031dea6… = expected, already_applied false, predecessors.sql77.applied true, preconditions met, current_user checksops_admin, owner_roles [checksops_admin], authenticated_member_of_owner false. Contracts claim-ledger 4/4, tenant-isolation 6/6 (runner), financial-write-protections 36/36 (clean local checkout of the same commit). one_use_id sql78-prod-cb9bb8f3-3071-4350-9158-cbff4a42349b consumed. execute is false so the pin is no longer a standing authorization."
+    "2026-10-15 apply": "Guarded apply on i-0c35557c4e5385406, workstream prod-sql78-check-partner-stakeholder-removals-20261015, main a81464ce4 (staged by sql53-temporary-transfer run 38742844478), owner-approved run, SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2: receipt issued, evaluate allowed, apply exit 0, 4031dea6… -> 3d650a56…; unrelated catalog 8a778ee3… unchanged; post-apply inspect already_applied true, table_owner checksops_admin, authenticated_member_of_owner false. Pre-apply inspect SSM f6287116-f2a5-48ea-861c-e4651f898e24: live 4031dea6… = expected, already_applied false, predecessors.sql77.applied true, preconditions met, current_user checksops_admin, owner_roles [checksops_admin], authenticated_member_of_owner false. Contracts claim-ledger 4/4, tenant-isolation 6/6 (runner), financial-write-protections 36/36 (clean local checkout of the same commit). one_use_id sql78-prod-cb9bb8f3-3071-4350-9158-cbff4a42349b consumed by the successful apply (registry entry not read back). execute is false so the pin is no longer a standing authorization."
   }
 }

@@ -46,7 +46,7 @@ execute-authorized, not applied.
   - Main `a81464ce4524314dedb44894024f3d14d64bb4f0` (staged by sql53-temporary-transfer
     run 38742844478), runner `i-0c35557c4e5385406`, workstream
     `prod-sql78-check-partner-stakeholder-removals-20261015`, `one_use_id`
-    `sql78-prod-cb9bb8f3-3071-4350-9158-cbff4a42349b` (consumed).
+    `sql78-prod-cb9bb8f3-3071-4350-9158-cbff4a42349b` (consumed by the successful apply; the registry entry was not read back).
   - Pre-apply inspect and runner contracts, SSM `f6287116-f2a5-48ea-861c-e4651f898e24`:
     live `4031dea6c0fbb70af1b17befa7ffb161fec40227cda080cd87c222dec674d269` = expected,
     `live_matches_expected` true, `already_applied` false, `predecessors.sql77.applied`
@@ -66,7 +66,7 @@ execute-authorized, not applied.
     `authenticated_member_of_owner` false.
 - **SQL 79: execute-authorized** (`execute: true`), not applied. The reviewed change that
   sets it records:
-  - `authorization`: the owner approved the SQL 78 apply on 2026-10-15 and this change
+  - `authorization`: the owner approved the SQL 78 apply on 2026-10-15 and asked for this change
     ("approve the SQL 78 record and SQL 79 execute PR"); the SQL 79 pin values
     (d9bc8921 → 878d6441) are unchanged from the reviewed pin; production's read-only
     inspect (SSM `405d41e9-4b0e-4ca5-af90-27ff2c9428f2`) matched the pre-state d9bc8921

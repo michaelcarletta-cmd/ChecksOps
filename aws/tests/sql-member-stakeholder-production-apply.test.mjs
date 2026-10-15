@@ -439,7 +439,7 @@ test('SQL 79 execute pin: authorization wording, unchanged staging pins, staging
   const pin = COMMITTED.sql79;
   const staging = MEMBER_STAKEHOLDER_MIGRATIONS.sql79.staging_pin;
   assert.equal(pin.execute, true);
-  assert.ok(pin.authorization.startsWith('Owner approved the SQL 78 apply on 2026-10-15 and this change ("approve the SQL 78 record and SQL 79 execute PR"); the SQL 79 pin values (d9bc8921 -> 878d6441) are unchanged from the reviewed pin'));
+  assert.ok(pin.authorization.startsWith('Owner approved the SQL 78 apply on 2026-10-15 and asked for this change ("approve the SQL 78 record and SQL 79 execute PR"); the SQL 79 pin values (d9bc8921 -> 878d6441) are unchanged from the reviewed pin'));
   assert.ok(pin.authorization.includes("production's read-only inspect (SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2) matched the pre-state d9bc8921 (the post-state 878d6441 rests on staging run 38612871864)"));
   assert.match(pin.authorization, /CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES/);
   // It records no owner approval of a SQL 79 run.

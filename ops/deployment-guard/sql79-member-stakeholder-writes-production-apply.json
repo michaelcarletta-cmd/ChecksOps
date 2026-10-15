@@ -1,7 +1,7 @@
 {
   "id": "sql79-member-stakeholder-writes-production-apply",
   "migration": "sql79",
-  "authorization": "Owner approved the SQL 78 apply on 2026-10-15 and this change (\"approve the SQL 78 record and SQL 79 execute PR\"); the SQL 79 pin values (d9bc8921 -> 878d6441) are unchanged from the reviewed pin; production's read-only inspect (SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2) matched the pre-state d9bc8921 (the post-state 878d6441 rests on staging run 38612871864); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase (CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES) and a new one_use_id",
+  "authorization": "Owner approved the SQL 78 apply on 2026-10-15 and asked for this change (\"approve the SQL 78 record and SQL 79 execute PR\"); the SQL 79 pin values (d9bc8921 -> 878d6441) are unchanged from the reviewed pin; production's read-only inspect (SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2) matched the pre-state d9bc8921 (the post-state 878d6441 rests on staging run 38612871864); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase (CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES) and a new one_use_id",
   "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
