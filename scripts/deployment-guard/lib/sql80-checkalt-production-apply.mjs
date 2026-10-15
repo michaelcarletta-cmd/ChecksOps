@@ -128,6 +128,25 @@ WITH RECURSIVE m AS (
 )
 SELECT EXISTS (SELECT 1 FROM m JOIN pg_catalog.pg_roles r ON r.oid = m.member WHERE r.rolname = 'authenticated') AS member
 `.trim();
+// Whether authenticated is a member of any of the given owner roles (the function's and the
+// table's inspected owner), directly or through other roles. Every pg_auth_members row counts,
+// INHERIT FALSE and SET FALSE grants included: membership in the owner can still reach the
+// owner's privileges (SET ROLE, or a later ALTER/DROP as owner). NULL (an owner role or
+// authenticated missing, or no owner given) is treated as yes.
+const AUTHENTICATED_IN_OWNER_SQL = `
+WITH RECURSIVE owners AS (
+  SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = ANY($1::text[])
+), m AS (
+  SELECT am.member FROM pg_catalog.pg_auth_members am JOIN owners o ON o.oid = am.roleid
+  UNION
+  SELECT am.member FROM pg_catalog.pg_auth_members am JOIN m ON am.roleid = m.member
+)
+SELECT CASE WHEN pg_catalog.cardinality($1::text[]) = 0
+    OR (SELECT count(*) FROM owners) <> (SELECT count(DISTINCT x) FROM pg_catalog.unnest($1::text[]) x)
+    OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN NULL
+  ELSE EXISTS (SELECT 1 FROM m JOIN pg_catalog.pg_roles r ON r.oid = m.member WHERE r.rolname = 'authenticated')
+  END AS member
+`.trim();
 // Functions of schema auth (auth.uid() and friends), which SQL 80's body calls.
 const AUTH_FUNCTIONS_SQL = `
 SELECT p.oid::regprocedure::text AS sig, pg_catalog.pg_get_userbyid(p.proowner) AS owner, md5(p.prosrc) AS src_md5,
@@ -140,8 +159,14 @@ ORDER BY 1
 
 const entryLine = (row) => `${row.grantee} ${row.privilege_type}${row.is_grantable === true ? ' with grant option' : ''}`;
 
+/** The owner roles authenticated must not be a member of: the pin's inspected function and table owners. */
+export function sql80OwnerRoles(pin) {
+  const inspect = pin?.production_inspect || {};
+  return [...new Set([inspect.function_owner, inspect.table_owner].filter((name) => typeof name === 'string' && name))].sort();
+}
+
 /** Readable ACLs and owners of the function and the table, plus the UPDATE and membership checks. */
-export async function readCheckaltProductionDetail(client) {
+export async function readCheckaltProductionDetail(client, { ownerRoles = [] } = {}) {
   const fn = (await client.query(FUNCTION_DETAIL_SQL, [CHECKALT_AUTO_DEPOSIT_FUNCTION]))?.rows?.[0] || null;
   const fnEntries = fn ? ((await client.query(FUNCTION_ACL_ENTRIES_SQL, [CHECKALT_AUTO_DEPOSIT_FUNCTION]))?.rows || []) : [];
   const table = (await client.query(TABLE_DETAIL_SQL))?.rows?.[0] || null;
@@ -149,6 +174,7 @@ export async function readCheckaltProductionDetail(client) {
   const columns = table ? ((await client.query(COLUMN_UPDATE_SQL))?.rows || []) : [];
   const canUpdate = (await client.query(AUTHENTICATED_UPDATE_SQL))?.rows?.[0]?.can_update;
   const member = (await client.query(AUTHENTICATED_IN_CHECKSOPS_SQL))?.rows?.[0]?.member;
+  const ownerMember = (await client.query(AUTHENTICATED_IN_OWNER_SQL, [ownerRoles]))?.rows?.[0]?.member;
   return ok({
     function_acl: fn ? (fn.function_acl ?? null) : null,
     function_owner: fn ? fn.function_owner : null,
@@ -163,14 +189,16 @@ export async function readCheckaltProductionDetail(client) {
     column_update_entries: columns.map((row) => `${TABLE_NAME}.${row.column_name} ${row.grantee} UPDATE${row.is_grantable === true ? ' with grant option' : ''}`).sort(),
     authenticated_can_update: canUpdate === false ? false : true,
     authenticated_member_of_checksops: member === false ? false : true,
+    owner_roles: [...ownerRoles],
+    authenticated_member_of_owner: ownerMember === false ? false : true,
   });
 }
 
 /** The staging reader's state plus `production` (readable ACLs, owners), which is never hashed. */
-async function readState(client, executor) {
+async function readState(client, executor, pin) {
   const state = await executor.readCheckaltAutoDepositState(client);
   if (!state.ok) return state;
-  const detail = await readCheckaltProductionDetail(client);
+  const detail = await readCheckaltProductionDetail(client, { ownerRoles: sql80OwnerRoles(pin) });
   if (!detail.ok) return detail;
   return ok({ ...state.details, production: detail.details });
 }
@@ -213,6 +241,9 @@ const sharedChecks = (state, pin) => [
   ['no_column_update_grants', sameList(state?.production?.column_update_entries, [])],
   ['authenticated_cannot_update_table', state?.production?.authenticated_can_update === false],
   ['authenticated_not_member_of_checksops', state?.production?.authenticated_member_of_checksops === false],
+  ['authenticated_not_member_of_owner', state?.production?.authenticated_member_of_owner === false
+    && sameList(state?.production?.owner_roles, sql80OwnerRoles(pin))
+    && (state?.production?.owner_roles || []).length > 0],
 ];
 
 /** Production pre-apply rule: exactly the state the 2026-10-15 inspect read. */
@@ -358,7 +389,7 @@ export async function inspectSql80Production({ connect, pin, root = repoRootFrom
   try {
     await client.query('BEGIN READ ONLY');
     await client.query(PG_CATALOG_SEARCH_PATH_SQL);
-    const state = await readState(client, executor);
+    const state = await readState(client, executor, thePin);
     if (!state.ok) {
       return ok({ read_only: true, migration: 'sql80', state_error: { code: state.code, message: state.message }, apply_preconditions_met: false });
     }
@@ -386,6 +417,8 @@ export async function inspectSql80Production({ connect, pin, root = repoRootFrom
       column_update_entries: production.column_update_entries,
       authenticated_can_update_table: production.authenticated_can_update,
       authenticated_member_of_checksops: production.authenticated_member_of_checksops,
+      owner_roles: production.owner_roles,
+      authenticated_member_of_owner: production.authenticated_member_of_owner,
       state: staging,
       live_definition_sha256: live,
       expected_live_definition_sha256: thePin.expected_live_definition_sha256,
@@ -475,7 +508,7 @@ export async function executeSql80ProductionApply(input = {}, ctx = {}) {
     for (const key of LOCK_KEYS) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [key]);
     await client.query(PG_CATALOG_SEARCH_PATH_SQL);
 
-    const before = await readState(client, executor);
+    const before = await readState(client, executor, pin);
     if (!before.ok) return rollback(before);
     if (alreadyApplied(before.details, pin)) {
       return rollback(fail(CODES.UNRELATED_MUTATION, 'SQL 80 is already in place; refuse re-apply', {
@@ -503,7 +536,7 @@ export async function executeSql80ProductionApply(input = {}, ctx = {}) {
     await client.query(sql.details.text);
 
     await client.query(PG_CATALOG_SEARCH_PATH_SQL);
-    const after = await readState(client, executor);
+    const after = await readState(client, executor, pin);
     if (!after.ok) return rollback(after);
     const snapshotAfter = await readSql80UnrelatedSnapshot(client);
     const postFailures = sql80ProductionPostconditionFailures(before.details, after.details, pin, sql.details.reviewed_definition_sha256);
