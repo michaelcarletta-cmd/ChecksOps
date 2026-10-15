@@ -2,13 +2,19 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
 import { canMoveTenantChecks } from "@/lib/tenantCheckUser";
+import { canOperateCheckAlt } from "@/lib/checkAltOperatorAccess";
 import { loadTenantCheckIdentity } from "@/lib/tenantCheckIdentity";
 import { useAuth } from "./useAuth";
 import { useTenantFilter } from "./useTenantFilter";
 
-export function useIdentityTenantAccess() {
+/**
+ * The signed-in user's membership of a tenant. Defaults to the current tenant
+ * (useTenantFilter); pass a tenant id to ask about a specific tenant.
+ */
+export function useIdentityTenantAccess(tenantIdOverride?: string | null) {
   const { user, userRole } = useAuth();
-  const { tenantId } = useTenantFilter();
+  const { tenantId: currentTenantId } = useTenantFilter();
+  const tenantId = tenantIdOverride !== undefined ? tenantIdOverride : currentTenantId;
   const aws = isAwsStaging();
 
   const { data: identity } = useQuery({
@@ -57,4 +63,15 @@ export function useCanMoveChecks(): boolean {
     systemRoles: roles,
     isTenantMember,
   });
+}
+
+/**
+ * True when the user's tenant role for this tenant (default: the current
+ * tenant) is owner, admin, manager or operator. Hides Check Alt submit,
+ * approve, reject and refresh-status controls from viewers and non-members.
+ * False while loading. UX only; the server enforces the same rule.
+ */
+export function useCanOperateCheckAlt(tenantIdOverride?: string | null): boolean {
+  const { isTenantMember, tenantRole } = useIdentityTenantAccess(tenantIdOverride);
+  return canOperateCheckAlt({ isTenantMember, tenantRole });
 }

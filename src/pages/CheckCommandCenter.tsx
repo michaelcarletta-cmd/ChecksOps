@@ -53,7 +53,7 @@ import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
-import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
+import { useCanMoveChecks, useCanOperateCheckAlt } from "@/hooks/useCanMoveChecks";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
@@ -3029,6 +3029,11 @@ function CheckDetailPanel({
   const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
   const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
   const isSharedView = !!check && !isOwner;
+  // Check Alt Deposit/Resubmit is only for owner/admin/manager/operator members
+  // of the check's tenant. Viewers and partners a check is shared with do not
+  // see it; the server refuses them either way.
+  const canOperateCheckAltHere = useCanOperateCheckAlt();
+  const canDepositWithCheckAlt = isOwner && canOperateCheckAltHere;
 
   const { data: frontImageUrl } = useQuery({
     queryKey: ["check-front-img", check?.front_image_path],
@@ -4224,7 +4229,9 @@ function CheckDetailPanel({
                           <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
                             <div className="font-medium">Deposit {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
                             {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
-                            <div className="text-red-200/60 mt-1">Click below to resubmit deposit.</div>
+                            {(!checkAltEnabled || canDepositWithCheckAlt) && (
+                              <div className="text-red-200/60 mt-1">Click below to resubmit deposit.</div>
+                            )}
                           </div>
                         )}
                         {allEndorsementsComplete && !isDepositBlocked && check.check_stage !== "deposited" && check.status !== "deposited" && (
@@ -4235,18 +4242,20 @@ function CheckDetailPanel({
                               frontImagePath={check.front_image_path}
                               backImageDepositPath={check.back_image_deposit_path}
                             />
-                            <Button
-                              size="sm"
-                              variant="success"
-                              className="w-full mt-1"
-                              disabled={depositingWithCheckAlt}
-                              onClick={handleDepositWithCheckAlt}
-                            >
-                              <Banknote className="h-4 w-4 mr-2" />
-                              {depositingWithCheckAlt
-                                ? DEPOSIT_PHASE_LABEL[depositPhase] || "Preparing check for deposit…"
-                                : caRejected ? "Resubmit Deposit" : "Deposit"}
-                            </Button>
+                            {canDepositWithCheckAlt && (
+                              <Button
+                                size="sm"
+                                variant="success"
+                                className="w-full mt-1"
+                                disabled={depositingWithCheckAlt}
+                                onClick={handleDepositWithCheckAlt}
+                              >
+                                <Banknote className="h-4 w-4 mr-2" />
+                                {depositingWithCheckAlt
+                                  ? DEPOSIT_PHASE_LABEL[depositPhase] || "Preparing check for deposit…"
+                                  : caRejected ? "Resubmit Deposit" : "Deposit"}
+                              </Button>
+                            )}
                             </>
                           ) : (
                        <Button

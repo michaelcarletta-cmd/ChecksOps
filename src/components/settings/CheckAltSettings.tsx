@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useCanOperateCheckAlt } from "@/hooks/useCanMoveChecks";
 import { awsApiBaseUrl } from "@/lib/awsStaging";
 import {
   checkAltProviderUserMessage,
@@ -411,6 +412,9 @@ export function CheckAltSettings() {
  */
 export function PendingApprovalDeposits() {
   const qc = useQueryClient();
+  // Viewers and non-members of the current tenant get the list without
+  // Approve, Reject or Poll Now; the server refuses those calls for them.
+  const canOperate = useCanOperateCheckAlt();
   const { toast } = useToast();
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
@@ -566,12 +570,14 @@ export function PendingApprovalDeposits() {
           No CheckAlt deposits awaiting approval.
         </p>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={() => poll.mutate()} disabled={poll.isPending}>
-            {poll.isPending
-              ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              : <RefreshCw className="h-3 w-3 mr-1" />}
-            Poll Now
-          </Button>
+          {canOperate && (
+            <Button size="sm" variant="ghost" onClick={() => poll.mutate()} disabled={poll.isPending}>
+              {poll.isPending
+                ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                : <RefreshCw className="h-3 w-3 mr-1" />}
+              Poll Now
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => refetch()}>
             Refresh
           </Button>
@@ -582,14 +588,16 @@ export function PendingApprovalDeposits() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-end">
-        <Button size="sm" variant="outline" onClick={() => poll.mutate()} disabled={poll.isPending}>
-          {poll.isPending
-            ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            : <RefreshCw className="h-3 w-3 mr-1" />}
-          Poll Now
-        </Button>
-      </div>
+      {canOperate && (
+        <div className="flex items-center justify-end">
+          <Button size="sm" variant="outline" onClick={() => poll.mutate()} disabled={poll.isPending}>
+            {poll.isPending
+              ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              : <RefreshCw className="h-3 w-3 mr-1" />}
+            Poll Now
+          </Button>
+        </div>
+      )}
       {data.map((row: any) => {
         const intake = row.check_intake_items;
         const statusDesc = row.last_status_payload?.statusDescription ?? row.last_status_payload?.reasonDescription;
@@ -626,7 +634,7 @@ export function PendingApprovalDeposits() {
                   </div>
                 )}
               </div>
-              {!isRejecting && (
+              {canOperate && !isRejecting && (
                 <div className="flex items-center gap-2 shrink-0">
                   <Button
                     size="sm"
@@ -656,7 +664,7 @@ export function PendingApprovalDeposits() {
                 </div>
               )}
             </div>
-            {isRejecting && (
+            {canOperate && isRejecting && (
               <div className="space-y-2 border-t border-border/40 pt-2">
                 <Label className="text-xs">Reject reason (optional)</Label>
                 <Input
