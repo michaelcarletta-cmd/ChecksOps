@@ -11,6 +11,13 @@
  * readStakeholderGrantState, readPartnerStakeholderRemovalsState,
  * readMemberStakeholderWritesState, SQL78/79_NORMALIZED_STATEMENTS), loaded from an
  * isolated copy of that module, so production fingerprints exactly what staging did.
+ * Exception, production only: the read-only production inspect of 2026-10-15 (SSM
+ * command ca4ad39d) found checksops already holding SELECT, INSERT, UPDATE and
+ * DELETE on public.check_stakeholders, where staging had SELECT only. The staging
+ * rule `update_not_granted` (SQL 77 and SQL 79) refuses any UPDATE grant, so SQL 77
+ * and SQL 79 carry production variants below that accept exactly that one
+ * pre-existing UPDATE (checksops on check_stakeholders, no grant option) and
+ * nothing else; every other staging condition still applies.
  * On top of that, apply refuses while a predecessor migration is not applied or a
  * dependency is missing, and rolls back unless every unrelated object in schema
  * public (relations, columns, constraints, policies, functions, triggers, ACLs,
@@ -93,11 +100,50 @@ export const DEPENDENCY_LABELS = Object.freeze({
   role_authenticated: 'role authenticated',
 });
 
+// Non-owner ACL entries of both stakeholder tables, with grantor and grant
+// option (the staging readers keep neither for the two grantees' own entries).
+// A table that does not exist yet contributes no rows.
+const STAKEHOLDER_GRANTEE_ACL_SQL = `
+SELECT c.oid::regclass::text AS rel, COALESCE(r.rolname, 'PUBLIC') AS grantee, pg_get_userbyid(a.grantor) AS grantor,
+  a.privilege_type, a.is_grantable
+FROM pg_class c
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.oid IN (to_regclass('public.check_stakeholders'), to_regclass('public.check_partner_stakeholder_removals'))
+  AND a.grantee <> c.relowner
+ORDER BY 1, 2, 3, 4
+`.trim();
+// The one UPDATE grant production already had before SQL 77 (inspect 2026-10-15,
+// SSM ca4ad39d), as an update_entries line. Any other UPDATE, or this one with
+// grant option, is drift.
+export const PRODUCTION_PREEXISTING_UPDATE_ENTRIES = Object.freeze([`${STAKEHOLDER_GRANT_TABLE} checksops UPDATE`]);
+const FOUR_PRIVILEGES = Object.freeze(['SELECT', 'INSERT', 'UPDATE', 'DELETE']);
+const privilegesAre = (state, granted) => FOUR_PRIVILEGES.every((privilege) => (state?.[privilege] === 'granted') === granted.includes(privilege));
+const sameList = (a, b) => Array.isArray(a) && Array.isArray(b) && JSON.stringify(a) === JSON.stringify(b);
+
+/** Production-only ACL detail read next to the staging fingerprint. Never part of the hash. */
+export async function readStakeholderGranteeAcl(client) {
+  const rows = (await client.query(STAKEHOLDER_GRANTEE_ACL_SQL))?.rows || [];
+  const line = (row) => `${row.rel} ${row.grantee} ${row.privilege_type}${row.is_grantable === true ? ' with grant option' : ''}`;
+  return ok({
+    // checksops' own entries on check_stakeholders, grantor included: byte-identical across SQL 77.
+    checksops_check_stakeholders_entries: rows
+      .filter((row) => row.rel === STAKEHOLDER_GRANT_TABLE && row.grantee === 'checksops')
+      .map((row) => `${line(row)} granted by ${row.grantor}`)
+      .sort(),
+    // Every non-owner UPDATE entry on either table.
+    update_entries: [...new Set(rows.filter((row) => row.privilege_type === 'UPDATE').map(line))].sort(),
+  });
+}
+const updateOnlyPreexisting = (state) => sameList(state?.production?.update_entries, PRODUCTION_PREEXISTING_UPDATE_ENTRIES);
+
 const memberPolicyKeys = MEMBER_STAKEHOLDER_TABLES.flatMap((table) => MEMBER_STAKEHOLDER_NEW_POLICIES[table].map((policy) => `${table}.${policy.name}`));
 
 /**
  * Per migration: its staging pin, the staging reader and lock key, what it
- * depends on, and the staging handler's exact pre/post rules.
+ * depends on, and the staging handler's exact pre/post rules (SQL 77 and SQL 79:
+ * production variants, see the header). `productionRead`, when set, adds
+ * `state.production` next to the staging state; it is never part of the hash.
  * `preconditionFailures` and `postconditionFailures` return the names of the
  * failed checks (empty = pass).
  */
@@ -115,13 +161,30 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
     // every other entry of that ACL to preserved_acl_sha256.
     scope: Object.freeze({ skip_relations: [], acl_ignored: [STAKEHOLDER_GRANT_TABLE], policies_ignored: [] }),
     statementsAllowed: (text) => SQL77_SINGLE_STATEMENT_RE.test(text),
+    productionRead: readStakeholderGranteeAcl,
     alreadyApplied: (state, pin) => state.live_definition_sha256 === pin.intended_replacement_sha256,
+    // Production variant of the staging rule (tenant_guard_ok, update_not_granted):
+    // checksops already holds all four privileges, its UPDATE without grant option
+    // and as the only UPDATE; authenticated holds none. Re-granting S/I/D to
+    // checksops is then a no-op; only authenticated gains S/I/D.
     preconditionFailures: (state) => [
+      ['table_present', state.table_present === true],
+      ['rls_enabled', state.rls_enabled === true],
+      ['write_policy_as_expected', state.write_policy_as_expected === true],
+      ['no_other_write_policy', state.other_write_policy_count === 0],
+      ['grantee_does_not_bypass_rls', state.grantee_bypasses_rls === false],
       ['tenant_guard_ok', state.tenant_guard_ok === true],
-      ['update_not_granted', state.update_granted === false],
+      ['checksops_holds_select_insert_update_delete', privilegesAre(state.privilege_state?.checksops, FOUR_PRIVILEGES)],
+      ['authenticated_holds_none', privilegesAre(state.privilege_state?.authenticated, [])],
+      ['update_only_checksops_without_grant_option', updateOnlyPreexisting(state)],
     ].filter(([, passed]) => !passed).map(([name]) => name),
     postconditionFailures: (before, after, pin) => [
       ['intended_state', after.live_definition_sha256 === pin.intended_replacement_sha256],
+      ['authenticated_select_insert_delete_only', privilegesAre(after.privilege_state?.authenticated, ['SELECT', 'INSERT', 'DELETE'])],
+      ['checksops_unchanged', privilegesAre(after.privilege_state?.checksops, FOUR_PRIVILEGES)
+        && JSON.stringify(after.privilege_state?.checksops) === JSON.stringify(before.privilege_state?.checksops)
+        && sameList(after.production?.checksops_check_stakeholders_entries, before.production?.checksops_check_stakeholders_entries)],
+      ['update_only_checksops_without_grant_option', updateOnlyPreexisting(after)],
       ['other_acl_entries_unchanged', after.preserved_acl_sha256 === before.preserved_acl_sha256],
       ['tenant_guard_ok', after.tenant_guard_ok === true],
     ].filter(([, passed]) => !passed).map(([name]) => name),
@@ -169,22 +232,31 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
     // Only the four member policies are new; everything else stays identical.
     scope: Object.freeze({ skip_relations: [], acl_ignored: [], policies_ignored: memberPolicyKeys }),
     statementsAllowed: (text, executor) => normalizeStatements(text) === executor.SQL79_NORMALIZED_STATEMENTS,
+    productionRead: readStakeholderGranteeAcl,
     alreadyApplied: (state, pin) => state.live_definition_sha256 === pin.intended_replacement_sha256
       || Object.values(state.member_policy_states || {}).some((value) => value !== 'absent'),
+    // Production variant of the staging rule: the staging reader's update_granted
+    // (and so its tenant_guard_ok) is true / false in production because checksops
+    // keeps UPDATE on check_stakeholders after SQL 77. Every other part of
+    // tenant_guard_ok is checked by name, and that UPDATE must be the only one on
+    // either table.
     preconditionFailures: (state) => [
       ['tables_present', state.tables_present === true],
       ['required_roles_present', state.required_roles_present === true],
       ['required_functions_present', state.required_functions_present === true],
       ['functions_executable', state.functions_executable === true],
       ['grantee_does_not_bypass_rls', state.grantee_bypasses_rls === false],
-      ['update_not_granted', state.update_granted === false],
-      ['tenant_guard_ok', state.tenant_guard_ok === true],
+      ['rls_enabled', state.rls_enabled === true],
+      ['reviewed_policies_as_expected', state.reviewed_policies_as_expected === true],
+      ['no_other_policies', state.other_policy_count === 0],
+      ['functions_as_expected', state.functions_as_expected === true],
+      ['update_only_checksops_without_grant_option', updateOnlyPreexisting(state)],
     ].filter(([, passed]) => !passed).map(([name]) => name),
     postconditionFailures: (before, after, pin) => [
       ['intended_state', after.live_definition_sha256 === pin.intended_replacement_sha256],
       ['member_policies_present', after.member_policies_present === true],
       ['acl_unchanged', after.acl_sha256 === before.acl_sha256],
-      ['update_not_granted', after.update_granted === false],
+      ['update_only_checksops_without_grant_option', updateOnlyPreexisting(after)],
       ['grantee_does_not_bypass_rls', after.grantee_bypasses_rls === false],
     ].filter(([, passed]) => !passed).map(([name]) => name),
   }),
@@ -285,6 +357,15 @@ export async function evaluateMemberStakeholderProductionApply(input = {}, { roo
 export const resolveMemberStakeholderDatabaseUrl = resolveLedgerDatabaseUrl;
 
 // --- catalog reads ----------------------------------------------------------
+
+/** The staging reader's state plus, when the spec has one, its production-only read. */
+async function readMigrationState(client, spec, executor) {
+  const state = await executor[spec.reader](client);
+  if (!state.ok || typeof spec.productionRead !== 'function') return state;
+  const extra = await spec.productionRead(client);
+  if (!extra.ok) return extra;
+  return ok({ ...state.details, production: extra.details });
+}
 
 /** Runs `fn` under a savepoint so a failing read leaves the transaction usable. */
 async function guardedRead(client, name, fn) {
@@ -450,7 +531,7 @@ export async function inspectMemberStakeholderProduction({ connect, migration, p
     const predecessorsApplied = Object.values(predecessors).every((row) => row.applied === true);
     const state = missing.length
       ? fail(CODES.DEPLOYMENT_COLLISION, `${spec.label} dependencies are missing`, { missing_dependencies: missing.map((name) => DEPENDENCY_LABELS[name]) })
-      : await guardedRead(client, `state_${spec.key}`, () => executor[spec.reader](client));
+      : await guardedRead(client, `state_${spec.key}`, () => readMigrationState(client, spec, executor));
     const details = state.ok ? state.details : null;
     const live = details?.live_definition_sha256 || null;
     const preconditionFailures = details ? spec.preconditionFailures(details) : ['state_unreadable'];
@@ -573,7 +654,7 @@ export async function executeMemberStakeholderProductionApply(input = {}, ctx = 
         missing_dependencies: missing.map((name) => DEPENDENCY_LABELS[name]),
       }));
     }
-    const before = await executor[spec.reader](client);
+    const before = await readMigrationState(client, spec, executor);
     if (!before.ok) return rollback(before);
     if (spec.alreadyApplied(before.details, pin)) {
       return rollback(fail(CODES.UNRELATED_MUTATION, `${spec.label} is already in place; refuse re-apply`, {
@@ -603,7 +684,7 @@ export async function executeMemberStakeholderProductionApply(input = {}, ctx = 
 
     await client.query(sql.details.text);
 
-    const after = await executor[spec.reader](client);
+    const after = await readMigrationState(client, spec, executor);
     if (!after.ok) return rollback(after);
     const snapshotAfter = await readUnrelatedCatalogSnapshot(client, spec.scope);
     const postFailures = spec.postconditionFailures(before.details, after.details, pin);

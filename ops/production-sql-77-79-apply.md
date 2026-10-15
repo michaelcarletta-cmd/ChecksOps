@@ -20,19 +20,51 @@ Tool: `scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --mi
 
 | | expected pre-state | intended post-state | staging apply |
 |---|---|---|---|
-| `sql77` | `71465932…` (checksops SELECT only, authenticated nothing) | `e4d49ffa…` (both SELECT/INSERT/DELETE, no UPDATE) | run #26 [38574715440](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440) |
+| `sql77` | `8f2417b5…` (production: checksops SELECT/INSERT/UPDATE/DELETE, authenticated nothing) | `0cd3ab3f…` (checksops unchanged, all four; authenticated SELECT/INSERT/DELETE, no UPDATE) | run #26 [38574715440](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440) (staging `71465932…` → `e4d49ffa…`) |
 | `sql78` | `4031dea6…` (table absent) | `3d650a56…` | run #31 [38602758947](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38602758947) |
 | `sql79` | `d9bc8921…` (reviewed policies only, pinned helper bodies) | `878d6441…` | run #34 [38612871864](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864) |
 
 The hashes are the staging executor's own fingerprints
 (`readStakeholderGrantState`, `readPartnerStakeholderRemovalsState`,
 `readMemberStakeholderWritesState` in `aws/write-path/guarded-sql-executor/index.mjs`;
-the tool loads that module from an isolated copy). They are the staging pins in
-`scripts/deployment-guard/lib/sql-executor-auth.mjs`. Production is expected to read
+the tool loads that module from an isolated copy). SQL 78's and SQL 79's are the
+staging pins in `scripts/deployment-guard/lib/sql-executor-auth.mjs`; SQL 77's are
+production-specific (below). Production is expected to read
 the same pre-state, but may not: for example SQL 79's fingerprint includes whether
 the login that runs the file owns both tables, and SQL 77's includes the two
 grantees' current privileges. If inspect reads a different live hash, **stop**: the
 apply refuses, and a different pre-state needs its own reviewed pin change.
+
+**SQL 77 production pin (2026-10-15).** That happened for SQL 77. The owner-approved
+read-only inspect (SSM command `ca4ad39d`) read `8f2417b5…`: `checksops` already holds
+SELECT, INSERT, UPDATE and DELETE on `public.check_stakeholders` (staging: SELECT only),
+`authenticated` nothing; RLS, the reviewed write policy, no other write policy, no RLS
+bypass, `tenant_guard_ok` all as expected; `preserved_acl_sha256` `c40af23b…`. It
+reported `precondition_failures: ["update_not_granted"]`. The SQL 77 pin now expects
+that state. The SQL file is unchanged (same `source_sha256`): re-granting
+SELECT/INSERT/DELETE to `checksops` is a no-op, so `checksops` keeps all four
+(UPDATE included, no REVOKE) and only `authenticated` gains SELECT/INSERT/DELETE. The
+intended hash `0cd3ab3f…` is what `readStakeholderGrantState` reads after the file on
+a PostgreSQL 16 fixture of the production pre-state, so it differs from staging's
+`e4d49ffa…`; the staging acceptance reference is still run #26.
+
+The production tool replaces the staging `update_not_granted` rule with a
+production-only rule (the staging executor is unchanged). SQL 77 pre-apply: every
+other staging condition (table, RLS, reviewed write policy, no other write policy,
+no RLS bypass, `tenant_guard_ok`), `checksops` holds exactly the four privileges,
+`authenticated` holds none, and the only non-owner UPDATE on either stakeholder table
+is `checksops` on `check_stakeholders`, without grant option. Post-apply: the
+intended hash, `authenticated` exactly SELECT/INSERT/DELETE, `checksops`' ACL entries
+(grantor and grant option included) byte-identical, `preserved_acl_sha256` and the
+unrelated-catalog snapshot unchanged. The staging pre-state (`71465932…`) is refused.
+
+SQL 78 and SQL 79 pins are unchanged: SQL 78's fingerprint covers only the new table
+and SQL 79's covers RLS, policies, ownership and the helper functions, not ACLs, so
+`d9bc8921…` → `878d6441…` holds in production too (reproduced on the same fixture).
+But SQL 79's staging rule also refuses any UPDATE grant (`update_not_granted`, and
+through it `tenant_guard_ok`), which `checksops`' kept UPDATE trips. Its production
+variant checks every other part of `tenant_guard_ok` by name and accepts only that
+one UPDATE (before and after); any other UPDATE on either table is refused.
 
 ## Where it runs
 
@@ -94,5 +126,6 @@ secret as SQL 72; the tool still proves the endpoint is the production RDS.
 - SQL 79: `DROP POLICY` the four `aws_member_*` policies. Admin/staff writes keep working.
 - SQL 78: `DROP TABLE public.check_partner_stakeholder_removals` (only after SQL 79 is
   rolled back and the API no longer writes it; recorded removals are lost).
-- SQL 77: `REVOKE INSERT, DELETE ON public.check_stakeholders FROM checksops, authenticated`
-  and `REVOKE SELECT … FROM authenticated` (checksops keeps SELECT).
+- SQL 77: `REVOKE SELECT, INSERT, DELETE ON public.check_stakeholders FROM authenticated`.
+  In production `checksops` already held all four privileges before SQL 77, so its
+  privileges are not revoked (staging: `REVOKE INSERT, DELETE … FROM checksops` too).
