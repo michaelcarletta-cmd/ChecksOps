@@ -7,12 +7,12 @@
   "members": {
     "providers/production/checkalt-authz.mjs": {
       "live_sha256": "69408021199775db888d949a8c36488574e8d4e977b63a9ba826a1fa790fe683",
-      "accepted_sha256": "8d4359828d4229098fb82c1a08ddcf62d487209dacdfbc7203d46849d9c3b035",
+      "accepted_sha256": "80b44100bbf053f4869858cf2ad04c1ef9d0d36ce20aead85b91f2232d3d96f3",
       "operation": "replace"
     },
     "workflow-rpc.mjs": {
       "live_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
-      "accepted_sha256": "dedbf7a81a03698c8f6c9b9bda34560fcd462ade7fc9ff35ce51744f129b2c78",
+      "accepted_sha256": "659028c2a712e3d40adcf8375b878ef27c2673e97f5f39e0cba89527ef9afe68",
       "operation": "replace"
     }
   }
