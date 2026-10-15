@@ -84,7 +84,14 @@ import { handleAdminResetTotp } from './admin-reset-totp.mjs';
 import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
 import { handleTaxProfiles } from './tax-profiles.mjs';
-import { handleTenantManagementV2 } from './tenant-management-v2.mjs';
+import {
+  handleSaveTenantBillingAccount,
+  handleSaveTenantCompanyBranding,
+} from './tenant-settings-handlers.mjs';
+import {
+  handleTenantBillingAdmin,
+  handleTenantBillingAuthorize,
+} from './tenant-billing-handlers.mjs';
 import { handleMortgageAgentCompensation } from './mortgage-agent-compensation.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
@@ -154,11 +161,14 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-set-openai-key',
   'tenant-validate-openai-key',
   'tenant-remove-openai-key',
-  'tenant-management-v2',
   // Mortgage desk hire (Cognito + identity_accounts)
   'hire-mortgage-agent',
   'mortgage-agent-compensation',
   'tenant-tax-profiles',
+  'save-tenant-billing-account',
+  'tenant-company-branding-save',
+  'tenant-billing-admin',
+  'tenant-billing-authorize',
   // Public directory
   'public-contractor-directory',
   'lookup-partner-code-public',
@@ -186,13 +196,6 @@ export const handleAppServiceRequest = async (event, path, method) => {
   const upper = String(method || 'POST').toUpperCase();
   if (upper === 'OPTIONS') {
     return { ok: true, statusCode: 200, cors: true };
-  }
-
-  if (name === 'tenant-management-v2') {
-    if (upper !== 'GET') {
-      return { ok: false, statusCode: 405, error: 'method_not_allowed' };
-    }
-    return handleTenantManagementV2(event);
   }
 
   if (name === 'handle-email-unsubscribe' && (upper === 'GET' || upper === 'POST')) {
@@ -326,6 +329,14 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleMortgageAgentCompensation(event);
     case 'tenant-tax-profiles':
       return handleTaxProfiles(event);
+    case 'save-tenant-billing-account':
+      return handleSaveTenantBillingAccount(event);
+    case 'tenant-company-branding-save':
+      return handleSaveTenantCompanyBranding(event);
+    case 'tenant-billing-admin':
+      return handleTenantBillingAdmin(event);
+    case 'tenant-billing-authorize':
+      return handleTenantBillingAuthorize(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);
