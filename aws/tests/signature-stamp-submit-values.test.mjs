@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { PNG } from 'pngjs';
-import { PDFDocument, rgb } from 'pdf-lib';
+import {
+  PDFArray,
+  PDFDocument,
+  PDFName,
+  PDFRawStream,
+  decodePDFRawStream,
+  rgb,
+} from 'pdf-lib';
 import {
   attachCompletedSignatureDocument,
   buildSubmitSignersWithValues,
@@ -78,49 +81,65 @@ const fieldBoxPdf = (pageWidth, pageHeight, field) => {
   return { x, y, w, h };
 };
 
-const countColorPixels = (pngBytes, box, color) => {
-  const png = PNG.sync.read(pngBytes);
-  let inBox = 0;
-  let outBox = 0;
-  for (let y = 0; y < png.height; y += 1) {
-    for (let x = 0; x < png.width; x += 1) {
-      const idx = (png.width * y + x) << 2;
-      const r = png.data[idx];
-      const g = png.data[idx + 1];
-      const b = png.data[idx + 2];
-      const a = png.data[idx + 3];
-      const isColor = a > 80
-        && Math.abs(r - color.r) < 50
-        && Math.abs(g - color.g) < 50
-        && Math.abs(b - color.b) < 50;
-      if (!isColor) continue;
-      const inside = x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
-      if (inside) inBox += 1;
-      else outBox += 1;
+const multiply = (a, b) => [
+  (a[0] * b[0]) + (a[1] * b[2]),
+  (a[0] * b[1]) + (a[1] * b[3]),
+  (a[2] * b[0]) + (a[3] * b[2]),
+  (a[2] * b[1]) + (a[3] * b[3]),
+  (a[4] * b[0]) + (a[5] * b[2]) + b[4],
+  (a[4] * b[1]) + (a[5] * b[3]) + b[5],
+];
+
+/**
+ * Every image drawn on page 1, with its placement in PDF points and its pixel
+ * width. Reads the content streams directly so no rasterizer is needed.
+ */
+const drawnImages = async (pdfBytes) => {
+  const doc = await PDFDocument.load(pdfBytes);
+  const page = doc.getPages()[0];
+  const contents = page.node.Contents();
+  const streams = contents instanceof PDFArray
+    ? contents.asArray().map((ref) => doc.context.lookup(ref))
+    : [contents];
+  const text = streams.map((stream) => Buffer.from(
+    stream instanceof PDFRawStream ? decodePDFRawStream(stream).decode() : stream.getContents(),
+  ).toString('latin1')).join('\n');
+  const xobjects = page.node.Resources().lookup(PDFName.of('XObject'));
+  const widthOf = (name) => {
+    const ref = xobjects?.get(PDFName.of(name));
+    const width = ref ? doc.context.lookup(ref).dict.get(PDFName.of('Width')) : null;
+    return width ? Number(width.toString()) : null;
+  };
+  const images = [];
+  const stack = [];
+  let ctm = [1, 0, 0, 1, 0, 0];
+  for (const line of text.split(/\r?\n/)) {
+    const op = line.trim();
+    if (op === 'q') stack.push(ctm);
+    else if (op === 'Q') ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
+    const cm = op.match(/^(\S+) (\S+) (\S+) (\S+) (\S+) (\S+) cm$/);
+    if (cm) ctm = multiply(cm.slice(1).map(Number), ctm);
+    const draw = op.match(/^\/(\S+) Do$/);
+    if (draw) {
+      images.push({
+        pixelWidth: widthOf(draw[1]),
+        x: ctm[4],
+        y: ctm[5],
+        w: ctm[0],
+        h: ctm[3],
+      });
     }
   }
-  return { inBox, outBox, width: png.width, height: png.height };
+  return { images, pageWidth: page.getWidth(), pageHeight: page.getHeight() };
 };
 
-const rasterize = (pdfBytes, prefix) => {
-  const dir = mkdtempSync(join(tmpdir(), 'sig-stamp-submit-'));
-  const pdfPath = join(dir, 'doc.pdf');
-  writeFileSync(pdfPath, pdfBytes);
-  const result = spawnSync('pdftoppm', ['-png', '-r', '144', pdfPath, join(dir, prefix)], { encoding: 'utf8' });
-  if (result.status !== 0) {
-    throw new Error(`pdftoppm failed: ${result.stderr || result.stdout || result.status}`);
-  }
-  return readFileSync(join(dir, `${prefix}-1.png`));
-};
-
-const rasterBox = (page, field, scale = 144 / 72) => {
-  const box = fieldBoxPdf(page.getWidth(), page.getHeight(), field);
-  return {
-    left: (box.x * scale) - 6,
-    right: ((box.x + box.w) * scale) + 6,
-    top: ((page.getHeight() - box.y - box.h) * scale) - 6,
-    bottom: ((page.getHeight() - box.y) * scale) + 6,
-  };
+/** The image sits inside the field box (1pt slack) and fills most of it. */
+const assertInsideField = (image, pageWidth, pageHeight, field, label) => {
+  const box = fieldBoxPdf(pageWidth, pageHeight, field);
+  assert.ok(image, `${label}: image not drawn`);
+  assert.ok(image.x >= box.x - 1 && image.x + image.w <= box.x + box.w + 1, `${label}: x outside field ${JSON.stringify({ image, box })}`);
+  assert.ok(image.y >= box.y - 1 && image.y + image.h <= box.y + box.h + 1, `${label}: y outside field ${JSON.stringify({ image, box })}`);
+  assert.ok(image.w * image.h > box.w * box.h * 0.25, `${label}: image too small for field ${JSON.stringify({ image, box })}`);
 };
 
 test('1-5 editor signature-<timestamp> maps to persisted UUID with submitted PNG and lookup coordinates', () => {
@@ -193,12 +212,10 @@ test('6 stamp uses the intended submitted PNG at persisted coordinates, even wit
   const original = await makeSourcePdf();
   const stamped = Buffer.from(await stampSignaturePdf(original, signers));
   assert.match(stamped.toString('latin1'), /\/Subtype\s*\/Image[\s\S]{0,160}\/Width 400/);
-  const srcDoc = await PDFDocument.load(original);
-  const page = srcDoc.getPages()[0];
-  const raster = rasterize(stamped, 'intended');
-  const pixels = countColorPixels(raster, rasterBox(page, PLACEMENT_A), MAGENTA);
-  assert.ok(pixels.inBox > 80, `expected magenta signature in field box, got ${pixels.inBox}`);
-  assert.ok(pixels.outBox < pixels.inBox * 0.25, `signature leaked: in=${pixels.inBox} out=${pixels.outBox}`);
+  const { images, pageWidth, pageHeight } = await drawnImages(stamped);
+  assert.equal(images.length, 1);
+  assert.equal(images[0].pixelWidth, 400);
+  assertInsideField(images[0], pageWidth, pageHeight, PLACEMENT_A, 'signature');
 });
 
 test('7 missing or invalid signature image fails safely', async () => {
@@ -308,17 +325,11 @@ test('8 stamp keeps each signature in its own persisted box', async () => {
   const latin = stamped.toString('latin1');
   assert.match(latin, /\/Width 400/);
   assert.match(latin, /\/Width 220/);
-  const srcDoc = await PDFDocument.load(original);
-  const page = srcDoc.getPages()[0];
-  const raster = rasterize(stamped, 'cross');
-  const aMagenta = countColorPixels(raster, rasterBox(page, PLACEMENT_A), MAGENTA);
-  const bCyan = countColorPixels(raster, rasterBox(page, PLACEMENT_B), CYAN);
-  const aCyan = countColorPixels(raster, rasterBox(page, PLACEMENT_A), CYAN);
-  const bMagenta = countColorPixels(raster, rasterBox(page, PLACEMENT_B), MAGENTA);
-  assert.ok(aMagenta.inBox > 80, `magenta missing from A: ${aMagenta.inBox}`);
-  assert.ok(bCyan.inBox > 80, `cyan missing from B: ${bCyan.inBox}`);
-  assert.ok(aCyan.inBox < 20, `cyan leaked into A: ${aCyan.inBox}`);
-  assert.ok(bMagenta.inBox < 20, `magenta leaked into B: ${bMagenta.inBox}`);
+  const { images, pageWidth, pageHeight } = await drawnImages(stamped);
+  assert.equal(images.length, 2);
+  // The 400px (magenta) signature goes in box A, the 220px (cyan) one in box B.
+  assertInsideField(images.find((image) => image.pixelWidth === 400), pageWidth, pageHeight, PLACEMENT_A, 'A');
+  assertInsideField(images.find((image) => image.pixelWidth === 220), pageWidth, pageHeight, PLACEMENT_B, 'B');
 });
 
 test('9 attach without signersWithValues still re-reads merged DB values', async () => {
