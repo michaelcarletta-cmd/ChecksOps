@@ -89,6 +89,7 @@ const fakeClient = (state) => ({
     if (text.includes('aws_checkalt_production_config')) {
       return { rows: [{ merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com', default_enabled: true, depositor_account_id: null, business_unit: null }] };
     }
+    if (text.includes('to_regprocedure')) return { rows: [{ present: state.writerPresent !== false }] };
     if (text.includes('aws_register_checkalt_tenant_account')) {
       if (state.writerError) throw state.writerError;
       const account = JSON.parse(params[1]);
@@ -272,7 +273,16 @@ test('production register: Check Alt refusal saves nothing and returns masked de
   assert.equal(result.details.accountNumber, '****6789');
 });
 
-test('production register: SQL 81 not applied or writer refusal is reported, never a silent success', async () => {
+test('production register: SQL 81 not applied is refused before Check Alt is called', async () => {
+  const state = newState({ writerPresent: false });
+  const result = await call(state, 'checkalt-register-account', registerBody());
+  assert.equal(result.statusCode, 503);
+  assert.equal(result.error, 'register_writer_missing');
+  assert.equal(state.calls.length, 0);
+  assert.equal(state.saved, null);
+});
+
+test('production register: writer refusal after Check Alt accepted is reported, never a silent success', async () => {
   for (const [code, status, error] of [['42883', 503, 'register_writer_missing'], ['42501', 403, 'not_authorized'], ['P0002', 404, 'tenant_not_found']]) {
     const state = newState({ writerError: Object.assign(new Error('x'), { code }) });
     const result = await call(state, 'checkalt-register-account', registerBody());

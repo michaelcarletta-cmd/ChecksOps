@@ -118,9 +118,11 @@ test('PostgreSQL 16: SQL 81 lets only the platform owner register a production C
       deps: { loadProductionSecrets: secrets },
     }));
 
-    // Before SQL 81 the writer is missing: reported, not a silent success.
-    let result = await register(OWNER, {});
+    // Before SQL 81 the writer is missing: refused before Check Alt is called.
+    const early = [];
+    let result = await register(OWNER, {}, early);
     assert.equal(result.error, 'register_writer_missing', JSON.stringify(result));
+    assert.deepEqual(early, []);
     assert.equal(await stored(), undefined);
 
     await client.query(fs.readFileSync(SQL_81, 'utf8'));

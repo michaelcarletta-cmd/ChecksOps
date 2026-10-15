@@ -137,7 +137,9 @@ const sqlErrorResult = (error) => {
   return null;
 };
 
-const loadStoredAccount = async (client, tenantId) => (await client.query(
+export const REGISTER_WRITER_PRESENT_SQL = `SELECT to_regprocedure('public.aws_register_checkalt_tenant_account(uuid, jsonb)') IS NOT NULL AS present`;
+
+const loadStoredAccount =async (client, tenantId) => (await client.query(
   `SELECT tenant_id, sso_user_id, deposit_account_number, first_name, last_name, email,
           enabled, registered_at
    FROM public.checkalt_tenant_accounts
@@ -176,6 +178,12 @@ export async function handleProductionCheckAltRegister({
   }
   const input = validateRegisterBody(body);
   if (input.error) return { ...input.error, spoofFieldsIgnored: spoof };
+
+  // Never register with Check Alt when ChecksOps could not save the result.
+  const writer = (await client.query(REGISTER_WRITER_PRESENT_SQL)).rows[0];
+  if (!writer?.present) {
+    return { ...sqlErrorResult({ code: '42883' }), productionExecution: false, spoofFieldsIgnored: spoof };
+  }
 
   const loaded = await loadSecretsAndConfig(client, deps);
   if (loaded.errorResult) return { ...loaded.errorResult, spoofFieldsIgnored: spoof };
