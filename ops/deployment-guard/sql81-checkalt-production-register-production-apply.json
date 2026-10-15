@@ -1,8 +1,8 @@
 {
   "id": "sql81-checkalt-production-register-production-apply",
   "migration": "sql81",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "owner-approved 2026-10-15 in session (\"approve applying SQL 81 to production\"): the pin may carry execute true once this reviewed change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -20,17 +20,29 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
+    "status": "recorded",
+    "date": "2026-10-15",
+    "ssm_command_id": "402bbab1-f3a4-4904-8f12-0a2ea16a8462",
     "read_only": true,
     "connected_as": "checksops_admin",
     "function_count": 0,
     "table_owner": "checksops_admin",
     "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
     "column_write_grants": 0,
-    "source": "ops/deployment-guard/sql80-checkalt-member-auto-deposit-production-apply.json applied.receipt.table_acl (SQL 80 production apply, SSM b3221877-8d75-44e7-b76c-ae9420e2d73c, 2026-10-15, table_acl_unchanged true)",
-    "note": "Pending: no read-only production inspect has been run for SQL 81 yet. The table owner and ACL are the ones the SQL 80 production apply read and left byte-identical on 2026-10-15; function_count 0 is the expectation that SQL 81 has never run in production. Before the reviewed change that sets execute true, run node scripts/deployment-guard/sql81-checkalt-production-apply.mjs --inspect on the runner and record its date, SSM command id, live_definition_sha256 (must be e12fdf2f…), function_present false, table_owner and table_acl here. If anything differs, stop: a different pre-state needs its own reviewed pin change. expected_live_definition_sha256 e12fdf2f… is the staging executor's fingerprint (readCheckaltRegisterState / checkaltRegisterStateText) of the function absent, identical in staging and production."
+    "source": "Owner-approved read-only production inspect with the official tool (sql81-checkalt-production-apply.mjs --inspect) on main 75119fafe (tarball 27baf1be04e2cf818b9281bed48e8f7d40a587427dd00fcdbdceba0a32d7ba0d), SSM command 402bbab1-f3a4-4904-8f12-0a2ea16a8462, PostgreSQL 18.3, as checksops_admin",
+    "note": "Read-only inspect 2026-10-15: current_user and session_user checksops_admin; function_present false, overload_count 0; live_definition_sha256 e12fdf2f\u2026 = expected_live_definition_sha256; table_owner checksops_admin and table_acl byte-equal to the values above; table_write_entries checksops INSERT and UPDATE only; column_write_entries []; authenticated_can_write_table, authenticated_member_of_checksops and authenticated_member_of_owner false; owner_roles [checksops_admin]; precondition_failures []; apply_preconditions_met true.",
+    "latest": {
+      "date": "2026-10-15",
+      "ssm_command_id": "402bbab1-f3a4-4904-8f12-0a2ea16a8462",
+      "source_commit": "75119fafe",
+      "read_only": true,
+      "live_definition_sha256": "e12fdf2fe609d474a9cc215c018cce922cc2a63edfd18f7b5988ce21d1903f37",
+      "live_matches_expected": true,
+      "function_present": false,
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}"
+    }
   },
   "intended_post_state": {
     "function_definition_sha256": "d1f781edb9e8665748da96b28a8afca54279fa43cf603c526f4200524d104a78",
@@ -38,12 +50,12 @@
     "function_owner": "checksops_admin",
     "function_acl": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}",
     "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
-    "note": "After the unchanged SQL 81 file run as checksops_admin: the function exists once (no overload in any schema), owned by checksops_admin, SECURITY DEFINER with search_path=public and row_security=off, the SQL 81 body (pg_get_functiondef compared with the text reconstructed from the pinned file, sha256 d1f781ed…) and comment (e48465b4…), and EXECUTE for the owner, checksops and authenticated only; PUBLIC's default EXECUTE is revoked. The table ACL is byte-identical (SQL 81 grants no table privilege). intended_replacement_sha256 36623cce… equals the staging pin's (the owner's own entry is not part of the fingerprint)."
+    "note": "After the unchanged SQL 81 file run as checksops_admin: the function exists once (no overload in any schema), owned by checksops_admin, SECURITY DEFINER with search_path=public and row_security=off, the SQL 81 body (pg_get_functiondef compared with the text reconstructed from the pinned file, sha256 d1f781ed\u2026) and comment (e48465b4\u2026), and EXECUTE for the owner, checksops and authenticated only; PUBLIC's default EXECUTE is revoked. The table ACL is byte-identical (SQL 81 grants no table privilege). intended_replacement_sha256 36623cce\u2026 equals the staging pin's (the owner's own entry is not part of the fingerprint)."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor apply run of sql81-checkalt-depositor-register (staging e12fdf2f… -> 36623cce…) here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED.",
-    "production_differs": "The function is absent in both, so the pre-state fingerprint e12fdf2f… and the post-state 36623cce… are the same in staging and production. The table differs: production's checkalt_tenant_accounts grants checksops arwd (staging: no INSERT/UPDATE for checksops or authenticated), so this tool's production rules accept exactly the pinned production table ACL instead of the staging rule. The same file bytes (source_sha256) run in both."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38782120576",
+    "basis": "Guarded staging SQL executor apply of sql81-checkalt-depositor-register, run #44 (38782120576) on main 75119fafe, executor CodeSha256 GsGaJS69\u2026: staging e12fdf2f\u2026 -> 36623cce\u2026, acl_sha256 5e51925f\u2026. Read-live run 38782293351 (#45) confirmed already_applied, function_definition_sha256 d1f781ed\u2026 on staging PostgreSQL 18.3 (equal to intended_post_state.function_definition_sha256).",
+    "production_differs": "The function is absent in both, so the pre-state fingerprint e12fdf2f\u2026 and the post-state 36623cce\u2026 are the same in staging and production. The table differs: production's checkalt_tenant_accounts grants checksops arwd (staging: no INSERT/UPDATE for checksops or authenticated), so this tool's production rules accept exactly the pinned production table ACL instead of the staging rule. The same file bytes (source_sha256) run in both."
   }
 }

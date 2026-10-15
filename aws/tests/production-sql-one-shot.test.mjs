@@ -462,8 +462,10 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
-test('every real production pin (execute false today) is refused before any child', async () => {
-  for (const key of Object.keys(ONE_SHOT_TOOLS)) {
+test('every real production pin with execute false is refused before any child', async () => {
+  // SQL 81's pin is execute-authorized (owner-approved 2026-10-15) until its record-and-retire change.
+  assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), ['sql81']);
+  for (const key of Object.keys(ONE_SHOT_TOOLS).filter((k) => realPin(k).execute === false)) {
     for (const phase of ['inspect', 'apply']) {
       const { result, runner } = await oneShot({ key, pin: null, o: { phase } });
       assert.equal(realPin(key).execute, false);
@@ -482,10 +484,11 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     assert.equal(result.details.stopped_at, 'pin');
     assert.equal(runner.calls.length, 0);
   }
-  // SQL 81's committed pin has no staging acceptance yet: even with execute flipped it stops at the pin.
+  // SQL 81's pin without its recorded staging acceptance stops at the pin even with execute true.
   const sql81 = realPin('sql81');
-  assert.equal(sql81.staging_acceptance.ok, false);
-  const { result, runner } = await oneShot({ key: 'sql81', pin: { ...sql81, execute: true }, o: { 'workstream-id': 'prod-sql81-pending-test' } });
+  assert.equal(sql81.staging_acceptance.ok, true);
+  const pending = { ...sql81, execute: true, staging_acceptance: { ok: false, reference: null, basis: 'Pending' } };
+  const { result, runner } = await oneShot({ key: 'sql81', pin: pending, o: { 'workstream-id': 'prod-sql81-pending-test' } });
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
