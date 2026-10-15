@@ -9,6 +9,7 @@ import { denyTableReason, WRITE_ALLOWLIST } from '../functions/api/write-allowli
 import { executeAllowlistedWrite } from '../functions/api/write.mjs';
 import {
   AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL,
+  CHECKALT_TENANT_MEMBER_SQL,
   SAFE_WRITE_RPCS,
   executeSafeWriteRpc,
 } from '../functions/api/workflow-rpc.mjs';
@@ -40,7 +41,7 @@ const identityClient = ({ platformOwner = false, tenantAdminFor = FREEDOM } = {}
     }
     if (sql === USER_ROLES_SQL) return { rows: [{ role: 'admin' }] };
     if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: platformOwner }] };
-    if (/FROM public\.tenant_users/.test(sql) && /lower\(role::text\) IN \('admin', 'owner'\)/.test(sql)) {
+    if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
       if (params[0] === APP_ID && params[1] === tenantAdminFor) return { rows: [{ '?column?': 1 }] };
       return { rows: [] };
     }
@@ -220,4 +221,164 @@ test('CheckAlt provider request builders remain unchanged', () => {
   const rpc = fs.readFileSync(path.join(ROOT, 'functions/api/workflow-rpc.mjs'), 'utf8');
   assert.match(rpc, /aws_save_checkalt_tenant_auto_deposit/);
   assert.equal(/UPDATE public\.checkalt_tenant_accounts/.test(rpc), false);
+});
+
+const sql80 = fs.readFileSync(path.join(ROOT, 'workflows/sql/80_checkalt_member_auto_deposit.sql'), 'utf8');
+
+/** Plain member of FREEDOM: tenant_users row with a non-admin role, no user_roles. */
+const memberClient = ({ memberOf = FREEDOM, tenantRole = 'operator', result } = {}) => {
+  const queries = [];
+  return {
+    queries,
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: false }] };
+      if (sql === USER_ROLES_SQL) return { rows: [] };
+      if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
+        // Honor the role allowlist exactly as the gate's SQL spells it.
+        const allowed = [...(sql.match(/lower\(role::text\) IN \(([^)]*)\)/)?.[1] || '').matchAll(/'([^']+)'/g)].map((m) => m[1]);
+        if (!allowed.length) throw new Error('the Auto-Deposit gate must filter on tenant role');
+        const ok = params[0] === APP_ID && params[1] === memberOf && allowed.includes(tenantRole);
+        return { rows: ok ? [{ role: tenantRole }] : [] };
+      }
+      if (sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL) {
+        if (result !== undefined) return { rows: result === null ? [] : [{ result }] };
+        return {
+          rows: [{
+            result: {
+              tenant_id: params[0],
+              auto_approve_enabled: params[1].auto_approve_enabled,
+              auto_approve_max_cents: params[1].auto_approve_max_cents ?? null,
+            },
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  };
+};
+
+const save = (client, args) => executeSafeWriteRpc({
+  client,
+  mapping: { application_user_id: APP_ID },
+  name: 'save_checkalt_tenant_auto_deposit',
+  args,
+});
+
+test('tenant operators and admins can toggle Auto-Deposit and set or clear the ceiling', async () => {
+  for (const tenantRole of ['operator', 'admin', 'owner', 'manager']) {
+    const client = memberClient({ tenantRole });
+    const off = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false, auto_approve_max_cents: 200000 });
+    assert.equal(off.error, undefined, tenantRole);
+    assert.equal(off.data.auto_approve_enabled, false);
+    assert.equal(off.data.auto_approve_max_cents, 200000);
+    const blank = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: true, auto_approve_max_cents: null });
+    assert.equal(blank.error, undefined, tenantRole);
+    assert.equal(blank.data.auto_approve_max_cents, null);
+    const persists = client.queries.filter((q) => q.sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL);
+    assert.deepEqual(persists.map((q) => q.params[1]), [
+      { auto_approve_enabled: false, auto_approve_max_cents: 200000 },
+      { auto_approve_enabled: true, auto_approve_max_cents: null },
+    ]);
+  }
+});
+
+test('viewers (and unknown roles) cannot change Auto-Deposit, and nothing is written', async () => {
+  assert.match(CHECKALT_TENANT_MEMBER_SQL, /lower\(role::text\) IN \('owner', 'admin', 'manager', 'operator'\)/);
+  for (const tenantRole of ['viewer', 'Viewer', 'member', 'partner', '']) {
+    const client = memberClient({ tenantRole });
+    const denied = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false });
+    assert.equal(denied.error, 'not_authorized', tenantRole);
+    assert.equal(client.queries.some((q) => q.sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL), false, tenantRole);
+  }
+});
+
+test('a member of another tenant cannot change this tenant, and nothing is written', async () => {
+  const client = memberClient({ memberOf: C1C });
+  const denied = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false });
+  assert.equal(denied.error, 'not_authorized');
+  assert.equal(client.queries.some((q) => q.sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL), false);
+});
+
+test('ceiling must be null or a non-negative whole number of cents', async () => {
+  for (const bad of [-1, 12.5, '12.5', 'abc', true, {}, [], 2147483648, Number.NaN]) {
+    const client = memberClient();
+    const denied = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: true, auto_approve_max_cents: bad });
+    assert.equal(denied.error, 'invalid_field', String(bad));
+    assert.equal(denied.field, 'auto_approve_max_cents');
+    assert.equal(client.queries.some((q) => q.sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL), false);
+  }
+  for (const [good, cents] of [[0, 0], [250000, 250000], ['1500', 1500], ['', null]]) {
+    const ok = await save(memberClient(), { tenant_id: FREEDOM, auto_approve_enabled: true, auto_approve_max_cents: good });
+    assert.equal(ok.error, undefined, String(good));
+    assert.equal(ok.data.auto_approve_max_cents, cents);
+  }
+  const badToggle = await save(memberClient(), { tenant_id: FREEDOM, auto_approve_enabled: 'yes' });
+  assert.equal(badToggle.error, 'invalid_field');
+  assert.equal(badToggle.field, 'auto_approve_enabled');
+});
+
+test('a database invalid_field refusal names the right field, or a neutral one', async () => {
+  const failing = (error) => ({
+    query: async (sql, params) => {
+      if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: false }] };
+      if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
+        return { rows: params[1] === FREEDOM ? [{ role: 'operator' }] : [] };
+      }
+      if (sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL) throw error;
+      return { rows: [] };
+    },
+  });
+  const pgError = (detail, message = 'invalid_field') => Object.assign(new Error(message), { code: '22023', detail });
+  for (const [error, field] of [
+    [pgError('auto_approve_enabled'), 'auto_approve_enabled'],
+    [pgError('auto_approve_max_cents'), 'auto_approve_max_cents'],
+    [pgError(undefined), 'auto_deposit_settings'],
+    [pgError('something_else'), 'auto_deposit_settings'],
+    [Object.assign(new Error('bad'), { code: '22023' }), 'auto_deposit_settings'],
+  ]) {
+    const result = await save(failing(error), { tenant_id: FREEDOM, auto_approve_enabled: true, auto_approve_max_cents: 100 });
+    assert.equal(result.error, 'invalid_field');
+    assert.equal(result.field, field, String(error.detail));
+  }
+  const missing = await save(
+    failing(Object.assign(new Error('missing_required_field'), { code: '22023' })),
+    { tenant_id: FREEDOM, auto_approve_enabled: true },
+  );
+  assert.equal(missing.error, 'missing_required_field');
+});
+
+test('a save that returns no stored row is an error, never a silent success', async () => {
+  const empty = await save(memberClient({ result: null }), { tenant_id: FREEDOM, auto_approve_enabled: false });
+  assert.equal(empty.error, 'rls_denied');
+  const otherRow = await save(
+    memberClient({ result: { tenant_id: C1C, auto_approve_enabled: false, auto_approve_max_cents: null } }),
+    { tenant_id: FREEDOM, auto_approve_enabled: false },
+  );
+  assert.equal(otherRow.error, 'rls_denied');
+});
+
+test('SQL 80 replaces the persist RPC with an owner/admin/manager/operator gate and keeps the column whitelist', () => {
+  assert.match(sql80, /CREATE OR REPLACE FUNCTION public\.aws_save_checkalt_tenant_auto_deposit\(\s*_tenant_id uuid,\s*_settings jsonb\s*\)/);
+  assert.match(sql80, /SECURITY DEFINER/);
+  assert.match(sql80, /SET row_security = off/);
+  const gate = sql80.slice(sql80.indexOf('IF NOT ('), sql80.indexOf("RAISE EXCEPTION 'not_authorized'"));
+  assert.match(gate, /is_platform_owner\(\)/);
+  assert.match(gate, /tu\.user_id = auth\.uid\(\)/);
+  assert.match(gate, /tu\.tenant_id = _tenant_id/);
+  assert.match(gate, /AND lower\(tu\.role::text\) IN \('owner', 'admin', 'manager', 'operator'\)/);
+  assert.equal(/viewer/.test(gate), false);
+  const keyGuard = sql80.slice(sql80.indexOf('FOR _key IN'), sql80.indexOf('IF NOT ('));
+  assert.match(keyGuard, /_key NOT IN \('auto_approve_enabled', 'auto_approve_max_cents'\)/);
+  const updateSlice = sql80.slice(sql80.indexOf('UPDATE public.checkalt_tenant_accounts'), sql80.indexOf('RETURNING'));
+  const setColumns = [...updateSlice.matchAll(/^\s{4}(\w+) =/gm)].map((m) => m[1]);
+  assert.deepEqual(setColumns, ['auto_approve_enabled', 'auto_approve_max_cents', 'updated_at']);
+  assert.match(updateSlice, /WHERE tenant_id = _tenant_id/);
+  assert.match(sql80, /RAISE EXCEPTION 'not_found'/);
+  assert.match(sql80, /DETAIL = 'auto_approve_enabled'/);
+  assert.match(sql80, /DETAIL = 'auto_approve_max_cents'/);
+  assert.equal(/GRANT (UPDATE|INSERT|DELETE)/.test(sql80), false);
+  assert.equal(/ALTER TABLE|CREATE POLICY|DROP/.test(sql80), false);
+  assert.match(sql80, /REVOKE ALL ON FUNCTION public\.aws_save_checkalt_tenant_auto_deposit\(uuid, jsonb\) FROM PUBLIC/);
+  assert.match(sql80, /GRANT EXECUTE ON FUNCTION public\.aws_save_checkalt_tenant_auto_deposit\(uuid, jsonb\) TO checksops, authenticated/);
 });

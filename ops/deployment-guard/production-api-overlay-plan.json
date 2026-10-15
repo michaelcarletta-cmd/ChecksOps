@@ -2,7 +2,7 @@
   "id": "production-api-overlay-plan",
   "function_name": "checksops-production-prep-api",
   "source": "aws/tests/fixtures/production-reconciliation-deployment-manifest-2026-10-08.json",
-  "notes": "One member per guarded production run. Main's bytes must equal accepted_sha256. REPLACE requires the live member to still equal expected_live_sha256 (the reconciled pre-deploy bytes) unless it already equals accepted_sha256 (no-op). ADD requires the member to be absent. ocr.mjs and index.mjs are never overlaid. workflow-delete-check.mjs is not imported by any accepted member (Delete Check is served from workflow.mjs) and is excluded, matching overlay_sequence_when_authorized. Read-only production Moov wallet sync (2026-10-13): moov-wallet.mjs, then ADD providers/production/moov-wallet-sync.mjs, then providers.mjs (live production bytes, which carry the Platform Finance read exception, plus the moov-wallet-sync route). parity/moov-functions.mjs is not overlaid. Production WalletOps funding (2026-10-13): providers/production/moov-wallet-sync.mjs (financial GUCs for SQL 72), ADD providers/production/moov-fund-authz.mjs, cognito.mjs (login id claims), auth-financial-totp.mjs (wallet.fund step-up once per login), ADD providers/production/moov-wallet-fund.mjs, then providers.mjs (#914 bytes plus the moov-wallet-fund route). Production sends (2026-10-13): ADD providers/production/moov-send.mjs, then providers.mjs (#915 bytes plus the moov-disburse send route); applied (overlay runs 31 and 33). Then REPLACE providers/production/moov-send.mjs so partners added to the check stakeholders can be paid. Check Alt approve two-factor (2026-10-14): REPLACE providers/production/checkalt-authz.mjs, then auth-financial-totp.mjs (its new bytes import FINANCIAL_CHECKALT_STEPUP_ACTIONS from checkalt-authz.mjs at runtime, so checkalt-authz.mjs must be live first), then providers/production/checkalt-approve.mjs (so approve never asks for a proof the live step-up cannot mint). Check Alt approve two-factor applied 2026-10-14 (overlay runs 37, 38 and 39). Check Alt auto-approve (2026-10-14, PR #954): REPLACE providers/production/checkalt-config.mjs, then providers/production/checkalt-idempotency.mjs, then providers/production/checkalt-submit.mjs.",
+  "notes": "One member per guarded production run. Main's bytes must equal accepted_sha256. REPLACE requires the live member to still equal expected_live_sha256 (the reconciled pre-deploy bytes) unless it already equals accepted_sha256 (no-op). ADD requires the member to be absent. ocr.mjs and index.mjs are never overlaid. workflow-delete-check.mjs is not imported by any accepted member (Delete Check is served from workflow.mjs) and is excluded, matching overlay_sequence_when_authorized. Read-only production Moov wallet sync (2026-10-13): moov-wallet.mjs, then ADD providers/production/moov-wallet-sync.mjs, then providers.mjs (live production bytes, which carry the Platform Finance read exception, plus the moov-wallet-sync route). parity/moov-functions.mjs is not overlaid. Production WalletOps funding (2026-10-13): providers/production/moov-wallet-sync.mjs (financial GUCs for SQL 72), ADD providers/production/moov-fund-authz.mjs, cognito.mjs (login id claims), auth-financial-totp.mjs (wallet.fund step-up once per login), ADD providers/production/moov-wallet-fund.mjs, then providers.mjs (#914 bytes plus the moov-wallet-fund route). Production sends (2026-10-13): ADD providers/production/moov-send.mjs, then providers.mjs (#915 bytes plus the moov-disburse send route); applied (overlay runs 31 and 33). Then REPLACE providers/production/moov-send.mjs so partners added to the check stakeholders can be paid. Check Alt approve two-factor (2026-10-14): REPLACE providers/production/checkalt-authz.mjs, then auth-financial-totp.mjs (its new bytes import FINANCIAL_CHECKALT_STEPUP_ACTIONS from checkalt-authz.mjs at runtime, so checkalt-authz.mjs must be live first), then providers/production/checkalt-approve.mjs (so approve never asks for a proof the live step-up cannot mint). Check Alt approve two-factor applied 2026-10-14 (overlay runs 37, 38 and 39). Check Alt auto-approve (2026-10-14, PR #954): REPLACE providers/production/checkalt-config.mjs, then providers/production/checkalt-idempotency.mjs, then providers/production/checkalt-submit.mjs. Check Alt member access (2026-10-15): REPLACE providers/production/checkalt-authz.mjs (tenant owner, admin, manager or operator may submit, approve and refresh with their own step-up; viewers may not), then workflow-rpc.mjs (the same roles may save Auto-Deposit; SQL 80 replaces the SQL 38 function's admin check). Live workflow-rpc.mjs equals the 2026-10-08 reconciled bytes (inspect run 38665168066).",
   "live_identity_at_plan": {
     "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
     "revision_id": "f4904e55-61b3-46c4-bf1f-da178e84911b",
@@ -24,7 +24,6 @@
     "financial-remaining.mjs",
     "check-deposited.mjs",
     "workflow.mjs",
-    "workflow-rpc.mjs",
     "claim-settlement-rpc.mjs",
     "data.mjs",
     "workflow-transitions.mjs",
@@ -32,12 +31,13 @@
     "providers/production/moov-wallet-sync.mjs",
     "providers/production/moov-fund-authz.mjs",
     "cognito.mjs",
-    "providers/production/checkalt-authz.mjs",
     "auth-financial-totp.mjs",
     "providers/production/checkalt-approve.mjs",
     "providers/production/checkalt-config.mjs",
     "providers/production/checkalt-idempotency.mjs",
     "providers/production/checkalt-submit.mjs",
+    "providers/production/checkalt-authz.mjs",
+    "workflow-rpc.mjs",
     "providers/production/moov-wallet-fund.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
@@ -65,12 +65,6 @@
       "operation": "replace",
       "accepted_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
       "expected_live_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
-      "sql_before": null
-    },
-    "workflow-rpc.mjs": {
-      "operation": "replace",
-      "accepted_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
-      "expected_live_sha256": "635da37e3aaed8ed1b9551dc2fc5c76926e2fd708f37c66ef015cfd94d3aa654",
       "sql_before": null
     },
     "claim-settlement-rpc.mjs": {
@@ -118,13 +112,6 @@
       "expected_live_sha256": "361f7ba69c806eb5d5fbe58d17509ea05f935091ea730c9c285e3cc2c462114b",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json"
-    },
-    "providers/production/checkalt-authz.mjs": {
-      "operation": "replace",
-      "accepted_sha256": "69408021199775db888d949a8c36488574e8d4e977b63a9ba826a1fa790fe683",
-      "expected_live_sha256": "88a08b7672eda7f92c9b5f661d4c285c2e5876f109f84ff5f998da1dff148159",
-      "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-approve-manifest-2026-10-14.json"
     },
     "auth-financial-totp.mjs": {
       "operation": "replace",
@@ -181,6 +168,20 @@
       "expected_live_sha256": "11c6fdd85d06d3257e0564c2fa0b22e22c966439af43a962cfc511e25e79f114",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json"
+    },
+    "providers/production/checkalt-authz.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "80b44100bbf053f4869858cf2ad04c1ef9d0d36ce20aead85b91f2232d3d96f3",
+      "expected_live_sha256": "69408021199775db888d949a8c36488574e8d4e977b63a9ba826a1fa790fe683",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-checkalt-member-access-manifest-2026-10-15.json"
+    },
+    "workflow-rpc.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "659028c2a712e3d40adcf8375b878ef27c2673e97f5f39e0cba89527ef9afe68",
+      "expected_live_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-checkalt-member-access-manifest-2026-10-15.json"
     }
   },
   "do_not_overlay": [

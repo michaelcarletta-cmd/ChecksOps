@@ -12,7 +12,11 @@ import {
   IS_PLATFORM_OWNER_SQL,
   autoDepositColumnSql,
 } from '../functions/api/data.mjs';
-import { resolveAutoDepositUiState } from '../../src/lib/autoDepositUiState.ts';
+import {
+  autoDepositSaveMismatch,
+  parseAutoDepositCeilingCents,
+  resolveAutoDepositUiState,
+} from '../../src/lib/autoDepositUiState.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -62,7 +66,7 @@ const identityClient = ({ platformOwner = false, tenantAdminFor = FREEDOM } = {}
     }
     if (sql === USER_ROLES_SQL) return { rows: [{ role: 'admin' }] };
     if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: platformOwner }] };
-    if (/FROM public\.tenant_users/.test(sql) && /lower\(role::text\) IN \('admin', 'owner'\)/.test(sql)) {
+    if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
       if (params[0] === APP_ID && params[1] === tenantAdminFor) return { rows: [{ '?column?': 1 }] };
       return { rows: [] };
     }
@@ -216,4 +220,50 @@ test('TenantAutoApproveCard uses distinct copy for each registration state', () 
   assert.equal(/deposit_account_number/.test(card), false);
   assert.equal(/last_register_payload/.test(card), false);
   assert.equal(/from\("checkalt_config"\)/.test(card), false);
+});
+
+test('Auto-Deposit ceiling parses to integer cents; blank is no ceiling; junk is refused', () => {
+  assert.equal(parseAutoDepositCeilingCents(''), null);
+  assert.equal(parseAutoDepositCeilingCents('   '), null);
+  assert.equal(parseAutoDepositCeilingCents('2000'), 200000);
+  assert.equal(parseAutoDepositCeilingCents('2000.00'), 200000);
+  assert.equal(parseAutoDepositCeilingCents('0.1'), 10);
+  assert.equal(parseAutoDepositCeilingCents('19.99'), 1999);
+  assert.equal(parseAutoDepositCeilingCents('0'), 0);
+  for (const bad of ['-1', '12.345', 'abc', '12abc', '1e5', '$20', '21474836.48']) {
+    assert.equal(parseAutoDepositCeilingCents(bad), undefined, bad);
+  }
+});
+
+test('Auto-Deposit save is checked against the row read back after saving', () => {
+  const stored = { tenant_id: FREEDOM, auto_approve_enabled: false, auto_approve_max_cents: 200000, registered: true };
+  assert.equal(autoDepositSaveMismatch({ enabled: false, maxCents: 200000 }, stored), null);
+  assert.match(autoDepositSaveMismatch({ enabled: true, maxCents: 200000 }, stored), /not saved/);
+  assert.match(autoDepositSaveMismatch({ enabled: false, maxCents: null }, stored), /not saved/);
+  assert.match(autoDepositSaveMismatch({ enabled: false, maxCents: 200000 }, null), /could not be read back/);
+  assert.equal(autoDepositSaveMismatch(
+    { enabled: true, maxCents: null },
+    { ...stored, auto_approve_enabled: true, auto_approve_max_cents: null },
+  ), null);
+});
+
+test('TenantAutoApproveCard fails loudly when nothing is saved and shows the stored values', () => {
+  const card = sourceOf('src/components/billing/TenantAutoApproveCard.tsx');
+  assert.match(card, /\.eq\("tenant_id", tenantId\)\s*\.select\("tenant_id, auto_approve_enabled, auto_approve_max_cents"\)/);
+  assert.match(card, /if \(!saved\) \{\s*throw new Error/);
+  assert.match(card, /qc\.fetchQuery\(\{ queryKey, queryFn: readAccount, staleTime: 0 \}\)/);
+  assert.match(card, /showStored\(stored\)/);
+  assert.match(card, /autoDepositSaveMismatch\(/);
+  assert.match(card, /parseAutoDepositCeilingCents\(maxDollars\)/);
+  assert.equal(/parseFloat/.test(card), false);
+  // A failed read-back after a confirmed save is not a failure: show the saved row and refresh.
+  const refreshCatch = card.slice(card.indexOf('} catch {'), card.indexOf('showStored(stored);'));
+  assert.match(refreshCatch, /showStored\(saved as AutoDepositPublicRow\)/);
+  assert.match(refreshCatch, /qc\.invalidateQueries\(\{ queryKey \}\)/);
+  assert.match(refreshCatch, /return \{ refreshed: false \}/);
+  assert.equal(/throw/.test(refreshCatch), false);
+  assert.match(card, /couldn't refresh/);
+  assert.match(card, /autoDepositSaveMismatch\(wanted, saved as AutoDepositPublicRow\)/);
+  const successAt = card.indexOf('toast.success("Auto-approve settings saved")');
+  assert.ok(successAt > card.indexOf('if (mismatch) throw new Error(mismatch);'));
 });

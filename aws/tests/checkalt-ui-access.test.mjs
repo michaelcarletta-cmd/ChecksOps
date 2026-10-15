@@ -75,7 +75,7 @@ const identityClient = ({ platformOwner = false, tenantAdminFor = FREEDOM } = {}
       }
       if (sql === USER_ROLES_SQL) return { rows: [{ role: platformOwner ? 'admin' : 'admin' }] };
       if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: platformOwner }] };
-      if (/FROM public\.tenant_users/.test(sql) && /lower\(role::text\) IN \('admin', 'owner'\)/.test(sql)) {
+      if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
         const userId = params[0];
         const tenantId = params[1];
         if (userId === APP_ID && tenantId === tenantAdminFor) return { rows: [{ '?column?': 1 }] };

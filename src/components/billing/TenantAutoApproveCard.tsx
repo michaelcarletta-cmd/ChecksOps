@@ -9,7 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { resolveAutoDepositUiState } from "@/lib/autoDepositUiState";
+import {
+  autoDepositSaveMismatch,
+  parseAutoDepositCeilingCents,
+  resolveAutoDepositUiState,
+  type AutoDepositPublicRow,
+} from "@/lib/autoDepositUiState";
 
 /**
  * Per-tenant auto-approve controls for CheckAlt deposits.
@@ -24,52 +29,86 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
   const [enabled, setEnabled] = useState(false);
   const [maxDollars, setMaxDollars] = useState<string>("");
 
+  const queryKey = ["checkalt-tenant-auto-deposit", tenantId];
+  const readAccount = async (): Promise<AutoDepositPublicRow> => {
+    const { data, error } = await supabase
+      .from("checkalt_tenant_auto_deposit_public" as any)
+      .select("tenant_id, auto_approve_enabled, auto_approve_max_cents, registered")
+      .eq("tenant_id", tenantId!)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as AutoDepositPublicRow;
+  };
+
   const { data: account, isLoading, isError } = useQuery({
-    queryKey: ["checkalt-tenant-auto-deposit", tenantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("checkalt_tenant_auto_deposit_public" as any)
-        .select("tenant_id, auto_approve_enabled, auto_approve_max_cents, registered")
-        .eq("tenant_id", tenantId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryKey,
+    queryFn: readAccount,
     enabled: !!tenantId,
   });
 
+  const showStored = (row: AutoDepositPublicRow | undefined) => {
+    if (!row) return;
+    setEnabled(!!row.auto_approve_enabled);
+    setMaxDollars(
+      row.auto_approve_max_cents != null
+        ? (row.auto_approve_max_cents / 100).toFixed(2)
+        : "",
+    );
+  };
+
   useEffect(() => {
-    if (account) {
-      setEnabled(!!account.auto_approve_enabled);
-      setMaxDollars(
-        account.auto_approve_max_cents != null
-          ? (account.auto_approve_max_cents / 100).toFixed(2)
-          : "",
-      );
-    }
+    showStored(account);
   }, [account]);
 
   const save = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("No tenant");
-      const cents = maxDollars.trim() === "" ? null : Math.round(parseFloat(maxDollars) * 100);
-      if (cents != null && (!Number.isFinite(cents) || cents < 0)) {
-        throw new Error("Invalid maximum amount");
+      const cents = parseAutoDepositCeilingCents(maxDollars);
+      if (cents === undefined) {
+        throw new Error("Enter the ceiling as a dollar amount, like 2000.00, or leave it blank.");
       }
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("checkalt_tenant_accounts")
         .update({
           auto_approve_enabled: enabled,
           auto_approve_max_cents: cents,
         })
-        .eq("tenant_id", tenantId);
+        .eq("tenant_id", tenantId)
+        .select("tenant_id, auto_approve_enabled, auto_approve_max_cents");
       if (error) throw error;
+      const saved = Array.isArray(data) ? data[0] : data;
+      if (!saved) {
+        throw new Error("Auto-Deposit settings were not saved. No settings were changed.");
+      }
+      const wanted = { enabled, maxCents: cents };
+      const savedMismatch = autoDepositSaveMismatch(wanted, saved as AutoDepositPublicRow);
+      if (savedMismatch) {
+        showStored(saved as AutoDepositPublicRow);
+        throw new Error(savedMismatch);
+      }
+      // Re-read what is on file and show that, not what was typed.
+      let stored: AutoDepositPublicRow;
+      try {
+        stored = await qc.fetchQuery({ queryKey, queryFn: readAccount, staleTime: 0 });
+      } catch {
+        // The save itself returned the stored row; only the refresh failed.
+        showStored(saved as AutoDepositPublicRow);
+        qc.invalidateQueries({ queryKey });
+        return { refreshed: false };
+      }
+      showStored(stored);
+      const mismatch = autoDepositSaveMismatch(wanted, stored);
+      if (mismatch) throw new Error(mismatch);
+      return { refreshed: true };
     },
-    onSuccess: () => {
-      toast.success("Auto-approve settings saved");
-      qc.invalidateQueries({ queryKey: ["checkalt-tenant-auto-deposit", tenantId] });
+    onSuccess: (result) => {
+      if (result.refreshed) toast.success("Auto-approve settings saved");
+      else toast.success("Auto-approve settings saved; couldn't refresh the page. Reload to confirm.");
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to save"),
+    onError: (e: unknown) => {
+      toast.error((e as { message?: string } | null)?.message || "Failed to save");
+      qc.invalidateQueries({ queryKey });
+    },
   });
 
   if (!tenantId) return null;

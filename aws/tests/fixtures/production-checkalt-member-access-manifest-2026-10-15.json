@@ -1,0 +1,19 @@
+{
+  "workstream_id": "checkalt-production-member-access",
+  "authorization": "Owner-approved 2026-10-15: users only, no admin; a tenant owner, admin, manager or operator may submit, approve and refresh Check Alt deposits with their own step-up and may save their tenant's Auto-Deposit toggle and ceiling; viewers (including partners shared on a check) may not. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "live_sha256 values are the production bytes: checkalt-authz.mjs from overlay runs 37-39 (2026-10-14), workflow-rpc.mjs from read-only inspect run 38665168066 (2026-10-15, equal to the 2026-10-08 reconciled bytes). Apply checkalt-authz.mjs, then workflow-rpc.mjs. The Auto-Deposit save for non-admin members also needs SQL 80 through the guarded SQL path; until both are live a member save gets a visible refusal.",
+  "members": {
+    "providers/production/checkalt-authz.mjs": {
+      "live_sha256": "69408021199775db888d949a8c36488574e8d4e977b63a9ba826a1fa790fe683",
+      "accepted_sha256": "80b44100bbf053f4869858cf2ad04c1ef9d0d36ce20aead85b91f2232d3d96f3",
+      "operation": "replace"
+    },
+    "workflow-rpc.mjs": {
+      "live_sha256": "cc17e5c64e686c1a39ec2df29c67addbb91eaba3fa08c1f8b9809c566f44a54b",
+      "accepted_sha256": "659028c2a712e3d40adcf8375b878ef27c2673e97f5f39e0cba89527ef9afe68",
+      "operation": "replace"
+    }
+  }
+}
