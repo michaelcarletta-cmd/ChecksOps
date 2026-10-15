@@ -54,12 +54,12 @@ Server-side only. React step-up is not authority.
 
 1. Cognito → `identity_accounts.application_user_id`
 2. Membership of the **check** tenant (browser `tenant_id` / `user_id` ignored)
-3. Tenant role in `{owner, admin, manager}` — `operator` is denied
-4. Cognito TOTP step-up recorded in `financial_stepup_log` (`deposit.submit`) **or** dual-control from a **distinct** owner/admin/manager (`POST /financial/checkalt-dual-control`)
-5. Both TOTP and dual-control are bound to the authenticated application user, the **server-derived check tenant**, `check_intake_item_id`, current server-derived `amount_cents`, and `operation = deposit.submit`. Browser `tenant_id` / `amount` are ignored. Changing the check or amount invalidates the step-up. There is **no tenant-wide TOTP fallback**.
+3. The caller's own `tenant_users` role for the check tenant is in `{owner, admin, manager, operator}` (platform `user_roles` are not consulted; viewers are denied)
+4. The caller's **own** Cognito TOTP step-up recorded in `financial_stepup_log` (`deposit.submit`). Check Alt dual control (second-person approval) has been **removed**: `POST /financial/checkalt-dual-control` returns `410 dual_control_removed` and writes nothing, and existing `checkalt.dual_control` rows are never read. A second approval never substitutes for the submitter's step-up.
+5. The step-up is bound to the authenticated application user, the **server-derived check tenant**, `check_intake_item_id`, current server-derived `amount_cents`, and `operation = deposit.submit`. Browser `tenant_id` / `amount` are ignored. Changing the check or amount invalidates the step-up. There is **no tenant-wide TOTP fallback**.
 6. `productionCheckAltExecutionAllowed()` — all of `AWS_PROVIDER_EXECUTION_ENABLED`, `AWS_CHECKALT_ENABLED`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED`, and sandbox flag **false**
 
-The unenrolled Freedom operator tester cannot be the sole authority. Dual-control recording is not money movement and stays available with flags off. Requester and approver must be distinct owner/admin/manager principals.
+Every submitter must be TOTP-enrolled; there is no second-person path around the step-up.
 | `canSimulate` | true when sandbox simulation is on and the caller is an authenticated member of the **resource** tenant. A financial role is recorded (`roleOk`) but is not required for simulation, because simulation is not money movement. Staging testers are `staff` / tenant members, not automatically `owner`/`admin`/`manager`. |
 | `activated` | always `false` |
 

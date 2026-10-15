@@ -11,9 +11,14 @@ export const FINANCIAL_CHECKALT_STEPUP_ACTIONS = Object.freeze([
   CHECKALT_TOTP_ACTION,
   CHECKALT_APPROVE_ACTION,
 ]);
+/**
+ * Removed feature: Check Alt dual control (second-person approval) no longer
+ * authorizes anything. Rows with this action_key are never read. The constant
+ * stays exported only so a live checkalt-dual-control.mjs that still imports
+ * it keeps linking until that member is overlaid with the 410 refusal.
+ */
 export const CHECKALT_DUAL_CONTROL_ACTION = 'checkalt.dual_control';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
-export const DUAL_CONTROL_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const denyCheckAltAuthz = (error, extra = {}) => ({
   ok: false,
@@ -115,50 +120,6 @@ export async function loadRecentStepUp(client, {
   }));
 }
 
-export async function loadDualControlApproval(client, {
-  tenantId,
-  checkId,
-  amountCents,
-  excludeUserId,
-} = {}) {
-  if (!tenantId || !checkId || !Number.isInteger(Number(amountCents))) return null;
-  const rows = (await client.query(
-    `SELECT id, user_id, tenant_id, action_key, factor_type, succeeded, metadata, created_at
-     FROM public.financial_stepup_log
-     WHERE tenant_id = $1::uuid
-       AND action_key = $2
-       AND succeeded IS TRUE
-       AND created_at >= $3::timestamptz
-       AND (metadata->>'check_id') = $4
-       AND COALESCE((metadata->>'amount_cents')::bigint, -1) = $5::bigint
-     ORDER BY created_at DESC
-     LIMIT 20`,
-    [
-      tenantId,
-      CHECKALT_DUAL_CONTROL_ACTION,
-      new Date(Date.now() - DUAL_CONTROL_TTL_MS).toISOString(),
-      String(checkId),
-      Number(amountCents),
-    ],
-  )).rows;
-  for (const row of rows) {
-    if (String(row.user_id) === String(excludeUserId)) continue;
-    if (!stepUpMatchesCheck(row, {
-      tenantId,
-      checkId,
-      amountCents: Number(amountCents),
-      actionKey: CHECKALT_DUAL_CONTROL_ACTION,
-    })) continue;
-    // The second approver counts only through their own tenant_users role for
-    // this tenant (owner/admin/manager/operator). A platform user_roles admin
-    // or staff row never makes a viewer or a non-member an approver.
-    const approverRoles = await loadCheckAltTenantRoles(client, row.user_id, tenantId);
-    if (!roleAllowsCheckAlt(approverRoles)) continue;
-    return row;
-  }
-  return null;
-}
-
 /**
  * Roles that may submit, approve, reject and refresh Check Alt deposits for a
  * tenant they belong to. Viewers (for example partners added to a tenant to
@@ -179,17 +140,17 @@ export const roleAllowsCheckAlt = (roles = []) =>
  * tenant_users, never from the browser) whose role is owner, admin, manager or
  * operator may submit, approve and refresh Check Alt deposits. Viewers and
  * members of other tenants (including partner tenants a check is shared with)
- * may not. Money actions still need the step-up.
+ * may not. Money actions still need the caller's own step-up: there is no
+ * second-person (dual-control) alternative.
  */
 export const evaluateCheckAltProductionAuthorization = ({
   identityOk,
   membershipOk,
   roles = [],
   totpOk = false,
-  dualControlOk = false,
 } = {}) => {
   const roleOk = Boolean(membershipOk) && roleAllowsCheckAlt(roles);
-  const stepUpOk = Boolean(totpOk || dualControlOk);
+  const stepUpOk = Boolean(totpOk);
   const flagsOk = productionCheckAltExecutionAllowed();
   const canExecute = Boolean(identityOk && membershipOk && roleOk && stepUpOk && flagsOk);
   return {
@@ -197,7 +158,6 @@ export const evaluateCheckAltProductionAuthorization = ({
     membershipOk: Boolean(membershipOk),
     roleOk,
     totpOk: Boolean(totpOk),
-    dualControlOk: Boolean(dualControlOk),
     stepUpOk,
     flagsOk,
     financialPermissionActivated: financialPermissionsActivated(),
@@ -211,7 +171,7 @@ export const evaluateCheckAltProductionAuthorization = ({
         : !roleOk
           ? 'Viewers cannot submit, approve or refresh Check Alt deposits. Owner/admin/manager/operator required.'
           : !stepUpOk
-            ? 'Cognito TOTP step-up or dual-control approval from a distinct tenant owner/admin/manager/operator is required, bound to this check and amount.'
+            ? 'Your own Cognito TOTP step-up is required, bound to this check and amount.'
             : !flagsOk
               ? 'Production CheckAlt holds remain on.'
               : 'CheckAlt production authorization satisfied. Holds must still be lifted by a human.',
@@ -225,7 +185,6 @@ export async function authorizeCheckAltProduction({
   check,
   requireStepUp = true,
   actionKey = CHECKALT_TOTP_ACTION,
-  allowDualControl = true,
 } = {}) {
   const userId = mapping?.application_user_id;
   if (!userId) return denyCheckAltAuthz('identity_required', { statusCode: 401 });
@@ -245,10 +204,10 @@ export async function authorizeCheckAltProduction({
   // Only the caller's tenant_users role for the check's tenant decides. A
   // platform user_roles admin/staff never lets a tenant viewer act.
   const roles = await loadCheckAltTenantRoles(client, userId, check.tenant_id);
+  // Only the caller's own step-up for this action, check and amount counts.
+  // A second person's approval never substitutes for it.
   let totpOk = false;
-  let dualControlOk = false;
   let totpRow = null;
-  let dualRow = null;
   if (requireStepUp) {
     const totpRows = await loadRecentStepUp(client, {
       userId,
@@ -260,22 +219,12 @@ export async function authorizeCheckAltProduction({
     });
     totpRow = totpRows[0] || null;
     totpOk = Boolean(totpRow);
-    if (allowDualControl) {
-      dualRow = await loadDualControlApproval(client, {
-        tenantId: check.tenant_id,
-        checkId: check.id,
-        amountCents,
-        excludeUserId: userId,
-      });
-      dualControlOk = Boolean(dualRow);
-    }
   }
   const evaluation = evaluateCheckAltProductionAuthorization({
     identityOk: true,
     membershipOk: true,
     roles,
     totpOk: requireStepUp ? totpOk : true,
-    dualControlOk: requireStepUp ? dualControlOk : true,
   });
   if (!evaluation.canExecuteProductionCheckAlt) {
     const error = !evaluation.roleOk
@@ -294,7 +243,6 @@ export async function authorizeCheckAltProduction({
     membership: ownership,
     roles,
     totpRow,
-    dualRow,
     amountCents,
   };
 }
