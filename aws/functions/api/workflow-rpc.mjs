@@ -907,19 +907,23 @@ const requirePlatformOwner = async (client) => {
   return { ok: true };
 };
 
-const requireOwnTenantAdmin = async (client, userId, tenantId) => {
+export const CHECKALT_TENANT_MEMBER_SQL = `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid`;
+
+/**
+ * Check Alt member policy: the platform owner, or ANY tenant_users member of
+ * this tenant (no tenant admin/owner role). Platform admin/staff without a
+ * membership of the tenant are refused.
+ */
+const requireOwnTenantMember = async (client, userId, tenantId) => {
   const owner = await requirePlatformOwner(client);
   if (!owner.error) return { ok: true, platformOwner: true };
   if (!isUuid(tenantId)) {
     return { error: 'invalid_uuid', field: 'tenant_id' };
   }
-  const tenantAdmin = (await client.query(
-    `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND lower(role::text) IN ('admin', 'owner')`,
-    [userId, tenantId],
-  )).rows[0];
-  if (!tenantAdmin) {
-    return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
+  const member = (await client.query(CHECKALT_TENANT_MEMBER_SQL, [userId, tenantId])).rows[0];
+  if (!member) {
+    return { error: 'not_authorized', message: 'Only members of this tenant can change its Auto-Deposit settings' };
   }
   return { ok: true };
 };
@@ -1074,7 +1078,7 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
     }
     tenantId = memberships[0].tenant_id;
   }
-  const gated = await requireOwnTenantAdmin(client, mapping.application_user_id, tenantId);
+  const gated = await requireOwnTenantMember(client, mapping.application_user_id, tenantId);
   if (gated.error) return gated;
   for (const key of Object.keys(nested)) {
     if (key.startsWith('p_') && key !== 'p_settings') continue;
@@ -1093,11 +1097,20 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
     maxCents = hasMax ? null : undefined;
   }
   if (maxCents != null) {
-    maxCents = Number(maxCents);
-    if (!Number.isFinite(maxCents) || maxCents < 0) {
+    // null (no ceiling) or a non-negative whole number of cents that fits the
+    // integer column. Fractions, booleans and non-numeric strings are refused.
+    const numeric = typeof maxCents === 'number'
+      || (typeof maxCents === 'string' && /^\d+$/.test(maxCents.trim()));
+    maxCents = numeric ? Number(maxCents) : NaN;
+    if (!Number.isSafeInteger(maxCents) || maxCents < 0 || maxCents > 2147483647) {
       return { error: 'invalid_field', field: 'auto_approve_max_cents' };
     }
-    maxCents = Math.round(maxCents);
+  }
+  if (hasEnabled && typeof nested.auto_approve_enabled !== 'boolean') {
+    const raw = nested.auto_approve_enabled;
+    if (!['true', 'false', 1, 0, '1', '0'].includes(raw)) {
+      return { error: 'invalid_field', field: 'auto_approve_enabled' };
+    }
   }
   const settings = {};
   if (hasEnabled) settings.auto_approve_enabled = truthy(nested.auto_approve_enabled);
@@ -1107,11 +1120,17 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
       tenantId,
       settings,
     ])).rows;
-    return { data: rows[0]?.result || null };
+    const saved = rows[0]?.result || null;
+    if (!saved || String(saved.tenant_id) !== String(tenantId)) {
+      // The DEFINER RPC raises when no row changes; never report success
+      // without the stored values.
+      return { error: 'rls_denied', message: 'Auto-Deposit settings were not saved' };
+    }
+    return { data: saved };
   } catch (error) {
     const message = String(error?.message || '');
     if (/not_authorized/i.test(message) || error?.code === '42501') {
-      return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
+      return { error: 'not_authorized', message: 'Only members of this tenant can change its Auto-Deposit settings' };
     }
     if (/invalid_field/i.test(message) || error?.code === '22023') {
       return { error: 'invalid_field', field: 'auto_approve_max_cents' };
