@@ -377,7 +377,7 @@ export const runMortgageAgentCompensation = async ({
 
 export const handleMortgageAgentCompensation = (event, deps = {}) => {
   const body = parseBody(event);
-  const write = WRITE_ACTIONS.includes(String(body.action || ''));
+  const write = WRITE_ACTIONS.includes(String(body.action || '').trim());
   const runner = write ? withIdentityWrite : withIdentity;
   return runner(event, (ctx) => runMortgageAgentCompensation({
     ...ctx,

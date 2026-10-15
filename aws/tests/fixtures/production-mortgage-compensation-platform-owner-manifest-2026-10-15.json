@@ -7,7 +7,7 @@
   "members": {
     "mortgage-agent-compensation.mjs": {
       "live_sha256": "531837ab7ff9fb8279bcfb6cf624bde8aa183820f4a2ac355c6f7a1814cca4bb",
-      "accepted_sha256": "d59b4b8964808e46a1a05a8e1a179e617f945fcf5d3dc7670a5312a617d9b641",
+      "accepted_sha256": "c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512",
       "operation": "replace"
     }
   }
