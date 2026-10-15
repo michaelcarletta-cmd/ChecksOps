@@ -256,6 +256,14 @@ test('TenantAutoApproveCard fails loudly when nothing is saved and shows the sto
   assert.match(card, /autoDepositSaveMismatch\(/);
   assert.match(card, /parseAutoDepositCeilingCents\(maxDollars\)/);
   assert.equal(/parseFloat/.test(card), false);
+  // A failed read-back after a confirmed save is not a failure: show the saved row and refresh.
+  const refreshCatch = card.slice(card.indexOf('} catch {'), card.indexOf('showStored(stored);'));
+  assert.match(refreshCatch, /showStored\(saved as AutoDepositPublicRow\)/);
+  assert.match(refreshCatch, /qc\.invalidateQueries\(\{ queryKey \}\)/);
+  assert.match(refreshCatch, /return \{ refreshed: false \}/);
+  assert.equal(/throw/.test(refreshCatch), false);
+  assert.match(card, /couldn't refresh/);
+  assert.match(card, /autoDepositSaveMismatch\(wanted, saved as AutoDepositPublicRow\)/);
   const successAt = card.indexOf('toast.success("Auto-approve settings saved")');
   assert.ok(successAt > card.indexOf('if (mismatch) throw new Error(mismatch);'));
 });

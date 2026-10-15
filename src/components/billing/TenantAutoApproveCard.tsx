@@ -80,15 +80,30 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
       if (!saved) {
         throw new Error("Auto-Deposit settings were not saved. No settings were changed.");
       }
+      const wanted = { enabled, maxCents: cents };
+      const savedMismatch = autoDepositSaveMismatch(wanted, saved as AutoDepositPublicRow);
+      if (savedMismatch) {
+        showStored(saved as AutoDepositPublicRow);
+        throw new Error(savedMismatch);
+      }
       // Re-read what is on file and show that, not what was typed.
-      const stored = await qc.fetchQuery({ queryKey, queryFn: readAccount, staleTime: 0 });
+      let stored: AutoDepositPublicRow;
+      try {
+        stored = await qc.fetchQuery({ queryKey, queryFn: readAccount, staleTime: 0 });
+      } catch {
+        // The save itself returned the stored row; only the refresh failed.
+        showStored(saved as AutoDepositPublicRow);
+        qc.invalidateQueries({ queryKey });
+        return { refreshed: false };
+      }
       showStored(stored);
-      const mismatch = autoDepositSaveMismatch({ enabled, maxCents: cents }, stored);
+      const mismatch = autoDepositSaveMismatch(wanted, stored);
       if (mismatch) throw new Error(mismatch);
-      return stored;
+      return { refreshed: true };
     },
-    onSuccess: () => {
-      toast.success("Auto-approve settings saved");
+    onSuccess: (result) => {
+      if (result.refreshed) toast.success("Auto-approve settings saved");
+      else toast.success("Auto-approve settings saved; couldn't refresh the page. Reload to confirm.");
     },
     onError: (e: unknown) => {
       toast.error((e as { message?: string } | null)?.message || "Failed to save");

@@ -66,6 +66,15 @@ export async function loadTenantRole(client, userId, tenantId) {
   return [...new Set([...tenant, ...platform])];
 }
 
+/** The caller's tenant_users role(s) for one tenant, without platform user_roles. */
+export async function loadCheckAltTenantRoles(client, userId, tenantId) {
+  if (!userId || !tenantId) return [];
+  return (await client.query(
+    'SELECT role FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid',
+    [userId, tenantId],
+  )).rows.map((row) => String(row.role || '').toLowerCase());
+}
+
 export async function loadRecentStepUp(client, {
   userId,
   tenantId,
@@ -143,9 +152,9 @@ export async function loadDualControlApproval(client, {
 /**
  * Roles that may submit, approve, reject and refresh Check Alt deposits for a
  * tenant they belong to. Viewers (for example partners added to a tenant to
- * see shared checks) may not. `roles` holds the caller's tenant_users role for
- * the check's tenant plus any platform user_roles (loadTenantRole); unknown
- * roles fail closed.
+ * see shared checks) may not. `roles` holds only the caller's tenant_users
+ * role for the check's tenant (loadCheckAltTenantRoles); platform user_roles
+ * are not consulted, and unknown roles fail closed.
  */
 export const CHECKALT_OPERATOR_ROLES = Object.freeze(['owner', 'admin', 'manager', 'operator']);
 
@@ -223,7 +232,9 @@ export async function authorizeCheckAltProduction({
       message: 'Server-derived check amount is required for financial step-up. Browser amount is ignored.',
     });
   }
-  const roles = await loadTenantRole(client, userId, check.tenant_id);
+  // Only the caller's tenant_users role for the check's tenant decides. A
+  // platform user_roles admin/staff never lets a tenant viewer act.
+  const roles = await loadCheckAltTenantRoles(client, userId, check.tenant_id);
   let totpOk = false;
   let dualControlOk = false;
   let totpRow = null;

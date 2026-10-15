@@ -162,6 +162,8 @@ const createStore = ({
     persistOutcomeFails: 0,
     role,
     rolesByUser: {},
+    platformRoles: [],
+    platformRolesByUser: {},
     memberships: memberships || [{ tenant_id: tenantId, role, tenant_name: 'Freedom', tenant_slug: 'freedom' }],
   };
 };
@@ -182,10 +184,10 @@ const identityClient = (store) => ({
       return { rows: store.memberships };
     }
     if (text.includes('FROM public.user_roles')) {
+      // Platform user_roles are separate from tenant roles: none unless a test sets them.
       const userId = params[0];
-      const role = store.rolesByUser?.[userId] || store.role;
-      if (role === 'viewer') return { rows: [] };
-      return { rows: role === 'operator' ? [{ role: 'staff' }] : [{ role: 'admin' }] };
+      const platform = store.platformRolesByUser?.[userId] || store.platformRoles || [];
+      return { rows: platform.map((role) => ({ role })) };
     }
     if (text.includes('FROM public.tenant_users WHERE user_id') && text.includes('AND tenant_id')) {
       const userId = params[0];
@@ -1512,6 +1514,49 @@ test('a tenant viewer cannot approve or reject, even with a valid deposit.approv
   grantStepUp(store, { action: 'deposit.approve' });
   assertApproveRefused(store, await approveOnce(store), 'financial_unauthorized');
   assertApproveRefused(store, await approveOnce(store, { action: 'reject' }), 'financial_unauthorized');
+});
+
+test('a tenant viewer who is also a platform admin/staff still cannot submit, approve, reject or refresh', async () => {
+  for (const platformRoles of [['admin'], ['staff'], ['admin', 'staff']]) {
+    const submit = createStore({ role: 'viewer' });
+    submit.platformRoles = platformRoles;
+    grantStepUp(submit);
+    const submitted = await submitOnce(submit);
+    assert.equal(submitted.statusCode, 403, JSON.stringify(platformRoles));
+    assert.equal(submitted.error, 'financial_unauthorized');
+    assert.equal(submit.processPosts, 0);
+
+    const approve = createStore({ role: 'viewer' });
+    approve.platformRoles = platformRoles;
+    pendingApprovalDeposit(approve);
+    grantStepUp(approve, { action: 'deposit.approve' });
+    assertApproveRefused(approve, await approveOnce(approve), 'financial_unauthorized');
+    assertApproveRefused(approve, await approveOnce(approve, { action: 'reject' }), 'financial_unauthorized');
+
+    const poll = createStore({ role: 'viewer' });
+    poll.platformRoles = platformRoles;
+    poll.itemPayload = { statusCode: 127, status: 127, statusDescription: 'Approved' };
+    poll.deposits.push({
+      id: DEPOSIT_ID,
+      tenant_id: FREEDOM_TENANT,
+      check_intake_item_id: CHECK_ID,
+      checkalt_reference: '9001',
+      status: 'pending_approval',
+      amount: 12.34,
+      amount_cents: 1234,
+      cleared_at: null,
+    });
+    const polled = await withEnv(productionPollFlags, () => handleProviderRequest(
+      jwtEvent('/functions/v1/checkalt-poll-status', 'POST', { deposit_id: DEPOSIT_ID }),
+      '/functions/v1/checkalt-poll-status',
+      'POST',
+      submitDeps(poll),
+    ));
+    assert.equal(polled.statusCode, 403);
+    assert.equal(polled.error, 'financial_unauthorized');
+    assert.equal(poll.itemPosts, 0);
+    assert.equal(poll.deposits[0].status, 'pending_approval');
+  }
 });
 
 test('a partner (member of another tenant) cannot approve the owner tenant deposit', async () => {

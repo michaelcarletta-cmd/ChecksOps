@@ -43,7 +43,7 @@ BEGIN
   FOR _key IN SELECT jsonb_object_keys(_settings)
   LOOP
     IF _key NOT IN ('auto_approve_enabled', 'auto_approve_max_cents') THEN
-      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023', DETAIL = _key;
     END IF;
   END LOOP;
 
@@ -64,17 +64,17 @@ BEGIN
      AND jsonb_typeof(_settings->'auto_approve_max_cents') <> 'null'
   THEN
     IF jsonb_typeof(_settings->'auto_approve_max_cents') <> 'number' THEN
-      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023', DETAIL = 'auto_approve_max_cents';
     END IF;
     _max := (_settings->>'auto_approve_max_cents')::numeric;
     IF _max < 0 OR _max <> trunc(_max) OR _max > 2147483647 THEN
-      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023', DETAIL = 'auto_approve_max_cents';
     END IF;
   END IF;
 
   IF _settings ? 'auto_approve_enabled' THEN
     IF jsonb_typeof(_settings->'auto_approve_enabled') <> 'boolean' THEN
-      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'invalid_field' USING ERRCODE = '22023', DETAIL = 'auto_approve_enabled';
     END IF;
     _enabled := (_settings->>'auto_approve_enabled')::boolean;
   END IF;

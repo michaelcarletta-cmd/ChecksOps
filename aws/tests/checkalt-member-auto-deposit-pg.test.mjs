@@ -172,8 +172,8 @@ test('PostgreSQL 16: SQL 80 lets tenant operators and admins, not viewers, chang
       'SELECT public.aws_save_checkalt_tenant_auto_deposit($1::uuid, $2::jsonb) AS result', [TENANT_A, settings],
     ));
     await assert.rejects(direct(A_OPERATOR, { enabled: false }), /invalid_field/);
-    await assert.rejects(direct(A_OPERATOR, { auto_approve_enabled: 'false' }), /invalid_field/);
-    await assert.rejects(direct(A_OPERATOR, { auto_approve_max_cents: 12.5 }), /invalid_field/);
+    await assert.rejects(direct(A_OPERATOR, { auto_approve_enabled: 'false' }), (e) => e.code === '22023' && /invalid_field/.test(e.message) && e.detail === 'auto_approve_enabled');
+    await assert.rejects(direct(A_OPERATOR, { auto_approve_max_cents: 12.5 }), (e) => e.code === '22023' && /invalid_field/.test(e.message) && e.detail === 'auto_approve_max_cents');
     await assert.rejects(direct(A_OPERATOR, { auto_approve_max_cents: '100' }), /invalid_field/);
     await assert.rejects(direct(B_MEMBER, { auto_approve_enabled: false }), /not_authorized/);
     await assert.rejects(direct(A_VIEWER, { auto_approve_enabled: false }), /not_authorized/);

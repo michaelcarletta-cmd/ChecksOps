@@ -1134,11 +1134,18 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
     if (/not_authorized/i.test(message) || error?.code === '42501') {
       return { error: 'not_authorized', message: 'Only members of this tenant (not viewers) can change its Auto-Deposit settings' };
     }
-    if (/invalid_field/i.test(message) || error?.code === '22023') {
-      return { error: 'invalid_field', field: 'auto_approve_max_cents' };
-    }
     if (/missing_required_field/i.test(message)) {
       return { error: 'missing_required_field', field: 'auto_approve_enabled' };
+    }
+    if (/invalid_field/i.test(message) || error?.code === '22023') {
+      // SQL 80 names the field in DETAIL; anything else gets a neutral field.
+      const detail = `${error?.detail || ''} ${message}`;
+      const field = /auto_approve_max_cents/.test(detail)
+        ? 'auto_approve_max_cents'
+        : /auto_approve_enabled/.test(detail)
+          ? 'auto_approve_enabled'
+          : 'auto_deposit_settings';
+      return { error: 'invalid_field', field };
     }
     if (/not_found/i.test(message) || error?.code === 'P0002') {
       return { error: 'rls_denied', message: 'Auto-Deposit account not found' };

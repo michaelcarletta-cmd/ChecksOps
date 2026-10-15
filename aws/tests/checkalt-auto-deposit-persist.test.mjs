@@ -318,6 +318,36 @@ test('ceiling must be null or a non-negative whole number of cents', async () =>
   assert.equal(badToggle.field, 'auto_approve_enabled');
 });
 
+test('a database invalid_field refusal names the right field, or a neutral one', async () => {
+  const failing = (error) => ({
+    query: async (sql, params) => {
+      if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: false }] };
+      if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
+        return { rows: params[1] === FREEDOM ? [{ role: 'operator' }] : [] };
+      }
+      if (sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL) throw error;
+      return { rows: [] };
+    },
+  });
+  const pgError = (detail, message = 'invalid_field') => Object.assign(new Error(message), { code: '22023', detail });
+  for (const [error, field] of [
+    [pgError('auto_approve_enabled'), 'auto_approve_enabled'],
+    [pgError('auto_approve_max_cents'), 'auto_approve_max_cents'],
+    [pgError(undefined), 'auto_deposit_settings'],
+    [pgError('something_else'), 'auto_deposit_settings'],
+    [Object.assign(new Error('bad'), { code: '22023' }), 'auto_deposit_settings'],
+  ]) {
+    const result = await save(failing(error), { tenant_id: FREEDOM, auto_approve_enabled: true, auto_approve_max_cents: 100 });
+    assert.equal(result.error, 'invalid_field');
+    assert.equal(result.field, field, String(error.detail));
+  }
+  const missing = await save(
+    failing(Object.assign(new Error('missing_required_field'), { code: '22023' })),
+    { tenant_id: FREEDOM, auto_approve_enabled: true },
+  );
+  assert.equal(missing.error, 'missing_required_field');
+});
+
 test('a save that returns no stored row is an error, never a silent success', async () => {
   const empty = await save(memberClient({ result: null }), { tenant_id: FREEDOM, auto_approve_enabled: false });
   assert.equal(empty.error, 'rls_denied');
@@ -345,6 +375,8 @@ test('SQL 80 replaces the persist RPC with an owner/admin/manager/operator gate 
   assert.deepEqual(setColumns, ['auto_approve_enabled', 'auto_approve_max_cents', 'updated_at']);
   assert.match(updateSlice, /WHERE tenant_id = _tenant_id/);
   assert.match(sql80, /RAISE EXCEPTION 'not_found'/);
+  assert.match(sql80, /DETAIL = 'auto_approve_enabled'/);
+  assert.match(sql80, /DETAIL = 'auto_approve_max_cents'/);
   assert.equal(/GRANT (UPDATE|INSERT|DELETE)/.test(sql80), false);
   assert.equal(/ALTER TABLE|CREATE POLICY|DROP/.test(sql80), false);
   assert.match(sql80, /REVOKE ALL ON FUNCTION public\.aws_save_checkalt_tenant_auto_deposit\(uuid, jsonb\) FROM PUBLIC/);
