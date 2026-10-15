@@ -8,11 +8,16 @@
 -- ledger view (Cursor branch SQL 73, last_viewed best-effort + check_stage
 -- totals repair), renumbered to 82 so it does not collide with main's
 -- 71_review_amount_column_grant.sql / 72_member_payment_writes.sql.
--- One security change from that body: pending_endorsements[].sign_url is
+-- First security change from that body: pending_endorsements[].sign_url is
 -- always NULL. The staging SQL 73 body returned '/endorse?token=' ||
 -- check_endorsements.token (and, with an empty homeowner email, for every
 -- insured party). The raw endorsement token must never be in the ledger
 -- view; the endorse doorway in SQL 83 returns it only at click time.
+-- Second change: the homeowner name match for is_homeowner and for listing
+-- requires the token's homeowner name to have at least two parts of 2+
+-- letters, each a whole word of payee_name. SQL 73 accepted any one
+-- 3+ letter part as a substring, so a co-insured sharing a surname (or
+-- 'ada' inside 'adam') matched.
 --
 -- Isolation: token → tenant → claim must agree. Fail closed on
 -- invalid / revoked / expired / mismatched-tenant / mismatched-claim.
@@ -287,11 +292,21 @@ BEGIN
                 OR lower(COALESCE(e.contact_email, '')) = homeowner_email_lc
                 OR (
                   homeowner_name_lc <> ''
-                  AND EXISTS (
-                    SELECT 1
-                    FROM unnest(regexp_split_to_array(homeowner_name_lc, '\s+')) AS part
-                    WHERE length(part) >= 3
-                      AND strpos(lower(COALESCE(e.payee_name, '')), part) > 0
+                  AND (
+                    -- SQL 82: the homeowner name needs at least two parts of 2+ letters,
+                    -- and every one must be a whole word of the name. A shared surname
+                    -- alone, or a substring such as 'ada' in 'adam', is not a match.
+                    (
+                      SELECT count(*)
+                      FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+                      WHERE length(part) >= 2
+                    ) >= 2
+                    AND NOT EXISTS (
+                      SELECT 1
+                      FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+                      WHERE length(part) >= 2
+                        AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(e.payee_name, '')), '[^a-z0-9]+')))
+                    )
                   )
                 )
               )
@@ -326,11 +341,21 @@ BEGIN
               OR lower(COALESCE(e.contact_email, '')) = homeowner_email_lc
               OR (
                 homeowner_name_lc <> ''
-                AND EXISTS (
-                  SELECT 1
-                  FROM unnest(regexp_split_to_array(homeowner_name_lc, '\s+')) AS part
-                  WHERE length(part) >= 3
-                    AND strpos(lower(COALESCE(e.payee_name, '')), part) > 0
+                AND (
+                  -- SQL 82: the homeowner name needs at least two parts of 2+ letters,
+                  -- and every one must be a whole word of the name. A shared surname
+                  -- alone, or a substring such as 'ada' in 'adam', is not a match.
+                  (
+                    SELECT count(*)
+                    FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+                    WHERE length(part) >= 2
+                  ) >= 2
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+                    WHERE length(part) >= 2
+                      AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(e.payee_name, '')), '[^a-z0-9]+')))
+                  )
                 )
               )
             )

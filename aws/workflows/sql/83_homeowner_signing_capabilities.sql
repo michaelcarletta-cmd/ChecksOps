@@ -8,11 +8,16 @@
 --
 -- Provenance: the staging Homeowner Ops signing doorway (Cursor branch
 -- SQL 74), renumbered to 83 to follow main's 81_checkalt_production_register.sql.
--- One security change from that body: claim-only Signature Requests
+-- First security change from that body: claim-only Signature Requests
 -- (null check_intake_item_id) must also be on a claim whose org_id is the
 -- token tenant (or null). SQL 74 accepted any claim-only request on the
 -- token claim, even when claim_ok held only through a same-tenant check
 -- or event on a claim another tenant owns.
+-- Second change: a name match requires the token's homeowner name to have
+-- at least two parts of 2+ letters, each a whole word of payee_name /
+-- signer_name (same rule as SQL 82). SQL 74 accepted any one 3+ letter
+-- part as a substring, so a co-insured sharing only a surname could mint
+-- the other insured's /endorse or /sign link.
 --
 -- Isolation: ledger token → exact tenant + claim. Fail closed on
 -- invalid / revoked / expired / mismatched-tenant / mismatched-claim.
@@ -174,11 +179,21 @@ BEGIN
   email_hit := homeowner_email_lc <> ''
     AND lower(COALESCE(rec.contact_email, '')) = homeowner_email_lc;
   name_hit := homeowner_name_lc <> ''
-    AND EXISTS (
-      SELECT 1
-      FROM unnest(regexp_split_to_array(homeowner_name_lc, '\s+')) AS part
-      WHERE length(part) >= 3
-        AND strpos(lower(COALESCE(rec.payee_name, '')), part) > 0
+    AND (
+      -- SQL 83: the homeowner name needs at least two parts of 2+ letters,
+      -- and every one must be a whole word of the name. A shared surname
+      -- alone, or a substring such as 'ada' in 'adam', is not a match.
+      (
+        SELECT count(*)
+        FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+        WHERE length(part) >= 2
+      ) >= 2
+      AND NOT EXISTS (
+        SELECT 1
+        FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+        WHERE length(part) >= 2
+          AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(rec.payee_name, '')), '[^a-z0-9]+')))
+      )
     );
   identity_ok := email_hit OR name_hit OR open_insured_count = 1;
   IF NOT identity_ok THEN
@@ -332,11 +347,21 @@ BEGIN
         (homeowner_email_lc <> '' AND lower(COALESCE(counted.signer_email, '')) = homeowner_email_lc)
         OR (
           homeowner_name_lc <> ''
-          AND EXISTS (
-            SELECT 1
-            FROM unnest(regexp_split_to_array(homeowner_name_lc, '\s+')) AS part
-            WHERE length(part) >= 3
-              AND strpos(lower(COALESCE(counted.signer_name, '')), part) > 0
+          AND (
+            -- SQL 83: the homeowner name needs at least two parts of 2+ letters,
+            -- and every one must be a whole word of the name. A shared surname
+            -- alone, or a substring such as 'ada' in 'adam', is not a match.
+            (
+              SELECT count(*)
+              FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+              WHERE length(part) >= 2
+            ) >= 2
+            AND NOT EXISTS (
+              SELECT 1
+              FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+              WHERE length(part) >= 2
+                AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(counted.signer_name, '')), '[^a-z0-9]+')))
+            )
           )
         )
         OR counted.homeowner_signer_count = 1
@@ -562,11 +587,21 @@ BEGIN
   email_hit := homeowner_email_lc <> ''
     AND lower(COALESCE(rec.signer_email, '')) = homeowner_email_lc;
   name_hit := homeowner_name_lc <> ''
-    AND EXISTS (
-      SELECT 1
-      FROM unnest(regexp_split_to_array(homeowner_name_lc, '\s+')) AS part
-      WHERE length(part) >= 3
-        AND strpos(lower(COALESCE(rec.signer_name, '')), part) > 0
+    AND (
+      -- SQL 83: the homeowner name needs at least two parts of 2+ letters,
+      -- and every one must be a whole word of the name. A shared surname
+      -- alone, or a substring such as 'ada' in 'adam', is not a match.
+      (
+        SELECT count(*)
+        FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+        WHERE length(part) >= 2
+      ) >= 2
+      AND NOT EXISTS (
+        SELECT 1
+        FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+        WHERE length(part) >= 2
+          AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(rec.signer_name, '')), '[^a-z0-9]+')))
+      )
     );
   identity_ok := email_hit OR name_hit OR homeowner_signer_count = 1;
   IF NOT identity_ok THEN

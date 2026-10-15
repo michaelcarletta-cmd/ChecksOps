@@ -104,15 +104,23 @@ export const notifyStaffOfHomeownerLedgerUpload = async ({
   return { notified: true, recipient: to, uploadId: uploadId || null };
 };
 
-const namePartsForHomeowner = (name) => String(name || '')
-  .toLowerCase()
-  .trim()
-  .split(/\s+/)
-  .filter((part) => part.length >= 3);
+const nameWords = (name) => String(name || '').toLowerCase().split(/[^a-z0-9]+/);
 
 /**
- * An insured endorsement is this homeowner's when the contact email or a
- * >=3-letter name part matches, or when it is the only open insured
+ * Same rule as SQL 82/83: the homeowner name needs at least two parts of 2+
+ * letters and every one must be a whole word of the payee name. One shared
+ * surname, or 'ada' inside 'adam', is not a match.
+ */
+export const homeownerNameMatches = (homeownerName, payeeName) => {
+  const parts = nameWords(homeownerName).filter((part) => part.length >= 2);
+  if (parts.length < 2) return false;
+  const words = new Set(nameWords(payeeName));
+  return parts.every((part) => words.has(part));
+};
+
+/**
+ * An insured endorsement is this homeowner's when the contact email or the
+ * full homeowner name matches, or when it is the only open insured
  * endorsement on that check (claim-scoped sole insured). An empty homeowner
  * email is never a match-all.
  */
@@ -120,9 +128,7 @@ export const isHomeownerEndorsementParty = (endorsement, homeowner = {}, ctx = {
   if (String(endorsement?.payee_type || '') !== 'insured') return false;
   const email = String(homeowner.email || '').toLowerCase().trim();
   const emailHit = email && String(endorsement?.contact_email || '').toLowerCase() === email;
-  const nameHit = namePartsForHomeowner(homeowner.name).some((part) => (
-    String(endorsement?.payee_name || '').toLowerCase().includes(part)
-  ));
+  const nameHit = homeownerNameMatches(homeowner.name, endorsement?.payee_name);
   if (emailHit || nameHit) return true;
   const openInsuredCount = Number(ctx.openInsuredCount);
   return Number.isInteger(openInsuredCount) && openInsuredCount === 1;

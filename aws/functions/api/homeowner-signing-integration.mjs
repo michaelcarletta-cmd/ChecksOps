@@ -25,11 +25,15 @@ const DEAD_SIGNER_STATUSES = Object.freeze([
   'cancelled', 'canceled', 'revoked', 'expired', 'voided', 'rejected',
 ]);
 
-const nameParts = (name) => String(name || '')
-  .toLowerCase()
-  .trim()
-  .split(/\s+/)
-  .filter((part) => part.length >= 3);
+const nameWords = (name) => String(name || '').toLowerCase().split(/[^a-z0-9]+/);
+
+/** At least two 2+ letter homeowner name parts, each a whole word of the signer name (SQL 83 rule). */
+const homeownerNameMatches = (homeownerName, signerName) => {
+  const parts = nameWords(homeownerName).filter((part) => part.length >= 2);
+  if (parts.length < 2) return false;
+  const words = new Set(nameWords(signerName));
+  return parts.every((part) => words.has(part));
+};
 
 export const isReusableDocumentAccessToken = (value) => {
   const raw = String(value || '').trim();
@@ -50,9 +54,7 @@ export const isHomeownerDocumentSigner = (signer = {}, homeowner = {}, ctx = {})
   if (!isHomeownerDocumentSignerType(signer)) return false;
   const email = String(homeowner.email || '').toLowerCase().trim();
   const emailHit = email && String(signer.signer_email || '').toLowerCase().trim() === email;
-  const nameHit = nameParts(homeowner.name).some((part) => (
-    String(signer.signer_name || '').toLowerCase().includes(part)
-  ));
+  const nameHit = homeownerNameMatches(homeowner.name, signer.signer_name);
   if (emailHit || nameHit) return true;
   const sole = Number(ctx.homeownerSignerCount);
   return Number.isInteger(sole) && sole === 1;
