@@ -28,7 +28,7 @@ import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
  * Platform-owner configuration panel for the CheckAlt (FinCapture) RDC integration.
  * Single ChecksOps-wide account model:
  *   - Username/password live in backend secrets (CHECKALT_USERNAME / CHECKALT_PASSWORD)
- *   - Per-deployment values (base URL, depositor account, business unit, enable flag) live here
+ *   - Per-deployment values (base URL, business unit, enable flag) live here
  * Tenant-scoped register/account UI lives in CheckAltTenantAccountCard.
  */
 export function CheckAltSettings() {
@@ -56,7 +56,6 @@ export function CheckAltSettings() {
     merchant: "",
     fi_key: "",
     business_unit: "",
-    depositor_account_id: "",
     default_enabled: false,
     auto_approve_enabled: false,
     auto_approve_max_dollars: "",
@@ -70,7 +69,6 @@ export function CheckAltSettings() {
         merchant: cfg.merchant ?? "",
         fi_key: cfg.fi_key ?? "",
         business_unit: cfg.business_unit ?? "",
-        depositor_account_id: cfg.depositor_account_id ?? "",
         default_enabled: !!cfg.default_enabled,
         auto_approve_enabled: !!(cfg as any).auto_approve_enabled,
         auto_approve_max_dollars:
@@ -93,7 +91,6 @@ export function CheckAltSettings() {
           merchant: form.merchant.trim() || null,
           fi_key: form.fi_key.trim() || null,
           business_unit: form.business_unit.trim() || null,
-          depositor_account_id: form.depositor_account_id.trim() || null,
           default_enabled: form.default_enabled,
           auto_approve_enabled: form.auto_approve_enabled,
           auto_approve_max_cents: Number.isFinite(maxCents as number) ? maxCents : null,
@@ -195,7 +192,7 @@ export function CheckAltSettings() {
   }
 
   const fullyConfigured =
-    !!form.base_url && !!form.merchant && !!form.fi_key && !!form.depositor_account_id && form.default_enabled;
+    !!form.base_url && !!form.merchant && !!form.fi_key && form.default_enabled;
 
   return (
     <div className="space-y-6">
@@ -268,18 +265,10 @@ export function CheckAltSettings() {
                 onChange={(e) => setForm({ ...form, business_unit: e.target.value })}
               />
             </div>
-            <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="depositor_account_id">Deposit Account Number</Label>
-              <Input
-                id="depositor_account_id"
-                placeholder="Bank account number for deposits"
-                value={form.depositor_account_id}
-                onChange={(e) => setForm({ ...form, depositor_account_id: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                The bank account where deposits are credited. Maps to depositAccountNumber in the API.
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground md:col-span-2">
+              Deposits are credited to each tenant's own registered depositor account
+              (Tenant Management &rarr; tenant &rarr; Integrations), not a platform-wide account.
+            </p>
           </div>
 
           <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/30 p-3">

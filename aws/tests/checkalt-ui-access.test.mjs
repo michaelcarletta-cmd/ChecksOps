@@ -140,7 +140,9 @@ test('Platform owner can still access global CheckAlt settings', async () => {
   assert.match(settings, /id="merchant"/);
   assert.match(settings, /id="fi_key"/);
   assert.match(settings, /id="business_unit"/);
-  assert.match(settings, /id="depositor_account_id"/);
+  // The misleading global "Deposit Account Number" field is gone; deposits go to each tenant's own account.
+  assert.equal(/id="depositor_account_id"/.test(settings), false);
+  assert.equal(/where deposits are credited/.test(settings), false);
   assert.match(settings, /id="default_enabled"/);
   assert.match(settings, /checkalt-test-connection/);
   assert.match(settings, /checkalt-poll-status/);
@@ -173,13 +175,15 @@ test('Tenant Management selected-tenant register UI remains tenant-scoped', () =
   const integrations = admin.slice(admin.indexOf('value="integrations"'));
   assert.match(integrations, /CheckAltTenantAccountCard/);
   assert.equal(/<CheckAltSettings \/>/.test(integrations.slice(0, 800)), false);
-  assert.match(card, /eq\("tenant_id", tenant!\.id\)/);
+  assert.match(card, /tenant_id: tenant!\.id,\n\s+action: "status"/);
   assert.match(card, /sso_user_id/);
   assert.match(card, /first_name/);
   assert.match(card, /last_name/);
   assert.match(card, /deposit_account_number/);
   assert.match(card, /registered_at/);
-  assert.match(card, /last_register_payload/);
+  // Status comes from the server (masked), never a direct table read; the raw payload is not rendered.
+  assert.equal(/from\("checkalt_tenant_accounts"\)/.test(card), false);
+  assert.equal(/last_register_payload/.test(card), false);
   assert.equal(/from\("checkalt_config"\)/.test(card), false);
   assert.equal(/id="base_url"/.test(card), false);
   assert.equal(/id="fi_key"/.test(card), false);
@@ -276,8 +280,8 @@ test('tenant users cannot read full checkalt_tenant_accounts', async () => {
 
 test('Platform Owner/Tenant Management can still access administrative account information', async () => {
   const card = sourceOf('src/components/settings/CheckAltTenantAccountCard.tsx');
-  assert.match(card, /from\("checkalt_tenant_accounts"\)/);
-  assert.match(card, /sso_user_id, deposit_account_number, first_name, last_name, email, enabled, registered_at, last_register_payload/);
+  assert.match(card, /checkalt-verify-account/);
+  assert.match(card, /account_last4/);
   const client = identityClient({ platformOwner: true }, (sql) => {
     if (sql.includes('count(*)')) return { rows: [{ n: 1 }] };
     if (sql.includes('FROM public.checkalt_tenant_accounts')) {

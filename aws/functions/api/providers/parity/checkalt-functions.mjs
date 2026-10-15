@@ -15,6 +15,7 @@ import { formatCheckAltUserAmount, resolveCheckAltProviderStatus } from '../amou
 import { CHECKALT_UAT_HOST } from '../../sandbox-credentials.mjs';
 import { isPlatformAdmin, jsonResult, fail, checkAltParityContext } from './caller.mjs';
 import { loadCheckAltTenantRoles, roleAllowsCheckAlt } from '../production/checkalt-authz.mjs';
+import { accountLast4, maskCheckAltPayload, normalizeDepositAccountNumber } from '../checkalt-account-mask.mjs';
 import {
   buildDepositProcessBody,
   buildRegisterPayload,
@@ -237,6 +238,13 @@ const registerAccount = {
     const ssoUserId = String(body.sso_user_id || body.ssoUserId || '').trim()
       || `aws-uat-test-${crypto.randomUUID()}`;
     const fromSecret = String(ctx.uat.depositAccountNumber || '').trim();
+    if (body.deposit_account_number && !normalizeDepositAccountNumber(body.deposit_account_number)) {
+      return fail('invalid_deposit_account_number', 400, {
+        field: 'deposit_account_number',
+        message: 'Deposit account number must be 4 to 17 digits, with no spaces, dashes or letters.',
+        liveProviderCalled: false,
+      });
+    }
     const depositAccountNumber = String(body.deposit_account_number || fromSecret || '').trim();
     if (!depositAccountNumber) {
       return fail('blocked_by_checkalt_test_configuration', 409, {
@@ -271,7 +279,9 @@ const registerAccount = {
     let respJson;
     try { respJson = JSON.parse(respText); } catch { respJson = { raw: respText }; }
     if (!resp.ok) {
-      return fail('CheckAlt registration failed', 502, { status: resp.status, details: respJson, liveProviderCalled: true });
+      return fail('CheckAlt registration failed', 502, {
+        status: resp.status, details: maskCheckAltPayload(respJson, [depositAccountNumber]), liveProviderCalled: true,
+      });
     }
     let ssoKey = null;
     let userAccountPayload = null;
@@ -302,8 +312,12 @@ const registerAccount = {
     );
     return jsonResult({
       success: true,
+      status: 'registered',
+      registered: true,
       sso_user_id: ssoUserId,
       sso_key: ssoKey,
+      account_last4: accountLast4(depositAccountNumber),
+      environment: 'uat',
       liveProviderCalled: true,
       productionRecordsMutated: false,
       warning: ssoKey ? undefined : 'Registration succeeded but CheckAlt did not return an ssoKey. The userId will be used as ssoKey for deposits.',
@@ -315,8 +329,20 @@ const verifyAccount = {
   requireAdmin: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
     const tenantId = body.tenant_id || ctx.tenantId;
-    const action = body.action === 'account' ? 'account' : 'user';
+    const action = ['status', 'account'].includes(body.action) ? body.action : 'user';
     const acct = await loadUatTenantAccount(client, tenantId);
+    // UAT truth for the platform-owner card: the isolated UAT row, never production.
+    const status = {
+      status: acct?.sso_user_id ? 'registered' : 'not_registered',
+      registered: Boolean(acct?.sso_user_id),
+      enabled: Boolean(acct?.sso_user_id),
+      sso_user_id: acct?.sso_user_id || null,
+      account_last4: accountLast4(acct?.deposit_account_number),
+      environment: 'uat',
+    };
+    if (action === 'status') {
+      return jsonResult({ success: true, ...status, tenant_id: tenantId, action, liveProviderCalled: false });
+    }
     if (!acct?.sso_user_id) {
       return fail('No registered CheckAlt UAT account for this tenant. Register in Integration Settings first.', 409, {
         error: 'account_unregistered',
@@ -331,7 +357,18 @@ const verifyAccount = {
       : await getUserAccountInfo({
         cfg, credentials: creds, ssoUserId: acct.sso_user_id, fetchImpl, jwtCache,
       });
-    return jsonResult({ ...result, success: result.ok, liveProviderCalled: true, userIdSource: 'uat_tenant_sso_user_id' });
+    const known = [acct.deposit_account_number];
+    const data = maskCheckAltPayload(result.json, known);
+    return jsonResult({
+      ...status,
+      ok: result.ok,
+      success: result.ok,
+      action,
+      data,
+      ...(result.ok ? {} : { error: 'checkalt_lookup_failed', details: data }),
+      liveProviderCalled: true,
+      userIdSource: 'uat_tenant_sso_user_id',
+    });
   },
 };
 

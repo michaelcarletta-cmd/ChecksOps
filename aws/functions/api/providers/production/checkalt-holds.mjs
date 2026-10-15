@@ -8,6 +8,9 @@ export const PRODUCTION_CHECKALT_FUNCTIONS = new Set([
   'checkalt-submit-deposit',
   'checkalt-poll-status',
   'checkalt-approve-deposit',
+  // Platform-owner depositor onboarding (checkalt-register.mjs). Same holds as submit.
+  'checkalt-register-account',
+  'checkalt-verify-account',
 ]);
 
 /**
