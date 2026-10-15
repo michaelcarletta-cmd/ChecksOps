@@ -1,88 +1,19 @@
-import { withIdentityWrite } from '../../data.mjs';
-import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
-import { membershipForTenant } from '../../financial-ownership.mjs';
-import {
-  CHECKALT_DUAL_CONTROL_ACTION,
-  CHECKALT_TOTP_ACTION,
-  loadCheckAltTenantRoles,
-  roleAllowsCheckAlt,
-  serverAmountCentsFromCheck,
-} from './checkalt-authz.mjs';
-
-const fail = (error, statusCode, extra = {}) => ({
-  ok: false,
-  statusCode,
-  error,
-  liveProviderCalled: false,
-  productionExecution: false,
-  ...extra,
-});
-
-export async function handleCheckAltDualControl(event, deps = {}) {
-  return withIdentityWrite(event, async ({ client, mapping, body, spoof }) => {
-    const checkId = body.check_intake_item_id || body.check_id;
-    if (!checkId) return fail('check_intake_item_id is required', 400);
-    const check = (await client.query(
-      `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
-      [checkId],
-    )).rows[0];
-    if (!check) return fail('Check not found', 404);
-    const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
-    const membership = membershipForTenant(memberships, check.tenant_id);
-    if (!membership) {
-      return fail('cross_tenant_denied', 403, {
-        message: 'Dual-control approval is tenant-safe. Browser tenant_id is ignored.',
-        spoofFieldsIgnored: spoof,
-      });
-    }
-    // Same rule as submit/approve: only the caller's tenant_users role for the
-    // check's tenant counts. Platform user_roles admin/staff are ignored.
-    const roles = await loadCheckAltTenantRoles(client, mapping.application_user_id, check.tenant_id);
-    if (!roleAllowsCheckAlt(roles)) {
-      return fail('financial_unauthorized', 403, {
-        message: 'Viewers cannot record a Check Alt second approval. Tenant owner/admin/manager/operator required.',
-        spoofFieldsIgnored: spoof,
-      });
-    }
-    const amountCents = serverAmountCentsFromCheck(check);
-    if (!Number.isInteger(amountCents)) {
-      return fail('invalid_amount', 400, {
-        message: 'Server-derived check amount is required. Browser amount is ignored.',
-        spoofFieldsIgnored: spoof,
-      });
-    }
-    const row = (await client.query(
-      `INSERT INTO public.financial_stepup_log
-        (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
-       VALUES ($1::uuid, $2::uuid, $3, 'dual_control', true, $4::jsonb)
-       RETURNING id, user_id, tenant_id, action_key, factor_type, created_at`,
-      [
-        mapping.application_user_id,
-        check.tenant_id,
-        CHECKALT_DUAL_CONTROL_ACTION,
-        JSON.stringify({
-          check_id: check.id,
-          amount_cents: amountCents,
-          amount_dollars: check.amount,
-          operation: CHECKALT_TOTP_ACTION,
-          approver_role: membership.role,
-        }),
-      ],
-    )).rows[0];
-    return {
-      ok: true,
-      statusCode: 200,
-      success: true,
-      liveProviderCalled: false,
-      productionExecution: false,
-      approval_id: row.id,
-      check_id: check.id,
-      tenant_id: check.tenant_id,
-      amount_cents: amountCents,
-      action_key: CHECKALT_DUAL_CONTROL_ACTION,
-      message: 'Dual-control approval recorded. This does not submit a CheckAlt deposit.',
-      spoofFieldsIgnored: spoof,
-      applicationUserId: mapping.application_user_id,
-    };
-  }, deps);
+/**
+ * POST /financial/checkalt-dual-control
+ *
+ * Check Alt dual control (second-person approval) has been removed. Every
+ * production Check Alt submit requires the submitter's own deposit.submit
+ * step-up; a second approval never substitutes for it. This route stays
+ * registered so callers get an explicit refusal: it never opens a database
+ * connection, never writes financial_stepup_log, and never calls Check Alt.
+ */
+export async function handleCheckAltDualControl() {
+  return {
+    ok: false,
+    statusCode: 410,
+    error: 'dual_control_removed',
+    message: 'Check Alt dual-control approval has been removed. Each submitter must complete their own two-factor step-up.',
+    liveProviderCalled: false,
+    productionExecution: false,
+  };
 }

@@ -112,22 +112,4 @@ export const stepUpAwsTotp = async (input: {
   return Boolean(payload.verified || payload.ok);
 };
 
-export const recordCheckAltDualControl = async (checkId: string) => {
-  const session = readSession();
-  if (!session.idToken && !session.accessToken) throw new Error("missing_access_token");
-  const response = await fetch(`${awsApiBaseUrl()}/financial/checkalt-dual-control`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${session.idToken || session.accessToken}`,
-    },
-    body: JSON.stringify({ check_intake_item_id: checkId }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.ok === false) {
-    throw new Error(String(payload?.message || payload?.error || "dual_control_failed"));
-  }
-  return payload;
-};
-
 export const awsAuthUserId = () => readSession().userId;
