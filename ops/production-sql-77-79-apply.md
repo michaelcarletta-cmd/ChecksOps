@@ -157,7 +157,7 @@ reads sit beside the fingerprint, so `4031dea6…` and `3d650a56…` are unchang
 prints `table_owner` (null until the table exists), `current_user`, `owner_roles`,
 `authenticated_member_of_owner`, `table_acl` and `table_acl_entries`.
 
-SQL 78 and SQL 79 pins are unchanged: SQL 78's fingerprint covers only the new table
+The SQL 78 and SQL 79 pin hashes are unchanged (SQL 78's execute and authorization have since changed; see below): SQL 78's fingerprint covers only the new table
 and SQL 79's covers RLS, policies, ownership and the helper functions, not ACLs, so
 `d9bc8921…` → `878d6441…` holds in production too (reproduced on the same fixture).
 But SQL 79's staging rule also refuses any UPDATE grant (`update_not_granted`, and
