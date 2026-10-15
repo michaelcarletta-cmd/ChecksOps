@@ -18,6 +18,10 @@
  * and SQL 79 carry production variants below that accept exactly that one
  * pre-existing UPDATE (checksops on check_stakeholders, no grant option) and
  * nothing else; every other staging condition still applies.
+ * SQL 77 also requires, before and after, that public.check_stakeholders' owner is
+ * the pin's inspected owner (production_inspect.table_owner, checksops_admin), that
+ * the tool runs as that owner (current_user), and that authenticated is not a
+ * member of it (recursive pg_auth_members, INHERIT FALSE grants included).
  * On top of that, apply refuses while a predecessor migration is not applied or a
  * dependency is missing, and rolls back unless every unrelated object in schema
  * public (relations, columns, constraints, policies, functions, triggers, ACLs,
@@ -140,6 +144,43 @@ WITH RECURSIVE m AS (
 )
 SELECT EXISTS (SELECT 1 FROM m JOIN pg_catalog.pg_roles r ON r.oid = m.member WHERE r.rolname = 'authenticated') AS member
 `.trim();
+// SQL 77 only: the table's owner and ACL text, and the login running the tool.
+const SQL77_TABLE_DETAIL_SQL = `
+SELECT pg_catalog.pg_get_userbyid(c.relowner) AS table_owner, c.relacl::text AS table_acl,
+  current_user::text AS current_user
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relname = 'check_stakeholders' AND c.relkind IN ('r', 'p')
+`.trim();
+// SQL 77 only: every entry of check_stakeholders' table ACL, the owner's own included.
+const SQL77_TABLE_ACL_ENTRIES_SQL = `
+SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, pg_catalog.pg_get_userbyid(a.grantor) AS grantor, a.privilege_type, a.is_grantable
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(c.relacl, pg_catalog.acldefault('r', c.relowner))) a
+LEFT JOIN pg_catalog.pg_roles r ON r.oid = a.grantee
+WHERE n.nspname = 'public' AND c.relname = 'check_stakeholders' AND c.relkind IN ('r', 'p')
+ORDER BY 1, 3, 2
+`.trim();
+// Whether authenticated is a member of any of the given owner roles (SQL 77: the pin's
+// inspected table owner), directly or through other roles. Every pg_auth_members row
+// counts, INHERIT FALSE and SET FALSE grants included: membership in the owner can
+// still reach the owner's privileges (SET ROLE, or ALTER/DROP as owner). NULL (an
+// owner role or authenticated missing, or no owner given) is treated as yes.
+const AUTHENTICATED_IN_OWNER_SQL = `
+WITH RECURSIVE owners AS (
+  SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = ANY($1::text[])
+), m AS (
+  SELECT am.member FROM pg_catalog.pg_auth_members am JOIN owners o ON o.oid = am.roleid
+  UNION
+  SELECT am.member FROM pg_catalog.pg_auth_members am JOIN m ON am.roleid = m.member
+)
+SELECT CASE WHEN pg_catalog.cardinality($1::text[]) = 0
+    OR (SELECT count(*) FROM owners) <> (SELECT count(DISTINCT x) FROM pg_catalog.unnest($1::text[]) x)
+    OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN NULL
+  ELSE EXISTS (SELECT 1 FROM m JOIN pg_catalog.pg_roles r ON r.oid = m.member WHERE r.rolname = 'authenticated')
+  END AS member
+`.trim();
 // The one UPDATE grant production already had before SQL 77 (inspect 2026-10-15,
 // SSM ca4ad39d), as an update_entries line. Any other UPDATE, or this one with
 // grant option, is drift.
@@ -169,6 +210,52 @@ export async function readStakeholderGranteeAcl(client) {
     authenticated_member_of_checksops: member === false ? false : true,
   });
 }
+/** The owner roles authenticated must not be a member of for SQL 77: the pin's inspected table owner. */
+export function sql77OwnerRoles(pin) {
+  const owner = pin?.production_inspect?.table_owner;
+  return typeof owner === 'string' && owner ? [owner] : [];
+}
+
+/**
+ * SQL 77's production-only read: readStakeholderGranteeAcl plus check_stakeholders'
+ * owner, readable ACL and every ACL entry in plain text (the owner's own included),
+ * the login running the tool (current_user), and whether authenticated is a member
+ * of the pinned owner role. Never part of the hash.
+ */
+export async function readSql77ProductionDetail(client, { pin } = {}) {
+  const base = await readStakeholderGranteeAcl(client);
+  if (!base.ok) return base;
+  const ownerRoles = sql77OwnerRoles(pin);
+  const table = (await client.query(SQL77_TABLE_DETAIL_SQL))?.rows?.[0] || null;
+  const entries = table ? ((await client.query(SQL77_TABLE_ACL_ENTRIES_SQL))?.rows || []) : [];
+  const ownerMember = (await client.query(AUTHENTICATED_IN_OWNER_SQL, [ownerRoles]))?.rows?.[0]?.member;
+  return ok({
+    ...base.details,
+    table_owner: table ? table.table_owner : null,
+    table_acl: table ? (table.table_acl ?? null) : null,
+    table_acl_entries: entries
+      .map((row) => `${row.grantee} ${row.privilege_type} granted by ${row.grantor}${row.is_grantable === true ? ' with grant option' : ''}`)
+      .sort(),
+    current_user: table ? table.current_user : null,
+    owner_roles: [...ownerRoles],
+    authenticated_member_of_owner: ownerMember === false ? false : true,
+  });
+}
+/**
+ * SQL 77 only, before and after: the live table owner is the pin's inspected owner,
+ * the tool runs as that owner (so SQL 77's grants are recorded with the same grantor
+ * as checksops' existing entries), and authenticated is not a member of that owner.
+ */
+const sql77OwnerChecks = (state, pin) => {
+  const owners = sql77OwnerRoles(pin);
+  return [
+    ['table_owner_as_inspected', owners.length === 1 && state?.production?.table_owner === owners[0]],
+    ['current_user_is_table_owner', owners.length === 1 && typeof state?.production?.current_user === 'string'
+      && state.production.current_user === owners[0] && state.production.current_user === state.production.table_owner],
+    ['authenticated_not_member_of_owner', state?.production?.authenticated_member_of_owner === false
+      && owners.length > 0 && sameList(state?.production?.owner_roles, owners)],
+  ];
+};
 const updateOnlyPreexisting = (state) => sameList(state?.production?.update_entries, PRODUCTION_PREEXISTING_UPDATE_ENTRIES);
 /** The production-only checks shared by SQL 77 and SQL 79, before and after. */
 const productionGuardChecks = (state) => [
@@ -202,7 +289,16 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
     // every other entry of that ACL to preserved_acl_sha256.
     scope: Object.freeze({ skip_relations: [], acl_ignored: [STAKEHOLDER_GRANT_TABLE], policies_ignored: [] }),
     statementsAllowed: (text) => SQL77_SINGLE_STATEMENT_RE.test(text),
-    productionRead: readStakeholderGranteeAcl,
+    productionRead: readSql77ProductionDetail,
+    // Printed at the top of --inspect, beside the fingerprint (never hashed).
+    inspectSummary: (state) => ({
+      table_owner: state?.production?.table_owner ?? null,
+      current_user: state?.production?.current_user ?? null,
+      owner_roles: state?.production?.owner_roles ?? [],
+      authenticated_member_of_owner: state?.production?.authenticated_member_of_owner ?? true,
+      table_acl: state?.production?.table_acl ?? null,
+      table_acl_entries: state?.production?.table_acl_entries ?? [],
+    }),
     alreadyApplied: (state, pin) => state.live_definition_sha256 === pin.intended_replacement_sha256,
     // Production variant of the staging rule (tenant_guard_ok, update_not_granted):
     // checksops already holds all four privileges, its UPDATE without grant option
@@ -222,6 +318,7 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
       ['preserved_acl_as_inspected', typeof pin?.production_inspect?.preserved_acl_sha256 === 'string'
         && state.preserved_acl_sha256 === pin.production_inspect.preserved_acl_sha256],
       ...productionGuardChecks(state),
+      ...sql77OwnerChecks(state, pin),
     ].filter(([, passed]) => !passed).map(([name]) => name),
     postconditionFailures: (before, after, pin) => [
       ['intended_state', after.live_definition_sha256 === pin.intended_replacement_sha256],
@@ -230,6 +327,9 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
         && JSON.stringify(after.privilege_state?.checksops) === JSON.stringify(before.privilege_state?.checksops)
         && sameList(after.production?.checksops_check_stakeholders_entries, before.production?.checksops_check_stakeholders_entries)],
       ...productionGuardChecks(after),
+      ...sql77OwnerChecks(after, pin),
+      ['table_owner_unchanged', typeof before.production?.table_owner === 'string'
+        && after.production?.table_owner === before.production.table_owner],
       ['other_acl_entries_unchanged', after.preserved_acl_sha256 === before.preserved_acl_sha256],
       ['tenant_guard_ok', after.tenant_guard_ok === true],
     ].filter(([, passed]) => !passed).map(([name]) => name),
@@ -404,10 +504,10 @@ export const resolveMemberStakeholderDatabaseUrl = resolveLedgerDatabaseUrl;
 // --- catalog reads ----------------------------------------------------------
 
 /** The staging reader's state plus, when the spec has one, its production-only read. */
-async function readMigrationState(client, spec, executor) {
+async function readMigrationState(client, spec, executor, pin) {
   const state = await executor[spec.reader](client);
   if (!state.ok || typeof spec.productionRead !== 'function') return state;
-  const extra = await spec.productionRead(client);
+  const extra = await spec.productionRead(client, { pin });
   if (!extra.ok) return extra;
   return ok({ ...state.details, production: extra.details });
 }
@@ -580,7 +680,7 @@ export async function inspectMemberStakeholderProduction({ connect, migration, p
     const predecessorsApplied = Object.values(predecessors).every((row) => row.applied === true);
     const state = missing.length
       ? fail(CODES.DEPLOYMENT_COLLISION, `${spec.label} dependencies are missing`, { missing_dependencies: missing.map((name) => DEPENDENCY_LABELS[name]) })
-      : await guardedRead(client, `state_${spec.key}`, () => readMigrationState(client, spec, executor));
+      : await guardedRead(client, `state_${spec.key}`, () => readMigrationState(client, spec, executor, thePin));
     const details = state.ok ? state.details : null;
     const live = details?.live_definition_sha256 || null;
     const preconditionFailures = details ? spec.preconditionFailures(details, thePin) : ['state_unreadable'];
@@ -595,6 +695,7 @@ export async function inspectMemberStakeholderProduction({ connect, migration, p
       missing_dependencies: missing.map((name) => DEPENDENCY_LABELS[name]),
       predecessors,
       predecessors_applied: predecessorsApplied,
+      ...(details && typeof spec.inspectSummary === 'function' ? spec.inspectSummary(details) : {}),
       ...(details ? { state: details } : { state_error: { code: state.code, message: state.message, details: state.details } }),
       live_definition_sha256: live,
       expected_live_definition_sha256: thePin.expected_live_definition_sha256,
@@ -703,7 +804,7 @@ export async function executeMemberStakeholderProductionApply(input = {}, ctx = 
         missing_dependencies: missing.map((name) => DEPENDENCY_LABELS[name]),
       }));
     }
-    const before = await readMigrationState(client, spec, executor);
+    const before = await readMigrationState(client, spec, executor, pin);
     if (!before.ok) return rollback(before);
     if (spec.alreadyApplied(before.details, pin)) {
       return rollback(fail(CODES.UNRELATED_MUTATION, `${spec.label} is already in place; refuse re-apply`, {
@@ -733,7 +834,7 @@ export async function executeMemberStakeholderProductionApply(input = {}, ctx = 
 
     await client.query(sql.details.text);
 
-    const after = await readMigrationState(client, spec, executor);
+    const after = await readMigrationState(client, spec, executor, pin);
     if (!after.ok) return rollback(after);
     const snapshotAfter = await readUnrelatedCatalogSnapshot(client, spec.scope);
     const postFailures = spec.postconditionFailures(before.details, after.details, pin);
