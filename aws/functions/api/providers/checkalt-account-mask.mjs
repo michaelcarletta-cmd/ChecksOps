@@ -65,3 +65,15 @@ export const maskCheckAltPayload = (value, knownNumbers = []) => {
   return walk(value);
 };
 
+
+/** A checkalt_tenant_accounts row as the browser may see it (Data API reads). */
+export const maskTenantAccountRow = (row) => {
+  if (!row || typeof row !== 'object') return row;
+  const out = { ...row };
+  const full = row.deposit_account_number;
+  if ('deposit_account_number' in out) out.deposit_account_number = maskAccountNumber(full);
+  if ('last_register_payload' in out) {
+    out.last_register_payload = maskCheckAltPayload(out.last_register_payload, full ? [full] : []);
+  }
+  return out;
+};

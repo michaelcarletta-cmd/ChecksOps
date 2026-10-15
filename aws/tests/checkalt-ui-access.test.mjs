@@ -295,7 +295,7 @@ test('Platform Owner/Tenant Management can still access administrative account i
           email: 'mcarletta@freedomadj.com',
           enabled: true,
           registered_at: '2026-01-01T00:00:00.000Z',
-          last_register_payload: { status: 'ok' },
+          last_register_payload: { status: 'ok', note: 'acct 90001111', user_account_info: { accountDataList: [{ accountNumber: '90001111', ssoKey: 'k' }] } },
         }],
       };
     }
@@ -312,8 +312,13 @@ test('Platform Owner/Tenant Management can still access administrative account i
   }), depsFor(client));
   assert.equal(account.ok, true, account.message || account.error);
   assert.equal(account.data.sso_user_id, 'mcarletta');
-  assert.equal(account.data.deposit_account_number, '90001111');
+  // Even the platform owner's browser receives the last four only, in the column and the stored payload.
+  assert.equal(account.data.deposit_account_number, '****1111');
   assert.equal(account.data.last_register_payload.status, 'ok');
+  assert.equal(account.data.last_register_payload.note, 'acct ****1111');
+  assert.equal(account.data.last_register_payload.user_account_info.accountDataList[0].accountNumber, '****1111');
+  assert.equal(account.data.last_register_payload.user_account_info.accountDataList[0].ssoKey, 'k');
+  assert.equal(JSON.stringify(account).includes('90001111'), false);
 
   const cfg = await handleDataQuery(jwtEvent({
     table: 'checkalt_config',
@@ -457,4 +462,60 @@ test('this change does not add SQL 36 or tenant business_unit', () => {
       assert.equal(/id="business_unit"/.test(src), false);
     }
   }
+});
+
+const embedClient = (platformOwner) => identityClient({ platformOwner }, (sql) => {
+  if (sql.includes('count(*)')) return { rows: [{ n: 1 }] };
+  if (sql.includes('FROM public.checkalt_tenant_accounts')) {
+    return {
+      rows: [{
+        tenant_id: FREEDOM,
+        sso_user_id: 'mcarletta',
+        deposit_account_number: '90001111',
+        last_register_payload: { user_account_info: { accountDataList: [{ accountNumber: '90001111' }] } },
+      }],
+    };
+  }
+  if (sql.includes('FROM public.checkalt_config')) {
+    return { rows: [{ id: 'cfg', singleton: true, merchant: 'lockbox5', fi_key: 'fi', depositor_account_id: '90001111' }] };
+  }
+  if (sql.includes('FROM public.tenants')) return { rows: [{ id: FREEDOM, name: 'Freedom' }] };
+  return { rows: [] };
+});
+
+test('Data API: platform owner embedding checkalt_tenant_accounts (tenants -> checkalt_tenant_accounts(*)) gets the last four only', async () => {
+  const client = embedClient(true);
+  const result = await handleDataQuery(jwtEvent({
+    table: 'tenants',
+    select: 'id, name, checkalt_tenant_accounts(*)',
+    filters: [{ column: 'id', op: 'eq', value: FREEDOM }],
+  }), depsFor(client));
+  assert.equal(result.ok, true, result.message || result.error);
+  const embedded = result.data[0].checkalt_tenant_accounts;
+  assert.ok(Array.isArray(embedded) && embedded.length === 1, JSON.stringify(result.data));
+  assert.equal(embedded[0].deposit_account_number, '****1111');
+  assert.equal(embedded[0].last_register_payload.user_account_info.accountDataList[0].accountNumber, '****1111');
+  assert.equal(JSON.stringify(result).includes('90001111'), false);
+});
+
+test('Data API: non-owners cannot embed or filter into checkalt_tenant_accounts or checkalt_config', async () => {
+  for (const [select, filters] of [
+    ['id, name, checkalt_tenant_accounts(*)', []],
+    ['id, name, acct:checkalt_tenant_accounts(deposit_account_number)', []],
+    ['id, claims(id, checkalt_tenant_accounts(*))', []],
+    ['id, checkalt_config(*)', []],
+    ['id, checkalt_config_public(*)', []],
+    ['id, name', [{ column: 'checkalt_tenant_accounts.deposit_account_number', op: 'eq', value: '90001111' }]],
+  ]) {
+    const client = embedClient(false);
+    const result = await handleDataQuery(jwtEvent({ table: 'tenants', select, filters }), depsFor(client));
+    assert.equal(result.ok, false, select);
+    assert.equal(result.statusCode, 403, select);
+    assert.equal(result.error, 'not_authorized', select);
+    assert.equal(client.queries.some((q) => /FROM public\.(checkalt_tenant_accounts|checkalt_config|tenants)\b/.test(q.sql)), false, select);
+  }
+  // Ordinary tenant reads without those tables are unaffected.
+  const client = embedClient(false);
+  const ok = await handleDataQuery(jwtEvent({ table: 'tenants', select: 'id, name', filters: [{ column: 'id', op: 'eq', value: FREEDOM }] }), depsFor(client));
+  assert.equal(ok.ok, true, ok.message || ok.error);
 });

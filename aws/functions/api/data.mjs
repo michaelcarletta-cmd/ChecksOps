@@ -18,6 +18,7 @@ import {
 } from './identity.mjs';
 import { assertTrustedIssuer } from './identity-env.mjs';
 import { denyTaxSecretQuery, denyTaxSecretRpc } from './tax-secrets.mjs';
+import { maskTenantAccountRow } from './providers/checkalt-account-mask.mjs';
 
 const { Client } = pg;
 const IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -481,6 +482,26 @@ export const isCheckAltPlatformOwnerRead = (table) => (
   CHECKALT_PLATFORM_OWNER_READ_TABLES.has(requestedTableName(table))
 );
 
+/** True when a select embeds, or a filter reaches into, a platform-owner-only CheckAlt table. */
+export const touchesCheckAltPlatformOwnerEmbed = (embeds = [], filters = []) => {
+  const walk = (list) => list.some((embed) => (
+    isCheckAltPlatformOwnerRead(embed.table)
+    || isCheckAltPlatformOwnerRead(embedRelationTable(embed.table, embed.columns))
+    || walk(embed.embeds || [])
+  ));
+  if (walk(embeds)) return true;
+  return splitEmbedFilters(filters || []).embed.some((filter) => isCheckAltPlatformOwnerRead(filter.embedTable));
+};
+
+/**
+ * The browser never receives a full Check Alt deposit account number: every
+ * checkalt_tenant_accounts row (top level or embedded) comes back with
+ * deposit_account_number and last_register_payload masked to the last four.
+ */
+export const maskCheckAltTenantAccountRows = (table, rows) => (
+  table === 'checkalt_tenant_accounts' && Array.isArray(rows) ? rows.map(maskTenantAccountRow) : rows
+);
+
 /** Map secret-bearing config tables to tenant-safe public-column views. */
 export const resolvePublicTable = (table) => PUBLIC_CONFIG_TABLES[table] || table;
 
@@ -782,7 +803,7 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
         `SELECT ${embedCols} FROM public.${relTable} WHERE id = ANY($1::uuid[])`,
         [ids],
       )).rows;
-      const nested = await attachEmbeds(client, related, relTable, embed.embeds || []);
+      const nested = maskCheckAltTenantAccountRows(relTable, await attachEmbeds(client, related, relTable, embed.embeds || []));
       const byId = new Map(nested.map((row) => [String(row.id), row]));
       const next = [];
       for (const row of current) {
@@ -806,7 +827,7 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
         `SELECT ${embedCols} FROM public.${relTable} WHERE ${ident(childKey, 'column')} = ANY($1::uuid[])`,
         [parentIds],
       )).rows;
-      const nested = await attachEmbeds(client, related, relTable, embed.embeds || []);
+      const nested = maskCheckAltTenantAccountRows(relTable, await attachEmbeds(client, related, relTable, embed.embeds || []));
       const byParent = new Map();
       for (const item of nested) {
         const key = String(item[childKey]);
@@ -862,7 +883,7 @@ const runSelect = async (client, body) => {
   }
   const sql = `SELECT ${cols} FROM public.${table} ${where} ${order} LIMIT ${limit} OFFSET ${offset}`;
   const rows = (await client.query(sql, params)).rows;
-  const attached = await attachEmbeds(client, rows, table, parsed.embeds);
+  const attached = maskCheckAltTenantAccountRows(table, await attachEmbeds(client, rows, table, parsed.embeds));
   return { rows: attached, count };
 };
 
@@ -964,7 +985,7 @@ export const handleDataQuery = async (event, deps) => {
       spoofFieldsIgnored: spoof,
     };
   }
-  if (isCheckAltPlatformOwnerRead(rawTable)) {
+  if (isCheckAltPlatformOwnerRead(rawTable) || touchesCheckAltPlatformOwnerEmbed(parsedSelect.embeds, body.filters)) {
     const owner = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
     if (!owner?.is_owner) {
       return {
