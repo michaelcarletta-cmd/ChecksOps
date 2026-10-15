@@ -192,8 +192,9 @@ const identityClient = (store) => ({
     if (text.includes('FROM public.tenant_users WHERE user_id') && text.includes('AND tenant_id')) {
       const userId = params[0];
       const tenantId = params[1];
-      if (store.rolesByUser?.[userId]) {
-        return { rows: [{ role: store.rolesByUser[userId] }] };
+      if (store.rolesByUser && Object.hasOwn(store.rolesByUser, userId)) {
+        // null: this user has no tenant_users row for the tenant.
+        return { rows: store.rolesByUser[userId] ? [{ role: store.rolesByUser[userId] }] : [] };
       }
       const match = store.memberships.find((row) => row.tenant_id === tenantId);
       return { rows: match ? [{ role: match.role }] : [] };
@@ -840,38 +841,61 @@ test('default holds keep the production CheckAlt path unreachable through the pu
   assert.equal(productionCheckAltExecutionAllowed(), false);
 });
 
-test('dual-control records approval without calling CheckAlt; operator cannot approve', async () => {
+const dualControlOnce = (store) => handleFinancialRequest(
+  jwtEvent('/financial/checkalt-dual-control', 'POST', { check_intake_item_id: CHECK_ID }),
+  '/financial/checkalt-dual-control',
+  'POST',
+  {
+    createClient: () => identityClient(store),
+    loadDatabaseCredentials: async () => ({
+      host: 'localhost', username: 'checksops', password: 'x', database: 'checksops',
+    }),
+  },
+);
+
+test('dual-control records approval without calling CheckAlt; a tenant operator may record it', async () => {
   const store = createStore();
-  const ok = await handleFinancialRequest(
-    jwtEvent('/financial/checkalt-dual-control', 'POST', { check_intake_item_id: CHECK_ID }),
-    '/financial/checkalt-dual-control',
-    'POST',
-    {
-      createClient: () => identityClient(store),
-      loadDatabaseCredentials: async () => ({
-        host: 'localhost', username: 'checksops', password: 'x', database: 'checksops',
-      }),
-    },
-  );
+  const ok = await dualControlOnce(store);
   assert.equal(ok.statusCode, 200);
   assert.equal(ok.liveProviderCalled, false);
   assert.equal(ok.productionExecution, false);
   assert.equal(store.stepups[0].action_key, 'checkalt.dual_control');
 
   const operatorStore = createStore({ role: 'operator' });
-  const denied = await handleFinancialRequest(
-    jwtEvent('/financial/checkalt-dual-control', 'POST', { check_intake_item_id: CHECK_ID }),
-    '/financial/checkalt-dual-control',
-    'POST',
-    {
-      createClient: () => identityClient(operatorStore),
-      loadDatabaseCredentials: async () => ({
-        host: 'localhost', username: 'checksops', password: 'x', database: 'checksops',
-      }),
-    },
-  );
+  const operatorOk = await dualControlOnce(operatorStore);
+  assert.equal(operatorOk.statusCode, 200);
+  assert.equal(operatorStore.stepups.length, 1);
+  assert.equal(operatorStore.stepups[0].action_key, 'checkalt.dual_control');
+});
+
+test('dual-control record: a tenant viewer is refused, with or without a platform admin/staff role', async () => {
+  for (const platformRoles of [[], ['admin'], ['staff'], ['admin', 'staff']]) {
+    const store = createStore({ role: 'viewer' });
+    store.platformRoles = platformRoles;
+    const denied = await dualControlOnce(store);
+    assert.equal(denied.statusCode, 403, JSON.stringify(platformRoles));
+    assert.equal(denied.error, 'financial_unauthorized');
+    assert.equal(store.stepups.length, 0);
+  }
+});
+
+test('dual-control record: a platform admin with no membership of the check tenant is refused', async () => {
+  for (const memberships of [[], partnerMemberships]) {
+    const store = createStore({ memberships });
+    store.platformRoles = ['admin'];
+    const denied = await dualControlOnce(store);
+    assert.equal(denied.statusCode, 403);
+    assert.equal(denied.error, 'cross_tenant_denied');
+    assert.equal(store.stepups.length, 0);
+  }
+  // Even if a membership row were present, the tenant role is what counts.
+  const noRole = createStore();
+  noRole.platformRoles = ['admin'];
+  noRole.rolesByUser = { [FREEDOM_APP]: null };
+  const denied = await dualControlOnce(noRole);
   assert.equal(denied.statusCode, 403);
   assert.equal(denied.error, 'financial_unauthorized');
+  assert.equal(noRole.stepups.length, 0);
 });
 
 test('direct submit helper uses check amount cents and refuses client image bytes', async () => {
@@ -1042,7 +1066,7 @@ test('TOTP is bound to check and amount; tenant-wide leftover does not authorize
   }, { tenantId: FREEDOM_TENANT, checkId: CHECK_ID, amountCents: 5678, actionKey: 'deposit.submit' }), false);
 });
 
-test('dual-control requires a distinct owner/admin/manager bound to check and amount', async () => {
+test('dual-control requires a distinct tenant owner/admin/manager/operator bound to check and amount', async () => {
   const self = createStore();
   grantStepUp(self, { userId: FREEDOM_APP, action: 'checkalt.dual_control' });
   const selfDenied = await submitOnce(self);
@@ -1083,9 +1107,39 @@ test('dual-control requires a distinct owner/admin/manager bound to check and am
   const operatorApprover = createStore();
   grantStepUp(operatorApprover, { userId: APPROVER_APP, action: 'checkalt.dual_control' });
   operatorApprover.rolesByUser = { [APPROVER_APP]: 'operator', [FREEDOM_APP]: 'admin' };
-  const operatorDenied = await submitOnce(operatorApprover);
-  assert.equal(operatorDenied.error, 'step_up_required');
-  assert.equal(operatorApprover.processPosts, 0);
+  const operatorAccepted = await submitOnce(operatorApprover);
+  assert.equal(operatorAccepted.statusCode, 200);
+  assert.equal(operatorApprover.processPosts, 1);
+});
+
+test('dual-control second approver: platform admin counts only through their tenant role', async () => {
+  // Tenant viewer who is also a platform admin/staff: not a second approver.
+  for (const platformRoles of [['admin'], ['staff'], ['admin', 'staff']]) {
+    const viewerApprover = createStore();
+    grantStepUp(viewerApprover, { userId: APPROVER_APP, action: 'checkalt.dual_control' });
+    viewerApprover.rolesByUser = { [APPROVER_APP]: 'viewer', [FREEDOM_APP]: 'admin' };
+    viewerApprover.platformRolesByUser = { [APPROVER_APP]: platformRoles };
+    const denied = await submitOnce(viewerApprover);
+    assert.equal(denied.error, 'step_up_required', JSON.stringify(platformRoles));
+    assert.equal(viewerApprover.processPosts, 0);
+  }
+
+  // Platform admin with no tenant_users row for the check tenant: not a second approver.
+  const outsider = createStore();
+  grantStepUp(outsider, { userId: APPROVER_APP, action: 'checkalt.dual_control' });
+  outsider.rolesByUser = { [APPROVER_APP]: null, [FREEDOM_APP]: 'admin' };
+  outsider.platformRolesByUser = { [APPROVER_APP]: ['admin'] };
+  const outsiderDenied = await submitOnce(outsider);
+  assert.equal(outsiderDenied.error, 'step_up_required');
+  assert.equal(outsider.processPosts, 0);
+
+  // Tenant operator: counts.
+  const operatorApprover = createStore();
+  grantStepUp(operatorApprover, { userId: APPROVER_APP, action: 'checkalt.dual_control' });
+  operatorApprover.rolesByUser = { [APPROVER_APP]: 'operator', [FREEDOM_APP]: 'operator' };
+  const accepted = await submitOnce(operatorApprover);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(operatorApprover.processPosts, 1);
 });
 
 test('dual-control record ignores browser tenant and amount', async () => {
