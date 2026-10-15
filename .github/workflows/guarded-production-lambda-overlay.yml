@@ -23,6 +23,7 @@ on:
           - check-deposited.mjs
           - workflow.mjs
           - claim-settlement-rpc.mjs
+          - providers/checkalt-account-mask.mjs
           - data.mjs
           - workflow-transitions.mjs
           - providers/parity/moov-wallet.mjs
@@ -37,6 +38,9 @@ on:
           - workflow-rpc.mjs
           - providers/production/checkalt-authz.mjs
           - providers/production/checkalt-dual-control.mjs
+          - providers/production/checkalt-register.mjs
+          - providers/production/checkalt-dispatch.mjs
+          - providers/production/checkalt-holds.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs

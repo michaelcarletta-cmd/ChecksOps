@@ -1,0 +1,40 @@
+{
+  "workstream_id": "checkalt-production-onboarding",
+  "authorization": "Owner-approved 2026-10-15: platform-owner production Check Alt depositor registration and live verify (SQL 81 writer), account number shown as the last four only (register/verify/status responses and every Data API read of checkalt_tenant_accounts, top level and embedded), checkalt_config.depositor_account_id last four only (Data API reads and the save_checkalt_settings response), account-number columns never filterable or orderable, and embeds of checkalt_tenant_accounts / checkalt_config / checkalt_config_public refused for non-owners. Not a deploy authorization: the lock and plan change and each overlay still need their own approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "SQL 81 (aws/workflows/sql/81_checkalt_production_register.sql, 88aafdacf83ea382e4b2f0c56da8d8c2048d36773ada18c49874e807cdbd8fbe) must be applied first. Then, one member per run: ADD providers/checkalt-account-mask.mjs, ADD providers/production/checkalt-register.mjs, REPLACE data.mjs and workflow-rpc.mjs (both import the mask helper), REPLACE providers/production/checkalt-dispatch.mjs (imports the register handler), REPLACE providers/production/checkalt-holds.mjs last (routes register/verify to production). data.mjs live_sha256 is the 2026-10-08 reconciled bytes; workflow-rpc.mjs live_sha256 is the Check Alt member-access bytes (applied 2026-10-15); checkalt-dispatch.mjs / checkalt-holds.mjs live_sha256 are main's bytes before this change. Confirm each with a read-only inspect. providers/parity/checkalt-functions.mjs is staging-only and is not overlaid to production; providers/catalog.mjs changes descriptions only and need not be overlaid.",
+  "members": {
+    "providers/checkalt-account-mask.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "f0671e1e352dda9f8f0bcc98a43016e730a05cea26ab1626ae8774eec57e31f9",
+      "operation": "add"
+    },
+    "providers/production/checkalt-register.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "2264e34cc1d824d5f1c3a89c822a489bb35f90fc85b0ed90f68ebdbd1117b501",
+      "operation": "add"
+    },
+    "data.mjs": {
+      "live_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+      "accepted_sha256": "f81055b8ab46f4293c79d213e3a9ceb8742ce7676d41f079fc86a5be10953449",
+      "operation": "replace"
+    },
+    "workflow-rpc.mjs": {
+      "live_sha256": "659028c2a712e3d40adcf8375b878ef27c2673e97f5f39e0cba89527ef9afe68",
+      "accepted_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-member-access-manifest-2026-10-15.json"
+    },
+    "providers/production/checkalt-dispatch.mjs": {
+      "live_sha256": "14929c052564c4fd631c2fe36e9f45819399f39bffaa568b6b3a1e1f5c16ba22",
+      "accepted_sha256": "319794183df8d17fbb8dbddef24e812711c01d3463979e3112c0207fb49e4120",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-holds.mjs": {
+      "live_sha256": "01068775c824beb2406b644cb192b450d5f3a2e02c62d2c1134dd8f957a627f5",
+      "accepted_sha256": "ba43e6f29bf2e4f9918f35f9c46a18421521325bda9915c5cd31fa9c2cf5f078",
+      "operation": "replace"
+    }
+  }
+}

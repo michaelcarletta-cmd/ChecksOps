@@ -42,6 +42,15 @@ const newerManifestRow = (name) => {
 
 /** Chain check: the newer manifest replaces exactly the reconciled bytes. */
 const assertChainsFromReconciled = (name, row) => {
+  // A second change to a member names the manifest it builds on: its live bytes
+  // are that manifest's accepted bytes, which in turn chain back to 2026-10-08.
+  if (row.previous_manifest) {
+    const previous = JSON.parse(fs.readFileSync(path.join(ROOT, row.previous_manifest), 'utf8')).members?.[name];
+    assert.ok(previous, `${row.previous_manifest} must list ${name}`);
+    assert.equal(row.live_sha256, previous.accepted_sha256, `${name} live_sha256 must equal ${row.previous_manifest} accepted bytes`);
+    assertChainsFromReconciled(name, previous);
+    return;
+  }
   assert.equal(row.live_sha256, proof.members[name].reconciled_sha256, `${name} newer manifest live_sha256 must equal the 2026-10-08 reconciled bytes`);
 };
 

@@ -18,6 +18,7 @@ import {
 } from './identity.mjs';
 import { assertTrustedIssuer } from './identity-env.mjs';
 import { denyTaxSecretQuery, denyTaxSecretRpc } from './tax-secrets.mjs';
+import { maskAccountNumber, maskTenantAccountRow } from './providers/checkalt-account-mask.mjs';
 
 const { Client } = pg;
 const IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -481,6 +482,67 @@ export const isCheckAltPlatformOwnerRead = (table) => (
   CHECKALT_PLATFORM_OWNER_READ_TABLES.has(requestedTableName(table))
 );
 
+/** True when a select embeds, or a filter reaches into, a platform-owner-only CheckAlt table. */
+export const touchesCheckAltPlatformOwnerEmbed = (embeds = [], filters = []) => {
+  const walk = (list) => list.some((embed) => (
+    isCheckAltPlatformOwnerRead(embed.table)
+    || isCheckAltPlatformOwnerRead(embedRelationTable(embed.table, embed.columns))
+    || walk(embed.embeds || [])
+  ));
+  if (walk(embeds)) return true;
+  return splitEmbedFilters(filters || []).embed.some((filter) => isCheckAltPlatformOwnerRead(filter.embedTable));
+};
+
+/** Columns that carry a full bank account number; never filterable or orderable. */
+export const CHECKALT_ACCOUNT_NUMBER_COLUMNS = Object.freeze([
+  'deposit_account_number',
+  'last_register_payload',
+  'depositor_account_id',
+]);
+
+const CHECKALT_ACCOUNT_NUMBER_COLUMN_RE = new RegExp(`\\b(${CHECKALT_ACCOUNT_NUMBER_COLUMNS.join('|')})\\b`);
+
+/** True when a filter (including or=(...) expressions) or the order names an account-number column. */
+export const filtersOrOrdersCheckAltAccountNumber = (filters = [], order = null) => (
+  CHECKALT_ACCOUNT_NUMBER_COLUMN_RE.test(JSON.stringify(filters || []))
+  || CHECKALT_ACCOUNT_NUMBER_COLUMN_RE.test(String(order?.column || ''))
+);
+
+/**
+ * last_register_payload can only be masked with the account number it hides:
+ * when it is selected without deposit_account_number, read the number too.
+ * Returns true when the caller must drop it from the output again.
+ */
+export const addCheckAltMaskColumns = (table, needed) => {
+  if (table !== 'checkalt_tenant_accounts' || needed.has('*')) return false;
+  if (!needed.has('last_register_payload') || needed.has('deposit_account_number')) return false;
+  needed.add('deposit_account_number');
+  return true;
+};
+
+/**
+ * The browser never receives a full bank account number: every
+ * checkalt_tenant_accounts row (top level or embedded) comes back with
+ * deposit_account_number and last_register_payload masked to the last four,
+ * and checkalt_config / checkalt_config_public with depositor_account_id masked.
+ */
+export const maskCheckAltRows = (table, rows, { dropAccountNumber = false } = {}) => {
+  if (!Array.isArray(rows)) return rows;
+  if (table === 'checkalt_tenant_accounts') {
+    return rows.map((row) => {
+      const out = maskTenantAccountRow(row);
+      if (dropAccountNumber && out && typeof out === 'object') delete out.deposit_account_number;
+      return out;
+    });
+  }
+  if (table === 'checkalt_config' || table === 'checkalt_config_public') {
+    return rows.map((row) => (row && typeof row === 'object' && 'depositor_account_id' in row
+      ? { ...row, depositor_account_id: maskAccountNumber(row.depositor_account_id) }
+      : row));
+  }
+  return rows;
+};
+
 /** Map secret-bearing config tables to tenant-safe public-column views. */
 export const resolvePublicTable = (table) => PUBLIC_CONFIG_TABLES[table] || table;
 
@@ -764,6 +826,7 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
     const resultKey = embed.alias || embed.table;
     const parentHasFk = current.some((row) => Object.prototype.hasOwnProperty.call(row, fk));
     const nestedNeeded = columnsNeededForEmbeds(relTable, embed.columns, embed.embeds);
+    const dropAccountNumber = addCheckAltMaskColumns(relTable, nestedNeeded);
     if (parentHasFk) {
       const ids = [...new Set(current.map((row) => row[fk]).filter(Boolean))];
       if (!ids.length) {
@@ -782,7 +845,7 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
         `SELECT ${embedCols} FROM public.${relTable} WHERE id = ANY($1::uuid[])`,
         [ids],
       )).rows;
-      const nested = await attachEmbeds(client, related, relTable, embed.embeds || []);
+      const nested = maskCheckAltRows(relTable, await attachEmbeds(client, related, relTable, embed.embeds || []), { dropAccountNumber });
       const byId = new Map(nested.map((row) => [String(row.id), row]));
       const next = [];
       for (const row of current) {
@@ -806,7 +869,7 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
         `SELECT ${embedCols} FROM public.${relTable} WHERE ${ident(childKey, 'column')} = ANY($1::uuid[])`,
         [parentIds],
       )).rows;
-      const nested = await attachEmbeds(client, related, relTable, embed.embeds || []);
+      const nested = maskCheckAltRows(relTable, await attachEmbeds(client, related, relTable, embed.embeds || []), { dropAccountNumber });
       const byParent = new Map();
       for (const item of nested) {
         const key = String(item[childKey]);
@@ -852,6 +915,7 @@ const runSelect = async (client, body) => {
   const needed = autoDeposit
     ? new Set(CHECKALT_AUTO_DEPOSIT_READ_COLUMNS)
     : columnsNeededForEmbeds(table, parsed.columns, parsed.embeds);
+  const dropAccountNumber = !autoDeposit && addCheckAltMaskColumns(table, needed);
   const cols = needed.has('*')
     ? '*'
     : [...needed].map((c) => (autoDeposit ? autoDepositColumnSql(c) : ident(c, 'column'))).join(', ');
@@ -862,7 +926,7 @@ const runSelect = async (client, body) => {
   }
   const sql = `SELECT ${cols} FROM public.${table} ${where} ${order} LIMIT ${limit} OFFSET ${offset}`;
   const rows = (await client.query(sql, params)).rows;
-  const attached = await attachEmbeds(client, rows, table, parsed.embeds);
+  const attached = maskCheckAltRows(table, await attachEmbeds(client, rows, table, parsed.embeds), { dropAccountNumber });
   return { rows: attached, count };
 };
 
@@ -964,7 +1028,19 @@ export const handleDataQuery = async (event, deps) => {
       spoofFieldsIgnored: spoof,
     };
   }
-  if (isCheckAltPlatformOwnerRead(rawTable)) {
+  const checkAltOwnerRead = isCheckAltPlatformOwnerRead(rawTable)
+    || touchesCheckAltPlatformOwnerEmbed(parsedSelect.embeds, body.filters);
+  if (checkAltOwnerRead && filtersOrOrdersCheckAltAccountNumber(body.filters, body.order)) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'account_number_filter_denied',
+      message: 'Account-number columns cannot be filtered or ordered on.',
+      table: requestedTableName(rawTable),
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (checkAltOwnerRead) {
     const owner = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
     if (!owner?.is_owner) {
       return {

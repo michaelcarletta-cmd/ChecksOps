@@ -9,6 +9,7 @@ import {
 import { bindCheckAltProductionGucs, bindCheckAltStatusReadGucs } from './checkalt-idempotency.mjs';
 import { handleProductionCheckAltApprove } from './checkalt-approve.mjs';
 import { handleProductionCheckAltPoll } from './checkalt-poll.mjs';
+import { handleProductionCheckAltRegister, handleProductionCheckAltVerify } from './checkalt-register.mjs';
 import { handleProductionCheckAltSubmit } from './checkalt-submit.mjs';
 import {
   checkaltStatusReadAllowed,
@@ -62,6 +63,8 @@ const HANDLERS = {
   'checkalt-submit-deposit': wrap(handleProductionCheckAltSubmit),
   'checkalt-poll-status': wrap(handleProductionCheckAltPoll, { statusRead: true }),
   'checkalt-approve-deposit': wrap(handleProductionCheckAltApprove),
+  'checkalt-register-account': wrap(handleProductionCheckAltRegister),
+  'checkalt-verify-account': wrap(handleProductionCheckAltVerify),
 };
 
 /**

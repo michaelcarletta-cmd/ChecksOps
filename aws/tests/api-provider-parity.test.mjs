@@ -954,3 +954,57 @@ test('UAT Check Alt setup: a tenant viewer or operator who omits tenant_id canno
     assert.equal(depositorRowWritten(client), true);
   });
 });
+
+test('UAT Check Alt verify: status reads the UAT row (no provider call); live lookups come back masked to the last four', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    let { fetchImpl, calls } = uatReadFetch();
+    let result = await parityCall('checkalt-verify-account', parityClient(), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
+    assert.equal(result.success, true, JSON.stringify(result));
+    assert.equal(result.status, 'registered');
+    assert.equal(result.environment, 'uat');
+    assert.equal(result.account_last4, '1111');
+    assert.equal(calls.length, 0);
+    assert.equal(JSON.stringify(result).includes('90001111'), false);
+
+    result = await parityCall('checkalt-verify-account', parityClient({ uatAccounts: [] }), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
+    assert.equal(result.status, 'not_registered');
+    assert.equal(result.registered, false);
+
+    ({ fetchImpl, calls } = recordedFetch([
+      { match: '/public/fincapture/authenticate', method: 'POST', body: 'header.payload.sig' },
+      { match: '/fincapture/useraccount/getDepositAccountInformation', method: 'POST', body: { accountNumber: '90001111', note: 'acct 90001111 ok' } },
+    ]));
+    result = await parityCall('checkalt-verify-account', parityClient(), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'account' });
+    assert.equal(result.success, true, JSON.stringify(result));
+    assert.equal(result.data.accountNumber, '****1111');
+    assert.equal(result.data.note, 'acct ****1111 ok');
+    assert.equal(JSON.stringify(result).includes('90001111'), false);
+    assert.ok(calls.some((c) => c.url.includes('getDepositAccountInformation')));
+  });
+});
+
+test('UAT Check Alt register refuses a non-digit deposit account number before calling Check Alt', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const bad of ['1234-5678', 'abc12345', '123', '123456789012345678']) {
+      const { fetchImpl, calls } = uatReadFetch();
+      const result = await parityCall('checkalt-register-account', parityClient(), fetchImpl, {
+        tenant_id: FREEDOM_TENANT, sso_user_id: 'depositor-2', deposit_account_number: bad,
+      });
+      assert.equal(result.statusCode, 400, bad);
+      assert.equal(result.error, 'invalid_deposit_account_number', bad);
+      assert.equal(calls.length, 0, bad);
+    }
+  });
+});
+
+test('UAT Check Alt verify: a missing or unknown action is 400 with no provider call', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const body of [{ tenant_id: FREEDOM_TENANT }, { tenant_id: FREEDOM_TENANT, action: 'history' }]) {
+      const { fetchImpl, calls } = uatReadFetch();
+      const result = await parityCall('checkalt-verify-account', parityClient(), fetchImpl, body);
+      assert.equal(result.statusCode, 400, JSON.stringify(body));
+      assert.equal(result.error, 'invalid_action', JSON.stringify(body));
+      assert.equal(calls.length, 0, JSON.stringify(body));
+    }
+  });
+});

@@ -53,6 +53,7 @@
       ],
       "description": "CheckAlt submission, eligibility, images, and production writer SQL. Explicit files only; Moov or future provider siblings are not captured.",
       "paths": [
+        "aws/functions/api/providers/checkalt-account-mask.mjs",
         "aws/functions/api/providers/production/checkalt-approve.mjs",
         "aws/functions/api/providers/production/checkalt-authz.mjs",
         "aws/functions/api/providers/production/checkalt-config.mjs",
@@ -60,6 +61,7 @@
         "aws/functions/api/providers/production/checkalt-dual-control.mjs",
         "aws/functions/api/providers/production/checkalt-eligibility.mjs",
         "aws/functions/api/providers/production/checkalt-holds.mjs",
+        "aws/functions/api/providers/production/checkalt-register.mjs",
         "aws/functions/api/providers/production/checkalt-idempotency.mjs",
         "aws/functions/api/providers/production/checkalt-image-compliance.mjs",
         "aws/functions/api/providers/production/checkalt-images.mjs",
