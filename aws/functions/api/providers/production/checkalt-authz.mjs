@@ -1,4 +1,4 @@
-import { FINANCIAL_ROLES, roleAllowsFinancial } from '../../financial-authz.mjs';
+import { FINANCIAL_ROLES } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { formatCheckAltUserAmount } from '../amounts.mjs';
@@ -53,6 +53,13 @@ export const stepUpMatchesCheck = (row, {
   return loggedAmountCents(row.metadata) === Number(amountCents);
 };
 
+/**
+ * Deprecated: mixes tenant_users with platform user_roles, so it must not
+ * decide any Check Alt action. Kept exported only so a live
+ * checkalt-dual-control.mjs that still imports it keeps linking until that
+ * member is overlaid (it is next in the production plan). Use
+ * loadCheckAltTenantRoles.
+ */
 export async function loadTenantRole(client, userId, tenantId) {
   if (!userId || !tenantId) return [];
   const tenant = (await client.query(
@@ -142,8 +149,11 @@ export async function loadDualControlApproval(client, {
       amountCents: Number(amountCents),
       actionKey: CHECKALT_DUAL_CONTROL_ACTION,
     })) continue;
-    const approverRoles = await loadTenantRole(client, row.user_id, tenantId);
-    if (!roleAllowsFinancial(approverRoles)) continue;
+    // The second approver counts only through their own tenant_users role for
+    // this tenant (owner/admin/manager/operator). A platform user_roles admin
+    // or staff row never makes a viewer or a non-member an approver.
+    const approverRoles = await loadCheckAltTenantRoles(client, row.user_id, tenantId);
+    if (!roleAllowsCheckAlt(approverRoles)) continue;
     return row;
   }
   return null;
@@ -201,7 +211,7 @@ export const evaluateCheckAltProductionAuthorization = ({
         : !roleOk
           ? 'Viewers cannot submit, approve or refresh Check Alt deposits. Owner/admin/manager/operator required.'
           : !stepUpOk
-            ? 'Cognito TOTP step-up or dual-control approval from a distinct owner/admin/manager is required, bound to this check and amount.'
+            ? 'Cognito TOTP step-up or dual-control approval from a distinct tenant owner/admin/manager/operator is required, bound to this check and amount.'
             : !flagsOk
               ? 'Production CheckAlt holds remain on.'
               : 'CheckAlt production authorization satisfied. Holds must still be lifted by a human.',

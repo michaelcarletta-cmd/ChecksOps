@@ -1,8 +1,13 @@
 import { withIdentityWrite } from '../../data.mjs';
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
-import { roleAllowsFinancial } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
-import { CHECKALT_DUAL_CONTROL_ACTION, CHECKALT_TOTP_ACTION, loadTenantRole, serverAmountCentsFromCheck } from './checkalt-authz.mjs';
+import {
+  CHECKALT_DUAL_CONTROL_ACTION,
+  CHECKALT_TOTP_ACTION,
+  loadCheckAltTenantRoles,
+  roleAllowsCheckAlt,
+  serverAmountCentsFromCheck,
+} from './checkalt-authz.mjs';
 
 const fail = (error, statusCode, extra = {}) => ({
   ok: false,
@@ -30,10 +35,12 @@ export async function handleCheckAltDualControl(event, deps = {}) {
         spoofFieldsIgnored: spoof,
       });
     }
-    const roles = await loadTenantRole(client, mapping.application_user_id, check.tenant_id);
-    if (!roleAllowsFinancial(roles)) {
+    // Same rule as submit/approve: only the caller's tenant_users role for the
+    // check's tenant counts. Platform user_roles admin/staff are ignored.
+    const roles = await loadCheckAltTenantRoles(client, mapping.application_user_id, check.tenant_id);
+    if (!roleAllowsCheckAlt(roles)) {
       return fail('financial_unauthorized', 403, {
-        message: 'Dual-control requires tenant owner/admin/manager. Operator cannot approve production CheckAlt.',
+        message: 'Viewers cannot record a Check Alt second approval. Tenant owner/admin/manager/operator required.',
         spoofFieldsIgnored: spoof,
       });
     }

@@ -121,6 +121,8 @@ const parityClient = ({
     },
   }],
   operations = [],
+  tenantRole = 'admin',
+  platformAdmin = true,
 } = {}) => {
   const queries = [];
   return {
@@ -135,9 +137,12 @@ const parityClient = ({
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       if (sql.includes('FROM public.tenant_users') || sql === TENANT_MEMBERSHIP_SQL) {
-        return { rows: [{ tenant_id: FREEDOM_TENANT, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' }] };
+        // tenantRole null: the caller has no tenant_users row at all.
+        if (!tenantRole) return { rows: [] };
+        if (sql.includes('AND tenant_id = $2') && params[1] !== FREEDOM_TENANT) return { rows: [] };
+        return { rows: [{ tenant_id: FREEDOM_TENANT, role: tenantRole, tenant_name: 'Freedom', tenant_slug: 'freedom' }] };
       }
-      if (sql.includes('FROM public.user_roles')) return { rows: [{ role: 'admin' }] };
+      if (sql.includes('FROM public.user_roles')) return { rows: platformAdmin ? [{ role: 'admin' }] : [] };
       if (sql.includes('FROM public.tenants') && sql.includes('moov_allowlisted')) {
         return { rows: [{ moov_allowlisted: true, moov_environment: 'sandbox' }] };
       }
@@ -197,7 +202,15 @@ const parityClient = ({
         return { rows: operations };
       }
       if (sql.includes('FROM public.aws_provider_sandbox_operations')) {
-        return { rows: operations };
+        // Filter by the bound params, as Postgres would, so lookups by id,
+        // by provider reference and by tenant are really exercised.
+        const limit = Number(/LIMIT (\d+)/.exec(sql)?.[1] || Infinity);
+        let rows = operations.filter((op) => (op.provider || 'checkalt') === 'checkalt');
+        if (/WHERE id = \$1/.test(sql)) rows = rows.filter((op) => op.id === params[0]);
+        else if (/provider_reference = \$1/.test(sql)) rows = rows.filter((op) => String(op.provider_reference) === String(params[0]));
+        else if (/tenant_id = \$1/.test(sql)) rows = rows.filter((op) => op.tenant_id === params[0] && op.provider_reference != null);
+        else throw new Error(`unmocked aws_provider_sandbox_operations query: ${sql}`);
+        return { rows: rows.slice(0, limit) };
       }
       if (sql.includes('FROM public.payment_wallet_ledger')) return { rows: [] };
       if (sql.includes('FROM public.payment_wallet_sub_ledgers')) return { rows: [] };
@@ -572,6 +585,181 @@ test('checkalt-approve-deposit accepts production deposit_id body and action 1/2
     assert.equal(payload.referenceNumber, 98765);
     assert.equal(payload.fiKey, 'fi-key-uat');
     assert.equal(payload.ssoKey, undefined);
+  });
+});
+
+const OTHER_TENANT = '88888888-8888-4888-8888-888888888888';
+const UAT_DEPOSIT_ID = '66666666-6666-4666-8666-666666666666';
+const parityDeps = (client, fetchImpl) => ({
+  loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+  createClient: () => client,
+  loadSandboxCredentials: async () => sandboxCreds(),
+  fetchImpl,
+  downloadClaimFile: async () => syntheticCheckRaster({ width: 1400, height: 700, flat: true }),
+});
+const pendingUatOp = (tenantId = FREEDOM_TENANT) => [{
+  id: UAT_DEPOSIT_ID,
+  tenant_id: tenantId,
+  provider_reference: '98765',
+  status: 'pending_approval',
+  metadata: {},
+}];
+const uatProviderFetch = () => recordedFetch([
+  { match: '/public/fincapture/authenticate', method: 'POST', body: 'header.payload.sig' },
+  { match: '/fincapture/deposit/process', method: 'POST', body: { referenceNumber: 98765, status: 127 } },
+  { match: '/fincapture/deposit/approve', method: 'POST', body: { success: true, status: 'Approved', statusDescription: 'OK' } },
+]);
+const parityApprove = (client, fetchImpl, body) => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', body),
+  '/functions/v1/checkalt-approve-deposit',
+  'POST',
+  parityDeps(client, fetchImpl),
+);
+const paritySubmit = (client, fetchImpl, body = { check_intake_item_id: CHECK_ID }) => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-submit-deposit', 'POST', body),
+  '/functions/v1/checkalt-submit-deposit',
+  'POST',
+  parityDeps(client, fetchImpl),
+);
+const providerCalled = (calls, path) => calls.some((c) => c.url.includes(path));
+
+test('UAT Check Alt approve/reject: a tenant viewer who is a platform admin is refused', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const action of ['approve', 'reject']) {
+      const { fetchImpl, calls } = uatProviderFetch();
+      const client = parityClient({ tenantRole: 'viewer', platformAdmin: true, operations: pendingUatOp() });
+      const result = await parityApprove(client, fetchImpl, { tenant_id: FREEDOM_TENANT, deposit_id: UAT_DEPOSIT_ID, action });
+      assert.equal(result.statusCode, 403, action);
+      assert.equal(result.error, 'financial_unauthorized');
+      assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+      assert.equal(client.queries.some((q) => q.sql.includes('UPDATE public.aws_provider_sandbox_operations')), false);
+    }
+  });
+});
+
+test('UAT Check Alt approve/reject: a platform admin with no tenant membership is refused', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const body of [
+      { tenant_id: FREEDOM_TENANT, deposit_id: UAT_DEPOSIT_ID, action: 'approve' },
+      { deposit_id: UAT_DEPOSIT_ID, action: 'reject' },
+      { tenant_id: FREEDOM_TENANT, referenceNumber: '98765', action: 'approve' },
+    ]) {
+      const { fetchImpl, calls } = uatProviderFetch();
+      const client = parityClient({ tenantRole: null, platformAdmin: true, operations: pendingUatOp() });
+      const result = await parityApprove(client, fetchImpl, body);
+      assert.equal(result.statusCode, 403, JSON.stringify(body));
+      assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+    }
+    // A member of another tenant who is a platform admin cannot act on this tenant's deposit.
+    const { fetchImpl, calls } = uatProviderFetch();
+    const client = parityClient({ tenantRole: 'admin', platformAdmin: true, operations: pendingUatOp(OTHER_TENANT) });
+    const result = await parityApprove(client, fetchImpl, { tenant_id: OTHER_TENANT, deposit_id: UAT_DEPOSIT_ID, action: 'approve' });
+    assert.equal(result.statusCode, 403);
+    assert.equal(result.error, 'financial_unauthorized');
+    assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+  });
+});
+
+test('UAT Check Alt approve: a bare reference with no recorded deposit is refused', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    const { fetchImpl, calls } = uatProviderFetch();
+    const client = parityClient({ tenantRole: 'owner', platformAdmin: true, operations: [] });
+    const result = await parityApprove(client, fetchImpl, { referenceNumber: '98765', action: 'approve' });
+    assert.equal(result.statusCode, 404);
+    assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+  });
+});
+
+test('UAT Check Alt approve by reference: two recorded deposits sharing it -> 409, no provider call', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    const { fetchImpl, calls } = uatProviderFetch();
+    const operations = [
+      ...pendingUatOp(),
+      { ...pendingUatOp()[0], id: '99999999-9999-4999-8999-999999999999' },
+    ];
+    const client = parityClient({ tenantRole: 'operator', platformAdmin: false, operations });
+    const result = await parityApprove(client, fetchImpl, { referenceNumber: '98765', action: 'approve' });
+    assert.equal(result.statusCode, 409);
+    assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+    assert.equal(client.queries.some((q) => q.sql.includes('UPDATE public.aws_provider_sandbox_operations')), false);
+  });
+});
+
+test('UAT Check Alt approve by reference: one deposit of the caller tenant, operator -> allowed and that row updated', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    const { fetchImpl, calls } = uatProviderFetch();
+    const operations = [
+      ...pendingUatOp(),
+      { ...pendingUatOp(OTHER_TENANT)[0], id: '99999999-9999-4999-8999-999999999999', provider_reference: '11111' },
+    ];
+    const client = parityClient({ tenantRole: 'operator', platformAdmin: false, operations });
+    const result = await parityApprove(client, fetchImpl, { referenceNumber: '98765', action: 'approve' });
+    assert.equal(result.success, true, JSON.stringify(result));
+    const approve = calls.find((c) => c.url.includes('/fincapture/deposit/approve'));
+    assert.ok(approve);
+    assert.equal(JSON.parse(approve.body).referenceNumber, 98765);
+    const update = client.queries.find((q) => q.sql.includes('UPDATE public.aws_provider_sandbox_operations'));
+    assert.equal(update.params[0], UAT_DEPOSIT_ID);
+  });
+});
+
+test('UAT Check Alt approve by reference: one deposit of another tenant -> refused, even for a platform admin', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const platformAdmin of [false, true]) {
+      const { fetchImpl, calls } = uatProviderFetch();
+      const operations = [
+        { ...pendingUatOp(OTHER_TENANT)[0], provider_reference: '55555' },
+        ...pendingUatOp(),
+      ];
+      const client = parityClient({ tenantRole: 'operator', platformAdmin, operations });
+      const result = await parityApprove(client, fetchImpl, { referenceNumber: '55555', action: 'approve' });
+      assert.equal(result.statusCode, 403, String(platformAdmin));
+      assert.equal(result.error, 'financial_unauthorized');
+      assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+      assert.equal(client.queries.some((q) => q.sql.includes('UPDATE public.aws_provider_sandbox_operations')), false);
+    }
+  });
+});
+
+test('UAT Check Alt approve/reject: a tenant operator without platform admin is allowed', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const body of [
+      { deposit_id: UAT_DEPOSIT_ID, action: 'approve' },
+      { deposit_id: UAT_DEPOSIT_ID, action: 'reject' },
+      { referenceNumber: '98765', action: 'approve' },
+    ]) {
+      const { fetchImpl, calls } = uatProviderFetch();
+      const client = parityClient({ tenantRole: 'operator', platformAdmin: false, operations: pendingUatOp() });
+      const result = await parityApprove(client, fetchImpl, body);
+      assert.equal(result.success, true, JSON.stringify(result));
+      assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), true);
+    }
+  });
+});
+
+test('UAT Check Alt submit: tenant role decides; platform admin is ignored', async () => {
+  await withEnv({
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_CHECKALT_ENABLED: 'false',
+  }, async () => {
+    for (const [tenantRole, body] of [
+      ['viewer', { tenant_id: FREEDOM_TENANT, check_intake_item_id: CHECK_ID }],
+      [null, { tenant_id: FREEDOM_TENANT, check_intake_item_id: CHECK_ID }],
+      [null, { check_intake_item_id: CHECK_ID }],
+    ]) {
+      const { fetchImpl, calls } = uatProviderFetch();
+      const client = parityClient({ tenantRole, platformAdmin: true });
+      const result = await paritySubmit(client, fetchImpl, body);
+      assert.equal(result.statusCode, 403, `${tenantRole} ${JSON.stringify(body)}`);
+      assert.equal(providerCalled(calls, '/fincapture/deposit/process'), false);
+      assert.equal(client.queries.some((q) => q.sql.includes('INSERT INTO public.aws_provider_sandbox_operations')), false);
+    }
+    const { fetchImpl, calls } = uatProviderFetch();
+    const client = parityClient({ tenantRole: 'operator', platformAdmin: false });
+    const result = await paritySubmit(client, fetchImpl);
+    assert.equal(result.success, true, JSON.stringify(result));
+    assert.equal(providerCalled(calls, '/fincapture/deposit/process'), true);
   });
 });
 
