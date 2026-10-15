@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ident } from './data.mjs';
 import { REVIEW_CHECK_STAGE, REVIEW_FINANCIAL_COLUMNS, WRITE_ALLOWLIST } from './write-allowlist.mjs';
 import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
@@ -434,7 +435,7 @@ const executePayees = async ({ client, mapping, op, values, filters }) => {
     if (looked.error) return looked;
     const coerced = payeeCoerce(values, { inserting: true });
     if (coerced.error) return coerced;
-    const token = crypto.randomUUID();
+    const token = randomUUID();
     const rows = (await client.query(
       `INSERT INTO public.check_payees (
          check_id, tenant_id, payee_name, payee_type, contact_email, contact_phone,
