@@ -44,6 +44,22 @@ jobs:
           echo '{"name":"sql53-runner-deps","private":true}' > package.json
           npm install --ignore-scripts --omit=optional --no-audit --no-fund "pg@${PG}" "@aws-sdk/client-secrets-manager@${SM}"
           mv node_modules /tmp/pkg/src/node_modules
+          # The runner contract aws/tests/api-write.test.mjs imports aws/functions/api, whose
+          # runtime dependencies (@aws-sdk/client-s3 and the rest) come from that package's own
+          # reviewed lockfile, exactly as aws-migration-ci.yml installs them.
+          npm ci --prefix /tmp/pkg/src/aws/functions/api --ignore-scripts --omit=dev --no-audit --no-fund
+      - name: Run the runner contracts against the packaged tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          # /tmp/pkg/src has no parent node_modules, so this resolves modules the way the runner does.
+          cd /tmp/pkg/src
+          node --test aws/tests/claim-ledger-accepted-contract.test.mjs aws/tests/tenant-security-compliance.test.mjs aws/tests/api-write.test.mjs
+      - name: Compress package
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="${GITHUB_SHA}"
           cd /tmp/pkg
           tar -czf "source-${SHA}.tar.gz" -C src .
           sha256sum "source-${SHA}.tar.gz" | tee "source-${SHA}.tar.gz.sha256"
