@@ -299,6 +299,38 @@ const firstNonEmpty = (...values) => {
   return null;
 };
 
+/**
+ * Run one optional branding read inside a savepoint when the caller holds an
+ * open transaction (Signature Request create/send, /data/write callers). A
+ * missing optional column (e.g. the NOT_APPLIED SES metadata) then rolls back
+ * to the savepoint instead of aborting the caller's write transaction. Outside
+ * a transaction the SAVEPOINT is refused and the read runs directly.
+ */
+export const brandingQuery = async (client, name, sql, params) => {
+  let savepoint = false;
+  try {
+    await client.query(`SAVEPOINT ${name}`);
+    savepoint = true;
+  } catch {
+    savepoint = false;
+  }
+  try {
+    const result = await client.query(sql, params);
+    if (savepoint) {
+      try { await client.query(`RELEASE SAVEPOINT ${name}`); } catch { /* ignore */ }
+    }
+    return result;
+  } catch (error) {
+    if (savepoint) {
+      try {
+        await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+        await client.query(`RELEASE SAVEPOINT ${name}`);
+      } catch { /* caller transaction reports */ }
+    }
+    throw error;
+  }
+};
+
 export const resolveEmailBranding = async (client, { tenantId = null, senderOverride = null } = {}) => {
   const platform = platformBranding();
   if (senderOverride === 'checksops' || !tenantId) return platform;
@@ -307,7 +339,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   let settings = {};
   if (client?.query) {
     try {
-      tenant = (await client.query(
+      tenant = (await brandingQuery(client, 'email_branding_tenant',
         `SELECT name, logo_url, primary_color, is_system_tenant,
                 email_from_name, email_from_address, email_reply_to
          FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
@@ -317,7 +349,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
       tenant = {};
     }
     try {
-      settings = (await client.query(
+      settings = (await brandingQuery(client, 'email_branding_settings',
         `SELECT from_name, reply_to, sending_mode, sending_domain, from_address, domain_status,
                 ses_identity_name, custom_sending_enabled
          FROM public.tenant_email_settings WHERE tenant_id = $1::uuid LIMIT 1`,
@@ -325,7 +357,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
       )).rows[0] || {};
     } catch {
       try {
-        settings = (await client.query(
+        settings = (await brandingQuery(client, 'email_branding_settings_deployed',
           `SELECT from_name, reply_to, sending_mode, sending_domain, from_address, domain_status
            FROM public.tenant_email_settings WHERE tenant_id = $1::uuid LIMIT 1`,
           [tenantId],

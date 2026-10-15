@@ -67,6 +67,8 @@ const AWS_WRITE_TABLES = new Set([
   "privacy_notice_acknowledgments",
   "tenant_users",
   "claims",
+  "signature_requests",
+  "signature_signers",
 ]);
 
 const CLAIM_SETTLEMENT_VALUE_COLUMNS = new Set([
