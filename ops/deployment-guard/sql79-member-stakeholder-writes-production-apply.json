@@ -1,8 +1,8 @@
 {
   "id": "sql79-member-stakeholder-writes-production-apply",
   "migration": "sql79",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved the SQL 78 apply on 2026-10-15 and asked for this change (\"approve the SQL 78 record and SQL 79 execute PR\"); the SQL 79 pin values (d9bc8921 -> 878d6441) are unchanged from the reviewed pin; production's read-only inspect (SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2) matched the pre-state d9bc8921 (the post-state 878d6441 rests on staging run 38612871864); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase (CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES) and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -17,9 +17,34 @@
   "rds_identifier": "checksops-production",
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "expected_table_owner": "checksops_admin",
+    "note": "SQL 79 creates four policies on public.check_stakeholders and public.check_partner_stakeholder_removals; CREATE POLICY needs the table owner, and the staging fingerprint (d9bc8921…) already requires both tables to be owned by the login. Both tables are owned by checksops_admin: the SQL 77 pre-apply inspect (SSM d6aaefb4-c337-4b85-865e-87e8b586d964) read table_owner and current_user checksops_admin for check_stakeholders, and the SQL 78 post-apply inspect (SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2) read table_owner checksops_admin for check_partner_stakeholder_removals. The production rule (scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs, sql79) requires current_user to be expected_table_owner and authenticated not to be a member of it (recursive pg_auth_members, INHERIT FALSE and SET FALSE included) before; after, both tables' owner is still it and equals current_user, authenticated is still not a member, both tables' ACLs (every entry, the owner's own included) are unchanged, and the policies on the two tables are the ones before plus exactly the four aws_member_* policies (permissive, INSERT or DELETE, to authenticated). These reads sit beside the fingerprint, so d9bc8921… and 878d6441… are unchanged.",
+    "latest": {
+      "date": "2026-10-15",
+      "ssm_command_id": "405d41e9-4b0e-4ca5-af90-27ff2c9428f2",
+      "source_commit": "a81464ce4524314dedb44894024f3d14d64bb4f0",
+      "read_only": true,
+      "after_sql78_apply": true,
+      "live_definition_sha256": "d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4",
+      "live_matches_expected": true,
+      "predecessors": {
+        "sql77": {
+          "applied": true
+        },
+        "sql78": {
+          "applied": true
+        }
+      },
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "note": "Read-only inspect with the official tool (sql-member-stakeholder-production-apply.mjs --migration sql79 --inspect) in SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2, after the SQL 78 apply in the same command, on main a81464ce4: live d9bc8921… = expected_live_definition_sha256, predecessors sql77 and sql78 applied, apply_preconditions_met true, precondition_failures []. It matched the pre-state only; the post-state 878d6441… rests on staging run 38612871864. That run predates the current_user_is_expected_owner and authenticated_not_member_of_owner preconditions added with this execute change; the apply re-reads them inside its transaction, and step 1 of the SQL 79 procedure in ops/production-sql-77-79-apply.md re-runs the inspect, which prints them."
+    }
+  },
   "staging_acceptance": {
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864",
-    "basis": "Guarded staging SQL executor apply run #34 (38612871864, main 4ca9e1763, 2026-10-14) of sql79-member-stakeholder-writes: d9bc8921… -> 878d6441…, the four aws_member_* policies present."
+    "basis": "Guarded staging SQL executor apply run #34 (38612871864, main 4ca9e1763, 2026-10-14) of sql79-member-stakeholder-writes: d9bc8921… -> 878d6441…, the four aws_member_* policies present.",
+    "production_differs": "Production's pre-state hash is staging's (d9bc8921…): the fingerprint covers both tables' RLS, policies and ownership and the two helper functions, not ACLs, so checksops' pre-existing UPDATE on check_stakeholders does not change it, and the staging pins hold unchanged. The same file bytes (source_sha256) run in both."
   }
 }

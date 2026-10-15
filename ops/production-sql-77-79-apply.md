@@ -8,8 +8,8 @@ Three migrations, applied to production **in this order**, one run each:
 | `sql78` | `aws/workflows/sql/78_check_partner_stakeholder_removals.sql` | creates `public.check_partner_stakeholder_removals` (composite FK to `shared_checks`, indexes, RLS, two policies, grants) | `ops/deployment-guard/sql78-check-partner-stakeholder-removals-production-apply.json` |
 | `sql79` | `aws/workflows/sql/79_member_stakeholder_writes.sql` | four `aws_member_*` INSERT/DELETE policies on those two tables | `ops/deployment-guard/sql79-member-stakeholder-writes-production-apply.json` |
 
-**Status:** SQL 77 applied to production (2026-10-15) and retired; SQL 78
-execute-authorized, not applied; SQL 79 pending.
+**Status:** SQL 77 and SQL 78 applied to production (2026-10-15) and retired; SQL 79
+execute-authorized, not applied.
 
 - **SQL 77: applied 2026-10-15, retired** (`execute: false`). The pin's `authorization`
   now says it was applied and is no longer a standing authorization; a re-apply needs a
@@ -37,31 +37,59 @@ execute-authorized, not applied; SQL 79 pending.
     `{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin,authenticated=ard/checksops_admin}`,
     `preserved_acl_sha256` `c40af23b…` unchanged; `authenticated` SELECT/INSERT/DELETE
     granted, UPDATE absent; `checksops` unchanged (all four).
-- **SQL 78: execute-authorized** (`execute: true`), not applied. The reviewed change that
+- **SQL 78: applied 2026-10-15, retired** (`execute: false`). The pin's `authorization`
+  now says it was applied and is no longer a standing authorization; a re-apply needs a
+  new reviewed pin change. PR #963 set `execute: true` (4031dea6 → 3d650a56, unchanged
+  from the reviewed pin); after it merged, the owner approved that one run ("merged,
+  approve applying SQL 78 to production"). No standing authorization. Evidence (pin
+  `applied` and `production_evidence`):
+  - Main `a81464ce4524314dedb44894024f3d14d64bb4f0` (staged by sql53-temporary-transfer
+    run 38742844478), runner `i-0c35557c4e5385406`, workstream
+    `prod-sql78-check-partner-stakeholder-removals-20261015`, `one_use_id`
+    `sql78-prod-cb9bb8f3-3071-4350-9158-cbff4a42349b` (consumed by the successful apply; the registry entry was not read back).
+  - Pre-apply inspect and runner contracts, SSM `f6287116-f2a5-48ea-861c-e4651f898e24`:
+    live `4031dea6c0fbb70af1b17befa7ffb161fec40227cda080cd87c222dec674d269` = expected,
+    `live_matches_expected` true, `already_applied` false, `predecessors.sql77.applied`
+    true (`0cd3ab3f…`), `current_user` `checksops_admin`, `owner_roles`
+    `["checksops_admin"]`, `authenticated_member_of_owner` false, `precondition_failures`
+    `[]`, `apply_preconditions_met` true. Contracts: claim-ledger 4/4 and tenant-isolation
+    6/6 on the runner; financial-write-protections (`api-write.test.mjs`) 36/36 on a clean
+    local checkout of the same commit (the runner's package lacks `@aws-sdk/client-s3`).
+  - Receipt, evaluate, apply and verify, SSM `405d41e9-4b0e-4ca5-af90-27ff2c9428f2`:
+    receipt issued, evaluate allowed true, apply exit 0, result `applied`, before
+    `4031dea6…`, after `3d650a56a2fd8a4ccfaeaf795ac0de8c4d0b849a748c1769400397d62e92dd40`,
+    `unrelated_catalog_sha256`
+    `8a778ee358fcd2f28911e5759fa1e59fd3f869338b2f0f05ed73dfe45e61b216` (relations 855,
+    columns 3407, constraints 2112, policies 362, functions 1274, triggers 173, roles 29,
+    default_privileges 0, schema 1), staging acceptance run 38602758947. Post-apply
+    inspect: live `3d650a56…`, `already_applied` true, `table_owner` `checksops_admin`,
+    `authenticated_member_of_owner` false.
+- **SQL 79: execute-authorized** (`execute: true`), not applied. The reviewed change that
   sets it records:
-  - `authorization`: the owner approved the SQL 77 apply on 2026-10-15; the SQL 78 pin
-    values (4031dea6 → 3d650a56) are unchanged from the reviewed pin and matched
-    production's read-only inspect (SSM `3f7ac222-30fb-40d4-9a06-e55b73b9ce5c`);
-    `execute: true` takes effect only when the owner reviews and merges that change. It
-    does not itself run or approve a run: each apply still needs the owner's run-time
-    approval for that workstream, a production-sql receipt owning the pinned file, the
-    authorization phrase and a new `one_use_id`. **The owner has not yet approved a SQL 78
-    run.**
+  - `authorization`: the owner approved the SQL 78 apply on 2026-10-15 and asked for this change
+    ("approve the SQL 78 record and SQL 79 execute PR"); the SQL 79 pin values
+    (d9bc8921 → 878d6441) are unchanged from the reviewed pin; production's read-only
+    inspect (SSM `405d41e9-4b0e-4ca5-af90-27ff2c9428f2`) matched the pre-state d9bc8921
+    (the post-state 878d6441 rests on staging run 38612871864); `execute: true` takes
+    effect only when the owner reviews and merges that change. It does not itself run or
+    approve a run: each apply still needs the owner's run-time approval for that
+    workstream, a production-sql receipt owning the pinned file, the authorization phrase
+    (`CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES`) and a new `one_use_id`. **The owner has
+    not yet approved a SQL 79 run.**
   - `staging_acceptance` (unchanged, recorded earlier): `ok: true`, reference
-    `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38602758947` (guarded
-    staging SQL executor apply run #31 on main `c6841346e`, 2026-10-14, staging
-    `4031dea6…` (table absent) → `3d650a56…`). Production's pre-state is staging's (the
-    table is absent in both), so the staging pins hold unchanged.
+    `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864` (guarded
+    staging SQL executor apply run #34 on main `4ca9e1763`, 2026-10-14, staging
+    `d9bc8921…` → `878d6441…`, the four `aws_member_*` policies present).
   - `production_inspect.latest`: the read-only inspect with this tool in SSM
-    `3f7ac222-30fb-40d4-9a06-e55b73b9ce5c`, after the SQL 77 apply in the same command
-    (main `14027f993`): live `4031dea6c0fbb70af1b17befa7ffb161fec40227cda080cd87c222dec674d269`
-    = expected, `predecessors.sql77.applied` true, `apply_preconditions_met` true,
-    `precondition_failures` `[]`. That run predates the SQL 78 owner checks below, so the
-    step 1 inspect before the apply must show them passing.
-  - `production_inspect.expected_table_owner`: `checksops_admin` (the login of the pinned
-    secret; CREATE TABLE makes it the owner of the new table).
-- **SQL 79:** `authorization: "pending"`, `execute: false`, unchanged. It needs its own
-  reviewed execute change after SQL 78 is applied and its own read-only inspect.
+    `405d41e9-4b0e-4ca5-af90-27ff2c9428f2`, after the SQL 78 apply in the same command
+    (main `a81464ce4`): live `d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4`
+    = expected (`live_matches_expected` true), `predecessors` `sql77` and `sql78` applied,
+    `apply_preconditions_met` true, `precondition_failures` `[]`. It matched the pre-state
+    only; the post-state `878d6441…` rests on staging run 38612871864. That run predates the
+    SQL 79 owner checks below, so the step 1 inspect before the apply must show them passing.
+  - `production_inspect.expected_table_owner`: `checksops_admin` (the owner of both tables:
+    the SQL 77 inspects for `check_stakeholders`, the SQL 78 post-apply inspect for
+    `check_partner_stakeholder_removals`; CREATE POLICY needs the table owner).
 
 After each apply, a follow-up reviewed change records the evidence in that pin and sets
 `execute` back to `false`.
@@ -157,7 +185,30 @@ reads sit beside the fingerprint, so `4031dea6…` and `3d650a56…` are unchang
 prints `table_owner` (null until the table exists), `current_user`, `owner_roles`,
 `authenticated_member_of_owner`, `table_acl` and `table_acl_entries`.
 
-The SQL 78 and SQL 79 pin hashes are unchanged (SQL 78's execute and authorization have since changed; see below): SQL 78's fingerprint covers only the new table
+**SQL 79 owner checks (added with the SQL 79 execute change).** SQL 79 creates four
+policies on `public.check_stakeholders` and `public.check_partner_stakeholder_removals`;
+CREATE POLICY needs the table owner, and the staging fingerprint already requires both
+tables to be owned by the login (`owner: executor role`). Its production rule (the
+`tenant_guard_ok` variant below) had no check of which login that is, or of the owner
+membership, so the production tool adds, like SQL 78's: before, `current_user` must equal
+the pin's `production_inspect.expected_table_owner` (`checksops_admin`;
+`current_user_is_expected_owner`) and `authenticated` must not be a member of that role
+(`authenticated_not_member_of_owner`, the same recursive `pg_auth_members` walk, INHERIT
+FALSE and SET FALSE included; unreadable or missing counts as a member). After: both
+tables' owner is still that role, as before (`table_owners_as_expected`), and is the login
+(`current_user_is_table_owner`); `authenticated` is still not a member of it; both tables'
+ACLs are unchanged, every entry with grantor and grant option, the owner's own included,
+and the `relacl` text (`table_acls_unchanged`; SQL 79 grants nothing, and the staging
+`acl_unchanged` holds neither grantors nor the owner's entries); and the policies on the
+two tables are exactly the ones before plus the four reviewed `aws_member_*` policies,
+each permissive, INSERT or DELETE, to `authenticated` only (`member_policies_as_reviewed`).
+These reads sit beside the fingerprint, so `d9bc8921…` and `878d6441…` are unchanged, and
+the SQL 77 and SQL 78 reads send byte-identical queries (asserted in the test).
+`--inspect` prints `current_user`, `owner_roles`, `authenticated_member_of_owner`,
+`table_owners`, `table_acls` and `policy_entries` (`<table> <policy>
+<permissive|restrictive> <CMD> to <roles>`).
+
+The SQL 78 and SQL 79 pin hashes are unchanged (their execute and authorization have since changed; see above): SQL 78's fingerprint covers only the new table
 and SQL 79's covers RLS, policies, ownership and the helper functions, not ACLs, so
 `d9bc8921…` → `878d6441…` holds in production too (reproduced on the same fixture).
 But SQL 79's staging rule also refuses any UPDATE grant (`update_not_granted`, and
@@ -277,7 +328,11 @@ commit. The tool connects with the pinned `checksops_admin` secret.
 8. **Record and retire:** a reviewed change records the evidence (receipt, before/after
    hashes, ACL entries, SSM ids) in the SQL 77 pin and sets its `execute` back to `false`.
 
-## SQL 78 apply on the runner (execute-authorized; needs the owner's run-time approval)
+## SQL 78 apply on the runner (done 2026-10-15; pin retired)
+
+This is the procedure the 2026-10-15 run followed (evidence under **Status**). The SQL 78
+pin is `execute: false` again, so the tool refuses to run it; a re-apply needs a new
+reviewed pin change.
 
 Run on `i-0c35557c4e5385406` from a checkout of reviewed main that contains the
 execute-authorized SQL 78 pin (staged by `.github/workflows/sql53-temporary-transfer.yml`),
@@ -373,6 +428,104 @@ commit. The tool connects with the pinned `checksops_admin` secret.
    must show `predecessors.sql78.applied` true.
 8. **Record and retire:** a reviewed change records the evidence (receipt, before/after
    hashes, ACL entries, SSM ids) in the SQL 78 pin and sets its `execute` back to `false`.
+
+## SQL 79 apply on the runner (execute-authorized; needs the owner's run-time approval)
+
+Run on `i-0c35557c4e5385406` from a checkout of reviewed main that contains the
+execute-authorized SQL 79 pin (staged by `.github/workflows/sql53-temporary-transfer.yml`),
+with `AWS_ENDPOINT_URL_SECRETS_MANAGER` set as above. `<main sha>` is that checkout's full
+commit. The tool connects with the pinned `checksops_admin` secret.
+
+1. **Inspect (read-only):**
+   `node scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --migration sql79 --inspect`
+   runs in `BEGIN READ ONLY … ROLLBACK` and only SELECTs. Proceed only when
+   `pin_execute` true, `source_ok` true, `missing_dependencies` `[]`,
+   `predecessors.sql77.applied` and `predecessors.sql78.applied` true (live `0cd3ab3f…`
+   and `3d650a56…`), `live_definition_sha256`
+   `d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4`,
+   `live_matches_expected` true, `already_applied` false, `precondition_failures` `[]`,
+   `apply_preconditions_met` true, `current_user` `checksops_admin`, `owner_roles`
+   `["checksops_admin"]`, `authenticated_member_of_owner` false, `table_owners` both
+   `checksops_admin`, and no `aws_member_*` line in `policy_entries`. Keep the printed
+   `table_acls` and `policy_entries` for step 7. If anything differs, **stop**: a different
+   pre-state needs its own reviewed pin change.
+2. **Contracts:** on the same checkout run
+   `node --test aws/tests/claim-ledger-accepted-contract.test.mjs` and
+   `node --test aws/tests/tenant-security-compliance.test.mjs`; run
+   `node --test aws/tests/api-write.test.mjs` on a **clean checkout of the same commit
+   elsewhere** (the runner's package lacks `@aws-sdk/client-s3`). Record them as
+   `contract_results` (`claim-ledger`, `tenant-isolation`, `financial-write-protections`,
+   each `{ ok, test, evidence }`, the api-write evidence naming the clean checkout);
+   preflight refuses `sql-apply` without them.
+3. **Manifest** (for example `sql79-manifest.json`, outside the repo):
+
+   ```json
+   {
+     "workstream_id": "prod-sql79-member-stakeholder-writes-<yyyymmdd>",
+     "branch": "main",
+     "commit": "<main sha>",
+     "operator": "michaelcarletta-cmd",
+     "target_environment": "production",
+     "target_component": "production-sql",
+     "deployment_type": "sql-apply",
+     "owned_components": ["aws/workflows/sql/79_member_stakeholder_writes.sql"],
+     "filename": "aws/workflows/sql/79_member_stakeholder_writes.sql",
+     "migration_id": "79_member_stakeholder_writes",
+     "source_sha256": "87556017ffbb97625af328c55cc468f1938566ad5760eac883375c187c1d1231",
+     "expected_live_definition_sha256": "d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4",
+     "intended_replacement_sha256": "878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7",
+     "live_definition_sha256": "<live hash from step 1>",
+     "preflight_live_fingerprint": { "sql": "<live hash from step 1>" },
+     "production_fingerprint": { "sql": "<live hash from step 1>" },
+     "immediately_before_fingerprint": { "sql": "<live hash from step 1>" },
+     "staging_acceptance": "<the pin's staging_acceptance object, verbatim>",
+     "approval": {
+       "approved": true,
+       "workstream_id": "<same workstream_id>",
+       "approved_by": "owner",
+       "statement": "<the owner's run-time approval of this apply>"
+     },
+     "authorization_phrase": "CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES",
+     "one_use_id": "sql79-prod-<new uuid>",
+     "build_timestamp": "<now, ISO 8601>",
+     "contract_results": "<from step 2>"
+   }
+   ```
+
+   The tool refuses unless `filename`, `migration_id`, `source_sha256`,
+   `expected_live_definition_sha256` and `live_definition_sha256` equal the pin's,
+   `staging_acceptance.reference` equals the pin's (`…/actions/runs/38612871864`),
+   `approval.workstream_id` is this workstream, the phrase is exactly
+   `CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES`, `one_use_id` matches
+   `^[A-Za-z0-9._:-]{8,128}$` and was never consumed, and the receipt owns the SQL 79 file
+   (a receipt for another migration's file is `RECEIPT_MISMATCH`).
+4. **Lease and receipt** on the same host:
+   `node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input sql79-manifest.json`
+   (prints the receipt path; a staging receipt cannot authorize production).
+5. **Evaluate (no connection):**
+   `node scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --migration sql79 --input sql79-manifest.json`
+   must print `member_stakeholder_production_apply_allowed: true`.
+6. **Apply:**
+   `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT=<receipt> node scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --migration sql79 --apply --input sql79-manifest.json`.
+   The receipt is spent only after the guard, the receipt-ownership, execute, phrase,
+   `one_use_id` and replay checks pass and the secret resolves. One transaction,
+   `lock_timeout` 5s, advisory locks `sql77_79_member_stakeholder_production` and
+   `sql79_member_stakeholder_writes`; it re-checks that SQL 77 and SQL 78 are applied and
+   every precondition (the owner checks included) inside the transaction, runs the pinned
+   file once and rolls back unless the after-state is `878d6441…`, every postcondition
+   holds and the unrelated-catalog snapshot (everything in schema public but the four new
+   policies, both tables' ACLs included) is unchanged. If the tool reports the COMMIT
+   outcome as unknown, run step 1 before anything else.
+7. **Verify:** re-run step 1: `already_applied` true, `live_definition_sha256`
+   `878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7`, `current_user`
+   and both `table_owners` `checksops_admin`, `authenticated_member_of_owner` false,
+   `table_acls` as in step 1, and `policy_entries` = step 1's plus exactly
+   `public.check_partner_stakeholder_removals aws_member_delete_check_partner_stakeholder_removals permissive DELETE to authenticated`,
+   `public.check_partner_stakeholder_removals aws_member_insert_check_partner_stakeholder_removals permissive INSERT to authenticated`,
+   `public.check_stakeholders aws_member_delete_check_stakeholders permissive DELETE to authenticated` and
+   `public.check_stakeholders aws_member_insert_check_stakeholders permissive INSERT to authenticated`.
+8. **Record and retire:** a reviewed change records the evidence (receipt, before/after
+   hashes, policy entries, SSM ids) in the SQL 79 pin and sets its `execute` back to `false`.
 
 ## Steps per migration (each needs owner approval; do 77, then 78, then 79)
 
