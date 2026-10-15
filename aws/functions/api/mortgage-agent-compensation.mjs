@@ -15,10 +15,12 @@ export const WRITE_ACTIONS = Object.freeze([
 const PLATFORM_OWNER_SQL =
   `SELECT public.is_master_owner() AS is_master, public.is_platform_owner() AS is_platform`;
 
+// Platform owner only. A global user_roles 'admin' (or mortgage_agent) role does
+// not grant compensation administration; roles are accepted for call-site
+// compatibility and ignored.
 export const isCompensationAdmin = (owner = {}, roles = []) => (
   owner?.is_master === true
   || owner?.is_platform === true
-  || roles.includes('admin')
 );
 
 const asUuidArray = (value) => {

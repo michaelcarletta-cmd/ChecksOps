@@ -18,10 +18,11 @@ const sqlClient = (handlers) => ({
   },
 });
 
-test('compensation admin is platform owner only, not mortgage_agent', () => {
+test('compensation admin is platform owner only, not a global admin or mortgage_agent', () => {
   assert.equal(isCompensationAdmin({ is_master: true }, ['mortgage_agent']), true);
   assert.equal(isCompensationAdmin({ is_platform: true }, []), true);
-  assert.equal(isCompensationAdmin({}, ['admin']), true);
+  assert.equal(isCompensationAdmin({}, ['admin']), false);
+  assert.equal(isCompensationAdmin({ is_master: false, is_platform: false }, ['admin', 'mortgage_agent']), false);
   assert.equal(isCompensationAdmin({}, ['mortgage_agent']), false);
   assert.equal(isCompensationAdmin({}, []), false);
 });
@@ -196,4 +197,34 @@ test('approve and mark_paid stay bookkeeping RPC calls', async () => {
   assert.match(seen[0], /approve_mortgage_agent_compensation/);
   assert.match(seen[1], /mark_mortgage_agent_compensation_paid/);
   assert.doesNotMatch(seen.join('\n'), /moov_|stripe_|ach_/i);
+});
+
+test('a global admin role is refused every compensation read and write', async () => {
+  const client = sqlClient([
+    {
+      match: (sql) => sql.includes('is_master_owner') || sql.includes('is_platform_owner'),
+      result: () => ({ rows: [{ is_master: false, is_platform: false }] }),
+    },
+    {
+      match: (sql) => sql.includes('FROM public.user_roles'),
+      result: () => ({ rows: [{ role: 'admin' }] }),
+    },
+  ]);
+  for (const body of [
+    { action: 'monthly', period: '2026-10' },
+    { action: 'approve', entry_ids: ['00000000-0000-4000-8000-000000000001'] },
+    { action: 'mark_paid', entry_ids: ['00000000-0000-4000-8000-000000000001'] },
+    { action: 'adjust', entry_id: '00000000-0000-4000-8000-000000000001', amount_cents: 100 },
+    { action: 'return_to_queue', request_id: '00000000-0000-4000-8000-000000000002' },
+  ]) {
+    const result = await runMortgageAgentCompensation({
+      client,
+      mapping: { application_user_id: AGENT },
+      body,
+      spoof: {},
+    });
+    assert.equal(result.ok, false, body.action);
+    assert.equal(result.statusCode, 403, body.action);
+    assert.equal(result.error, 'not_authorized', body.action);
+  }
 });
