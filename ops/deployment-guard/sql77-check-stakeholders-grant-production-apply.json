@@ -1,8 +1,8 @@
 {
   "id": "sql77-check-stakeholders-grant-production-apply",
   "migration": "sql77",
-  "authorization": "Owner approved the SQL 77 production pin (8f2417b5 -> 0cd3ab3f) and the read-only production inspects on 2026-10-15; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-15; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 77 production pin (8f2417b5 -> 0cd3ab3f) and the read-only production inspects on 2026-10-15, and approved the one apply run recorded in applied (workstream prod-sql77-check-stakeholders-grant-20261015) on 2026-10-15 with \"approve applying SQL 77 to production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -85,5 +85,96 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440",
     "basis": "Guarded staging SQL executor apply run #26 (38574715440, main 06dcdd9ae, pin commit b70fadfb, 2026-10-14). Its receipt names sql_file aws/workflows/sql/77_check_stakeholders_write_grant.sql, before_hash 71465932… (checksops SELECT only) and after_hash e4d49ffa… (checksops and authenticated SELECT/INSERT/DELETE, no UPDATE), result applied.",
     "production_differs": "Production's starting privileges differ from staging's (checksops already holds INSERT, UPDATE and DELETE there, not SELECT only), so production's pre-state (8f2417b5…) and post-state (0cd3ab3f…, checksops all four, authenticated SELECT/INSERT/DELETE) hashes differ from staging's 71465932… -> e4d49ffa…. The same file bytes (source_sha256) and the same statement were accepted in staging."
+  },
+  "applied": {
+    "date": "2026-10-15",
+    "result": "applied",
+    "source_commit": "14027f993a54d34b2dec955a5a856bdf1f5fd4b5",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql77-check-stakeholders-grant-20261015",
+    "one_use_id": "sql77-prod-97dff6e5-612c-4be1-abc2-7db4d38261fd",
+    "owner_approval": "approve applying SQL 77 to production",
+    "pre_apply_inspect": {
+      "ssm_command_id": "d6aaefb4-c337-4b85-865e-87e8b586d964",
+      "read_only": true,
+      "live_definition_sha256": "8f2417b5a97dd330185de62de29658c9a04a8b6d70672c0df7494834597ad57e",
+      "live_matches_expected": true,
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "table_owner": "checksops_admin",
+      "current_user": "checksops_admin",
+      "owner_roles": [
+        "checksops_admin"
+      ],
+      "authenticated_member_of_owner": false,
+      "preserved_acl_sha256": "c40af23bab9eabcb08ec6c43f00b5e45cf66e7d09892ac8f7d0227136625e43f",
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+      "table_acl_entries_match_catalog_read": true,
+      "note": "The 12 table_acl_entries matched production_inspect.catalog_read.table_acl_entries exactly."
+    },
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (SSM d6aaefb4-c337-4b85-865e-87e8b586d964)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (SSM d6aaefb4-c337-4b85-865e-87e8b586d964)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "36/36 on the operator's clean checkout of 14027f993a54d34b2dec955a5a856bdf1f5fd4b5; the runner's package lacks @aws-sdk/client-s3 and cannot load this test"
+      }
+    },
+    "apply_ssm_command_id": "3f7ac222-30fb-40d4-9a06-e55b73b9ce5c",
+    "apply_ssm_note": "One SSM command issued the receipt and lease (preflight), evaluated, applied, ran the post-apply inspect and then the read-only SQL 78 inspect recorded in the SQL 78 pin's production_inspect.latest.",
+    "receipt": {
+      "result": "applied",
+      "before_hash": "8f2417b5a97dd330185de62de29658c9a04a8b6d70672c0df7494834597ad57e",
+      "after_hash": "0cd3ab3fd41245ad9f35e882dc32bcb36cd9720132f63ad88728df655290ddac",
+      "unrelated_catalog_sha256": "4aebe87f4c94c56b7d3133f2ce27a38f0328dcf36378b872c86267d428d0329c",
+      "unrelated_catalog_counts": {
+        "relations": 855,
+        "columns": 3407,
+        "constraints": 2112,
+        "policies": 362,
+        "functions": 1274,
+        "triggers": 173,
+        "roles": 29,
+        "default_privileges": 0,
+        "schema": 1
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440"
+    },
+    "post_apply_inspect": {
+      "ssm_command_id": "3f7ac222-30fb-40d4-9a06-e55b73b9ce5c",
+      "read_only": true,
+      "live_definition_sha256": "0cd3ab3fd41245ad9f35e882dc32bcb36cd9720132f63ad88728df655290ddac",
+      "already_applied": true,
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin,authenticated=ard/checksops_admin}",
+      "preserved_acl_sha256": "c40af23bab9eabcb08ec6c43f00b5e45cf66e7d09892ac8f7d0227136625e43f",
+      "preserved_acl_unchanged": true,
+      "privilege_state": {
+        "checksops": {
+          "SELECT": "granted",
+          "INSERT": "granted",
+          "UPDATE": "granted",
+          "DELETE": "granted"
+        },
+        "authenticated": {
+          "SELECT": "granted",
+          "INSERT": "granted",
+          "UPDATE": "absent",
+          "DELETE": "granted"
+        }
+      },
+      "checksops_unchanged": true
+    }
+  },
+  "production_evidence": {
+    "2026-10-15 apply": "Guarded apply on i-0c35557c4e5385406, workstream prod-sql77-check-stakeholders-grant-20261015, main 14027f993, owner-approved run, SSM 3f7ac222-30fb-40d4-9a06-e55b73b9ce5c: 8f2417b5… -> 0cd3ab3f…; authenticated SELECT/INSERT/DELETE granted by checksops_admin, UPDATE absent; checksops unchanged (all four); preserved ACL c40af23b… unchanged; unrelated catalog 4aebe87f… unchanged; post-apply inspect already_applied true. Pre-apply inspect SSM d6aaefb4-c337-4b85-865e-87e8b586d964: live 8f2417b5…, preconditions met, table_owner and current_user checksops_admin, authenticated_member_of_owner false. Contracts claim-ledger 4/4, tenant-isolation 6/6 (runner), financial-write-protections 36/36 (operator checkout of the same commit). execute is false so the pin is no longer a standing authorization."
   }
 }

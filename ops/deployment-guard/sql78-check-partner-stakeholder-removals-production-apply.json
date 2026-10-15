@@ -1,8 +1,8 @@
 {
   "id": "sql78-check-partner-stakeholder-removals-production-apply",
   "migration": "sql78",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved the SQL 77 apply on 2026-10-15; the SQL 78 pin values (4031dea6 -> 3d650a56) are unchanged from the reviewed pin and matched production's read-only inspect (SSM 3f7ac222-30fb-40d4-9a06-e55b73b9ce5c); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -17,9 +17,31 @@
   "rds_identifier": "checksops-production",
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "expected_table_owner": "checksops_admin",
+    "note": "SQL 78 creates public.check_partner_stakeholder_removals, so its owner is the login that runs the file. The tool connects with the pinned checksops_admin secret: the SQL 77 pre-apply inspect (SSM d6aaefb4-c337-4b85-865e-87e8b586d964) read current_user checksops_admin, and the catalog read (SSM 316cfa35-489e-42d1-9957-3bb4b73c8923, connected as checksops_admin) found no superuser or BYPASSRLS role and the table absent. The production rule (scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs, sql78) requires current_user to be expected_table_owner and authenticated not to be a member of it (recursive pg_auth_members, INHERIT FALSE and SET FALSE included) before; after, the new table's owner and current_user equal it, authenticated is still not a member, its non-owner ACL is exactly checksops and authenticated SELECT/INSERT/DELETE granted by it with no grant option, and no column-level UPDATE grant exists on it. These reads sit beside the fingerprint, so 4031dea6… and 3d650a56… are unchanged.",
+    "latest": {
+      "date": "2026-10-15",
+      "ssm_command_id": "3f7ac222-30fb-40d4-9a06-e55b73b9ce5c",
+      "source_commit": "14027f993a54d34b2dec955a5a856bdf1f5fd4b5",
+      "read_only": true,
+      "after_sql77_apply": true,
+      "live_definition_sha256": "4031dea6c0fbb70af1b17befa7ffb161fec40227cda080cd87c222dec674d269",
+      "live_matches_expected": true,
+      "predecessors": {
+        "sql77": {
+          "applied": true
+        }
+      },
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "note": "Read-only inspect with the official tool (sql-member-stakeholder-production-apply.mjs --migration sql78 --inspect) in SSM 3f7ac222-30fb-40d4-9a06-e55b73b9ce5c, after the SQL 77 apply in the same command, on main 14027f993: live 4031dea6… (table absent) = expected_live_definition_sha256, predecessors.sql77.applied true, apply_preconditions_met true, precondition_failures []. That run predates the current_user_is_expected_owner and authenticated_not_member_of_owner preconditions added with this execute change; the apply re-reads them inside its transaction, and step 1 of the SQL 78 procedure in ops/production-sql-77-79-apply.md re-runs the inspect, which prints them."
+    }
+  },
   "staging_acceptance": {
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38602758947",
-    "basis": "Guarded staging SQL executor apply run #31 (38602758947, main c6841346e, 2026-10-14) of sql78-check-partner-stakeholder-removals: 4031dea6… (table absent) -> 3d650a56… (the reviewed table, indexes, RLS, two policies and grants)."
+    "basis": "Guarded staging SQL executor apply run #31 (38602758947, main c6841346e, 2026-10-14) of sql78-check-partner-stakeholder-removals: 4031dea6… (table absent) -> 3d650a56… (the reviewed table, indexes, RLS, two policies and grants).",
+    "production_differs": "Production's pre-state is staging's: the table is absent in both (4031dea6…), and the fingerprint covers only the new table, so the staging pins hold unchanged. The same file bytes (source_sha256) run in both."
   }
 }
