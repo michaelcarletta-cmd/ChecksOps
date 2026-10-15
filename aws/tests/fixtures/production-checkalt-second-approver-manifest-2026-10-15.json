@@ -1,0 +1,19 @@
+{
+  "workstream_id": "checkalt-production-second-approver",
+  "authorization": "Owner-approved 2026-10-15 (\"approve the second-approver lock b486ecf8 → 1d80f96c and plan changes c7f75c1a / 536ac911\"): users only, no admin; a Check Alt second approver counts, and a second approval may be recorded, only by a tenant owner, admin, manager or operator; viewers (including partners shared on a check) and platform-only admins may not. This approves the lock and plan change only; each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "checkalt-authz.mjs live_sha256 is the bytes applied by the Check Alt member access overlay (2026-10-15, production runs #47/#48). checkalt-dual-control.mjs live_sha256 is main's bytes, unchanged since 113b6e1c6; confirm it with a read-only production inspect before any apply. Apply checkalt-authz.mjs, then checkalt-dual-control.mjs (its new bytes import helpers only the new checkalt-authz.mjs exports).",
+  "members": {
+    "providers/production/checkalt-authz.mjs": {
+      "live_sha256": "80b44100bbf053f4869858cf2ad04c1ef9d0d36ce20aead85b91f2232d3d96f3",
+      "accepted_sha256": "c7f75c1ac65e638359d4313d5e320a19c073fe3046809db27d08bd3ef40016cf",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-dual-control.mjs": {
+      "live_sha256": "ca2437a4cdc6e53e877e3094cfdf59e1e71e30169e19014f06cc82522351201a",
+      "accepted_sha256": "536ac9118174d19642e12b99c5416160f091380200ff523719119b6b5b514cd1",
+      "operation": "replace"
+    }
+  }
+}

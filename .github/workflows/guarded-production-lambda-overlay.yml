@@ -34,8 +34,9 @@ on:
           - providers/production/checkalt-config.mjs
           - providers/production/checkalt-idempotency.mjs
           - providers/production/checkalt-submit.mjs
-          - providers/production/checkalt-authz.mjs
           - workflow-rpc.mjs
+          - providers/production/checkalt-authz.mjs
+          - providers/production/checkalt-dual-control.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
