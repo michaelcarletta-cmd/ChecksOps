@@ -14,6 +14,7 @@
 import { formatCheckAltUserAmount, resolveCheckAltProviderStatus } from '../amounts.mjs';
 import { CHECKALT_UAT_HOST } from '../../sandbox-credentials.mjs';
 import { isPlatformAdmin, jsonResult, fail, checkAltParityContext } from './caller.mjs';
+import { loadCheckAltTenantRoles, roleAllowsCheckAlt } from '../production/checkalt-authz.mjs';
 import {
   buildDepositProcessBody,
   buildRegisterPayload,
@@ -35,6 +36,21 @@ import {
 } from './checkalt-image.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
+
+/**
+ * Check Alt deposit actions (submit, approve, reject) follow the production
+ * rule: only the caller's tenant_users role for the deposit's tenant counts
+ * (owner, admin, manager or operator). Platform user_roles admin is ignored,
+ * so it never lets a viewer or a non-member act on another tenant's deposit.
+ */
+const denyUnlessCheckAltTenantRole = async (client, userId, tenantId) => {
+  const roles = await loadCheckAltTenantRoles(client, userId, tenantId);
+  if (roleAllowsCheckAlt(roles)) return null;
+  return fail('Forbidden', 403, {
+    error: 'financial_unauthorized',
+    message: 'Viewers and non-members cannot submit, approve or reject Check Alt deposits. Tenant owner/admin/manager/operator required.',
+  });
+};
 const MAX_TOTAL_B64_CHARS = 1_600_000;
 
 const bytesToBase64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -420,7 +436,8 @@ const submitDeposit = {
       [checkId],
     )).rows[0];
     if (!check) return fail('Check not found', 404);
-    if (check.tenant_id !== ctx.tenantId && !ctx.isAdmin) return fail('Forbidden', 403);
+    const denied = await denyUnlessCheckAltTenantRole(client, mapping.application_user_id, check.tenant_id);
+    if (denied) return denied;
     const tenantId = check.tenant_id;
     const acct = await loadUatTenantAccount(client, tenantId);
     if (!acct?.sso_user_id || !acct?.deposit_account_number) {
@@ -567,26 +584,39 @@ const submitDeposit = {
 };
 
 const approveDeposit = {
-  requireAdmin: true,
-  run: async ({ client, body, ctx, fetchImpl }) => {
+  run: async ({ client, mapping, body, ctx, fetchImpl }) => {
     const actionName = body.action === 'reject' ? 'reject' : (body.action === 'approve' ? 'approve' : null);
     if (!actionName) return fail('action must be approve or reject', 400);
-    let op = null;
-    let reference = body.referenceNumber || body.checkalt_reference || null;
-    if (body.deposit_id) {
-      op = (await client.query(
+    const bodyReference = body.referenceNumber || body.checkalt_reference || null;
+    if (!body.deposit_id && !bodyReference) {
+      return fail('Deposit has no CheckAlt reference yet — cannot approve/reject', 400);
+    }
+    // The deposit row (by id, or by the reference it stores) is what binds the
+    // action to a tenant. A bare reference with no recorded deposit is refused,
+    // so it cannot approve or reject another tenant's deposit.
+    const ops = body.deposit_id
+      ? (await client.query(
         `SELECT id, tenant_id, provider_reference, status, metadata
          FROM public.aws_provider_sandbox_operations
          WHERE id = $1::uuid AND provider = 'checkalt' LIMIT 1`,
         [body.deposit_id],
-      )).rows[0];
-      if (!op) return fail('Deposit not found', 404);
-      if (op.tenant_id !== ctx.tenantId && !ctx.isAdmin) return fail('Forbidden', 403);
-      reference = op.provider_reference;
-      const cancellable = actionName === 'reject' && ['submitted', 'pending', 'processing'].includes(op.status ?? '');
-      if (op.status !== 'pending_approval' && !cancellable) {
-        return fail(`Deposit is in '${op.status}' status, not pending_approval`, 409);
-      }
+      )).rows
+      : (await client.query(
+        `SELECT id, tenant_id, provider_reference, status, metadata
+         FROM public.aws_provider_sandbox_operations
+         WHERE provider = 'checkalt' AND provider_reference = $1 LIMIT 2`,
+        [String(bodyReference)],
+      )).rows;
+    if (ops.length !== 1) {
+      return fail(ops.length ? 'Deposit reference is ambiguous' : 'Deposit not found', ops.length ? 409 : 404);
+    }
+    const op = ops[0];
+    const denied = await denyUnlessCheckAltTenantRole(client, mapping.application_user_id, op.tenant_id);
+    if (denied) return denied;
+    const reference = op.provider_reference;
+    const cancellable = actionName === 'reject' && ['submitted', 'pending', 'processing'].includes(op.status ?? '');
+    if (op.status !== 'pending_approval' && !cancellable) {
+      return fail(`Deposit is in '${op.status}' status, not pending_approval`, 409);
     }
     if (!reference) return fail('Deposit has no CheckAlt reference yet — cannot approve/reject', 400);
     const cfg = uatCfg(ctx.uat);
@@ -624,14 +654,12 @@ const approveDeposit = {
     let internalStatus = actionName === 'approve' ? 'submitted' : 'rejected';
     if (apiStatusText.includes('reject')) internalStatus = 'rejected';
     else if (apiStatusText.includes('approv') || apiStatusText.includes('submit')) internalStatus = 'submitted';
-    if (op) {
-      await client.query(
-        `UPDATE public.aws_provider_sandbox_operations
-         SET status = $2, metadata = metadata || $3::jsonb, updated_at = now()
-         WHERE id = $1::uuid`,
-        [op.id, internalStatus, JSON.stringify({ last_approve: json, production_table_written: false })],
-      ).catch(() => {});
-    }
+    await client.query(
+      `UPDATE public.aws_provider_sandbox_operations
+       SET status = $2, metadata = metadata || $3::jsonb, updated_at = now()
+       WHERE id = $1::uuid`,
+      [op.id, internalStatus, JSON.stringify({ last_approve: json, production_table_written: false })],
+    ).catch(() => {});
     return jsonResult({
       success: true,
       status: internalStatus,
