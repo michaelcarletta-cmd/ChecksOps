@@ -30,28 +30,32 @@ const serverUser = (() => {
 })();
 const run = (bin, args, opts = {}) => spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
 
-export function pgSkipReason() {
-  if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) return 'PostgreSQL 16 binaries not installed';
+export function pgSkipReason(bin = PG_BIN) {
+  if (!fs.existsSync(path.join(bin, 'initdb'))) return `PostgreSQL binaries not installed in ${bin}`;
   if (typeof process.getuid === 'function' && process.getuid() === 0 && !serverUser) return 'initdb cannot run as root and no ubuntu account exists';
   return null;
 }
 
-/** Starts a throwaway server; `stop()` removes it. The superuser is 'ubuntu'. */
-export function startPg(prefix, basePort) {
+/**
+ * Starts a throwaway server; `stop()` removes it. The superuser is 'ubuntu'.
+ * `bin` defaults to the PostgreSQL 16 binaries (another major version's for a
+ * cross-version check).
+ */
+export function startPg(prefix, basePort, { bin = PG_BIN } = {}) {
   const server = serverUser || {};
   const pgData = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   if (serverUser) fs.chownSync(pgData, serverUser.uid, serverUser.gid);
   const port = basePort + (process.pid % 1000);
-  const init = run(path.join(PG_BIN, 'initdb'), ['-D', pgData, '--auth=trust', '--no-sync', '--username=ubuntu', '--encoding=UTF8'], server);
+  const init = run(path.join(bin, 'initdb'), ['-D', pgData, '--auth=trust', '--no-sync', '--username=ubuntu', '--encoding=UTF8'], server);
   if (init.status !== 0) throw new Error(init.stderr);
   fs.appendFileSync(path.join(pgData, 'postgresql.conf'), `\nlisten_addresses = ''\nport = ${port}\nunix_socket_directories = '${pgData}'\nlogging_collector = off\n`);
-  const start = run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-l', path.join(pgData, 'pg.log'), '-w', '-t', '30', 'start'], server);
+  const start = run(path.join(bin, 'pg_ctl'), ['-D', pgData, '-l', path.join(pgData, 'pg.log'), '-w', '-t', '30', 'start'], server);
   if (start.status !== 0) throw new Error(start.stderr);
   return {
     host: pgData,
     port,
     stop() {
-      run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', '-w', 'stop'], server);
+      run(path.join(bin, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', '-w', 'stop'], server);
       fs.rmSync(pgData, { recursive: true, force: true });
     },
   };

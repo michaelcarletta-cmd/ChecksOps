@@ -1,0 +1,53 @@
+{
+  "id": "sql80-checkalt-member-auto-deposit-production-apply",
+  "migration": "sql80",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/80_checkalt_member_auto_deposit.sql",
+  "migration_id": "80_checkalt_member_auto_deposit",
+  "staging_pin_commit": "4a7c1053f5f766eaf600e68427d72fbbdc701032",
+  "source_sha256": "3ca77bf4d3bfe0d09645bec2d8bf86517f60a0804935fe6aff68a61f92747352",
+  "function_identity": "public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)",
+  "table": "public.checkalt_tenant_accounts",
+  "expected_live_definition_sha256": "dce5b13151f4b6c6fe7660e0ef9576d4a80e80ad66cfcffbad6d880ad8a07d65",
+  "intended_replacement_sha256": "5ad9a81cfc01ba8affc165b42986c1a6e7ce87c5f61df6a5ebcac293e00fa0db",
+  "authorization_phrase": "REPLACE_CHECKALT_AUTO_DEPOSIT_SAVE",
+  "predecessors": [],
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "date": "2026-10-15",
+    "ssm_command_id": "1b849090-4596-49ef-aa76-c2a89b58a3a1",
+    "read_only": true,
+    "server_version": "PostgreSQL 18.3",
+    "connected_as": "checksops_admin",
+    "function_count": 1,
+    "function_definition_sha256": "b7989db70a0376b9ef7957fd8c6e6a47d8ac64155715eb662a300f91b5636e37",
+    "security_definer": true,
+    "config": ["search_path=public", "row_security=off"],
+    "function_owner": "checksops_admin",
+    "comment": null,
+    "function_acl": "{=X/checksops_admin,checksops_admin=X/checksops_admin,checksops=X/checksops_admin}",
+    "table_owner": "checksops_admin",
+    "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+    "column_update_grants": 0,
+    "note": "Owner-approved read-only production inspect of SQL 80's target on 2026-10-15 (SSM command 1b849090-4596-49ef-aa76-c2a89b58a3a1, PostgreSQL 18.3, as checksops_admin). Exactly one public.aws_save_checkalt_tenant_auto_deposit(_tenant_id uuid, _settings jsonb); sha256(pg_get_functiondef) b7989db7… is SQL 38's body (identical to staging PostgreSQL 16); SECURITY DEFINER; proconfig search_path=public, row_security=off; owner checksops_admin. Unlike staging it has no comment, and EXECUTE for PUBLIC and checksops but not authenticated: production got SQL 38's CREATE but not its COMMENT/REVOKE/GRANT. public.checkalt_tenant_accounts grants checksops arwd (UPDATE included; staging has no UPDATE for checksops or authenticated); no column-level UPDATE grants. expected_live_definition_sha256 dce5b131… is the staging executor's fingerprint (readCheckaltAutoDepositState / checkaltAutoDepositStateText) of that state, code-derived and re-read from a PostgreSQL fixture of it (aws/tests/sql80-checkalt-production-apply.test.mjs). The production rule (scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs) accepts only this pre-state."
+  },
+  "intended_post_state": {
+    "function_definition_sha256": "97c5bddc1ada170530fc7da9fe2cd4e3998a037571dd71d0dbe1a89bf03ab9c5",
+    "comment_sha256": "05ad30345f0fb94b446bb6238e01c99fbecdcd3d53cf60fcfa36ba3fe45d9520",
+    "function_acl": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}",
+    "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+    "note": "After the unchanged SQL 80 file: the SQL 80 body (pg_get_functiondef compared with the text reconstructed from the pinned file, sha256 97c5bddc…), the SQL 80 comment, and EXECUTE for the owner, checksops and authenticated only. PUBLIC's EXECUTE is revoked and authenticated gains EXECUTE: an intended tightening to what SQL 38 meant and staging already has. checksops keeps EXECUTE and its table arwd; the table ACL is byte-identical. intended_replacement_sha256 5ad9a81c… equals the staging pin's (the owner's own entry is not part of the fingerprint)."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor apply run of sql80-checkalt-member-auto-deposit (staging 3ef657f4… -> 5ad9a81c…) here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED.",
+    "production_differs": "Production's pre-state differs from staging's (no comment; PUBLIC and checksops EXECUTE instead of checksops and authenticated), so its pre-state fingerprint dce5b131… differs from staging's 3ef657f4…. The post-state 5ad9a81c… is the same. The same file bytes (source_sha256) run in both."
+  }
+}

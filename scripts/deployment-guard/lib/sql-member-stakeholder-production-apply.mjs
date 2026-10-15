@@ -498,6 +498,7 @@ SELECT p.oid::regprocedure::text AS sig, pg_get_userbyid(p.proowner) AS owner, p
   md5(p.prosrc) AS src_md5, p.prosecdef, p.provolatile::text AS volatile, p.proconfig::text AS config, p.proacl::text AS acl
 FROM pg_proc p
 WHERE p.pronamespace = 'public'::regnamespace
+  AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) x WHERE to_regprocedure(x) = p.oid)
 ORDER BY 1`,
   triggers: `
 SELECT t.tgrelid::regclass::text AS rel, t.tgname, t.tgenabled::text AS enabled, pg_get_triggerdef(t.oid) AS def
@@ -526,18 +527,21 @@ WHERE n.nspname = 'public'`,
  * Hash of everything in schema public (and the roles) that the migration must
  * not touch. `scope.skip_relations` are the migration's own new relations,
  * `scope.acl_ignored` relations whose table ACL the migration changes, and
- * `scope.policies_ignored` "table.policy" keys of the policies it adds.
+ * `scope.policies_ignored` "table.policy" keys of the policies it adds, and
+ * `scope.functions_ignored` signatures of the functions it replaces (SQL 80).
  */
 export async function readUnrelatedCatalogSnapshot(client, scope = {}) {
   await client.query(PG_CATALOG_SEARCH_PATH_SQL);
   const skip = [...(scope.skip_relations || [])];
   const aclIgnored = [...(scope.acl_ignored || [])];
   const policiesIgnored = [...(scope.policies_ignored || [])];
+  const functionsIgnored = [...(scope.functions_ignored || [])];
   const params = {
     relations: [skip, aclIgnored],
     columns: [skip],
     constraints: [skip],
     policies: [skip, policiesIgnored],
+    functions: [functionsIgnored],
   };
   const categories = {};
   const counts = {};
