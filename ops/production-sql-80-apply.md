@@ -10,8 +10,9 @@
 **Status:** not applied to production; the pin is **execute-authorized** (`execute: true`).
 The reviewed change that set it recorded:
 
-- `authorization`: the owner's approval on 2026-10-15, in session, of applying SQL 80 to
-  production once that change is merged. It is not an approval of any particular run:
+- `authorization`: the owner's approval on 2026-10-15 of the pin values (dce5b131 → 5ad9a81c)
+  and the read-only production inspect; `execute: true` takes effect only on the owner's review
+  and merge of that change. It is not an approval of any particular run:
   each apply still needs the owner's run-time approval for that workstream (the
   manifest's `approval`), a production-sql receipt that owns the pinned file, the
   authorization phrase and a new `one_use_id`.

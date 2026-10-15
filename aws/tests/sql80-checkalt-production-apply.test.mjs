@@ -616,11 +616,12 @@ for (const version of PG_VERSIONS) {
       assert.ok(seen.slice(1, -1).every((text) => /^\s*(SELECT|WITH|SAVEPOINT|RELEASE)\b/i.test(text)), JSON.stringify(seen));
 
       const apply = (overrides = {}, ctx = {}) => executeSql80ProductionApply(manifest(overrides), { root: ROOT, pin: fixturePin, connect, consumedPath: consumedPath(), ...ctx });
-      const refusedThenRestored = async (label, breakIt, restore, as = 'ubuntu') => {
+      const refusedThenRestored = async (label, breakIt, restore, as = 'ubuntu', failures = null) => {
         const client = as === 'ubuntu' ? admin : await connectAs(as);
         await client.query(breakIt);
         const refused = await inspect();
         assert.equal(refused.details.apply_preconditions_met, false, label);
+        if (failures) assert.deepEqual(refused.details.precondition_failures, failures, label);
         const applyRefused = await apply();
         assert.equal(applyRefused.code, CODES.DEPLOYMENT_COLLISION, `${label}: ${JSON.stringify(applyRefused)}`);
         await client.query(restore);
@@ -655,7 +656,8 @@ for (const version of PG_VERSIONS) {
       await admin.query('REVOKE checksops_admin FROM authenticated');
       await refusedThenRestored('authenticated in the owner through another role (INHERIT FALSE)',
         'CREATE ROLE sql80_mid NOLOGIN; GRANT checksops_admin TO sql80_mid WITH INHERIT FALSE; GRANT sql80_mid TO authenticated WITH INHERIT FALSE',
-        'REVOKE sql80_mid FROM authenticated; REVOKE checksops_admin FROM sql80_mid; DROP ROLE sql80_mid');
+        'REVOKE sql80_mid FROM authenticated; REVOKE checksops_admin FROM sql80_mid; DROP ROLE sql80_mid',
+        'ubuntu', ['authenticated_not_member_of_owner']);
       await refusedThenRestored('table SELECT for authenticated', 'GRANT SELECT ON public.checkalt_tenant_accounts TO authenticated', 'REVOKE SELECT ON public.checkalt_tenant_accounts FROM authenticated', 'checksops_admin');
       await refusedThenRestored('SECURITY INVOKER', `ALTER FUNCTION ${fn} SECURITY INVOKER`, `ALTER FUNCTION ${fn} SECURITY DEFINER`, 'checksops_admin');
       assert.deepEqual(await catalog(), start);
