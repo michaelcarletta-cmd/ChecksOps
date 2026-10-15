@@ -28,7 +28,15 @@
  * new table's owner is that role and the login, authenticated is still not a member,
  * its non-owner ACL is exactly the reviewed grant (checksops and authenticated
  * SELECT/INSERT/DELETE, granted by the owner, no grant option) and no column-level
- * UPDATE grant exists on it. None of these reads enters a fingerprint.
+ * UPDATE grant exists on it.
+ * SQL 79 requires, before, that the tool runs as the pin's expected owner of both
+ * tables (production_inspect.expected_table_owner, checksops_admin; CREATE POLICY needs
+ * the table owner) and that authenticated is not a member of it; after, that both
+ * tables' owner is still that role and the login, authenticated is still not a member,
+ * both tables' ACLs (every entry, the owner's own included) are unchanged, and the
+ * policies on the two tables are the ones before plus exactly the four reviewed
+ * aws_member_* policies (permissive, INSERT or DELETE, to authenticated). None of
+ * these reads enters a fingerprint.
  * On top of that, apply refuses while a predecessor migration is not applied or a
  * dependency is missing, and rolls back unless every unrelated object in schema
  * public (relations, columns, constraints, policies, functions, triggers, ACLs,
@@ -175,10 +183,34 @@ const SQL77_TABLE_DETAIL_SQL = tableDetailSql('check_stakeholders');
 const SQL77_TABLE_ACL_ENTRIES_SQL = tableAclEntriesSql('check_stakeholders');
 const SQL78_TABLE_DETAIL_SQL = tableDetailSql('check_partner_stakeholder_removals');
 const SQL78_TABLE_ACL_ENTRIES_SQL = tableAclEntriesSql('check_partner_stakeholder_removals');
-// The login SQL 78 runs as, read whether or not the table exists yet.
+// SQL 79 reads both tables with the same two queries.
+const TABLE_DETAIL_SQL = Object.freeze({
+  [STAKEHOLDER_GRANT_TABLE]: SQL77_TABLE_DETAIL_SQL,
+  [PARTNER_STAKEHOLDER_REMOVALS_TABLE]: SQL78_TABLE_DETAIL_SQL,
+});
+const TABLE_ACL_ENTRIES_SQL = Object.freeze({
+  [STAKEHOLDER_GRANT_TABLE]: SQL77_TABLE_ACL_ENTRIES_SQL,
+  [PARTNER_STAKEHOLDER_REMOVALS_TABLE]: SQL78_TABLE_ACL_ENTRIES_SQL,
+});
+// The login SQL 78 and SQL 79 run as, read whether or not the table exists yet.
 const CURRENT_USER_SQL = 'SELECT current_user::text AS current_user';
+// SQL 79 only: every policy on either table, with its kind, command and role names
+// (PUBLIC for role 0). The expressions stay in the staging fingerprint.
+const STAKEHOLDER_POLICIES_SQL = `
+SELECT n.nspname || '.' || c.relname AS rel, pol.polname,
+  pol.polpermissive AS permissive,
+  CASE pol.polcmd WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT' WHEN 'w' THEN 'UPDATE' WHEN 'd' THEN 'DELETE' WHEN '*' THEN 'ALL'
+    ELSE pol.polcmd::text END AS cmd,
+  ARRAY(SELECT CASE WHEN r = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(r)::text END
+    FROM pg_catalog.unnest(pol.polroles) r ORDER BY 1)::text[] AS roles
+FROM pg_catalog.pg_policy pol
+JOIN pg_catalog.pg_class c ON c.oid = pol.polrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE ${STAKEHOLDER_REL_FILTER} AND c.relkind IN ('r', 'p')
+ORDER BY 1, 2
+`.trim();
 // Whether authenticated is a member of any of the given owner roles (SQL 77: the pin's
-// inspected table owner; SQL 78: the pin's expected owner of the new table), directly or through other roles. Every pg_auth_members row
+// inspected table owner; SQL 78 and SQL 79: the pin's expected table owner), directly or through other roles. Every pg_auth_members row
 // counts, INHERIT FALSE and SET FALSE grants included: membership in the owner can
 // still reach the owner's privileges (SET ROLE, or ALTER/DROP as owner). NULL (an
 // owner role or authenticated missing, or no owner given) is treated as yes.
@@ -316,26 +348,102 @@ export async function readSql78ProductionDetail(client, { pin } = {}) {
  * After: the new table's owner is that role and is the login, authenticated is still not
  * a member of it, its non-owner ACL is exactly the reviewed grant with the owner as
  * grantor, and nobody holds a column-level UPDATE on it.
+ * (ownerMembershipCheck and expectedOwnerPreChecks are shared with SQL 79.)
  */
-const sql78OwnerMembership = (state, owners) => ['authenticated_not_member_of_owner', state?.production?.authenticated_member_of_owner === false
+const ownerMembershipCheck = (state, owners) => ['authenticated_not_member_of_owner', state?.production?.authenticated_member_of_owner === false
   && owners.length > 0 && sameList(state?.production?.owner_roles, owners)];
-const sql78PreOwnerChecks = (state, pin) => {
-  const owners = sql78OwnerRoles(pin);
-  return [
-    ['current_user_is_expected_owner', owners.length === 1 && state?.production?.current_user === owners[0]],
-    sql78OwnerMembership(state, owners),
-  ];
-};
+const expectedOwnerPreChecks = (state, owners) => [
+  ['current_user_is_expected_owner', owners.length === 1 && state?.production?.current_user === owners[0]],
+  ownerMembershipCheck(state, owners),
+];
+const sql78PreOwnerChecks = (state, pin) => expectedOwnerPreChecks(state, sql78OwnerRoles(pin));
 const sql78PostOwnerChecks = (state, pin) => {
   const owners = sql78OwnerRoles(pin);
   return [
     ['table_owner_as_expected', owners.length === 1 && state?.production?.table_owner === owners[0]],
     ['current_user_is_table_owner', owners.length === 1 && typeof state?.production?.current_user === 'string'
       && state.production.current_user === owners[0] && state.production.current_user === state.production.table_owner],
-    sql78OwnerMembership(state, owners),
+    ownerMembershipCheck(state, owners),
     ['grantee_entries_as_reviewed', owners.length === 1
       && sameList(state?.production?.grantee_entries, sql78ReviewedGranteeEntries(owners[0]))],
     ['no_column_update_grants', sameList(state?.production?.column_update_entries, [])],
+  ];
+};
+/** The owner roles authenticated must not be a member of for SQL 79: the pin's expected owner of both tables. */
+export function sql79OwnerRoles(pin) {
+  const owner = pin?.production_inspect?.expected_table_owner;
+  return typeof owner === 'string' && owner ? [owner] : [];
+}
+const policyLine = (row) => `${row.rel} ${row.polname} ${row.permissive === false ? 'restrictive' : 'permissive'} ${row.cmd} to ${[...(Array.isArray(row.roles) ? row.roles : [])].sort().join(',')}`;
+// SQL 79's four CREATE POLICY statements, as policy_entries lines: permissive, INSERT or
+// DELETE, to authenticated only.
+export const sql79ReviewedPolicyEntries = () => MEMBER_STAKEHOLDER_TABLES
+  .flatMap((table) => MEMBER_STAKEHOLDER_NEW_POLICIES[table].map((policy) => policyLine({
+    rel: table, polname: policy.name, permissive: policy.permissive, cmd: policy.cmd, roles: policy.roles,
+  })))
+  .sort();
+
+/**
+ * SQL 79's production-only read: readStakeholderGranteeAcl plus the login running the
+ * tool (current_user), whether authenticated is a member of the pin's expected owner,
+ * each table's owner, readable ACL and every ACL entry in plain text (the owner's own
+ * included, prefixed with the table), and every policy on the two tables as
+ * `<table> <policy> <permissive|restrictive> <CMD> to <roles>`. Never part of the hash.
+ */
+export async function readSql79ProductionDetail(client, { pin } = {}) {
+  const base = await readStakeholderGranteeAcl(client);
+  if (!base.ok) return base;
+  const ownerRoles = sql79OwnerRoles(pin);
+  const login = (await client.query(CURRENT_USER_SQL))?.rows?.[0]?.current_user;
+  const tableOwners = {};
+  const tableAcls = {};
+  const aclEntries = [];
+  for (const table of MEMBER_STAKEHOLDER_TABLES) {
+    const row = (await client.query(TABLE_DETAIL_SQL[table]))?.rows?.[0] || null;
+    const entries = row ? ((await client.query(TABLE_ACL_ENTRIES_SQL[table]))?.rows || []) : [];
+    tableOwners[table] = row ? row.table_owner : null;
+    tableAcls[table] = row ? (row.table_acl ?? null) : null;
+    for (const entry of entries) {
+      aclEntries.push(`${table} ${entry.grantee} ${entry.privilege_type} granted by ${entry.grantor}${entry.is_grantable === true ? ' with grant option' : ''}`);
+    }
+  }
+  const policies = (await client.query(STAKEHOLDER_POLICIES_SQL))?.rows || [];
+  const ownerMember = (await client.query(AUTHENTICATED_IN_OWNER_SQL, [ownerRoles]))?.rows?.[0]?.member;
+  return ok({
+    ...base.details,
+    current_user: typeof login === 'string' ? login : null,
+    table_owners: tableOwners,
+    table_acls: tableAcls,
+    table_acl_entries: aclEntries.sort(),
+    policy_entries: policies.map(policyLine).sort(),
+    owner_roles: [...ownerRoles],
+    authenticated_member_of_owner: ownerMember === false ? false : true,
+  });
+}
+/**
+ * SQL 79 only. Before: the tool runs as the pin's expected owner (CREATE POLICY needs the
+ * table owner; the staging fingerprint already requires both tables to be owned by the
+ * login) and authenticated is not a member of it. After: both tables' owner is still that
+ * role and the login, authenticated is still not a member, both tables' ACLs are
+ * byte-identical to before (SQL 79 grants nothing), and the policies on the two tables are
+ * the ones before plus exactly the four reviewed aws_member_* policies.
+ */
+const sql79PreOwnerChecks = (state, pin) => expectedOwnerPreChecks(state, sql79OwnerRoles(pin));
+const sql79PostOwnerChecks = (before, after, pin) => {
+  const owners = sql79OwnerRoles(pin);
+  const ownersOf = (state) => MEMBER_STAKEHOLDER_TABLES.map((table) => state?.production?.table_owners?.[table]);
+  const policiesBefore = before?.production?.policy_entries;
+  return [
+    ['table_owners_as_expected', owners.length === 1 && ownersOf(after).every((owner) => owner === owners[0])
+      && sameList(ownersOf(after), ownersOf(before))],
+    ['current_user_is_table_owner', owners.length === 1 && typeof after?.production?.current_user === 'string'
+      && after.production.current_user === owners[0] && ownersOf(after).every((owner) => owner === after.production.current_user)],
+    ownerMembershipCheck(after, owners),
+    ['table_acls_unchanged', sameList(after?.production?.table_acl_entries, before?.production?.table_acl_entries)
+      && sameList(MEMBER_STAKEHOLDER_TABLES.map((table) => after?.production?.table_acls?.[table] ?? null),
+        MEMBER_STAKEHOLDER_TABLES.map((table) => before?.production?.table_acls?.[table] ?? null))],
+    ['member_policies_as_reviewed', Array.isArray(policiesBefore)
+      && sameList(after?.production?.policy_entries, [...policiesBefore, ...sql79ReviewedPolicyEntries()].sort())],
   ];
 };
 const updateOnlyPreexisting = (state) => sameList(state?.production?.update_entries, PRODUCTION_PREEXISTING_UPDATE_ENTRIES);
@@ -473,15 +581,25 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
     // Only the four member policies are new; everything else stays identical.
     scope: Object.freeze({ skip_relations: [], acl_ignored: [], policies_ignored: memberPolicyKeys }),
     statementsAllowed: (text, executor) => normalizeStatements(text) === executor.SQL79_NORMALIZED_STATEMENTS,
-    productionRead: readStakeholderGranteeAcl,
+    productionRead: readSql79ProductionDetail,
+    // Printed at the top of --inspect, beside the fingerprint (never hashed).
+    inspectSummary: (state) => ({
+      current_user: state?.production?.current_user ?? null,
+      owner_roles: state?.production?.owner_roles ?? [],
+      authenticated_member_of_owner: state?.production?.authenticated_member_of_owner ?? true,
+      table_owners: state?.production?.table_owners ?? {},
+      table_acls: state?.production?.table_acls ?? {},
+      policy_entries: state?.production?.policy_entries ?? [],
+    }),
     alreadyApplied: (state, pin) => state.live_definition_sha256 === pin.intended_replacement_sha256
       || Object.values(state.member_policy_states || {}).some((value) => value !== 'absent'),
     // Production variant of the staging rule: the staging reader's update_granted
     // (and so its tenant_guard_ok) is true / false in production because checksops
     // keeps UPDATE on check_stakeholders after SQL 77. Every other part of
     // tenant_guard_ok is checked by name, and that UPDATE must be the only one on
-    // either table.
-    preconditionFailures: (state) => [
+    // either table. Plus (production only, sql79PreOwnerChecks) the login is the pin's
+    // expected owner and authenticated is not a member of it.
+    preconditionFailures: (state, pin) => [
       ['tables_present', state.tables_present === true],
       ['required_roles_present', state.required_roles_present === true],
       ['required_functions_present', state.required_functions_present === true],
@@ -492,6 +610,7 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
       ['no_other_policies', state.other_policy_count === 0],
       ['functions_as_expected', state.functions_as_expected === true],
       ...productionGuardChecks(state),
+      ...sql79PreOwnerChecks(state, pin),
     ].filter(([, passed]) => !passed).map(([name]) => name),
     postconditionFailures: (before, after, pin) => [
       ['intended_state', after.live_definition_sha256 === pin.intended_replacement_sha256],
@@ -499,6 +618,7 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
       ['acl_unchanged', after.acl_sha256 === before.acl_sha256],
       ...productionGuardChecks(after),
       ['grantee_does_not_bypass_rls', after.grantee_bypasses_rls === false],
+      ...sql79PostOwnerChecks(before, after, pin),
     ].filter(([, passed]) => !passed).map(([name]) => name),
   }),
 });
