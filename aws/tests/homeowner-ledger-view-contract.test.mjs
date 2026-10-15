@@ -75,7 +75,7 @@ test('a staging SQL 73 document (raw sign_url per insured) is sanitized', () => 
   assert.doesNotMatch(JSON.stringify(view), /tok-john|tok-jane|tok-bank/);
 });
 
-test('a sole open insured on the check is actionable even when email and name miss', () => {
+test('a sole insured is actionable only when sent and nothing contradicts it', () => {
   const view = assembleHomeownerLedgerView({
     ok: true,
     mode: 'claim',
@@ -85,14 +85,20 @@ test('a sole open insured on the check is actionable even when email and name mi
     pending_endorsements: [{
       check_id: CHECK_A,
       parties: [
-        { endorsement_id: 'e-1', payee_type: 'insured', payee_name: 'JOHN SMITH AND JANE SMITH', is_homeowner: false },
-        { endorsement_id: 'e-2', payee_type: 'mortgage_company', payee_name: 'Bank' },
+        { endorsement_id: 'e-1', payee_type: 'insured', payee_name: '', status: 'sent', is_homeowner: false },
+        { endorsement_id: 'e-2', payee_type: 'mortgage_company', payee_name: 'Bank', status: 'sent' },
+      ],
+    }, {
+      check_id: 'other-check',
+      parties: [
+        { endorsement_id: 'e-3', payee_type: 'insured', payee_name: 'JOHN SMITH AND JANE SMITH', status: 'sent', is_homeowner: false },
       ],
     }],
   }, {});
   const [insured, mortgage] = view.pending_endorsements[0].parties;
   assert.equal(insured.can_sign, true);
   assert.equal(mortgage.can_sign, false);
+  assert.equal(view.pending_endorsements[1].parties[0].can_sign, false, 'payee name contradicts the homeowner');
 });
 
 test('app-services routes the two new doorways and they fail closed before the database', async () => {

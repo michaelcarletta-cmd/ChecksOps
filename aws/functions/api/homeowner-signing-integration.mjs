@@ -11,19 +11,10 @@ const BLOCKED_DOCUMENT_SIGNER_TYPES = Object.freeze([
   'contractor', 'staff', 'other', 'mortgage', 'mortgage_company',
   'public_adjuster', 'pa',
 ]);
-const OPEN_REQUEST_STATUSES = Object.freeze([
-  'pending', 'sent', 'partial', 'in_progress',
-]);
-const DONE_SIGNER_STATUSES = Object.freeze([
-  'signed', 'completed', 'complete',
-]);
-const DEAD_REQUEST_STATUSES = Object.freeze([
-  'cancelled', 'canceled', 'revoked', 'expired', 'completed', 'complete',
-  'failed', 'voided',
-]);
-const DEAD_SIGNER_STATUSES = Object.freeze([
-  'cancelled', 'canceled', 'revoked', 'expired', 'voided', 'rejected',
-]);
+// Allow-lists, same as SQL 83: signature_requests.valid_status open values
+// and the signature_signers.valid_signer_status open value.
+const OPEN_REQUEST_STATUSES = Object.freeze(['pending', 'in_progress']);
+const OPEN_SIGNER_STATUSES = Object.freeze(['pending']);
 
 const nameWords = (name) => String(name || '').toLowerCase().split(/[^a-z0-9]+/);
 
@@ -53,24 +44,28 @@ export const isHomeownerDocumentSignerType = (signer) => {
 export const isHomeownerDocumentSigner = (signer = {}, homeowner = {}, ctx = {}) => {
   if (!isHomeownerDocumentSignerType(signer)) return false;
   const email = String(homeowner.email || '').toLowerCase().trim();
-  const emailHit = email && String(signer.signer_email || '').toLowerCase().trim() === email;
+  const signerEmail = String(signer.signer_email || '').toLowerCase().trim();
+  const emailHit = Boolean(email) && signerEmail === email;
   const nameHit = homeownerNameMatches(homeowner.name, signer.signer_name);
   if (emailHit || nameHit) return true;
+  // Sole homeowner-type signer fallback only when nothing contradicts it.
+  const emailConflict = Boolean(email) && Boolean(signerEmail) && signerEmail !== email;
+  const nameConflict = Boolean(String(signer.signer_name || '').trim()) && !nameHit;
+  if (emailConflict || nameConflict) return false;
   const sole = Number(ctx.homeownerSignerCount);
   return Number.isInteger(sole) && sole === 1;
 };
 
 const requestIsOpen = (request = {}) => {
-  const status = String(request.status || request.request_status || '').toLowerCase();
-  if (DEAD_REQUEST_STATUSES.includes(status)) return false;
-  if (request.cancelled_at || request.revoked_at) return false;
-  return OPEN_REQUEST_STATUSES.includes(status) || !status;
+  const status = String(request.status || request.request_status || '').toLowerCase().trim();
+  if (request.completed_at || request.cancelled_at || request.revoked_at) return false;
+  return OPEN_REQUEST_STATUSES.includes(status);
 };
 
 const signerIsOpen = (signer = {}) => {
-  const status = String(signer.status || signer.signer_status || '').toLowerCase();
-  if (signer.signed_at || DONE_SIGNER_STATUSES.includes(status)) return false;
-  if (signer.revoked_at || DEAD_SIGNER_STATUSES.includes(status)) return false;
+  const status = String(signer.status || signer.signer_status || '').toLowerCase().trim();
+  if (signer.signed_at || signer.revoked_at) return false;
+  if (!OPEN_SIGNER_STATUSES.includes(status)) return false;
   if (signer.expires_at && new Date(signer.expires_at) < new Date()) return false;
   return true;
 };

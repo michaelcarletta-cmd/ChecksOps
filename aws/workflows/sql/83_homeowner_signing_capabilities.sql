@@ -18,6 +18,13 @@
 -- signer_name (same rule as SQL 82). SQL 74 accepted any one 3+ letter
 -- part as a substring, so a co-insured sharing only a surname could mint
 -- the other insured's /endorse or /sign link.
+-- Third change (review of PR #989): the sole-insured / sole-signer
+-- fallback counts every insured endorsement (any status) and applies only
+-- when neither the contact/signer email nor the payee/signer name
+-- contradicts the token; the endorse doorway accepts only status 'sent'
+-- and mints under FOR UPDATE; the document doorway and reader accept only
+-- request status pending|in_progress and signer status pending; an
+-- org-less claim's claim-only request needs no other tenant's check on it.
 --
 -- Isolation: ledger token → exact tenant + claim. Fail closed on
 -- invalid / revoked / expired / mismatched-tenant / mismatched-claim.
@@ -55,9 +62,11 @@ DECLARE
   homeowner_email_lc text;
   homeowner_name_lc text;
   rec record;
-  open_insured_count integer := 0;
+  insured_count integer := 0;
   email_hit boolean := false;
   name_hit boolean := false;
+  email_conflict boolean := false;
+  name_conflict boolean := false;
   identity_ok boolean := false;
   endorse_token text;
   status_lc text;
@@ -132,7 +141,10 @@ BEGIN
   JOIN public.check_intake_items i
     ON i.id = e.check_id
   WHERE e.id = p_endorsement_id
-  LIMIT 1;
+  LIMIT 1
+  -- Lock the endorsement so a concurrent mint waits and then reads the
+  -- stored token instead of returning one that was never written.
+  FOR UPDATE OF e;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'error', 'not_found');
@@ -154,14 +166,18 @@ BEGIN
   ) THEN
     RETURN jsonb_build_object('ok', false, 'error', 'already_signed');
   END IF;
-  IF status_lc IN (
-    'cancelled', 'canceled', 'rejected', 'revoked', 'expired', 'voided'
-  ) THEN
+  -- Allow-list: only an endorsement staff actually requested. Both send
+  -- paths (check-endorsement send and the Supabase sender) set 'sent' with
+  -- request_sent_at; 'pending' is created-but-not-requested and
+  -- 'manual_required' is handled outside the portal.
+  IF status_lc <> 'sent' THEN
     RETURN jsonb_build_object('ok', false, 'error', 'invalid_state');
   END IF;
 
+  -- Every insured endorsement on the check, any status: once one co-insured
+  -- signs, the other does not become the "sole" insured.
   SELECT COUNT(*)::integer
-    INTO open_insured_count
+    INTO insured_count
     FROM public.check_endorsements e2
     JOIN public.check_intake_items i2
       ON i2.id = e2.check_id
@@ -169,15 +185,13 @@ BEGIN
      AND i2.tenant_id = tok.tenant_id
    WHERE e2.check_id = rec.check_id
      AND (e2.tenant_id IS NULL OR e2.tenant_id = tok.tenant_id)
-     AND e2.payee_type = 'insured'
-     AND e2.signed_at IS NULL
-     AND lower(COALESCE(e2.status, '')) NOT IN (
-       'signed', 'waived', 'endorsed', 'completed', 'complete',
-       'cancelled', 'canceled', 'rejected', 'revoked', 'expired', 'voided'
-     );
+     AND e2.payee_type = 'insured';
 
   email_hit := homeowner_email_lc <> ''
-    AND lower(COALESCE(rec.contact_email, '')) = homeowner_email_lc;
+    AND lower(trim(COALESCE(rec.contact_email, ''))) = homeowner_email_lc;
+  email_conflict := homeowner_email_lc <> ''
+    AND lower(trim(COALESCE(rec.contact_email, ''))) <> ''
+    AND lower(trim(COALESCE(rec.contact_email, ''))) <> homeowner_email_lc;
   name_hit := homeowner_name_lc <> ''
     AND (
       -- SQL 83: the homeowner name needs at least two parts of 2+ letters,
@@ -195,18 +209,30 @@ BEGIN
           AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(rec.payee_name, '')), '[^a-z0-9]+')))
       )
     );
-  identity_ok := email_hit OR name_hit OR open_insured_count = 1;
+  name_hit := COALESCE(name_hit, false);
+  name_conflict := trim(COALESCE(rec.payee_name, '')) <> '' AND NOT name_hit;
+  -- The sole-insured fallback applies only when nothing contradicts it.
+  identity_ok := email_hit OR name_hit
+    OR (insured_count = 1 AND NOT email_conflict AND NOT name_conflict);
   IF NOT identity_ok THEN
     RETURN jsonb_build_object('ok', false, 'error', 'not_your_signature');
   END IF;
 
   endorse_token := trim(COALESCE(rec.token, ''));
   IF endorse_token = '' THEN
-    endorse_token := gen_random_uuid()::text;
     UPDATE public.check_endorsements
-       SET token = endorse_token
+       SET token = gen_random_uuid()::text
      WHERE id = rec.id
-       AND (token IS NULL OR token = '');
+       AND (token IS NULL OR trim(token) = '')
+    RETURNING token INTO endorse_token;
+    IF endorse_token IS NULL THEN
+      SELECT trim(COALESCE(token, '')) INTO endorse_token
+        FROM public.check_endorsements
+       WHERE id = rec.id;
+    END IF;
+  END IF;
+  IF COALESCE(endorse_token, '') = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'not_found');
   END IF;
 
   RETURN jsonb_build_object(
@@ -313,12 +339,25 @@ BEGIN
           -- SQL 83 security change: a claim-only request carries no tenant.
           -- Bind it to the token tenant through claims.org_id so a token
           -- authorized by a same-tenant check/event on a claim another
-          -- tenant owns cannot read that tenant's claim-only requests.
+          -- tenant owns cannot read that tenant's claim-only requests. An
+          -- org-less claim qualifies only when no other tenant has a check
+          -- on it.
           AND EXISTS (
             SELECT 1
             FROM public.claims rc
             WHERE rc.id = r.claim_id
-              AND (rc.org_id IS NULL OR rc.org_id = tok.tenant_id)
+              AND (
+                rc.org_id = tok.tenant_id
+                OR (
+                  rc.org_id IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM public.check_intake_items oi
+                    WHERE oi.claim_id = rc.id
+                      AND oi.tenant_id IS DISTINCT FROM tok.tenant_id
+                  )
+                )
+              )
           )
         )
         OR (
@@ -328,7 +367,8 @@ BEGIN
           AND i.tenant_id = tok.tenant_id
         )
       )
-      AND lower(COALESCE(r.status, '')) IN ('pending', 'sent', 'partial', 'in_progress')
+      -- Allow-list of open request statuses (signature_requests.valid_status).
+      AND lower(trim(COALESCE(r.status, ''))) IN ('pending', 'in_progress')
       AND r.completed_at IS NULL
       AND lower(COALESCE(s.signer_type, '')) IN ('policyholder', 'insured', 'homeowner')
   ),
@@ -340,41 +380,59 @@ BEGIN
       ) OVER (PARTITION BY scoped.request_id) AS homeowner_signer_count
     FROM scoped
   ),
-  annotated AS (
+  matched AS (
     SELECT
       counted.*,
       (
-        (homeowner_email_lc <> '' AND lower(COALESCE(counted.signer_email, '')) = homeowner_email_lc)
-        OR (
-          homeowner_name_lc <> ''
-          AND (
-            -- SQL 83: the homeowner name needs at least two parts of 2+ letters,
-            -- and every one must be a whole word of the name. A shared surname
-            -- alone, or a substring such as 'ada' in 'adam', is not a match.
-            (
-              SELECT count(*)
-              FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
-              WHERE length(part) >= 2
-            ) >= 2
-            AND NOT EXISTS (
-              SELECT 1
-              FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
-              WHERE length(part) >= 2
-                AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(counted.signer_name, '')), '[^a-z0-9]+')))
-            )
+        homeowner_email_lc <> ''
+        AND lower(trim(COALESCE(counted.signer_email, ''))) = homeowner_email_lc
+      ) AS email_hit,
+      (
+        homeowner_email_lc <> ''
+        AND lower(trim(COALESCE(counted.signer_email, ''))) <> ''
+        AND lower(trim(COALESCE(counted.signer_email, ''))) <> homeowner_email_lc
+      ) AS email_conflict,
+      (
+        homeowner_name_lc <> ''
+        AND (
+          -- SQL 83: the homeowner name needs at least two parts of 2+ letters,
+          -- and every one must be a whole word of the name. A shared surname
+          -- alone, or a substring such as 'ada' in 'adam', is not a match.
+          (
+            SELECT count(*)
+            FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+            WHERE length(part) >= 2
+          ) >= 2
+          AND NOT EXISTS (
+            SELECT 1
+            FROM unnest(regexp_split_to_array(homeowner_name_lc, '[^a-z0-9]+')) AS part
+            WHERE length(part) >= 2
+              AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(counted.signer_name, '')), '[^a-z0-9]+')))
           )
         )
-        OR counted.homeowner_signer_count = 1
+      ) AS name_hit
+    FROM counted
+  ),
+  annotated AS (
+    SELECT
+      matched.*,
+      (
+        matched.email_hit
+        OR matched.name_hit
+        -- Sole homeowner-type signer fallback only when nothing contradicts it.
+        OR (
+          matched.homeowner_signer_count = 1
+          AND NOT matched.email_conflict
+          AND NOT (trim(COALESCE(matched.signer_name, '')) <> '' AND NOT matched.name_hit)
+        )
       ) AS is_homeowner,
       (
-        counted.signed_at IS NULL
-        AND lower(COALESCE(counted.signer_status, '')) NOT IN (
-          'signed', 'completed', 'complete',
-          'cancelled', 'canceled', 'revoked', 'expired', 'voided', 'rejected'
-        )
-        AND (counted.expires_at IS NULL OR counted.expires_at >= now())
+        matched.signed_at IS NULL
+        -- Allow-list: signature_signers.valid_signer_status open value.
+        AND lower(trim(COALESCE(matched.signer_status, ''))) = 'pending'
+        AND (matched.expires_at IS NULL OR matched.expires_at >= now())
       ) AS signer_open
-    FROM counted
+    FROM matched
   ),
   with_can AS (
     SELECT
@@ -389,10 +447,7 @@ BEGIN
             AND prior.id IS DISTINCT FROM annotated.signer_id
             AND COALESCE(prior.signing_order, 1) < COALESCE(annotated.signing_order, 1)
             AND prior.signed_at IS NULL
-            AND lower(COALESCE(prior.status, '')) NOT IN (
-              'signed', 'completed', 'complete',
-              'cancelled', 'canceled', 'revoked', 'expired', 'voided', 'rejected'
-            )
+            AND lower(trim(COALESCE(prior.status, ''))) = 'pending'
             AND (prior.expires_at IS NULL OR prior.expires_at >= now())
         )
       ) AS can_sign
@@ -464,6 +519,8 @@ DECLARE
   homeowner_signer_count integer := 0;
   email_hit boolean := false;
   name_hit boolean := false;
+  email_conflict boolean := false;
+  name_conflict boolean := false;
   identity_ok boolean := false;
   request_status_lc text;
   signer_status_lc text;
@@ -558,12 +615,24 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'error', 'not_found');
     END IF;
     -- SQL 83 security change: claim-only requests are bound to the token
-    -- tenant through claims.org_id (same rule as pending_signatures).
+    -- tenant through claims.org_id; an org-less claim qualifies only when no
+    -- other tenant has a check on it (same rule as pending_signatures).
     IF NOT EXISTS (
       SELECT 1
       FROM public.claims rc
       WHERE rc.id = rec.claim_id
-        AND (rc.org_id IS NULL OR rc.org_id = tok.tenant_id)
+        AND (
+          rc.org_id = tok.tenant_id
+          OR (
+            rc.org_id IS NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.check_intake_items oi
+              WHERE oi.claim_id = rc.id
+                AND oi.tenant_id IS DISTINCT FROM tok.tenant_id
+            )
+          )
+        )
     ) THEN
       RETURN jsonb_build_object('ok', false, 'error', 'not_found');
     END IF;
@@ -585,7 +654,10 @@ BEGIN
      AND lower(COALESCE(s2.signer_type, '')) IN ('policyholder', 'insured', 'homeowner');
 
   email_hit := homeowner_email_lc <> ''
-    AND lower(COALESCE(rec.signer_email, '')) = homeowner_email_lc;
+    AND lower(trim(COALESCE(rec.signer_email, ''))) = homeowner_email_lc;
+  email_conflict := homeowner_email_lc <> ''
+    AND lower(trim(COALESCE(rec.signer_email, ''))) <> ''
+    AND lower(trim(COALESCE(rec.signer_email, ''))) <> homeowner_email_lc;
   name_hit := homeowner_name_lc <> ''
     AND (
       -- SQL 83: the homeowner name needs at least two parts of 2+ letters,
@@ -603,29 +675,27 @@ BEGIN
           AND NOT (part = ANY (regexp_split_to_array(lower(COALESCE(rec.signer_name, '')), '[^a-z0-9]+')))
       )
     );
-  identity_ok := email_hit OR name_hit OR homeowner_signer_count = 1;
+  name_conflict := trim(COALESCE(rec.signer_name, '')) <> '' AND NOT name_hit;
+  -- The sole homeowner-type signer fallback applies only when nothing
+  -- contradicts it.
+  identity_ok := email_hit OR name_hit
+    OR (homeowner_signer_count = 1 AND NOT email_conflict AND NOT name_conflict);
   IF NOT identity_ok THEN
     RETURN jsonb_build_object('ok', false, 'error', 'not_your_signature');
   END IF;
 
-  request_status_lc := lower(COALESCE(rec.request_status, ''));
-  IF rec.completed_at IS NOT NULL OR request_status_lc IN (
-    'cancelled', 'canceled', 'revoked', 'expired', 'completed', 'complete',
-    'failed', 'voided'
-  ) THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'invalid_state');
-  END IF;
-  IF request_status_lc NOT IN ('pending', 'sent', 'partial', 'in_progress', '') THEN
+  -- Allow-lists, same as pending_signatures: open requests are 'pending' or
+  -- 'in_progress'; an open signer is 'pending'.
+  request_status_lc := lower(trim(COALESCE(rec.request_status, '')));
+  IF rec.completed_at IS NOT NULL OR request_status_lc NOT IN ('pending', 'in_progress') THEN
     RETURN jsonb_build_object('ok', false, 'error', 'invalid_state');
   END IF;
 
-  signer_status_lc := lower(COALESCE(rec.status, ''));
-  IF rec.signed_at IS NOT NULL OR signer_status_lc IN ('signed', 'completed', 'complete') THEN
+  signer_status_lc := lower(trim(COALESCE(rec.status, '')));
+  IF rec.signed_at IS NOT NULL OR signer_status_lc = 'signed' THEN
     RETURN jsonb_build_object('ok', false, 'error', 'already_signed');
   END IF;
-  IF signer_status_lc IN (
-    'cancelled', 'canceled', 'revoked', 'expired', 'voided', 'rejected'
-  ) THEN
+  IF signer_status_lc <> 'pending' THEN
     RETURN jsonb_build_object('ok', false, 'error', 'invalid_state');
   END IF;
   IF rec.expires_at IS NOT NULL AND rec.expires_at < now() THEN
@@ -639,10 +709,7 @@ BEGIN
       AND prior.id IS DISTINCT FROM rec.id
       AND COALESCE(prior.signing_order, 1) < COALESCE(rec.signing_order, 1)
       AND prior.signed_at IS NULL
-      AND lower(COALESCE(prior.status, '')) NOT IN (
-        'signed', 'completed', 'complete',
-        'cancelled', 'canceled', 'revoked', 'expired', 'voided', 'rejected'
-      )
+      AND lower(trim(COALESCE(prior.status, ''))) = 'pending'
       AND (prior.expires_at IS NULL OR prior.expires_at >= now())
   ) INTO order_blocked;
   IF order_blocked THEN

@@ -127,9 +127,15 @@ export const homeownerNameMatches = (homeownerName, payeeName) => {
 export const isHomeownerEndorsementParty = (endorsement, homeowner = {}, ctx = {}) => {
   if (String(endorsement?.payee_type || '') !== 'insured') return false;
   const email = String(homeowner.email || '').toLowerCase().trim();
-  const emailHit = email && String(endorsement?.contact_email || '').toLowerCase() === email;
+  const contactEmail = String(endorsement?.contact_email || '').toLowerCase().trim();
+  const emailHit = Boolean(email) && contactEmail === email;
   const nameHit = homeownerNameMatches(homeowner.name, endorsement?.payee_name);
   if (emailHit || nameHit) return true;
+  // Sole-insured fallback only when nothing contradicts it (same rule as the
+  // SQL 83 mint, which also counts every insured endorsement on the check).
+  const emailConflict = Boolean(email) && Boolean(contactEmail) && contactEmail !== email;
+  const nameConflict = Boolean(String(endorsement?.payee_name || '').trim()) && !nameHit;
+  if (emailConflict || nameConflict) return false;
   const openInsuredCount = Number(ctx.openInsuredCount);
   return Number.isInteger(openInsuredCount) && openInsuredCount === 1;
 };
@@ -167,7 +173,9 @@ const publicEndorsementParty = (party = {}, homeowner = {}, ctx = {}) => {
     status: party.status ?? null,
     sent_at: party.sent_at || party.request_sent_at || null,
     is_homeowner: isHomeowner,
-    can_sign: Boolean(isHomeowner && payeeType === 'insured'),
+    // Only a requested ('sent') insured endorsement, matching the SQL 83 allow-list.
+    can_sign: Boolean(isHomeowner && payeeType === 'insured'
+      && String(party.status || '').toLowerCase().trim() === 'sent'),
     // Never return a raw check_endorsements.token. The endorse doorway mints at click.
     sign_url: null,
   };
@@ -756,6 +764,10 @@ export const runHomeownerLedgerSend = async ({
   )).rows[0];
   if (!claimOwned) return { ok: false, statusCode: 403, error: 'claim_not_in_tenant', spoofFieldsIgnored: spoof };
 
+  // A ledger token is one recipient's capability (the signing doorways trust
+  // its homeowner_email/name). Reuse only this recipient's own live token on
+  // the same tenant + claim; a co-insured or a new address gets a new token.
+  const homeownerName = String(body.homeowner_name || '').trim() || null;
   let tokenRow = null;
   if (!body.rotate) {
     tokenRow = (await client.query(
@@ -764,8 +776,14 @@ export const runHomeownerLedgerSend = async ({
          AND claim_id IS NOT DISTINCT FROM $2::uuid
          AND revoked_at IS NULL
          AND (expires_at IS NULL OR expires_at > now())
+         AND lower(trim(COALESCE(homeowner_email, ''))) = lower(trim(COALESCE($3::text, '')))
+         AND (
+           $4::text IS NULL
+           OR NULLIF(trim(COALESCE(homeowner_name, '')), '') IS NULL
+           OR lower(trim(homeowner_name)) = lower(trim($4::text))
+         )
        ORDER BY created_at DESC LIMIT 1`,
-      [tenantId, claimId],
+      [tenantId, claimId, homeownerEmail || null, homeownerName],
     )).rows[0];
   }
   if (!tokenRow) {
@@ -775,14 +793,14 @@ export const runHomeownerLedgerSend = async ({
          tenant_id, claim_id, token, homeowner_email, homeowner_name, created_by, sent_by_user_id, created_at
        ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $6::uuid, now())
        RETURNING id, token`,
-      [tenantId, claimId, token, homeownerEmail || null, body.homeowner_name || null, mapping.application_user_id],
+      [tenantId, claimId, token, homeownerEmail || null, homeownerName, mapping.application_user_id],
     );
     const insertWithoutSentBy = async () => client.query(
       `INSERT INTO public.homeowner_ledger_tokens (
          tenant_id, claim_id, token, homeowner_email, homeowner_name, created_by, created_at
        ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, now())
        RETURNING id, token`,
-      [tenantId, claimId, token, homeownerEmail || null, body.homeowner_name || null, mapping.application_user_id],
+      [tenantId, claimId, token, homeownerEmail || null, homeownerName, mapping.application_user_id],
     );
     try {
       tokenRow = (await insertWithSentBy()).rows[0];
@@ -793,9 +811,11 @@ export const runHomeownerLedgerSend = async ({
     try {
       await client.query(
         `UPDATE public.homeowner_ledger_tokens
-         SET sent_by_user_id = $2::uuid, homeowner_email = COALESCE($3, homeowner_email)
+         SET sent_by_user_id = $2::uuid,
+             homeowner_email = COALESCE(NULLIF(trim(COALESCE(homeowner_email, '')), ''), $3),
+             homeowner_name = COALESCE(NULLIF(trim(COALESCE(homeowner_name, '')), ''), $4)
          WHERE id = $1::uuid`,
-        [tokenRow.id, mapping.application_user_id, homeownerEmail || null],
+        [tokenRow.id, mapping.application_user_id, homeownerEmail || null, homeownerName],
       );
     } catch {
       /* sent_by_user_id may be absent on older staging dumps */

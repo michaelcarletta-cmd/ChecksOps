@@ -42,7 +42,7 @@ test('a pre-claim upload link reuses only unclaimed tokens, never another claim\
   const reuse = c.queries.find((q) => q.text.includes('FROM public.homeowner_ledger_tokens'));
   assert.match(reuse.text, /claim_id IS NOT DISTINCT FROM \$2::uuid/);
   assert.doesNotMatch(reuse.text, /\$2::uuid IS NULL OR/);
-  assert.deepEqual(reuse.params, [TENANT, null]);
+  assert.deepEqual(reuse.params, [TENANT, null, 'home@example.com', null]);
   assert.equal((await run({ claim_id: 'not-a-uuid' })).error, 'invalid_claim_id');
   assert.equal((await run({ claim_id: CLAIM, tenant_id: 'x' })).error, 'invalid_tenant_id');
 });
@@ -84,7 +84,7 @@ test('an acting member sends for a claim the tenant owns, and token reuse is cla
   const reuse = c.queries.find((q) => q.text.includes('FROM public.homeowner_ledger_tokens'));
   assert.match(reuse.text, /claim_id IS NOT DISTINCT FROM \$2::uuid/);
   assert.doesNotMatch(reuse.text, /\$2::uuid IS NULL/);
-  assert.deepEqual(reuse.params, [TENANT, CLAIM]);
+  assert.deepEqual(reuse.params, [TENANT, CLAIM, 'home@example.com', null]);
 });
 
 test('the check-based ownership branch only applies to claims with no owning org', async () => {
@@ -139,4 +139,78 @@ test('send-file: token lookup is exact on the claim and skips expired links', as
   assert.doesNotMatch(lookup.text, /\$2::uuid IS NULL OR/);
   assert.match(lookup.text, /expires_at IS NULL OR expires_at > now\(\)/);
   assert.deepEqual(lookup.params, [TENANT, CLAIM]);
+});
+
+/**
+ * Token table stand-in: applies the reuse query's recipient filter (tenant,
+ * claim, live, lower(trim(email)), name null-or-equal) to stored rows.
+ */
+const tokenTable = (rows) => {
+  const base = client();
+  const inserted = [];
+  const updates = [];
+  return {
+    queries: base.queries,
+    inserted,
+    updates,
+    async query(sql, params = []) {
+      const text = String(sql);
+      if (text.includes('SELECT id, token FROM public.homeowner_ledger_tokens')) {
+        base.queries.push({ text, params });
+        const [tenant, claim, email, name] = params;
+        const norm = (v) => String(v || '').trim().toLowerCase();
+        const hit = rows.find((row) => row.tenant_id === tenant && row.claim_id === claim
+          && norm(row.homeowner_email) === norm(email)
+          && (name == null || !norm(row.homeowner_name) || norm(row.homeowner_name) === norm(name)));
+        return { rows: hit ? [{ id: hit.id, token: hit.token }] : [] };
+      }
+      if (text.includes('INSERT INTO public.homeowner_ledger_tokens')) {
+        base.queries.push({ text, params });
+        inserted.push(params);
+        return { rows: [{ id: `new-${inserted.length}`, token: `newtok${inserted.length}` }] };
+      }
+      if (text.includes('UPDATE public.homeowner_ledger_tokens')) {
+        base.queries.push({ text, params });
+        updates.push({ text, params });
+        return { rows: [] };
+      }
+      return base.query(sql, params);
+    },
+  };
+};
+
+const ALICE = { id: 'tok-alice', tenant_id: TENANT, claim_id: CLAIM, token: 'alice-token', homeowner_email: 'Alice@Example.com ', homeowner_name: 'Alice Smith' };
+
+test('a second co-insured on the same claim gets a new token, never the first recipient\'s', async () => {
+  const c = tokenTable([ALICE]);
+  const bob = await run({ claim_id: CLAIM, rotate: false, homeowner_email: 'bob@example.com', homeowner_name: 'Bob Smith' }, c);
+  assert.equal(bob.ok, true);
+  assert.notEqual(bob.token, 'alice-token');
+  assert.equal(c.inserted.length, 1);
+  assert.equal(c.inserted[0][3], 'bob@example.com');
+  assert.equal(c.inserted[0][4], 'Bob Smith');
+  assert.equal(c.updates.length, 0, 'Alice\'s token is never rewritten for Bob');
+});
+
+test('the same recipient reuses their own token without overwriting stored identity', async () => {
+  const c = tokenTable([ALICE]);
+  const again = await run({ claim_id: CLAIM, rotate: false, homeowner_email: 'alice@example.com', homeowner_name: 'Alice Smith' }, c);
+  assert.equal(again.token, 'alice-token');
+  assert.equal(c.inserted.length, 0);
+  assert.equal(c.updates.length, 1);
+  // Only fills an empty email/name; never replaces a stored value.
+  assert.match(c.updates[0].text, /homeowner_email = COALESCE\(NULLIF\(trim\(COALESCE\(homeowner_email, ''\)\), ''\), \$3\)/);
+  assert.match(c.updates[0].text, /homeowner_name = COALESCE\(NULLIF\(trim\(COALESCE\(homeowner_name, ''\)\), ''\), \$4\)/);
+  // Same email but a different person's name is a different recipient.
+  const other = tokenTable([ALICE]);
+  const renamed = await run({ claim_id: CLAIM, rotate: false, homeowner_email: 'alice@example.com', homeowner_name: 'Carol Jones' }, other);
+  assert.notEqual(renamed.token, 'alice-token');
+  assert.equal(other.inserted.length, 1);
+});
+
+test('the reuse query matches the recipient email after lower(trim())', async () => {
+  const c = client();
+  await run({ claim_id: CLAIM, rotate: false }, c);
+  const reuse = c.queries.find((q) => q.text.includes('FROM public.homeowner_ledger_tokens'));
+  assert.match(reuse.text, /lower\(trim\(COALESCE\(homeowner_email, ''\)\)\) = lower\(trim\(COALESCE\(\$3::text, ''\)\)\)/);
 });

@@ -345,8 +345,37 @@ test('multiple unmatched homeowner-type signers fail closed unless specifically 
       }],
     }],
   });
-  assert.equal(sole.length, 1);
-  assert.equal(sole[0].signers[0].can_sign, true);
+  // A sole policyholder signer whose name and email contradict the token is
+  // someone else (Bob's /sign link must never reach Alice's ledger).
+  assert.equal(sole.length, 0);
+  for (const signer of [
+    { signer_name: '', signer_email: 'payee@example.com' },
+    { signer_name: 'Bob Other', signer_email: '' },
+  ]) {
+    assert.equal(pendingSignaturesForHomeowner({
+      homeowner: { name: 'Ada Lovelace', email: 'invite@example.com' },
+      requests: [{ request_id: REQUEST_A, document_name: 'Sole packet', status: 'pending',
+        signers: [{ signer_id: SIGNER_HOME, signer_type: 'policyholder', status: 'pending', ...signer }] }],
+    }).length, 0, JSON.stringify(signer));
+  }
+  const uncontradicted = pendingSignaturesForHomeowner({
+    homeowner: { name: 'Ada Lovelace', email: 'invite@example.com' },
+    requests: [{ request_id: REQUEST_A, document_name: 'Sole packet', status: 'pending',
+      signers: [{ signer_id: SIGNER_HOME, signer_name: '', signer_email: '', signer_type: 'policyholder', status: 'pending' }] }],
+  });
+  assert.equal(uncontradicted[0].signers[0].can_sign, true);
+});
+
+test('only open request and signer statuses are actionable (allow-lists)', () => {
+  const build = (requestStatus, signerStatus) => pendingSignaturesForHomeowner({
+    homeowner: { name: 'Ada Lovelace', email: 'ada@example.com' },
+    requests: [{ request_id: REQUEST_A, document_name: 'Doc', status: requestStatus,
+      signers: [{ signer_id: SIGNER_HOME, signer_name: 'Ada Lovelace', signer_email: 'ada@example.com', signer_type: 'policyholder', status: signerStatus }] }],
+  }).length;
+  assert.equal(build('pending', 'pending'), 1);
+  assert.equal(build('in_progress', 'pending'), 1);
+  for (const status of ['', 'draft', 'declined', 'failed', 'sent', 'partial']) assert.equal(build(status, 'pending'), 0, status);
+  for (const status of ['', 'declined', 'signed', 'viewed']) assert.equal(build('pending', status), 0, status);
 });
 
 test('wrong signer types cannot enter /sign from Homeowner Ops', async () => {

@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -76,10 +76,21 @@ test('SQL 83 is a sibling forward migration and does not rewrite SQL 82', () => 
   assert.doesNotMatch(body, /e\.revoked_at/);
   assert.doesNotMatch(body, /cognito|moov_|plaid_|wallet_|GRANT SELECT ON TABLE/i);
   // The only write is minting an empty check_endorsements.token.
-  assert.equal((body.match(/\bUPDATE\b/g) || []).length, 1);
-  assert.match(body, /UPDATE public\.check_endorsements\s+SET token = endorse_token\s+WHERE id = rec\.id\s+AND \(token IS NULL OR token = ''\)/);
-  // Claim-only Signature Requests are bound to the token tenant.
-  assert.equal((body.match(/rc\.org_id IS NULL OR rc\.org_id = tok\.tenant_id/g) || []).length, 2);
+  assert.equal((body.match(/\bUPDATE public\./g) || []).length, 1);
+  assert.match(body, /UPDATE public\.check_endorsements\s+SET token = gen_random_uuid\(\)::text\s+WHERE id = rec\.id\s+AND \(token IS NULL OR trim\(token\) = ''\)\s+RETURNING token INTO endorse_token/);
+  // The endorsement row is locked before a mint.
+  assert.match(body, /LIMIT 1\s+FOR UPDATE OF e;/);
+  // Claim-only Signature Requests are bound to the token tenant; an org-less
+  // claim needs no other tenant's check on it.
+  assert.equal((body.match(/rc\.org_id = tok\.tenant_id/g) || []).length, 2);
+  assert.equal((body.match(/oi\.tenant_id IS DISTINCT FROM tok\.tenant_id/g) || []).length, 2);
+  assert.doesNotMatch(body, /rc\.org_id IS NULL OR rc\.org_id/);
+  // Allow-lists.
+  assert.match(body, /IF status_lc <> 'sent' THEN/);
+  assert.match(body, /request_status_lc NOT IN \('pending', 'in_progress'\)/);
+  assert.doesNotMatch(body, /'partial'|'sent', 'partial'|, ''\) THEN/);
+  // Emails compared after lower(trim()).
+  assert.doesNotMatch(body, /lower\(COALESCE\([a-z_.]*(contact|signer)_email/);
 });
 
 const run = (bin, args, opts = {}) => spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
@@ -224,7 +235,8 @@ VALUES
 INSERT INTO public.homeowner_ledger_tokens
   (id, tenant_id, claim_id, token, homeowner_email, homeowner_name, revoked_at, expires_at)
 VALUES
-  ('44444444-4444-4444-8444-444444444441', '${TENANT_A}', '${CLAIM_A}', 'valid-claim-token-value', 'invite@example.com', 'Freedom Invite', NULL, NULL),
+  ('44444444-4444-4444-8444-444444444441', '${TENANT_A}', '${CLAIM_A}', 'valid-claim-token-value', 'anissa@example.com', 'Anissa Nassry', NULL, NULL),
+  ('44444444-4444-4444-8444-444444444440', '${TENANT_A}', '${CLAIM_A}', 'invite-token-value', 'invite@example.com', 'Freedom Invite', NULL, NULL),
   ('44444444-4444-4444-8444-444444444442', '${TENANT_B}', '${CLAIM_B}', 'foreign-token-value', 'eve@example.com', 'Eve', NULL, NULL),
   ('44444444-4444-4444-8444-444444444443', '${TENANT_A}', '${CLAIM_A}', 'revoked-token-value', 'invite@example.com', 'Freedom Invite', now(), NULL);
 
@@ -232,7 +244,7 @@ INSERT INTO public.signature_requests
   (id, claim_id, check_intake_item_id, document_name, status, sent_at, completed_at)
 VALUES
   ('${REQUEST_A}', '${CLAIM_A}', '${CHECK_A}', 'Proof of Loss', 'pending', '2026-09-27T00:00:00Z', NULL),
-  ('${REQUEST_CLAIM_ONLY}', '${CLAIM_A}', NULL, 'Claim-only packet', 'sent', '2026-09-27T00:00:00Z', NULL),
+  ('${REQUEST_CLAIM_ONLY}', '${CLAIM_A}', NULL, 'Claim-only packet', 'in_progress', '2026-09-27T00:00:00Z', NULL),
   ('${REQUEST_FOREIGN}', '${CLAIM_B}', '${CHECK_B}', 'Foreign packet', 'pending', '2026-09-27T00:00:00Z', NULL),
   ('${REQUEST_MORTGAGE}', '${CLAIM_A}', '${CHECK_A}', 'Mortgage packet', 'pending', '2026-09-27T00:00:00Z', NULL),
   ('${REQUEST_DONE}', '${CLAIM_A}', '${CHECK_A}', 'Completed packet', 'completed', '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z'),
@@ -273,7 +285,7 @@ VALUES
   ('${SIGNER_SHARED_CHECK}', '${REQUEST_SHARED_CHECK}', 'Anissa Nassry', 'anissa@example.com', 'policyholder', 1, 'pending', NULL, '${'cc'.repeat(32)}', 'hash-tenant-a-check');
 `;
 
-test('isolated PostgreSQL SQL 83 sibling definers fail closed without rewriting SQL 82', { timeout: 180000 }, (t) => {
+test('isolated PostgreSQL SQL 83 sibling definers fail closed without rewriting SQL 82', { timeout: 180000 }, async (t) => {
   const skip = pgSkipReason();
   if (skip) { t.skip(skip); return; }
   const pg = startPg('pg-homeowner-sql83-', 56100);
@@ -509,6 +521,118 @@ test('isolated PostgreSQL SQL 83 sibling definers fail closed without rewriting 
       SELECT public.aws_public_homeowner_ledger_endorse_capability('valid-claim-token-value', '${ENDORSE_INSURED}'::uuid)::text
     `));
     assert.equal(again.endorse_token, minted.endorse_token);
+
+    // --- PR #989 review: sole-insured / sole-signer fallback conflicts. ---
+    // invite-token-value is 'Freedom Invite' <invite@>. Every Anissa row has
+    // a contradicting name and email, so the fallback never applies.
+    const inviteEndorse = endorseAs('invite-token-value', ENDORSE_INSURED);
+    assert.equal(inviteEndorse.ok, false);
+    assert.equal(inviteEndorse.error, 'not_your_signature');
+    const invitePending = JSON.parse(psql(`SELECT public.aws_public_homeowner_pending_signatures('invite-token-value')::text`));
+    assert.deepEqual(invitePending.requests, []);
+    assert.equal(signAs('invite-token-value', SIGNER_CLAIM_ONLY).error, 'not_your_signature');
+    assert.doesNotMatch(JSON.stringify(signAs('invite-token-value', SIGNER_CLAIM_ONLY)), new RegExp(RAW_TOKEN));
+
+    // Fallback with nothing contradicting it, and the co-insured case.
+    psql(`
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id, amount, check_stage, check_number) VALUES
+        ('33333333-3333-4333-8333-3333333333c1', '${TENANT_A}', '${CLAIM_A}', 10, 'review', 'SOLE'),
+        ('33333333-3333-4333-8333-3333333333c2', '${TENANT_A}', '${CLAIM_A}', 20, 'review', 'COINS');
+      INSERT INTO public.check_endorsements
+        (id, check_id, tenant_id, payee_name, payee_type, status, token, contact_email, signed_at, request_sent_at)
+      VALUES
+        ('d9999999-9999-4999-8999-9999999999c1', '33333333-3333-4333-8333-3333333333c1', '${TENANT_A}', '', 'insured', 'sent', 'endorse-sole', NULL, NULL, now()),
+        ('d9999999-9999-4999-8999-9999999999c2', '33333333-3333-4333-8333-3333333333c2', '${TENANT_A}', 'Freedom Invite', 'insured', 'signed', 'endorse-alice', 'invite@example.com', now(), now()),
+        ('d9999999-9999-4999-8999-9999999999c3', '33333333-3333-4333-8333-3333333333c2', '${TENANT_A}', '', 'insured', 'sent', 'endorse-bob', NULL, NULL, now()),
+        ('d9999999-9999-4999-8999-9999999999c4', '33333333-3333-4333-8333-3333333333c1', '${TENANT_A}', 'First National', 'mortgage_company', 'sent', 'endorse-mtg-sole', NULL, NULL, now());
+    `);
+    const soleOk = endorseAs('invite-token-value', 'd9999999-9999-4999-8999-9999999999c1');
+    assert.equal(soleOk.ok, true);
+    assert.equal(soleOk.endorse_token, 'endorse-sole');
+    // Alice signed; Bob's endorsement is not "sole" and never reaches Alice.
+    const bobFromAlice = endorseAs('invite-token-value', 'd9999999-9999-4999-8999-9999999999c3');
+    assert.equal(bobFromAlice.ok, false);
+    assert.equal(bobFromAlice.error, 'not_your_signature');
+    assert.doesNotMatch(JSON.stringify(bobFromAlice), /endorse-bob/);
+    // A positive email mismatch defeats the fallback.
+    psql(`UPDATE public.check_endorsements SET contact_email = ' Bob@Example.com ' WHERE id = 'd9999999-9999-4999-8999-9999999999c1'`);
+    assert.equal(endorseAs('invite-token-value', 'd9999999-9999-4999-8999-9999999999c1').error, 'not_your_signature');
+    // ... while a matching email (after lower(trim())) is a hit.
+    psql(`UPDATE public.check_endorsements SET contact_email = ' INVITE@example.com ' WHERE id = 'd9999999-9999-4999-8999-9999999999c1'`);
+    assert.equal(endorseAs('invite-token-value', 'd9999999-9999-4999-8999-9999999999c1').ok, true);
+    // Endorse allow-list: only 'sent' (requested). 'pending' / 'manual_required' never mint.
+    for (const status of ['pending', 'manual_required', '']) {
+      psql(`UPDATE public.check_endorsements SET status = '${status}' WHERE id = 'd9999999-9999-4999-8999-9999999999c1'`);
+      assert.equal(endorseAs('invite-token-value', 'd9999999-9999-4999-8999-9999999999c1').error, 'invalid_state', status);
+    }
+
+    // Document fallback: only signer is Bob <b@>; Alice's token never gets his link.
+    psql(`
+      INSERT INTO public.signature_requests (id, claim_id, check_intake_item_id, document_name, status, sent_at)
+      VALUES ('77777777-7777-4777-8777-7777777777c1', '${CLAIM_A}', NULL, 'Bob only packet', 'pending', now()),
+             ('77777777-7777-4777-8777-7777777777c2', '${CLAIM_A}', NULL, 'Blank status packet', '', now());
+      INSERT INTO public.signature_signers
+        (id, signature_request_id, signer_name, signer_email, signer_type, signing_order, status, signed_at, access_token, token_hash)
+      VALUES ('88888888-8888-4888-8888-8888888888c1', '77777777-7777-4777-8777-7777777777c1', 'Bob Other', 'b@example.com', 'policyholder', 1, 'pending', NULL, '${'dd'.repeat(32)}', 'hash-bob'),
+             ('88888888-8888-4888-8888-8888888888c2', '77777777-7777-4777-8777-7777777777c2', 'Anissa Nassry', 'anissa@example.com', 'policyholder', 1, 'pending', NULL, '${'ee'.repeat(32)}', 'hash-blank');
+    `);
+    const bobDoc = signAs('invite-token-value', '88888888-8888-4888-8888-8888888888c1');
+    assert.equal(bobDoc.error, 'not_your_signature');
+    assert.doesNotMatch(JSON.stringify(bobDoc), /d{64}/);
+    assert.ok(!JSON.parse(psql(`SELECT public.aws_public_homeowner_pending_signatures('invite-token-value')::text`))
+      .requests.some((row) => row.document_name === 'Bob only packet'));
+    // Document allow-list: a request with status '' is not open.
+    assert.equal(signAs('valid-claim-token-value', '88888888-8888-4888-8888-8888888888c2').error, 'invalid_state');
+    assert.ok(!JSON.parse(psql(`SELECT public.aws_public_homeowner_pending_signatures('valid-claim-token-value')::text`))
+      .requests.some((row) => row.document_name === 'Blank status packet'));
+
+    // --- Org-less claim: claim-only requests only while no other tenant has a check on it. ---
+    psql(`
+      INSERT INTO public.claims (id, org_id, claim_number, policyholder_address, loss_type, status, created_at)
+      VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccc0a', NULL, 'CL-NOORG', '8 Orphan Rd', 'wind', 'open', now());
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id, amount, check_stage, check_number)
+      VALUES ('33333333-3333-4333-8333-3333333333d1', '${TENANT_A}', 'cccccccc-cccc-4ccc-8ccc-cccccccccc0a', 5, 'review', 'NOORG-A');
+      INSERT INTO public.homeowner_ledger_tokens (id, tenant_id, claim_id, token, homeowner_email, homeowner_name)
+      VALUES ('44444444-4444-4444-8444-4444444444d1', '${TENANT_A}', 'cccccccc-cccc-4ccc-8ccc-cccccccccc0a', 'noorg-token-value', 'anissa@example.com', 'Anissa Nassry');
+      INSERT INTO public.signature_requests (id, claim_id, check_intake_item_id, document_name, status, sent_at)
+      VALUES ('77777777-7777-4777-8777-7777777777d1', 'cccccccc-cccc-4ccc-8ccc-cccccccccc0a', NULL, 'Org-less claim packet', 'pending', now());
+      INSERT INTO public.signature_signers
+        (id, signature_request_id, signer_name, signer_email, signer_type, signing_order, status, signed_at, access_token, token_hash)
+      VALUES ('88888888-8888-4888-8888-8888888888d1', '77777777-7777-4777-8777-7777777777d1', 'Anissa Nassry', 'anissa@example.com', 'policyholder', 1, 'pending', NULL, '${'ab'.repeat(32)}', 'hash-noorg');
+    `);
+    const noorgOnly = JSON.parse(psql(`SELECT public.aws_public_homeowner_pending_signatures('noorg-token-value')::text`));
+    assert.deepEqual(noorgOnly.requests.map((row) => row.document_name), ['Org-less claim packet']);
+    assert.equal(signAs('noorg-token-value', '88888888-8888-4888-8888-8888888888d1').ok, true);
+    psql(`
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id, amount, check_stage, check_number)
+      VALUES ('33333333-3333-4333-8333-3333333333d2', '${TENANT_B}', 'cccccccc-cccc-4ccc-8ccc-cccccccccc0a', 7, 'review', 'NOORG-B');
+    `);
+    const noorgShared = JSON.parse(psql(`SELECT public.aws_public_homeowner_pending_signatures('noorg-token-value')::text`));
+    assert.deepEqual(noorgShared.requests, []);
+    const noorgDenied = signAs('noorg-token-value', '88888888-8888-4888-8888-8888888888d1');
+    assert.equal(noorgDenied.error, 'not_found');
+    assert.doesNotMatch(JSON.stringify(noorgDenied), /(ab){32}/);
+
+    // Mint race: two concurrent mints of an empty token return the same,
+    // stored token (the second waits on FOR UPDATE, then reads it).
+    psql(`UPDATE public.check_endorsements SET status = 'sent', token = NULL, contact_email = NULL WHERE id = 'd9999999-9999-4999-8999-9999999999c1'`);
+    const capSql = `SELECT public.aws_public_homeowner_ledger_endorse_capability('invite-token-value', 'd9999999-9999-4999-8999-9999999999c1'::uuid)->>'endorse_token'`;
+    const session = (sql) => new Promise((resolve, reject) => {
+      const child = spawn(path.join(PG_BIN, 'psql'), ['-h', pg.host, '-p', String(pg.port), '-U', 'ubuntu', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At', '-c', sql]);
+      let out = '';
+      let err = '';
+      child.stdout.on('data', (d) => { out += d; });
+      child.stderr.on('data', (d) => { err += d; });
+      child.on('close', (code) => (code === 0 ? resolve(out.trim()) : reject(new Error(err))));
+    });
+    const first = session(`BEGIN; ${capSql}; SELECT pg_sleep(1.5); COMMIT;`);
+    await new Promise((r) => setTimeout(r, 400));
+    const second = session(capSql);
+    const [firstOut, secondToken] = await Promise.all([first, second]);
+    const firstToken = firstOut.split('\n').find((line) => /^[0-9a-f-]{36}$/.test(line));
+    assert.match(firstToken || '', /^[0-9a-f-]{36}$/);
+    assert.equal(secondToken, firstToken);
+    assert.equal(psql(`SELECT token FROM public.check_endorsements WHERE id = 'd9999999-9999-4999-8999-9999999999c1'`), firstToken);
 
     const fnHashAfter = createHash('sha256').update(psql(
       `SELECT pg_get_functiondef('public.aws_public_homeowner_ledger_by_token(text)'::regprocedure)`,

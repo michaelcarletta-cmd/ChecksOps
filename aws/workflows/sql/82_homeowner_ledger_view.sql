@@ -17,7 +17,8 @@
 -- requires the token's homeowner name to have at least two parts of 2+
 -- letters, each a whole word of payee_name. SQL 73 accepted any one
 -- 3+ letter part as a substring, so a co-insured sharing a surname (or
--- 'ada' inside 'adam') matched.
+-- 'ada' inside 'adam') matched. Contact emails are compared after
+-- lower(trim()) (PR #989 review).
 --
 -- Isolation: token → tenant → claim must agree. Fail closed on
 -- invalid / revoked / expired / mismatched-tenant / mismatched-claim.
@@ -289,7 +290,7 @@ BEGIN
               e.payee_type = 'insured'
               AND (
                 homeowner_email_lc = ''
-                OR lower(COALESCE(e.contact_email, '')) = homeowner_email_lc
+                OR lower(trim(COALESCE(e.contact_email, ''))) = homeowner_email_lc
                 OR (
                   homeowner_name_lc <> ''
                   AND (
@@ -338,7 +339,7 @@ BEGIN
             e.payee_type = 'insured'
             AND (
               homeowner_email_lc = ''
-              OR lower(COALESCE(e.contact_email, '')) = homeowner_email_lc
+              OR lower(trim(COALESCE(e.contact_email, ''))) = homeowner_email_lc
               OR (
                 homeowner_name_lc <> ''
                 AND (

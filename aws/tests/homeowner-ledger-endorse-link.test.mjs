@@ -165,16 +165,32 @@ test('empty homeowner email is not a match-all for insured parties', () => {
     payee_name: 'Ada Lovelace',
     contact_email: 'ada@example.com',
   }, { name: 'Ada Lovelace', email: 'ada@example.com' }), false);
+  // Sole-insured fallback only when nothing contradicts it.
   assert.equal(isHomeownerEndorsementParty({
     payee_type: 'insured',
-    payee_name: 'Joint Payee Line',
+    payee_name: '',
     contact_email: '',
   }, { name: 'Ada Lovelace', email: '' }, { openInsuredCount: 1 }), true);
   assert.equal(isHomeownerEndorsementParty({
     payee_type: 'insured',
-    payee_name: 'Joint Payee Line',
+    payee_name: '',
     contact_email: '',
   }, { name: 'Ada Lovelace', email: '' }, { openInsuredCount: 2 }), false);
+  assert.equal(isHomeownerEndorsementParty({
+    payee_type: 'insured',
+    payee_name: 'Joint Payee Line',
+    contact_email: '',
+  }, { name: 'Ada Lovelace', email: '' }, { openInsuredCount: 1 }), false, 'payee name contradicts');
+  assert.equal(isHomeownerEndorsementParty({
+    payee_type: 'insured',
+    payee_name: '',
+    contact_email: 'bob@example.com',
+  }, { name: 'Ada Lovelace', email: 'ada@example.com' }, { openInsuredCount: 1 }), false, 'email contradicts');
+  assert.equal(isHomeownerEndorsementParty({
+    payee_type: 'insured',
+    payee_name: '',
+    contact_email: ' ADA@example.com ',
+  }, { name: '', email: 'ada@example.com' }, { openInsuredCount: 2 }), true, 'trimmed, case-folded email');
 });
 
 test('name match needs every homeowner name part as a whole word', () => {
@@ -335,7 +351,7 @@ test('mint creates a token only when the endorsement row has none', async () => 
   assert.match(result.sign_url, /^\/endorse\?token=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9&return_to=/i);
 });
 
-test('SQL 82 pending_endorsements party count makes a sole unmatched insured actionable', () => {
+test('a sole insured whose payee name contradicts the homeowner is not actionable', () => {
   const pending = [{
     check_id: CHECK_A,
     check_number: '271682',
@@ -355,8 +371,22 @@ test('SQL 82 pending_endorsements party count makes a sole unmatched insured act
     { name: 'Ada Lovelace', email: 'invite@example.com' },
     counts,
   );
-  assert.equal(sanitized[0].parties[0].can_sign, true);
+  assert.equal(sanitized[0].parties[0].can_sign, false);
   assert.equal(sanitized[0].parties[0].sign_url, null);
+  // Without a contradicting payee name, the sole sent insured is actionable;
+  // an unrequested ('pending') one never is.
+  const blank = sanitizePendingEndorsementsForHomeowner(
+    [{ ...pending[0], parties: [{ ...pending[0].parties[0], payee_name: '' }] }],
+    { name: 'Ada Lovelace', email: 'invite@example.com' },
+    counts,
+  );
+  assert.equal(blank[0].parties[0].can_sign, true);
+  const unrequested = sanitizePendingEndorsementsForHomeowner(
+    [{ ...pending[0], parties: [{ ...pending[0].parties[0], payee_name: 'Ada Lovelace', status: 'pending' }] }],
+    { name: 'Ada Lovelace', email: 'invite@example.com' },
+    counts,
+  );
+  assert.equal(unrequested[0].parties[0].can_sign, false);
 });
 
 test('multiple unmatched insureds from SQL 82 pending_endorsements fail closed', () => {
@@ -527,7 +557,30 @@ test('empty-email homeowner cannot mint another insured party', async () => {
   assert.equal(result.error, 'not_your_signature');
 });
 
-test('sole open insured on the authorized check can mint without email/name match', async () => {
+test('sole insured with a contradicting payee name or email cannot mint', async () => {
+  for (const row of [
+    endorsementRow({ payee_name: 'JOHN SMITH AND JANE SMITH', contact_email: '' }),
+    endorsementRow({ payee_name: '', contact_email: 'payee@example.com' }),
+  ]) {
+    const result = await runHomeownerLedgerEndorseLink({
+      token: LEDGER_TOKEN,
+      endorsementId: ENDORSE_INSURED,
+      spoof: {},
+      client: mintClient({
+        doc: claimDoc({
+          token: { homeowner_email: 'invite@example.com', homeowner_name: 'Ada Lovelace' },
+          homeowner: { name: 'Ada Lovelace', email: 'invite@example.com' },
+        }),
+        row,
+        openInsuredCount: 1,
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'not_your_signature');
+  }
+});
+
+test('sole insured with no contradicting name or email can mint', async () => {
   const result = await runHomeownerLedgerEndorseLink({
     token: LEDGER_TOKEN,
     endorsementId: ENDORSE_INSURED,
@@ -538,8 +591,8 @@ test('sole open insured on the authorized check can mint without email/name matc
         homeowner: { name: 'Ada Lovelace', email: 'invite@example.com' },
       }),
       row: endorsementRow({
-        payee_name: 'JOHN SMITH AND JANE SMITH',
-        contact_email: 'payee@example.com',
+        payee_name: '',
+        contact_email: '',
         check_number: '271682',
       }),
       openInsuredCount: 1,
