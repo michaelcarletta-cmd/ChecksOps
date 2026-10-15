@@ -3,11 +3,13 @@
  * Staff Cognito identity; SES/sink delivery; SHA-256 token hashes.
  * Does not call DocuSign/HelloSign/Lovable. Does not move money.
  */
-import { createHash, randomBytes } from 'node:crypto';
-import { withIdentityWrite } from './data.mjs';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { IS_PLATFORM_OWNER_SQL, withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
 import { escapeHtml, renderChecksOpsEmail } from './email-layout.mjs';
+import { normalizePath } from './storage-paths.mjs';
+import { authorizeSignatureDocumentPath, resolveSignatureRequestIds } from './write-signature.mjs';
 
 const TOKEN_EXPIRY_HOURS = 72;
 
@@ -117,14 +119,246 @@ const loadClaimsContext = async (client, request) => {
   return {};
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const optionalUuid = (value) => {
+  if (value == null || value === '') return null;
+  const text = String(value);
+  return UUID_RE.test(text) ? text : null;
+};
+
+export const normalizeCreateSigners = (raw) => {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.map((row, index) => ({
+    signer_name: String(row?.signer_name || row?.name || '').trim(),
+    signer_email: String(row?.signer_email || row?.email || '').trim(),
+    signer_type: String(row?.signer_type || row?.type || 'policyholder').trim() || 'policyholder',
+    signing_order: Number(row?.signing_order ?? row?.order ?? index + 1) || index + 1,
+  })).filter((row) => row.signer_name && row.signer_email);
+};
+
+const resolveCreateTenantId = async (client, { claimId, checkIntakeItemId }) => {
+  if (claimId) {
+    const claim = (await client.query(
+      `SELECT org_id AS tenant_id FROM public.claims WHERE id = $1::uuid LIMIT 1`,
+      [claimId],
+    )).rows[0];
+    if (claim?.tenant_id) return claim.tenant_id;
+  }
+  if (checkIntakeItemId) {
+    const intake = (await client.query(
+      `SELECT tenant_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
+      [checkIntakeItemId],
+    )).rows[0];
+    if (intake?.tenant_id) return intake.tenant_id;
+  }
+  return null;
+};
+
+/**
+ * Tenant for an existing request: the claim's org, the request's check, or a
+ * check of the claim. Null means the caller cannot see a tenant-owned parent.
+ */
+const resolveRequestTenantId = async (client, request) => {
+  if (request.claims?.tenant_id) return request.claims.tenant_id;
+  const direct = await resolveCreateTenantId(client, {
+    claimId: null,
+    checkIntakeItemId: optionalUuid(request.check_intake_item_id),
+  });
+  if (direct) return direct;
+  const claimId = optionalUuid(request.claim_id);
+  if (!claimId) return null;
+  const viaCheck = (await client.query(
+    `SELECT tenant_id FROM public.check_intake_items WHERE claim_id = $1::uuid AND tenant_id IS NOT NULL LIMIT 1`,
+    [claimId],
+  )).rows[0];
+  return viaCheck?.tenant_id || null;
+};
+
+export const SIGNATURE_ACTOR_SQL = `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
+     LIMIT 1`;
+
+/**
+ * Signature Request writers: a tenant_users member of the owning tenant whose
+ * role is owner, admin, manager or operator (viewers and partner tenants do
+ * not act), or the platform owner. aws_can_write_tenant stays as the existing
+ * live gate. Fails closed when the owning tenant cannot be resolved.
+ */
+export const requireSignatureActor = async (client, { mapping, tenantId, spoof }) => {
+  const forbidden = { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+  if (!optionalUuid(tenantId)) return forbidden;
+  const canWrite = (await client.query(
+    'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
+    [tenantId],
+  )).rows[0]?.ok;
+  if (!canWrite) return forbidden;
+  const userId = optionalUuid(mapping?.application_user_id);
+  if (userId) {
+    const actor = (await client.query(SIGNATURE_ACTOR_SQL, [userId, tenantId])).rows[0];
+    if (actor) return { ok: true };
+  }
+  const owner = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
+  if (owner?.is_owner === true) return { ok: true, platformOwner: true };
+  return forbidden;
+};
+
+/**
+ * Link the signed source document to its check file. Best-effort inside a
+ * savepoint: a missing column grant must not abort the request transaction.
+ */
+const linkCheckFileToRequest = async (client, { requestId, checkIntakeItemId, paths }) => {
+  const savepoint = 'esign_check_file_link';
+  let linked = false;
+  try {
+    await client.query(`SAVEPOINT ${savepoint}`);
+  } catch {
+    return false;
+  }
+  try {
+    const result = await client.query(
+      `UPDATE public.check_files
+       SET signature_request_id = $1::uuid
+       WHERE check_intake_item_id = $2::uuid AND file_path = ANY($3::text[])`,
+      [requestId, checkIntakeItemId, paths],
+    );
+    linked = Number(result?.rowCount || 0) > 0;
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+  } catch {
+    linked = false;
+    try {
+      await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    } catch { /* outer transaction reports */ }
+  }
+  return linked;
+};
+
+/**
+ * Class A create branch. Inserts signature_requests + signature_signers and
+ * optionally links check_files. Does not use generic /data/write.
+ */
+export const createSignatureRequestRows = async ({ client, mapping, body, spoof }) => {
+  const claimId = optionalUuid(body.claim_id ?? body.claimId);
+  const checkIntakeItemId = optionalUuid(body.check_intake_item_id ?? body.checkIntakeItemId);
+  const documentName = String(body.document_name ?? body.documentName ?? '').trim();
+  const documentPath = String(body.document_path ?? body.documentPath ?? '').trim();
+  const documentType = String(body.document_type ?? body.documentType ?? '').trim() || null;
+  const fieldData = Array.isArray(body.field_data)
+    ? body.field_data
+    : (Array.isArray(body.fieldData) ? body.fieldData : []);
+  const signers = normalizeCreateSigners(body.signers);
+  if (!documentName || !documentPath) {
+    return { ok: false, statusCode: 400, error: 'document_name and document_path are required', spoofFieldsIgnored: spoof };
+  }
+  if (!claimId && !checkIntakeItemId) {
+    return { ok: false, statusCode: 400, error: 'claim_id or check_intake_item_id is required', spoofFieldsIgnored: spoof };
+  }
+  if (!signers.length) {
+    return { ok: false, statusCode: 400, error: 'at least one signer is required', spoofFieldsIgnored: spoof };
+  }
+
+  // Same claim/check consistency rule as /data/write signature_requests.
+  const ids = await resolveSignatureRequestIds({
+    client,
+    values: { claim_id: claimId, check_intake_item_id: checkIntakeItemId },
+  });
+  if (ids.error) {
+    const statusCode = ids.error === 'rls_denied' ? 404 : 400;
+    return { ok: false, statusCode, error: ids.error, message: ids.message, spoofFieldsIgnored: spoof };
+  }
+  const requestClaimId = ids.claimId || null;
+  const requestCheckId = ids.checkId || null;
+
+  const tenantId = await resolveCreateTenantId(client, {
+    claimId: requestClaimId,
+    checkIntakeItemId: requestCheckId,
+  });
+  const actor = await requireSignatureActor(client, { mapping, tenantId, spoof });
+  if (actor.ok === false) return actor;
+
+  const storedPath = normalizePath(documentPath, 'claim-files');
+  if (!storedPath || storedPath.length > 512) {
+    return { ok: false, statusCode: 400, error: 'invalid_field', field: 'document_path', spoofFieldsIgnored: spoof };
+  }
+  if (!(await authorizeSignatureDocumentPath(client, {
+    path: storedPath,
+    claimId: requestClaimId,
+    checkId: requestCheckId,
+  }))) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'not_authorized',
+      field: 'document_path',
+      message: "document_path must be a file of this request's own check or claim",
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  const requestId = randomUUID();
+  const createdBy = optionalUuid(mapping?.application_user_id);
+  const inserted = (await client.query(
+    `INSERT INTO public.signature_requests (
+       id, claim_id, check_intake_item_id, document_name, document_path, document_type,
+       field_data, status, created_by
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::jsonb, 'draft', $8::uuid)
+     RETURNING *`,
+    [
+      requestId,
+      requestClaimId,
+      requestCheckId,
+      documentName,
+      storedPath,
+      documentType,
+      JSON.stringify(fieldData),
+      createdBy,
+    ],
+  )).rows[0];
+  if (!inserted) {
+    return { ok: false, statusCode: 500, error: 'failed_to_create_request', spoofFieldsIgnored: spoof };
+  }
+
+  for (const signer of signers) {
+    await client.query(
+      `INSERT INTO public.signature_signers (
+         id, signature_request_id, signer_name, signer_email, signer_type, signing_order, status, access_token
+       ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, 'pending', $7)`,
+      [
+        randomUUID(),
+        requestId,
+        signer.signer_name,
+        signer.signer_email,
+        signer.signer_type,
+        signer.signing_order,
+        generateRawToken(),
+      ],
+    );
+  }
+
+  let checkFileLinked = false;
+  if (requestCheckId) {
+    checkFileLinked = await linkCheckFileToRequest(client, {
+      requestId,
+      checkIntakeItemId: requestCheckId,
+      paths: [...new Set([documentPath, storedPath])],
+    });
+  }
+
+  return { ok: true, requestId, request: inserted, checkFileLinked, spoofFieldsIgnored: spoof };
+};
+
 export const runSendSignatureRequest = async ({
   client, mapping, body, spoof, send,
 }) => {
-  const requestId = body.requestId || body.request_id;
+  let requestId = body.requestId || body.request_id || null;
   const skipEmail = body.skipEmail === true;
   const senderOverride = body.senderOverride || body.sender_override || null;
   if (!requestId) {
-    return { ok: false, statusCode: 400, error: 'requestId is required', spoofFieldsIgnored: spoof };
+    const created = await createSignatureRequestRows({ client, mapping, body, spoof });
+    if (created.ok === false) return created;
+    requestId = created.requestId;
   }
 
   const request = (await client.query(
@@ -148,23 +382,9 @@ export const runSendSignatureRequest = async ({
   )).rows[0] || {};
   const branding = { ...brandingRow };
 
-  let tenantId = request.claims.tenant_id || null;
-  if (!tenantId && request.check_intake_item_id) {
-    const ck = (await client.query(
-      `SELECT tenant_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
-      [request.check_intake_item_id],
-    )).rows[0];
-    tenantId = ck?.tenant_id || null;
-  }
-  if (tenantId) {
-    const canWrite = (await client.query(
-      'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
-      [tenantId],
-    )).rows[0]?.ok;
-    if (!canWrite) {
-      return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
-    }
-  }
+  const tenantId = await resolveRequestTenantId(client, request);
+  const actor = await requireSignatureActor(client, { mapping, tenantId, spoof });
+  if (actor.ok === false) return actor;
 
   const resolved = await resolveEmailBranding(client, {
     tenantId,
@@ -220,37 +440,41 @@ export const runSendSignatureRequest = async ({
     )).rows[0];
     if (!existing) {
       for (const field of fieldData) {
-        await client.query(
-          `INSERT INTO public.signature_fields (
-             id, signature_request_id, signer_index, field_type, label, page, x, y, width, height, required, placeholder, checkbox_label
-           ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-          [
-            field.id || null,
-            requestId,
-            field.signerIndex ?? 0,
-            field.type,
-            field.label || null,
-            field.page ?? 1,
-            field.x ?? 0,
-            field.y ?? 0,
-            field.width ?? 33,
-            field.height ?? 6,
-            field.required !== false,
-            field.placeholder || null,
-            field.checkboxLabel || null,
-          ],
-        ).catch(() => {});
+        const fieldId = optionalUuid(field.id);
+        const fieldValues = [
+          requestId,
+          field.signerIndex ?? 0,
+          field.type,
+          field.label || null,
+          field.page ?? 1,
+          field.x ?? 0,
+          field.y ?? 0,
+          field.width ?? 33,
+          field.height ?? 6,
+          field.required !== false,
+          field.placeholder || null,
+          field.checkboxLabel || null,
+        ];
+        if (fieldId) {
+          await client.query(
+            `INSERT INTO public.signature_fields (
+               id, signature_request_id, signer_index, field_type, label, page, x, y, width, height, required, placeholder, checkbox_label
+             ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            [fieldId, ...fieldValues],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO public.signature_fields (
+               signature_request_id, signer_index, field_type, label, page, x, y, width, height, required, placeholder, checkbox_label
+             ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            fieldValues,
+          );
+        }
       }
     }
   }
 
   if (skipEmail) {
-    for (const signer of signers) {
-      await client.query(
-        `UPDATE public.signature_signers SET access_token = NULL WHERE id = $1::uuid`,
-        [signer.id],
-      );
-    }
     await client.query(
       `UPDATE public.signature_requests
        SET status = 'pending', delivery_mode = 'manual_bypass', provider_status = 'manual_bypass',
@@ -258,15 +482,10 @@ export const runSendSignatureRequest = async ({
        WHERE id = $1::uuid`,
       [requestId],
     );
-    if (claimId) {
-      await client.query(
-        `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
-        [claimId, requestId],
-      );
-    }
     return {
       ok: true,
       statusCode: 200,
+      requestId,
       mode: 'manual_bypass',
       signerLinks,
       provider: 'aws_ses_or_sink',
@@ -294,7 +513,7 @@ export const runSendSignatureRequest = async ({
       const delivery = sendResult.results?.[0]?.delivery || sendResult.mode;
       await client.query(
         `UPDATE public.signature_signers
-         SET access_token = NULL, delivery_status = 'sent', email_sent_at = now(),
+         SET delivery_status = 'sent', email_sent_at = now(),
              email_provider_message_id = $2
          WHERE id = $1::uuid`,
         [signer.id, messageId],
@@ -304,7 +523,7 @@ export const runSendSignatureRequest = async ({
       const errMsg = String(emailErr?.message || emailErr).slice(0, 300);
       await client.query(
         `UPDATE public.signature_signers
-         SET access_token = NULL, delivery_status = 'failed', delivery_error = $2
+         SET delivery_status = 'failed', delivery_error = $2
          WHERE id = $1::uuid`,
         [signer.id, errMsg],
       );
@@ -329,16 +548,11 @@ export const runSendSignatureRequest = async ({
       providerStatus,
     ],
   );
-  if (claimId) {
-    await client.query(
-      `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
-      [claimId, requestId],
-    );
-  }
 
   return {
     ok: !allFailed,
     statusCode: allFailed ? 500 : 200,
+    requestId,
     mode: 'aws_ses_or_sink',
     results,
     sent: results.filter((row) => row.success).length,
