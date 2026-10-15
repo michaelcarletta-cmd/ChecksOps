@@ -202,7 +202,15 @@ const parityClient = ({
         return { rows: operations };
       }
       if (sql.includes('FROM public.aws_provider_sandbox_operations')) {
-        return { rows: operations };
+        // Filter by the bound params, as Postgres would, so lookups by id,
+        // by provider reference and by tenant are really exercised.
+        const limit = Number(/LIMIT (\d+)/.exec(sql)?.[1] || Infinity);
+        let rows = operations.filter((op) => (op.provider || 'checkalt') === 'checkalt');
+        if (/WHERE id = \$1/.test(sql)) rows = rows.filter((op) => op.id === params[0]);
+        else if (/provider_reference = \$1/.test(sql)) rows = rows.filter((op) => String(op.provider_reference) === String(params[0]));
+        else if (/tenant_id = \$1/.test(sql)) rows = rows.filter((op) => op.tenant_id === params[0] && op.provider_reference != null);
+        else throw new Error(`unmocked aws_provider_sandbox_operations query: ${sql}`);
+        return { rows: rows.slice(0, limit) };
       }
       if (sql.includes('FROM public.payment_wallet_ledger')) return { rows: [] };
       if (sql.includes('FROM public.payment_wallet_sub_ledgers')) return { rows: [] };
@@ -659,6 +667,57 @@ test('UAT Check Alt approve: a bare reference with no recorded deposit is refuse
     const result = await parityApprove(client, fetchImpl, { referenceNumber: '98765', action: 'approve' });
     assert.equal(result.statusCode, 404);
     assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+  });
+});
+
+test('UAT Check Alt approve by reference: two recorded deposits sharing it -> 409, no provider call', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    const { fetchImpl, calls } = uatProviderFetch();
+    const operations = [
+      ...pendingUatOp(),
+      { ...pendingUatOp()[0], id: '99999999-9999-4999-8999-999999999999' },
+    ];
+    const client = parityClient({ tenantRole: 'operator', platformAdmin: false, operations });
+    const result = await parityApprove(client, fetchImpl, { referenceNumber: '98765', action: 'approve' });
+    assert.equal(result.statusCode, 409);
+    assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+    assert.equal(client.queries.some((q) => q.sql.includes('UPDATE public.aws_provider_sandbox_operations')), false);
+  });
+});
+
+test('UAT Check Alt approve by reference: one deposit of the caller tenant, operator -> allowed and that row updated', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    const { fetchImpl, calls } = uatProviderFetch();
+    const operations = [
+      ...pendingUatOp(),
+      { ...pendingUatOp(OTHER_TENANT)[0], id: '99999999-9999-4999-8999-999999999999', provider_reference: '11111' },
+    ];
+    const client = parityClient({ tenantRole: 'operator', platformAdmin: false, operations });
+    const result = await parityApprove(client, fetchImpl, { referenceNumber: '98765', action: 'approve' });
+    assert.equal(result.success, true, JSON.stringify(result));
+    const approve = calls.find((c) => c.url.includes('/fincapture/deposit/approve'));
+    assert.ok(approve);
+    assert.equal(JSON.parse(approve.body).referenceNumber, 98765);
+    const update = client.queries.find((q) => q.sql.includes('UPDATE public.aws_provider_sandbox_operations'));
+    assert.equal(update.params[0], UAT_DEPOSIT_ID);
+  });
+});
+
+test('UAT Check Alt approve by reference: one deposit of another tenant -> refused, even for a platform admin', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const platformAdmin of [false, true]) {
+      const { fetchImpl, calls } = uatProviderFetch();
+      const operations = [
+        { ...pendingUatOp(OTHER_TENANT)[0], provider_reference: '55555' },
+        ...pendingUatOp(),
+      ];
+      const client = parityClient({ tenantRole: 'operator', platformAdmin, operations });
+      const result = await parityApprove(client, fetchImpl, { referenceNumber: '55555', action: 'approve' });
+      assert.equal(result.statusCode, 403, String(platformAdmin));
+      assert.equal(result.error, 'financial_unauthorized');
+      assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
+      assert.equal(client.queries.some((q) => q.sql.includes('UPDATE public.aws_provider_sandbox_operations')), false);
+    }
   });
 });
 
