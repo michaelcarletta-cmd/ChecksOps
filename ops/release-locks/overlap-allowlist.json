@@ -2018,6 +2018,13 @@
       "reason": "PR #954 (owner-approved 2026-10-14) adds Check Alt auto-approve and overlaps Cursor PR #324 on this file. #954 supersedes #433; the others must rebase onto main before any later merge.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 891,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #986 (owner-approved 2026-10-15) restores signature_requests and signature_signers to the browser write tables and overlaps review-only PR #891 on this file. #891 must rebase onto main before any later merge.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
