@@ -149,7 +149,7 @@ const PRODUCTION_PRE_STATE = Object.freeze({
 test('production pin: inspected pre-state, staging post-state, execute-authorized after staging acceptance, production RDS', () => {
   assert.equal(COMMITTED.migration, 'sql80');
   assert.equal(COMMITTED.execute, true);
-  assert.match(COMMITTED.authorization, /^owner-approved 2026-10-15 in session /);
+  assert.match(COMMITTED.authorization, /takes effect only when the owner reviews and merges this change/);
   // The authorization records the owner's approval to merge the execute pin, not a run.
   assert.match(COMMITTED.authorization, /run-time approval/);
   assert.match(COMMITTED.authorization, /authorization phrase/);
