@@ -486,6 +486,80 @@ export const AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT = Object.freeze({
   table: CHECKALT_AUTO_DEPOSIT_TABLE,
 });
 
+// SQL 81 creates the SECURITY DEFINER function
+// public.aws_register_checkalt_tenant_account(uuid, jsonb), the platform-owner
+// -only writer of a tenant's production Check Alt depositor identity, its
+// comment, REVOKE ALL ... FROM PUBLIC and GRANT EXECUTE ... TO checksops,
+// authenticated. The function does not exist before (pre-state: absent, no
+// function of that name in any schema). The state text has the same shape as
+// SQL 80's: present, how many functions carry its name (any schema), the
+// sha256 of pg_get_functiondef, SECURITY DEFINER, proconfig, whether the
+// executor role owns it, the sha256 of its comment and every non-owner ACL entry.
+export const CHECKALT_REGISTER_FUNCTION = 'public.aws_register_checkalt_tenant_account(uuid, jsonb)';
+export const CHECKALT_REGISTER_FUNCTION_NAME = 'aws_register_checkalt_tenant_account';
+export const CHECKALT_REGISTER_TABLE = 'public.checkalt_tenant_accounts';
+export const CHECKALT_REGISTER_CONFIG = Object.freeze(['search_path=public', 'row_security=off']);
+export const CHECKALT_REGISTER_GRANTEES = Object.freeze(['authenticated', 'checksops']);
+// Columns the function body writes or returns; ON CONFLICT (tenant_id) also needs a unique tenant_id.
+export const CHECKALT_REGISTER_COLUMNS = Object.freeze([
+  'tenant_id', 'sso_user_id', 'deposit_account_number', 'first_name', 'last_name', 'email',
+  'enabled', 'registered_at', 'last_register_payload', 'updated_at',
+]);
+// sha256(pg_get_functiondef) and sha256(obj_description) on PostgreSQL 16 of the
+// SQL 81 file, re-derived by aws/tests/sql81-checkalt-depositor-register-executor.test.mjs.
+export const CHECKALT_REGISTER_DEFINITION_SHA256 = Object.freeze({
+  sql81: 'd1f781edb9e8665748da96b28a8afca54279fa43cf603c526f4200524d104a78',
+});
+export const CHECKALT_REGISTER_COMMENT_SHA256 = Object.freeze({
+  sql81: 'e48465b4e9badfe5435ffcfc7162770b95746954b95c71eb9a9e304570bc435b',
+});
+/** Same `state` shape as checkaltAutoDepositStateText. */
+export function checkaltRegisterStateText(state = {}) {
+  const fn = CHECKALT_REGISTER_FUNCTION;
+  if (state?.exists !== true) {
+    return [`function ${fn}: absent`, `functions named ${CHECKALT_REGISTER_FUNCTION_NAME}: ${Number(state?.overload_count) || 0}`].join('\n');
+  }
+  const lines = [
+    `function ${fn}: present`,
+    `functions named ${CHECKALT_REGISTER_FUNCTION_NAME}: ${Number(state.overload_count) || 0}`,
+    `${fn} definition sha256 ${SHA256_HEX_RE.test(String(state.definition_sha256 || '')) ? state.definition_sha256 : 'unreadable'}`,
+    `${fn} security definer: ${state.security_definer === true ? 'on' : 'off'}`,
+    `${fn} config: ${(state.config || []).join(',') || '-'}`,
+    `${fn} owner: ${state.owner_is_executor === true ? 'executor role' : 'another role'}`,
+    `${fn} comment sha256 ${SHA256_HEX_RE.test(String(state.comment_sha256 || '')) ? state.comment_sha256 : 'none'}`,
+  ];
+  const acl = (state.acl || []).map((entry) => `${fn} acl ${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`);
+  return [...lines, ...acl.sort()].join('\n');
+}
+/** Before SQL 81: no function of that name in any schema. */
+export const CHECKALT_REGISTER_PRE_STATE = Object.freeze({ exists: false, overload_count: 0 });
+/** What SQL 81 leaves: the reviewed function, EXECUTE for checksops and authenticated only (no PUBLIC). */
+export const CHECKALT_REGISTER_APPLIED_STATE = Object.freeze({
+  exists: true,
+  overload_count: 1,
+  definition_sha256: CHECKALT_REGISTER_DEFINITION_SHA256.sql81,
+  security_definer: true,
+  config: [...CHECKALT_REGISTER_CONFIG],
+  owner_is_executor: true,
+  comment_sha256: CHECKALT_REGISTER_COMMENT_SHA256.sql81,
+  acl: CHECKALT_REGISTER_GRANTEES.map((grantee) => ({ grantee, privilege_type: 'EXECUTE', is_grantable: false })),
+});
+export const AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER = Object.freeze({
+  filename: 'aws/workflows/sql/81_checkalt_production_register.sql',
+  migration_id: '81_checkalt_production_register',
+  // The commit that authored the current file bytes (PR #972).
+  commit: 'e13efe6632753d3a50e4c37cd6162fb9a175a586',
+  source_sha256: '88aafdacf83ea382e4b2f0c56da8d8c2048d36773ada18c49874e807cdbd8fbe',
+  // Code-derived: sha256(checkaltRegisterStateText(CHECKALT_REGISTER_PRE_STATE)), the
+  // function absent. A staging read-live run should confirm it before apply.
+  expected_live_definition_sha256: 'e12fdf2fe609d474a9cc215c018cce922cc2a63edfd18f7b5988ce21d1903f37',
+  // Code-derived: sha256(checkaltRegisterStateText(CHECKALT_REGISTER_APPLIED_STATE)),
+  // re-derived from the real catalog by aws/tests/sql81-checkalt-depositor-register-executor.test.mjs.
+  intended_replacement_sha256: '36623ccebd920a9c6316da7f787ad99126e474656877e01b5854e099ce661225',
+  function_identity: CHECKALT_REGISTER_FUNCTION,
+  table: CHECKALT_REGISTER_TABLE,
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -521,6 +595,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
   AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
   AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
+  AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -570,6 +645,10 @@ export function isSql80CheckaltMemberAutoDeposit(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT);
 }
 
+export function isSql81CheckaltProductionRegister(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -598,6 +677,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql78PartnerStakeholderRemovals(input)) return AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS;
   if (isSql79MemberStakeholderWrites(input)) return AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES;
   if (isSql80CheckaltMemberAutoDeposit(input)) return AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT;
+  if (isSql81CheckaltProductionRegister(input)) return AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;

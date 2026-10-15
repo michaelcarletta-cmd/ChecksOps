@@ -27,6 +27,7 @@ on:
           - sql78-check-partner-stakeholder-removals
           - sql79-member-stakeholder-writes
           - sql80-checkalt-member-auto-deposit
+          - sql81-checkalt-depositor-register
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -120,6 +121,7 @@ jobs:
           node --test aws/tests/sql78-check-partner-stakeholder-removals-executor.test.mjs
           node --test aws/tests/sql79-member-stakeholder-writes-executor.test.mjs
           node --test aws/tests/sql80-checkalt-member-auto-deposit-executor.test.mjs
+          node --test aws/tests/sql81-checkalt-depositor-register-executor.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
           node scripts/deployment-guard/scan-bypass.mjs

@@ -25,6 +25,7 @@ import {
   AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
   AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
   AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
+  AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
   CHECKALT_AUTO_DEPOSIT_CONFIG,
@@ -34,6 +35,15 @@ import {
   CHECKALT_AUTO_DEPOSIT_GRANTEES,
   CHECKALT_AUTO_DEPOSIT_TABLE,
   checkaltAutoDepositStateText,
+  CHECKALT_REGISTER_COLUMNS,
+  CHECKALT_REGISTER_COMMENT_SHA256,
+  CHECKALT_REGISTER_CONFIG,
+  CHECKALT_REGISTER_DEFINITION_SHA256,
+  CHECKALT_REGISTER_FUNCTION,
+  CHECKALT_REGISTER_FUNCTION_NAME,
+  CHECKALT_REGISTER_GRANTEES,
+  CHECKALT_REGISTER_TABLE,
+  checkaltRegisterStateText,
   MEMBER_STAKEHOLDER_FUNCTIONS,
   MEMBER_STAKEHOLDER_FUNCTION_SHA256,
   MEMBER_STAKEHOLDER_NEW_POLICIES,
@@ -68,6 +78,7 @@ import {
   isSql78PartnerStakeholderRemovals,
   isSql79MemberStakeholderWrites,
   isSql80CheckaltMemberAutoDeposit,
+  isSql81CheckaltProductionRegister,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
   STAKEHOLDER_GRANT_TABLE,
@@ -118,6 +129,7 @@ const SQL77_CHECK_STAKEHOLDERS_GRANT_FILE = path.join(ROOT, 'sql/77_check_stakeh
 const SQL78_PARTNER_STAKEHOLDER_REMOVALS_FILE = path.join(ROOT, 'sql/78_check_partner_stakeholder_removals.sql');
 const SQL79_MEMBER_STAKEHOLDER_WRITES_FILE = path.join(ROOT, 'sql/79_member_stakeholder_writes.sql');
 const SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT_FILE = path.join(ROOT, 'sql/80_checkalt_member_auto_deposit.sql');
+const SQL81_CHECKALT_PRODUCTION_REGISTER_FILE = path.join(ROOT, 'sql/81_checkalt_production_register.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -3082,11 +3094,12 @@ export async function readCheckaltAutoDepositState(client) {
   });
 }
 
-async function readCheckaltSchemaSnapshot(client) {
+/** `fnIdentity` is the function the migration replaces or creates (excluded from other_functions). */
+async function readCheckaltSchemaSnapshot(client, fnIdentity = CHECKALT_AUTO_DEPOSIT_FUNCTION) {
   await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
   const relations = (await client.query(MEMBER_SCHEMA_RELATIONS_SQL))?.rows || [];
   const policies = (await client.query(CHECKALT_ALL_POLICIES_SQL))?.rows || [];
-  const functions = (await client.query(CHECKALT_OTHER_FUNCTIONS_SQL, [CHECKALT_AUTO_DEPOSIT_FUNCTION]))?.rows || [];
+  const functions = (await client.query(CHECKALT_OTHER_FUNCTIONS_SQL, [fnIdentity]))?.rows || [];
   const tableAcl = (await client.query(CHECKALT_TABLE_ACL_SQL))?.rows?.[0]?.table_acl ?? null;
   return {
     relations_sha256: hashSqlDefinition(relations.map((row) => `${row.relname}:${row.relkind}`).join('\n')),
@@ -3271,6 +3284,333 @@ async function handleSql80CheckaltMemberAutoDeposit({
         security_definer: after.details.security_definer,
         config_as_reviewed: after.details.config_as_reviewed,
         acl_unchanged: after.details.acl_sha256 === before.details.acl_sha256,
+        relations_unchanged: schemaAfter.relations_sha256 === schemaBefore.relations_sha256,
+        policies_unchanged: schemaAfter.policies_sha256 === schemaBefore.policies_sha256,
+        other_functions_unchanged: schemaAfter.other_functions_sha256 === schemaBefore.other_functions_sha256,
+        table_acl_unchanged: schemaAfter.table_acl_sha256 === schemaBefore.table_acl_sha256,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        function_states: after.details.function_states,
+        acl_sha256: after.details.acl_sha256,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
+// --- SQL 81: production Check Alt depositor registration writer ------------
+
+// The roles, tables, helper and columns SQL 81's body uses; ON CONFLICT (tenant_id)
+// needs a plain unique index on tenant_id alone. $1 is CHECKALT_REGISTER_COLUMNS.
+const CHECKALT_REGISTER_PREREQUISITES_SQL = `
+SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') AS required_roles_present,
+  to_regclass('${CHECKALT_REGISTER_TABLE}') IS NOT NULL
+    AND to_regclass('public.tenants') IS NOT NULL AS required_tables_present,
+  to_regprocedure('public.is_platform_owner()') IS NOT NULL AS required_functions_present,
+  to_regclass('${CHECKALT_REGISTER_TABLE}') IS NOT NULL
+    AND (SELECT count(DISTINCT a.attname)::int FROM pg_attribute a
+      WHERE a.attrelid = to_regclass('${CHECKALT_REGISTER_TABLE}') AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attname::text = ANY($1::text[])) = cardinality($1::text[])
+    AND EXISTS (SELECT 1 FROM pg_index i
+      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+      WHERE i.indrelid = to_regclass('${CHECKALT_REGISTER_TABLE}') AND i.indisunique AND i.indnkeyatts = 1
+        AND i.indpred IS NULL AND i.indexprs IS NULL AND a.attname = 'tenant_id') AS required_columns_present
+`.trim();
+// Table or column UPDATE / INSERT for either grantee; unknown (missing table or role) reads as granted.
+const CHECKALT_REGISTER_TABLE_WRITE_SQL = `
+SELECT CASE WHEN to_regclass('${CHECKALT_REGISTER_TABLE}') IS NULL
+    OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN NULL
+  ELSE has_any_column_privilege('checksops', '${CHECKALT_REGISTER_TABLE}', 'UPDATE')
+    OR has_any_column_privilege('authenticated', '${CHECKALT_REGISTER_TABLE}', 'UPDATE')
+  END AS register_table_update_granted,
+  CASE WHEN to_regclass('${CHECKALT_REGISTER_TABLE}') IS NULL
+    OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN NULL
+  ELSE has_any_column_privilege('checksops', '${CHECKALT_REGISTER_TABLE}', 'INSERT')
+    OR has_any_column_privilege('authenticated', '${CHECKALT_REGISTER_TABLE}', 'INSERT')
+  END AS register_table_insert_granted
+`.trim();
+
+const SQL81_SIGNATURE = CHECKALT_REGISTER_FUNCTION;
+// The reviewed file outside the function body and the comment literal,
+// comments removed and whitespace collapsed.
+export const SQL81_NORMALIZED_STATEMENTS = [
+  'CREATE OR REPLACE FUNCTION public.aws_register_checkalt_tenant_account( _tenant_id uuid, _account jsonb )',
+  'RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public SET row_security = off AS $$<body>$$;',
+  `COMMENT ON FUNCTION ${SQL81_SIGNATURE} IS <comment>;`,
+  `REVOKE ALL ON FUNCTION ${SQL81_SIGNATURE} FROM PUBLIC;`,
+  `GRANT EXECUTE ON FUNCTION ${SQL81_SIGNATURE} TO checksops, authenticated;`,
+].join(' ');
+// pg_get_functiondef's header on PostgreSQL 16 for the reviewed CREATE.
+const SQL81_FUNCTIONDEF_HEADER = [
+  'CREATE OR REPLACE FUNCTION public.aws_register_checkalt_tenant_account(_tenant_id uuid, _account jsonb)',
+  ' RETURNS jsonb',
+  ' LANGUAGE plpgsql',
+  ' SECURITY DEFINER',
+  " SET search_path TO 'public'",
+  " SET row_security TO 'off'",
+  'AS $function$',
+].join('\n');
+
+/** Splits the file into the statements outside the body, the body and the comment text (SQL 80's file shape). */
+export function parseSql81(text) {
+  return parseSql80(text);
+}
+
+/** pg_get_functiondef (PostgreSQL 16) of the function the reviewed SQL 81 file creates. */
+export function sql81ReviewedFunctiondef(text) {
+  const parsed = parseSql81(text);
+  return parsed ? `${SQL81_FUNCTIONDEF_HEADER}${parsed.body}$function$\n` : null;
+}
+
+// 'absent' before SQL 81, 'intended' = the SQL 81 text, anything else 'other'.
+const registerLabel = (hash, reviewed, missing) => {
+  if (hash == null) return missing;
+  return hash === reviewed ? 'intended' : 'other';
+};
+
+/**
+ * Read-only fingerprint of the SQL 81 function (same shape as SQL 80's): its
+ * definition, SECURITY DEFINER, config, owner, comment, overloads and ACL, plus
+ * prerequisites and the table's INSERT/UPDATE surface.
+ */
+export async function readCheckaltRegisterState(client) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const fn = (await client.query(CHECKALT_FUNCTION_SQL, [CHECKALT_REGISTER_FUNCTION, CHECKALT_REGISTER_FUNCTION_NAME]))?.rows?.[0] || {};
+  const exists = fn.present === true;
+  const acl = exists ? ((await client.query(CHECKALT_FUNCTION_ACL_SQL, [CHECKALT_REGISTER_FUNCTION]))?.rows || []) : [];
+  const prereq = (await client.query(CHECKALT_REGISTER_PREREQUISITES_SQL, [[...CHECKALT_REGISTER_COLUMNS]]))?.rows?.[0] || {};
+  const writes = (await client.query(CHECKALT_REGISTER_TABLE_WRITE_SQL))?.rows?.[0] || {};
+  const config = Array.isArray(fn.config) ? fn.config.map(String) : [];
+  const state = {
+    exists,
+    overload_count: Number.isInteger(fn.overload_count) ? fn.overload_count : Number(fn.overload_count) || 0,
+    definition_sha256: exists && typeof fn.def === 'string' ? hashSqlDefinition(fn.def) : null,
+    security_definer: fn.security_definer === true,
+    config,
+    owner_is_executor: fn.owner_is_executor === true,
+    comment_sha256: exists && typeof fn.comment === 'string' ? hashSqlDefinition(fn.comment) : null,
+    acl: acl.map((entry) => ({ grantee: entry.grantee, privilege_type: entry.privilege_type, is_grantable: entry.is_grantable === true })),
+  };
+  const aclLines = state.acl.map((entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable ? ' with grant option' : ''}`).sort();
+  const expectedAcl = CHECKALT_REGISTER_GRANTEES.map((grantee) => `${grantee} EXECUTE`).sort();
+  return ok({
+    exists,
+    overload_count: state.overload_count,
+    security_definer: state.security_definer,
+    config_as_reviewed: JSON.stringify(config) === JSON.stringify(CHECKALT_REGISTER_CONFIG),
+    owner_is_executor: state.owner_is_executor,
+    function_states: {
+      definition: registerLabel(state.definition_sha256, CHECKALT_REGISTER_DEFINITION_SHA256.sql81, 'absent'),
+      comment: exists ? registerLabel(state.comment_sha256, CHECKALT_REGISTER_COMMENT_SHA256.sql81, 'none') : 'absent',
+    },
+    function_definition_sha256: state.definition_sha256,
+    acl_sha256: hashSqlDefinition(aclLines.join('\n')),
+    acl_as_expected: JSON.stringify(aclLines) === JSON.stringify(expectedAcl),
+    required_roles_present: prereq.required_roles_present === true,
+    required_tables_present: prereq.required_tables_present === true,
+    required_functions_present: prereq.required_functions_present === true,
+    required_columns_present: prereq.required_columns_present === true,
+    table_update_granted: writes.register_table_update_granted !== false,
+    table_insert_granted: writes.register_table_insert_granted !== false,
+    live_definition_sha256: hashSqlDefinition(checkaltRegisterStateText(state)),
+  });
+}
+
+/** A test may supply `pin` only as the committed pin with a reviewed expected hash filled in. */
+function sql81PinIsCommitted(pin) {
+  const committed = AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER;
+  return Boolean(pin) && ['filename', 'migration_id', 'commit', 'source_sha256', 'intended_replacement_sha256', 'function_identity', 'table']
+    .every((key) => pin[key] === committed[key]);
+}
+
+async function handleSql81CheckaltProductionRegister({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile81,
+  pin = AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
+}) {
+  if (!sql81PinIsCommitted(pin)) {
+    return fail(CODES.SQL_COLLISION, 'SQL 81 pin does not match the committed allowlist entry');
+  }
+  const embedded = readEmbeddedSql(sqlFile81, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  const parsed = parseSql81(embedded.details.text);
+  const reviewedDef = sql81ReviewedFunctiondef(embedded.details.text);
+  if (!parsed || parsed.outside !== SQL81_NORMALIZED_STATEMENTS
+    || hashSqlDefinition(parsed.comment) !== CHECKALT_REGISTER_COMMENT_SHA256.sql81
+    || hashSqlDefinition(reviewedDef) !== CHECKALT_REGISTER_DEFINITION_SHA256.sql81) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 81 is not exactly the reviewed statements');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 81 executor action ${event.action}`);
+  }
+  const pinExecutable = SQL80_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, 'SQL 81 pin has no reviewed pre-apply live definition hash yet; apply is refused');
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 81 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  // Pre-apply: the function is absent (no function of that name in any schema),
+  // everything it uses exists, and neither grantee can INSERT or UPDATE the table.
+  const prerequisites = (details) => details.exists === false
+    && details.overload_count === 0
+    && details.required_roles_present === true
+    && details.required_tables_present === true
+    && details.required_functions_present === true
+    && details.required_columns_present === true
+    && details.table_update_granted === false
+    && details.table_insert_granted === false;
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readCheckaltRegisterState(client);
+      await rollback();
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          prerequisites_ok: prerequisites(state.details),
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && state.details.function_states.definition === 'absent'
+            && prerequisites(state.details),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql81_checkalt_production_register']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readCheckaltRegisterState(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256
+      || before.details.function_states.definition === 'intended') {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'the SQL 81 function is already in place; refuse re-apply', {
+        function_states: before.details.function_states,
+        matches_intended: before.details.live_definition_sha256 === pin.intended_replacement_sha256,
+      });
+    }
+    if (!prerequisites(before.details)) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 81 prerequisites are not met (no function named aws_register_checkalt_tenant_account in any schema; the roles, tables, columns, unique tenant_id and helper it uses; no INSERT or UPDATE on checkalt_tenant_accounts for checksops or authenticated)', {
+        exists: before.details.exists,
+        overload_count: before.details.overload_count,
+        required_roles_present: before.details.required_roles_present,
+        required_tables_present: before.details.required_tables_present,
+        required_functions_present: before.details.required_functions_present,
+        required_columns_present: before.details.required_columns_present,
+        table_update_granted: before.details.table_update_granted,
+        table_insert_granted: before.details.table_insert_granted,
+      });
+    }
+    if (before.details.function_states.definition !== 'absent'
+      || before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'aws_register_checkalt_tenant_account is not the expected absent pre-apply state', {
+        function_states: before.details.function_states,
+        live_definition_sha256: before.details.live_definition_sha256,
+      });
+    }
+    const schemaBefore = await readCheckaltSchemaSnapshot(client, CHECKALT_REGISTER_FUNCTION);
+
+    await client.query(embedded.details.text);
+
+    const after = await readCheckaltRegisterState(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const schemaAfter = await readCheckaltSchemaSnapshot(client, CHECKALT_REGISTER_FUNCTION);
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.function_definition_sha256 !== hashSqlDefinition(reviewedDef)
+      || after.details.function_states.definition !== 'intended'
+      || after.details.function_states.comment !== 'intended'
+      || after.details.exists !== true
+      || after.details.overload_count !== 1
+      || after.details.security_definer !== true
+      || after.details.config_as_reviewed !== true
+      || after.details.owner_is_executor !== true
+      || after.details.acl_as_expected !== true
+      || after.details.table_update_granted !== false
+      || after.details.table_insert_granted !== false
+      || schemaAfter.relations_sha256 !== schemaBefore.relations_sha256
+      || schemaAfter.policies_sha256 !== schemaBefore.policies_sha256
+      || schemaAfter.other_functions_sha256 !== schemaBefore.other_functions_sha256
+      || schemaAfter.table_acl_sha256 !== schemaBefore.table_acl_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 81 did not land exactly on the reviewed function and grants, or changed something else', {
+        after_hash: after.details.live_definition_sha256,
+        function_states: after.details.function_states,
+        security_definer: after.details.security_definer,
+        config_as_reviewed: after.details.config_as_reviewed,
+        owner_is_executor: after.details.owner_is_executor,
+        acl_as_expected: after.details.acl_as_expected,
         relations_unchanged: schemaAfter.relations_sha256 === schemaBefore.relations_sha256,
         policies_unchanged: schemaAfter.policies_sha256 === schemaBefore.policies_sha256,
         other_functions_unchanged: schemaAfter.other_functions_sha256 === schemaBefore.other_functions_sha256,
@@ -3908,6 +4248,8 @@ export function createHandler({
   sql79Pin = AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
   sqlFile80 = SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT_FILE,
   sql80Pin = AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
+  sqlFile81 = SQL81_CHECKALT_PRODUCTION_REGISTER_FILE,
+  sql81Pin = AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -3967,6 +4309,10 @@ export function createHandler({
 
     if (isSql80CheckaltMemberAutoDeposit(event)) {
       return handleSql80CheckaltMemberAutoDeposit({ event, authorization, identity, connect, sqlFile80, pin: sql80Pin });
+    }
+
+    if (isSql81CheckaltProductionRegister(event)) {
+      return handleSql81CheckaltProductionRegister({ event, authorization, identity, connect, sqlFile81, pin: sql81Pin });
     }
 
     if (isLedger20261007193200(event)) {
