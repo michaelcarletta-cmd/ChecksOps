@@ -22,6 +22,13 @@
  * the pin's inspected owner (production_inspect.table_owner, checksops_admin), that
  * the tool runs as that owner (current_user), and that authenticated is not a
  * member of it (recursive pg_auth_members, INHERIT FALSE grants included).
+ * SQL 78 requires, before, that the tool runs as the pin's expected owner of the new
+ * table (production_inspect.expected_table_owner, checksops_admin; CREATE TABLE makes
+ * the login the owner) and that authenticated is not a member of it; after, that the
+ * new table's owner is that role and the login, authenticated is still not a member,
+ * its non-owner ACL is exactly the reviewed grant (checksops and authenticated
+ * SELECT/INSERT/DELETE, granted by the owner, no grant option) and no column-level
+ * UPDATE grant exists on it. None of these reads enters a fingerprint.
  * On top of that, apply refuses while a predecessor migration is not applied or a
  * dependency is missing, and rolls back unless every unrelated object in schema
  * public (relations, columns, constraints, policies, functions, triggers, ACLs,
@@ -144,26 +151,34 @@ WITH RECURSIVE m AS (
 )
 SELECT EXISTS (SELECT 1 FROM m JOIN pg_catalog.pg_roles r ON r.oid = m.member WHERE r.rolname = 'authenticated') AS member
 `.trim();
-// SQL 77 only: the table's owner and ACL text, and the login running the tool.
-const SQL77_TABLE_DETAIL_SQL = `
+// SQL 77 (check_stakeholders) and SQL 78 (check_partner_stakeholder_removals): the
+// table's owner and ACL text, and the login running the tool. No row while the table
+// does not exist.
+const tableDetailSql = (relname) => `
 SELECT pg_catalog.pg_get_userbyid(c.relowner) AS table_owner, c.relacl::text AS table_acl,
   current_user::text AS current_user
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public' AND c.relname = 'check_stakeholders' AND c.relkind IN ('r', 'p')
+WHERE n.nspname = 'public' AND c.relname = '${relname}' AND c.relkind IN ('r', 'p')
 `.trim();
-// SQL 77 only: every entry of check_stakeholders' table ACL, the owner's own included.
-const SQL77_TABLE_ACL_ENTRIES_SQL = `
+// Every entry of that table's ACL, the owner's own included.
+const tableAclEntriesSql = (relname) => `
 SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, pg_catalog.pg_get_userbyid(a.grantor) AS grantor, a.privilege_type, a.is_grantable
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(c.relacl, pg_catalog.acldefault('r', c.relowner))) a
 LEFT JOIN pg_catalog.pg_roles r ON r.oid = a.grantee
-WHERE n.nspname = 'public' AND c.relname = 'check_stakeholders' AND c.relkind IN ('r', 'p')
+WHERE n.nspname = 'public' AND c.relname = '${relname}' AND c.relkind IN ('r', 'p')
 ORDER BY 1, 3, 2
 `.trim();
+const SQL77_TABLE_DETAIL_SQL = tableDetailSql('check_stakeholders');
+const SQL77_TABLE_ACL_ENTRIES_SQL = tableAclEntriesSql('check_stakeholders');
+const SQL78_TABLE_DETAIL_SQL = tableDetailSql('check_partner_stakeholder_removals');
+const SQL78_TABLE_ACL_ENTRIES_SQL = tableAclEntriesSql('check_partner_stakeholder_removals');
+// The login SQL 78 runs as, read whether or not the table exists yet.
+const CURRENT_USER_SQL = 'SELECT current_user::text AS current_user';
 // Whether authenticated is a member of any of the given owner roles (SQL 77: the pin's
-// inspected table owner), directly or through other roles. Every pg_auth_members row
+// inspected table owner; SQL 78: the pin's expected owner of the new table), directly or through other roles. Every pg_auth_members row
 // counts, INHERIT FALSE and SET FALSE grants included: membership in the owner can
 // still reach the owner's privileges (SET ROLE, or ALTER/DROP as owner). NULL (an
 // owner role or authenticated missing, or no owner given) is treated as yes.
@@ -254,6 +269,73 @@ const sql77OwnerChecks = (state, pin) => {
       && state.production.current_user === owners[0] && state.production.current_user === state.production.table_owner],
     ['authenticated_not_member_of_owner', state?.production?.authenticated_member_of_owner === false
       && owners.length > 0 && sameList(state?.production?.owner_roles, owners)],
+  ];
+};
+/** The owner roles authenticated must not be a member of for SQL 78: the pin's expected owner of the new table. */
+export function sql78OwnerRoles(pin) {
+  const owner = pin?.production_inspect?.expected_table_owner;
+  return typeof owner === 'string' && owner ? [owner] : [];
+}
+// SQL 78's GRANT, as the new table's non-owner ACL entries: SELECT, INSERT and DELETE
+// for checksops and authenticated, granted by the owner (the login that ran the file),
+// no grant option.
+export const sql78ReviewedGranteeEntries = (owner) => ['authenticated', 'checksops']
+  .flatMap((grantee) => ['DELETE', 'INSERT', 'SELECT'].map((privilege) => `${grantee} ${privilege} granted by ${owner}`));
+
+/**
+ * SQL 78's production-only read: the login running the tool (current_user), whether
+ * authenticated is a member of the pin's expected owner, and, once the table exists,
+ * its owner, readable ACL, every ACL entry in plain text (the owner's own included),
+ * the non-owner entries and any column-level UPDATE grant on it. Never part of the hash.
+ */
+export async function readSql78ProductionDetail(client, { pin } = {}) {
+  const base = await readStakeholderGranteeAcl(client);
+  if (!base.ok) return base;
+  const ownerRoles = sql78OwnerRoles(pin);
+  const login = (await client.query(CURRENT_USER_SQL))?.rows?.[0]?.current_user;
+  const table = (await client.query(SQL78_TABLE_DETAIL_SQL))?.rows?.[0] || null;
+  const entries = table ? ((await client.query(SQL78_TABLE_ACL_ENTRIES_SQL))?.rows || []) : [];
+  const ownerMember = (await client.query(AUTHENTICATED_IN_OWNER_SQL, [ownerRoles]))?.rows?.[0]?.member;
+  const line = (row) => `${row.grantee} ${row.privilege_type} granted by ${row.grantor}${row.is_grantable === true ? ' with grant option' : ''}`;
+  const owner = table ? table.table_owner : null;
+  return ok({
+    current_user: typeof login === 'string' ? login : null,
+    table_owner: owner,
+    table_acl: table ? (table.table_acl ?? null) : null,
+    table_acl_entries: entries.map(line).sort(),
+    grantee_entries: entries.filter((row) => row.grantee !== owner).map(line).sort(),
+    column_update_entries: base.details.column_update_entries
+      .filter((entry) => entry.startsWith(`${PARTNER_STAKEHOLDER_REMOVALS_TABLE}.`)),
+    owner_roles: [...ownerRoles],
+    authenticated_member_of_owner: ownerMember === false ? false : true,
+  });
+}
+/**
+ * SQL 78 only. Before (the table does not exist yet): the tool runs as the pin's expected
+ * owner (CREATE TABLE makes the login the owner) and authenticated is not a member of it.
+ * After: the new table's owner is that role and is the login, authenticated is still not
+ * a member of it, its non-owner ACL is exactly the reviewed grant with the owner as
+ * grantor, and nobody holds a column-level UPDATE on it.
+ */
+const sql78OwnerMembership = (state, owners) => ['authenticated_not_member_of_owner', state?.production?.authenticated_member_of_owner === false
+  && owners.length > 0 && sameList(state?.production?.owner_roles, owners)];
+const sql78PreOwnerChecks = (state, pin) => {
+  const owners = sql78OwnerRoles(pin);
+  return [
+    ['current_user_is_expected_owner', owners.length === 1 && state?.production?.current_user === owners[0]],
+    sql78OwnerMembership(state, owners),
+  ];
+};
+const sql78PostOwnerChecks = (state, pin) => {
+  const owners = sql78OwnerRoles(pin);
+  return [
+    ['table_owner_as_expected', owners.length === 1 && state?.production?.table_owner === owners[0]],
+    ['current_user_is_table_owner', owners.length === 1 && typeof state?.production?.current_user === 'string'
+      && state.production.current_user === owners[0] && state.production.current_user === state.production.table_owner],
+    sql78OwnerMembership(state, owners),
+    ['grantee_entries_as_reviewed', owners.length === 1
+      && sameList(state?.production?.grantee_entries, sql78ReviewedGranteeEntries(owners[0]))],
+    ['no_column_update_grants', sameList(state?.production?.column_update_entries, [])],
   ];
 };
 const updateOnlyPreexisting = (state) => sameList(state?.production?.update_entries, PRODUCTION_PREEXISTING_UPDATE_ENTRIES);
@@ -349,17 +431,31 @@ export const MEMBER_STAKEHOLDER_MIGRATIONS = Object.freeze({
     // The new table and its indexes, constraints and policies are the migration.
     scope: Object.freeze({ skip_relations: [PARTNER_STAKEHOLDER_REMOVALS_TABLE], acl_ignored: [], policies_ignored: [] }),
     statementsAllowed: (text, executor) => normalizeStatements(text) === executor.SQL78_NORMALIZED_STATEMENTS,
+    productionRead: readSql78ProductionDetail,
+    // Printed at the top of --inspect, beside the fingerprint (never hashed).
+    inspectSummary: (state) => ({
+      table_owner: state?.production?.table_owner ?? null,
+      current_user: state?.production?.current_user ?? null,
+      owner_roles: state?.production?.owner_roles ?? [],
+      authenticated_member_of_owner: state?.production?.authenticated_member_of_owner ?? true,
+      table_acl: state?.production?.table_acl ?? null,
+      table_acl_entries: state?.production?.table_acl_entries ?? [],
+    }),
     // The staging handler refuses any existing table, not only the intended one.
     alreadyApplied: (state) => state.table_present === true,
-    preconditionFailures: (state) => [
+    // The staging rules, plus (production only, sql78PreOwnerChecks) the login is the
+    // pin's expected owner and authenticated is not a member of it.
+    preconditionFailures: (state, pin) => [
       ['table_absent', state.table_present === false],
       ['prerequisites_ok', state.prerequisites_ok === true],
       ['grantee_does_not_bypass_rls', state.grantee_bypasses_rls === false],
       ['default_acl_as_expected', state.default_acl_as_expected === true],
+      ...sql78PreOwnerChecks(state, pin),
     ].filter(([, passed]) => !passed).map(([name]) => name),
     postconditionFailures: (before, after, pin) => [
       ['intended_state', after.live_definition_sha256 === pin.intended_replacement_sha256],
       ['tenant_guard_ok', after.tenant_guard_ok === true],
+      ...sql78PostOwnerChecks(after, pin),
     ].filter(([, passed]) => !passed).map(([name]) => name),
   }),
   sql79: Object.freeze({
