@@ -24,7 +24,16 @@ import {
   AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
   AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
   AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
+  AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
+  CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
+  CHECKALT_AUTO_DEPOSIT_CONFIG,
+  CHECKALT_AUTO_DEPOSIT_DEFINITION_SHA256,
+  CHECKALT_AUTO_DEPOSIT_FUNCTION,
+  CHECKALT_AUTO_DEPOSIT_FUNCTION_NAME,
+  CHECKALT_AUTO_DEPOSIT_GRANTEES,
+  CHECKALT_AUTO_DEPOSIT_TABLE,
+  checkaltAutoDepositStateText,
   MEMBER_STAKEHOLDER_FUNCTIONS,
   MEMBER_STAKEHOLDER_FUNCTION_SHA256,
   MEMBER_STAKEHOLDER_NEW_POLICIES,
@@ -58,6 +67,7 @@ import {
   isSql77CheckStakeholdersGrant,
   isSql78PartnerStakeholderRemovals,
   isSql79MemberStakeholderWrites,
+  isSql80CheckaltMemberAutoDeposit,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
   STAKEHOLDER_GRANT_TABLE,
@@ -107,6 +117,7 @@ const SQL76_PARTNERSHIP_CONSENT_FILE = path.join(ROOT, 'sql/76_tenant_partnershi
 const SQL77_CHECK_STAKEHOLDERS_GRANT_FILE = path.join(ROOT, 'sql/77_check_stakeholders_write_grant.sql');
 const SQL78_PARTNER_STAKEHOLDER_REMOVALS_FILE = path.join(ROOT, 'sql/78_check_partner_stakeholder_removals.sql');
 const SQL79_MEMBER_STAKEHOLDER_WRITES_FILE = path.join(ROOT, 'sql/79_member_stakeholder_writes.sql');
+const SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT_FILE = path.join(ROOT, 'sql/80_checkalt_member_auto_deposit.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -2911,6 +2922,389 @@ async function handleSql79MemberStakeholderWrites({
   }
 }
 
+// --- SQL 80: Check Alt Auto-Deposit save for tenant operators -------------
+
+// $1 is the function signature, $2 its bare name (overloads in any schema).
+const CHECKALT_FUNCTION_SQL = `
+SELECT p.oid IS NOT NULL AS present,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_functiondef(p.oid) END AS def,
+  p.prosecdef AS security_definer,
+  COALESCE(p.proconfig, ARRAY[]::text[]) AS config,
+  p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user) AS owner_is_executor,
+  obj_description(p.oid, 'pg_proc') AS comment,
+  (SELECT count(*)::int FROM pg_proc o WHERE o.proname = $2) AS overload_count
+FROM (SELECT to_regprocedure($1) AS oid) t
+LEFT JOIN pg_proc p ON p.oid = t.oid
+`.trim();
+// Non-owner ACL entries of the function; a NULL proacl reads as the default (PUBLIC EXECUTE).
+const CHECKALT_FUNCTION_ACL_SQL = `
+SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type, a.is_grantable
+FROM pg_proc p
+CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE p.oid = to_regprocedure($1) AND a.grantee <> p.proowner
+ORDER BY 1, 2, 3
+`.trim();
+const CHECKALT_PREREQUISITES_SQL = `
+SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') AS required_roles_present,
+  to_regclass('${CHECKALT_AUTO_DEPOSIT_TABLE}') IS NOT NULL
+    AND to_regclass('public.tenant_users') IS NOT NULL AS required_tables_present,
+  to_regprocedure('public.is_platform_owner()') IS NOT NULL
+    AND to_regprocedure('auth.uid()') IS NOT NULL AS required_functions_present
+`.trim();
+// Table or column UPDATE for either grantee; unknown (missing table or role) reads as granted.
+const CHECKALT_TABLE_UPDATE_SQL = `
+SELECT CASE WHEN to_regclass('${CHECKALT_AUTO_DEPOSIT_TABLE}') IS NULL
+    OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN NULL
+  ELSE has_any_column_privilege('checksops', '${CHECKALT_AUTO_DEPOSIT_TABLE}', 'UPDATE')
+    OR has_any_column_privilege('authenticated', '${CHECKALT_AUTO_DEPOSIT_TABLE}', 'UPDATE')
+  END AS table_update_granted
+`.trim();
+// Everything else SQL 80 must not touch: relations of schema public, every
+// policy, every other function in public and auth (definition, ACL, SECURITY
+// DEFINER, config) and the Check Alt table's ACL.
+const CHECKALT_ALL_POLICIES_SQL = `
+SELECT pol.polrelid::regclass::text AS table_name, pol.polname, pol.polcmd::text AS polcmd,
+  pol.polpermissive, pol.polroles::text AS polroles,
+  pg_get_expr(pol.polqual, pol.polrelid) AS polqual,
+  pg_get_expr(pol.polwithcheck, pol.polrelid) AS polwithcheck
+FROM pg_policy pol
+ORDER BY 1, 2
+`.trim();
+const CHECKALT_OTHER_FUNCTIONS_SQL = `
+SELECT p.oid::regprocedure::text AS signature,
+  encode(sha256(convert_to(pg_get_functiondef(p.oid), 'UTF8')), 'hex') AS def_sha256,
+  p.proacl::text AS acl, p.prosecdef, p.proconfig::text AS config, p.proowner::regrole::text AS owner
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('public', 'auth') AND p.prokind IN ('f', 'p')
+  AND p.oid IS DISTINCT FROM to_regprocedure($1)
+ORDER BY 1
+`.trim();
+const CHECKALT_TABLE_ACL_SQL = `
+SELECT c.relacl::text AS table_acl FROM pg_class c WHERE c.oid = to_regclass('${CHECKALT_AUTO_DEPOSIT_TABLE}')
+`.trim();
+
+const SQL80_SIGNATURE = 'public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)';
+// The reviewed file outside the function body and the comment literal,
+// comments removed and whitespace collapsed.
+export const SQL80_NORMALIZED_STATEMENTS = [
+  'CREATE OR REPLACE FUNCTION public.aws_save_checkalt_tenant_auto_deposit( _tenant_id uuid, _settings jsonb )',
+  'RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public SET row_security = off AS $$<body>$$;',
+  `COMMENT ON FUNCTION ${SQL80_SIGNATURE} IS <comment>;`,
+  `REVOKE ALL ON FUNCTION ${SQL80_SIGNATURE} FROM PUBLIC;`,
+  `GRANT EXECUTE ON FUNCTION ${SQL80_SIGNATURE} TO checksops, authenticated;`,
+].join(' ');
+// pg_get_functiondef's header on PostgreSQL 16 for the reviewed CREATE.
+const SQL80_FUNCTIONDEF_HEADER = [
+  'CREATE OR REPLACE FUNCTION public.aws_save_checkalt_tenant_auto_deposit(_tenant_id uuid, _settings jsonb)',
+  ' RETURNS jsonb',
+  ' LANGUAGE plpgsql',
+  ' SECURITY DEFINER',
+  " SET search_path TO 'public'",
+  " SET row_security TO 'off'",
+  'AS $function$',
+].join('\n');
+
+/** Splits the file into the statements outside the body, the body and the comment text. */
+export function parseSql80(text) {
+  const source = String(text || '');
+  const open = source.indexOf('AS $$');
+  const close = open < 0 ? -1 : source.indexOf('$$;', open + 5);
+  if (open < 0 || close < 0 || source.indexOf('$$', close + 3) >= 0) return null;
+  const body = source.slice(open + 5, close);
+  const rest = `${source.slice(0, open)}AS $$<body>$$;${source.slice(close + 3)}`.replace(/--[^\n]*/g, ' ');
+  const literal = rest.match(/ IS\s+'((?:[^']|'')*)'\s*;/);
+  if (!literal) return null;
+  const outside = rest.replace(literal[0], ' IS <comment>;').replace(/\s+/g, ' ').trim();
+  return { outside, body, comment: literal[1].replace(/''/g, "'") };
+}
+
+/** pg_get_functiondef (PostgreSQL 16) of the function the reviewed file creates. */
+export function sql80ReviewedFunctiondef(text) {
+  const parsed = parseSql80(text);
+  return parsed ? `${SQL80_FUNCTIONDEF_HEADER}${parsed.body}$function$\n` : null;
+}
+
+// 'expected' = the SQL 38 text (pre-apply), 'intended' = the SQL 80 text.
+const versionLabel = (hash, table, missing) => {
+  if (hash == null) return missing;
+  if (hash === table.sql38) return 'expected';
+  if (hash === table.sql80) return 'intended';
+  return 'other';
+};
+
+/**
+ * Read-only fingerprint of the SQL 38/80 function: its definition, SECURITY
+ * DEFINER, config, owner, comment, overloads and ACL, plus prerequisites.
+ */
+export async function readCheckaltAutoDepositState(client) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const fn = (await client.query(CHECKALT_FUNCTION_SQL, [CHECKALT_AUTO_DEPOSIT_FUNCTION, CHECKALT_AUTO_DEPOSIT_FUNCTION_NAME]))?.rows?.[0] || {};
+  const exists = fn.present === true;
+  const acl = exists ? ((await client.query(CHECKALT_FUNCTION_ACL_SQL, [CHECKALT_AUTO_DEPOSIT_FUNCTION]))?.rows || []) : [];
+  const prereq = (await client.query(CHECKALT_PREREQUISITES_SQL))?.rows?.[0] || {};
+  const updateRow = (await client.query(CHECKALT_TABLE_UPDATE_SQL))?.rows?.[0] || {};
+  const config = Array.isArray(fn.config) ? fn.config.map(String) : [];
+  const state = {
+    exists,
+    overload_count: Number.isInteger(fn.overload_count) ? fn.overload_count : Number(fn.overload_count) || 0,
+    definition_sha256: exists && typeof fn.def === 'string' ? hashSqlDefinition(fn.def) : null,
+    security_definer: fn.security_definer === true,
+    config,
+    owner_is_executor: fn.owner_is_executor === true,
+    comment_sha256: exists && typeof fn.comment === 'string' ? hashSqlDefinition(fn.comment) : null,
+    acl: acl.map((entry) => ({ grantee: entry.grantee, privilege_type: entry.privilege_type, is_grantable: entry.is_grantable === true })),
+  };
+  const aclLines = state.acl.map((entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable ? ' with grant option' : ''}`).sort();
+  const expectedAcl = CHECKALT_AUTO_DEPOSIT_GRANTEES.map((grantee) => `${grantee} EXECUTE`).sort();
+  const configAsReviewed = JSON.stringify(config) === JSON.stringify(CHECKALT_AUTO_DEPOSIT_CONFIG);
+  return ok({
+    exists,
+    overload_count: state.overload_count,
+    security_definer: state.security_definer,
+    config_as_reviewed: configAsReviewed,
+    owner_is_executor: state.owner_is_executor,
+    function_states: {
+      definition: versionLabel(state.definition_sha256, CHECKALT_AUTO_DEPOSIT_DEFINITION_SHA256, 'absent'),
+      comment: exists ? versionLabel(state.comment_sha256, CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256, 'none') : 'absent',
+    },
+    function_definition_sha256: state.definition_sha256,
+    acl_sha256: hashSqlDefinition(aclLines.join('\n')),
+    acl_as_expected: JSON.stringify(aclLines) === JSON.stringify(expectedAcl),
+    required_roles_present: prereq.required_roles_present === true,
+    required_tables_present: prereq.required_tables_present === true,
+    required_functions_present: prereq.required_functions_present === true,
+    table_update_granted: updateRow.table_update_granted !== false,
+    live_definition_sha256: hashSqlDefinition(checkaltAutoDepositStateText(state)),
+  });
+}
+
+async function readCheckaltSchemaSnapshot(client) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const relations = (await client.query(MEMBER_SCHEMA_RELATIONS_SQL))?.rows || [];
+  const policies = (await client.query(CHECKALT_ALL_POLICIES_SQL))?.rows || [];
+  const functions = (await client.query(CHECKALT_OTHER_FUNCTIONS_SQL, [CHECKALT_AUTO_DEPOSIT_FUNCTION]))?.rows || [];
+  const tableAcl = (await client.query(CHECKALT_TABLE_ACL_SQL))?.rows?.[0]?.table_acl ?? null;
+  return {
+    relations_sha256: hashSqlDefinition(relations.map((row) => `${row.relname}:${row.relkind}`).join('\n')),
+    policies_sha256: hashSqlDefinition(policies.map((row) => JSON.stringify([
+      row.table_name, row.polname, row.polcmd, row.polpermissive, row.polroles, row.polqual, row.polwithcheck,
+    ])).join('\n')),
+    other_functions_sha256: hashSqlDefinition(functions.map((row) => JSON.stringify([
+      row.signature, row.def_sha256, row.acl, row.prosecdef, row.config, row.owner,
+    ])).join('\n')),
+    table_acl_sha256: hashSqlDefinition(String(tableAcl)),
+  };
+}
+
+const SQL80_SHA256_RE = /^[0-9a-f]{64}$/;
+
+/** A test may supply `pin` only as the committed pin with a reviewed expected hash filled in. */
+function sql80PinIsCommitted(pin) {
+  const committed = AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT;
+  return Boolean(pin) && ['filename', 'migration_id', 'commit', 'source_sha256', 'intended_replacement_sha256', 'function_identity', 'table']
+    .every((key) => pin[key] === committed[key]);
+}
+
+async function handleSql80CheckaltMemberAutoDeposit({
+  event,
+  authorization,
+  identity,
+  connect,
+  sqlFile80,
+  pin = AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
+}) {
+  if (!sql80PinIsCommitted(pin)) {
+    return fail(CODES.SQL_COLLISION, 'SQL 80 pin does not match the committed allowlist entry');
+  }
+  const embedded = readEmbeddedSql(sqlFile80, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  const parsed = parseSql80(embedded.details.text);
+  const reviewedDef = sql80ReviewedFunctiondef(embedded.details.text);
+  if (!parsed || parsed.outside !== SQL80_NORMALIZED_STATEMENTS
+    || hashSqlDefinition(parsed.comment) !== CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256.sql80
+    || hashSqlDefinition(reviewedDef) !== CHECKALT_AUTO_DEPOSIT_DEFINITION_SHA256.sql80) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 80 is not exactly the reviewed statements');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 80 executor action ${event.action}`);
+  }
+  const pinExecutable = SQL80_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, 'SQL 80 pin has no reviewed pre-apply live definition hash yet; apply is refused');
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, 'SQL 80 apply is bound to the exact allowlisted pin');
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  const prerequisites = (details) => details.exists === true
+    && details.overload_count === 1
+    && details.security_definer === true
+    && details.config_as_reviewed === true
+    && details.owner_is_executor === true
+    && details.acl_as_expected === true
+    && details.required_roles_present === true
+    && details.required_tables_present === true
+    && details.required_functions_present === true
+    && details.table_update_granted === false;
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readCheckaltAutoDepositState(client);
+      await rollback();
+      if (!state.ok) return state;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: state.details.live_definition_sha256,
+          after_hash: state.details.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          ...state.details,
+          prerequisites_ok: prerequisites(state.details),
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && state.details.live_definition_sha256 === pin.expected_live_definition_sha256
+            && state.details.function_states.definition === 'expected'
+            && prerequisites(state.details),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql80_checkalt_member_auto_deposit']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readCheckaltAutoDepositState(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256
+      || before.details.function_states.definition === 'intended') {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'the SQL 80 function definition is already in place; refuse re-apply', {
+        function_states: before.details.function_states,
+        matches_intended: before.details.live_definition_sha256 === pin.intended_replacement_sha256,
+      });
+    }
+    if (!prerequisites(before.details)) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 80 prerequisites are not met (the SQL 38 function with no other overloads, SECURITY DEFINER and the reviewed search_path/row_security, owned by the executor role, EXECUTE for checksops and authenticated only, the tables, roles and helpers it calls, no UPDATE grant on checkalt_tenant_accounts)', {
+        exists: before.details.exists,
+        overload_count: before.details.overload_count,
+        security_definer: before.details.security_definer,
+        config_as_reviewed: before.details.config_as_reviewed,
+        owner_is_executor: before.details.owner_is_executor,
+        acl_as_expected: before.details.acl_as_expected,
+        required_roles_present: before.details.required_roles_present,
+        required_tables_present: before.details.required_tables_present,
+        required_functions_present: before.details.required_functions_present,
+        table_update_granted: before.details.table_update_granted,
+      });
+    }
+    if (before.details.function_states.definition !== 'expected'
+      || before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'aws_save_checkalt_tenant_auto_deposit is not the expected SQL 38 pre-apply state', {
+        function_states: before.details.function_states,
+        live_definition_sha256: before.details.live_definition_sha256,
+      });
+    }
+    const schemaBefore = await readCheckaltSchemaSnapshot(client);
+
+    await client.query(embedded.details.text);
+
+    const after = await readCheckaltAutoDepositState(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const schemaAfter = await readCheckaltSchemaSnapshot(client);
+    if (after.details.live_definition_sha256 !== pin.intended_replacement_sha256
+      || after.details.function_definition_sha256 !== hashSqlDefinition(reviewedDef)
+      || after.details.function_states.definition !== 'intended'
+      || after.details.overload_count !== 1
+      || after.details.security_definer !== true
+      || after.details.config_as_reviewed !== true
+      || after.details.acl_sha256 !== before.details.acl_sha256
+      || after.details.table_update_granted !== false
+      || schemaAfter.relations_sha256 !== schemaBefore.relations_sha256
+      || schemaAfter.policies_sha256 !== schemaBefore.policies_sha256
+      || schemaAfter.other_functions_sha256 !== schemaBefore.other_functions_sha256
+      || schemaAfter.table_acl_sha256 !== schemaBefore.table_acl_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 80 did not land exactly on the reviewed function, or changed its grants or something else', {
+        after_hash: after.details.live_definition_sha256,
+        function_states: after.details.function_states,
+        security_definer: after.details.security_definer,
+        config_as_reviewed: after.details.config_as_reviewed,
+        acl_unchanged: after.details.acl_sha256 === before.details.acl_sha256,
+        relations_unchanged: schemaAfter.relations_sha256 === schemaBefore.relations_sha256,
+        policies_unchanged: schemaAfter.policies_sha256 === schemaBefore.policies_sha256,
+        other_functions_unchanged: schemaAfter.other_functions_sha256 === schemaBefore.other_functions_sha256,
+        table_acl_unchanged: schemaAfter.table_acl_sha256 === schemaBefore.table_acl_sha256,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        function_states: after.details.function_states,
+        acl_sha256: after.details.acl_sha256,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 // --- SQL 72: tenant-member payment write policies ---------------------------
 
 const PAYMENT_POLICIES_SQL = `
@@ -3512,6 +3906,8 @@ export function createHandler({
   sql78Pin = AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
   sqlFile79 = SQL79_MEMBER_STAKEHOLDER_WRITES_FILE,
   sql79Pin = AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
+  sqlFile80 = SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT_FILE,
+  sql80Pin = AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -3567,6 +3963,10 @@ export function createHandler({
 
     if (isSql79MemberStakeholderWrites(event)) {
       return handleSql79MemberStakeholderWrites({ event, authorization, identity, connect, sqlFile79, pin: sql79Pin });
+    }
+
+    if (isSql80CheckaltMemberAutoDeposit(event)) {
+      return handleSql80CheckaltMemberAutoDeposit({ event, authorization, identity, connect, sqlFile80, pin: sql80Pin });
     }
 
     if (isLedger20261007193200(event)) {
