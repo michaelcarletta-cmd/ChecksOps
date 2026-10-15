@@ -2,7 +2,7 @@
  * HomeownerOps Class A services (non-financial).
  * Public token routes + staff send/upload helpers.
  */
-import { randomBytes, createHash, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { CopyObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -668,56 +668,23 @@ export const handleHomeownerLedgerDocumentSignLink = async (event) => {
   ));
 };
 
+/**
+ * Retired. The legacy Homeowner sign-link reminted a signer through
+ * aws_public_homeowner_ledger_remint_signer, which is not token + claim +
+ * homeowner scoped, and echoed a caller-supplied `origin` into the link.
+ * The route stays registered so old SPA builds get a clean refusal; it
+ * never touches the database. Use homeowner-ledger-document-sign-link.
+ */
 export const handleHomeownerLedgerSignLink = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
-  const token = String(body.token || '').trim();
-  const signerId = body.signer_id || body.signature_signer_id;
-  if (!token || !signerId) {
-    return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
-  }
-  let client;
-  try {
-    client = await publicDb(true);
-    await client.query('BEGIN');
-    await client.query('SET TRANSACTION READ WRITE');
-    const raw = randomBytes(32).toString('hex');
-    const hash = createHash('sha256').update(raw).digest('hex');
-    const remint = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_remint_signer($1, $2::uuid, $3) AS doc',
-      [token, signerId, hash],
-    )).rows[0]?.doc;
-    if (!remint?.ok) {
-      await client.query('ROLLBACK');
-      const error = remint?.error || 'not_found';
-      return { ok: false, statusCode: signLinkStatus(error), error, spoofFieldsIgnored: spoof };
-    }
-    await client.query('COMMIT');
-    const origin = String(body.origin || process.env.SIGN_BASE_URL || process.env.VITE_APP_URL || 'https://checksops.com').replace(/\/$/, '');
-    return {
-      ok: true,
-      statusCode: 200,
-      sign_url: `${origin}/sign?token=${raw}`,
-      request_id: remint.request_id || null,
-      signer_id: remint.signer_id || signerId,
-      spoofFieldsIgnored: spoof,
-    };
-  } catch (error) {
-    if (client) {
-      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
-    }
-    return {
-      ok: false,
-      statusCode: 503,
-      error: 'sign_link_failed',
-      message: sanitizePublicError(error),
-      spoofFieldsIgnored: spoof,
-    };
-  } finally {
-    if (client) {
-      try { await client.end(); } catch { /* ignore */ }
-    }
-  }
+  return {
+    ok: false,
+    statusCode: 410,
+    error: 'sign_link_retired',
+    message: 'Use homeowner-ledger-document-sign-link.',
+    spoofFieldsIgnored: spoof,
+  };
 };
 
 export const runHomeownerLedgerSend = async ({
