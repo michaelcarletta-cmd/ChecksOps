@@ -348,7 +348,7 @@ test('SQL 78 execute pin: authorization wording, unchanged staging pins, staging
   const staging = MEMBER_STAKEHOLDER_MIGRATIONS.sql78.staging_pin;
   assert.equal(pin.execute, true);
   assert.ok(pin.authorization.startsWith('Owner approved the SQL 77 apply on 2026-10-15; the SQL 78 pin values (4031dea6 -> 3d650a56) are unchanged from the reviewed pin'));
-  assert.ok(pin.authorization.includes("matched production's read-only inspect (SSM 3f7ac222-30fb-40d4-9a06-e55b73b9ce5c)"));
+  assert.ok(pin.authorization.includes("production's read-only inspect (SSM 3f7ac222-30fb-40d4-9a06-e55b73b9ce5c) matched the pre-state 4031dea6"));
   // It records no owner approval of a SQL 78 run.
   assert.doesNotMatch(pin.authorization, /approve applying SQL 78/);
   assert.equal(pin.applied, undefined);
