@@ -53,10 +53,12 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLI = path.join(ROOT, 'scripts/deployment-guard/sql80-checkalt-production-apply.mjs');
 const COMMITTED = loadSql80ProductionPin(ROOT);
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938';
-// The committed pin is execute-authorized with the recorded staging acceptance; apply tests use it as is.
-const PIN = COMMITTED;
+// The committed pin was retired (execute false) after the 2026-10-15 production apply. The apply
+// tests exercise an execute-authorized copy (the pin as it stood for that run); the committed pin
+// is checked to refuse.
+const PIN = Object.freeze({ ...COMMITTED, execute: true });
 // The pre-authorization state (execute false, staging acceptance pending), built here so the
-// refusals of a pending pin stay tested after the committed pin was authorized.
+// refusals of a pending pin stay tested after the committed pin was authorized and retired.
 const PENDING = Object.freeze({
   ...COMMITTED,
   authorization: 'pending',
@@ -146,14 +148,17 @@ const PRODUCTION_PRE_STATE = Object.freeze({
   acl: [entry('PUBLIC'), entry('checksops')],
 });
 
-test('production pin: inspected pre-state, staging post-state, execute-authorized after staging acceptance, production RDS', () => {
+test('production pin: inspected pre-state, staging post-state, applied 2026-10-15 and retired, production RDS', () => {
   assert.equal(COMMITTED.migration, 'sql80');
-  assert.equal(COMMITTED.execute, true);
-  assert.match(COMMITTED.authorization, /takes effect only when the owner reviews and merges this change/);
-  // The authorization records the owner's approval to merge the execute pin, not a run.
-  assert.match(COMMITTED.authorization, /run-time approval/);
-  assert.match(COMMITTED.authorization, /authorization phrase/);
-  assert.match(COMMITTED.authorization, /one_use_id/);
+  // Retired after the apply: no longer a standing authorization.
+  assert.equal(COMMITTED.execute, false);
+  assert.match(COMMITTED.authorization, /^Applied to production on 2026-10-15/);
+  assert.match(COMMITTED.authorization, /no longer a standing authorization/);
+  assert.match(COMMITTED.authorization, /re-apply needs a new reviewed pin change/);
+  // The owner approved the pin and inspect, and that one run (not any later run).
+  assert.match(COMMITTED.authorization, /approved the SQL 80 production pin \(dce5b131 -> 5ad9a81c\) and the read-only production inspect/);
+  assert.match(COMMITTED.authorization, /"approve applying SQL 80 to production"/);
+  assert.match(COMMITTED.authorization, /covered that run only/);
   assert.equal(COMMITTED.staging_acceptance.ok, true);
   assert.equal(COMMITTED.staging_acceptance.reference, STAGING_REF);
   assert.match(COMMITTED.staging_acceptance.basis, /sql80-checkalt-member-auto-deposit/);
@@ -358,7 +363,8 @@ test('evaluation is bound to the exact pin, a recorded staging acceptance and th
   assert.equal(pending.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const okFalse = await evaluateSql80ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, staging_acceptance: { ...PIN.staging_acceptance, ok: false } } });
   assert.equal(okFalse.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  // The committed pin allows evaluation with its own recorded reference.
+  // The committed pin allows evaluation with its own recorded reference (evaluation does not
+  // check execute; the apply does, see 'the committed (retired) pin no longer authorizes an apply').
   const allowed = await evaluateSql80ProductionApply(manifest(), { root: ROOT, pin: COMMITTED });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   for (const field of ['filename', 'migration_id', 'source_sha256', 'expected_live_definition_sha256', 'intended_replacement_sha256', 'live_definition_sha256']) {
@@ -374,7 +380,7 @@ test('evaluation is bound to the exact pin, a recorded staging acceptance and th
   assert.equal(otherApproval.ok, false);
 });
 
-test('CLI with the committed (execute-authorized) pin and no receipt refuses at the guard and never connects', () => {
+test('CLI with the committed (retired) pin and no receipt refuses at the guard and never connects', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sql80-prod-noreceipt-'));
   try {
     const input = path.join(dir, 'sql80.json');
@@ -469,6 +475,62 @@ test('the real guard: a staging receipt cannot authorize production; a productio
     fs.rmSync(stagingRoot, { recursive: true, force: true });
     fs.rmSync(prodRoot, { recursive: true, force: true });
   }
+});
+
+test('the applied evidence matches the pin: dce5b131 -> 5ad9a81c, the intended ACLs, staging acceptance and a clean post-apply inspect', () => {
+  const applied = COMMITTED.applied;
+  assert.equal(applied.date, '2026-10-15');
+  assert.equal(applied.result, 'applied');
+  assert.match(applied.source_commit, /^60772dbf7[0-9a-f]{31}$/);
+  assert.equal(applied.runner, 'i-0c35557c4e5385406');
+  assert.match(applied.workstream_id, /^prod-sql80-checkalt-member-auto-deposit-20261015$/);
+  assert.match(applied.one_use_id, /^sql80-prod-[0-9a-f-]{36}$/);
+  assert.equal(applied.owner_approval, 'approve applying SQL 80 to production');
+  assert.equal(applied.pre_apply_inspect.live_definition_sha256, COMMITTED.expected_live_definition_sha256);
+  assert.equal(applied.pre_apply_inspect.apply_preconditions_met, true);
+  assert.deepEqual(applied.pre_apply_inspect.owner_roles, ['checksops_admin']);
+  assert.equal(applied.pre_apply_inspect.authenticated_member_of_owner, false);
+  for (const name of ['claim-ledger', 'tenant-isolation', 'financial-write-protections']) {
+    assert.equal(applied.contract_results[name].ok, true, name);
+  }
+  assert.equal(applied.contract_results['financial-write-protections'].test, 'aws/tests/api-write.test.mjs');
+  const receipt = applied.receipt;
+  assert.equal(receipt.result, 'applied');
+  assert.equal(receipt.before_hash, COMMITTED.expected_live_definition_sha256);
+  assert.equal(receipt.after_hash, COMMITTED.intended_replacement_sha256);
+  assert.equal(receipt.function_acl_before, COMMITTED.production_inspect.function_acl);
+  assert.equal(receipt.function_acl_before, PRE_FN_ACL);
+  assert.equal(receipt.function_acl_after, COMMITTED.intended_post_state.function_acl);
+  assert.equal(receipt.function_acl_after, POST_FN_ACL);
+  assert.equal(receipt.table_acl, COMMITTED.production_inspect.table_acl);
+  assert.equal(receipt.table_acl, COMMITTED.intended_post_state.table_acl);
+  assert.match(receipt.unrelated_catalog_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(receipt.staging_acceptance, COMMITTED.staging_acceptance.reference);
+  assert.equal(applied.post_apply_inspect.ssm_command_id, applied.apply_ssm_command_id);
+  assert.equal(applied.post_apply_inspect.live_definition_sha256, COMMITTED.intended_replacement_sha256);
+  assert.equal(applied.post_apply_inspect.already_applied, true);
+  assert.deepEqual(applied.post_apply_inspect.function_states, { definition: 'intended', comment: 'intended' });
+  assert.equal(applied.post_apply_inspect.authenticated_member_of_owner, false);
+  assert.match(COMMITTED.production_evidence['2026-10-15 apply'], /execute is false/);
+});
+
+test('the committed (retired) pin no longer authorizes an apply: refused before connecting, receipt not spent', async () => {
+  assert.equal(COMMITTED.execute, false);
+  const refused = await executeSql80ProductionApply(manifest(), { root: ROOT, pin: COMMITTED, connect: neverConnect, consumedPath: consumedPath() });
+  assert.equal(refused.code, CODES.GUARD_APPLY_FORBIDDEN);
+  assert.match(refused.message, /execute is not authorized/);
+  // The same manifest passes on the execute-authorized copy up to the connection, so the
+  // refusal above is due to execute alone.
+  const authorized = await executeSql80ProductionApply(manifest(), { root: ROOT, pin: PIN, connect: neverConnect, consumedPath: consumedPath() }).catch((error) => error);
+  assert.match(String(authorized?.message || ''), /should-not-connect/);
+  // Loaded from disk (no injected pin), with a receipt owning the file: refused, nothing spent.
+  const cli = await runCli(['--apply'], {
+    input: manifest(),
+    deps: { enforceScriptGuard: () => ({ ok: true, details: { receipt: { owned_components: [COMMITTED.filename] } } }) },
+  });
+  assert.equal(cli.spent, 0);
+  assert.match(cli.out, /GUARD_APPLY_FORBIDDEN/);
+  assert.doesNotMatch(cli.out, /should-not-connect/);
 });
 
 test('apply refuses before connecting without the phrase, a single-use id, execute or staging acceptance', async () => {
