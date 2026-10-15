@@ -1,8 +1,8 @@
 {
   "id": "sql81-checkalt-production-register-production-apply",
   "migration": "sql81",
-  "authorization": "owner-approved 2026-10-15 in session (\"approve applying SQL 81 to production\"): the pin may carry execute true once this reviewed change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-15; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 81 production pin (e12fdf2f -> 36623cce) and the read-only production inspect on 2026-10-15, and approved the one apply run recorded in applied (workstream prod-sql81-checkalt-register-20261015) on 2026-10-15 with \"approve applying SQL 81 to production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -57,5 +57,139 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38782120576",
     "basis": "Guarded staging SQL executor apply of sql81-checkalt-depositor-register, run #44 (38782120576) on main 75119fafe, executor CodeSha256 GsGaJS69\u2026: staging e12fdf2f\u2026 -> 36623cce\u2026, acl_sha256 5e51925f\u2026. Read-live run 38782293351 (#45) confirmed already_applied, function_definition_sha256 d1f781ed\u2026 on staging PostgreSQL 18.3 (equal to intended_post_state.function_definition_sha256).",
     "production_differs": "The function is absent in both, so the pre-state fingerprint e12fdf2f\u2026 and the post-state 36623cce\u2026 are the same in staging and production. The table differs: production's checkalt_tenant_accounts grants checksops arwd (staging: no INSERT/UPDATE for checksops or authenticated), so this tool's production rules accept exactly the pinned production table ACL instead of the staging rule. The same file bytes (source_sha256) run in both."
+  },
+  "applied": {
+    "date": "2026-10-15",
+    "result": "applied",
+    "source_commit": "787007faf30a0a9d416b49768a22e808894b6ffc",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-787007faf30a0a9d416b49768a22e808894b6ffc.tar.gz",
+      "sha256": "2d05bbc538a50f327c83fc139d8c8c2d20de0338bcbbe4f7bb8ea9ac1b196569"
+    },
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql81-checkalt-register-20261015",
+    "one_use_id": "sql81-prod-f6029798-63e9-4212-8244-0e5b220a36eb",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve applying SQL 81 to production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql81; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "e12fdf2fe609d474a9cc215c018cce922cc2a63edfd18f7b5988ce21d1903f37",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "owner_roles": [
+        "checksops_admin"
+      ],
+      "authenticated_member_of_owner": false,
+      "table_owner": "checksops_admin",
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+      "table_acl_entries": [
+        "checksops DELETE granted by checksops_admin",
+        "checksops INSERT granted by checksops_admin",
+        "checksops SELECT granted by checksops_admin",
+        "checksops UPDATE granted by checksops_admin"
+      ],
+      "function_present": false,
+      "function_owner": null,
+      "function_acl": null,
+      "function_acl_entries": [],
+      "table_write_entries": [
+        "checksops INSERT",
+        "checksops UPDATE"
+      ]
+    },
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 787007faf30a0a9d416b49768a22e808894b6ffc (production-sql-one-shot 572b69bc-3240-4934-b24f-4f0c3f03e145, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 787007faf30a0a9d416b49768a22e808894b6ffc (production-sql-one-shot 572b69bc-3240-4934-b24f-4f0c3f03e145, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "36/36 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 787007faf30a0a9d416b49768a22e808894b6ffc (production-sql-one-shot 572b69bc-3240-4934-b24f-4f0c3f03e145, node --test)"
+      }
+    },
+    "one_shot_run_id": "572b69bc-3240-4934-b24f-4f0c3f03e145",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql81_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.",
+    "receipt": {
+      "migration": "sql81",
+      "workstream": "prod-sql81-checkalt-register-20261015",
+      "commit": "787007faf30a0a9d416b49768a22e808894b6ffc",
+      "sql_file": "aws/workflows/sql/81_checkalt_production_register.sql",
+      "before_hash": "e12fdf2fe609d474a9cc215c018cce922cc2a63edfd18f7b5988ce21d1903f37",
+      "after_hash": "36623ccebd920a9c6316da7f787ad99126e474656877e01b5854e099ce661225",
+      "function_owner": "checksops_admin",
+      "function_acl_after": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}",
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+      "unrelated_catalog_sha256": "8427e0acbb68d3583051d97bd46ccded81e8f0742b1030777ca1c97983c68f60",
+      "unrelated_catalog_counts": {
+        "relations": 860,
+        "columns": 3413,
+        "constraints": 2125,
+        "policies": 368,
+        "functions": 1274,
+        "triggers": 173,
+        "roles": 29,
+        "default_privileges": 0,
+        "schema": 1
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38782120576",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "36623ccebd920a9c6316da7f787ad99126e474656877e01b5854e099ce661225",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "apply_preconditions_met": false,
+      "precondition_failures": [
+        "function_absent",
+        "no_function_named",
+        "definition_absent"
+      ],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "owner_roles": [
+        "checksops_admin"
+      ],
+      "authenticated_member_of_owner": false,
+      "table_owner": "checksops_admin",
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+      "table_acl_entries": [
+        "checksops DELETE granted by checksops_admin",
+        "checksops INSERT granted by checksops_admin",
+        "checksops SELECT granted by checksops_admin",
+        "checksops UPDATE granted by checksops_admin"
+      ],
+      "function_present": true,
+      "function_owner": "checksops_admin",
+      "function_acl": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}",
+      "function_acl_entries": [
+        "authenticated EXECUTE granted by checksops_admin",
+        "checksops EXECUTE granted by checksops_admin"
+      ],
+      "table_write_entries": [
+        "checksops INSERT",
+        "checksops UPDATE"
+      ]
+    },
+    "apply_ssm_command_id": "6c0422a9-5712-4f15-bb83-54565b0d35fb",
+    "source_staged_by": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38785839555",
+    "earlier_ssm_command_id": "f4d9fe16-d0be-48b5-b2f0-42f52c36cc4d",
+    "earlier_ssm_note": "An earlier one-shot --phase inspect on main aa0bc2046 stopped at its contracts step (financial-write-protections: crypto is not defined on the runner Node 18.20.8) before any write; fixed by #975. The successful run used --phase inspect (SSM 2c22dc91-53aa-41e8-99dd-0137709ee452) then --phase apply (SSM 6c0422a9-5712-4f15-bb83-54565b0d35fb)."
   }
 }

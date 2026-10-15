@@ -463,9 +463,9 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // --- stop conditions ---------------------------------------------------------------------
 
 test('every real production pin with execute false is refused before any child', async () => {
-  // SQL 81's pin is execute-authorized (owner-approved 2026-10-15) until its record-and-retire change.
-  assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), ['sql81']);
-  for (const key of Object.keys(ONE_SHOT_TOOLS).filter((k) => realPin(k).execute === false)) {
+  // Every pin is retired (execute false), SQL 81's since its 2026-10-15 record-and-retire change.
+  assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), []);
+  for (const key of Object.keys(ONE_SHOT_TOOLS)) {
     for (const phase of ['inspect', 'apply']) {
       const { result, runner } = await oneShot({ key, pin: null, o: { phase } });
       assert.equal(realPin(key).execute, false);
