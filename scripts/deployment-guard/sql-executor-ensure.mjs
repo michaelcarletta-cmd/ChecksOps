@@ -50,6 +50,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/77_check_stakeholders_write_grant.sql', 'sql/77_check_stakeholders_write_grant.sql'],
   ['aws/workflows/sql/78_check_partner_stakeholder_removals.sql', 'sql/78_check_partner_stakeholder_removals.sql'],
   ['aws/workflows/sql/79_member_stakeholder_writes.sql', 'sql/79_member_stakeholder_writes.sql'],
+  ['aws/workflows/sql/80_checkalt_member_auto_deposit.sql', 'sql/80_checkalt_member_auto_deposit.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

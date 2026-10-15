@@ -408,6 +408,84 @@ export const AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES = Object.freeze({
   tables: MEMBER_STAKEHOLDER_TABLES,
 });
 
+// SQL 80 CREATE OR REPLACEs the SQL 38 SECURITY DEFINER function
+// public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb) so tenant
+// owner/admin/manager/operator (not viewer) can save auto_approve_enabled and
+// auto_approve_max_cents, and replaces its comment. Its REVOKE/GRANT lines
+// restate SQL 38's EXECUTE grants, so the function ACL must not change. The
+// "definition" is the canonical state text of the function: present, how many
+// functions carry its name (any schema; no overloads), the sha256 of
+// pg_get_functiondef, SECURITY DEFINER, proconfig, whether the executor role
+// owns it, the sha256 of its comment and every non-owner ACL entry.
+export const CHECKALT_AUTO_DEPOSIT_FUNCTION = 'public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)';
+export const CHECKALT_AUTO_DEPOSIT_FUNCTION_NAME = 'aws_save_checkalt_tenant_auto_deposit';
+export const CHECKALT_AUTO_DEPOSIT_TABLE = 'public.checkalt_tenant_accounts';
+export const CHECKALT_AUTO_DEPOSIT_SQL38_FILE = 'aws/rls/sql/38_checkalt_auto_deposit_persist.sql';
+export const CHECKALT_AUTO_DEPOSIT_CONFIG = Object.freeze(['search_path=public', 'row_security=off']);
+export const CHECKALT_AUTO_DEPOSIT_GRANTEES = Object.freeze(['authenticated', 'checksops']);
+// sha256(pg_get_functiondef) and sha256(obj_description) on PostgreSQL 16 of
+// the SQL 38 and SQL 80 files, re-derived by
+// aws/tests/sql80-checkalt-member-auto-deposit-executor.test.mjs.
+export const CHECKALT_AUTO_DEPOSIT_DEFINITION_SHA256 = Object.freeze({
+  sql38: 'b7989db70a0376b9ef7957fd8c6e6a47d8ac64155715eb662a300f91b5636e37',
+  sql80: '97c5bddc1ada170530fc7da9fe2cd4e3998a037571dd71d0dbe1a89bf03ab9c5',
+});
+export const CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256 = Object.freeze({
+  sql38: 'fc9384c2a1152af8424d2b5f57dab894bcf74ef2466587779374fbb6ce83d47c',
+  sql80: '05ad30345f0fb94b446bb6238e01c99fbecdcd3d53cf60fcfa36ba3fe45d9520',
+});
+/**
+ * `state` is { exists, overload_count, definition_sha256, security_definer,
+ * config: text[], owner_is_executor, comment_sha256, acl: [{grantee,
+ * privilege_type, is_grantable}] } (acl without the owner's own entries).
+ */
+export function checkaltAutoDepositStateText(state = {}) {
+  const fn = CHECKALT_AUTO_DEPOSIT_FUNCTION;
+  if (state?.exists !== true) {
+    return [`function ${fn}: absent`, `functions named ${CHECKALT_AUTO_DEPOSIT_FUNCTION_NAME}: ${Number(state?.overload_count) || 0}`].join('\n');
+  }
+  const lines = [
+    `function ${fn}: present`,
+    `functions named ${CHECKALT_AUTO_DEPOSIT_FUNCTION_NAME}: ${Number(state.overload_count) || 0}`,
+    `${fn} definition sha256 ${SHA256_HEX_RE.test(String(state.definition_sha256 || '')) ? state.definition_sha256 : 'unreadable'}`,
+    `${fn} security definer: ${state.security_definer === true ? 'on' : 'off'}`,
+    `${fn} config: ${(state.config || []).join(',') || '-'}`,
+    `${fn} owner: ${state.owner_is_executor === true ? 'executor role' : 'another role'}`,
+    `${fn} comment sha256 ${SHA256_HEX_RE.test(String(state.comment_sha256 || '')) ? state.comment_sha256 : 'none'}`,
+  ];
+  const acl = (state.acl || []).map((entry) => `${fn} acl ${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`);
+  return [...lines, ...acl.sort()].join('\n');
+}
+const checkaltAutoDepositState = (version) => ({
+  exists: true,
+  overload_count: 1,
+  definition_sha256: CHECKALT_AUTO_DEPOSIT_DEFINITION_SHA256[version],
+  security_definer: true,
+  config: [...CHECKALT_AUTO_DEPOSIT_CONFIG],
+  owner_is_executor: true,
+  comment_sha256: CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256[version],
+  acl: CHECKALT_AUTO_DEPOSIT_GRANTEES.map((grantee) => ({ grantee, privilege_type: 'EXECUTE', is_grantable: false })),
+});
+/** What SQL 38 leaves (EXECUTE for checksops and authenticated only, no PUBLIC). */
+export const CHECKALT_AUTO_DEPOSIT_PRE_STATE = Object.freeze(checkaltAutoDepositState('sql38'));
+/** What SQL 80 leaves: only the definition and the comment differ. */
+export const CHECKALT_AUTO_DEPOSIT_APPLIED_STATE = Object.freeze(checkaltAutoDepositState('sql80'));
+export const AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT = Object.freeze({
+  filename: 'aws/workflows/sql/80_checkalt_member_auto_deposit.sql',
+  migration_id: '80_checkalt_member_auto_deposit',
+  // The commit that authored the current file bytes (merged in PR #957).
+  commit: '4a7c1053f5f766eaf600e68427d72fbbdc701032',
+  source_sha256: '3ca77bf4d3bfe0d09645bec2d8bf86517f60a0804935fe6aff68a61f92747352',
+  // Code-derived: sha256(checkaltAutoDepositStateText(CHECKALT_AUTO_DEPOSIT_PRE_STATE)),
+  // the state SQL 38 leaves. A staging read-live run should confirm it before apply.
+  expected_live_definition_sha256: '3ef657f48750ee96813e7d718ffa10314a71f660560dbc20bc41687c79770847',
+  // Code-derived: sha256(checkaltAutoDepositStateText(CHECKALT_AUTO_DEPOSIT_APPLIED_STATE)),
+  // re-derived from the real catalog by aws/tests/sql80-checkalt-member-auto-deposit-executor.test.mjs.
+  intended_replacement_sha256: '5ad9a81cfc01ba8affc165b42986c1a6e7ce87c5f61df6a5ebcac293e00fa0db',
+  function_identity: CHECKALT_AUTO_DEPOSIT_FUNCTION,
+  table: CHECKALT_AUTO_DEPOSIT_TABLE,
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -442,6 +520,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT,
   AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS,
   AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
+  AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -487,6 +566,10 @@ export function isSql79MemberStakeholderWrites(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES);
 }
 
+export function isSql80CheckaltMemberAutoDeposit(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -514,6 +597,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql77CheckStakeholdersGrant(input)) return AUTHORIZED_SQL77_CHECK_STAKEHOLDERS_GRANT;
   if (isSql78PartnerStakeholderRemovals(input)) return AUTHORIZED_SQL78_PARTNER_STAKEHOLDER_REMOVALS;
   if (isSql79MemberStakeholderWrites(input)) return AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES;
+  if (isSql80CheckaltMemberAutoDeposit(input)) return AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
