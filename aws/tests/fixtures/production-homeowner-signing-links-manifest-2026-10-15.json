@@ -1,0 +1,25 @@
+{
+  "workstream_id": "homeowner-signing-links",
+  "authorization": "Owner-approved 2026-10-15 (PR 6, option 1: rebuild app-services.mjs from the live production file and add the two routes): homeowner-signing-integration.mjs, homeowner.mjs and app-services.mjs may be planned for production. Each production apply still needs the owner's run-time approval, the staging acceptance run and the phrase DEPLOY <member> TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Apply in order homeowner-signing-integration.mjs (ADD), homeowner.mjs, app-services.mjs. The new homeowner.mjs imports the integration module; the new app-services.mjs imports handleHomeownerLedgerEndorseLink and handleHomeownerLedgerDocumentSignLink, which only the new homeowner.mjs exports, so app-services.mjs must go last (an app-services-only overlay fails to link against live homeowner.mjs 91f757ee). app-services.mjs is the live production file cce9d0ff plus only the two route additions. SQL 82 and 83 must be applied before the doorways return links; without them the view keeps working and the doorways fail closed (503).",
+  "members": {
+    "homeowner-signing-integration.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "4ffc10d25f80c438374bf99951bc89a9eefd72da5471eac862a936319930ccca",
+      "operation": "add"
+    },
+    "homeowner.mjs": {
+      "live_sha256": "91f757ee94cb56b1fe9aa1268ee2a9f38699db0b29f4e8ba9fb245a5ecd9228b",
+      "accepted_sha256": "7cedcd69ba5d10123b46544bbafd139751643c5f6a249751dd27fb1dc6b2ec83",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-ledger-send-scope-manifest-2026-10-15.json"
+    },
+    "app-services.mjs": {
+      "live_sha256": "cce9d0ff48ce7644083e5aa04aec77c5100246b93a440c20ddb1ba5701bcc0c5",
+      "accepted_sha256": "51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa",
+      "operation": "replace"
+    }
+  }
+}
