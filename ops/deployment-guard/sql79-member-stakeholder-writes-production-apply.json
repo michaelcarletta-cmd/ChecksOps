@@ -1,8 +1,8 @@
 {
   "id": "sql79-member-stakeholder-writes-production-apply",
   "migration": "sql79",
-  "authorization": "Owner approved the SQL 78 apply on 2026-10-15 and asked for this change (\"approve the SQL 78 record and SQL 79 execute PR\"); the SQL 79 pin values (d9bc8921 -> 878d6441) are unchanged from the reviewed pin; production's read-only inspect (SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2) matched the pre-state d9bc8921 (the post-state 878d6441 rests on staging run 38612871864); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase (CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES) and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-15; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. PR #964 set execute true on the SQL 79 pin (d9bc8921 -> 878d6441, unchanged from the reviewed pin), and after PR #964 merged the owner approved the one apply run recorded in applied (workstream prod-sql79-member-stakeholder-writes-20261015) on 2026-10-15 with \"approve applying SQL 79 to production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -46,5 +46,107 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864",
     "basis": "Guarded staging SQL executor apply run #34 (38612871864, main 4ca9e1763, 2026-10-14) of sql79-member-stakeholder-writes: d9bc8921… -> 878d6441…, the four aws_member_* policies present.",
     "production_differs": "Production's pre-state hash is staging's (d9bc8921…): the fingerprint covers both tables' RLS, policies and ownership and the two helper functions, not ACLs, so checksops' pre-existing UPDATE on check_stakeholders does not change it, and the staging pins hold unchanged. The same file bytes (source_sha256) run in both."
+  },
+  "applied": {
+    "date": "2026-10-15",
+    "result": "applied",
+    "source_commit": "18fafde1b5d0338ca535ab54410f9850f6b09702",
+    "source_staged_by": "sql53-temporary-transfer run 38747149596",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql79-member-stakeholder-writes-20261015",
+    "one_use_id": "sql79-prod-ed5216d8-5f92-4f7a-a49b-316dad1f58e5",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve applying SQL 79 to production",
+    "pre_apply_inspect": {
+      "ssm_command_id": "4dcdfee5-da70-482a-a35b-2f2e8bcef429",
+      "read_only": true,
+      "live_definition_sha256": "d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {
+        "sql77": {
+          "applied": true,
+          "live_definition_sha256": "0cd3ab3fd41245ad9f35e882dc32bcb36cd9720132f63ad88728df655290ddac"
+        },
+        "sql78": {
+          "applied": true,
+          "live_definition_sha256": "3d650a56a2fd8a4ccfaeaf795ac0de8c4d0b849a748c1769400397d62e92dd40"
+        }
+      },
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "owner_roles": [
+        "checksops_admin"
+      ],
+      "authenticated_member_of_owner": false,
+      "table_owners": {
+        "public.check_stakeholders": "checksops_admin",
+        "public.check_partner_stakeholder_removals": "checksops_admin"
+      },
+      "table_acls": {
+        "public.check_stakeholders": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin,authenticated=ard/checksops_admin}",
+        "public.check_partner_stakeholder_removals": "{checksops_admin=arwdDxtm/checksops_admin,checksops=ard/checksops_admin,authenticated=ard/checksops_admin}"
+      },
+      "policies": "aws_select_* (SELECT) and aws_write_* (ALL) on each table, permissive, to authenticated"
+    },
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (SSM 4dcdfee5-da70-482a-a35b-2f2e8bcef429)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (SSM 4dcdfee5-da70-482a-a35b-2f2e8bcef429)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "36/36 on a clean local checkout of 18fafde1b5d0338ca535ab54410f9850f6b09702; run locally because the runner's package lacked @aws-sdk/client-s3 in the SQL 77 and SQL 78 runs (not re-checked on this run)"
+      }
+    },
+    "apply_ssm_command_id": "b443d830-9b42-467e-af94-d8f77f43d9f8",
+    "apply_ssm_note": "One SSM command issued the receipt and lease (preflight), evaluated (member_stakeholder_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.",
+    "receipt": {
+      "result": "applied",
+      "before_hash": "d9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4",
+      "after_hash": "878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7",
+      "unrelated_catalog_sha256": "c1384429ca2dc0471fcecc7023c328349cd6b827f4e2ae19a713b74272dbf56c",
+      "unrelated_catalog_counts": {
+        "relations": 860,
+        "columns": 3413,
+        "constraints": 2125,
+        "policies": 364,
+        "functions": 1274,
+        "triggers": 173,
+        "roles": 29,
+        "default_privileges": 0,
+        "schema": 1
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38612871864"
+    },
+    "post_apply_inspect": {
+      "ssm_command_id": "b443d830-9b42-467e-af94-d8f77f43d9f8",
+      "read_only": true,
+      "live_definition_sha256": "878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7",
+      "already_applied": true,
+      "table_owners": {
+        "public.check_stakeholders": "checksops_admin",
+        "public.check_partner_stakeholder_removals": "checksops_admin"
+      },
+      "authenticated_member_of_owner": false,
+      "table_acls": {
+        "public.check_stakeholders": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin,authenticated=ard/checksops_admin}",
+        "public.check_partner_stakeholder_removals": "{checksops_admin=arwdDxtm/checksops_admin,checksops=ard/checksops_admin,authenticated=ard/checksops_admin}"
+      },
+      "table_acls_unchanged": true,
+      "policies": "the pre-apply policies plus aws_member_insert_* (INSERT) and aws_member_delete_* (DELETE) on each table, permissive, to authenticated"
+    }
+  },
+  "production_evidence": {
+    "2026-10-15 apply": "Guarded apply on i-0c35557c4e5385406, workstream prod-sql79-member-stakeholder-writes-20261015, main 18fafde1b (staged by sql53-temporary-transfer run 38747149596), owner-approved run, SSM b443d830-9b42-467e-af94-d8f77f43d9f8: receipt issued, evaluate allowed, apply exit 0, d9bc8921… -> 878d6441…; unrelated catalog c1384429… unchanged; post-apply inspect already_applied true, both table owners checksops_admin, authenticated_member_of_owner false, both table ACLs unchanged, aws_member_insert_* and aws_member_delete_* added on both tables (permissive, to authenticated). Pre-apply inspect SSM 4dcdfee5-da70-482a-a35b-2f2e8bcef429: live d9bc8921… = expected, already_applied false, predecessors sql77 and sql78 applied, preconditions met, current_user checksops_admin, owner_roles [checksops_admin], authenticated_member_of_owner false, both table owners checksops_admin. Contracts claim-ledger 4/4, tenant-isolation 6/6 (runner), financial-write-protections 36/36 (clean local checkout of the same commit). one_use_id sql79-prod-ed5216d8-5f92-4f7a-a49b-316dad1f58e5 consumed by the successful apply (registry entry not read back). execute is false so the pin is no longer a standing authorization."
   }
 }

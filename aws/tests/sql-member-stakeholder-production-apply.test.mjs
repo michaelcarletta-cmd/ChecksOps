@@ -9,11 +9,10 @@
  * helper schema as it stood in production before SQL 77, then runs
  * the real production inspect and apply for 77, 78 and 79 in order, with the
  * order, drift and unrelated-change refusals in between.
- * The SQL 77 and SQL 78 pins were applied to production on 2026-10-15 and
- * retired (execute false, evidence in `applied`); the SQL 79 pin is
- * execute-authorized (owner review of the execute change). Refusals of a
- * pending or retired pin, and applies of an execute-authorized one, run on
- * in-test copies.
+ * The SQL 77, SQL 78 and SQL 79 pins were applied to production on 2026-10-15
+ * and retired (execute false, evidence in `applied`). Refusals of a pending or
+ * retired pin, and applies of an execute-authorized one, run on in-test
+ * copies.
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -55,16 +54,15 @@ import { applyBaseSchema, pgSkipReason, startPg } from './helpers/stakeholder-po
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLI = path.join(ROOT, 'scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs');
 const COMMITTED = loadAllMemberStakeholderProductionPins(ROOT);
-// The committed SQL 77 and SQL 78 pins were retired (execute false) after their 2026-10-15
-// production applies; SQL 79 is execute-authorized. The apply tests run on execute-authorized
-// copies (SQL 77's and SQL 78's are the pins as they stood for those runs; SQL 79's equals the
-// committed pin).
+// The committed SQL 77, SQL 78 and SQL 79 pins were retired (execute false) after their
+// 2026-10-15 production applies. The apply tests run on execute-authorized copies (the pins as
+// they stood for those runs).
 const PINS = Object.fromEntries(Object.entries(COMMITTED).map(([key, pin]) => [key, { ...pin, execute: true }]));
 // Each migration's pending state (execute false, authorization pending), built here so the
 // refusals of a pending pin stay tested after a committed pin was authorized (and retired).
 const PENDING = Object.freeze(Object.fromEntries(Object.entries(COMMITTED).map(([key, pin]) => [key, Object.freeze({ ...pin, authorization: 'pending', execute: false })])));
-const EXECUTE_AUTHORIZED = new Set(['sql79']);
-const RETIRED = new Set(['sql77', 'sql78']);
+const EXECUTE_AUTHORIZED = new Set();
+const RETIRED = new Set(['sql77', 'sql78', 'sql79']);
 const SQL72_PIN = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/sql72-production-apply.json'), 'utf8'));
 const STAGING_RUNS = { sql77: '38574715440', sql78: '38602758947', sql79: '38612871864' };
 const COMMIT = 'a'.repeat(40);
@@ -131,7 +129,11 @@ async function runCli(argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, i
   return { out: writes.join(''), spent };
 }
 
-test('production pins are the staging-applied pins (SQL 77 hashes aside), SQL 77 and SQL 78 applied and retired, SQL 79 execute-authorized, with distinct phrases and the production RDS', () => {
+test('production pins are the staging-applied pins (SQL 77 hashes aside), SQL 77, SQL 78 and SQL 79 applied and retired, with distinct phrases and the production RDS', () => {
+  // All three were applied once and retired: no committed pin is execute-authorized.
+  assert.deepEqual([...RETIRED], MEMBER_STAKEHOLDER_MIGRATION_ORDER);
+  assert.equal(EXECUTE_AUTHORIZED.size, 0);
+  for (const key of MEMBER_STAKEHOLDER_MIGRATION_ORDER) assert.equal(COMMITTED[key].execute, false, key);
   const phrases = new Set();
   for (const key of MEMBER_STAKEHOLDER_MIGRATION_ORDER) {
     const pin = COMMITTED[key];
@@ -323,7 +325,7 @@ test('SQL 77 applied evidence matches the pin: 8f2417b5 -> 0cd3ab3f, owner check
   assert.match(pin.production_evidence['2026-10-15 apply'], /execute is false/);
 });
 
-test('the committed (retired) SQL 77 and SQL 78 pins no longer authorize an apply: refused before connecting, receipt not spent', async () => {
+test('the committed (retired) SQL 77, SQL 78 and SQL 79 pins no longer authorize an apply: refused before connecting, receipt not spent', async () => {
   for (const key of RETIRED) {
     assert.equal(COMMITTED[key].execute, false, key);
     const run = (pin) => executeMemberStakeholderProductionApply(manifest(key), {
@@ -435,17 +437,16 @@ test('SQL 78 applied evidence matches the pin: 4031dea6 -> 3d650a56, owner check
   assert.match(pin.production_evidence['2026-10-15 apply'], /execute is false/);
 });
 
-test('SQL 79 execute pin: authorization wording, unchanged staging pins, staging acceptance, latest production inspect, expected owner', () => {
+test('SQL 79 retired pin: authorization wording, unchanged staging pins, staging acceptance, latest production inspect, expected owner', () => {
   const pin = COMMITTED.sql79;
   const staging = MEMBER_STAKEHOLDER_MIGRATIONS.sql79.staging_pin;
-  assert.equal(pin.execute, true);
-  assert.ok(pin.authorization.startsWith('Owner approved the SQL 78 apply on 2026-10-15 and asked for this change ("approve the SQL 78 record and SQL 79 execute PR"); the SQL 79 pin values (d9bc8921 -> 878d6441) are unchanged from the reviewed pin'));
-  assert.ok(pin.authorization.includes("production's read-only inspect (SSM 405d41e9-4b0e-4ca5-af90-27ff2c9428f2) matched the pre-state d9bc8921 (the post-state 878d6441 rests on staging run 38612871864)"));
-  assert.match(pin.authorization, /CREATE_MEMBER_STAKEHOLDER_WRITE_POLICIES/);
-  // It records no owner approval of a SQL 79 run.
-  assert.doesNotMatch(pin.authorization, /approve applying SQL 79/);
-  assert.doesNotMatch(pin.authorization, /approve applying/);
-  assert.equal(pin.applied, undefined);
+  assert.equal(pin.execute, false);
+  assert.ok(pin.authorization.includes('PR #964 set execute true on the SQL 79 pin (d9bc8921 -> 878d6441, unchanged from the reviewed pin)'));
+  // The owner approved that one run (not any later run), after PR #964 merged.
+  assert.ok(pin.authorization.includes('"approve applying SQL 79 to production"'));
+  assert.match(pin.authorization, /workstream prod-sql79-member-stakeholder-writes-20261015/);
+  assert.match(pin.authorization, /That approval covered that run only/);
+  assert.equal(pin.applied.owner_approval, 'approve applying SQL 79 to production');
   assert.equal(pin.expected_live_definition_sha256, 'd9bc8921d75864abe9af5bf404f237fb561bc2c1cad21339e7f60decd0a6f0a4');
   assert.equal(pin.intended_replacement_sha256, '878d6441902edf8050b01daf25b2d43a01bdfde62d17490550c4d7217a5baba7');
   for (const field of ['source_sha256', 'expected_live_definition_sha256', 'intended_replacement_sha256']) assert.equal(pin[field], staging[field], field);
@@ -474,6 +475,78 @@ test('SQL 79 execute pin: authorization wording, unchanged staging pins, staging
   // The inspect matched the pre-state only.
   assert.equal(latest.already_applied, undefined);
   assert.match(latest.note, /matched the pre-state only; the post-state 878d6441… rests on staging run 38612871864/);
+});
+
+test('SQL 79 applied evidence matches the pin: d9bc8921 -> 878d6441, owner checks, unchanged ACLs, staging acceptance and a clean post-apply inspect', () => {
+  const pin = COMMITTED.sql79;
+  const applied = pin.applied;
+  assert.equal(applied.date, '2026-10-15');
+  assert.equal(applied.result, 'applied');
+  assert.equal(applied.source_commit, '18fafde1b5d0338ca535ab54410f9850f6b09702');
+  assert.equal(applied.source_staged_by, 'sql53-temporary-transfer run 38747149596');
+  assert.equal(applied.runner, 'i-0c35557c4e5385406');
+  assert.equal(applied.workstream_id, 'prod-sql79-member-stakeholder-writes-20261015');
+  assert.equal(applied.one_use_id, 'sql79-prod-ed5216d8-5f92-4f7a-a49b-316dad1f58e5');
+  assert.match(applied.one_use_id, /^sql79-prod-[0-9a-f-]{36}$/);
+  assert.notEqual(applied.one_use_id, COMMITTED.sql77.applied.one_use_id);
+  assert.notEqual(applied.one_use_id, COMMITTED.sql78.applied.one_use_id);
+  assert.equal(applied.one_use_id_consumed, true);
+  assert.equal(applied.one_use_id_consumed_basis, COMMITTED.sql78.applied.one_use_id_consumed_basis);
+  const tables = ['public.check_stakeholders', 'public.check_partner_stakeholder_removals'];
+  const owners = Object.fromEntries(tables.map((table) => [table, pin.production_inspect.expected_table_owner]));
+  const acls = {
+    'public.check_stakeholders': '{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin,authenticated=ard/checksops_admin}',
+    'public.check_partner_stakeholder_removals': '{checksops_admin=arwdDxtm/checksops_admin,checksops=ard/checksops_admin,authenticated=ard/checksops_admin}',
+  };
+  const pre = applied.pre_apply_inspect;
+  assert.equal(pre.ssm_command_id, '4dcdfee5-da70-482a-a35b-2f2e8bcef429');
+  assert.equal(pre.read_only, true);
+  assert.equal(pre.live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(pre.live_matches_expected, true);
+  assert.equal(pre.already_applied, false);
+  assert.deepEqual(pre.predecessors, {
+    sql77: { applied: true, live_definition_sha256: COMMITTED.sql77.intended_replacement_sha256 },
+    sql78: { applied: true, live_definition_sha256: COMMITTED.sql78.intended_replacement_sha256 },
+  });
+  assert.equal(pre.apply_preconditions_met, true);
+  assert.deepEqual(pre.precondition_failures, []);
+  assert.equal(pre.current_user, pin.production_inspect.expected_table_owner);
+  assert.deepEqual(pre.owner_roles, sql79OwnerRoles(pin));
+  assert.equal(pre.authenticated_member_of_owner, false);
+  assert.deepEqual(pre.table_owners, owners);
+  assert.deepEqual(pre.table_acls, acls);
+  // check_stakeholders' ACL is the one the SQL 77 post-apply inspect read.
+  assert.equal(pre.table_acls['public.check_stakeholders'], COMMITTED.sql77.applied.post_apply_inspect.table_acl);
+  assert.doesNotMatch(pre.policies, /aws_member_insert|aws_member_delete/);
+  for (const name of ['claim-ledger', 'tenant-isolation', 'financial-write-protections']) {
+    assert.equal(applied.contract_results[name].ok, true, name);
+  }
+  assert.match(applied.contract_results['claim-ledger'].evidence, /^4\/4 on i-0c35557c4e5385406 \(SSM 4dcdfee5/);
+  assert.match(applied.contract_results['tenant-isolation'].evidence, /^6\/6 on i-0c35557c4e5385406 \(SSM 4dcdfee5/);
+  assert.equal(applied.contract_results['financial-write-protections'].test, 'aws/tests/api-write.test.mjs');
+  assert.match(applied.contract_results['financial-write-protections'].evidence, /^36\/36 on a clean local checkout of 18fafde1b5d0338ca535ab54410f9850f6b09702/);
+  assert.equal(applied.apply_ssm_command_id, 'b443d830-9b42-467e-af94-d8f77f43d9f8');
+  const receipt = applied.receipt;
+  assert.equal(receipt.result, 'applied');
+  assert.equal(receipt.before_hash, pin.expected_live_definition_sha256);
+  assert.equal(receipt.after_hash, pin.intended_replacement_sha256);
+  assert.equal(receipt.unrelated_catalog_sha256, 'c1384429ca2dc0471fcecc7023c328349cd6b827f4e2ae19a713b74272dbf56c');
+  assert.deepEqual(receipt.unrelated_catalog_counts, {
+    relations: 860, columns: 3413, constraints: 2125, policies: 364, functions: 1274, triggers: 173, roles: 29, default_privileges: 0, schema: 1,
+  });
+  assert.equal(receipt.staging_acceptance, pin.staging_acceptance.reference);
+  const post = applied.post_apply_inspect;
+  assert.equal(post.ssm_command_id, applied.apply_ssm_command_id);
+  assert.equal(post.read_only, true);
+  assert.equal(post.live_definition_sha256, pin.intended_replacement_sha256);
+  assert.equal(post.already_applied, true);
+  assert.deepEqual(post.table_owners, owners);
+  assert.equal(post.authenticated_member_of_owner, false);
+  assert.deepEqual(post.table_acls, pre.table_acls);
+  assert.equal(post.table_acls_unchanged, true);
+  assert.match(post.policies, /aws_member_insert_\* \(INSERT\) and aws_member_delete_\* \(DELETE\) on each table, permissive, to authenticated/);
+  assert.match(pin.production_evidence['2026-10-15 apply'], /SSM b443d830-9b42-467e-af94-d8f77f43d9f8/);
+  assert.match(pin.production_evidence['2026-10-15 apply'], /execute is false/);
 });
 
 test('SQL 79 production rules: the login is the expected owner, authenticated is not a member of it, ACLs unchanged, exactly the four reviewed policies', () => {
@@ -892,8 +965,7 @@ test('CLI does not spend the receipt on a wrong phrase, execute false, a wrong o
     assert.equal(crossPhrase.spent, 0);
     assert.match(crossPhrase.out, /PRODUCTION_APPROVAL_REQUIRED/);
 
-    // A pending pin (SQL 79's pre-authorization copy) or a retired one (SQL 77 and SQL 78 as
-    // committed) refuses execute.
+    // A retired pin (SQL 77, SQL 78 and SQL 79 as committed) refuses execute.
     const committed = await runCli(argv, { input: manifest(key), deps: { ...(EXECUTE_AUTHORIZED.has(key) ? { pin: PENDING[key] } : {}), enforceScriptGuard: () => owned(key) } });
     assert.equal(committed.spent, 0);
     assert.match(committed.out, /GUARD_APPLY_FORBIDDEN/);
@@ -958,18 +1030,7 @@ test('the real guard: a staging receipt cannot authorize production; a productio
   assert.equal(refused.spent, 0);
   assert.match(refused.out, /RECEIPT_MISMATCH/);
 
-  const prodRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sql77-79-prod-receipt-'));
-  const production = issue(prodRoot, 'sql79', {});
   const refusingDb = async () => ({ query: async () => { throw new Error('db-unavailable'); }, end: async () => {} });
-  // SQL 79's pending copy (execute:false) stops it after the guard, before the receipt is spent.
-  const pending = await runCli(['--migration', 'sql79', '--apply'], { input: production.input, deps: { pin: PENDING.sql79, enforceScriptGuard: guardWith(prodRoot, production.receipt), connect: refusingDb } });
-  assert.equal(pending.spent, 0);
-  assert.match(pending.out, /GUARD_APPLY_FORBIDDEN/);
-  // The committed (execute-authorized) SQL 79 pin, with no pin override, spends a production
-  // receipt that owns its file exactly once, then rolls back at a database that refuses every query.
-  const valid = await runCli(['--migration', 'sql79', '--apply'], { input: production.input, deps: { enforceScriptGuard: guardWith(prodRoot, production.receipt), connect: refusingDb } });
-  assert.equal(valid.spent, 1, valid.out);
-  assert.match(valid.out, /rolled back/);
   for (const key of RETIRED) {
     const retiredRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${key}-prod-receipt-`));
     const issued = issue(retiredRoot, key, {});
@@ -977,14 +1038,18 @@ test('the real guard: a staging receipt cannot authorize production; a productio
     const retired = await runCli(['--migration', key, '--apply'], { input: issued.input, deps: { enforceScriptGuard: guardWith(retiredRoot, issued.receipt), connect: refusingDb } });
     assert.equal(retired.spent, 0, key);
     assert.match(retired.out, /GUARD_APPLY_FORBIDDEN/, key);
-    // Its execute-authorized copy (the pin as it stood for the 2026-10-15 run) spends it exactly once.
+    // A pending copy (execute false, authorization pending) stops after the guard as well.
+    const pending = await runCli(['--migration', key, '--apply'], { input: issued.input, deps: { pin: PENDING[key], enforceScriptGuard: guardWith(retiredRoot, issued.receipt), connect: refusingDb } });
+    assert.equal(pending.spent, 0, key);
+    assert.match(pending.out, /GUARD_APPLY_FORBIDDEN/, key);
+    // Its execute-authorized copy (the pin as it stood for the 2026-10-15 run) spends a production
+    // receipt that owns its file exactly once, then rolls back at a database that refuses every query.
     const authorized = await runCli(['--migration', key, '--apply'], { input: issued.input, deps: { pin: PINS[key], enforceScriptGuard: guardWith(retiredRoot, issued.receipt), connect: refusingDb } });
     assert.equal(authorized.spent, 1, authorized.out);
     assert.match(authorized.out, /rolled back/, key);
     fs.rmSync(retiredRoot, { recursive: true, force: true });
   }
   fs.rmSync(stagingRoot, { recursive: true, force: true });
-  fs.rmSync(prodRoot, { recursive: true, force: true });
 });
 
 test('apply refuses before connecting without the phrase, a single-use id or execute', async () => {
