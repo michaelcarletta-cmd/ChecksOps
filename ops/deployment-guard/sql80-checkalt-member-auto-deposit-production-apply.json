@@ -1,8 +1,8 @@
 {
   "id": "sql80-checkalt-member-auto-deposit-production-apply",
   "migration": "sql80",
-  "authorization": "Owner approved the SQL 80 production pin (dce5b131 -> 5ad9a81c) and the read-only production inspect on 2026-10-15; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-15; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 80 production pin (dce5b131 -> 5ad9a81c) and the read-only production inspect on 2026-10-15, and approved the one apply run recorded in applied (workstream prod-sql80-checkalt-member-auto-deposit-20261015) on 2026-10-15 with \"approve applying SQL 80 to production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -62,5 +62,80 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938",
     "basis": "Guarded staging SQL executor apply of sql80-checkalt-member-auto-deposit, run #39 (38723636938) on main ba2047117: staging 3ef657f4… -> 5ad9a81c…, acl_sha256 5e51925f… unchanged. Read-live run 38723779280 (#40) confirmed already_applied.",
     "production_differs": "Production's pre-state differs from staging's (no comment; PUBLIC and checksops EXECUTE instead of checksops and authenticated), so its pre-state fingerprint dce5b131… differs from staging's 3ef657f4…. The post-state 5ad9a81c… is the same. The same file bytes (source_sha256) run in both."
+  },
+  "applied": {
+    "date": "2026-10-15",
+    "result": "applied",
+    "source_commit": "60772dbf72c7bb912fc6210f50ddcecd26fde433",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql80-checkalt-member-auto-deposit-20261015",
+    "one_use_id": "sql80-prod-e527ba94-d5b0-45f5-bd2c-2fbb96f7d7cd",
+    "owner_approval": "approve applying SQL 80 to production",
+    "pre_apply_inspect": {
+      "ssm_command_id": "93c5591a-2af2-4a41-9790-fad6b58f5afc",
+      "read_only": true,
+      "live_definition_sha256": "dce5b13151f4b6c6fe7660e0ef9576d4a80e80ad66cfcffbad6d880ad8a07d65",
+      "apply_preconditions_met": true,
+      "owner_roles": [
+        "checksops_admin"
+      ],
+      "authenticated_member_of_owner": false
+    },
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (SSM 93c5591a-2af2-4a41-9790-fad6b58f5afc)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (SSM 93c5591a-2af2-4a41-9790-fad6b58f5afc)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "36/36 on the operator's clean checkout of 60772dbf72c7bb912fc6210f50ddcecd26fde433; the runner's package lacks @aws-sdk/client-s3 and cannot load this test"
+      }
+    },
+    "apply_ssm_command_id": "b3221877-8d75-44e7-b76c-ae9420e2d73c",
+    "earlier_ssm_command_id": "64fb1530-ab13-415f-b998-cb6ba3e757d9",
+    "earlier_ssm_note": "Issued the receipt and lease via preflight, then stopped before evaluate on an operator script parsing error; nothing was applied by it. That same unspent receipt and manifest (same one_use_id) were then used by SSM b3221877-8d75-44e7-b76c-ae9420e2d73c, which spent the receipt once.",
+    "receipt": {
+      "result": "applied",
+      "before_hash": "dce5b13151f4b6c6fe7660e0ef9576d4a80e80ad66cfcffbad6d880ad8a07d65",
+      "after_hash": "5ad9a81cfc01ba8affc165b42986c1a6e7ce87c5f61df6a5ebcac293e00fa0db",
+      "function_acl_before": "{=X/checksops_admin,checksops_admin=X/checksops_admin,checksops=X/checksops_admin}",
+      "function_acl_after": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}",
+      "table_acl": "{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}",
+      "table_acl_unchanged": true,
+      "unrelated_catalog_sha256": "2f83e42f8e1f3dabbe389bd59263089b61d26cfe3833179fd72773bc51f82c22",
+      "unrelated_catalog_counts": {
+        "relations": 855,
+        "columns": 3407,
+        "constraints": 2112,
+        "policies": 362,
+        "functions": 1273,
+        "triggers": 173,
+        "roles": 29,
+        "default_privileges": 0,
+        "schema": 1
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938"
+    },
+    "post_apply_inspect": {
+      "ssm_command_id": "b3221877-8d75-44e7-b76c-ae9420e2d73c",
+      "read_only": true,
+      "live_definition_sha256": "5ad9a81cfc01ba8affc165b42986c1a6e7ce87c5f61df6a5ebcac293e00fa0db",
+      "already_applied": true,
+      "function_states": {
+        "definition": "intended",
+        "comment": "intended"
+      },
+      "authenticated_member_of_owner": false
+    }
+  },
+  "production_evidence": {
+    "2026-10-15 apply": "Guarded apply on i-0c35557c4e5385406, workstream prod-sql80-checkalt-member-auto-deposit-20261015, main 60772dbf7, owner-approved run, SSM b3221877-8d75-44e7-b76c-ae9420e2d73c: dce5b131… -> 5ad9a81c…; PUBLIC EXECUTE revoked, authenticated EXECUTE granted, checksops kept; table ACL unchanged; unrelated catalog 2f83e42f… unchanged; post-apply inspect already_applied true. Contracts claim-ledger 4/4, tenant-isolation 6/6 (runner), financial-write-protections 36/36 (operator checkout of the same commit). execute is false so the pin is no longer a standing authorization."
   }
 }

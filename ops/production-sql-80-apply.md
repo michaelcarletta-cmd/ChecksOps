@@ -7,33 +7,52 @@
 | Tool | `scripts/deployment-guard/sql80-checkalt-production-apply.mjs` (lib `scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs`) |
 | Test | `aws/tests/sql80-checkalt-production-apply.test.mjs` |
 
-**Status:** not applied to production; the pin is **execute-authorized** (`execute: true`).
-The reviewed change that set it recorded:
+**Status:** applied 2026-10-15. The pin's `execute` is back to `false`, so it is no longer a
+standing authorization; a re-apply needs a new reviewed pin change. The evidence is in the
+pin's `applied` and `production_evidence`:
 
-- `authorization`: the owner's approval on 2026-10-15 of the pin values (dce5b131 → 5ad9a81c)
-  and the read-only production inspect; `execute: true` takes effect only on the owner's review
-  and merge of that change. It is not an approval of any particular run:
-  each apply still needs the owner's run-time approval for that workstream (the
-  manifest's `approval`), a production-sql receipt that owns the pinned file, the
-  authorization phrase and a new `one_use_id`.
-- `staging_acceptance`: `ok: true`, reference
-  `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938` (guarded
-  staging SQL executor apply of `sql80-checkalt-member-auto-deposit`, run #39 on main
-  `ba2047117`, staging `3ef657f4…` → `5ad9a81c…`, `acl_sha256` `5e51925f…` unchanged;
-  read-live run `38723779280` (#40) confirmed `already_applied`).
-- `production_inspect.latest`: the read-only inspect with this tool, SSM command
-  `da23b804-07c0-4c93-b686-cb8b0bb36de5` (2026-10-15, main `43377df1a`): live
-  `dce5b131…` = expected, `apply_preconditions_met` true, `precondition_failures` `[]`,
-  `function_acl` and `table_acl` unchanged from SSM `1b849090-4596-49ef-aa76-c2a89b58a3a1`.
-  That run predates the `authenticated_not_member_of_owner` precondition (below), so the
-  step 1 inspect before the apply must show `authenticated_member_of_owner: false`.
+- **Approval:** the owner approved the pin values (dce5b131 → 5ad9a81c) and the read-only
+  production inspect on 2026-10-15, and approved this one apply run on 2026-10-15 with
+  "approve applying SQL 80 to production".
+- **Run:** main `60772dbf72c7bb912fc6210f50ddcecd26fde433` on `i-0c35557c4e5385406`,
+  workstream `prod-sql80-checkalt-member-auto-deposit-20261015`, `one_use_id`
+  `sql80-prod-e527ba94-d5b0-45f5-bd2c-2fbb96f7d7cd`.
+- **Pre-apply inspect** (SSM `93c5591a-2af2-4a41-9790-fad6b58f5afc`): live `dce5b131…`,
+  `apply_preconditions_met` true, `owner_roles` `["checksops_admin"]`,
+  `authenticated_member_of_owner` false.
+- **Contracts:** claim-ledger 4/4 and tenant-isolation 6/6 on the runner (same SSM);
+  financial-write-protections (`aws/tests/api-write.test.mjs`) 36/36 on the operator's clean
+  checkout of the same commit (see the note under step 2).
+- **Receipt, evaluate, apply and verify** (SSM `b3221877-8d75-44e7-b76c-ae9420e2d73c`):
+  `result` applied, `before_hash` `dce5b13151f4b6c6fe7660e0ef9576d4a80e80ad66cfcffbad6d880ad8a07d65`,
+  `after_hash` `5ad9a81cfc01ba8affc165b42986c1a6e7ce87c5f61df6a5ebcac293e00fa0db`;
+  function ACL `{=X/checksops_admin,checksops_admin=X/checksops_admin,checksops=X/checksops_admin}`
+  → `{checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}`;
+  table ACL unchanged (`{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}`);
+  unrelated catalog `2f83e42f8e1f3dabbe389bd59263089b61d26cfe3833179fd72773bc51f82c22`
+  unchanged (relations 855, columns 3407, constraints 2112, policies 362, functions 1273,
+  triggers 173, roles 29, default privileges 0, schema 1); staging acceptance run
+  `38723636938`. An earlier SSM `64fb1530-ab13-415f-b998-cb6ba3e757d9` issued a receipt via
+  preflight and then stopped before evaluate on an operator script parsing error; nothing
+  was applied by it. That same unspent receipt and manifest were then used by
+  `b3221877…`, which spent the receipt once.
+- **Post-apply inspect** (same SSM `b3221877…`): live `5ad9a81c…`, `already_applied` true,
+  `function_states` definition intended / comment intended, `authenticated_member_of_owner`
+  false.
 
-After the apply, a follow-up reviewed change records the evidence in the pin and sets
-`execute` back to `false`.
+Before the apply, the reviewed change that set `execute: true` recorded the
+`staging_acceptance` (`ok: true`, reference
+`https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38723636938`: guarded staging
+SQL executor apply of `sql80-checkalt-member-auto-deposit`, run #39 on main `ba2047117`,
+staging `3ef657f4…` → `5ad9a81c…`, `acl_sha256` `5e51925f…` unchanged; read-live run
+`38723779280` (#40) confirmed `already_applied`) and `production_inspect.latest` (SSM
+`da23b804-07c0-4c93-b686-cb8b0bb36de5`, main `43377df1a`: live `dce5b131…` = expected,
+`apply_preconditions_met` true).
 
 ## What the apply changes in production (plain words)
 
-On `public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)` only, in one transaction:
+Written before the apply; "today" below means the pre-apply state. On
+`public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)` only, in one transaction:
 
 1. **Function body:** SQL 38's body is replaced by SQL 80's. Tenant users with role
    owner, admin, manager or operator (not only admin/owner) and the platform owner may
@@ -137,6 +156,11 @@ as SQL 72; the tool proves the endpoint is the production RDS.
 
 ## Steps (each needs owner approval)
 
+These steps are kept as the record of how the 2026-10-15 apply ran. The committed pin is
+retired (`execute: false`), so step 6 (apply) now refuses without connecting
+(`GUARD_APPLY_FORBIDDEN` even with a receipt that owns the file, and the receipt is not
+spent); any re-run needs a new reviewed pin change first.
+
 Run on `i-0c35557c4e5385406` from a checkout of reviewed main that contains the
 execute-authorized pin (staged by `.github/workflows/sql53-temporary-transfer.yml`), with
 `AWS_ENDPOINT_URL_SECRETS_MANAGER` set as above. `<main sha>` is that checkout's full
@@ -161,6 +185,9 @@ commit.
    `node --test aws/tests/api-write.test.mjs`, and record them as `contract_results`
    (`claim-ledger`, `tenant-isolation`, `financial-write-protections`, each
    `{ ok, test, evidence }`); preflight refuses `sql-apply` without them.
+   The runner's package lacks `@aws-sdk/client-s3`, so `aws/tests/api-write.test.mjs`
+   cannot load there; run it on a clean checkout of the same commit elsewhere (as on
+   2026-10-15) and record that as its `evidence`.
 3. **Manifest** (for example `sql80-manifest.json`, outside the repo):
 
    ```json
@@ -222,7 +249,8 @@ commit.
    `5ad9a81c…`, `function_acl` as in "after" above, `table_acl` unchanged,
    `authenticated_member_of_owner` false.
 8. **Record and retire:** a reviewed change records the evidence (receipt, before/after
-   hashes and ACLs) in the pin and sets `execute` back to `false`.
+   hashes and ACLs) in the pin and sets `execute` back to `false`. Done for the 2026-10-15
+   apply (see Status).
 
 ## Rollback (a separate owner-approved operation)
 
