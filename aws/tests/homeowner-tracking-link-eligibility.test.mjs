@@ -84,3 +84,17 @@ test('tracking button uses live claim_id and keeps payment eligibility separate'
     /deposited_at|check_stage|homeowner_bank_link|payoutEnabled|bank.?verif/,
   );
 });
+
+test('a resolved live check without a claim disables tracking even with a stale claim prop', () => {
+  const CLAIM = '11111111-1111-4111-8111-111111111111';
+  const unlinked = evaluateHomeownerTrackingLinkEligibility({
+    claimId: CLAIM,
+    liveCheckClaimId: null,
+    liveResolved: true,
+  });
+  assert.equal(unlinked.enabled, false);
+  assert.equal(unlinked.claimId, null);
+  const pending = evaluateHomeownerTrackingLinkEligibility({ claimId: CLAIM, liveCheckClaimId: null, liveResolved: false });
+  assert.equal(pending.enabled, true);
+  assert.equal(pending.claimId, CLAIM);
+});

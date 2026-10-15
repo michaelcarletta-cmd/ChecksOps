@@ -57,7 +57,7 @@ export function SendCheckTrackingLinkButton({
   const [sentUrl, setSentUrl] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
 
-  const { data: liveCheckLink } = useQuery({
+  const { data: liveCheckLink, isSuccess: liveCheckResolved } = useQuery({
     queryKey: homeownerTrackingLinkQueryKey(checkIntakeItemId || ""),
     enabled: !!checkIntakeItemId,
     queryFn: async () => {
@@ -74,6 +74,7 @@ export function SendCheckTrackingLinkButton({
   const tracking = evaluateHomeownerTrackingLinkEligibility({
     claimId,
     liveCheckClaimId: liveCheckLink?.claim_id ?? null,
+    liveResolved: liveCheckResolved,
   });
   const resolvedClaimId = tracking.claimId;
 

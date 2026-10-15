@@ -13,6 +13,8 @@ export function homeownerTrackingLinkQueryKey(checkIntakeItemId: string) {
 export function evaluateHomeownerTrackingLinkEligibility(opts: {
   claimId?: string | null;
   liveCheckClaimId?: string | null;
+  /** True once the live check row has been read; then its claim_id wins, even when null. */
+  liveResolved?: boolean;
   /** Ignored. Deposit is not a tracking-link gate. */
   deposited?: boolean;
   /** Ignored. Homeowner bank verification is payment-link only. */
@@ -20,7 +22,10 @@ export function evaluateHomeownerTrackingLinkEligibility(opts: {
   /** Ignored. Disbursement readiness is not a tracking-link gate. */
   payoutEnabled?: boolean;
 }) {
-  const claimId = opts.liveCheckClaimId || opts.claimId || null;
+  // A check unlinked from its claim must not keep sending for the old claim via a stale prop.
+  const claimId = opts.liveResolved
+    ? opts.liveCheckClaimId || null
+    : opts.liveCheckClaimId || opts.claimId || null;
   if (!claimId) {
     return {
       enabled: false as const,
