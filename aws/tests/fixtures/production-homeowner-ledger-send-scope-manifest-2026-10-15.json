@@ -7,7 +7,7 @@
   "members": {
     "homeowner.mjs": {
       "live_sha256": "5801f18a1e4a1be88ef96b4c4458a5d1b7281bb2c749c94ba409b650a31fbf63",
-      "accepted_sha256": "69785a7d3705428f8674616e63028cef637ceb872bb0fc351064cdcf1c918897",
+      "accepted_sha256": "91f757ee94cb56b1fe9aa1268ee2a9f38699db0b29f4e8ba9fb245a5ecd9228b",
       "operation": "replace"
     }
   }

@@ -541,8 +541,8 @@ export const runHomeownerLedgerSend = async ({
     `SELECT 1 FROM public.claims c
      WHERE c.id = $1::uuid
        AND (c.org_id = $2::uuid
-         OR EXISTS (SELECT 1 FROM public.check_intake_items ci
-                    WHERE ci.claim_id = c.id AND ci.tenant_id = $2::uuid))
+         OR (c.org_id IS NULL AND EXISTS (SELECT 1 FROM public.check_intake_items ci
+                    WHERE ci.claim_id = c.id AND ci.tenant_id = $2::uuid)))
      LIMIT 1`,
     [claimId, tenantId],
   )).rows[0];
@@ -649,20 +649,32 @@ export const runSendFileToHomeowner = async ({
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
+  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
+  const actor = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
+     LIMIT 1`,
+    [mapping.application_user_id, file.tenant_id],
+  )).rows[0];
+  if (!actor) return { ok: false, statusCode: 403, error: 'role_not_allowed', spoofFieldsIgnored: spoof };
+
   const claim = (await client.query(
     `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [file.check_id],
   )).rows[0];
   const claimId = claim?.claim_id || null;
-  const tok = (await client.query(
+  // Only this claim's homeowner: never the tenant's newest token for another claim.
+  const tok = claimId ? (await client.query(
     `SELECT token, homeowner_email, homeowner_name
      FROM public.homeowner_ledger_tokens
      WHERE tenant_id = $1::uuid
-       AND ($2::uuid IS NULL OR claim_id = $2::uuid)
+       AND claim_id = $2::uuid
        AND revoked_at IS NULL
+       AND (expires_at IS NULL OR expires_at > now())
      ORDER BY created_at DESC LIMIT 1`,
     [file.tenant_id, claimId],
-  )).rows[0];
+  )).rows[0] : null;
   const homeownerEmail = normalizeEmail(tok?.homeowner_email);
   if (!homeownerEmail) {
     return {
