@@ -1,0 +1,24 @@
+{
+  "workstream_id": "signature-request-repairs",
+  "authorization": "Owner-approved 2026-10-15 (\"prepare the deploy bundle after PR 5 merges\"): write-signature.mjs, email-branding.mjs and esign.mjs from PR #986 may be planned for production as REPLACE overlays on the live production bytes. Each production apply still needs the owner's run-time approval, the staging acceptance run and the phrase DEPLOY <member> TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Apply in order write-signature.mjs, email-branding.mjs, esign.mjs: the new esign imports authorizeSignatureDocumentPath, which only the new write-signature exports. write-signature and email-branding only add exports, so each is safe against the live esign. write-signature now requires owner/admin/manager/operator of the owning tenant (or platform owner) and draft requests for signers; live write-check-workflow passes mapping. signature-submit.mjs is unchanged (24845b4c).",
+  "members": {
+    "write-signature.mjs": {
+      "live_sha256": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26",
+      "accepted_sha256": "867ab4e06cb1cda29802f1463f9af6c731898738e42d748da14b1780f7ad8b9c",
+      "operation": "replace"
+    },
+    "email-branding.mjs": {
+      "live_sha256": "54cb79d1a62e9b62618d54c0f1e86e8ec43d9e1860a77bec32adde171a7b88cb",
+      "accepted_sha256": "f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0",
+      "operation": "replace"
+    },
+    "esign.mjs": {
+      "live_sha256": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+      "accepted_sha256": "953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83",
+      "operation": "replace"
+    }
+  }
+}
