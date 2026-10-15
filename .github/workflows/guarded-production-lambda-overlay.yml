@@ -41,6 +41,7 @@ on:
           - providers/production/checkalt-register.mjs
           - providers/production/checkalt-dispatch.mjs
           - providers/production/checkalt-holds.mjs
+          - providers/parity/checkalt-functions.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
