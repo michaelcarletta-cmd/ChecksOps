@@ -17,6 +17,10 @@
     "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql": {
       "verified_live": true,
       "evidence": "2026-10-12 guarded apply on i-0c35557c4e5385406 (workstream prod-ledger-20261007193200, main 23540ecb): sync_homeowner_ledger_from_check() 9f6ec2dc… -> 03fcea3c…; read-only inspect after apply reports already_applied, preserved functions and ledger triggers unchanged"
+    },
+    "aws/workflows/sql/81_checkalt_production_register.sql": {
+      "verified_live": true,
+      "evidence": "2026-10-15 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 6c0422a9-5712-4f15-bb83-54565b0d35fb, workstream prod-sql81-checkalt-register-20261015, main 787007faf): public.aws_register_checkalt_tenant_account e12fdf2f… -> 36623cce…; post-apply read-only inspect already_applied true; recorded in ops/deployment-guard/sql81-checkalt-production-register-production-apply.json applied (#976)"
     }
   },
   "order": [
