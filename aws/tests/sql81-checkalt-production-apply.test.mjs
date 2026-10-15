@@ -51,9 +51,9 @@ import { applyBaseSchema, pgSkipReason, startPg } from './helpers/stakeholder-po
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLI = path.join(ROOT, 'scripts/deployment-guard/sql81-checkalt-production-apply.mjs');
 const COMMITTED = loadSql81ProductionPin(ROOT);
-// The committed pin is execute-authorized (owner-approved 2026-10-15) with the recorded
-// staging acceptance. The apply tests exercise a copy with a placeholder staging acceptance
-// reference; PENDING is the pre-authorization shape, checked to refuse.
+// The committed pin is retired (execute false) with the 2026-10-15 apply recorded in
+// applied. The apply tests exercise an execute-authorized copy with a placeholder staging
+// acceptance reference; PENDING is the pre-authorization shape, checked to refuse.
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
 const PIN = Object.freeze({
   ...COMMITTED,
@@ -136,10 +136,22 @@ async function runCli(argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, i
   return { out: writes.join(''), spent };
 }
 
-test('production pin: execute-authorized, staging accepted, absent pre-state, staging post-state, production RDS', () => {
+test('production pin: applied and retired, staging accepted, absent pre-state, staging post-state, production RDS', () => {
   assert.equal(COMMITTED.migration, 'sql81');
-  assert.equal(COMMITTED.execute, true);
-  assert.match(COMMITTED.authorization, /^owner-approved 2026-10-15 in session \("approve applying SQL 81 to production"\)/);
+  assert.equal(COMMITTED.execute, false);
+  assert.match(COMMITTED.authorization, /^Applied to production on 2026-10-15; execute is false again/);
+  const applied = COMMITTED.applied;
+  assert.equal(applied.result, 'applied');
+  assert.equal(applied.owner_approval, 'approve applying SQL 81 to production');
+  assert.equal(applied.apply_ssm_command_id, '6c0422a9-5712-4f15-bb83-54565b0d35fb');
+  assert.equal(applied.receipt.before_hash, COMMITTED.expected_live_definition_sha256);
+  assert.equal(applied.receipt.after_hash, COMMITTED.intended_replacement_sha256);
+  assert.equal(applied.receipt.function_acl_after, COMMITTED.intended_post_state.function_acl);
+  assert.equal(applied.receipt.table_acl, COMMITTED.intended_post_state.table_acl);
+  assert.equal(applied.receipt.staging_acceptance, COMMITTED.staging_acceptance.reference);
+  assert.equal(applied.post_apply_inspect.already_applied, true);
+  assert.equal(applied.post_apply_inspect.live_definition_sha256, COMMITTED.intended_replacement_sha256);
+  for (const id of ['claim-ledger', 'tenant-isolation', 'financial-write-protections']) assert.equal(applied.contract_results[id].ok, true, id);
   assert.equal(COMMITTED.staging_acceptance.ok, true);
   assert.equal(COMMITTED.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38782120576');
   assert.match(COMMITTED.staging_acceptance.basis, /^Guarded staging SQL executor apply of sql81-checkalt-depositor-register/);
@@ -498,9 +510,9 @@ test('apply refuses before connecting: the pending pin, no phrase, no single-use
   const run = (overrides, pin = PIN) => executeSql81ProductionApply(manifest(overrides), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() });
   assert.equal((await run({}, PENDING)).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({}, { ...PENDING, staging_acceptance: PIN.staging_acceptance })).code, CODES.GUARD_APPLY_FORBIDDEN);
-  // The committed (authorized) pin, read from disk, passes every check up to the connection.
-  const committed = await executeSql81ProductionApply(manifest({ staging_acceptance: COMMITTED.staging_acceptance }), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() }).catch((error) => error);
-  assert.match(String(committed?.message || committed?.code || ''), /should-not-connect/);
+  // The committed (retired) pin, read from disk, refuses before connecting.
+  const committed = await executeSql81ProductionApply(manifest({ staging_acceptance: COMMITTED.staging_acceptance }), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() });
+  assert.equal(committed.code, CODES.GUARD_APPLY_FORBIDDEN);
   assert.equal((await run({ authorization_phrase: 'yes' })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({ one_use_id: 'x' })).code, CODES.INVALID_MANIFEST);
   assert.equal((await run({}, { ...PIN, execute: false })).code, CODES.GUARD_APPLY_FORBIDDEN);

@@ -8,14 +8,10 @@
 | Test | `aws/tests/sql81-checkalt-production-apply.test.mjs` |
 | Staging | guarded staging SQL executor, migration `sql81-checkalt-depositor-register` (test `aws/tests/sql81-checkalt-depositor-register-executor.test.mjs`) |
 
-**Status:** not applied to production. The pin is `authorization: "pending"`,
-`execute: false`, its `staging_acceptance` is still pending (`reference: null`) and its
-`production_inspect` is still `status: "pending"`, so evaluate and apply refuse with
-`PRODUCTION_APPROVAL_REQUIRED`. The owner records the staging apply run of
-`sql81-checkalt-depositor-register` and the read-only production inspect below, flips
-`execute` and records the approval in `authorization` in one separate reviewed change.
-After the apply, a follow-up change records the evidence and sets `execute` back to
-`false`.
+**Status:** applied to production on 2026-10-15 (SSM `6c0422a9-5712-4f15-bb83-54565b0d35fb`,
+workstream `prod-sql81-checkalt-register-20261015`, main `787007faf`: `e12fdf2f…` →
+`36623cce…`). The pin records the run in `applied` and is `execute: false` again, so
+evaluate and apply refuse; a re-apply needs a new reviewed pin change.
 
 ## What the apply changes in production (plain words)
 
