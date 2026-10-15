@@ -37,11 +37,13 @@ type PendingSigner = {
   status: string;
   signed_at: string | null;
   is_homeowner: boolean;
+  can_sign?: boolean;
 };
 type PendingSignature = {
   request_id: string;
   document_name: string;
   sent_at: string | null;
+  status?: string | null;
   signers: PendingSigner[];
 };
 
@@ -52,6 +54,7 @@ type PendingEndorsementParty = {
   status: string;
   sent_at: string | null;
   is_homeowner: boolean;
+  can_sign?: boolean;
   sign_url: string | null;
 };
 type PendingEndorsement = {
@@ -164,10 +167,15 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
     document.title = preClaim ? "Send your check | ChecksOps" : "Your claim ledger | ChecksOps";
   }, [preClaim]);
 
-  const load = async () => {
+  // quiet: background refresh on return to the tab. Keeps the page mounted
+  // (an open upload form or file picker must not be reset) and keeps the
+  // last good data if the refresh fails.
+  const load = async ({ quiet = false }: { quiet?: boolean } = {}) => {
     if (!token) return;
-    setLoading(true);
-    setError(null);
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const { data: res, error: e } = await supabase.functions.invoke("homeowner-ledger-view", {
         body: { token },
@@ -176,13 +184,27 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
       if ((res as any)?.error) throw new Error((res as any).error);
       setData(res as Summary);
     } catch (e: any) {
-      setError(e.message || "Could not load ledger");
+      if (!quiet) setError(e.message || "Could not load ledger");
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+
+  useEffect(() => {
+    const refresh = () => { if (token) load({ quiet: true }); };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refresh();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("focus", refresh);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   if (loading) {
     return <Shell><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></Shell>;
@@ -259,7 +281,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
       <CollapsibleUpload token={token} onDone={onRefresh} />
 
 
-      <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} onRefresh={onRefresh} />
+      <PendingEndorsementsPanel token={token} pending={data.pending_endorsements ?? []} onRefresh={onRefresh} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
       <SharedDocumentsPanel documents={data.shared_documents ?? []} />
 
@@ -377,9 +399,59 @@ function PreClaimView({ token, homeowner, pending, onRefresh }: {
   );
 }
 
-function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndorsement[]; onRefresh?: () => void }) {
+type SignLinkResponse = { sign_url?: string; error?: string; message?: string } | null;
+
+const HOMEOWNER_SIGN_LINK_MESSAGES: Record<string, string> = {
+  existing_email_link_required: "Use the signing link already emailed to you. Homeowner Ops will not replace that link.",
+  already_signed: "This has already been signed.",
+  signer_order_blocked: "Another signer has to sign first.",
+};
+
+function signLinkErrorMessage(data: SignLinkResponse, error: { message?: string } | null): string | null {
+  const code = String(data?.error || "");
+  if (code) return HOMEOWNER_SIGN_LINK_MESSAGES[code] || data?.message || code;
+  if (error) return error.message || "Request failed";
+  return null;
+}
+
+function isSafeEndorseUrl(url: string): boolean {
+  if (!url.startsWith("/endorse?")) return false;
+  if (url.includes("://") || url.includes("//") || url.includes("\\") || url.includes("..")) return false;
+  return true;
+}
+
+function PendingEndorsementsPanel({
+  pending,
+  token,
+  onRefresh,
+}: {
+  pending: PendingEndorsement[];
+  token: string;
+  onRefresh?: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
   if (!pending || pending.length === 0) return null;
   const partyLabel = (t: string) => t === "mortgage_company" ? "Mortgage company" : t === "insured" ? "Homeowner" : t;
+
+  const reviewAndSign = async (endorsementId: string) => {
+    setBusyId(endorsementId);
+    try {
+      const { data, error } = await supabase.functions.invoke("homeowner-ledger-endorse-link", {
+        body: { token, endorsement_id: endorsementId },
+      });
+      const res = data as SignLinkResponse;
+      const failure = signLinkErrorMessage(res, error);
+      if (failure) throw new Error(failure);
+      const url = String(res?.sign_url || "");
+      if (!isSafeEndorseUrl(url)) throw new Error("No sign link returned");
+      window.location.assign(url);
+    } catch (e) {
+      toast.error((e as Error).message || "Could not open check signing");
+      setBusyId(null);
+      if (onRefresh) onRefresh();
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -387,16 +459,25 @@ function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndo
           <PenTool className="h-4 w-4 text-amber-400" /> Checks awaiting signature
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          You can sign right here — or use the link we emailed you. Once signed either way, it will no longer show as awaiting your signature.
+          Review and sign your insurance check here. Mortgage or other required signers are handled separately.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        {pending.map((chk) => (
+        {pending.map((chk) => {
+          const openInsuredRemains = chk.parties.some((p) => p.payee_type === "insured");
+          const otherRequiredRemains = chk.parties.some((p) => p.payee_type !== "insured");
+          return (
           <div key={chk.check_id} className="rounded-lg border border-border p-3 space-y-2">
             <div className="text-sm font-medium">
               Check {chk.check_number ? `#${chk.check_number}` : ""}
               {chk.check_amount != null && <span className="text-muted-foreground"> — {fmt(Number(chk.check_amount))}</span>}
             </div>
+            {/* The ledger lists only open parties, so it cannot prove the homeowner signed. */}
+            {!openInsuredRemains && otherRequiredRemains && (
+              <div className="text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1.5">
+                No homeowner signature is waiting here. This check is awaiting another required signer.
+              </div>
+            )}
             <ul className="space-y-1.5">
               {chk.parties.map((p) => (
                 <li key={p.endorsement_id} className="flex items-center justify-between gap-2 text-xs rounded bg-muted/40 px-2 py-1.5">
@@ -409,17 +490,16 @@ function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndo
                       {p.sent_at ? `Requested ${new Date(p.sent_at).toLocaleDateString()}` : "Awaiting request"}
                     </div>
                   </div>
-                  {p.sign_url ? (
+                  {p.can_sign ? (
                     <Button
                       size="sm"
                       className="h-7 px-2 text-[11px] shrink-0"
-                      onClick={() => {
-                        window.open(p.sign_url!, "_blank", "noopener,noreferrer");
-                        toast.info("Signing opened in a new tab. Return here and refresh when done.");
-                        if (onRefresh) setTimeout(onRefresh, 15000);
-                      }}
+                      disabled={busyId === p.endorsement_id}
+                      onClick={() => reviewAndSign(p.endorsement_id)}
                     >
-                      Sign now
+                      {busyId === p.endorsement_id
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : "Review & Sign Check"}
                     </Button>
                   ) : (
                     <Badge variant="secondary" className="text-[10px] shrink-0">
@@ -430,31 +510,38 @@ function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndo
               ))}
             </ul>
           </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
 }
 
 
+function isSafeDocumentSignUrl(url: string): boolean {
+  if (!url.startsWith("/sign?")) return false;
+  if (url.includes("://") || url.includes("//") || url.includes("\\") || url.includes("..")) return false;
+  return true;
+}
+
 function PendingSignaturesPanel({ token, pending }: { token: string; pending: PendingSignature[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   if (!pending || pending.length === 0) return null;
 
-  const openSignLink = async (signerId: string) => {
+  const reviewAndSignDocument = async (signerId: string) => {
     setBusyId(signerId);
     try {
-      const { data, error } = await supabase.functions.invoke("homeowner-ledger-sign-link", {
+      const { data, error } = await supabase.functions.invoke("homeowner-ledger-document-sign-link", {
         body: { token, signer_id: signerId },
       });
-      if (error) throw new Error(error.message);
-      if ((data as any)?.error) throw new Error((data as any).error);
-      const url = (data as any)?.sign_url;
-      if (!url) throw new Error("No sign link returned");
-      window.location.href = url;
-    } catch (e: any) {
-      toast.error(e.message || "Could not open signing page");
-    } finally {
+      const res = data as SignLinkResponse;
+      const failure = signLinkErrorMessage(res, error);
+      if (failure) throw new Error(failure);
+      const url = String(res?.sign_url || "");
+      if (!isSafeDocumentSignUrl(url)) throw new Error("No sign link returned");
+      window.location.assign(url);
+    } catch (e) {
+      toast.error((e as Error).message || "Could not open document signing");
       setBusyId(null);
     }
   };
@@ -463,8 +550,11 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <PenTool className="h-4 w-4 text-amber-400" /> Signatures
+          <PenTool className="h-4 w-4 text-amber-400" /> Awaiting your signature
         </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Review and sign documents requested from you. Other signers are handled separately.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {pending.map((r) => (
@@ -474,11 +564,11 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
                 <div className="text-sm font-medium truncate">{r.document_name}</div>
                 {r.sent_at && (
                   <div className="text-[11px] text-muted-foreground">
-                    Sent {new Date(r.sent_at).toLocaleString()}
+                    Requested {new Date(r.sent_at).toLocaleString()}
                   </div>
                 )}
               </div>
-              <Badge variant="secondary" className="text-[10px]">Awaiting signatures</Badge>
+              <Badge variant="secondary" className="text-[10px]">{r.status || "Awaiting signature"}</Badge>
             </div>
             <ul className="space-y-1.5">
               {r.signers.map((s) => (
@@ -496,14 +586,14 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
                   </div>
                   {s.status === "signed" ? (
                     <span className="text-[10px] text-emerald-400">Signed</span>
-                  ) : s.is_homeowner ? (
+                  ) : s.can_sign ? (
                     <Button
                       size="sm"
                       className="h-7 px-2 text-xs"
                       disabled={busyId === s.signer_id}
-                      onClick={() => openSignLink(s.signer_id)}
+                      onClick={() => reviewAndSignDocument(s.signer_id)}
                     >
-                      {busyId === s.signer_id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Sign now"}
+                      {busyId === s.signer_id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Review & Sign Document"}
                     </Button>
                   ) : (
                     <span className="text-[10px] text-muted-foreground">Pending</span>
