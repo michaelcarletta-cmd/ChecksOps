@@ -95,6 +95,12 @@
       "note": "Official production apply for SQL 77 (check_stakeholders grant), SQL 78 (check_partner_stakeholder_removals table) and SQL 79 (four member stakeholder policies) only, one --migration per run, in that order. Requires a sql-apply production-sql receipt owning that migration's pinned file, a pin with execute true, CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1, that pin's authorization phrase and a single-use id. Reuses the staging executor's fingerprints and exact-statement checks; refuses arbitrary SQL, a missing dependency or an unapplied predecessor, and rolls back unless everything else in schema public is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK."
     },
     {
+      "path": "scripts/deployment-guard/sql80-checkalt-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql80-production-apply"],
+      "note": "Official production apply for SQL 80 (CREATE OR REPLACE of public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb), its comment, REVOKE ALL FROM PUBLIC and GRANT EXECUTE TO checksops, authenticated) only. Requires a sql-apply production-sql receipt owning the pinned file, a pin with execute true and a staging acceptance reference, CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1, the pin's authorization phrase and a single-use id. Reuses the staging executor's fingerprint and reviewed-text parse; accepts only the inspected production pre-state, refuses arbitrary SQL, and rolls back unless the function ACL is exactly owner, checksops and authenticated EXECUTE, the table ACL is byte-identical and everything else in schema public is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK."
+    },
+    {
       "path": "scripts/deployment-guard/github-sql53-production-apply.mjs",
       "classification": "SAFE",
       "capabilities": ["sql53-production-evaluate"],
