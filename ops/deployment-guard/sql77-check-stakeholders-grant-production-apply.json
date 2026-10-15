@@ -10,16 +10,29 @@
   "migration_id": "77_check_stakeholders_write_grant",
   "staging_pin_commit": "b70fadfb1e50baa0c5a32a0b17ecda8edd3981ed",
   "source_sha256": "ed7f1c809b8c66c63e60c4d3504b3cbcbf8088ad1336f418b72a26f528029ec1",
-  "expected_live_definition_sha256": "714659325ea58a54fdc2ad39b35224308f8f9df92629c3c53b8e3c6fe3faa4e7",
-  "intended_replacement_sha256": "e4d49fface305abc732bb225824e4f113e4a0a6ef4f5f2a145bdf3b0324043d1",
+  "expected_live_definition_sha256": "8f2417b5a97dd330185de62de29658c9a04a8b6d70672c0df7494834597ad57e",
+  "intended_replacement_sha256": "0cd3ab3fd41245ad9f35e882dc32bcb36cd9720132f63ad88728df655290ddac",
   "authorization_phrase": "GRANT_CHECK_STAKEHOLDERS_WRITE",
   "predecessors": [],
   "rds_identifier": "checksops-production",
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "date": "2026-10-15",
+    "ssm_command_id": "ca4ad39d",
+    "read_only": true,
+    "live_definition_sha256": "8f2417b5a97dd330185de62de29658c9a04a8b6d70672c0df7494834597ad57e",
+    "preserved_acl_sha256": "c40af23bab9eabcb08ec6c43f00b5e45cf66e7d09892ac8f7d0227136625e43f",
+    "privilege_state": {
+      "checksops": { "SELECT": "granted", "INSERT": "granted", "UPDATE": "granted", "DELETE": "granted" },
+      "authenticated": { "SELECT": "absent", "INSERT": "absent", "UPDATE": "absent", "DELETE": "absent" }
+    },
+    "note": "Owner-approved read-only production inspect of SQL 77 on 2026-10-15 (SSM command ca4ad39d): table_present, rls_enabled, write_policy_present and write_policy_as_expected true, other_write_policy_count 0, grantee_bypasses_rls false, tenant_guard_ok true, update_granted true (checksops). Against the staging pin it reported precondition_failures [\"update_not_granted\"]. The owner approved this production-specific pin: expected pre-state is that live state (8f2417b5…); the unchanged SQL 77 file re-grants S/I/D to checksops (a no-op; checksops keeps all four privileges, UPDATE included) and grants S/I/D, not UPDATE, to authenticated. Intended post-state 0cd3ab3f… is what readStakeholderGrantState reads after applying the file to a PostgreSQL 16 fixture of that pre-state (aws/tests/sql-member-stakeholder-production-apply.test.mjs). The production rule (scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs, sql77) accepts only this pre-state: checksops' UPDATE without grant option is the only UPDATE, authenticated holds nothing, every other staging condition holds."
+  },
   "staging_acceptance": {
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38574715440",
-    "basis": "Guarded staging SQL executor apply run #26 (38574715440, main 06dcdd9ae, pin commit b70fadfb, 2026-10-14). Its receipt names sql_file aws/workflows/sql/77_check_stakeholders_write_grant.sql, before_hash 71465932\u2026 (checksops SELECT only) and after_hash e4d49ffa\u2026 (checksops and authenticated SELECT/INSERT/DELETE, no UPDATE), result applied."
+    "basis": "Guarded staging SQL executor apply run #26 (38574715440, main 06dcdd9ae, pin commit b70fadfb, 2026-10-14). Its receipt names sql_file aws/workflows/sql/77_check_stakeholders_write_grant.sql, before_hash 71465932… (checksops SELECT only) and after_hash e4d49ffa… (checksops and authenticated SELECT/INSERT/DELETE, no UPDATE), result applied.",
+    "production_differs": "Production's starting privileges differ from staging's (checksops already holds INSERT, UPDATE and DELETE there, not SELECT only), so production's pre-state (8f2417b5…) and post-state (0cd3ab3f…, checksops all four, authenticated SELECT/INSERT/DELETE) hashes differ from staging's 71465932… -> e4d49ffa…. The same file bytes (source_sha256) and the same statement were accepted in staging."
   }
 }
