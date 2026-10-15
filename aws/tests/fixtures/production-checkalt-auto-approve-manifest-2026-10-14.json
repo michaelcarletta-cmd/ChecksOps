@@ -1,0 +1,24 @@
+{
+  "workstream_id": "checkalt-production-auto-approve",
+  "authorization": "Owner-approved 2026-10-14 (PR #954): after a committed /deposit/process returns status 40, the server auto-approves only when the tenant has auto_approve_enabled, a set integer ceiling covers the amount, Check Alt raised no flags and the risk rating is Low Risk. Otherwise the deposit stays pending for manager approval. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "live_sha256 values are main's bytes before #954; the read-only production inspect run 38632977883 (2026-10-14) showed live Check Alt files equal main. Staging applied the same bytes in overlay runs 137, 138 and 139. Apply checkalt-config.mjs, then checkalt-idempotency.mjs, then checkalt-submit.mjs (which imports the new idempotency and config exports).",
+  "members": {
+    "providers/production/checkalt-config.mjs": {
+      "live_sha256": "04b13269b5ad85d561877e320586472269ea67d7abfcb36fac1be5d9b116a77d",
+      "accepted_sha256": "3b9cbe272c70958f468342c4fc64bdddd02a4707acb7eec78afdb4092b2ec9b3",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-idempotency.mjs": {
+      "live_sha256": "8c6aaae05a495d17b1809752a84ffdf1045601ebeedc09353c71c3d0967ec3c1",
+      "accepted_sha256": "bc216669d3b98ff03984d9999dea8de80d9c7f51655da496e7ddf7957b0c5577",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-submit.mjs": {
+      "live_sha256": "3bff32b31c6810e4c7b745536a4213c41a18c39e14f65a06a12187e031d2c151",
+      "accepted_sha256": "dd164667b1968cd487cf82b908ac3b8f2763152e700c649b53620e70425388d2",
+      "operation": "replace"
+    }
+  }
+}
