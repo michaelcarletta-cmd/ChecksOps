@@ -508,7 +508,13 @@ for (const version of PG_VERSIONS) {
       t.skip(reason);
       return;
     }
-    const { default: pg } = await import('pg');
+    let pg;
+    try {
+      pg = (await import('pg')).default;
+    } catch {
+      t.skip('pg module is not installed');
+      return;
+    }
     const { server, admin, connectAs } = await productionFixture(pg, 'pg-sql80-prod-', version.port, version.bin);
     const fn = CHECKALT_AUTO_DEPOSIT_FUNCTION;
     const fixturePin = pinFor(version.bin);
@@ -685,7 +691,13 @@ test('PostgreSQL 16: a statement failing inside the apply transaction leaves the
     t.skip(reason);
     return;
   }
-  const { default: pg } = await import('pg');
+  let pg;
+  try {
+    pg = (await import('pg')).default;
+  } catch {
+    t.skip('pg module is not installed');
+    return;
+  }
   const { server, admin, connectAs } = await productionFixture(pg, 'pg-sql80-prod-rb-', 56300);
   const fixturePin = pinFor(null);
   try {
