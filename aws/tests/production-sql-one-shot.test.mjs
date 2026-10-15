@@ -1,0 +1,976 @@
+/**
+ * production-sql-one-shot: orchestration of one registered production SQL tool
+ * on the runner. Every child process is injected (no database, no AWS, no
+ * preflight state written): each stop condition halts before later steps, the
+ * apply child is the only one that sees the apply variables, receipts are never
+ * an input, and the summary carries a pin-ready `applied` block.
+ */
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
+import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
+import { receiptDir } from '../../scripts/deployment-guard/lib/paths.mjs';
+import {
+  CHILD_ENV_ALLOWLIST,
+  GUARD_ENV_KEYS,
+  LOADER_ENV_KEYS,
+  ONE_SHOT_EXCEPTION,
+  ONE_SHOT_TOOLS,
+  compareTreeToTarball,
+  normalizeTarPath,
+  parseJsonOutput,
+  parseTapSummary,
+  requiredContracts,
+  runProductionSqlOneShot,
+} from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
+import { evaluateMemberStakeholderProductionApply } from '../../scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs';
+import { evaluateSql80ProductionApply } from '../../scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs';
+import { main as oneShotMain } from '../../scripts/deployment-guard/production-sql-one-shot.mjs';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const COMMIT = 'a'.repeat(40);
+const WORKSTREAM = 'prod-sql80-checkalt-member-auto-deposit-20261016';
+const STATEMENT = 'approve applying SQL 80 to production';
+const RECEIPT = path.join(receiptDir(ROOT), 'production::production-sql.json');
+
+const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
+const executePin = (key, extra = {}) => ({ ...realPin(key), execute: true, ...extra });
+
+function tarballFixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-tarball-'));
+  const file = path.join(dir, `source-${COMMIT}.tar.gz`);
+  fs.writeFileSync(file, 'not really a tarball');
+  const sha = createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  fs.writeFileSync(`${file}.sha256`, `${sha}  source-${COMMIT}.tar.gz\n`);
+  return { file, sha };
+}
+
+const { file: TARBALL, sha: TARBALL_SHA } = tarballFixture();
+const tap = (n, { fail = 0, skipped = 0 } = {}) => `TAP version 13\n1..${n}\n# tests ${n}\n# suites 0\n# pass ${n - fail - skipped}\n# fail ${fail}\n# cancelled 0\n# skipped ${skipped}\n# todo 0\n`;
+const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
+
+function inspectDetails(key, pin, overrides = {}) {
+  return {
+    read_only: true,
+    migration: key,
+    filename: pin.filename,
+    source_ok: true,
+    pin_execute: true,
+    missing_dependencies: [],
+    predecessors: {},
+    predecessors_applied: true,
+    current_user: 'checksops_admin',
+    owner_roles: ['checksops_admin'],
+    authenticated_member_of_owner: false,
+    state: { big: 'not copied' },
+    live_definition_sha256: pin.expected_live_definition_sha256,
+    expected_live_definition_sha256: pin.expected_live_definition_sha256,
+    intended_replacement_sha256: pin.intended_replacement_sha256,
+    live_matches_expected: true,
+    already_applied: false,
+    precondition_failures: [],
+    apply_preconditions_met: true,
+    ...overrides,
+  };
+}
+
+/** A runner that answers each step from `responses` and records every call. */
+function fakeRunner(key, pin, responses = {}) {
+  const calls = [];
+  const tool = ONE_SHOT_TOOLS[key];
+  const defaults = {
+    inspect: () => ({ status: 0, stdout: json({ ok: true, details: inspectDetails(key, pin) }), stderr: '' }),
+    contract: (call) => ({ status: 0, stdout: tap(call.args.at(-1).includes('api-write') ? 36 : 4), stderr: '' }),
+    preflight: () => ({ status: 0, stdout: json({ ok: true, details: { receipt: RECEIPT, lease: { id: 'l' } } }), stderr: '' }),
+    evaluate: () => ({ status: 0, stdout: json({ ok: true, details: { migration: key, [tool.allowed_key]: true } }), stderr: '' }),
+    apply: () => ({
+      status: 0,
+      stdout: json({
+        ok: true,
+        details: {
+          receipt: {
+            migration: key,
+            before_hash: pin.expected_live_definition_sha256,
+            after_hash: pin.intended_replacement_sha256,
+            unrelated_catalog_sha256: 'c'.repeat(64),
+            unrelated_catalog_counts: { relations: 1 },
+            staging_acceptance: pin.staging_acceptance.reference,
+            result: 'applied',
+          },
+        },
+      }),
+      stderr: '',
+    }),
+    'post-apply-inspect': () => ({
+      status: 0,
+      stdout: json({ ok: true, details: inspectDetails(key, pin, { live_definition_sha256: pin.intended_replacement_sha256, live_matches_expected: false, already_applied: true, apply_preconditions_met: false }) }),
+      stderr: '',
+    }),
+  };
+  const manifests = [];
+  const run = (call) => {
+    calls.push(call);
+    const input = call.args.indexOf('--input');
+    if (input !== -1) manifests.push({ step: call.step, text: fs.readFileSync(call.args[input + 1], 'utf8') });
+    const kind = call.step.startsWith('contract:') ? 'contract' : call.step;
+    const answer = responses[call.step] || responses[kind] || defaults[kind];
+    return answer(call);
+  };
+  return { run, calls, manifests, steps: () => calls.map((c) => c.step) };
+}
+
+function opts(key = 'sql80', extra = {}) {
+  return {
+    migration: key,
+    commit: COMMIT,
+    'workstream-id': WORKSTREAM,
+    'approval-statement': STATEMENT,
+    'approval-scope': key,
+    phase: 'apply',
+    'source-tarball': TARBALL,
+    'expected-tarball-sha256': TARBALL_SHA,
+    operator: 'michaelcarletta-cmd',
+    runner: 'i-0c35557c4e5385406',
+    ...extra,
+  };
+}
+
+async function oneShot({ key = 'sql80', o = {}, pin, responses, env = { PATH: '/usr/bin', AWS_ENDPOINT_URL_SECRETS_MANAGER: 'https://vpce.example' }, compareTree, sourceCommit = `${COMMIT}\n`, execArgv } = {}) {
+  const thePin = pin === undefined ? executePin(key) : pin;
+  const runner = fakeRunner(key, thePin || realPin(key), responses);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-manifest-'));
+  const result = await runProductionSqlOneShot(opts(key, o), {
+    root: ROOT,
+    env,
+    run: runner.run,
+    nodePath: '/usr/bin/node',
+    pin: thePin || undefined,
+    tmpDir,
+    runId: 'run-1',
+    now: () => new Date('2026-10-16T12:00:00.000Z'),
+    readTarball: async () => ({ sha256: TARBALL_SHA, index: new Map() }),
+    compareTreeToIndex: compareTree || (async () => ({ ok: true, details: { tarball_files: 3, tarball_entries: 4 } })),
+    readSourceCommit: () => sourceCommit,
+    ...(execArgv ? { execArgv } : {}),
+  });
+  return { result, runner, tmpDir };
+}
+
+const CONTRACT_STEPS = ['contract:claim-ledger', 'contract:tenant-isolation', 'contract:financial-write-protections'];
+const FULL = ['inspect', ...CONTRACT_STEPS, 'preflight', 'evaluate', 'apply', 'post-apply-inspect'];
+const lastManifest = (runner) => JSON.parse(runner.manifests.at(-1).text);
+
+// --- happy paths ----------------------------------------------------------------
+
+test('apply phase runs every step in order and prints a pin-ready applied block', async () => {
+  const { result, runner } = await oneShot();
+  assert.equal(result.ok, true, JSON.stringify(result.details.error));
+  assert.deepEqual(runner.steps(), FULL);
+  const d = result.details;
+  assert.deepEqual(d.steps.map((s) => s.step), ['pin', 'source', 'inspect', 'contracts', 'manifest', 'source-recheck-before-preflight', 'preflight', 'evaluate', 'source-recheck-before-apply', 'apply', 'post-apply-inspect']);
+  assert.equal(d.source.tarball_sha256, TARBALL_SHA);
+  assert.equal(d.source.tarball_sha256_matches_expected, true);
+  assert.equal(d.source.source_commit, COMMIT);
+  assert.equal(d.manifest_deleted, true);
+  assert.equal(fs.existsSync(path.dirname(d.manifest_file)), false, 'the manifest temp dir is deleted');
+  assert.match(d.manifest_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(d.receipt_issued, true);
+  const applied = d.applied;
+  const pin = realPin('sql80');
+  assert.equal(applied.result, 'applied');
+  assert.equal(applied.date, '2026-10-16');
+  assert.equal(applied.source_commit, COMMIT);
+  assert.match(applied.source_commit_basis, /SOURCE_COMMIT/);
+  assert.match(applied.source_commit_basis, /--expected-tarball-sha256/);
+  assert.equal(applied.operator, 'michaelcarletta-cmd');
+  assert.equal(applied.workstream_id, WORKSTREAM);
+  assert.equal(applied.owner_approval, STATEMENT);
+  assert.match(applied.owner_approval_basis, /cannot verify/);
+  assert.match(applied.owner_approval_basis, /--approval-scope sql80/);
+  assert.equal(applied.runner, 'i-0c35557c4e5385406');
+  assert.match(applied.runner_basis, /operator-supplied/);
+  assert.match(applied.one_use_id, /^sql80-prod-[0-9a-f-]{36}$/);
+  assert.equal(applied.one_use_id_consumed, true);
+  assert.match(applied.one_use_id_consumed_basis, /^Inferred/);
+  assert.equal(applied.receipt.before_hash, pin.expected_live_definition_sha256);
+  assert.equal(applied.receipt.after_hash, pin.intended_replacement_sha256);
+  assert.equal(applied.pre_apply_inspect.live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(applied.pre_apply_inspect.state, undefined, 'the raw state is not copied');
+  assert.equal(applied.post_apply_inspect.already_applied, true);
+  assert.equal(applied.source_tarball.file, `source-${COMMIT}.tar.gz`);
+  assert.deepEqual(Object.keys(applied.contract_results).sort(), ['claim-ledger', 'financial-write-protections', 'tenant-isolation']);
+  assert.equal(applied.contract_results['financial-write-protections'].evidence, `36/36 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at ${COMMIT} (production-sql-one-shot run-1, node --test)`);
+  assert.ok(d.not_observed_by_this_run.some((row) => row.startsWith('ssm_command_id')));
+  assert.ok(d.not_observed_by_this_run.some((row) => row.startsWith('source_staged_by')));
+});
+
+test('runner defaults to the hostname and says so', async () => {
+  const { result } = await oneShot({ o: { runner: undefined } });
+  assert.equal(result.ok, true);
+  assert.equal(result.details.applied.runner, os.hostname());
+  assert.match(result.details.applied.runner_basis, /os\.hostname/);
+  assert.match(result.details.applied.contract_results['claim-ledger'].evidence, /\(os\.hostname\(\) of the host/);
+});
+
+test('inspect phase stops after the contracts and writes nothing', async () => {
+  const { result, runner, tmpDir } = await oneShot({ o: { phase: 'inspect' } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(runner.steps(), ['inspect', ...CONTRACT_STEPS]);
+  assert.deepEqual(fs.readdirSync(tmpDir), [], 'no manifest is written');
+  assert.equal(result.details.applied, undefined);
+  assert.equal(result.details.receipt_issued, undefined);
+  assert.equal(Object.keys(result.details.contract_results).length, 3);
+});
+
+test('every registered migration runs its own tool with its own arguments', async () => {
+  for (const key of Object.keys(ONE_SHOT_TOOLS)) {
+    const { result, runner } = await oneShot({ key, o: { 'workstream-id': `prod-${key}-one-shot-test` } });
+    assert.equal(result.ok, true, `${key}: ${JSON.stringify(result.details.error)}`);
+    const tool = ONE_SHOT_TOOLS[key];
+    const applyCall = runner.calls.find((c) => c.step === 'apply');
+    assert.deepEqual(applyCall.args.slice(0, 1 + tool.args.length), [tool.script, ...tool.args]);
+    assert.equal(applyCall.command, '/usr/bin/node');
+    assert.equal(applyCall.cwd, ROOT);
+    assert.ok(fs.existsSync(path.join(ROOT, tool.script)), tool.script);
+    assert.ok(fs.existsSync(path.join(ROOT, tool.pin_rel)), tool.pin_rel);
+  }
+});
+
+// --- manifest -----------------------------------------------------------------------
+
+test('the manifest is built from the pin, the inspect and the contracts, and the real evaluators accept it', async () => {
+  for (const key of Object.keys(ONE_SHOT_TOOLS)) {
+    const pin = executePin(key);
+    const workstream = `prod-${key}-one-shot-test`;
+    const modes = [];
+    const { result, runner } = await oneShot({
+      key,
+      o: { 'workstream-id': workstream },
+      responses: { preflight: (call) => {
+        modes.push(fs.statSync(call.args.at(-1)).mode & 0o777);
+        return { status: 0, stdout: json({ ok: true, details: { receipt: RECEIPT } }), stderr: '' };
+      } },
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(modes, [0o600]);
+    assert.deepEqual(runner.manifests.map((m) => m.step), ['preflight', 'evaluate', 'apply'], 'every child reads the same manifest');
+    assert.equal(new Set(runner.manifests.map((m) => m.text)).size, 1);
+    const manifest = lastManifest(runner);
+    assert.equal(manifest.workstream_id, workstream);
+    assert.equal(manifest.commit, COMMIT);
+    assert.equal(manifest.target_environment, 'production');
+    assert.equal(manifest.target_component, 'production-sql');
+    assert.equal(manifest.deployment_type, 'sql-apply');
+    assert.deepEqual(manifest.owned_components, [pin.filename]);
+    for (const field of ['filename', 'migration_id', 'source_sha256', 'expected_live_definition_sha256', 'intended_replacement_sha256', 'authorization_phrase']) {
+      assert.equal(manifest[field], pin[field], field);
+    }
+    assert.deepEqual(manifest.staging_acceptance, pin.staging_acceptance);
+    for (const field of ['preflight_live_fingerprint', 'production_fingerprint', 'immediately_before_fingerprint']) {
+      assert.deepEqual(manifest[field], { sql: pin.expected_live_definition_sha256 }, field);
+    }
+    assert.deepEqual(manifest.approval, { approved: true, workstream_id: workstream, approved_by: 'owner', statement: STATEMENT });
+    assert.equal(manifest.one_use_id, result.details.one_use_id);
+    assert.match(manifest.one_use_id, new RegExp(`^${key}-prod-[0-9a-f-]{36}$`));
+    assert.equal(manifest.build_timestamp, '2026-10-16T12:00:00.000Z');
+    assert.equal(manifest.receipt_path, undefined);
+    assert.equal(manifest.operator, 'michaelcarletta-cmd');
+    for (const row of Object.values(manifest.contract_results)) assert.equal(row.ok, true);
+
+    // The same checks preflight and the tool's evaluate run (no connection, nothing written).
+    const guard = evaluateDeployment(manifest, { root: ROOT, env: {} });
+    assert.equal(guard.ok, true, `${key} preflight evaluate: ${JSON.stringify(guard.errors)}`);
+    const evaluation = key === 'sql80'
+      ? await evaluateSql80ProductionApply(manifest, { root: ROOT, pin })
+      : await evaluateMemberStakeholderProductionApply(manifest, { root: ROOT, migration: key, pin });
+    assert.equal(evaluation.ok, true, `${key} tool evaluate: ${JSON.stringify(evaluation.errors)}`);
+    assert.equal(evaluation.details[ONE_SHOT_TOOLS[key].allowed_key], true);
+  }
+});
+
+// --- arguments, receipts and environment ------------------------------------------------
+
+test('approval statement is required and recorded verbatim', async () => {
+  for (const value of [undefined, '', '   ', true]) {
+    const { result, runner } = await oneShot({ o: { 'approval-statement': value } });
+    assert.equal(result.ok, false, String(value));
+    assert.equal(result.details.stopped_at, 'arguments');
+    assert.equal(result.code, CODES.INVALID_MANIFEST);
+    assert.equal(runner.calls.length, 0);
+  }
+  const exact = '  merged, approve applying SQL 80 to production  ';
+  const { result, runner } = await oneShot({ o: { 'approval-statement': exact } });
+  assert.equal(result.ok, true);
+  assert.equal(result.details.applied.owner_approval, exact);
+  assert.equal(lastManifest(runner).approval.statement, exact);
+});
+
+test('--approval-statement-b64 carries the exact words; it is exclusive with --approval-statement', async () => {
+  const words = "merged, \"approve\" applying SQL 80 to production — it's fine\n";
+  const b64 = Buffer.from(words, 'utf8').toString('base64');
+  const { result, runner } = await oneShot({ o: { 'approval-statement': undefined, 'approval-statement-b64': b64 } });
+  assert.equal(result.ok, true, JSON.stringify(result.details.error));
+  assert.equal(result.details.applied.owner_approval, words);
+  assert.equal(lastManifest(runner).approval.statement, words);
+  for (const o of [
+    { 'approval-statement-b64': b64 },
+    { 'approval-statement': undefined, 'approval-statement-b64': 'not base64!' },
+    { 'approval-statement': undefined, 'approval-statement-b64': 'YWJj' + '=' },
+    { 'approval-statement': undefined, 'approval-statement-b64': Buffer.from([0xff, 0xfe]).toString('base64') },
+    { 'approval-statement': undefined, 'approval-statement-b64': Buffer.from('   ').toString('base64') },
+    { 'approval-statement': undefined, 'approval-statement-b64': true },
+  ]) {
+    const res = await oneShot({ o });
+    assert.equal(res.result.ok, false, JSON.stringify(o));
+    assert.equal(res.result.details.stopped_at, 'arguments');
+    assert.equal(res.runner.calls.length, 0);
+  }
+});
+
+test('--approval-scope must name the migration being run', async () => {
+  for (const scope of [undefined, 'sql79', 'SQL80', '', true]) {
+    const { result, runner } = await oneShot({ o: { 'approval-scope': scope } });
+    assert.equal(result.ok, false, String(scope));
+    assert.match(result.details.error.details.errors.join('\n'), /--approval-scope/);
+    assert.equal(runner.calls.length, 0);
+  }
+  const { result } = await oneShot({ key: 'sql79', o: { 'workstream-id': 'prod-sql79-scope-test' } });
+  assert.equal(result.ok, true);
+  assert.equal(result.details.approval_scope, 'sql79');
+});
+
+test('a receipt, manifest or input can never be passed in', async () => {
+  for (const flag of ['receipt', 'receipt-path', 'input', 'json', 'manifest', 'financial-write-evidence', 'skip-contracts']) {
+    const { result, runner } = await oneShot({ o: { [flag]: '/tmp/x.json' } });
+    assert.equal(result.ok, false, flag);
+    assert.equal(result.code, CODES.INVALID_MANIFEST, flag);
+    assert.deepEqual(result.details.error.details.unknown, [flag]);
+    assert.equal(runner.calls.length, 0, flag);
+  }
+  for (const key of [...GUARD_ENV_KEYS, 'CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64', 'CHECKSOPS_DEPLOYMENT_GUARD_ANYTHING_NEW']) {
+    const { result, runner } = await oneShot({ env: { PATH: '/usr/bin', [key]: key.endsWith('RECEIPT') ? RECEIPT : '1' } });
+    assert.equal(result.ok, false, key);
+    assert.equal(result.code, CODES.DEPLOYMENT_GUARD_REQUIRED, key);
+    assert.equal(runner.calls.length, 0, key);
+  }
+});
+
+test('other argument errors stop before any child', async () => {
+  for (const o of [
+    { migration: 'sql53' },
+    { migration: undefined },
+    { phase: 'evaluate' },
+    { phase: undefined },
+    { commit: 'abc' },
+    { commit: COMMIT.toUpperCase() },
+    { 'workstream-id': 'x' },
+    { 'source-tarball': undefined },
+    { 'expected-tarball-sha256': undefined },
+    { 'expected-tarball-sha256': TARBALL_SHA.toUpperCase() },
+    { 'expected-tarball-sha256': 'abc' },
+    { operator: undefined },
+    { operator: '  ' },
+    { runner: true },
+    { migration: '__proto__', 'approval-scope': '__proto__' },
+    { migration: 'constructor', 'approval-scope': 'constructor' },
+    { migration: 'hasOwnProperty', 'approval-scope': 'hasOwnProperty' },
+  ]) {
+    const { result, runner } = await oneShot({ o });
+    assert.equal(result.ok, false, JSON.stringify(o));
+    assert.equal(result.details.stopped_at, 'arguments');
+    assert.equal(runner.calls.length, 0);
+  }
+});
+
+test('node loader variables and node flags are refused before any child', async () => {
+  for (const key of [...LOADER_ENV_KEYS, 'DYLD_INSERT_LIBRARIES']) {
+    const { result, runner } = await oneShot({ env: { PATH: '/usr/bin', [key]: '--require /tmp/evil.js' } });
+    assert.equal(result.ok, false, key);
+    assert.equal(result.code, CODES.DEPLOYMENT_GUARD_REQUIRED, key);
+    assert.deepEqual(result.details.error.details.preset, [key]);
+    assert.equal(runner.calls.length, 0, key);
+  }
+  const { result, runner } = await oneShot({ execArgv: ['--import', '/tmp/evil.mjs'] });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.details.error.details.exec_argv, ['--import', '/tmp/evil.mjs']);
+  assert.equal(runner.calls.length, 0);
+});
+
+test('children get only the allowlisted environment', async () => {
+  const env = {
+    PATH: '/usr/bin',
+    HOME: '/root',
+    TZ: 'UTC',
+    AWS_REGION: 'us-east-1',
+    AWS_ENDPOINT_URL_SECRETS_MANAGER: 'https://vpce.example',
+    CHECKSOPS_COMMIT: 'b'.repeat(40),
+    CHECKSOPS_WORKSTREAM_ID: 'other-workstream',
+    NODE_EXTRA_CA_CERTS: '/tmp/ca.pem',
+    AWS_ACCESS_KEY_ID: 'AKIAEXAMPLE',
+    SOMETHING_ELSE: 'x',
+  };
+  const { result, runner } = await oneShot({ env });
+  assert.equal(result.ok, true);
+  const expected = { PATH: '/usr/bin', HOME: '/root', TZ: 'UTC', AWS_REGION: 'us-east-1', AWS_ENDPOINT_URL_SECRETS_MANAGER: 'https://vpce.example' };
+  for (const call of runner.calls) {
+    const { CHECKSOPS_DEPLOYMENT_GUARD_APPLY, CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT, ...rest } = call.env;
+    assert.deepEqual(rest, expected, call.step);
+    for (const key of Object.keys(call.env)) {
+      assert.ok(CHILD_ENV_ALLOWLIST.includes(key) || (call.step === 'apply' && key.startsWith('CHECKSOPS_DEPLOYMENT_GUARD_')), `${call.step} ${key}`);
+    }
+  }
+});
+
+test('only the apply child gets the apply variables, and its receipt is the one preflight issued', async () => {
+  const env = { PATH: '/usr/bin', AWS_ENDPOINT_URL_SECRETS_MANAGER: 'https://vpce.example' };
+  const { result, runner } = await oneShot({ env });
+  assert.equal(result.ok, true);
+  for (const call of runner.calls) {
+    assert.equal(call.env.AWS_ENDPOINT_URL_SECRETS_MANAGER, 'https://vpce.example', call.step);
+    if (call.step === 'apply') {
+      assert.equal(call.env.CHECKSOPS_DEPLOYMENT_GUARD_APPLY, '1');
+      assert.equal(call.env.CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT, RECEIPT);
+      assert.ok(call.args.includes('--apply'));
+      assert.ok(!call.args.includes('--receipt'));
+    } else {
+      for (const key of GUARD_ENV_KEYS) assert.equal(call.env[key], undefined, `${call.step} ${key}`);
+      assert.ok(!call.args.includes('--apply'), call.step);
+    }
+  }
+  const preflight = runner.calls.find((c) => c.step === 'preflight');
+  assert.deepEqual(preflight.args.slice(0, 3), ['scripts/deployment-guard/preflight.mjs', '--acquire-lease', '--receipt']);
+  assert.ok(!preflight.args.includes('--skip-contracts'));
+  assert.equal(env.CHECKSOPS_DEPLOYMENT_GUARD_APPLY, undefined, 'the caller env is not mutated');
+});
+
+// --- stop conditions ---------------------------------------------------------------------
+
+test('every real production pin (execute false today) is refused before any child', async () => {
+  for (const key of Object.keys(ONE_SHOT_TOOLS)) {
+    for (const phase of ['inspect', 'apply']) {
+      const { result, runner } = await oneShot({ key, pin: null, o: { phase } });
+      assert.equal(realPin(key).execute, false);
+      assert.equal(result.ok, false);
+      assert.equal(result.code, CODES.GUARD_APPLY_FORBIDDEN);
+      assert.equal(result.details.stopped_at, 'pin');
+      assert.equal(runner.calls.length, 0);
+    }
+  }
+});
+
+test('a pin without staging acceptance or phrase is refused', async () => {
+  for (const extra of [{ staging_acceptance: { ok: false, reference: 'x' } }, { staging_acceptance: null }, { authorization_phrase: '' }]) {
+    const { result, runner } = await oneShot({ pin: executePin('sql80', extra) });
+    assert.equal(result.ok, false);
+    assert.equal(result.details.stopped_at, 'pin');
+    assert.equal(runner.calls.length, 0);
+  }
+});
+
+test('source failures stop before the inspect', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-src-'));
+  const wrongName = path.join(dir, `source-${'b'.repeat(40)}.tar.gz`);
+  fs.copyFileSync(TARBALL, wrongName);
+  fs.copyFileSync(`${TARBALL}.sha256`, `${wrongName}.sha256`);
+  const badSidecar = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-src-')), `source-${COMMIT}.tar.gz`);
+  fs.copyFileSync(TARBALL, badSidecar);
+  fs.writeFileSync(`${badSidecar}.sha256`, `${'0'.repeat(64)}  source-${COMMIT}.tar.gz\n`);
+  const noSidecar = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-src-')), `source-${COMMIT}.tar.gz`);
+  fs.copyFileSync(TARBALL, noSidecar);
+  const cases = [
+    [{ o: { 'expected-tarball-sha256': 'f'.repeat(64) } }, CODES.STALE_PACKAGE],
+    [{ sourceCommit: null }, CODES.STALE_PACKAGE],
+    [{ sourceCommit: `${'b'.repeat(40)}\n` }, CODES.STALE_PACKAGE],
+    [{ sourceCommit: COMMIT }, CODES.STALE_PACKAGE],
+    [{ sourceCommit: `${COMMIT}\nextra\n` }, CODES.STALE_PACKAGE],
+    [{ o: { 'source-tarball': wrongName } }, CODES.STALE_PACKAGE],
+    [{ o: { 'source-tarball': badSidecar } }, CODES.STALE_PACKAGE],
+    [{ o: { 'source-tarball': noSidecar } }, CODES.STALE_PACKAGE],
+    [{ compareTree: async () => ({ ok: false, code: CODES.SOURCE_RECONCILIATION_REQUIRED, message: 'tree differs', details: {} }) }, CODES.SOURCE_RECONCILIATION_REQUIRED],
+    [{ pin: executePin('sql80', { source_sha256: 'f'.repeat(64) }) }, CODES.SOURCE_RECONCILIATION_REQUIRED],
+    [{ pin: executePin('sql80', { migration: 'sql79' }) }, CODES.SQL_COLLISION],
+    [{ pin: executePin('sql80', { target_environment: 'staging' }) }, CODES.SQL_COLLISION],
+  ];
+  for (const [args, code] of cases) {
+    const { result, runner } = await oneShot(args);
+    assert.equal(result.ok, false, JSON.stringify(args.o || args.pin?.source_sha256 || 'tree'));
+    assert.equal(result.code, code);
+    assert.equal(result.details.stopped_at, 'source');
+    assert.equal(runner.calls.length, 0);
+  }
+});
+
+test('each inspect failure stops before the contracts', async () => {
+  const pin = executePin('sql80');
+  const cases = {
+    pin_execute: { pin_execute: false },
+    source_ok: { source_ok: false },
+    read_only: { read_only: false },
+    migration: { migration: 'sql79' },
+    filename: { filename: 'aws/workflows/sql/79_member_stakeholder_writes.sql' },
+    state_readable: { state_error: { code: 'X' } },
+    missing_dependencies: { missing_dependencies: ['primary key on x'] },
+    predecessors_applied: { predecessors_applied: false },
+    live_definition_sha256: { live_definition_sha256: 'e'.repeat(64) },
+    live_matches_expected: { live_matches_expected: false },
+    already_applied: { already_applied: true },
+    precondition_failures: { precondition_failures: ['update_not_granted'] },
+    apply_preconditions_met: { apply_preconditions_met: false },
+    expected_live_definition_sha256: { expected_live_definition_sha256: 'd'.repeat(64) },
+  };
+  for (const [name, overrides] of Object.entries(cases)) {
+    const { result, runner } = await oneShot({
+      responses: { inspect: () => ({ status: 0, stdout: json({ ok: true, details: inspectDetails('sql80', pin, overrides) }), stderr: '' }) },
+    });
+    assert.equal(result.ok, false, name);
+    assert.equal(result.code, CODES.DEPLOYMENT_COLLISION, name);
+    assert.equal(result.details.stopped_at, 'inspect', name);
+    assert.ok(result.details.error.details.failed.includes(name), `${name}: ${result.details.error.details.failed}`);
+    assert.deepEqual(runner.steps(), ['inspect'], name);
+  }
+  const { result, runner } = await oneShot({
+    responses: { inspect: () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'SQL_COLLISION', message: 'secret unreadable' }) }) },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'SQL_COLLISION');
+  assert.equal(result.details.stopped_at, 'inspect');
+  assert.deepEqual(runner.steps(), ['inspect']);
+});
+
+test('a failed, skipped or unparseable contract stops before preflight', async () => {
+  const bad = [
+    () => ({ status: 1, stdout: tap(36, { fail: 1 }), stderr: '' }),
+    () => ({ status: 0, stdout: tap(36, { skipped: 1 }), stderr: '' }),
+    () => ({ status: 1, stdout: '', stderr: "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@aws-sdk/client-s3'" }),
+    () => ({ status: 0, stdout: 'no summary', stderr: '' }),
+    () => ({ status: 0, stdout: tap(0), stderr: '' }),
+  ];
+  for (const answer of bad) {
+    const { result, runner } = await oneShot({ responses: { 'contract:financial-write-protections': answer } });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, CODES.REGRESSION_DETECTED);
+    assert.equal(result.details.stopped_at, 'contracts');
+    assert.equal(runner.steps().at(-1), 'contract:financial-write-protections');
+    assert.ok(!runner.steps().includes('preflight'));
+  }
+});
+
+test('contract tests come from the registry and run on this tree with the TAP reporter', async () => {
+  const ids = requiredContracts(ROOT).map((row) => row.id).sort();
+  assert.deepEqual(ids, ['claim-ledger', 'financial-write-protections', 'tenant-isolation']);
+  const { runner } = await oneShot({ o: { phase: 'inspect' } });
+  const call = runner.calls.find((c) => c.step === 'contract:financial-write-protections');
+  assert.deepEqual(call.args, ['--test', '--test-reporter=tap', 'aws/tests/api-write.test.mjs']);
+  const empty = { contracts: [] };
+  const res = await runProductionSqlOneShot(opts('sql80'), {
+    root: ROOT, env: {}, run: fakeRunner('sql80', executePin('sql80')).run, pin: executePin('sql80'), registry: empty,
+    readTarball: async () => ({ sha256: TARBALL_SHA, index: new Map() }),
+    compareTreeToIndex: async () => ({ ok: true, details: { tarball_files: 1 } }),
+    readSourceCommit: () => `${COMMIT}\n`,
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.details.stopped_at, 'contracts');
+});
+
+test('a preflight refusal or a receipt outside .deployment-guard/receipts stops before evaluate', async () => {
+  for (const answer of [
+    () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'LEASE_HELD', message: 'held by another workstream' }) }),
+    () => ({ status: 0, stdout: json({ ok: true, details: {} }), stderr: '' }),
+    () => ({ status: 0, stdout: json({ ok: true, details: { receipt: '/tmp/forged.json' } }), stderr: '' }),
+    () => ({ status: 0, stdout: json({ ok: true, details: { receipt: { ok: false } } }), stderr: '' }),
+  ]) {
+    const { result, runner } = await oneShot({ responses: { preflight: answer } });
+    assert.equal(result.ok, false);
+    assert.equal(result.details.stopped_at, 'preflight');
+    assert.equal(runner.steps().at(-1), 'preflight');
+  }
+  const { result } = await oneShot({ responses: { preflight: () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'LEASE_HELD', message: 'held' }) }) } });
+  assert.equal(result.code, 'LEASE_HELD');
+});
+
+test('apply never runs when evaluate disallows', async () => {
+  for (const answer of [
+    () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'PRODUCTION_APPROVAL_REQUIRED', message: 'no' }) }),
+    () => ({ status: 0, stdout: json({ ok: true, details: { migration: 'sql80', sql80_production_apply_allowed: false } }), stderr: '' }),
+    () => ({ status: 0, stdout: json({ ok: true, details: { migration: 'sql80' } }), stderr: '' }),
+    () => ({ status: 0, stdout: json({ ok: true, details: { migration: 'sql79', sql80_production_apply_allowed: true } }), stderr: '' }),
+    () => ({ status: 0, stdout: json({ ok: true, details: { migration: 'sql80', member_stakeholder_production_apply_allowed: true } }), stderr: '' }),
+  ]) {
+    const { result, runner } = await oneShot({ responses: { evaluate: answer } });
+    assert.equal(result.ok, false);
+    assert.equal(result.details.stopped_at, 'evaluate');
+    assert.ok(!runner.steps().includes('apply'));
+    assert.ok(!runner.steps().includes('post-apply-inspect'));
+  }
+});
+
+test('a failed apply still runs the read-only post-apply inspect and reports the stop', async () => {
+  const pin = executePin('sql80');
+  for (const answer of [
+    () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'SQL_COLLISION', message: 'COMMIT outcome is unknown' }) }),
+    () => ({ status: 0, stdout: json({ ok: true, details: { receipt: { result: 'applied', before_hash: pin.expected_live_definition_sha256, after_hash: 'x' } } }), stderr: '' }),
+  ]) {
+    const { result, runner } = await oneShot({ responses: { apply: answer } });
+    assert.equal(result.ok, false);
+    assert.equal(result.details.stopped_at, 'apply');
+    assert.deepEqual(runner.steps().slice(-2), ['apply', 'post-apply-inspect']);
+    assert.ok(result.details.post_apply_inspect);
+    assert.equal(result.details.applied, undefined);
+  }
+});
+
+test('a post-apply inspect that does not show the intended state fails the run', async () => {
+  const pin = executePin('sql80');
+  const { result } = await oneShot({
+    responses: { 'post-apply-inspect': () => ({ status: 0, stdout: json({ ok: true, details: inspectDetails('sql80', pin) }), stderr: '' }) },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.details.stopped_at, 'post-apply-inspect');
+  assert.equal(result.details.applied, undefined);
+});
+
+// --- source tree vs tarball (real tar) -----------------------------------------------------
+
+function makeTree() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-tree-'));
+  const src = path.join(base, 'src');
+  const long = `node_modules/${'very-long-package-name-'.repeat(5)}/dist/${'nested-'.repeat(10)}/index.js`;
+  for (const [rel, text] of [['a.txt', 'a'], ['dir/b.mjs', 'export default 1;\n'], [long, 'long']]) {
+    fs.mkdirSync(path.dirname(path.join(src, rel)), { recursive: true });
+    fs.writeFileSync(path.join(src, rel), text);
+  }
+  fs.symlinkSync('b.mjs', path.join(src, 'dir/link.mjs'));
+  const tarball = path.join(base, `source-${COMMIT}.tar.gz`);
+  const res = spawnSync('tar', ['-czf', tarball, '-C', src, '.']);
+  assert.equal(res.status, 0, String(res.stderr));
+  const extracted = path.join(base, 'x');
+  fs.mkdirSync(extracted);
+  assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', extracted]).status, 0);
+  return { tarball, extracted, long };
+}
+
+test('the extracted tree must be exactly the tarball', async () => {
+  const { tarball, extracted, long } = makeTree();
+  const same = await compareTreeToTarball(extracted, tarball);
+  assert.equal(same.ok, true, JSON.stringify(same.details));
+  assert.equal(same.details.tarball_files, 3);
+
+  fs.mkdirSync(path.join(extracted, '.deployment-guard/receipts'), { recursive: true });
+  fs.writeFileSync(path.join(extracted, '.deployment-guard/receipts/x.json'), '{}');
+  assert.equal((await compareTreeToTarball(extracted, tarball)).ok, true, 'local guard state is ignored');
+
+  fs.writeFileSync(path.join(extracted, 'dir/extra.mjs'), 'planted');
+  let res = await compareTreeToTarball(extracted, tarball);
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.details.extra, ['dir/extra.mjs']);
+  fs.rmSync(path.join(extracted, 'dir/extra.mjs'));
+
+  fs.writeFileSync(path.join(extracted, long), 'changed');
+  res = await compareTreeToTarball(extracted, tarball);
+  assert.equal(res.code, CODES.SOURCE_RECONCILIATION_REQUIRED);
+  assert.deepEqual(res.details.differing, [long]);
+  fs.writeFileSync(path.join(extracted, long), 'long');
+
+  fs.rmSync(path.join(extracted, 'a.txt'));
+  res = await compareTreeToTarball(extracted, tarball);
+  assert.deepEqual(res.details.missing, ['a.txt']);
+  fs.writeFileSync(path.join(extracted, 'a.txt'), 'a');
+
+  fs.rmSync(path.join(extracted, 'dir/link.mjs'));
+  fs.symlinkSync('../a.txt', path.join(extracted, 'dir/link.mjs'));
+  res = await compareTreeToTarball(extracted, tarball);
+  assert.deepEqual(res.details.differing, ['dir/link.mjs']);
+
+  const garbage = path.join(path.dirname(tarball), 'garbage.tar.gz');
+  fs.writeFileSync(garbage, 'nope');
+  assert.equal((await compareTreeToTarball(extracted, garbage)).code, CODES.STALE_PACKAGE);
+});
+
+test('a symlink that resolves outside the tree is refused', async () => {
+  for (const linkname of ['../../../etc/passwd', '/etc/passwd', '../..']) {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-link-'));
+    const src = path.join(base, 'src');
+    fs.mkdirSync(path.join(src, 'dir'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'a.txt'), 'a');
+    fs.symlinkSync(linkname, path.join(src, 'dir/escape'));
+    const tarball = path.join(base, `source-${COMMIT}.tar.gz`);
+    assert.equal(spawnSync('tar', ['-czf', tarball, '-C', src, '.']).status, 0);
+    const x = path.join(base, 'x');
+    fs.mkdirSync(x);
+    assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', x]).status, 0);
+    const res = await compareTreeToTarball(x, tarball);
+    assert.equal(res.ok, false, linkname);
+    assert.equal(res.code, CODES.SOURCE_RECONCILIATION_REQUIRED);
+    assert.deepEqual(res.details.escaping_symlinks, ['dir/escape'], linkname);
+  }
+});
+
+test('the tree is re-compared right before preflight and right before apply', async () => {
+  const failOnCall = (n) => {
+    let calls = 0;
+    return async () => {
+      calls += 1;
+      return calls === n
+        ? { ok: false, code: CODES.SOURCE_RECONCILIATION_REQUIRED, message: 'changed after the source step', details: { differing: ['scripts/deployment-guard/preflight.mjs'] } }
+        : { ok: true, details: { tarball_files: 3 } };
+    };
+  };
+  let { result, runner } = await oneShot({ compareTree: failOnCall(2) });
+  assert.equal(result.ok, false);
+  assert.equal(result.details.stopped_at, 'source-recheck-before-preflight');
+  assert.ok(!runner.steps().includes('preflight'));
+  assert.equal(result.details.manifest_deleted, true);
+
+  ({ result, runner } = await oneShot({ compareTree: failOnCall(3) }));
+  assert.equal(result.ok, false);
+  assert.equal(result.details.stopped_at, 'source-recheck-before-apply');
+  assert.deepEqual(runner.steps().slice(-2), ['preflight', 'evaluate']);
+  assert.ok(!runner.steps().includes('apply'));
+});
+
+test('the manifest temp dir is deleted when a later step fails', async () => {
+  const { result, tmpDir } = await oneShot({ responses: { evaluate: () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'X', message: 'no' }) }) } });
+  assert.equal(result.ok, false);
+  assert.equal(result.details.manifest_deleted, true);
+  assert.deepEqual(fs.readdirSync(tmpDir), []);
+});
+
+test('tar entry names cannot escape the tree', () => {
+  assert.equal(normalizeTarPath('./a/b'), 'a/b');
+  assert.equal(normalizeTarPath('./'), '');
+  assert.throws(() => normalizeTarPath('/etc/passwd'));
+  assert.throws(() => normalizeTarPath('./a/../../x'));
+});
+
+// --- helpers, CLI and registration ---------------------------------------------------------
+
+test('output parsers', () => {
+  assert.deepEqual(parseTapSummary(tap(4)), { tests: 4, pass: 4, fail: 0, cancelled: 0, skipped: 0, todo: 0 });
+  assert.equal(parseTapSummary('nothing').tests, null);
+  // A test that prints a fake summary line cannot win: the reporter's own summary is last.
+  assert.deepEqual(parseTapSummary(`# tests 9\n# pass 9\n# fail 0\n${tap(4, { fail: 1 })}`), { tests: 4, pass: 3, fail: 1, cancelled: 0, skipped: 0, todo: 0 });
+  assert.deepEqual(parseJsonOutput('{"ok":true}'), { ok: true });
+  assert.deepEqual(parseJsonOutput('warning line\n{\n  "ok": false\n}\n'), { ok: false });
+  assert.equal(parseJsonOutput('not json'), null);
+});
+
+test('the CLI refuses positional arguments and forwards to the orchestrator', async () => {
+  const writes = [];
+  const orig = process.stderr.write;
+  process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  try {
+    assert.equal(await oneShotMain(['--phase', 'apply', '--', 'node', 'evil.mjs'], {}, { run: () => assert.fail('no child') }), 1);
+    assert.equal(await oneShotMain(['--migration', 'sql80', '--receipt', RECEIPT], {}, { run: () => assert.fail('no child') }), 1);
+  } finally {
+    process.stderr.write = orig;
+  }
+  assert.match(writes[0], /positional arguments are not accepted/);
+  assert.match(writes[1], /unknown flag/);
+});
+
+test('the one-shot is inventoried and never connects or applies SQL itself', () => {
+  const inventory = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8'));
+  const row = inventory.scripts.find((r) => r.path === 'scripts/deployment-guard/production-sql-one-shot.mjs');
+  assert.equal(row?.classification, 'GUARDED');
+  for (const rel of ['scripts/deployment-guard/production-sql-one-shot.mjs', 'scripts/deployment-guard/lib/production-sql-one-shot.mjs']) {
+    const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    assert.doesNotMatch(text, /from '(?:pg|@aws-sdk\/[^']+)'/, rel);
+    assert.doesNotMatch(text, /createProductionDatabaseConnect|resolve\w*DatabaseUrl|issueReceipt|writeReceipt|consumeReceiptOnce/, rel);
+  }
+});
+
+test('the transfer workflow runs no npm or test code where an AWS token can be minted', () => {
+  const text = fs.readFileSync(path.join(ROOT, '.github/workflows/sql53-temporary-transfer.yml'), 'utf8');
+  const jobsAt = text.indexOf('\njobs:\n');
+  assert.ok(jobsAt > 0);
+  assert.doesNotMatch(text.slice(0, jobsAt).replace(/^#.*$/gm, ''), /id-token/, 'no workflow-level id-token permission');
+  const jobs = Object.fromEntries(text.slice(jobsAt + 7).split(/\n(?= {2}[a-z][a-z0-9-]*:\n)/).map((chunk) => [chunk.trim().split(':')[0], chunk]));
+  assert.deepEqual(Object.keys(jobs), ['package', 'contracts', 'upload']);
+  for (const name of ['package', 'contracts']) {
+    assert.doesNotMatch(jobs[name], /id-token|configure-aws-credentials|aws s3/, name);
+    assert.match(jobs[name], /permissions:\n\s+contents: read\n/, name);
+  }
+  const upload = jobs.upload;
+  assert.match(upload, /needs: \[package, contracts\]/);
+  assert.match(upload, /id-token: write/);
+  assert.doesNotMatch(upload, /\bnpm\b|\bnode\b|setup-node|checkout@/, 'the upload job runs no repository or npm code');
+  assert.match(upload, /EXPECTED: \$\{\{ needs\.package\.outputs\.sha256 \}\}/);
+  assert.ok(upload.indexOf('sha256sum -c -') !== -1 && upload.indexOf('sha256sum -c -') < upload.indexOf('configure-aws-credentials'), 'verified before the token is minted');
+  // The contracts job tests a copy extracted from the hashed tarball, with the registry's list.
+  assert.match(jobs.contracts, /needs: package/);
+  assert.match(jobs.contracts, /echo "\$\{EXPECTED\}  \$\{TARBALL\}" \| sha256sum -c -/);
+  assert.match(jobs.contracts, /relevantContracts\(loadContractRegistry/);
+  // Fail closed: command substitution (a failing node exits the step) and a non-empty list.
+  assert.match(jobs.contracts, /LIST=\$\(node --input-type=module -e '/);
+  assert.match(jobs.contracts, /mapfile -t TESTS <<<"\$LIST"/);
+  assert.match(jobs.contracts, /test "\$\{#TESTS\[@\]\}" -gt 0/);
+  assert.match(jobs.contracts, /test -n "\$\{TESTS\[0\]\}"/);
+  assert.doesNotMatch(jobs.contracts, /< <\(/, 'no process substitution, whose exit status is lost');
+  assert.match(jobs.contracts, /set -euo pipefail/);
+  assert.match(jobs.contracts, /test "\$\(cat \/tmp\/runner-copy\/SOURCE_COMMIT\)" = "\$\{GITHUB_SHA\}"/);
+  // Provenance and the API package's own lockfile dependencies.
+  assert.match(jobs.package, /printf '%s\\n' "\$\{SHA\}" > \/tmp\/pkg\/src\/SOURCE_COMMIT/);
+  assert.match(jobs.package, /echo "TARBALL_SHA256 \$\{SUM\}/);
+  assert.match(jobs.package, /npm ci --prefix \/tmp\/pkg\/src\/aws\/functions\/api --ignore-scripts --omit=dev/);
+  assert.ok(jobs.package.indexOf('tar -czf') < jobs.package.indexOf('upload-artifact'), 'hashed before hand-off');
+  assert.doesNotMatch(jobs.package, /node --test/, 'no tests run in the job that builds and hashes');
+  for (const line of text.split('\n').filter((row) => /^\s*-?\s*uses: /.test(row))) {
+    assert.match(line, /@[0-9a-f]{40}(?:\s|$)/, `action pinned by SHA: ${line.trim()}`);
+  }
+});
+
+// --- second review: cached index, realpath, exceptions ---------------------------------------
+
+function fixtureRunnerTree() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-swap-'));
+  const src = path.join(base, 'src');
+  const pin = executePin('sql80');
+  for (const [rel, text] of [
+    [pin.filename, fs.readFileSync(path.join(ROOT, pin.filename), 'utf8')],
+    ['SOURCE_COMMIT', `${COMMIT}\n`],
+    ['t.test.mjs', "import { test } from 'node:test';\ntest('ok', () => {});\n"],
+  ]) {
+    fs.mkdirSync(path.dirname(path.join(src, rel)), { recursive: true });
+    fs.writeFileSync(path.join(src, rel), text);
+  }
+  const tarball = path.join(base, `source-${COMMIT}.tar.gz`);
+  const pack = (dir) => {
+    assert.equal(spawnSync('tar', ['-czf', tarball, '-C', dir, '.']).status, 0);
+    const sha = createHash('sha256').update(fs.readFileSync(tarball)).digest('hex');
+    fs.writeFileSync(`${tarball}.sha256`, `${sha}  source-${COMMIT}.tar.gz\n`);
+    return sha;
+  };
+  const sha = pack(src);
+  const x = path.join(base, 'x');
+  fs.mkdirSync(x);
+  assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', x]).status, 0);
+  return { pin, tarball, sha, x, pack };
+}
+
+const FIXTURE_REGISTRY = { contracts: [{ id: 'c', accepted: true, enabled: true, environments: ['production'], components: ['*'], deployment_types: ['sql-apply'], test: 't.test.mjs' }] };
+
+test('re-checks compare against the index cached from the verified bytes, so swapping tarball and tree together is caught', async () => {
+  const { pin, tarball, sha, x, pack } = fixtureRunnerTree();
+  const runner = fakeRunner('sql80', pin, {
+    contract: () => ({ status: 0, stdout: tap(1), stderr: '' }),
+    preflight: () => ({ status: 0, stdout: json({ ok: true, details: { receipt: path.join(receiptDir(x), 'production::production-sql.json') } }), stderr: '' }),
+    evaluate: () => {
+      // An attacker changes the tree and re-packs a matching tarball and sidecar on disk.
+      fs.writeFileSync(path.join(x, 't.test.mjs'), 'planted\n');
+      pack(x);
+      return { status: 0, stdout: json({ ok: true, details: { migration: 'sql80', sql80_production_apply_allowed: true } }), stderr: '' };
+    },
+  });
+  const result = await runProductionSqlOneShot(opts('sql80', { 'source-tarball': tarball, 'expected-tarball-sha256': sha }), {
+    root: x, env: { PATH: '/usr/bin' }, run: runner.run, nodePath: '/usr/bin/node', pin, registry: FIXTURE_REGISTRY,
+    tmpDir: fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-manifest-')),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.details.stopped_at, 'source-recheck-before-apply');
+  assert.deepEqual(result.details.error.details.differing, ['t.test.mjs']);
+  assert.ok(!runner.steps().includes('apply'));
+  // Re-reading the swapped tarball from disk would have passed.
+  assert.equal((await compareTreeToTarball(x, tarball)).ok, true);
+});
+
+test('the same fixture passes every real source check when nothing is swapped', async () => {
+  const { pin, tarball, sha, x } = fixtureRunnerTree();
+  const runner = fakeRunner('sql80', pin, {
+    contract: () => ({ status: 0, stdout: tap(1), stderr: '' }),
+    preflight: () => ({ status: 0, stdout: json({ ok: true, details: { receipt: path.join(receiptDir(x), 'production::production-sql.json') } }), stderr: '' }),
+  });
+  const result = await runProductionSqlOneShot(opts('sql80', { 'source-tarball': tarball, 'expected-tarball-sha256': sha }), {
+    root: x, env: { PATH: '/usr/bin' }, run: runner.run, nodePath: '/usr/bin/node', pin, registry: FIXTURE_REGISTRY,
+    tmpDir: fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-manifest-')),
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.details.error));
+  assert.equal(result.details.source.tarball_sha256, sha);
+  assert.equal(result.details.source.index, undefined, 'the cached index is not printed');
+  assert.ok(result.details.steps.some((s) => s.step === 'source-recheck-before-apply' && s.ok));
+});
+
+test('symlinks are also resolved with realpath: s -> . plus t -> s/.. is refused', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'one-shot-realpath-'));
+  const src = path.join(base, 'src');
+  fs.mkdirSync(src);
+  fs.writeFileSync(path.join(src, 'a.txt'), 'a');
+  fs.symlinkSync('.', path.join(src, 's'));
+  fs.symlinkSync('s/..', path.join(src, 't'));
+  const tarball = path.join(base, `source-${COMMIT}.tar.gz`);
+  assert.equal(spawnSync('tar', ['-czf', tarball, '-C', src, '.']).status, 0);
+  const x = path.join(base, 'x');
+  fs.mkdirSync(x);
+  assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', x]).status, 0);
+  assert.equal(fs.realpathSync.native(path.join(x, 't')), fs.realpathSync.native(base), 'lexically inside, really the parent');
+  const res = await compareTreeToTarball(x, tarball);
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.details.escaping_symlinks, ['t']);
+
+  // A dangling link is refused too (it cannot be shown to stay inside).
+  fs.rmSync(path.join(src, 't'));
+  fs.symlinkSync('missing-target', path.join(src, 't'));
+  assert.equal(spawnSync('tar', ['-czf', tarball, '-C', src, '.']).status, 0);
+  const y = path.join(base, 'y');
+  fs.mkdirSync(y);
+  assert.equal(spawnSync('tar', ['-xzf', tarball, '-C', y]).status, 0);
+  assert.deepEqual((await compareTreeToTarball(y, tarball)).details.escaping_symlinks, ['t']);
+});
+
+test('OpenSSL, ICU and compile-cache variables are refused like the other loader variables', async () => {
+  for (const key of ['OPENSSL_CONF', 'OPENSSL_MODULES', 'NODE_ICU_DATA', 'NODE_COMPILE_CACHE']) {
+    assert.ok(LOADER_ENV_KEYS.includes(key), key);
+    const { result, runner } = await oneShot({ env: { PATH: '/usr/bin', [key]: '/tmp/x' } });
+    assert.equal(result.ok, false, key);
+    assert.equal(result.code, CODES.DEPLOYMENT_GUARD_REQUIRED, key);
+    assert.equal(runner.calls.length, 0, key);
+  }
+});
+
+test('an exception in any step still returns one failure summary', async () => {
+  const boom = () => { throw new Error('runner crashed'); };
+  let { result, runner, tmpDir } = await oneShot({ responses: { evaluate: boom } });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, ONE_SHOT_EXCEPTION);
+  assert.equal(result.details.stopped_at, 'preflight (exception)');
+  assert.match(result.details.error.message, /runner crashed/);
+  assert.equal(result.details.manifest_deleted, true);
+  assert.deepEqual(fs.readdirSync(tmpDir), []);
+  assert.equal(result.details.warning, undefined);
+  assert.ok(!runner.steps().includes('apply'));
+
+  ({ result } = await oneShot({ responses: { apply: boom } }));
+  assert.equal(result.code, ONE_SHOT_EXCEPTION);
+  assert.equal(result.details.apply_child_started, true);
+  assert.match(result.details.warning, /read-only --inspect before anything else/);
+
+  ({ result } = await oneShot({ responses: { inspect: boom } }));
+  assert.equal(result.details.stopped_at, 'source (exception)');
+
+  const writes = [];
+  const orig = process.stderr.write;
+  process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  let code;
+  try {
+    code = await oneShotMain([
+      '--migration', 'sql80', '--approval-scope', 'sql80', '--commit', COMMIT, '--workstream-id', WORKSTREAM,
+      '--operator', 'michaelcarletta-cmd', '--approval-statement', STATEMENT, '--source-tarball', TARBALL,
+      '--expected-tarball-sha256', TARBALL_SHA, '--phase', 'inspect',
+    ], { PATH: '/usr/bin' }, {
+      root: ROOT, run: boom, execArgv: [], pin: executePin('sql80'), readSourceCommit: () => `${COMMIT}\n`,
+      readTarball: async () => ({ sha256: TARBALL_SHA, index: new Map() }), compareTreeToIndex: async () => ({ ok: true, details: { tarball_files: 1 } }),
+    });
+  } finally {
+    process.stderr.write = orig;
+  }
+  assert.equal(code, 1);
+  const printed = JSON.parse(writes.join(''));
+  assert.equal(printed.code, ONE_SHOT_EXCEPTION);
+  assert.equal(printed.details.stopped_at, 'source (exception)');
+});
