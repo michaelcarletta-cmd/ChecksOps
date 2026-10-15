@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
+import { useAuth } from "@/hooks/useAuth";
+import { useCheckAltAccess } from "@/hooks/useCanMoveChecks";
+import { isPlatformOwner } from "@/lib/masterMerchant";
+import { canSaveCheckAltAutoDeposit, checkAltAccessState } from "@/lib/checkAltOperatorAccess";
+import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -21,11 +26,25 @@ import {
  * Overrides the global checkalt_config defaults for this tenant only.
  * Reads tenant_id, auto_approve_enabled, auto_approve_max_cents, and derived registered.
  * Writes only auto_approve_enabled and auto_approve_max_cents.
+ * Viewers and non-members see the settings read-only, without Save
+ * (the server refuses their save; this is UX only).
  */
 export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: string | null } = {}) {
   const { tenant } = useTenant();
   const tenantId = tenantIdProp ?? tenant?.id ?? null;
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const access = useCheckAltAccess();
+  const canEdit = canSaveCheckAltAutoDeposit({
+    memberships: access.memberships,
+    tenantId,
+    isPlatformOwner: isPlatformOwner(user?.email, user?.id),
+  });
+  const accessState = checkAltAccessState({
+    isLoading: access.isLoading,
+    isError: access.isError,
+    allowed: canEdit,
+  });
   const [enabled, setEnabled] = useState(false);
   const [maxDollars, setMaxDollars] = useState<string>("");
 
@@ -156,7 +175,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
               <Switch
                 checked={enabled}
                 onCheckedChange={setEnabled}
-                disabled={isLoading}
+                disabled={isLoading || !canEdit}
               />
             </div>
 
@@ -174,7 +193,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
                   placeholder="e.g. 2000.00"
                   value={maxDollars}
                   onChange={(e) => setMaxDollars(e.target.value)}
-                  disabled={!enabled || isLoading}
+                  disabled={!enabled || isLoading || !canEdit}
                   className="max-w-[180px]"
                 />
               </div>
@@ -184,13 +203,21 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
               </p>
             </div>
 
-            <Button
-              size="sm"
-              onClick={() => save.mutate()}
-              disabled={save.isPending || isLoading}
-            >
-              {save.isPending ? "Saving..." : "Save settings"}
-            </Button>
+            {canEdit ? (
+              <Button
+                size="sm"
+                onClick={() => save.mutate()}
+                disabled={save.isPending || isLoading}
+              >
+                {save.isPending ? "Saving..." : "Save settings"}
+              </Button>
+            ) : (
+              <CheckAltAccessNote
+                state={accessState}
+                action="change Auto-Deposit settings"
+                onRetry={() => access.retry()}
+              />
+            )}
           </>
         )}
       </CardContent>
