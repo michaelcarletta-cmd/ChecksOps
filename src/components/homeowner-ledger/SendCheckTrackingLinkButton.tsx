@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +9,16 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Loader2, Link2, Copy, Send } from "lucide-react";
+import {
+  evaluateHomeownerTrackingLinkEligibility,
+  homeownerTrackingLinkQueryKey,
+} from "@/lib/homeownerTrackingLink";
 
 interface Props {
   /** Claim tied to this check. Required — the tracking link is per-claim. */
   claimId: string | null | undefined;
+  /** When set, prefer the live check_intake_items.claim_id over a stale prop. */
+  checkIntakeItemId?: string | null;
   tenantId?: string | null;
   /** Optional pre-fill; falls back to claim.policyholder_* on open. */
   defaultName?: string | null;
@@ -31,6 +38,7 @@ interface Props {
  */
 export function SendCheckTrackingLinkButton({
   claimId,
+  checkIntakeItemId,
   tenantId,
   defaultName,
   defaultEmail,
@@ -49,13 +57,33 @@ export function SendCheckTrackingLinkButton({
   const [sentUrl, setSentUrl] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
 
+  const { data: liveCheckLink } = useQuery({
+    queryKey: homeownerTrackingLinkQueryKey(checkIntakeItemId || ""),
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id")
+        .eq("id", checkIntakeItemId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const tracking = evaluateHomeownerTrackingLinkEligibility({
+    claimId,
+    liveCheckClaimId: liveCheckLink?.claim_id ?? null,
+  });
+  const resolvedClaimId = tracking.claimId;
+
   const openDialog = async () => {
     setOpen(true);
-    if (prefilled || !claimId) return;
+    if (prefilled || !resolvedClaimId) return;
     const { data } = await supabase
       .from("claims")
       .select("policyholder_name,policyholder_email,policyholder_phone")
-      .eq("id", claimId)
+      .eq("id", resolvedClaimId)
       .maybeSingle();
     if (data) {
       setName((v) => v || data.policyholder_name || "");
@@ -74,7 +102,7 @@ export function SendCheckTrackingLinkButton({
     try {
       const { data, error } = await supabase.functions.invoke("homeowner-ledger-send", {
         body: {
-          claim_id: claimId ?? null,
+          claim_id: resolvedClaimId ?? null,
           tenant_id: tenantId ?? undefined,
           homeowner_email: email || null,
           homeowner_phone: phone || null,
@@ -107,9 +135,9 @@ export function SendCheckTrackingLinkButton({
     setSentUrl(null);
   };
 
-  if (!claimId) {
+  if (!tracking.enabled) {
     return (
-      <Button size={size} variant={variant} className={className} disabled title="Link this check to a claim first">
+      <Button size={size} variant={variant} className={className} disabled title={tracking.message}>
         <Link2 className="h-3.5 w-3.5 mr-1" /> {label}
       </Button>
     );
