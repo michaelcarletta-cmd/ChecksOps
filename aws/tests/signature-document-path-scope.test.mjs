@@ -19,6 +19,8 @@ const CHECK = 'c0000000-0000-4000-8000-000000000001';
 const OTHER_CHECK = 'c0000000-0000-4000-8000-000000000002';
 const CLAIM = 'a0000000-0000-4000-8000-000000000001';
 const OTHER_CLAIM = 'a0000000-0000-4000-8000-000000000002';
+const TENANT = 'b0000000-0000-4000-8000-000000000001';
+const USER = 'd0000000-0000-4000-8000-000000000001';
 
 /** Fake client: the check links CLAIM; `filesFound` answers the ownership lookup. */
 function fakeClient({ filesFound = false } = {}) {
@@ -29,11 +31,13 @@ function fakeClient({ filesFound = false } = {}) {
       const text = String(sql);
       seen.push(text);
       if (/FROM public\.check_intake_items WHERE id/.test(text)) {
-        return { rows: params[0] === CHECK ? [{ id: CHECK, claim_id: CLAIM }] : [] };
+        return { rows: params[0] === CHECK ? [{ id: CHECK, claim_id: CLAIM, tenant_id: TENANT }] : [] };
       }
       if (/FROM public\.claims WHERE id/.test(text)) {
-        return { rows: [CLAIM, OTHER_CLAIM].includes(params[0]) ? [{ id: params[0] }] : [] };
+        return { rows: [CLAIM, OTHER_CLAIM].includes(params[0]) ? [{ id: params[0], org_id: TENANT }] : [] };
       }
+      if (/aws_can_write_tenant/.test(text)) return { rows: [{ ok: true }] };
+      if (/FROM public\.tenant_users/.test(text)) return { rows: [{ '?column?': 1 }] };
       if (/FROM public\.check_files/.test(text)) return { rows: filesFound ? [{ '?column?': 1 }] : [] };
       if (/INSERT INTO public\.signature_requests/.test(text)) return { rows: [{ id: 'new', document_path: params[3] }] };
       throw new Error(`unexpected SQL ${text.slice(0, 60)}`);
@@ -43,6 +47,7 @@ function fakeClient({ filesFound = false } = {}) {
 
 const insert = (client, values) => executeSignatureRequests({
   client,
+  mapping: { application_user_id: USER },
   op: 'insert',
   values: { document_name: 'Authorization.pdf', ...values },
 });
