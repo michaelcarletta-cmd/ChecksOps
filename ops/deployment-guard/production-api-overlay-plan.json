@@ -179,17 +179,17 @@
     },
     "providers/production/checkalt-authz.mjs": {
       "operation": "replace",
-      "accepted_sha256": "c7f75c1ac65e638359d4313d5e320a19c073fe3046809db27d08bd3ef40016cf",
-      "expected_live_sha256": "80b44100bbf053f4869858cf2ad04c1ef9d0d36ce20aead85b91f2232d3d96f3",
+      "accepted_sha256": "77fe337d047bfea5e0432258d0a6a4ca7ae0742dd7113fbc5bc69907ffd6ad46",
+      "expected_live_sha256": "c7f75c1ac65e638359d4313d5e320a19c073fe3046809db27d08bd3ef40016cf",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-second-approver-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-checkalt-remove-dual-control-manifest-2026-10-15.json"
     },
     "providers/production/checkalt-dual-control.mjs": {
       "operation": "replace",
-      "accepted_sha256": "536ac9118174d19642e12b99c5416160f091380200ff523719119b6b5b514cd1",
-      "expected_live_sha256": "ca2437a4cdc6e53e877e3094cfdf59e1e71e30169e19014f06cc82522351201a",
+      "accepted_sha256": "b26f9c084a53fe6179449aa16415951cdf88c42c64eafc824f8d3c0301d3dadc",
+      "expected_live_sha256": "536ac9118174d19642e12b99c5416160f091380200ff523719119b6b5b514cd1",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-second-approver-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-checkalt-remove-dual-control-manifest-2026-10-15.json"
     }
   },
   "do_not_overlay": [
