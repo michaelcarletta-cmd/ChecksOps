@@ -48,6 +48,7 @@
     "providers/production/checkalt-dispatch.mjs",
     "providers/production/checkalt-holds.mjs",
     "providers/parity/checkalt-functions.mjs",
+    "mortgage-agent-compensation.mjs",
     "providers/production/moov-wallet-fund.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
@@ -235,6 +236,13 @@
       "expected_live_sha256": "3d6a0495dbd797ce59ef8b553a074acdff6fd6c557a27a502587f0fa728954a7",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-checkalt-parity-functions-manifest-2026-10-15.json"
+    },
+    "mortgage-agent-compensation.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512",
+      "expected_live_sha256": "531837ab7ff9fb8279bcfb6cf624bde8aa183820f4a2ac355c6f7a1814cca4bb",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-mortgage-compensation-platform-owner-manifest-2026-10-15.json"
     }
   },
   "do_not_overlay": [

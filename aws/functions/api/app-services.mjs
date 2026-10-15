@@ -83,6 +83,7 @@ import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
 import { handleTaxProfiles } from './tax-profiles.mjs';
 import { handleTenantManagementV2 } from './tenant-management-v2.mjs';
+import { handleMortgageAgentCompensation } from './mortgage-agent-compensation.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -152,6 +153,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-management-v2',
   // Mortgage desk hire (Cognito + identity_accounts)
   'hire-mortgage-agent',
+  'mortgage-agent-compensation',
   'tenant-tax-profiles',
   // Public directory
   'public-contractor-directory',
@@ -312,6 +314,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleTenantRemoveOpenaiKey(event);
     case 'hire-mortgage-agent':
       return handleHireMortgageAgent(event);
+    case 'mortgage-agent-compensation':
+      return handleMortgageAgentCompensation(event);
     case 'tenant-tax-profiles':
       return handleTaxProfiles(event);
     case 'public-contractor-directory':
