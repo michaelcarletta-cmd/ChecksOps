@@ -106,13 +106,12 @@ const owningTenantIds = async (client, { claimId, checkId }) => {
 
 /**
  * RLS lets anyone who can see a check or claim insert here, including partner
- * tenants. Only members of the owning tenant (any role value), or the platform
- * owner, may add requests or signers.
+ * tenants. Only members of the owning tenant (any role value) may add
+ * requests or signers; the platform owner does not act on tenant signatures.
  * Fails closed when no owning tenant resolves.
  */
 export const authorizeSignatureWriter = async (client, { mapping, claimId, checkId }) => {
   const userId = isUuid(mapping?.application_user_id) ? mapping.application_user_id : null;
-  let platformOwner;
   for (const tenantId of await owningTenantIds(client, { claimId, checkId })) {
     const canWrite = (await client.query(
       'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
@@ -120,10 +119,6 @@ export const authorizeSignatureWriter = async (client, { mapping, claimId, check
     )).rows[0]?.ok;
     if (!canWrite) continue;
     if (userId && (await client.query(WRITER_ROLE_SQL, [userId, tenantId])).rows.length) return true;
-    if (platformOwner === undefined) {
-      platformOwner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0]?.is_owner === true;
-    }
-    if (platformOwner) return true;
   }
   return false;
 };

@@ -1303,6 +1303,19 @@ const executeLossDraftAudit = async ({ client, mapping, values }) => {
 
 const INTRO_STATUSES = new Set(['new', 'contacted', 'accepted', 'declined', 'closed', 'spam']);
 
+/** Caller and the other user share a tenant (tenant_users; the role is ignored). */
+export const SHARES_TENANT_SQL = `SELECT 1
+  FROM public.tenant_users mine
+  JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
+ WHERE mine.user_id = $1::uuid
+   AND theirs.user_id = $2::uuid
+ LIMIT 1`;
+
+const sharesTenantWith = async (client, userId, otherUserId) => {
+  if (!userId || !otherUserId) return false;
+  return (await client.query(SHARES_TENANT_SQL, [userId, otherUserId])).rows.length > 0;
+};
+
 const executeHomeownerIntro = async ({ client, mapping, op, values, filters }) => {
   if (op === 'insert') {
     const profileId = values.contractor_profile_id;
@@ -1358,14 +1371,11 @@ const executeHomeownerIntro = async ({ client, mapping, op, values, filters }) =
     [id],
   )).rows[0];
   if (!existing) return { error: 'rls_denied', message: 'intro request not found' };
-  if (existing.contractor_user_id !== mapping.application_user_id) {
-    const roles = (await client.query(
-      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
-      [mapping.application_user_id],
-    )).rows.map((row) => String(row.role || '').toLowerCase());
-    if (!roles.includes('admin') && !roles.includes('staff')) {
-      return { error: 'not_authorized', message: 'Only the assigned contractor can update this lead' };
-    }
+  // Owner policy: the assigned contractor or a teammate (a member of one of
+  // the contractor's tenants). Global user_roles admin/staff get no shortcut.
+  if (existing.contractor_user_id !== mapping.application_user_id
+    && !(await sharesTenantWith(client, mapping.application_user_id, existing.contractor_user_id))) {
+    return { error: 'not_authorized', message: 'Only the assigned contractor or a teammate can update this lead' };
   }
   const out = {};
   if ('status' in values) {
@@ -1519,14 +1529,13 @@ const executeContractorProfiles = async ({ client, mapping, values, filters }) =
     [id],
   )).rows[0];
   if (!existing) return { error: 'rls_denied', message: 'contractor profile not found' };
-  if (existing.user_id !== mapping.application_user_id) {
-    const roles = (await client.query(
-      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
-      [mapping.application_user_id],
-    )).rows.map((row) => String(row.role || '').toLowerCase());
-    if (!roles.includes('admin')) {
-      return { error: 'not_authorized', message: 'Only the profile owner or admin can update' };
-    }
+  // A contractor profile belongs to its user and their company: the owner or
+  // a teammate (same rule as RLS aws_can_write_same_tenant_user). Directory
+  // decisions about a profile (Pro approval) are platform-owner RPCs, not this
+  // edit; a global user_roles admin gets no shortcut.
+  if (existing.user_id !== mapping.application_user_id
+    && !(await sharesTenantWith(client, mapping.application_user_id, existing.user_id))) {
+    return { error: 'not_authorized', message: 'Only the profile owner or a teammate can update' };
   }
   const out = {};
   for (const [col, max] of [

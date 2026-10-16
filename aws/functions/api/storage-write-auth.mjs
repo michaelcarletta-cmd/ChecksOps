@@ -196,7 +196,9 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     if (!isBrandingUploadPath(rel) || !tenantId) {
       return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'tenant-logos uploads must use {tenantId}/{file}' };
     }
-    if (!(await hasTenantMembership(client, userId, tenantId)) && !(await isPlatformOwner(client))) {
+    // Tenant branding is the tenant's own: members only. The platform owner
+    // does not edit tenant branding.
+    if (!(await hasTenantMembership(client, userId, tenantId))) {
       return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not a member of this tenant' };
     }
     return { ok: true, rel, tenantId: tenantId.toLowerCase(), key: s3KeyFor(bucket, rel), strategy: 'branding' };

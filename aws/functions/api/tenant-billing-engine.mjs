@@ -238,15 +238,16 @@ export async function actorIsPlatformOwner(client) {
   return row?.ok === true;
 }
 
+// Owner policy: any member of the tenant may authorize its billing (the role
+// column is ignored). The platform owner does not authorize a tenant's debits.
 export async function canAuthorizeTenantBilling(client, userId, tenantId) {
-  if (await actorIsPlatformOwner(client)) return true;
   const row = (await client.query(
-    `SELECT role FROM public.tenant_users
+    `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
      LIMIT 1`,
     [userId, tenantId],
   )).rows[0];
-  return String(row?.role || '') === 'admin';
+  return Boolean(row);
 }
 
 export async function canViewTenantBilling(client, userId, tenantId) {

@@ -807,9 +807,11 @@ export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
   return { data: payload };
 };
 
+// Contractor Pro approval is a platform-level directory decision: the
+// platform owner only (a global user_roles admin is not enough).
 const executeAdminSetContractorPro = async ({ client, mapping, args }) => {
-  const gated = await requireRole(client, mapping.application_user_id, ['admin']);
-  if (gated.error) return gated;
+  const gated = await requirePlatformOwner(client);
+  if (gated.error) return { error: 'not_authorized', message: 'Platform owner required for Contractor Pro approval' };
   const contractorId = arg(args, 'p_contractor_id', 'contractor_id');
   const approve = arg(args, 'p_approve', 'approve');
   if (!isUuid(contractorId)) return { error: 'invalid_uuid', field: 'p_contractor_id' };
@@ -945,13 +947,12 @@ export const CHECKALT_TENANT_MEMBER_SQL = `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid`;
 
 /**
- * Check Alt member policy: the platform owner, or any tenant_users member of
- * this tenant (the role column is ignored). Platform admin/staff without a
- * membership of the tenant, partners and other tenants are refused.
+ * Auto-Deposit approval threshold is a tenant setting (not Check Alt setup):
+ * any tenant_users member of this tenant (the role column is ignored). The
+ * platform owner, platform admin/staff without a membership of the tenant,
+ * partners and other tenants are refused.
  */
 const requireOwnTenantMember = async (client, userId, tenantId) => {
-  const owner = await requirePlatformOwner(client);
-  if (!owner.error) return { ok: true, platformOwner: true };
   if (!isUuid(tenantId)) {
     return { error: 'invalid_uuid', field: 'tenant_id' };
   }

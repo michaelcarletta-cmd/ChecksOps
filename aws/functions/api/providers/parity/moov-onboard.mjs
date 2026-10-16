@@ -1224,6 +1224,10 @@ export const platformBank = {
       return jsonResult({ success: true, banks, liveProviderCalled: true });
     }
     if (action === 'add') {
+      // bankAccountAdd links a bank to a tenant's payment account. With no
+      // tenant (the platform owner is not a member of one) there is no
+      // account to add to.
+      if (!ctx.tenantId) return fail('tenant_id is required to add a bank account', 400);
       return bankAccountAdd.run({
         client, mapping: { application_user_id: ctx.userId }, body, ctx: { ...ctx, tenantId: ctx.tenantId }, fetchImpl,
       });

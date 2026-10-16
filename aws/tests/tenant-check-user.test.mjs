@@ -9,8 +9,10 @@ test('any company user can move checks', () => {
   assert.equal(canMoveTenantChecks({ roles: ['read_only'], isTenantMember: true }), true);
 });
 
-test('platform admin can move checks without membership', () => {
-  assert.equal(canMoveTenantChecks({ roles: new Set(['admin']), isTenantMember: false }), true);
+test('a global user_roles admin/staff without membership of the check tenant cannot move checks', () => {
+  assert.equal(canMoveTenantChecks({ roles: new Set(['admin']), isTenantMember: false }), false);
+  assert.equal(canMoveTenantChecks({ roles: ['staff'], isTenantMember: false }), false);
+  assert.equal(canMoveTenantChecks({ roles: ['admin'] }), false);
 });
 
 test('client or contractor without membership cannot move checks', () => {

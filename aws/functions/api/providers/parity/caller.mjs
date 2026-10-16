@@ -141,10 +141,17 @@ export async function moovParityContext({
     allowPlatformOwner,
   });
   if (tenant.error) return tenant;
-  if (!tenant.tenantId) return fail('tenant_id is required', 400);
-  const tenantEnv = await loadTenantMoovEnv(client, tenant.tenantId);
-  if (tenantEnv?.error) return fail(tenantEnv.error, tenantEnv.statusCode);
-  const environment = effectiveMoovEnvironment(tenantEnv);
+  // Platform-owner-only handlers (platform bank, platform treasury) act on the
+  // platform's own Moov account, not a tenant's: the platform owner needs no
+  // tenant. Everyone else must resolve one.
+  const platformOnly = allowPlatformOwner && tenant.isPlatformOwner === true && !tenant.tenantId;
+  if (!tenant.tenantId && !platformOnly) return fail('tenant_id is required', 400);
+  let environment = 'sandbox';
+  if (tenant.tenantId) {
+    const tenantEnv = await loadTenantMoovEnv(client, tenant.tenantId);
+    if (tenantEnv?.error) return fail(tenantEnv.error, tenantEnv.statusCode);
+    environment = effectiveMoovEnvironment(tenantEnv);
+  }
   bindMoovEnvironment(environment);
   const loader = typeof loadSandbox === 'function' ? loadSandbox : loadSandboxCredentials;
   const loaded = await loader();

@@ -4,7 +4,7 @@
  * Does not call DocuSign/HelloSign/Lovable. Does not move money.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { IS_PLATFORM_OWNER_SQL, withIdentityWrite } from './data.mjs';
+import { withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
 import { escapeHtml, renderChecksOpsEmail } from './email-layout.mjs';
@@ -181,8 +181,8 @@ export const SIGNATURE_ACTOR_SQL = `SELECT 1 FROM public.tenant_users
 
 /**
  * Signature Request writers: any tenant_users member of the owning tenant
- * (the role column is ignored; partner tenants do not act), or the platform
- * owner. aws_can_write_tenant stays as the existing
+ * (the role column is ignored; partner tenants, other tenants and the
+ * platform owner do not act). aws_can_write_tenant stays as the existing
  * live gate. Fails closed when the owning tenant cannot be resolved.
  */
 export const requireSignatureActor = async (client, { mapping, tenantId, spoof }) => {
@@ -198,8 +198,6 @@ export const requireSignatureActor = async (client, { mapping, tenantId, spoof }
     const actor = (await client.query(SIGNATURE_ACTOR_SQL, [userId, tenantId])).rows[0];
     if (actor) return { ok: true };
   }
-  const owner = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
-  if (owner?.is_owner === true) return { ok: true, platformOwner: true };
   return forbidden;
 };
 

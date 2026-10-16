@@ -1107,6 +1107,37 @@ test('platform bank and treasury: platform owner only; a member or a global admi
         assert.equal(result.success, true, `${fn} ${JSON.stringify(result)}`);
         assert.equal(calls.some((c) => c.url.includes(`/accounts/${PLATFORM_ID}/`)), true, fn);
       }
+      // The platform owner with no tenant at all (the SPA panels send no
+      // tenant_id): the platform-owner-only handler still runs, on the
+      // platform's own account.
+      {
+        resetMoovTokenCache();
+        const { fetchImpl, calls } = recordedFetch([
+          { match: '/oauth2/token', method: 'POST', body: { access_token: 'tok', expires_in: 300 } },
+          { match: `/accounts/${PLATFORM_ID}/`, body: [] },
+        ]);
+        const client = withPlatformOwner(parityClient({ tenantRole: null, platformAdmin: false }), true);
+        const result = await runParityHandler(fn, jwtEvent(`/functions/v1/${fn}`, 'POST', { action: 'list' }), parityDeps(client, fetchImpl));
+        assert.notEqual(result.error, 'tenant_id is required', fn);
+        assert.equal(result.success, true, `${fn} ${JSON.stringify(result)}`);
+        assert.equal(calls.some((c) => c.url.includes(`/accounts/${PLATFORM_ID}/`)), true, fn);
+      }
+    }
+    // With no tenant there is no tenant payment account to add a bank to.
+    {
+      const { fetchImpl, calls } = recordedFetch([]);
+      const client = withPlatformOwner(parityClient({ tenantRole: null, platformAdmin: false }), true);
+      const result = await runParityHandler('moov-platform-bank', jwtEvent('/functions/v1/moov-platform-bank', 'POST', { action: 'add' }), parityDeps(client, fetchImpl));
+      assert.equal(result.statusCode, 400);
+      assert.equal(calls.length, 0);
+    }
+    // Other (tenant) Moov handlers still need a tenant, even for the platform owner.
+    {
+      const { fetchImpl, calls } = recordedFetch([]);
+      const client = withPlatformOwner(parityClient({ tenantRole: null, platformAdmin: false }), true);
+      const result = await runParityHandler('moov-fee-rollup', jwtEvent('/functions/v1/moov-fee-rollup', 'POST', {}), parityDeps(client, fetchImpl));
+      assert.equal(result.statusCode, 403, JSON.stringify(result));
+      assert.equal(calls.length, 0);
     }
   });
 });
