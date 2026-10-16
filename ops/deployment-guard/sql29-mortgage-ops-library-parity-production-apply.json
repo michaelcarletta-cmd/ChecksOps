@@ -1,0 +1,53 @@
+{
+  "id": "sql29-mortgage-ops-library-parity-production-apply",
+  "migration": "sql29",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/rls/sql/29_mortgage_ops_library_parity.sql",
+  "migration_id": "29_mortgage_ops_library_parity",
+  "staging_pin_commit": "48c16079dbad30368bc916484144e370f3441f26",
+  "source_sha256": "e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be",
+  "function_identities": [
+    "public.aws_mortgage_agent_can_read_library_document(uuid)",
+    "public.aws_mortgage_agent_can_read_library_path(text[], text, uuid)",
+    "public.aws_can_manage_mortgage_library(uuid)",
+    "public.aws_can_insert_mortgage_library_document(uuid, uuid, uuid, text)",
+    "public.share_library_docs_to_mortgage_request()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79",
+  "authorization_phrase": "APPLY_MORTGAGE_OPS_LIBRARY_PARITY",
+  "predecessors": [],
+  "order_note": "Before SQL 90 (aws/workflows/sql/90_users_only_tenant_roles.sql): SQL 29's aws_can_manage_mortgage_library still has the owner/admin tier, which SQL 90 replaces with the membership rule; the tools refuse SQL 29 (sql90_not_applied) once SQL 90's aws_is_tenant_member(uuid) exists. Needs aws/rls/sql/11_access_helpers.sql, 20_write_helpers.sql and 24_complete_write_policies.sql (has_role, aws_is_authenticated, aws_is_cross_tenant_reader, aws_can_access_tenant, aws_can_write_tenant, auth.uid) and the Mortgage Ops tables; prerequisites_present refuses otherwise. Independent of SQL 30.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "counts": null,
+    "sql29": null,
+    "sql90_applied": null,
+    "precondition_failures": null,
+    "apply_preconditions_met": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 29. Run node scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, counts (aggregate COUNT(*) only), sql29 (functions, policies, table_acl, share_triggers), sql90_applied, precondition_failures, apply_preconditions_met and live_definition_sha256 here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "sha256(sql29StateText(sql29IntendedState(file bytes))) in scripts/deployment-guard/lib/sql-executor-auth.mjs",
+    "note": "After the unchanged SQL 29 file run as checksops_admin: the five functions hold the file's bodies (prosrc), SECURITY DEFINER, search_path=public (and row_security=off for the four aws_ helpers); EXECUTE for their owner, checksops and authenticated (the trigger function: owner only); policies aws_select_mortgage_request_library_documents (SELECT TO authenticated: cross-tenant reader, tenant access, or the desk-agent attached-document read) and aws_write_mortgage_request_library_documents (INSERT TO authenticated WITH CHECK aws_can_insert_mortgage_library_document); no other policy; PUBLIC holds nothing and authenticated / checksops hold SELECT and INSERT (no UPDATE / DELETE) on mortgage_request_library_documents. No row changes. Owner names are not part of the fingerprint; the first inspect confirms the owner is checksops_admin."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql29-mortgage-ops-library-parity here in the reviewed change that sets execute true. Until then evaluate and apply refuse with SQL_COLLISION (no pre-state) and PRODUCTION_APPROVAL_REQUIRED."
+  }
+}

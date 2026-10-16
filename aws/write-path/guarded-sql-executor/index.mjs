@@ -34,6 +34,8 @@ import {
   AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
   AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
+  AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
+  AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
   CHECKALT_AUTO_DEPOSIT_CONFIG,
@@ -116,6 +118,16 @@ import {
   isSql87ResolveCheckCaseTenantScope,
   isSql88ClaimIdAssignCaseTenantScope,
   isSql89CheckIntakeColumnUpdate,
+  isSql29MortgageOpsLibraryParity,
+  isSql30TenantDocumentsDocType,
+  librarySqlExecutableText,
+  librarySharedPostconditionFailures,
+  librarySharedPreconditionFailures,
+  librarySqlLiveHash,
+  librarySqlReport,
+  libraryChangedCategories,
+  readLibrarySqlState,
+  readLibraryUnrelatedSnapshot,
   readSql89State,
   readSql89UnrelatedSnapshot,
   SQL89_CANONICAL_STATEMENTS,
@@ -183,6 +195,8 @@ const SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY_FILE = path.join(ROOT, 'sql/86_mort
 const SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/87_resolve_check_case_tenant_scope.sql');
 const SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/88_claim_id_assign_case_tenant_scope.sql');
 const SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE = path.join(ROOT, 'sql/89_check_intake_items_column_update.sql');
+const SQL29_MORTGAGE_OPS_LIBRARY_PARITY_FILE = path.join(ROOT, 'sql/29_mortgage_ops_library_parity.sql');
+const SQL30_TENANT_DOCUMENTS_DOC_TYPE_FILE = path.join(ROOT, 'sql/30_tenant_documents_mortgage_doc_type.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -1944,6 +1958,157 @@ async function handleSql89CheckIntakeColumnUpdate({ event, authorization, identi
         columns_lost_update: b.columns_losing_update,
         columns_gained_update: b.columns_to_grant,
         table_level_update: after.details.table_level_update,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
+// --- SQL 29 / SQL 30: Mortgage Ops library parity and the doc_type CHECK ---------
+// The unchanged operator packages aws/rls/sql/29_... and 30_... on one engine: the shared
+// state reader, fingerprints and pre/post rules live in lib/sql-executor-auth.mjs (also used
+// by the production tools). SQL 30 carries its own BEGIN/COMMIT; the executor runs the
+// bytes between them inside its own transaction (librarySqlExecutableText).
+
+const LIBRARY_SHA256_RE = /^[0-9a-f]{64}$/;
+const LIBRARY_LABELS = Object.freeze({ sql29: 'SQL 29', sql30: 'SQL 30' });
+
+async function handleLibrarySqlMigration({ key, event, authorization, identity, connect, sqlFile, pin }) {
+  const label = LIBRARY_LABELS[key];
+  const embedded = readEmbeddedSql(sqlFile, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  const executable = librarySqlExecutableText(key, embedded.details.text);
+  if (!executable) {
+    return fail(CODES.UNRELATED_MUTATION, `embedded ${label} is not the reviewed operator package`);
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported ${label} executor action ${event.action}`);
+  }
+  if (event.action === 'apply') {
+    if (!LIBRARY_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''))) {
+      return fail(CODES.SQL_COLLISION, `${label} pin has no reviewed pre-apply live definition hash; run read-live and record it in a reviewed pin change`);
+    }
+    if (!(
+      event.filename === pin.filename
+      && event.migration_id === pin.migration_id
+      && event.source_sha256 === pin.source_sha256
+      && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+      && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+      && event.commit === pin.commit
+    )) {
+      return fail(CODES.SQL_COLLISION, `${label} apply is bound to the exact allowlisted pin`);
+    }
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readLibrarySqlState(client);
+      if (!state.ok) return state;
+      const s = state.details;
+      const live = librarySqlLiveHash(key, s);
+      const failures = librarySharedPreconditionFailures(key, s);
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: live,
+          after_hash: live,
+          result: event.action,
+          executor_identity: identity,
+          live_definition_sha256: live,
+          pin_executable: LIBRARY_SHA256_RE.test(String(pin.expected_live_definition_sha256 || '')),
+          already_applied: live === pin.intended_replacement_sha256,
+          precondition_failures: failures,
+          apply_preconditions_met: failures.length === 0
+            && live !== pin.intended_replacement_sha256
+            && live === pin.expected_live_definition_sha256,
+          library_inspect: librarySqlReport(s),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${key}_library_sql`]);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', { one_use_id: event.one_use_id });
+    }
+    const before = await readLibrarySqlState(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    const b = before.details;
+    const liveBefore = librarySqlLiveHash(key, b);
+    if (liveBefore === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `${label} is already in place; refuse re-apply`);
+    }
+    if (liveBefore !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'expected live definition changed immediately before apply');
+    }
+    const preFailures = librarySharedPreconditionFailures(key, b);
+    if (preFailures.length) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, `${label} pre-apply conditions are not met`, { failed: preFailures });
+    }
+    const snapshotBefore = await readLibraryUnrelatedSnapshot(client, key);
+
+    await client.query(executable);
+
+    const after = await readLibrarySqlState(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const snapshotAfter = await readLibraryUnrelatedSnapshot(client, key);
+    const postFailures = librarySharedPostconditionFailures(key, b, after.details, pin);
+    const changed = libraryChangedCategories(snapshotBefore, snapshotAfter);
+    if (postFailures.length || changed.length) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `${label} did not leave exactly the reviewed state`, {
+        failed: postFailures,
+        unrelated_changed: changed,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveBefore,
+        after_hash: librarySqlLiveHash(key, after.details),
+        result: 'applied',
+        executor_identity: identity,
+        library_inspect: librarySqlReport(after.details),
       },
     });
   } catch (error) {
@@ -6399,6 +6564,10 @@ export function createHandler({
   sql88Pin = AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
   sqlFile89 = SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE,
   sql89Pin = AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
+  sqlFile29 = SQL29_MORTGAGE_OPS_LIBRARY_PARITY_FILE,
+  sql29Pin = AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
+  sqlFile30 = SQL30_TENANT_DOCUMENTS_DOC_TYPE_FILE,
+  sql30Pin = AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -6508,6 +6677,14 @@ export function createHandler({
 
     if (isSql89CheckIntakeColumnUpdate(event)) {
       return handleSql89CheckIntakeColumnUpdate({ event, authorization, identity, connect, sqlFile89, pin: sql89Pin });
+    }
+
+    if (isSql29MortgageOpsLibraryParity(event)) {
+      return handleLibrarySqlMigration({ key: 'sql29', event, authorization, identity, connect, sqlFile: sqlFile29, pin: sql29Pin });
+    }
+
+    if (isSql30TenantDocumentsDocType(event)) {
+      return handleLibrarySqlMigration({ key: 'sql30', event, authorization, identity, connect, sqlFile: sqlFile30, pin: sql30Pin });
     }
 
     if (isLedger20261007193200(event)) {

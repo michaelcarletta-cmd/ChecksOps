@@ -64,13 +64,15 @@ type PendingEndorsement = {
   parties: PendingEndorsementParty[];
 };
 
+// SQL 94: documents the team shared with this claim. Metadata only; the link is
+// minted on click by homeowner-shared-document-url and lives five minutes.
 type SharedDocument = {
   id: string;
-  file_name: string;
-  doc_type: string;
+  file_name: string | null;
+  category: string | null;
   mime_type: string | null;
   file_size: number | null;
-  url: string;
+  shared_at: string | null;
 };
 
 type ProjectPlan = {
@@ -283,7 +285,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
 
       <PendingEndorsementsPanel token={token} pending={data.pending_endorsements ?? []} onRefresh={onRefresh} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
-      <SharedDocumentsPanel documents={data.shared_documents ?? []} />
+      <SharedDocumentsPanel token={token} documents={data.shared_documents ?? []} />
 
 
       <Card>
@@ -608,9 +610,26 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
   );
 }
 
-function SharedDocumentsPanel({ documents }: { documents: SharedDocument[] }) {
+function SharedDocumentsPanel({ token, documents }: { token: string; documents: SharedDocument[] }) {
+  const [opening, setOpening] = useState<string | null>(null);
   if (!documents || documents.length === 0) return null;
-  
+
+  const openDocument = async (doc: SharedDocument) => {
+    setOpening(doc.id);
+    try {
+      const { data: res, error } = await supabase.functions.invoke("homeowner-shared-document-url", {
+        body: { token, shared_document_id: doc.id },
+      });
+      const url = (res as { url?: string } | null)?.url;
+      if (error || !url) throw new Error("This document is no longer available.");
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open the document");
+    } finally {
+      setOpening(null);
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -630,7 +649,7 @@ function SharedDocumentsPanel({ documents }: { documents: SharedDocument[] }) {
                 <div className="min-w-0">
                   <div className="text-sm font-medium truncate">{doc.file_name}</div>
                   <div className="text-[10px] text-muted-foreground">
-                    {doc.doc_type.split(":")[1] || "Document"}
+                    {doc.category || "Document"}
                     {doc.file_size ? ` · ${(doc.file_size / 1024).toFixed(0)} KB` : ""}
                   </div>
                 </div>
@@ -639,7 +658,8 @@ function SharedDocumentsPanel({ documents }: { documents: SharedDocument[] }) {
                 size="sm" 
                 variant="ghost" 
                 className="h-8 gap-1 text-xs"
-                onClick={() => window.open(doc.url, "_blank")}
+                disabled={opening === doc.id}
+                onClick={() => openDocument(doc)}
               >
                 <Download className="h-3.5 w-3.5" />
                 View

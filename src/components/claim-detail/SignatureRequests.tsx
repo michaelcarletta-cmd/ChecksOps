@@ -19,6 +19,12 @@ import {
   mergeClaimAndCheckSignatureFiles,
   signatureSourceFilesQueryKey,
 } from "@/lib/signature-source-files";
+import { LibrarySignatureSourcePicker } from "./LibrarySignatureSource";
+import {
+  useLibrarySignatureCopy,
+  useLibrarySignatureDocs,
+  type LibrarySignatureDoc,
+} from "@/hooks/useLibrarySignatureSource";
 
 interface SignatureRequestsProps {
   claimId: string;
@@ -78,9 +84,31 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [generatedDocxData, setGeneratedDocxData] = useState<Uint8Array | null>(null);
-  const [sourceType, setSourceType] = useState<"template" | "claim_file" | "upload">("template");
+  const [sourceType, setSourceType] = useState<"template" | "claim_file" | "upload" | "library">("template");
   const [selectedClaimFile, setSelectedClaimFile] = useState<any>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [selectedLibraryDoc, setSelectedLibraryDoc] = useState<LibrarySignatureDoc | null>(null);
+  const { data: libraryDocs, isLoading: libraryDocsLoading } = useLibrarySignatureDocs(claimId, isCreateOpen && sourceType === "library");
+  const libraryCopy = useLibrarySignatureCopy();
+  const startLibraryDoc = () => {
+    if (!selectedLibraryDoc) return;
+    libraryCopy.mutate(
+      { documentId: selectedLibraryDoc.id, claimId, checkIntakeItemId },
+      {
+        onSuccess: (copy) => {
+          setGeneratedDocPath(copy.path);
+          setIsDocxTemplate(!copy.is_pdf);
+          setGeneratedDocUrl(copy.is_pdf ? copy.signedUrl : null);
+          setGeneratedDocxData(copy.is_pdf ? null : copy.docxBytes);
+          setCurrentStep(2);
+          toast({ title: "Library document copied to this claim. Now place signature fields." });
+        },
+        onError: (error: Error) => {
+          toast({ title: "Failed to use library document", description: error.message, variant: "destructive" });
+        },
+      },
+    );
+  };
 
   const { data: templates } = useQuery({
     queryKey: ["document-templates"],
@@ -279,15 +307,20 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
       if (!generatedDocPath) throw new Error("Missing required data");
 
       // Guard against stale/missing storage files to avoid sending broken sign links
-      const { data: docCheck, error: docCheckError } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(generatedDocPath, 60);
+      // The library copy was just made and verified by signature-library-document-copy.
+      const { data: docCheck, error: docCheckError } = sourceType === "library"
+        ? { data: { signedUrl: "library-copy" }, error: null }
+        : await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(generatedDocPath, 60);
 
       if (docCheckError || !docCheck?.signedUrl) {
         throw new Error("Document file is missing in storage. Please regenerate the document before sending.");
       }
 
-      const docName = sourceType === "claim_file" 
+      const docName = sourceType === "library"
+        ? selectedLibraryDoc?.file_name || "Document"
+        : sourceType === "claim_file" 
         ? selectedClaimFile?.file_name || "Document" 
         : sourceType === "upload"
         ? uploadedFile?.name || "Document"
@@ -509,7 +542,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
               <div className="space-y-4">
                 <div>
                   <Label>Document Source</Label>
-                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); setUploadedFile(null); }}>
+                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); setUploadedFile(null); setSelectedLibraryDoc(null); }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -517,6 +550,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                       <SelectItem value="template">Generate from Template</SelectItem>
                       <SelectItem value="upload">Upload a File</SelectItem>
                       <SelectItem value="claim_file">Use Existing Claim/Check File</SelectItem>
+                      <SelectItem value="library">From Document Library</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -561,6 +595,15 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                       )}
                     </div>
                   </div>
+                )}
+
+                {sourceType === "library" && (
+                  <LibrarySignatureSourcePicker
+                    docs={libraryDocs}
+                    loading={libraryDocsLoading}
+                    selectedId={selectedLibraryDoc?.id}
+                    onSelect={setSelectedLibraryDoc}
+                  />
                 )}
 
                 {sourceType === "claim_file" && (
@@ -701,6 +744,24 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           Loading...
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {currentStep === 1 && sourceType === "library" && (
+                    <Button
+                      onClick={startLibraryDoc}
+                      disabled={!selectedLibraryDoc || libraryCopy.isPending}
+                    >
+                      {libraryCopy.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Copying...
                         </>
                       ) : (
                         <>

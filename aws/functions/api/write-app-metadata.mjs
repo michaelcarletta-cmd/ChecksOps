@@ -6,6 +6,7 @@ import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 import { tenantMoovDefaults } from './tenant-moov-defaults.mjs';
 import { matchLossDraftDocumentPath, matchTenantDocumentPath, normalizePath } from './storage-paths.mjs';
+import { isLibraryContentType, isLibrarySize, libraryFolderFor, libraryObjectPath } from './tenant-library-rules.mjs';
 
 /*
  * Stored file paths are read grants: storage.mjs authorizes an object for any
@@ -137,10 +138,19 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     if (rawPath?.error || !rawPath) return rawPath?.error || { error: 'missing_required_field', field: 'file_path' };
     const filePath = tenantLibraryPath(rawPath, tenantId);
     if (!filePath) return { error: 'path_not_allowlisted', field: 'file_path', message: 'file_path must be under {tenantId}/library/' };
+    // A library doc_type is stored under its own category folder.
+    const folder = libraryFolderFor(docType);
+    if (folder && !libraryObjectPath(filePath, { tenantId, category: folder })) {
+      return { error: 'path_not_allowlisted', field: 'file_path', message: 'file_path must be {tenantId}/library/{category}/{file} for this doc_type' };
+    }
     const fileName = clip(values.file_name, 255);
     if (fileName?.error) return fileName;
     const mime = clip(values.mime_type, 120);
     if (mime?.error) return mime;
+    if (mime && !isLibraryContentType(mime)) return { error: 'invalid_field', field: 'mime_type' };
+    if (values.file_size != null && !isLibrarySize(values.file_size)) {
+      return { error: 'invalid_field', field: 'file_size', message: 'file_size must be 1 byte to 25 MB' };
+    }
     const notes = clip(values.notes, 2000);
     if (notes?.error) return notes;
     const autoShare = values.auto_share_mortgage_ops === true || values.auto_share_mortgage_ops === 'true';
@@ -169,7 +179,7 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
   const existing = (await client.query(
-    `SELECT id, tenant_id FROM public.tenant_documents WHERE id = $1::uuid`,
+    `SELECT id, tenant_id, doc_type FROM public.tenant_documents WHERE id = $1::uuid`,
     [id],
   )).rows[0];
   if (!existing) return { error: 'rls_denied', message: 'document not writable' };
@@ -189,8 +199,13 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     if (col in values) {
       const text = clip(values[col], max);
       if (text?.error) return text;
-      if (col === 'doc_type' && !isAllowedTenantDocumentDocType(text)) {
+      // A rename keeps the document in its category (its object sits in that folder).
+      if (col === 'doc_type' && (!isAllowedTenantDocumentDocType(text)
+        || libraryFolderFor(text) !== libraryFolderFor(existing.doc_type))) {
         return { error: 'category_not_allowlisted', field: 'doc_type' };
+      }
+      if (col === 'mime_type' && text && !isLibraryContentType(text)) {
+        return { error: 'invalid_field', field: 'mime_type' };
       }
       out[col] = text;
     }

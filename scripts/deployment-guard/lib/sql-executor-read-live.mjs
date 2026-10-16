@@ -10,7 +10,7 @@
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
  *      expected live definition, which no reviewed pin can equal, so the
- *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89) refuse apply with it
+ *      read-live-selectable pins (ledger, 29, 30, 71, 72, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89) refuse apply with it
  *      before connecting.
  *
  * Failures print only an error code and a fixed message: executor and driver
@@ -188,6 +188,10 @@ export function readLiveSummary(invokeResult, { migration, pin } = {}) {
   }
   if (receipt.column_grant_inspect && typeof receipt.column_grant_inspect === 'object') {
     summary.column_grant_inspect = reportOnly(receipt.column_grant_inspect);
+  }
+  // SQL 29 / SQL 30: catalog flags, hashes and aggregate row counts only.
+  if (receipt.library_inspect && typeof receipt.library_inspect === 'object') {
+    summary.library_inspect = reportOnly(receipt.library_inspect);
   }
   if (Array.isArray(receipt.drifted_preserved_functions)) {
     summary.drifted_preserved_function_count = receipt.drifted_preserved_functions.length;
