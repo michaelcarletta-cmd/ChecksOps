@@ -421,7 +421,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
            AND deposited_at IS NULL
            AND status IS DISTINCT FROM 'deposited'`,
         [checkId],
-        { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+        { statement: 'check_intake_items.update', table: 'check_intake_items' },
       );
       await persistAutoAdvanceWrite(
         client,
@@ -437,7 +437,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
       );
     } catch (error) {
       return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
-        statement: 'UPDATE check_intake_items',
+        statement: 'check_intake_items.update',
         table: 'check_intake_items',
       }));
     }
@@ -459,12 +459,12 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
              AND status IS DISTINCT FROM 'voided'
              AND status IS DISTINCT FROM 'loss_draft_required'`,
           [checkId],
-          { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+          { statement: 'check_intake_items.update', table: 'check_intake_items' },
         );
         await updateOptionalClaimCheckStage(client, checkId);
       } catch (error) {
         return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
-          statement: 'UPDATE check_intake_items',
+          statement: 'check_intake_items.update',
           table: 'check_intake_items',
         }));
       }
@@ -491,7 +491,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
          AND status IS DISTINCT FROM 'loss_draft_required'
          AND check_stage IS DISTINCT FROM 'loss_draft'`,
       [checkId],
-      { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+      { statement: 'check_intake_items.update', table: 'check_intake_items' },
     );
     await updateOptionalClaimCheckStage(client, checkId);
     await persistAutoAdvanceWrite(
@@ -516,7 +516,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
     );
   } catch (error) {
     return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
-      statement: 'UPDATE check_intake_items',
+      statement: 'check_intake_items.update',
       table: 'check_intake_items',
     }));
   }
