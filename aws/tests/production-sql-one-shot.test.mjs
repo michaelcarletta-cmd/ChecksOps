@@ -33,6 +33,8 @@ import {
 import { evaluateMemberStakeholderProductionApply } from '../../scripts/deployment-guard/lib/sql-member-stakeholder-production-apply.mjs';
 import { evaluateSql80ProductionApply } from '../../scripts/deployment-guard/lib/sql80-checkalt-production-apply.mjs';
 import { evaluateSql81ProductionApply } from '../../scripts/deployment-guard/lib/sql81-checkalt-production-apply.mjs';
+import { evaluateSql82ProductionApply } from '../../scripts/deployment-guard/lib/sql82-homeowner-ledger-production-apply.mjs';
+import { evaluateSql83ProductionApply } from '../../scripts/deployment-guard/lib/sql83-homeowner-signing-production-apply.mjs';
 import { main as oneShotMain } from '../../scripts/deployment-guard/production-sql-one-shot.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -42,13 +44,17 @@ const STATEMENT = 'approve applying SQL 80 to production';
 const RECEIPT = path.join(receiptDir(ROOT), 'production::production-sql.json');
 
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
-// A pin whose staging acceptance is still pending (SQL 81 today) gets a placeholder reference in
-// the execute-authorized test copy; the committed pin is checked to refuse below.
+// A pin whose staging acceptance is still pending (SQL 82 and 83 today) gets a placeholder
+// reference in the execute-authorized test copy, and a pin whose pre-state is not recorded yet
+// (expected_live_definition_sha256 null) a placeholder hash; the committed pins are checked to
+// refuse below.
 const FIXTURE_STAGING_ACCEPTANCE = Object.freeze({ ok: true, reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000', basis: 'test fixture' });
+const FIXTURE_EXPECTED_LIVE = 'e'.repeat(64);
 const executePin = (key, extra = {}) => {
   const pin = realPin(key);
   const stagingAcceptance = pin.staging_acceptance?.ok === true ? pin.staging_acceptance : FIXTURE_STAGING_ACCEPTANCE;
-  return { ...pin, execute: true, staging_acceptance: stagingAcceptance, ...extra };
+  const expected = pin.expected_live_definition_sha256 ?? FIXTURE_EXPECTED_LIVE;
+  return { ...pin, execute: true, staging_acceptance: stagingAcceptance, expected_live_definition_sha256: expected, ...extra };
 };
 
 function tarballFixture() {
@@ -299,7 +305,11 @@ test('the manifest is built from the pin, the inspect and the contracts, and the
       ? await evaluateSql80ProductionApply(manifest, { root: ROOT, pin })
       : key === 'sql81'
         ? await evaluateSql81ProductionApply(manifest, { root: ROOT, pin })
-        : await evaluateMemberStakeholderProductionApply(manifest, { root: ROOT, migration: key, pin });
+        : key === 'sql82'
+          ? await evaluateSql82ProductionApply(manifest, { root: ROOT, pin })
+          : key === 'sql83'
+            ? await evaluateSql83ProductionApply(manifest, { root: ROOT, pin })
+            : await evaluateMemberStakeholderProductionApply(manifest, { root: ROOT, migration: key, pin });
     assert.equal(evaluation.ok, true, `${key} tool evaluate: ${JSON.stringify(evaluation.errors)}`);
     assert.equal(evaluation.details[ONE_SHOT_TOOLS[key].allowed_key], true);
   }
@@ -493,6 +503,26 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
+  // SQL 82's and 83's committed pins have no staging acceptance and no recorded pre-state yet:
+  // even with execute flipped they stop at the pin, and their evaluators refuse the null pre-state.
+  for (const key of ['sql82', 'sql83']) {
+    const committed = realPin(key);
+    assert.equal(committed.authorization, 'pending');
+    assert.equal(committed.staging_acceptance.ok, false);
+    assert.equal(committed.expected_live_definition_sha256, null);
+    const stopped = await oneShot({ key, pin: { ...committed, execute: true }, o: { 'workstream-id': `prod-${key}-pending-test` } });
+    assert.equal(stopped.result.ok, false);
+    assert.equal(stopped.result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+    assert.equal(stopped.result.details.stopped_at, 'pin');
+    assert.equal(stopped.runner.calls.length, 0);
+    // A staging acceptance alone is not enough while the pre-state is unrecorded.
+    const unrecorded = { ...committed, execute: true, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
+    const fixtureManifest = { ...committed, expected_live_definition_sha256: null, live_definition_sha256: null, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
+    const evaluate = key === 'sql82' ? evaluateSql82ProductionApply : evaluateSql83ProductionApply;
+    const refused = await evaluate(fixtureManifest, { root: ROOT, pin: unrecorded });
+    assert.equal(refused.code, CODES.SQL_COLLISION, key);
+    assert.match(refused.message, /no recorded pre-apply live definition hash/, key);
+  }
 });
 
 test('source failures stop before the inspect', async () => {
