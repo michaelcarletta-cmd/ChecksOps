@@ -129,11 +129,20 @@ SECURITY DEFINER
 SET search_path = public
 SET row_security = off
 AS $$`));
-  assert.doesNotMatch(body, /has_role|is_master_owner|'admin'/);
+  assert.doesNotMatch(body, /public\.has_role|is_master_owner|'admin'/);
   for (const role of ['PUBLIC', 'checksops', 'authenticated']) {
     assert.match(body, new RegExp(`REVOKE ALL ON FUNCTION public\\.earn_mortgage_agent_compensation\\(uuid\\) FROM ${role};`));
   }
-  assert.doesNotMatch(body, /CREATE TABLE|ALTER TABLE|INSERT INTO|UPDATE public|DELETE FROM|CREATE POLICY|DROP POLICY|GRANT /);
+  assert.doesNotMatch(body, /CREATE TABLE|ALTER TABLE|INSERT INTO|UPDATE public|DELETE FROM|CREATE POLICY|DROP POLICY|^GRANT /m);
+  // The earn revoke is guarded and re-grants the owner.
+  assert.match(body, /RAISE EXCEPTION 'earn_owner_unsafe: earn_mortgage_agent_compensation \(owner %\) and tg_earn/);
+  assert.match(body, /EXECUTE format\('GRANT EXECUTE ON FUNCTION public\.earn_mortgage_agent_compensation\(uuid\) TO %I', v_owner\);/);
+  // Reconciliation keeps its query and gains the admin check.
+  const recon = (sql) => sql.slice(sql.indexOf('  WITH completed AS ('), sql.indexOf('IS DISTINCT FROM p.amount_cents;') + 32)
+    .split('\n').map((line) => line.trim()).filter(Boolean).join('\n');
+  assert.equal(recon(SQL86), recon(SQL47));
+  assert.match(body, /AS \$\$\n#variable_conflict use_column\nBEGIN\n  IF NOT public\.aws_can_admin_mortgage_agent_compensation\(\) THEN\n    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';\n  END IF;\n\n  RETURN QUERY\n/);
+  assert.match(body, /CREATE OR REPLACE FUNCTION public\.mortgage_agent_compensation_reconciliation\(\n  p_pay_period text DEFAULT NULL\n\)\nRETURNS TABLE \(\n  anomaly_type text,\n  mortgage_request_id uuid,\n  compensation_entry_id uuid,\n  tenant_billing_event_id uuid,\n  detail jsonb\n\)\nLANGUAGE plpgsql\nSTABLE\nSECURITY DEFINER\nSET search_path = public\nSET row_security = off/);
   // Every SQL 47 caller of the helper is compensation administration.
   const callers = SQL47.split('\n').filter((line) => line.includes('aws_can_admin_mortgage_agent_compensation()')).length;
   assert.equal(callers, 11); // definition, 3 RPC checks, 6 SELECT policies, 1 GRANT
@@ -322,6 +331,38 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
         WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check') AND check_intake_item_id IS NOT NULL;`);
     okDb('dupes', SQL84);
     assert.equal(okDb('dupes', `SELECT count(*) FROM pg_class WHERE relname = 'check_billing_events_one_mortgage_ops_per_check';`), '0');
+    // The staging name alone does not count: a different predicate gets the fallback.
+    okDb('dupes', `DROP INDEX public.check_billing_events_mortgage_ops_check_uidx;
+      CREATE UNIQUE INDEX check_billing_events_mortgage_ops_check_uidx ON public.check_billing_events (check_intake_item_id)
+        WHERE event_type = 'mortgage_ops_initial';`);
+    okDb('dupes', SQL84);
+    assert.equal(okDb('dupes', `SELECT count(*) FROM pg_class WHERE relname = 'check_billing_events_one_mortgage_ops_per_check';`), '1');
+    // An invalid index holding the fallback name is refused, not skipped.
+    okDb('dupes', `UPDATE pg_index SET indisvalid = false WHERE indexrelid = 'public.check_billing_events_one_mortgage_ops_per_check'::regclass;`);
+    const invalid = inDb('dupes', SQL84);
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /mortgage_ops_per_check_unique_missing/);
+
+    // SQL 86 refuses when the earn revoke could break the completion trigger.
+    psql(`CREATE ROLE migrator NOLOGIN BYPASSRLS; CREATE ROLE api_member NOLOGIN IN ROLE checksops;`);
+    const earnOwner = (db) => okDb(db, `SELECT p.proname || ':' || pg_get_userbyid(p.proowner) FROM pg_proc p
+      WHERE p.proname IN ('earn_mortgage_agent_compensation', 'tg_earn_mortgage_agent_compensation') ORDER BY 1;`);
+    for (const [label, sql, pattern] of [
+      ['owner checksops', `ALTER FUNCTION public.earn_mortgage_agent_compensation(uuid) OWNER TO checksops;
+        ALTER FUNCTION public.tg_earn_mortgage_agent_compensation() OWNER TO checksops;`, /earn_owner_unsafe: .*owner checksops is or belongs/],
+      ['owner in checksops', `ALTER FUNCTION public.earn_mortgage_agent_compensation(uuid) OWNER TO api_member;
+        ALTER FUNCTION public.tg_earn_mortgage_agent_compensation() OWNER TO api_member;`, /earn_owner_unsafe: .*owner api_member is or belongs/],
+      ['different owners', `ALTER FUNCTION public.earn_mortgage_agent_compensation(uuid) OWNER TO migrator;
+        ALTER FUNCTION public.tg_earn_mortgage_agent_compensation() OWNER TO ubuntu;`, /earn_owner_unsafe: .*\(owner migrator\) and tg_earn_mortgage_agent_compensation \(owner ubuntu\) must have the same owner/],
+    ]) {
+      okDb('dupes', sql);
+      const before = okDb('dupes', `SELECT md5(pg_get_functiondef('public.aws_can_admin_mortgage_agent_compensation()'::regprocedure)) || has_function_privilege('authenticated', 'public.earn_mortgage_agent_compensation(uuid)', 'EXECUTE');`);
+      const refused = inDb('dupes', SQL86);
+      assert.notEqual(refused.status, 0, label);
+      assert.match(refused.stderr, pattern, label);
+      assert.equal(okDb('dupes', `SELECT md5(pg_get_functiondef('public.aws_can_admin_mortgage_agent_compensation()'::regprocedure)) || has_function_privilege('authenticated', 'public.earn_mortgage_agent_compensation(uuid)', 'EXECUTE');`), before, label);
+    }
+    assert.equal(earnOwner('dupes'), 'earn_mortgage_agent_compensation:migrator\ntg_earn_mortgage_agent_compensation:ubuntu');
 
     psql(SCHEMA);
     psql(AUTH_UID);
@@ -513,6 +554,8 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     fails(OWNER, adjustSql(parentId, -151, 'debit over net'), /adjustment_exceeds_net/);
     fails(OWNER, adjustSql(parentId, 2147483647, 'huge'), /adjustment_exceeds_parent/);
     fails(OWNER, adjustSql(parentId, -2147483648, 'huge'), /adjustment_exceeds_parent/);
+    // INT_MIN with a counterparty: abs() is taken in bigint, so a clean 22023.
+    assert.match(fails(OWNER, adjustSql(parentId, -2147483648, 'huge pair', AGENT_A), /adjustment_exceeds_parent/), /ERROR:  adjustment_exceeds_parent/);
     assert.equal(childCount(), '4');
     // A positive single adjustment is bounded only by the parent amount.
     as(OWNER, adjustSql(parentId, 1000, 'catch-up'));
@@ -535,13 +578,14 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     assert.equal(again.credit.id, first.credit.id);
     assert.deepEqual([childCount(), tableHash('mortgage_agent_compensation_batches'), tableHash('mortgage_agent_compensation_audit')], snapshot);
     const req3Root = psql(`SELECT id FROM public.mortgage_agent_compensation_entries WHERE mortgage_request_id = '${REQ3}' AND parent_entry_id IS NULL;`);
-    for (const [cents, reason, counterparty, parent] of [
+    for (const [cents, reason, counterparty, parent, period = null] of [
       [200, 'move', AGENT_A, parentId],
       [100, 'other reason', AGENT_A, parentId],
       [100, 'move', null, parentId],
+      [100, 'move', AGENT_A, parentId, '1999-01'],
       [100, 'move', AGENT_A, req3Root],
     ]) {
-      fails(OWNER, adjustSql(parent, cents, reason, counterparty, null, 'dialog-key-1'), /idempotency_key_conflict/);
+      fails(OWNER, adjustSql(parent, cents, reason, counterparty, period, 'dialog-key-1'), /idempotency_key_conflict/);
     }
     // The key is checked only after authorization.
     fails(GLOBAL_ADMIN, adjustSql(parentId, 100, 'move', AGENT_A, null, 'dialog-key-1'), /not_authorized/);
@@ -574,8 +618,30 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     assert.equal(as(GLOBAL_ADMIN, 'SELECT public.aws_can_admin_mortgage_agent_compensation();'), 't');
     assert.notEqual(as(GLOBAL_ADMIN, 'SELECT count(*) FROM public.mortgage_agent_compensation_entries;'), '0');
     assert.equal(psql(`SELECT has_function_privilege('authenticated', 'public.earn_mortgage_agent_compensation(uuid)', 'EXECUTE');`), 't');
+    // A non-superuser owner for earn and its trigger (as a migration role would be).
+    psql(`GRANT USAGE ON SCHEMA public, auth TO migrator;
+      GRANT ALL ON ALL TABLES IN SCHEMA public TO migrator;
+      ALTER FUNCTION public.earn_mortgage_agent_compensation(uuid) OWNER TO migrator;
+      ALTER FUNCTION public.tg_earn_mortgage_agent_compensation() OWNER TO migrator;`);
+    const reconHash = (user) => as(user, `SELECT count(*) || ':' || md5(coalesce(string_agg(t::text, ';' ORDER BY t::text), '')) FROM public.mortgage_agent_compensation_reconciliation(NULL) t;`);
+    // A completed request with no compensation (inserted, so no trigger ran) is an anomaly.
+    psql(`INSERT INTO public.mortgage_handling_requests (id, tenant_id, status, assigned_employee_id, accepted_at, completed_at)
+      VALUES ('00000000-0000-4000-8000-000000000026', '${TENANT_B}', 'completed', '${AGENT_B}', now(), now());`);
+    const reconBefore = reconHash(OWNER);
+    assert.notEqual(reconBefore.split(':')[0], '0');
+    assert.equal(reconHash(GLOBAL_ADMIN), reconBefore); // SQL 47: no caller check at all
     psql(SQL86);
     psql(SQL86);
+    assert.equal(psql(`SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.earn_mortgage_agent_compensation(uuid)'::regprocedure;`), 'migrator');
+    assert.equal(psql(`SELECT has_function_privilege('migrator', 'public.earn_mortgage_agent_compensation(uuid)', 'EXECUTE');`), 't');
+    assert.match(psql(`SELECT array_to_string(proacl, ',') FROM pg_proc WHERE oid = 'public.earn_mortgage_agent_compensation(uuid)'::regprocedure;`), /^migrator=X\/migrator$/);
+    // Reconciliation: same rows for the owner, refused for everyone else.
+    assert.equal(reconHash(OWNER), reconBefore);
+    assert.equal(as(OWNER, `SELECT count(*) FROM public.mortgage_agent_compensation_reconciliation('1999-01');`), '0');
+    for (const user of [GLOBAL_ADMIN, TENANT_ADMIN, AGENT_A, null]) {
+      fails(user, 'SELECT * FROM public.mortgage_agent_compensation_reconciliation(NULL);', /not_authorized/);
+      fails(user, 'SELECT * FROM public.mortgage_agent_compensation_reconciliation(NULL);', /not_authorized/, 'checksops');
+    }
     const helper = psql(`SELECT concat_ws('|', provolatile, prosecdef, prorettype::regtype, array_to_string(proconfig, ','))
       FROM pg_proc WHERE oid = 'public.aws_can_admin_mortgage_agent_compensation()'::regprocedure;`);
     assert.equal(helper, 's|t|boolean|search_path=public,row_security=off');
@@ -597,9 +663,9 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     assert.equal(as(OWNER, `SELECT public.approve_mortgage_agent_compensation(ARRAY['${plus.debit.id}']::uuid[], NULL);`), '1');
     assert.equal(as(OWNER, `SELECT public.mark_mortgage_agent_compensation_paid(ARRAY['${plus.debit.id}']::uuid[], CURRENT_DATE, NULL, NULL);`), '1');
     assert.equal(as(OWNER, `SELECT (public.set_mortgage_agent_account_status('${AGENT_B}', 'active', NULL)).status;`), 'active');
-    assert.equal(as(OWNER, `SELECT count(*) >= 0 FROM public.mortgage_agent_compensation_reconciliation(NULL);`), 't');
 
-    // earn: no app role can call it directly; Complete still earns via the trigger.
+    // earn: no app role can call it directly; Complete still earns via the
+    // trigger, which runs as the non-superuser owner migrator.
     for (const role of ['authenticated', 'checksops', 'outsider']) {
       assert.equal(psql(`SELECT has_function_privilege('${role}', 'public.earn_mortgage_agent_compensation(uuid)', 'EXECUTE');`), 'f', role);
       fails(OWNER, `SELECT public.earn_mortgage_agent_compensation('${REQ1}');`, /permission denied for function earn_mortgage_agent_compensation/, role);

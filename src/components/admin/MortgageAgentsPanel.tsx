@@ -181,8 +181,9 @@ export function MortgageAgentsPanel() {
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustCounterparty, setAdjustCounterparty] = useState("none");
-  // One idempotency key per opened Adjust dialog: a double-click or a retry
-  // after a lost response replays the first adjustment instead of adding one.
+  // One idempotency key per opened Adjust dialog. SQL 85 can replay a repeated
+  // key, but the API (mortgage-agent-compensation.mjs) does not forward it yet;
+  // until it does, the disabled-while-busy button is what stops double submits.
   const [adjustKey, setAdjustKey] = useState("");
   const [payConfirmAll, setPayConfirmAll] = useState(false);
   const [returnBusy, setReturnBusy] = useState(false);
@@ -831,7 +832,7 @@ export function MortgageAgentsPanel() {
             <div><Label>Reference</Label><Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Check / ACH / memo" /></div>
             <div><Label>Note</Label><Input value={payNote} onChange={(e) => setPayNote(e.target.value)} /></div>
             <p className="text-sm" data-testid="mark-paid-summary">
-              {payTargets.ids.length} {payTargets.ids.length === 1 ? "entry" : "entries"}, total {dollars(payTargets.totalCents)}
+              {payTargets.ids.length} {payTargets.ids.length === 1 ? "entry" : "entries"}, total {dollars(payTargets.totalCents)} (original entries only; adjustments are not included)
             </p>
             {payTargets.all && payTargets.ids.length > 0 ? (
               <label className="flex items-start gap-2 text-sm">
@@ -841,7 +842,7 @@ export function MortgageAgentsPanel() {
                   onChange={(e) => setPayConfirmAll(e.target.checked)}
                   data-testid="mark-paid-confirm-all"
                 />
-                <span>Nothing is selected. Mark every unpaid entry in this view paid ({payTargets.ids.length} entries, {dollars(payTargets.totalCents)}).</span>
+                <span>Nothing is selected. Mark every unpaid entry in this view paid ({payTargets.ids.length} entries, {dollars(payTargets.totalCents)}, original entries only; adjustments are not included).</span>
               </label>
             ) : null}
           </div>

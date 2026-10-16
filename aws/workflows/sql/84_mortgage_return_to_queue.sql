@@ -45,16 +45,16 @@
 -- add a second tenant charge, so a UNIQUE index on
 -- check_billing_events (check_intake_item_id) for Mortgage Ops events must
 -- exist. An existing index counts only when it is a valid, non-expression
--- UNIQUE index whose single key column is check_intake_item_id and that is
--- either named check_billing_events_mortgage_ops_check_uidx (the staging
--- index) or has exactly one of the two predicates below (PostgreSQL's
--- normalized text):
+-- UNIQUE index whose single key column is check_intake_item_id and whose
+-- predicate is exactly one of the two below (PostgreSQL's normalized text),
+-- whatever its name (staging's is check_billing_events_mortgage_ops_check_uidx):
 --   staging:  event_type IN (initial, additional) AND check_intake_item_id IS NOT NULL
 --   fallback: the same AND status IS DISTINCT FROM 'voided'
 -- Otherwise the fallback index check_billing_events_one_mortgage_ops_per_check
 -- is created, after refusing (23505 duplicate_mortgage_ops_billing_events,
--- listing the check ids) if duplicate non-voided per-check events exist. It
--- is an index, not a billing write.
+-- listing the check ids) if duplicate non-voided per-check events exist, and
+-- the file refuses (55000) unless a valid matching index then exists. It is
+-- an index, not a billing write.
 --
 -- Transactions: like main's other aws/workflows/sql files this has no
 -- BEGIN/COMMIT; the guarded SQL executor runs it inside one transaction, so
@@ -94,7 +94,6 @@ BEGIN
   IF EXISTS (
     SELECT 1
     FROM pg_index i
-    JOIN pg_class c ON c.oid = i.indexrelid
     JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
     WHERE i.indrelid = 'public.check_billing_events'::regclass
       AND i.indisunique
@@ -102,12 +101,9 @@ BEGIN
       AND i.indnkeyatts = 1
       AND i.indexprs IS NULL
       AND a.attname = 'check_intake_item_id'
-      AND (
-        c.relname = 'check_billing_events_mortgage_ops_check_uidx'
-        OR pg_get_expr(i.indpred, i.indrelid) IN (
-          '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (check_intake_item_id IS NOT NULL))',
-          '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (status IS DISTINCT FROM ''voided''::text) AND (check_intake_item_id IS NOT NULL))'
-        )
+      AND pg_get_expr(i.indpred, i.indrelid) IN (
+        '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (check_intake_item_id IS NOT NULL))',
+        '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (status IS DISTINCT FROM ''voided''::text) AND (check_intake_item_id IS NOT NULL))'
       )
   ) THEN
     RAISE NOTICE 'SQL 84: Mortgage Ops per-check unique already present';
@@ -135,6 +131,27 @@ BEGIN
     WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
       AND status IS DISTINCT FROM 'voided'
       AND check_intake_item_id IS NOT NULL;
+
+  -- CREATE ... IF NOT EXISTS skips an existing (possibly invalid) index with
+  -- this name, so prove a valid matching index now exists.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_index i
+    JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+    WHERE i.indrelid = 'public.check_billing_events'::regclass
+      AND i.indisunique
+      AND i.indisvalid
+      AND i.indnkeyatts = 1
+      AND i.indexprs IS NULL
+      AND a.attname = 'check_intake_item_id'
+      AND pg_get_expr(i.indpred, i.indrelid) IN (
+        '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (check_intake_item_id IS NOT NULL))',
+        '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (status IS DISTINCT FROM ''voided''::text) AND (check_intake_item_id IS NOT NULL))'
+      )
+  ) THEN
+    RAISE EXCEPTION 'mortgage_ops_per_check_unique_missing: check_billing_events_one_mortgage_ops_per_check exists but is not a valid matching unique index; drop and rerun'
+      USING ERRCODE = '55000';
+  END IF;
 END
 $$;
 

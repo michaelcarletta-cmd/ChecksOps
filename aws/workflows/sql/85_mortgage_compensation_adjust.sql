@@ -32,8 +32,8 @@
 --   * Idempotency: optional p_idempotency_key (1-200 chars). It is stored on
 --     the adjust batch (unique among adjust batches). A repeat with the same
 --     key returns the original result (idempotent_replay true) and writes
---     nothing; a repeat with a different parent, amount, counterparty or
---     reason is refused (P0001 idempotency_key_conflict). This adds a sixth
+--     nothing; a repeat with a different parent, amount, counterparty,
+--     reason or pay_period is refused (P0001 idempotency_key_conflict). This adds a sixth
 --     argument, so the SQL 49 / five-argument function is dropped first.
 --   * The counterparty must be an active Mortgage Agent
 --     (public.aws_is_active_mortgage_agent, SQL 47).
@@ -134,7 +134,7 @@ DECLARE
   v_period text;
   v_key text;
   v_amount integer;
-  v_signed integer;
+  v_signed bigint;
   v_net bigint;
   v_debit public.mortgage_agent_compensation_entries%ROWTYPE;
   v_credit public.mortgage_agent_compensation_entries%ROWTYPE;
@@ -169,7 +169,8 @@ BEGIN
 
   v_pair := p_counterparty_agent_id IS NOT NULL;
   -- The amount booked against the parent's agent.
-  v_signed := CASE WHEN v_pair THEN -abs(p_amount_cents) ELSE p_amount_cents END;
+  -- bigint, so abs() of INT_MIN cannot overflow before the caps refuse it.
+  v_signed := CASE WHEN v_pair THEN -abs(p_amount_cents::bigint) ELSE p_amount_cents::bigint END;
 
   IF v_key IS NOT NULL THEN
     -- Serialize same-key calls (a double-click sends two at once).
@@ -185,9 +186,10 @@ BEGIN
     LIMIT 1;
     IF FOUND THEN
       IF v_prior.entry_id IS DISTINCT FROM p_parent_entry_id
-         OR (v_prior.payload->>'amount_cents')::integer IS DISTINCT FROM v_signed
+         OR (v_prior.payload->>'amount_cents')::bigint IS DISTINCT FROM v_signed
          OR (v_prior.payload->>'counterparty_agent_id')::uuid IS DISTINCT FROM p_counterparty_agent_id
          OR (v_prior.payload->>'reason') IS DISTINCT FROM v_reason
+         OR (v_prior.payload->>'pay_period') IS DISTINCT FROM v_period
       THEN
         RAISE EXCEPTION 'idempotency_key_conflict' USING ERRCODE = 'P0001';
       END IF;
@@ -258,10 +260,10 @@ BEGIN
     WHERE c.parent_entry_id = v_parent.id
       AND c.agent_user_id = v_parent.agent_user_id
       AND c.status NOT IN ('voided', 'excluded');
-    IF abs(v_signed::bigint) > v_net THEN
+    IF abs(v_signed) > v_net THEN
       RAISE EXCEPTION 'adjustment_exceeds_net'
         USING ERRCODE = '22023',
-              DETAIL = format('debit %s exceeds the agent net %s on this file', abs(v_signed::bigint), v_net);
+              DETAIL = format('debit %s exceeds the agent net %s on this file', abs(v_signed), v_net);
     END IF;
   END IF;
 

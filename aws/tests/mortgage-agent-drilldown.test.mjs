@@ -179,6 +179,8 @@ test('Return, Adjust and Mark paid cannot double-submit; Adjust sends a per-dial
   assert.match(panel, /data-testid="adjustment-cap"/);
   // Mark paid with nothing selected needs an explicit confirm with count and total.
   assert.match(panel, /data-testid="mark-paid-summary"/);
+  assert.equal(panel.split('original entries only; adjustments are not included').length - 1, 2);
+  assert.match(panel, /does not forward it yet/);
   assert.match(panel, /data-testid="mark-paid-confirm-all"/);
   assert.match(panel, /if \(payTargets\.all && !payConfirmAll\) return toast\.error/);
   assert.doesNotMatch(panel, /entries\.filter\(\(e\) => e\.status !== "paid"\)/);
