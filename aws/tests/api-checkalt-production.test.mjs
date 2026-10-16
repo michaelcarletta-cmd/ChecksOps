@@ -1153,16 +1153,21 @@ test('another user\'s login session cannot use its verification', async () => {
   }
 });
 
-test('viewers and partners are still refused with a verified login session', async () => {
+test('a viewer-role member is allowed; partners and platform roles are refused with a verified login session', async () => {
+  // Owner policy: every member of the tenant is an equal user; tenant_users.role is ignored.
   const viewer = createStore({ role: 'viewer' });
   grantStepUp(viewer);
-  grantStepUp(viewer, { action: 'deposit.approve' });
   const submitted = await submitOnce(viewer);
-  assert.equal(submitted.statusCode, 403);
-  assert.equal(submitted.error, 'financial_unauthorized');
-  assert.equal(viewer.processPosts, 0);
-  pendingApprovalDeposit(viewer);
-  assertApproveRefused(viewer, await approveOnce(viewer), 'financial_unauthorized');
+  assert.equal(submitted.ok, true, JSON.stringify(submitted));
+  assert.equal(viewer.processPosts, 1);
+
+  const viewerApprove = createStore({ role: 'viewer' });
+  grantStepUp(viewerApprove, { action: 'deposit.approve' });
+  pendingApprovalDeposit(viewerApprove);
+  const approved = await approveOnce(viewerApprove);
+  assert.equal(approved.ok, true, JSON.stringify(approved));
+  assert.equal(approved.approvePosted, true);
+  assert.equal(viewerApprove.approvePosts, 1);
 
   // A partner holds a verified session for its own tenant and even a row for the owner tenant.
   const partner = createStore({ memberships: partnerMemberships });
@@ -1174,6 +1179,21 @@ test('viewers and partners are still refused with a verified login session', asy
   assert.equal(partner.processPosts, 0);
   pendingApprovalDeposit(partner);
   assertApproveRefused(partner, await approveOnce(partner), 'cross_tenant_denied');
+
+  // A platform user_roles admin/staff with a verified session but no membership of the check tenant.
+  for (const platformRoles of [['admin'], ['staff']]) {
+    const platform = createStore({ memberships: [] });
+    platform.platformRoles = platformRoles;
+    grantStepUp(platform);
+    grantStepUp(platform, { action: 'deposit.approve' });
+    const platformSubmit = await submitOnce(platform);
+    assert.equal(platformSubmit.statusCode, 403, JSON.stringify(platformRoles));
+    assert.equal(platform.processPosts, 0);
+    pendingApprovalDeposit(platform);
+    const platformApprove = await approveOnce(platform);
+    assert.equal(platformApprove.approvePosted, false);
+    assert.equal(platform.approvePosts, 0);
+  }
 });
 
 test('a login session with no verification is refused for submit and approve', async () => {
