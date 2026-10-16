@@ -294,7 +294,8 @@ test('production pin: pending, execute false, no recorded pre-state, no staging 
   }
   assert.deepEqual(COMMITTED.columns, [...SQL89_COLUMNS]);
   assert.equal(COMMITTED.staging_pin_commit, STAGING_PIN.commit);
-  assert.equal(STAGING_PIN.expected_live_definition_sha256, null, 'the staging pre-state waits for a read-live');
+  // The staging pre-state (read-live run 82) is staging's own; production records its own from --inspect.
+  assert.equal(STAGING_PIN.expected_live_definition_sha256, '6810985b26778774a633ad17f02b634ec7c19b956d0f5302251fd1d2d05b0c7f');
   assert.equal(sha(SQL89_TEXT), COMMITTED.source_sha256);
   assert.equal(COMMITTED.source_sha256, 'cadd01c13afc4ffba6f602b9f24ca7a572e240e6af00d92bf77d0119055e1afc');
   assert.equal(sql89StatementText(SQL89_TEXT), SQL89_CANONICAL_STATEMENTS);

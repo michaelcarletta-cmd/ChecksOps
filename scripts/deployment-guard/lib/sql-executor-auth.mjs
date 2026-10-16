@@ -177,8 +177,11 @@ export const AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE = Object.freeze({
   // The commit that authored the file bytes (this branch's first commit).
   commit: 'cc4449a0df90d6d9198ac53b6c4c65fc4b00a2c5',
   source_sha256: 'cadd01c13afc4ffba6f602b9f24ca7a572e240e6af00d92bf77d0119055e1afc',
-  // Pending a staging read-live: the staging pre-state is recorded only from its report.
-  expected_live_definition_sha256: null,
+  // Staging read-live run 82 (run id 38918803201), 2026-10-16, main 39f9b21ea (executor
+  // deploy run 81): no table-level UPDATE, 31 updatable columns (routing_number and
+  // account_number absent; detected_claim_number present), 13 to grant, 1 losing update,
+  // SQL 70 ingest SECURITY DEFINER, no unsafe update functions; precondition_failures [].
+  expected_live_definition_sha256: '6810985b26778774a633ad17f02b634ec7c19b956d0f5302251fd1d2d05b0c7f',
   // sha256(columnUpdateStateText({ table_level_update: false, updatable_columns: SQL89_COLUMNS })).
   intended_replacement_sha256: '2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8',
   grantee: 'checksops',
