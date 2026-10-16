@@ -1,0 +1,53 @@
+{
+  "id": "sql87-resolve-check-case-tenant-scope-production-apply",
+  "migration": "sql87",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/87_resolve_check_case_tenant_scope.sql",
+  "migration_id": "87_resolve_check_case_tenant_scope",
+  "staging_pin_commit": "4f68360ed60a1a0761601685574155faa4030eb7",
+  "source_sha256": "a15629e119a0526bfd876ff1afdd72889e549c21bccd2e53ebc3de7ddd84c963",
+  "function_identities": [
+    "public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30",
+  "authorization_phrase": "APPLY_RESOLVE_CHECK_CASE_TENANT_SCOPE",
+  "predecessors": [],
+  "order_note": "Independent of SQL 84-86. Needs supabase migration 20260826125804 (resolve_check_case, tg_check_intake_assign_case, tg_loss_draft_assign_case) on the database; the file refuses with sql87_prerequisite_missing otherwise.",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "function_states": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 87. The production pre-state is not code-derived (the restored resolve_check_case may differ from migration 20260826125804, its owner and ACL are unknown, anon and service_role may or may not exist), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, security definer, proacl), case_owner, case_triggers, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (a missing prerequisite, another signature, result type or parameter names, a function owned by another role, a resolve_check_case ACL entry the file does not revoke, or case_owner.case_owner_safe false: the helper and the two case trigger functions with different owners, a trigger function that is not SECURITY DEFINER, or an owner that is or belongs to checksops / authenticated / anon / service_role without being superuser, which the file refuses with case_owner_unsafe), stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "function_definition_sha256": {
+      "resolve_check_case": "687fecf6daec13618c2c0f371e9c249ac6d9423891612ab1976c1cee1f3bcec1"
+    },
+    "function_owner": "checksops_admin",
+    "function_acl": {
+      "resolve_check_case": "{checksops_admin=X/checksops_admin}"
+    },
+    "note": "After the unchanged SQL 87 file run as checksops_admin: resolve_check_case is the reviewed definition (tenant-scoped lookups, PR #991's claim-belongs-to-tenant rule, no claim data from outside the tenant), owned by checksops_admin, SECURITY DEFINER with search_path=public, and EXECUTE for its owner only (PUBLIC, anon, authenticated, service_role and checksops revoked); tg_check_intake_assign_case and tg_loss_draft_assign_case are unchanged, SECURITY DEFINER and owned by the same role, so the triggers keep calling it. intended_replacement_sha256 equals the staging pin's. function_owner is the expected production login (as for SQL 72 to 86); the first inspect must confirm it."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql87-resolve-check-case-tenant-scope here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
+    "production_differs": "Unknown until the first inspect of each environment: both should carry migration 20260826125804's resolve_check_case and trigger functions (case_original), but owners, ACLs and the presence of anon / service_role may differ. The staging and production pre-state hashes are recorded separately. The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) run in both."
+  }
+}

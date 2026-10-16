@@ -31,6 +31,7 @@ import {
   AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE,
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
+  AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
   CHECKALT_AUTO_DEPOSIT_CONFIG,
@@ -67,6 +68,8 @@ import {
   MORTGAGE_REPLACEABLE_ACL_ENTRIES,
   MORTGAGE_SQL85_OBJECTS_INTENDED,
   mortgageFunctionLabel,
+  mortgageOwnerAnchor,
+  mortgageReplaceableAcl,
   mortgageStateText,
   MEMBER_STAKEHOLDER_FUNCTIONS,
   MEMBER_STAKEHOLDER_FUNCTION_SHA256,
@@ -108,6 +111,7 @@ import {
   isSql84MortgageReturnToQueue,
   isSql85MortgageCompensationAdjust,
   isSql86MortgageCompensationOwnerOnly,
+  isSql87ResolveCheckCaseTenantScope,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
   STAKEHOLDER_GRANT_TABLE,
@@ -164,6 +168,7 @@ const SQL83_HOMEOWNER_SIGNING_CAPABILITIES_FILE = path.join(ROOT, 'sql/83_homeow
 const SQL84_MORTGAGE_RETURN_TO_QUEUE_FILE = path.join(ROOT, 'sql/84_mortgage_return_to_queue.sql');
 const SQL85_MORTGAGE_COMPENSATION_ADJUST_FILE = path.join(ROOT, 'sql/85_mortgage_compensation_adjust.sql');
 const SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY_FILE = path.join(ROOT, 'sql/86_mortgage_compensation_owner_only.sql');
+const SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/87_resolve_check_case_tenant_scope.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -4399,6 +4404,7 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
 }
 
 // --- SQL 84 / 85 / 86: Mortgage Ops Return to Queue, Adjust, owner-only helper ---
+// --- SQL 87 (resolve_check_case tenant scope) reuses this engine (SQL 86's shape) ---
 
 // sha256 of each reviewed file outside its CREATE OR REPLACE FUNCTION bodies (each body
 // replaced by <body>), comments removed and whitespace collapsed. The test re-derives them.
@@ -4406,6 +4412,7 @@ export const MORTGAGE_OUTSIDE_SHA256 = Object.freeze({
   sql84: 'dbfd54b76bd128bb1e71b4ed379532acbc33118fdcb350d5a4db63360e3dcf96',
   sql85: '77bba93b91397609a82bbb675b8f4ad0b72f38e1b9320edc62ffdd5b937811c7',
   sql86: 'fa7c20f47edc208f591a906a4741943d334c9cf8b1ce656d4472d9afd5562b04',
+  sql87: '410e339114e4b63b60e16d52e8325679a0bd81c8f83507aa18050bca325aaa64',
 });
 
 const mortgageTargets = (key) => (MORTGAGE_MIGRATIONS[key]?.functions || []).filter((fn) => fn.role === 'target');
@@ -4647,6 +4654,26 @@ const MORTGAGE_SNAPSHOT_PARAMS = Object.freeze({
   relations: [0], columns: [0, 1], constraints: [0, 2], policies: [0], triggers: [0], functions: [3],
 });
 
+// SQL 87: for each API role that exists, whether the case helper's owner is it or a member of it.
+const CASE_OWNER_ROLES_SQL = `
+SELECT r.rolname::text AS role, p.proowner = r.oid AS owner_is_role, pg_has_role(p.proowner, r.oid, 'MEMBER') AS owner_member
+FROM pg_proc p
+CROSS JOIN pg_roles r
+WHERE p.oid = to_regprocedure($1) AND r.rolname = ANY($2::text[])
+ORDER BY 1
+`.trim();
+// SQL 87: the two case triggers (report only: the file does not change them).
+const CASE_TRIGGERS_SQL = `
+SELECT t.tgname::text AS name, t.tgrelid::regclass::text AS rel, t.tgenabled::text AS enabled,
+  t.tgfoid = to_regprocedure($2) AS calls_function
+FROM pg_trigger t
+WHERE NOT t.tgisinternal AND t.tgname = $1
+`.trim();
+const CASE_TRIGGERS = Object.freeze([
+  Object.freeze({ name: 'assign_case_on_check_intake', rel: 'check_intake_items', fn: 'public.tg_check_intake_assign_case()' }),
+  Object.freeze({ name: 'assign_case_on_loss_draft', rel: 'loss_draft_tracking', fn: 'public.tg_loss_draft_assign_case()' }),
+]);
+
 const mortgageAclLine = (entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`;
 const sameMortgageJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const MORTGAGE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -4878,6 +4905,35 @@ export async function readMortgageState(client, key) {
       earn_owner_safe: e.exists && t.exists && sameOwner && !ownerIsApiRole && (e.owner_rolsuper === true || !ownerInApiRole),
     };
   }
+  if (key === 'sql87') {
+    const anchor = mortgageOwnerAnchor(spec);
+    const a = functions[anchor.key];
+    const referenced = spec.functions.filter((fn) => fn.role === 'referenced');
+    const ownerRoles = a.exists ? ((await client.query(CASE_OWNER_ROLES_SQL, [anchor.identity, [...spec.api_roles]]))?.rows || []) : [];
+    const ownerIsApiRole = ownerRoles.some((row) => row.owner_is_role === true);
+    const ownerInApiRole = ownerRoles.some((row) => row.owner_member === true);
+    const sameOwner = a.exists && referenced.every((fn) => functions[fn.key].exists && states[fn.identity].owner_oid === states[anchor.identity].owner_oid);
+    const triggersSecdef = referenced.every((fn) => functions[fn.key].exists && functions[fn.key].security_definer === true);
+    // SQL 87's case_owner_unsafe guard, predicted.
+    report.case_owner = {
+      helper_present: a.exists,
+      trigger_functions_present: referenced.every((fn) => functions[fn.key].exists),
+      same_owner: sameOwner,
+      trigger_functions_security_definer: triggersSecdef,
+      owner_is_api_role: ownerIsApiRole,
+      owner_rolsuper: a.exists ? a.owner_rolsuper : null,
+      owner_member_of_api_role: ownerInApiRole,
+      api_roles_present: ownerRoles.map((row) => row.role),
+      case_owner_safe: a.exists && sameOwner && triggersSecdef && !ownerIsApiRole && (a.owner_rolsuper === true || !ownerInApiRole),
+    };
+    report.case_triggers = {};
+    for (const trig of CASE_TRIGGERS) {
+      const row = ((await client.query(CASE_TRIGGERS_SQL, [trig.name, trig.fn]))?.rows || []).find((r) => r.rel === `public.${trig.rel}` || r.rel === trig.rel);
+      report.case_triggers[trig.name] = row
+        ? { present: true, enabled: row.enabled !== 'D', calls_function: row.calls_function === true }
+        : { present: false, enabled: false, calls_function: false };
+    }
+  }
   return ok({
     migration: key,
     current_user: login.current_user ?? null,
@@ -4979,6 +5035,10 @@ export function mortgageInspectSummary(state) {
     out.duplicate_adjust_idempotency_keys = report.duplicate_adjust_idempotency_keys;
   }
   if (state.migration === 'sql86') out.earn_owner = report.earn_owner;
+  if (state.migration === 'sql87') {
+    out.case_owner = report.case_owner;
+    out.case_triggers = report.case_triggers;
+  }
   return out;
 }
 
@@ -5015,14 +5075,14 @@ export function mortgagePreconditionFailures(state, key) {
         // pg_get_function_arguments includes defaults; CREATE OR REPLACE cannot remove one.
         check(`arguments_match:${fn.key}`, row.arguments === fn.arguments);
         check(`owner_is_login:${fn.key}`, row.owner_is_executor === true);
-        if (fn.grantees) check(`acl_replaceable:${fn.key}`, (row.acl_entries || []).every((line) => MORTGAGE_REPLACEABLE_ACL_ENTRIES.includes(line)));
+        if (fn.grantees) check(`acl_replaceable:${fn.key}`, (row.acl_entries || []).every((line) => mortgageReplaceableAcl(spec).includes(line)));
       }
     }
     if (fn.role === 'dropped' && row.exists) check(`owner_is_login:${fn.key}`, row.owner_is_executor === true);
     if (fn.role === 'acl_only') {
       check(`present:${fn.key}`, row.exists === true);
       check(`owner_is_login:${fn.key}`, row.owner_is_executor === true);
-      check(`acl_replaceable:${fn.key}`, (row.acl_entries || []).every((line) => MORTGAGE_REPLACEABLE_ACL_ENTRIES.includes(line)));
+      check(`acl_replaceable:${fn.key}`, (row.acl_entries || []).every((line) => mortgageReplaceableAcl(spec).includes(line)));
     }
   }
   const objects = state?.objects || {};
@@ -5066,6 +5126,9 @@ export function mortgagePreconditionFailures(state, key) {
   if (key === 'sql86') {
     check('earn_owner_safe', report.earn_owner?.earn_owner_safe === true);
   }
+  if (key === 'sql87') {
+    check('case_owner_safe', report.case_owner?.case_owner_safe === true);
+  }
   return failures;
 }
 
@@ -5102,6 +5165,7 @@ export function mortgagePostconditionFailures(after, key, reviewed, intendedSha2
   }
   if (key === 'sql84') check('per_check_unique_present', after?.objects?.per_check_unique_present === true);
   if (key === 'sql86') check('earn_owner_safe', after?.report?.earn_owner?.earn_owner_safe === true);
+  if (key === 'sql87') check('case_owner_safe', after?.report?.case_owner?.case_owner_safe === true);
   return failures;
 }
 
@@ -5955,6 +6019,8 @@ export function createHandler({
   sql85Pin = AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   sqlFile86 = SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY_FILE,
   sql86Pin = AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
+  sqlFile87 = SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE_FILE,
+  sql87Pin = AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -6047,6 +6113,12 @@ export function createHandler({
     if (isSql86MortgageCompensationOwnerOnly(event)) {
       return handleMortgageMigration({
         key: 'sql86', event, authorization, identity, connect, sqlFile: sqlFile86, pin: sql86Pin, committed: AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
+      });
+    }
+
+    if (isSql87ResolveCheckCaseTenantScope(event)) {
+      return handleMortgageMigration({
+        key: 'sql87', event, authorization, identity, connect, sqlFile: sqlFile87, pin: sql87Pin, committed: AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
       });
     }
 

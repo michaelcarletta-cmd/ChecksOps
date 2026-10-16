@@ -55,7 +55,7 @@ node scripts/deployment-guard/spa-upload.mjs --environment production
 node scripts/deployment-guard/sql-apply.mjs --input path/to/sql.json
 node scripts/deployment-guard/sql53-production-apply.mjs --input path/to/sql53-production-apply.json
 node scripts/deployment-guard/github-sql53-production-apply.mjs
-# Production SQL 77-86 on the runner, one invocation (ops/production-sql-one-shot.md)
+# Production SQL 77-87 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
 node scripts/deployment-guard/scan-bypass.mjs

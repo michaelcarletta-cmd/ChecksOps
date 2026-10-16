@@ -42,6 +42,7 @@ import { SQL83_PRODUCTION_PIN_REL } from './sql83-homeowner-signing-production-a
 import { SQL84_PRODUCTION_PIN_REL } from './sql84-mortgage-return-to-queue-production-apply.mjs';
 import { SQL85_PRODUCTION_PIN_REL } from './sql85-mortgage-compensation-adjust-production-apply.mjs';
 import { SQL86_PRODUCTION_PIN_REL } from './sql86-mortgage-compensation-owner-only-production-apply.mjs';
+import { SQL87_PRODUCTION_PIN_REL } from './sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
@@ -123,6 +124,7 @@ const SQL83_TOOL = 'scripts/deployment-guard/sql83-homeowner-signing-production-
 const SQL84_TOOL = 'scripts/deployment-guard/sql84-mortgage-return-to-queue-production-apply.mjs';
 const SQL85_TOOL = 'scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs';
 const SQL86_TOOL = 'scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs';
+const SQL87_TOOL = 'scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
 const memberTool = (key) => Object.freeze({
@@ -189,6 +191,13 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     args: Object.freeze([]),
     pin_rel: SQL86_PRODUCTION_PIN_REL,
     allowed_key: 'sql86_production_apply_allowed',
+  }),
+  sql87: Object.freeze({
+    key: 'sql87',
+    script: SQL87_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL87_PRODUCTION_PIN_REL,
+    allowed_key: 'sql87_production_apply_allowed',
   }),
 });
 

@@ -10,7 +10,7 @@
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
  *      expected live definition, which no reviewed pin can equal, so the
- *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86) refuse apply with it
+ *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87) refuse apply with it
  *      before connecting.
  *
  * Failures print only an error code and a fixed message: executor and driver
@@ -89,7 +89,7 @@ const SHA256_KEYS = Object.freeze(['default_acl_sha256', 'acl_sha256', 'function
 // Label maps: values must be short lowercase labels; keys are pinned object names.
 const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state', 'function_states']);
 
-// SQL 82/83 and 84/85/86 reports: flags, counts, hashes and short catalog text (types, signatures,
+// SQL 82/83 and 84/85/86/87 reports: flags, counts, hashes and short catalog text (types, signatures,
 // grantee roles, status labels). The executor never puts owner names, definitions or
 // row data in it; anything else that slips in reads 'unrecognized'.
 const REPORT_KEY_RE = /^[a-z0-9_]{1,64}$/;
