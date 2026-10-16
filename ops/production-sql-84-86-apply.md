@@ -11,17 +11,46 @@
 | Staging | guarded staging SQL executor, migration `sql84-mortgage-return-to-queue` | `sql85-mortgage-compensation-adjust` | `sql86-mortgage-compensation-owner-only` |
 | Tests | `aws/tests/sql84-sql86-mortgage-production-apply.test.mjs`, `aws/tests/sql84-sql86-mortgage-executor.test.mjs` | (same) | (same) |
 
-**Status:** not applied to staging or production. All three production pins are
-`authorization: "pending"`, `execute: false`, `staging_acceptance.ok: false` and
-`expected_live_definition_sha256: null`, and all three staging pins
-(`AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE`, `AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST`,
-`AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY` in
-`scripts/deployment-guard/lib/sql-executor-auth.mjs`) have
-`expected_live_definition_sha256: null`. So staging apply refuses with `SQL_COLLISION`
-("no reviewed pre-apply live definition hash"), and production evaluate and apply refuse
-with `SQL_COLLISION` and `PRODUCTION_APPROVAL_REQUIRED`. Every pre-state hash is recorded
-from a read-only inspect in its own reviewed change; nothing here is code-derived except
-the post-state.
+**Status:** not applied to staging or production. All pre-states are recorded, from
+read-only inspects only (nothing here is code-derived except the post-state):
+
+- **Staging** (`AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE`,
+  `AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST`,
+  `AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY` in
+  `scripts/deployment-guard/lib/sql-executor-auth.mjs`): guarded staging SQL executor
+  read-live runs of 2026-10-16 on main `2e500dad1` (executor deploy run 57, run id
+  38891814825): run 58 (38892001098) for SQL 84, run 59 (38892111590) for SQL 85, run 60
+  (38892218991) for SQL 86. All three: `precondition_failures` `[]`.
+- **Production** (`production_inspect` in each pin): `--inspect` of 2026-10-16 on runner
+  `i-0c35557c4e5385406`, SSM command `0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d`, source
+  `2e500dad1`, as `checksops_admin`, read-only, `precondition_failures` `[]`.
+
+Staging and production read the same pre-state for each migration (owner names are not
+part of the fingerprint):
+
+- **SQL 84:** `return_mortgage_handling_request_to_queue` is Cursor SQL 48's
+  (`cursor_original`, `9f6811a7…`), `p_request_id uuid, p_reason text`, `RETURNS
+  public.mortgage_handling_requests`, SECURITY DEFINER, `search_path=public`,
+  `row_security=off`, owned by `checksops_admin`, EXECUTE for `PUBLIC`, `authenticated` and
+  `checksops`. `per_check_unique_present` true (`check_billing_events_mortgage_ops_check_uidx`,
+  staging predicate, valid), so GATE 0 creates no index; `fallback_index_name_taken` false;
+  `billing_duplicates` 0 groups, 0 extra events. The audit table is present, with the
+  policy `aws_select_mortgage_ops_request_audit` using
+  `aws_can_admin_mortgage_agent_compensation()`.
+- **SQL 85:** the six-argument function absent; the five-argument one is Cursor SQL 49's
+  (`cursor_original`, `e05bce27…`), same ACL as SQL 84's. `idempotency_key` absent;
+  `batch_actions_outside_check` 0.
+- **SQL 86:** all four SQL 47 functions `ledger_original` (helper `ea033ce8…`,
+  reconciliation `edd48e82…`, earn `ffdc445e…`, trigger `ca557bd5…`); the first three
+  EXECUTE for `PUBLIC`, `authenticated` and `checksops`, the trigger function for `PUBLIC`.
+  `earn_owner`: same owner `checksops_admin`, not superuser, member of neither `checksops`
+  nor `authenticated`, `earn_owner_safe` true.
+
+Production apply is still refused: all three production pins are `authorization:
+"pending"`, `execute: false`, `staging_acceptance.ok: false` (`reference: null`), so
+production evaluate and apply refuse with `PRODUCTION_APPROVAL_REQUIRED`. Staging apply
+now needs the executor package that carries these pins (step 0, `mode: deploy`) and then
+`mode: apply` with `expected_live_definition_sha256` set to the staging pin.
 
 **Order:** SQL 84, then SQL 85, then SQL 86. None depends on another (each checks only
 SQL 47), and (as for SQL 81 to 83) the tools have no predecessor check, so each pin has
@@ -73,7 +102,8 @@ ACL or function in `public` or `auth`.
 
 | | SQL 84 | SQL 85 | SQL 86 |
 |---|---|---|---|
-| expected pre-state (staging and production) | `null`, pending the first read-live / `--inspect` | `null` | `null` |
+| expected pre-state, staging (read-live runs 58 / 59 / 60) | `53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496` | `7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d` | `c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b` |
+| expected pre-state, production (`--inspect` 2026-10-16) | `53a0fa9f…` (same as staging) | `7d5e766c…` (same) | `c982ece2…` (same) |
 | intended post-state | `ff920f5453283e9ca550bb8a191905386832f44e2e35567522530b806cb0e983` | `051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908` | `fb7e82291b146d0bf243dab1f607b2202b131c09cccac56e40de96c64542062f` |
 | definition sha256 (pg_get_functiondef, PostgreSQL 16) | return to queue `51069c48…` | adjust (6 args) `a8fa66f0…` | helper `b5bc3c54…`, reconciliation `427f7072…` |
 | labels the inspect recognises | Cursor SQL 48 body `9f6811a7…` (`cursor_original`) | Cursor SQL 49 five-argument body `e05bce27…` (`cursor_original`) | SQL 47 helper `ea033ce8…`, reconciliation `edd48e82…`, earn `ffdc445e…`, trigger `ca557bd5…` (`ledger_original`) |
@@ -203,7 +233,7 @@ connects with the repository's RDS CA bundle. Never from GitHub-hosted runners o
    (any `migration`) to read the live executor `CodeSha256`, then `mode: deploy`,
    `approved_commit: <main sha>`, `expected_executor_code_sha256: <CodeSha256>` so the
    executor carries the SQL 84 / 85 / 86 files and handlers.
-1. **Staging read-live (read-only)**, one run per migration:
+1. **Staging read-live (read-only)** (done 2026-10-16, runs 58, 59 and 60), one run per migration:
 
    ```bash
    gh workflow run guarded-staging-sql-executor.yml --ref main \
@@ -221,7 +251,7 @@ connects with the repository's RDS CA bundle. Never from GitHub-hosted runners o
    `billing_duplicates.groups` 0; for SQL 85 the five-argument function `cursor_original`
    or `absent`; for SQL 86 `earn_owner.earn_owner_safe` true. If `precondition_failures`
    is not empty, **stop**: that needs its own reviewed change.
-2. **Staging pin change (reviewed PR):** set each staging pin's
+2. **Staging pin change (reviewed PR)** (this change records all three): set each staging pin's
    `expected_live_definition_sha256` to the read-live `live_definition_sha256`.
 3. **Staging apply,** in order: `mode: apply`, `migration: sql84-mortgage-return-to-queue`,
    `approved_commit`, `expected_executor_code_sha256`, `expected_live_definition_sha256:
@@ -230,7 +260,7 @@ connects with the repository's RDS CA bundle. Never from GitHub-hosted runners o
    `sql86-mortgage-compensation-owner-only` (pre → `fb7e8229…`).
 4. **Transfer:** dispatch `.github/workflows/sql53-temporary-transfer.yml` on main and copy
    `TARBALL_SHA256` from its log.
-5. **Production inspect (read-only),** on the runner from the freshly extracted tree (the
+5. **Production inspect (read-only)** (done 2026-10-16, SSM `0bd3e2c7…`), on the runner from the freshly extracted tree (the
    SSM block in `ops/production-sql-one-shot.md`, with its last command replaced):
 
    ```bash
@@ -244,12 +274,14 @@ connects with the repository's RDS CA bundle. Never from GitHub-hosted runners o
    own. Expect `pre_state_recorded` false, `apply_preconditions_met` false (nothing
    recorded yet) and `precondition_failures` `[]`. If `sql47_prerequisites_present` is
    false (SQL 47 not in production) or `precondition_failures` is not empty, **stop**.
-6. **Production pin change (reviewed PR, owner-merged):** record each inspect in
-   `production_inspect` (date, SSM command id, source commit, `live_definition_sha256`,
-   `function_states`, the functions' arguments / owner / proacl, `precondition_failures`,
-   `apply_preconditions_met`, `status` no longer pending), copy `live_definition_sha256`
-   into `expected_live_definition_sha256`, record the staging apply run in
-   `staging_acceptance` (`ok: true`, `reference`), set `execute: true` and record the
+6. **Production pin change (reviewed PR, owner-merged).** Already recorded (this change):
+   each inspect in `production_inspect` (date, SSM command id, source commit,
+   `live_definition_sha256`, `function_states`, the functions' arguments / owner / proacl,
+   `precondition_failures`, `apply_preconditions_met`, `status: "recorded"`, no check ids)
+   and `live_definition_sha256` copied into `expected_live_definition_sha256`. Still to do,
+   after the staging apply and a fresh production `--inspect` that reports the same
+   `live_definition_sha256` and `precondition_failures` `[]`: record the staging apply run
+   in `staging_acceptance` (`ok: true`, `reference`), set `execute: true` and record the
    approval in `authorization` (it must start with `Owner approved` or `owner-approved`;
    `"pending"` refuses even with `execute: true`). Merge to main and stage it with step 4 again.
 7. **Run** (one-shot, `ops/production-sql-one-shot.md`), SQL 84 first:

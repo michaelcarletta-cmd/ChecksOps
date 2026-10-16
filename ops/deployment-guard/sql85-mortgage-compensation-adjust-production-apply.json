@@ -14,7 +14,7 @@
     "public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text, text)",
     "public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d",
   "intended_replacement_sha256": "051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908",
   "authorization_phrase": "APPLY_MORTGAGE_COMPENSATION_ADJUST",
   "predecessors": [],
@@ -23,17 +23,37 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-16",
+    "ssm_command_id": "0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d",
+    "source_commit": "2e500dad1348448b2a225b972ea1e1eecad4381e",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "function_states": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 85. The production pre-state is not code-derived (SQL 47 may be absent, the Cursor bodies may or may not be live), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, proacl), precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (SQL 47 missing, a signature of adjust_mortgage_agent_compensation other than the five- and six-argument ones, another result type, another owner, an ACL entry the file does not revoke, entries or batches owned by another role, an existing adjustment_reason / idempotency_key column of another type, an existing index of the same name that differs, batch actions outside approve/pay/adjust or duplicate adjust idempotency keys), stop: that needs its own reviewed change."
+    "live_definition_sha256": "7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d",
+    "function_states": {
+      "adjust_mortgage_agent_compensation": "absent",
+      "adjust_mortgage_agent_compensation_five_arg": "cursor_original"
+    },
+    "functions": {
+      "adjust_mortgage_agent_compensation": {
+        "exists": false,
+        "state": "absent"
+      },
+      "adjust_mortgage_agent_compensation_five_arg": {
+        "exists": true,
+        "state": "cursor_original",
+        "owner": "checksops_admin",
+        "proacl": "{=X/checksops_admin,checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}",
+        "definition_sha256": "e05bce276d9c6969fd69055b853467a7ec3fd970800d47604bf1ca4b7e541fd9"
+      }
+    },
+    "added_columns": {
+      "public.mortgage_agent_compensation_batches.idempotency_key": null
+    },
+    "batch_actions_outside_check": 0,
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d, node scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 2e500dad1, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). The six-argument adjust_mortgage_agent_compensation is absent; the five-argument one is Cursor SQL 49's (function_states cursor_original, definition_sha256 e05bce27...), owned by checksops_admin, proacl PUBLIC, authenticated and checksops EXECUTE (SQL 85 drops it). batches.idempotency_key is absent; batch_actions_outside_check 0. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. It does not authorize execution: authorization stays pending, execute false and staging_acceptance ok false, so evaluate and apply still refuse with PRODUCTION_APPROVAL_REQUIRED. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -48,7 +68,7 @@
   "staging_acceptance": {
     "ok": false,
     "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql85-mortgage-compensation-adjust here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
-    "production_differs": "Unknown until the first inspect of each environment: staging may carry Cursor SQL 49 (the five-argument adjust_mortgage_agent_compensation, adjustment_reason, the parent index and the approve/pay/adjust CHECK); production may have none of it, or no SQL 47. The staging and production pre-state hashes are recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql85-mortgage-compensation-adjust here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (the pre-state is recorded in production_inspect and expected_live_definition_sha256).",
+    "production_differs": "The pre-states are the same: staging (pin AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST, read-live run 59, run id 38892111590) and production (production_inspect, 2026-10-16) are both 7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d: the six-argument function absent, Cursor SQL 49's five-argument one present, idempotency_key absent. Owner names are not part of the fingerprint. Each environment's pre-state is still recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
   }
 }
