@@ -63,7 +63,14 @@ const fromCents = (v: unknown) =>
  * organization can move money. Answers are written straight to the provider,
  * so the tenant never has to complete them outside ChecksOps.
  */
-export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string | null }) {
+export function UnderwritingQuestionnairePanel({
+  tenantId,
+  readOnly = false,
+}: {
+  tenantId?: string | null;
+  /** Status-only view for roles that may not submit. */
+  readOnly?: boolean;
+}) {
   const { toast } = useToast();
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [loading, setLoading] = useState(false);
@@ -146,6 +153,7 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
           </div>
         ) : null}
 
+        <fieldset disabled={readOnly} className="space-y-4">
         <div className="grid sm:grid-cols-3 gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs">Average payment ($)</Label>
@@ -203,6 +211,7 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
             <Label className="text-xs">We sell or deliver physical goods</Label>
             <Switch
               checked={answers.hasPhysicalGoods}
+              disabled={readOnly}
               onCheckedChange={(v) => set({ hasPhysicalGoods: v, isShippingProduct: v ? answers.isShippingProduct : false })}
             />
           </div>
@@ -212,6 +221,7 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
                 <Label className="text-xs">We ship products to customers</Label>
                 <Switch
                   checked={answers.isShippingProduct}
+                  disabled={readOnly}
                   onCheckedChange={(v) => set({ isShippingProduct: v })}
                 />
               </div>
@@ -226,7 +236,7 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Return policy</Label>
-                  <Select value={answers.returnPolicy} onValueChange={(v) => set({ returnPolicy: v })}>
+                  <Select value={answers.returnPolicy} onValueChange={(v) => set({ returnPolicy: v })} disabled={readOnly}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {RETURN_POLICIES.map((r) => (
@@ -240,11 +250,15 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
           )}
         </div>
 
+        </fieldset>
+
+        {!readOnly && (
         <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving}>
           {saving
             ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Submitting…</>
             : <><Save className="h-3.5 w-3.5 mr-1.5" /> {onFile ? "Update answers" : "Submit answers"}</>}
         </Button>
+        )}
       </CardContent>
     </Card>
   );

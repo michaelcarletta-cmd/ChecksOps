@@ -387,7 +387,8 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <EmailSenderSettings />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
-            <ComplianceSettings tenantId={tenant.id} />
+            {/* Read-only by default; the platform owner opts in with "Edit on behalf of tenant". */}
+            <ComplianceSettings tenantId={tenant.id} adminView />
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <TenantMoovIdentityCard tenantId={tenant.id} tenantName={tenant.name} />

@@ -127,6 +127,8 @@ export function WhiteLabelSettings() {
     },
   });
   const canManageTenant = tenantRole === "owner" || tenantRole === "admin" || isAdmin;
+  // Every tenant member sees onboarding status; the server's can_submit decides who may edit.
+  const canViewCompliance = canManageTenant || !!tenantRole;
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;
@@ -177,7 +179,7 @@ export function WhiteLabelSettings() {
             {canManageTenant && <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Account/Stakeholders</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>}
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
-            {canManageTenant && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
+            {canViewCompliance && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
             <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
           </TabsList>
 
@@ -223,10 +225,10 @@ export function WhiteLabelSettings() {
           </TabsContent>
 
 
-          {canManageTenant && (
+          {canViewCompliance && (
             <TabsContent value="compliance" className="space-y-8">
               <ComplianceSettings />
-              {tenant && (
+              {tenant && canManageTenant && (
                 <div className="pt-6 border-t border-border/60">
                   <TenantDocumentLibrary tenantId={tenant.id} />
                 </div>
