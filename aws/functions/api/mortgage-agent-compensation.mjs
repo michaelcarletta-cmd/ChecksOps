@@ -35,6 +35,19 @@ const asUuid = (value) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) ? raw : null;
 };
 
+// SQL 85 p_idempotency_key: 1-200 chars. The SPA sends `adjust-<uuid>`.
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{1,200}$/;
+const UNSET = Symbol('unset');
+
+/** Absent -> null; present -> the trimmed key, or UNSET when it is not a safe key. */
+export const adjustIdempotencyKey = (body = {}) => {
+  const raw = body.idempotency_key ?? body.idempotencyKey;
+  if (raw == null) return null;
+  if (typeof raw !== 'string') return UNSET;
+  const key = raw.trim();
+  return IDEMPOTENCY_KEY_RE.test(key) ? key : UNSET;
+};
+
 const periodOrCurrent = (value) => {
   const raw = String(value || '').trim();
   if (/^\d{4}-\d{2}$/.test(raw)) return raw;
@@ -359,13 +372,19 @@ export const runMortgageAgentCompensation = async ({
     const amount = Number(body.amount_cents ?? body.amountCents);
     const counterparty = asUuid(body.counterparty_agent_id || body.counterpartyAgentId);
     const payPeriod = body.pay_period || body.payPeriod || null;
+    const idempotencyKey = adjustIdempotencyKey(body);
     if (!parentId || !reason || !Number.isInteger(amount) || amount === 0) {
       return { ok: false, statusCode: 400, error: 'invalid_adjustment', spoofFieldsIgnored: spoof };
     }
+    if (idempotencyKey === UNSET) {
+      return { ok: false, statusCode: 400, error: 'invalid_idempotency_key', spoofFieldsIgnored: spoof };
+    }
+    // Six arguments: requires SQL 85 (adjust_mortgage_agent_compensation(..., p_idempotency_key)).
+    // Deploy this member only after SQL 85 is applied in that environment.
     try {
       const row = (await client.query(
-        `SELECT public.adjust_mortgage_agent_compensation($1::uuid, $2::int, $3, $4::uuid, $5) AS adjustment`,
-        [parentId, amount, reason, counterparty, payPeriod],
+        `SELECT public.adjust_mortgage_agent_compensation($1::uuid, $2::int, $3, $4::uuid, $5, $6) AS adjustment`,
+        [parentId, amount, reason, counterparty, payPeriod, idempotencyKey],
       )).rows[0];
       return { ok: true, statusCode: 200, adjustment: row?.adjustment || row, spoofFieldsIgnored: spoof };
     } catch (error) {

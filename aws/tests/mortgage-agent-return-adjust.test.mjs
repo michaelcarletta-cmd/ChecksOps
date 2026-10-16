@@ -52,11 +52,13 @@ const call = (c, user, body) => runMortgageAgentCompensation({
 const RETURN_BODY = { action: 'return_to_queue', request_id: REQ, reason: 'Agent unavailable' };
 const ADJUST_BODY = { action: 'adjust', parent_entry_id: ENTRY, amount_cents: 250, reason: 'underpayment' };
 
-test('the production-accepted server bytes are unchanged (c3898615)', () => {
+test('the server bytes are the reviewed SQL 85 idempotency revision (efc4ae28)', () => {
+  // Live production is c3898615 (five-argument call). This revision passes
+  // p_idempotency_key as $6 and deploys only after production SQL 85.
   const bytes = fs.readFileSync(path.join(ROOT, 'aws/functions/api/mortgage-agent-compensation.mjs'));
   assert.equal(
     createHash('sha256').update(bytes).digest('hex'),
-    'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512',
+    'efc4ae28488b3c9fccb7d8e76d3becd9789e129a6f6b04c434f9c01c08f873d6',
   );
 });
 
@@ -121,11 +123,9 @@ test('the platform owner calls the SQL 84/85 functions with their signatures', a
   const [ret, adj] = c.calls.filter((q) => RPC.test(q.sql));
   assert.equal(ret.sql, 'SELECT * FROM public.return_mortgage_handling_request_to_queue($1::uuid, $2)');
   assert.deepEqual(ret.params, [REQ, 'Agent unavailable']);
-  // Five arguments: SQL 85's sixth (p_idempotency_key) defaults to NULL, so
-  // c3898615 keeps working against SQL 85. The SPA's idempotency_key is not
-  // forwarded until the server passes it as $6 (a planned, separate change).
-  assert.equal(adj.sql, 'SELECT public.adjust_mortgage_agent_compensation($1::uuid, $2::int, $3, $4::uuid, $5) AS adjustment');
-  assert.deepEqual(adj.params, [ENTRY, -1000, 'underpayment', AGENT_B, '2026-10']);
+  // Six arguments: the SPA's idempotency_key (trimmed) is SQL 85's p_idempotency_key.
+  assert.equal(adj.sql, 'SELECT public.adjust_mortgage_agent_compensation($1::uuid, $2::int, $3, $4::uuid, $5, $6) AS adjustment');
+  assert.deepEqual(adj.params, [ENTRY, -1000, 'underpayment', AGENT_B, '2026-10', 'adjust-k1']);
   assert.doesNotMatch(c.calls.map((q) => q.sql).join('\n'), /check_billing_events|moov_|stripe_|ach_|mortgage_agent_compensation_rates/i);
 
   // The SQL files declare exactly these signatures.
@@ -161,4 +161,43 @@ test('SQL refusals map to client errors', async () => {
       assert.equal(result.error, error.message);
     }
   }
+});
+
+test('adjust forwards the SPA idempotency key and refuses an unsafe one with 400', async () => {
+  const rpc = () => ({ rows: [{ adjustment: { ok: true } }] });
+  const adjustParams = async (extra) => {
+    const c = client({ owner: true, rpc });
+    const result = await call(c, OWNER, { ...ADJUST_BODY, ...extra });
+    return { result, rpcCall: c.calls.find((q) => RPC.test(q.sql)) };
+  };
+
+  // The SPA (MortgageAgentsPanel) sends idempotency_key: newIdempotencyKey() = adjust-<uuid>.
+  const key = 'adjust-0b8f6f1e-2f0c-4c7e-9a51-6a3f1d2e4b5c';
+  let { result, rpcCall } = await adjustParams({ idempotency_key: key });
+  assert.equal(result.ok, true);
+  assert.equal(rpcCall.params[5], key);
+  assert.equal((await adjustParams({ idempotency_key: 'k'.repeat(200) })).rpcCall.params[5], 'k'.repeat(200));
+
+  // No key (older SPA builds): NULL, which SQL 85 treats as no idempotency.
+  ({ result, rpcCall } = await adjustParams({}));
+  assert.equal(result.ok, true);
+  assert.equal(rpcCall.params.length, 6);
+  assert.equal(rpcCall.params[5], null);
+
+  for (const bad of ['', '   ', 'k'.repeat(201), 'adjust key', "adjust';--", 'a/b', 'é', 42, { k: 1 }, ['k']]) {
+    const c = client({ owner: true, rpc: () => { throw new Error('rpc must not run'); } });
+    const refused = await call(c, OWNER, { ...ADJUST_BODY, idempotency_key: bad });
+    assert.equal(refused.statusCode, 400, JSON.stringify(bad));
+    assert.equal(refused.error, 'invalid_idempotency_key');
+    assert.equal(c.calls.some((q) => RPC.test(q.sql)), false);
+  }
+
+  // The platform-owner gate still runs first: a non-owner with a bad key is 403, not 400.
+  const c = client({ owner: false, roles: ['admin'], rpc: () => { throw new Error('rpc must not run'); } });
+  const denied = await call(c, GLOBAL_ADMIN, { ...ADJUST_BODY, idempotency_key: 'bad key' });
+  assert.equal(denied.statusCode, 403);
+
+  // The SPA really sends this field name.
+  const panel = read('src/components/admin/MortgageAgentsPanel.tsx');
+  assert.match(panel, /idempotency_key: adjustKey/);
 });
