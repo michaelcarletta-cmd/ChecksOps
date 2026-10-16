@@ -48,15 +48,14 @@ export function canOperateCheckAltInAnyTenant(
 }
 
 /**
- * Auto-Deposit save: the same tenant roles, plus the platform owner, which
- * the save RPC (aws_save_checkalt_tenant_auto_deposit, SQL 80) also allows.
+ * Auto-Deposit save: any member of that tenant. It is a tenant setting: the
+ * save RPC (aws_save_checkalt_tenant_auto_deposit, SQL 90) refuses the
+ * platform owner, so the platform owner is not offered the control either.
  */
 export function canSaveCheckAltAutoDeposit(input: {
   memberships?: readonly TenantMembership[] | null;
   tenantId?: string | null;
-  isPlatformOwner?: boolean | null;
 } = {}): boolean {
-  if (input.isPlatformOwner === true) return true;
   return canOperateCheckAltForTenant(input.memberships, input.tenantId);
 }
 

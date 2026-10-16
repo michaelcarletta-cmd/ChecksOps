@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
-import { useAuth } from "@/hooks/useAuth";
 import { useCheckAltAccess } from "@/hooks/useCanMoveChecks";
-import { isPlatformOwner } from "@/lib/masterMerchant";
 import { canSaveCheckAltAutoDeposit, checkAltAccessState } from "@/lib/checkAltOperatorAccess";
 import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,12 +31,10 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
   const { tenant } = useTenant();
   const tenantId = tenantIdProp ?? tenant?.id ?? null;
   const qc = useQueryClient();
-  const { user } = useAuth();
   const access = useCheckAltAccess();
   const canEdit = canSaveCheckAltAutoDeposit({
     memberships: access.memberships,
     tenantId,
-    isPlatformOwner: isPlatformOwner(user?.email, user?.id),
   });
   const accessState = checkAltAccessState({
     isLoading: access.isLoading,

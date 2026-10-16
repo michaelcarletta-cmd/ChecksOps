@@ -64,14 +64,16 @@ test('per-row rule: membership of that row\'s tenant decides; Poll Now needs any
   assert.equal(canOperateCheckAltInAnyTenant(null), false);
 });
 
-test('canSaveCheckAltAutoDeposit: any member of that tenant or the platform owner (SQL 90)', () => {
+test('canSaveCheckAltAutoDeposit: any member of that tenant; not the platform owner (SQL 90)', () => {
   const memberships = [{ tenant_id: TENANT_A, role: 'operator' }, { tenant_id: TENANT_B, role: 'viewer' }];
   assert.equal(canSaveCheckAltAutoDeposit({ memberships, tenantId: TENANT_A }), true);
   assert.equal(canSaveCheckAltAutoDeposit({ memberships, tenantId: TENANT_B }), true);
   assert.equal(canSaveCheckAltAutoDeposit({ memberships, tenantId: TENANT_C }), false);
-  assert.equal(canSaveCheckAltAutoDeposit({ memberships: [], tenantId: TENANT_C, isPlatformOwner: true }), true);
+  // The platform owner without a membership is refused, as SQL 90's RPC refuses it.
+  assert.equal(canSaveCheckAltAutoDeposit({ memberships: [], tenantId: TENANT_C, isPlatformOwner: true }), false);
   assert.equal(canSaveCheckAltAutoDeposit(), false);
-  assert.match(sourceOf('aws/workflows/sql/90_users_only_tenant_roles.sql'), /public\.is_platform_owner\(\)/);
+  assert.match(sourceOf('aws/workflows/sql/90_users_only_tenant_roles.sql'), /the platform owner may not \(SQL 90/);
+  assert.doesNotMatch(sourceOf('src/components/billing/TenantAutoApproveCard.tsx'), /isPlatformOwner:/);
 });
 
 test('access state: hidden by default; role message only after memberships loaded', () => {
