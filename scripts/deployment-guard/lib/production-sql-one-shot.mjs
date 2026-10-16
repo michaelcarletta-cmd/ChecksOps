@@ -35,6 +35,7 @@ import { CODES, fail, ok } from './errors.mjs';
 import { LOCAL_STATE_DIR, receiptDir } from './paths.mjs';
 import { hashSqlDefinition } from './sql-apply.mjs';
 import { MEMBER_STAKEHOLDER_MIGRATIONS } from './sql-member-stakeholder-production-apply.mjs';
+import { SQL71_PRODUCTION_PIN_REL } from './sql71-review-amount-production-apply.mjs';
 import { SQL80_PRODUCTION_PIN_REL } from './sql80-checkalt-production-apply.mjs';
 import { SQL81_PRODUCTION_PIN_REL } from './sql81-checkalt-production-apply.mjs';
 import { SQL82_PRODUCTION_PIN_REL } from './sql82-homeowner-ledger-production-apply.mjs';
@@ -116,6 +117,7 @@ export const ONE_SHOT_FLAGS = Object.freeze([
 ]);
 
 const MEMBER_TOOL = 'scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs';
+const SQL71_TOOL = 'scripts/deployment-guard/sql71-review-amount-production-apply.mjs';
 const SQL80_TOOL = 'scripts/deployment-guard/sql80-checkalt-production-apply.mjs';
 const SQL81_TOOL = 'scripts/deployment-guard/sql81-checkalt-production-apply.mjs';
 const SQL82_TOOL = 'scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs';
@@ -138,6 +140,13 @@ const memberTool = (key) => Object.freeze({
  * reviewed tool here; the one-shot never applies SQL itself.
  */
 export const ONE_SHOT_TOOLS = Object.freeze({
+  sql71: Object.freeze({
+    key: 'sql71',
+    script: SQL71_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL71_PRODUCTION_PIN_REL,
+    allowed_key: 'sql71_production_apply_allowed',
+  }),
   sql77: memberTool('sql77'),
   sql78: memberTool('sql78'),
   sql79: memberTool('sql79'),
@@ -227,6 +236,13 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'per_check_unique_present',
   'billing_duplicates',
   'earn_owner',
+  'updatable_columns',
+  'amount_update_granted',
+  'routing_number_update_granted',
+  'account_number_update_granted',
+  'sql52_prerequisite_met',
+  'table_level_update',
+  'column_update_entries',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
