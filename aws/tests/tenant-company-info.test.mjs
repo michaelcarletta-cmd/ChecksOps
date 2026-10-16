@@ -9,6 +9,8 @@ import { isPublicBrandingPath } from '../functions/api/storage.mjs';
 import { authorizeStorageWritePath } from '../functions/api/storage-write-auth.mjs';
 import { executeTenantsNarrow } from '../functions/api/write-app-metadata.mjs';
 import { pickAllowlistedValues } from '../functions/api/write-allowlist.mjs';
+import { handleAppServiceRequest } from '../functions/api/app-services.mjs';
+import * as tenantSettingsHandlers from '../functions/api/tenant-settings-handlers.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -263,9 +265,19 @@ test('SQL 93 adds nullable tenant columns idempotently; one members-only tenants
   // Sensitive columns are refused by a BEFORE UPDATE trigger for end-user requests.
   assert.match(code, /CREATE TRIGGER aws_tenants_member_column_guard\s+BEFORE UPDATE ON public\.tenants/);
   assert.match(code, /tenant_column_not_member_writable/);
-  for (const col of ['slug', 'moov_environment', 'payment_provider', 'moov_allowlisted', 'is_test_account', 'is_system_tenant', 'ein', 'kyc_status']) {
+  for (const col of ['slug', 'moov_environment', 'payment_provider', 'moov_allowlisted', 'is_test_account', 'is_system_tenant', 'ein', 'kyc_status', 'business_address', 'business_phone', 'email_reply_to']) {
     assert.doesNotMatch(code, new RegExp(`'${col}'`), col);
   }
   assert.doesNotMatch(code, /has_role|aws_can_write_tenant\(id\)|admin'::|staff'::/);
   assert.doesNotMatch(code, /company_branding\s+(SET|ADD)|ALTER TABLE public\.company_branding/);
+});
+
+test('legacy tenant-company-branding-save is retired: 410, no database or handler', async () => {
+  const event = { body: JSON.stringify({ tenant_id: '11111111-1111-4111-8111-111111111111', business_address: 'x', email_reply_to: 'r@example.com' }) };
+  const res = await handleAppServiceRequest(event, '/functions/v1/tenant-company-branding-save', 'POST');
+  assert.equal(res.statusCode, 410);
+  assert.equal(res.error, 'route_retired');
+  assert.equal(res.ok, false);
+  assert.equal('handleSaveTenantCompanyBranding' in tenantSettingsHandlers, false);
+  assert.equal('applyTenantCompanyBranding' in tenantSettingsHandlers, false);
 });

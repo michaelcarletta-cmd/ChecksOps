@@ -471,7 +471,8 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
       ADD COLUMN moov_allowlisted boolean NOT NULL DEFAULT false, ADD COLUMN is_test_account boolean NOT NULL DEFAULT false,
       ADD COLUMN is_system_tenant boolean, ADD COLUMN ein text, ADD COLUMN kyc_status text NOT NULL DEFAULT 'pending',
       ADD COLUMN monthly_rate_cents integer NOT NULL DEFAULT 0, ADD COLUMN logo_url text, ADD COLUMN primary_color text,
-      ADD COLUMN invoice_footer_note text, ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now()`);
+      ADD COLUMN invoice_footer_note text, ADD COLUMN business_address text, ADD COLUMN business_phone text,
+      ADD COLUMN email_reply_to text, ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now()`);
     await client.query(`UPDATE public.tenants SET slug = 'a', moov_environment = 'sandbox', payment_provider = 'moov' WHERE id = '${TENANT_A}'`);
     // The permissive branding policy an earlier SQL 93 draft created.
     await client.query(`CREATE POLICY aws_member_update_tenant_branding ON public.tenants FOR UPDATE TO authenticated
@@ -502,6 +503,7 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
         ['slug', 'a-new'], ['moov_environment', 'production'], ['payment_provider', 'other'],
         ['moov_allowlisted', true], ['is_test_account', true], ['is_system_tenant', true],
         ['ein', '12-3456789'], ['kyc_status', 'approved'], ['monthly_rate_cents', 0 + 1],
+        ['business_address', '9 KYC Rd'], ['business_phone', '555-0199'], ['email_reply_to', 'r@example.com'],
       ]) {
         await assert.rejects(rowCount(user, `UPDATE public.tenants SET ${column} = $1 WHERE id = $2`, [value, TENANT_A]),
           guardRefused, `${user} ${column}`);

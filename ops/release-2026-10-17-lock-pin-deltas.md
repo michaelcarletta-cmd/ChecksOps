@@ -49,7 +49,7 @@ to `aws/functions/api/`). On `origin/main` every one of these equals its accepte
 | `write-signature.mjs` | replace | `867ab4e06cb1cda29802f1463f9af6c731898738e42d748da14b1780f7ad8b9c` | `14340acadf5af027646acbd636f7bde5efaae9d7ae337ffd2e4f2c17aaaf68bc` |
 | `email-branding.mjs` | replace | `f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0` | `fea68bc0c3f42193a13f5daaa60cfb831dce926ec150bd7b97df6675f0430b22` |
 | `esign.mjs` | replace | `953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83` | `e4f02745f6b9e1e78871a7290d8b5556146e92b90a6a986c328871801d791c07` |
-| `app-services.mjs` | replace | `51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa` | `e66423cbd9e0b478f41bc601120a0d32b268ffb0632213e3dda63ce0c6ea4aa2` |
+| `app-services.mjs` | replace | `51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa` | `ca922af81aee9cd2c2d9c3d5c932cbd2ddf441de188b41d79198f76e3d789c88` |
 | `write-allowlist.mjs` | replace | `9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7` | `9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1` |
 | `write-check-workflow.mjs` | replace | `1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d` | `fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2` |
 
@@ -111,7 +111,7 @@ the ZIP or keep live bytes until the route is gone).
 | `tenant-library-rules.mjs` | ADD (new file) | `43abcf433458e296872dca92fc674053f3131e1dafe9278d1f76126625684d98` |
 | `tenant-library.mjs` | ADD (new file) | `c9b1219b4f327f2c5ebaa6b505906b11051a0141f54b10b22dc0b816852ff7d5` |
 | `tenant-maintenance-payments-catalog-inspect.mjs` | modified (REPLACE) | `c7b83fed089ceec3656de2a4976a3e084fa7305c5cd7275ee26cc17c03da78fe` |
-| `tenant-settings-handlers.mjs` | modified (REPLACE) | `59eb214379a696ce979a31b554830957676f5b454da515a6881e1d03f93661d5` |
+| `tenant-settings-handlers.mjs` | modified (REPLACE) | `e07dd50fbac217388b654e23ca424d9bbfdd3de7f512f9c0683c0ab535b749f7` |
 | `workflow-delete-check.mjs` | modified (REPLACE) | `bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f` |
 | `write-app-metadata.mjs` | modified (REPLACE) | `32b805080a38f222ad99b8d558b16ce05795f6eb3a6d7a86b60d9fe2493766d5` |
 
@@ -136,7 +136,7 @@ apply and acceptance, then a production pin.
 | `aws/workflows/sql/90_users_only_tenant_roles.sql` | `edd1113234abaa32dc7f079ba9d17591a13572fe4ebbe281f59153598491b41d` |
 | `aws/workflows/sql/91_moov_onboarding.sql` | `f6bd83a2fe5c9e3ba54dec3234b0222e3c6464ecc68aab69cea5fbe95cfd9b00` |
 | `aws/workflows/sql/92_signature_request_check_files_link_grant.sql` | `ceef6482271f5572db20f5a6db3b4bbcf77e29ada2290f03f53af7fb6e725e17` |
-| `aws/workflows/sql/93_tenant_company_info.sql` | `8cee1e878acf9b7311c84c78a3b3c51081e98dddcaa7553076f2ccfa54b6c09a` |
+| `aws/workflows/sql/93_tenant_company_info.sql` | `d90ec7f9ef14ca60b805e94337021259c8f9ce9ec80ed9781a47c64dbd6f8cfa` |
 | `aws/workflows/sql/94_document_library_restore.sql` | `ef865f65c8ccdfda51e1b6f65a828f9d6bed16bdbd1879a1a85cf4ba30a990a2` |
 | `aws/workflows/sql/95_remove_freedom_claims_bridge.sql` | `0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137` |
 
@@ -200,3 +200,13 @@ Lambda order (Check Alt / step-up):
 
 SPA: one combined SPA build from this branch (users-only, Moov onboarding, document library, branding,
 signature repairs, announcements, Inter font, Freedom removal) after the Lambda members its screens call.
+
+## 6. Retirements on the release branch (owner-approved)
+
+- `supabase/functions/partner-shared-checks/` and its `supabase/config.toml` entry are deleted (the old
+  unauthenticated Supabase partner-code check lookup; nothing called it). AWS partner sharing
+  (connect_partner_by_code / share_check_with_partner, aws/rls/sql/32) is unchanged.
+- `tenant-company-branding-save` is retired: `app-services.mjs` (a plan member) answers it with 410
+  `route_retired`, and its handler is removed from `tenant-settings-handlers.mjs`. SQL 93's member column
+  guard therefore no longer allows `business_address`, `business_phone` or `email_reply_to` (no live API
+  path writes them on `tenants`: Reply-To lives in `tenant_email_settings`, KYC in the Moov onboarding tables).

@@ -30,7 +30,7 @@ Classification:
 | `tenant-set-openai-key` / `tenant-validate-openai-key` / `tenant-remove-openai-key` | stubbed | Secrets Manager per-tenant secret + API (no provider money) |
 | `notify-homeowner-lead` / `notify-homeowner-lead-accepted` / `notify-mortgage-handling-request` | stubbed | Same as email/SMS A-class once mailer exists |
 | `lookup-partner-code-public` / `public-contractor-directory` / `contractor-directory-search` | stubbed | Public API Gateway routes + RLS-safe reads (already have some public workflow routes) |
-| `ingest-shared-check` / `delete-shared-check` / `partner-shared-checks` / `partner-checks-by-claim` | stubbed/partial | Extend `/data` + workflow routes (non-financial share metadata) |
+| `ingest-shared-check` / `delete-shared-check` / `partner-shared-checks` / `partner-checks-by-claim` | retired 2026-10-17 | Deleted (Freedom Claims bridge removal; `partner-shared-checks` was the unauthenticated Supabase partner-code check lookup). Partner sharing stays on AWS: connect_partner_by_code / share_check_with_partner (aws/rls/sql/32). |
 | `geocode-claim` / `geocode-claims-batch` / `fetch-aerial-image` | stubbed | Map provider sandbox **or** skip if not needed for staging UAT |
 | `jobnimbus-search-match` / `push-status-to-freedom` | stubbed | CRM sandbox credentials (B if vendor required; A if mockable) |
 | `passkey-*` (Supabase SimpleWebAuthn) | superseded | **Already replaced** by Cognito WebAuthn on CheckOps HTTPS staging |

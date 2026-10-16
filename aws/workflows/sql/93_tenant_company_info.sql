@@ -27,10 +27,13 @@
 --   name, logo_url, primary_color, secondary_color, invoice_letterhead_url,
 --   invoice_footer_note, invoice_default_terms, invoice_accent_color,
 --   invoice_theme, company_address, company_phone, company_email,
---   letterhead_url (write-app-metadata executeTenantsNarrow), plus
---   business_address, business_phone and email_reply_to (the legacy
---   tenant-company-branding-save route, tenant-settings-handlers.mjs), and
---   updated_at.
+--   letterhead_url (write-app-metadata executeTenantsNarrow and the tenant
+--   branding display columns), and updated_at.
+-- business_address, business_phone (KYC / payment-provider data) and
+-- email_reply_to are not member-writable: the only route that wrote them,
+-- tenant-company-branding-save, is retired (410). Email Reply-To is saved in
+-- tenant_email_settings (tenant-email-branding-save), KYC in the Moov
+-- onboarding tables.
 -- Any other column (slug, moov_*, payment_provider, payment_rail,
 -- is_test_account, is_system_tenant, kyc_*, ein, partner_code, rates, caps,
 -- actum_*, ...) changed by an end-user request is refused with 42501
@@ -88,7 +91,6 @@ DECLARE
     'invoice_letterhead_url', 'invoice_footer_note', 'invoice_default_terms',
     'invoice_accent_color', 'invoice_theme',
     'company_address', 'company_phone', 'company_email', 'letterhead_url',
-    'business_address', 'business_phone', 'email_reply_to',
     'updated_at'
   ];
   v_old jsonb := to_jsonb(OLD);

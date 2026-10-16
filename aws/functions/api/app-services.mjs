@@ -84,7 +84,6 @@ import { handleCheckAltDepositPreflight } from './providers/production/checkalt-
 import { handleTaxProfiles } from './tax-profiles.mjs';
 import {
   handleSaveTenantBillingAccount,
-  handleSaveTenantCompanyBranding,
 } from './tenant-settings-handlers.mjs';
 import {
   handleTenantBillingAdmin,
@@ -356,7 +355,15 @@ export const handleAppServiceRequest = async (event, path, method) => {
     case 'save-tenant-billing-account':
       return handleSaveTenantBillingAccount(event);
     case 'tenant-company-branding-save':
-      return handleSaveTenantCompanyBranding(event);
+      // Retired 2026-10-17: the SPA saves tenant branding through /data/write
+      // (write-app-metadata executeTenantsNarrow). Nothing is written here.
+      return {
+        ok: false,
+        statusCode: 410,
+        error: 'route_retired',
+        message: 'tenant-company-branding-save is retired. Save branding from Settings > Branding.',
+        spoofFieldsIgnored: ignoredSpoof(event, parseBody(event)),
+      };
     case 'tenant-billing-admin':
       return handleTenantBillingAdmin(event);
     case 'tenant-billing-authorize':

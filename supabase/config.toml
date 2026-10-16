@@ -33,8 +33,6 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = false
   [functions.setup-email-queue-secrets]
     verify_jwt = false
-  [functions.partner-shared-checks]
-    verify_jwt = false
   [functions.moov-webhook]
     verify_jwt = false
 
