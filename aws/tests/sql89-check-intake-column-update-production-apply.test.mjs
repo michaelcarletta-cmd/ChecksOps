@@ -216,6 +216,19 @@ function liveProductionSources() {
     const want = new Set([spec.expected_live_sha256, spec.accepted_sha256].filter(Boolean));
     const found = new Set();
     const blobs = new Set();
+    // The snapshot's own bytes and this checkout's bytes first: a shallow CI checkout can hold
+    // the snapshot commit without the history `git log --all` walks. Each is matched by hash.
+    for (const [label, bytes] of [
+      [SNAP, git('show', `${SNAP}:${rel}`).status === 0 ? git('show', `${SNAP}:${rel}`).stdout : null],
+      ['HEAD', fs.existsSync(path.join(ROOT, rel)) ? fs.readFileSync(path.join(ROOT, rel)) : null],
+    ]) {
+      if (!bytes) continue;
+      const digest = sha(bytes);
+      if (want.has(digest) && !found.has(digest)) {
+        found.add(digest);
+        sources.push({ label: `${label.slice(0, 8)}:${digest.slice(0, 8)}`, rel, text: bytes.toString() });
+      }
+    }
     for (const commit of git('log', '--all', '--format=%H', '--', rel).stdout.toString().split('\n').filter(Boolean)) {
       const blob = git('rev-parse', '--verify', '-q', `${commit}:${rel}`).stdout.toString().trim();
       if (!blob || blobs.has(blob)) continue;
