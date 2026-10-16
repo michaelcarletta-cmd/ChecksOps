@@ -25,10 +25,18 @@
 --   Platform-owner writes kept (each for a listed duty):
 --     * tenants INSERT (tenant create): aws_insert_tenants (new).
 --     * tenant_users INSERT, first invite only: aws_insert_tenant_users, when
---       the tenant has no members and the invitee is not the platform owner.
---     * profiles and other user-scoped rows (aws_can_write_same_tenant_user,
---       unchanged platform branch): the first invite creates the invitee's
---       profile; Contractor Pro approval updates contractor_profiles.
+--       the tenant has no members (counted under the first-invite advisory
+--       lock, aws_first_invite_allowed) and the invitee is not the platform
+--       owner. The invitee's profile and Cognito link are created by the
+--       DEFINER aws_invite_create_user_identity (members and the locked first
+--       invite only).
+--     * profiles INSERT (mortgage agent hire): aws_platform_owner_insert_profiles.
+--     * contractor_profiles UPDATE (Contractor Pro approval):
+--       aws_platform_owner_update_contractor_profiles.
+--     * Its own user-scoped rows (sessions, notification preferences, ...):
+--       aws_can_write_same_tenant_user(own id). It no longer writes other users'
+--       user-scoped rows (pii_reveal_logs, user_sessions, notification_*,
+--       deposit_notification_prefs, referrers, role_version_tracker).
 --     * Check Alt setup: checkalt_tenant_accounts (aws_write_checkalt_tenant_
 --       accounts, now platform owner only), SQL 81 registration (DEFINER),
 --       checkalt_config (unchanged).
@@ -50,7 +58,7 @@
 --    them follows. Partners stay read-only: aws_can_write_check is owner-tenant
 --    only.
 -- 3) aws_can_write_same_tenant_user(u) = authenticated AND u IS NOT NULL AND
---    (cross-tenant reader OR auth.uid() shares a tenant with u).
+--    (auth.uid() shares a tenant with u, OR u is the platform owner's own id).
 -- 4) aws_can_access_tax_profiles(t) = aws_is_tenant_member(t). No platform-owner
 --    or user_roles admin branch (the API matches: tax-secrets evaluateTaxAccess).
 -- 5) aws_is_tenant_manager_admin() (SQL 35) = authenticated AND platform
@@ -67,7 +75,11 @@
 --    refused); everything else is SQL 80's body unchanged. Replaced only if
 --    present.
 -- 8) Helpers (new): aws_tenant_has_no_members(t), aws_is_platform_owner_user(u),
---    aws_has_any_tenant_membership().
+--    aws_has_any_tenant_membership(), aws_first_invite_allowed(t) (takes the
+--    first-invite advisory lock), and the DEFINER writers
+--    aws_invite_create_user_identity(t, email, name, cognito_sub) and
+--    aws_create_deposit_batch_for_item(item, provider) (assign_provider without
+--    a batch: an empty batch cannot pass the deposit_batches policy).
 -- 9) Policies (DROP IF EXISTS + CREATE):
 --    - tenant_users: aws_write_tenant_users (FOR ALL) is replaced by
 --      aws_insert_tenant_users (member of the row's tenant, or the platform
@@ -278,19 +290,19 @@ AS $$
   SELECT public.aws_is_authenticated()
      AND _user_id IS NOT NULL
      AND (
-       public.aws_is_cross_tenant_reader()
-       OR EXISTS (
+       EXISTS (
          SELECT 1
          FROM public.tenant_users mine
          JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
          WHERE mine.user_id = auth.uid()
            AND theirs.user_id = _user_id
        )
+       OR (_user_id = auth.uid() AND COALESCE(public.is_platform_owner(), false))
      );
 $$;
 
 COMMENT ON FUNCTION public.aws_can_write_same_tenant_user(uuid) IS
-  'Write another user-scoped row when authenticated and sharing a tenant with that user, or as the platform owner (kept: the first invite creates the invitee profile; Contractor Pro approval updates contractor_profiles). No global admin/staff requirement and no role tiers (SQL 90).';
+  'Write a user-scoped row when authenticated and sharing a tenant with that user. The platform owner (no tenant membership) writes only its own rows; its kept cross-user writes are dedicated policies (profiles INSERT, contractor_profiles UPDATE). No global admin/staff requirement and no role tiers (SQL 90).';
 
 CREATE OR REPLACE FUNCTION public.aws_can_access_tax_profiles(_tenant_id uuid)
 RETURNS boolean
@@ -324,6 +336,171 @@ GRANT EXECUTE ON FUNCTION public.aws_is_platform_owner_user(uuid) TO checksops, 
 GRANT EXECUTE ON FUNCTION public.aws_has_any_tenant_membership() TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_write_same_tenant_user(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_access_tax_profiles(uuid) TO checksops, authenticated;
+
+-- The platform owner's first invite, serialized per tenant: takes the same
+-- transaction advisory lock as the API (first-invite:<tenant>), then counts.
+-- VOLATILE so the count after the lock sees a concurrent invite that
+-- committed while this one waited.
+CREATE OR REPLACE FUNCTION public.aws_first_invite_allowed(_tenant_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+BEGIN
+  IF _tenant_id IS NULL OR NOT COALESCE(public.is_platform_owner(), false) THEN
+    RETURN false;
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('first-invite:' || _tenant_id::text, 0));
+  RETURN NOT EXISTS (SELECT 1 FROM public.tenant_users tu WHERE tu.tenant_id = _tenant_id);
+END;
+$$;
+
+COMMENT ON FUNCTION public.aws_first_invite_allowed(uuid) IS
+  'True when the caller is the platform owner and _tenant_id has no members, counted under the first-invite advisory lock (SQL 90).';
+
+-- Invite: the invitee's profile and Cognito identity link. The caller must be
+-- a member of _tenant_id, or the platform owner making a locked first invite.
+-- Never the platform owner as invitee; never re-points an existing
+-- cognito_sub; links a pending identity row (no cognito_sub yet) for the same
+-- email; creates a profile only when no user exists. Returns the user id.
+-- The membership itself is inserted by the API under aws_insert_tenant_users.
+CREATE OR REPLACE FUNCTION public.aws_invite_create_user_identity(
+  _tenant_id uuid,
+  _email text,
+  _full_name text,
+  _cognito_sub text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+DECLARE
+  _mail text := lower(btrim(COALESCE(_email, '')));
+  _sub text := btrim(COALESCE(_cognito_sub, ''));
+  _user uuid;
+  _linked_sub text;
+BEGIN
+  IF auth.uid() IS NULL OR _tenant_id IS NULL OR _mail = '' OR _sub = '' THEN
+    RAISE EXCEPTION 'missing_required_field' USING ERRCODE = '22023';
+  END IF;
+  IF NOT (public.aws_is_tenant_member(_tenant_id) OR public.aws_first_invite_allowed(_tenant_id)) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF _mail = 'checksopsadmin@gmail.com' THEN
+    RAISE EXCEPTION 'platform_owner_not_invitable' USING ERRCODE = '42501';
+  END IF;
+
+  -- An existing login keeps the user it is linked to.
+  SELECT ia.application_user_id INTO _user
+    FROM public.identity_accounts ia
+   WHERE ia.cognito_sub = _sub;
+
+  IF _user IS NULL THEN
+    SELECT ia.application_user_id, ia.cognito_sub INTO _user, _linked_sub
+      FROM public.identity_accounts ia
+     WHERE lower(ia.email) = _mail
+     LIMIT 1;
+    IF _user IS NOT NULL AND _linked_sub IS NOT NULL THEN
+      -- That user is linked to another login: never re-point it.
+      RAISE EXCEPTION 'identity_link_conflict' USING ERRCODE = 'P0001';
+    END IF;
+    IF _user IS NOT NULL THEN
+      UPDATE public.identity_accounts
+         SET cognito_sub = _sub, status = 'active', linked_at = COALESCE(linked_at, now())
+       WHERE application_user_id = _user
+         AND cognito_sub IS NULL;
+    ELSE
+      SELECT p.id INTO _user FROM public.profiles p WHERE lower(p.email) = _mail LIMIT 1;
+      IF _user IS NULL THEN
+        _user := gen_random_uuid();
+        INSERT INTO public.profiles (id, email, full_name)
+        VALUES (_user, _mail, NULLIF(btrim(COALESCE(_full_name, '')), ''));
+      END IF;
+      IF _sub = _user::text THEN
+        RAISE EXCEPTION 'unsafe_cognito_sub' USING ERRCODE = 'P0001';
+      END IF;
+      INSERT INTO public.identity_accounts (application_user_id, cognito_sub, email, status, linked_at, created_at)
+      VALUES (_user, _sub, _mail, 'active', now(), now())
+      ON CONFLICT DO NOTHING;
+    END IF;
+    -- Whatever happened above, the login must now be linked to _user.
+    IF NOT EXISTS (
+      SELECT 1 FROM public.identity_accounts ia
+       WHERE ia.cognito_sub = _sub AND ia.application_user_id = _user
+    ) THEN
+      RAISE EXCEPTION 'identity_link_conflict' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  IF public.aws_is_platform_owner_user(_user) THEN
+    RAISE EXCEPTION 'platform_owner_not_invitable' USING ERRCODE = '42501';
+  END IF;
+  RETURN _user;
+END;
+$$;
+
+COMMENT ON FUNCTION public.aws_invite_create_user_identity(uuid, text, text, text) IS
+  'Invite: creates or finds the invitee profile and Cognito link for a member of _tenant_id or the platform owner''s locked first invite. Refuses the platform owner; never re-points a cognito_sub (SQL 90).';
+
+-- assign_provider without a batch: a new batch has no deposit items yet, so
+-- no RLS policy (membership through the batch's items) can admit it. The
+-- caller must be a member of the deposit item's check tenant and the item
+-- must be pending assignment.
+CREATE OR REPLACE FUNCTION public.aws_create_deposit_batch_for_item(_deposit_item_id uuid, _provider text)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+DECLARE
+  _tenant uuid;
+  _amount numeric;
+  _status text;
+  _id uuid;
+BEGIN
+  IF auth.uid() IS NULL OR _deposit_item_id IS NULL OR NULLIF(btrim(COALESCE(_provider, '')), '') IS NULL THEN
+    RAISE EXCEPTION 'missing_required_field' USING ERRCODE = '22023';
+  END IF;
+  SELECT ci.tenant_id, di.amount, di.status::text
+    INTO _tenant, _amount, _status
+    FROM public.deposit_items di
+    JOIN public.check_intake_items ci ON ci.id = di.check_id
+   WHERE di.id = _deposit_item_id
+     FOR UPDATE OF di;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0002';
+  END IF;
+  IF NOT public.aws_is_tenant_member(_tenant) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF _status IS DISTINCT FROM 'pending_assignment' THEN
+    RAISE EXCEPTION 'invalid_status' USING ERRCODE = 'P0001';
+  END IF;
+  EXECUTE 'INSERT INTO public.deposit_batches (provider, total_items, total_amount, created_by)
+           VALUES ($1::public.deposit_provider, 1, $2, $3) RETURNING id'
+     INTO _id
+    USING _provider, COALESCE(_amount, 0), auth.uid();
+  RETURN _id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.aws_create_deposit_batch_for_item(uuid, text) IS
+  'Creates a one-item deposit batch for a pending deposit item of a tenant the caller is a member of (assign_provider without a batch). Members only (SQL 90).';
+
+REVOKE ALL ON FUNCTION public.aws_first_invite_allowed(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_invite_create_user_identity(uuid, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_create_deposit_batch_for_item(uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_first_invite_allowed(uuid) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.aws_invite_create_user_identity(uuid, text, text, text) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.aws_create_deposit_batch_for_item(uuid, text) TO checksops, authenticated;
 
 -- SQL 35 and SQL 29 helpers: replaced only when present.
 DO $$
@@ -512,7 +689,7 @@ CREATE POLICY aws_insert_tenant_users ON public.tenant_users
       public.aws_is_tenant_member(tenant_id)
       OR (
         COALESCE(public.is_platform_owner(), false)
-        AND public.aws_tenant_has_no_members(tenant_id)
+        AND public.aws_first_invite_allowed(tenant_id)
       )
     )
   );
@@ -550,6 +727,22 @@ BEGIN
     EXECUTE 'DROP POLICY IF EXISTS aws_write_checkalt_tenant_accounts ON public.checkalt_tenant_accounts';
     EXECUTE 'CREATE POLICY aws_write_checkalt_tenant_accounts ON public.checkalt_tenant_accounts
       FOR ALL TO authenticated
+      USING (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))
+      WITH CHECK (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))';
+  END IF;
+
+  -- The platform owner's kept cross-user writes, per table: profiles INSERT
+  -- (mortgage agent hire) and contractor_profiles UPDATE (Pro approval).
+  IF to_regclass('public.profiles') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS aws_platform_owner_insert_profiles ON public.profiles';
+    EXECUTE 'CREATE POLICY aws_platform_owner_insert_profiles ON public.profiles
+      FOR INSERT TO authenticated
+      WITH CHECK (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))';
+  END IF;
+  IF to_regclass('public.contractor_profiles') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS aws_platform_owner_update_contractor_profiles ON public.contractor_profiles';
+    EXECUTE 'CREATE POLICY aws_platform_owner_update_contractor_profiles ON public.contractor_profiles
+      FOR UPDATE TO authenticated
       USING (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))
       WITH CHECK (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))';
   END IF;

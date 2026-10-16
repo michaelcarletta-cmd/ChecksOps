@@ -44,6 +44,10 @@ const NEWCOMER = 'a1000000-0000-4000-8000-00000000000c';
 const TENANT_EMPTY = '44444444-4444-4444-8444-444444444444';
 const CHECK_A = '55555555-5555-4555-8555-555555555555';
 const CLAIM_A = '66666666-6666-4666-8666-666666666666';
+const DEPOSIT_PENDING = '77777777-7777-4777-8777-777777777777';
+const DEPOSIT_ASSIGNED = '88888888-8888-4888-8888-888888888888';
+const RACE_A = 'a1000000-0000-4000-8000-0000000000c1';
+const RACE_B = 'a1000000-0000-4000-8000-0000000000c2';
 
 const MEMBERS = [OWNER, OPERATOR, VIEWER, GLOBAL_ADMIN_VIEWER];
 const OUTSIDERS = [GLOBAL_ADMIN, GLOBAL_STAFF, B_OWNER];
@@ -66,6 +70,17 @@ CREATE TABLE public.deposit_provider_config (
 INSERT INTO public.checkalt_config (merchant, fi_key, depositor_account_id) VALUES ('M-1', 'FI-1', '123456789');
 INSERT INTO public.deposit_provider_config (provider, display_name, is_active, is_stubbed, capabilities, config)
   VALUES ('checkalt', 'Check Alt', true, false, '{"rdc": true}', '{"secret": "x"}');
+ALTER TABLE public.identity_accounts ADD COLUMN cognito_sub text UNIQUE, ADD COLUMN linked_at timestamptz,
+  ADD COLUMN created_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.profiles ADD COLUMN full_name text;
+CREATE TABLE public.pii_reveal_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, field_name text);
+CREATE TABLE public.user_sessions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, is_active boolean DEFAULT true);
+CREATE TABLE public.contractor_profiles (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, tier text DEFAULT 'basic');
+CREATE TYPE public.deposit_provider AS ENUM ('checkalt', 'manual_branch');
+ALTER TABLE public.deposit_items ADD COLUMN amount numeric, ADD COLUMN status text, ADD COLUMN batch_id uuid;
+CREATE TABLE public.deposit_batches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), provider public.deposit_provider, total_items integer NOT NULL DEFAULT 0,
+  total_amount numeric NOT NULL DEFAULT 0, created_by uuid, updated_at timestamptz DEFAULT now());
 INSERT INTO public.tenants (id, name) VALUES ('${TENANT_A}', 'A'), ('${TENANT_B}', 'B'), ('${TENANT_EMPTY}', 'Empty');
 INSERT INTO public.tenant_email_settings (tenant_id, from_name) VALUES ('${TENANT_A}', 'A');
 INSERT INTO public.check_intake_items (id, tenant_id) VALUES ('${CHECK_A}', '${TENANT_A}');
@@ -84,6 +99,14 @@ INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES
   ('${TENANT_A}', '${TEAMMATE}', 'viewer'), ('${TENANT_B}', '${B_OWNER}', 'owner');
 INSERT INTO public.recipient_tax_profiles (tenant_id, recipient_key, tin) VALUES ('${TENANT_A}', 'acct:1', '12-3456789');
 INSERT INTO public.checkalt_tenant_accounts (tenant_id) VALUES ('${TENANT_A}'), ('${TENANT_B}');
+UPDATE public.identity_accounts SET cognito_sub = 'sub-' || application_user_id::text;
+INSERT INTO public.profiles (id, email) SELECT application_user_id, email FROM public.identity_accounts;
+INSERT INTO public.pii_reveal_logs (user_id, field_name) VALUES ('${TEAMMATE}', 'tin');
+INSERT INTO public.user_sessions (user_id) VALUES ('${TEAMMATE}');
+INSERT INTO public.contractor_profiles (user_id) VALUES ('${TEAMMATE}');
+INSERT INTO public.deposit_items (id, check_id, amount, status) VALUES
+  ('${DEPOSIT_PENDING}', '${CHECK_A}', 25, 'pending_assignment'),
+  ('${DEPOSIT_ASSIGNED}', '${CHECK_A}', 30, 'provider_assigned');
 `;
 
 test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform roles platform-owner only', {
@@ -96,7 +119,8 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
   try {
     await applyBaseSchema(client);
     await client.query(SEED);
-    for (const table of ['tenant_users', 'tenants', 'recipient_tax_profiles', 'user_roles', 'tenant_email_settings', 'checkalt_tenant_accounts']) {
+    for (const table of ['tenant_users', 'tenants', 'recipient_tax_profiles', 'user_roles', 'tenant_email_settings', 'checkalt_tenant_accounts',
+      'profiles', 'pii_reveal_logs', 'user_sessions', 'contractor_profiles', 'deposit_batches']) {
       await client.query(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`);
       await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.${table} TO checksops`);
     }
@@ -112,6 +136,13 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
     await client.query(policyBlock('24_complete_write_policies.sql', 'aws_write_checkalt_tenant_accounts'));
     await client.query(`CREATE POLICY aws_select_tenant_email_settings ON public.tenant_email_settings FOR SELECT TO authenticated USING (true)`);
     await client.query(`CREATE POLICY aws_select_checkalt_tenant_accounts ON public.checkalt_tenant_accounts FOR SELECT TO authenticated USING (true)`);
+    await client.query('GRANT SELECT, INSERT, UPDATE ON TABLE public.identity_accounts TO checksops');
+    await client.query(policyBlock('24_complete_write_policies.sql', 'aws_write_profiles'));
+    await client.query(policyBlock('12_final_select_policies.sql', 'aws_select_profiles'));
+    for (const name of ['pii_reveal_logs', 'user_sessions', 'contractor_profiles', 'deposit_batches']) {
+      await client.query(policyBlock('24_complete_write_policies.sql', `aws_write_${name}`));
+      await client.query(`CREATE POLICY aws_select_${name} ON public.${name} FOR SELECT TO authenticated USING (true)`);
+    }
     await client.query(fs.readFileSync(SQL_80, 'utf8'));
     await client.query(sql35ManagerViews());
 
@@ -279,6 +310,138 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
       SELECT column_name FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = 'deposit_provider_config_public' ORDER BY ordinal_position`)).rows.map((r) => r.column_name);
     assert.equal(viewColumns.includes('config'), false);
+
+    // --- Concurrent first invites: exactly one commits. --------------------------
+    {
+      const connect = async () => {
+        const c = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
+        await c.connect();
+        await c.query('BEGIN');
+        await c.query('SET LOCAL ROLE checksops');
+        await c.query("SELECT set_config('request.app_user_id', $1, true)", [PLATFORM_OWNER]);
+        return c;
+      };
+      const first = await connect();
+      const second = await connect();
+      try {
+        const insert = (c, user) => c.query(
+          'INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_EMPTY, user, 'viewer'],
+        ).then((r) => r.rowCount, (error) => error);
+        const a = await insert(first, RACE_A);
+        // The second invite waits on the first-invite lock while the first is open.
+        const pendingB = insert(second, RACE_B);
+        const raced = await Promise.race([pendingB.then(() => 'finished'), new Promise((r) => { setTimeout(() => r('waiting'), 300); })]);
+        assert.equal(raced, 'waiting');
+        await first.query('COMMIT');
+        const b = await pendingB;
+        await second.query('ROLLBACK');
+        assert.equal(a, 1);
+        assert.ok(b instanceof Error && /row-level security/.test(b.message), String(b));
+        const members = (await client.query('SELECT user_id FROM public.tenant_users WHERE tenant_id = $1', [TENANT_EMPTY])).rows;
+        assert.deepEqual(members.map((r) => r.user_id), [RACE_A]);
+      } finally {
+        await first.end().catch(() => {});
+        await second.end().catch(() => {});
+        await client.query('DELETE FROM public.tenant_users WHERE tenant_id = $1', [TENANT_EMPTY]);
+      }
+      // The invite DEFINER takes the same lock: a concurrent first invite through it is refused too.
+      const third = await connect();
+      const fourth = await connect();
+      try {
+        const viaDefiner = (c, email) => c.query(
+          'SELECT public.aws_invite_create_user_identity($1::uuid, $2, $3, $4) AS id', [TENANT_EMPTY, email, 'X', `sub-${email}`],
+        ).then(async (r) => {
+          await c.query('INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_EMPTY, r.rows[0].id, 'viewer']);
+          return 'ok';
+        }, (error) => error);
+        const x = await viaDefiner(third, 'first@example.com');
+        const pendingY = viaDefiner(fourth, 'second@example.com');
+        await third.query('COMMIT');
+        const y = await pendingY;
+        await fourth.query('ROLLBACK');
+        assert.equal(x, 'ok');
+        assert.ok(y instanceof Error && y.code === '42501', String(y));
+        assert.equal((await client.query('SELECT count(*)::int AS n FROM public.tenant_users WHERE tenant_id = $1', [TENANT_EMPTY])).rows[0].n, 1);
+      } finally {
+        await third.end().catch(() => {});
+        await fourth.end().catch(() => {});
+        await client.query('DELETE FROM public.tenant_users WHERE tenant_id = $1', [TENANT_EMPTY]);
+      }
+    }
+
+    // --- Invite of a brand-new email under RLS. -----------------------------------
+    const inviteIdentity = (user, tenantId, email, sub) => as(user, async () => (await client.query(
+      'SELECT public.aws_invite_create_user_identity($1::uuid, $2, $3, $4)::text AS id', [tenantId, email, 'New Person', sub],
+    )).rows[0].id);
+    // A member's direct profiles INSERT for someone who is not a teammate yet is refused by aws_write_profiles.
+    await assert.rejects(as(VIEWER, () => client.query(
+      "INSERT INTO public.profiles (id, email) VALUES (gen_random_uuid(), 'fresh@example.com')",
+    )), /row-level security/);
+    // Through the DEFINER, any member (stored role viewer) invites a new email end to end.
+    const invited = await as(VIEWER, async () => {
+      const id = (await client.query(
+        'SELECT public.aws_invite_create_user_identity($1::uuid, $2, $3, $4)::text AS id', [TENANT_A, ' Fresh@Example.com ', 'Fresh', 'sub-fresh'],
+      )).rows[0].id;
+      const profile = (await client.query('SELECT public.aws_is_platform_owner_user($1::uuid) AS owner', [id])).rows[0];
+      const link = (await client.query('SELECT application_user_id::text AS id, email, status FROM public.identity_accounts WHERE cognito_sub = $1', ['sub-fresh'])).rows[0];
+      const inserted = (await client.query('INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_A, id, 'viewer'])).rowCount;
+      return { id, owner: profile.owner, link, inserted };
+    });
+    assert.match(invited.id, /^[0-9a-f-]{36}$/);
+    assert.equal(invited.owner, false);
+    assert.deepEqual(invited.link, { id: invited.id, email: 'fresh@example.com', status: 'active' });
+    assert.equal(invited.inserted, 1);
+    // Non-members (another tenant, a global admin) are refused.
+    for (const user of [B_OWNER, GLOBAL_ADMIN, GLOBAL_STAFF]) {
+      await assert.rejects(inviteIdentity(user, TENANT_A, 'fresh@example.com', 'sub-fresh'), (error) => error.code === '42501', user);
+    }
+    // The platform owner: a first invite into an empty tenant only.
+    assert.match(await inviteIdentity(PLATFORM_OWNER, TENANT_EMPTY, 'fresh@example.com', 'sub-fresh'), /^[0-9a-f-]{36}$/);
+    await assert.rejects(inviteIdentity(PLATFORM_OWNER, TENANT_A, 'fresh@example.com', 'sub-fresh'), (error) => error.code === '42501');
+    // Never the platform owner: by email, or by a login already linked to it.
+    await assert.rejects(inviteIdentity(OWNER, TENANT_A, 'ChecksOpsAdmin@gmail.com', 'sub-x'), (error) => error.code === '42501' && /platform_owner/.test(error.message));
+    await assert.rejects(inviteIdentity(OWNER, TENANT_A, 'alias@example.com', `sub-${PLATFORM_OWNER}`), (error) => error.code === '42501' && /platform_owner/.test(error.message));
+    // An existing login keeps its user; an email linked to another login is never re-pointed.
+    assert.equal(await inviteIdentity(OWNER, TENANT_A, 'other@example.com', `sub-${TEAMMATE}`), TEAMMATE);
+    await assert.rejects(inviteIdentity(OWNER, TENANT_A, 't@example.com', 'sub-new-login'), /identity_link_conflict/);
+    assert.equal((await client.query('SELECT cognito_sub FROM public.identity_accounts WHERE application_user_id = $1', [TEAMMATE])).rows[0].cognito_sub, `sub-${TEAMMATE}`);
+
+    // --- The platform owner no longer writes other users' user-scoped rows. -------
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.pii_reveal_logs SET field_name = $1 WHERE user_id = $2', ['x', TEAMMATE]), 0);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'DELETE FROM public.pii_reveal_logs WHERE user_id = $1', [TEAMMATE]), 0);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.user_sessions SET is_active = false WHERE user_id = $1', [TEAMMATE]), 0);
+    for (const table of ['pii_reveal_logs', 'user_sessions']) {
+      await assert.rejects(as(PLATFORM_OWNER, () => client.query(`INSERT INTO public.${table} (user_id) VALUES ($1)`, [TEAMMATE])), /row-level security/, table);
+    }
+    // Its own rows, and a teammate's rows for members, still work.
+    assert.equal(await rowCount(PLATFORM_OWNER, 'INSERT INTO public.user_sessions (user_id) VALUES ($1)', [PLATFORM_OWNER]), 1);
+    assert.equal(await rowCount(VIEWER, 'UPDATE public.user_sessions SET is_active = false WHERE user_id = $1', [TEAMMATE]), 1);
+    // Kept, per table: contractor_profiles UPDATE (Pro approval) and profiles INSERT (agent hire).
+    assert.equal(await rowCount(PLATFORM_OWNER, "UPDATE public.contractor_profiles SET tier = 'pro' WHERE user_id = $1", [TEAMMATE]), 1);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'DELETE FROM public.contractor_profiles WHERE user_id = $1', [TEAMMATE]), 0);
+    assert.equal(await rowCount(PLATFORM_OWNER, "INSERT INTO public.profiles (id, email) VALUES (gen_random_uuid(), 'agent@example.com')", []), 1);
+    assert.equal(await rowCount(PLATFORM_OWNER, "UPDATE public.profiles SET full_name = 'x' WHERE id = $1", [TEAMMATE]), 0);
+
+    // --- assign_provider without a batch: the DEFINER creates it for members. ------
+    const createBatch = (user, item) => as(user, async () => (await client.query(
+      "SELECT public.aws_create_deposit_batch_for_item($1::uuid, 'manual_branch')::text AS id", [item],
+    )).rows[0].id);
+    // Why a function: a member's direct INSERT of an empty batch cannot pass RLS.
+    await assert.rejects(as(OWNER, () => client.query(
+      "INSERT INTO public.deposit_batches (provider, total_items, total_amount, created_by) VALUES ('manual_branch', 1, 25, $1)", [OWNER],
+    )), /row-level security/);
+    for (const user of MEMBERS) {
+      const batch = await as(user, async () => {
+        const id = (await client.query("SELECT public.aws_create_deposit_batch_for_item($1::uuid, 'manual_branch')::text AS id", [DEPOSIT_PENDING])).rows[0].id;
+        return (await client.query('SELECT total_items, total_amount::int AS amount, created_by::text AS by FROM public.deposit_batches WHERE id = $1', [id])).rows[0];
+      });
+      assert.deepEqual(batch, { total_items: 1, amount: 25, by: user }, user);
+    }
+    for (const user of [...OUTSIDERS, PLATFORM_OWNER]) {
+      await assert.rejects(createBatch(user, DEPOSIT_PENDING), (error) => error.code === '42501', user);
+    }
+    await assert.rejects(createBatch(OWNER, DEPOSIT_ASSIGNED), /invalid_status/);
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM public.deposit_batches')).rows[0].n, 0);
 
     // Data is not rewritten: the stored role values are left as they were.
     const roles = (await client.query('SELECT role FROM public.tenant_users ORDER BY role')).rows.map((r) => r.role);
