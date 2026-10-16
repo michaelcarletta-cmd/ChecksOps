@@ -642,11 +642,11 @@ export async function executeMortgageProductionApply(key, input = {}, ctx = {}) 
       // COMMIT may have landed before the error; a re-run is refused once the after-state is live.
       inTx = false;
       return fail(CODES.SQL_COLLISION, `${label} production COMMIT outcome is unknown; re-run --inspect before anything else`, {
-        message: String(error?.message || error).slice(0, 300),
+        message: applyErrorMessage(error),
       });
     }
     return rollback(fail(CODES.SQL_COLLISION, `${label} production apply failed and was rolled back`, {
-      message: String(error?.message || error).slice(0, 300),
+      message: applyErrorMessage(error),
     }));
   } finally {
     await client.end().catch(() => {});
@@ -660,5 +660,20 @@ export async function executeMortgageProductionApply(key, input = {}, ctx = {}) 
     }
   }
 }
+
+/**
+ * SQL 84 and SQL 86 guard errors name check ids and role names; the apply result
+ * carries a fixed message instead (the --inspect output is where to look).
+ */
+const FIXED_APPLY_ERROR_MESSAGES = Object.freeze([
+  ['duplicate_mortgage_ops_billing_events', 'duplicate_mortgage_ops_billing_events: resolve duplicate Mortgage Ops billing events before SQL 84; run --inspect for details'],
+  ['earn_owner_unsafe', 'earn_owner_unsafe: the earn function and trigger owners are not safe for SQL 86; run --inspect for details'],
+]);
+
+export const applyErrorMessage = (error) => {
+  const message = String(error?.message || error);
+  const fixed = FIXED_APPLY_ERROR_MESSAGES.find(([prefix]) => message.startsWith(prefix));
+  return fixed ? fixed[1] : message.slice(0, 300);
+};
 
 export { createProductionDatabaseConnect };

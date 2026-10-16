@@ -626,7 +626,16 @@ const childFailure = (step, out) => fail(out.json?.code || CODES.DEPLOYMENT_GUAR
   ...(out.error ? { spawn_error: out.error } : {}),
 });
 
-const pickInspect = (details = {}) => Object.fromEntries(INSPECT_RECORD_KEYS.filter((key) => key in details).map((key) => [key, details[key]]));
+// Recorded inspect fields are summaries: billing_duplicates keeps only its counts, never check_ids.
+const INSPECT_RECORD_FIELDS = Object.freeze({ billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events']) });
+
+const pickFields = (value, fields) => (value && typeof value === 'object' && !Array.isArray(value)
+  ? Object.fromEntries(fields.filter((field) => field in value).map((field) => [field, value[field]]))
+  : value);
+
+export const pickInspect = (details = {}) => Object.fromEntries(INSPECT_RECORD_KEYS
+  .filter((key) => key in details)
+  .map((key) => [key, INSPECT_RECORD_FIELDS[key] ? pickFields(details[key], INSPECT_RECORD_FIELDS[key]) : details[key]]));
 
 /** Step 2 checks: everything the procedure says to proceed on. */
 export function preApplyInspectFailures(details, pin, tool) {
