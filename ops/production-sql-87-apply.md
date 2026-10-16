@@ -2,8 +2,12 @@
 
 `aws/workflows/sql/87_resolve_check_case_tenant_scope.sql` (source sha256
 `f046c76c…`, authored in `af84133e4`). Owner approval to start the work: 2026-10-16
-("start the SQL 87 resolve_check_case fix"; Option B, an internal helper). Nothing in
-this runbook has been run yet: both pins are pending.
+("start the SQL 87 resolve_check_case fix"; Option B, an internal helper).
+
+**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 78); not
+applied to production. The production pin is execute-authorized (step 6) and waits for the
+owner's review and merge, then the one-shot run (step 7). Both pre-states are recorded,
+from read-only inspects only.
 
 ## The bug
 
@@ -80,9 +84,33 @@ and falls back to the claim-number case, exactly as #991's route answers
 
 | | staging (`AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE`) | production (`ops/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.json`) |
 |---|---|---|
-| `expected_live_definition_sha256` | `null` (record from read-live) | `null` (record from `--inspect`) |
+| `expected_live_definition_sha256` | `8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a` (read-live) | `9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f` (`--inspect` of 2026-10-16, SSM `4b86eb75-5d78-483c-8899-50a7971e9d42` and `0435c387-8f9b-405d-9463-f1cc81124d36`) |
 | `intended_replacement_sha256` | `794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30` | same |
-| authorization / execute | n/a | `"pending"` / `false` |
+| authorization / execute | n/a | owner approved 2026-10-16 / `true` |
+
+The pre-states differ: production's `resolve_check_case` ACL also grants `checksops`
+EXECUTE explicitly (PUBLIC EXECUTE in both). The same file bytes run in both and the
+post-state is the same.
+
+**Staging acceptance** (recorded in the production pin's `staging_acceptance`): apply run
+78, `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38910474178`, on main
+`e043cde44` with the executor package `CodeSha256`
+`2SK4JxaCw/NXe4OwcsvyloYPZLU0lCPrgyPdX4UN480=` (deploy run 76, `38909978264`):
+`8817a4b0…` -> `794dcd33…`, result applied. Read-live run 79 (`38910633201`):
+`already_applied` true, `precondition_failures` `[]`, `resolve_check_case` intended,
+`acl_entries` `[]` (owner-only EXECUTE), `case_owner_safe` true, `other_callers.total` 0.
+
+**Production pin:** `execute: true`; `authorization` records the owner's approval of
+2026-10-16 ("approve the SQL 87 production unlock and apply"; "approve the unlock PR merge
+after the pin PR"): production apply of SQL 87 after the staging acceptance above. It takes
+effect only when the owner reviews and merges that change, and it does not itself run or
+approve a run: the apply still needs the owner's run-time approval for that workstream, a
+production-sql receipt owning the pinned file, the authorization phrase and a new
+`one_use_id`. `expected_live_definition_sha256` stays the recorded production pre-state
+(`9f264af1…`), and the post-state, source sha256 and rules are unchanged. With a pending
+authorization, `execute: false` or no staging acceptance, evaluate and apply refuse with
+`PRODUCTION_APPROVAL_REQUIRED` (or `GUARD_APPLY_FORBIDDEN` for execute); the tests keep
+those refusals on an explicit pending copy of the pin.
 
 The post-state hash is code-derived (`sha256(mortgageStateText('sql87',
 mortgageAppliedStates('sql87')))`) and re-derived from a real PostgreSQL 16 catalog by
@@ -136,13 +164,14 @@ GitHub-hosted runners or Lambda.
    true, `other_callers.total` 0 and both `case_triggers` present. Otherwise **stop**.
 2. **Staging pin change (reviewed PR):** record the read-live `live_definition_sha256` in
    `AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE.expected_live_definition_sha256`.
-3. **Staging apply:** `mode: apply`, `migration: sql87-resolve-check-case-tenant-scope`,
+3. **Staging apply** (done 2026-10-16: apply run 78, read-live run 79; see Staging
+   acceptance above): `mode: apply`, `migration: sql87-resolve-check-case-tenant-scope`,
    `approved_commit`, `expected_executor_code_sha256`, `expected_live_definition_sha256:
    <the recorded hash>` (pre → `794dcd33…`), then `read-live` (`already_applied` true).
    Then check a staging check intake insert still gets a case.
 4. **Transfer:** dispatch `.github/workflows/sql53-temporary-transfer.yml` on main and copy
    `TARBALL_SHA256` from its log.
-5. **Production inspect (read-only)**, on the runner from the extracted tree:
+5. **Production inspect (read-only)** (done 2026-10-16, recorded in `production_inspect`), on the runner from the extracted tree:
 
    ```bash
    export AWS_ENDPOINT_URL_SECRETS_MANAGER=https://vpce-01649ea2cdb21a689-tp7fo1qj.secretsmanager.us-east-1.vpce.amazonaws.com
@@ -151,11 +180,16 @@ GitHub-hosted runners or Lambda.
 
    Expect `pre_state_recorded` false, `apply_preconditions_met` false and
    `precondition_failures` `[]`. Otherwise **stop**.
-6. **Production pin change (reviewed PR, owner-merged):** record the inspect in
-   `production_inspect` and copy `live_definition_sha256` into
-   `expected_live_definition_sha256`; after the staging apply, record
-   `staging_acceptance`, set `execute: true` and the owner's approval in `authorization`
-   (it must start with `Owner approved` / `owner-approved`).
+6. **Production pin change (reviewed PR, owner-merged).** First change (done): the
+   inspect recorded in `production_inspect` and `live_definition_sha256` copied into
+   `expected_live_definition_sha256`. Second change (done 2026-10-16, after the staging
+   apply run 78): the staging apply run recorded in `staging_acceptance` (`ok: true`,
+   `reference`, `basis`), `execute: true` and the owner's approval in `authorization` (it
+   must start with `Owner approved` / `owner-approved`; `"pending"` refuses even with
+   `execute: true`). No fresh production `--inspect` was run for that change: the
+   `--phase inspect` of step 7 is that fresh inspect, and it must report the same
+   `live_definition_sha256` and `precondition_failures` `[]` (the one-shot and the tool
+   refuse otherwise).
 7. **Run** (one-shot, `ops/production-sql-one-shot.md`): `--migration sql87
    --approval-scope sql87`, `--phase inspect`, then `--phase apply`. One transaction,
    `lock_timeout` 5s, advisory locks `sql87_mortgage_objects` and

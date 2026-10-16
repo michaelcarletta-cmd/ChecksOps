@@ -6,9 +6,12 @@
  * The column set is checked against the API source: every SET target of every UPDATE
  * the API issues on the table is granted, and nothing else. The committed pin records
  * the pre-state read by the production --inspect of 2026-10-16 (production_inspect and
- * expected_live_definition_sha256) but stays locked (authorization "pending", execute
- * false, no staging acceptance) and is checked to refuse with PRODUCTION_APPROVAL_REQUIRED;
- * the no-pre-state refusals use an explicit copy with nothing recorded (unrecorded()).
+ * expected_live_definition_sha256) and is execute-authorized: the owner's approval of
+ * 2026-10-16 in authorization, execute true and the guarded staging executor apply run 95
+ * in staging_acceptance. The refusals of the earlier locked state (authorization
+ * "pending", execute false, no staging acceptance) stay tested with an explicit copy
+ * (pending()); the no-pre-state refusals use an explicit copy with nothing recorded
+ * (unrecorded()).
  * The apply tests use an execute-authorized copy
  * with a placeholder staging acceptance and a recorded production_inspect. The
  * PostgreSQL 16 tests build the table owned by a non-superuser checksops_admin: a
@@ -53,6 +56,7 @@ import {
   sql89ProductionPostconditionFailures,
   sql89ProductionPreconditionFailures,
 } from '../../scripts/deployment-guard/lib/sql89-check-intake-column-update-production-apply.mjs';
+import { homeownerAuthorizationApproved } from '../../scripts/deployment-guard/lib/homeowner-sql-production-apply.mjs';
 import { ONE_SHOT_TOOLS } from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
 import { main as cliMain } from '../../scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs';
 import { pgSkipReason, startPg } from './helpers/stakeholder-policies-pg.mjs';
@@ -100,6 +104,15 @@ const authorizedPin = ({ live = PROD_PRE, acl = PROD_ACL, columns = ALL_COLUMNS,
   },
 });
 const PIN = authorizedPin();
+/** The locked state before the execute change (authorization "pending", execute false, no staging acceptance). */
+const PENDING_ACCEPTANCE = Object.freeze({ ok: false, reference: null, basis: 'Pending (test copy of the pre-authorization pin)' });
+const pending = (extra = {}) => Object.freeze({
+  ...COMMITTED,
+  authorization: 'pending',
+  execute: false,
+  staging_acceptance: { ...COMMITTED.staging_acceptance, ...PENDING_ACCEPTANCE },
+  ...extra,
+});
 /** The committed pin (or another) with no recorded pre-state or inspect, for the no-pre-state refusals. */
 const unrecorded = (pin = COMMITTED) => Object.freeze({
   ...pin,
@@ -119,6 +132,16 @@ const unrecorded = (pin = COMMITTED) => Object.freeze({
 const PRODUCTION_PRE = 'c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4';
 const PRODUCTION_ACL = '{checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}';
 const PRODUCTION_COLUMNS_SHA256 = '9d033c1773679cd362810d44baeb1acec65ec2c1bc85c1fb072fefeaf4c5d5f8';
+// The guarded staging SQL executor apply and read-live runs recorded in staging_acceptance
+// (main 4701eb23a, executor package deploy run 93, 38929385245).
+const STAGING_ACCEPTANCE = Object.freeze({
+  reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38929944170',
+  apply_run: '38929944170',
+  read_live_run: '38930128476',
+  rolled_back_run: '38921067055',
+  executor_code_sha256: 'R+dlQhnD4ZtTyPUfUWGFAn4efOJ8AxdBK2BYozdBbG8=',
+  migration: 'sql89-check-intake-column-update',
+});
 
 function manifest(overrides = {}, live = PROD_PRE) {
   const fingerprint = { sql: live };
@@ -151,6 +174,8 @@ function manifest(overrides = {}, live = PROD_PRE) {
 }
 const consumedPath = () => path.join(os.tmpdir(), `sql89-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 const neverConnect = async () => { throw new Error('should-not-connect'); };
+/** A manifest bound to the committed pin (its recorded production pre-state and staging acceptance). */
+const committedManifest = (overrides = {}) => manifest({ staging_acceptance: COMMITTED.staging_acceptance, ...overrides }, PRODUCTION_PRE);
 
 async function runCli(argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, input, deps = {} } = {}) {
   let file = null;
@@ -316,13 +341,42 @@ test('every SQL function in the repo that UPDATEs the table is SECURITY DEFINER 
 
 // --- pin ------------------------------------------------------------------------
 
-test('production pin: pending, execute false, the recorded production pre-state, no staging acceptance; bound to the staging pin and the production RDS', () => {
+test('production pin: execute-authorized after staging acceptance, the recorded production pre-state; bound to the staging pin and the production RDS', () => {
   assert.equal(SQL89_PRODUCTION_PIN_REL, 'ops/deployment-guard/sql89-check-intake-column-update-production-apply.json');
   assert.equal(COMMITTED.migration, 'sql89');
-  assert.equal(COMMITTED.authorization, 'pending');
-  assert.equal(COMMITTED.execute, false);
-  assert.equal(COMMITTED.staging_acceptance.ok, false);
-  assert.equal(COMMITTED.staging_acceptance.reference, null);
+  assert.equal(COMMITTED.execute, true);
+  // The owner's approval of 2026-10-16, in the "Owner approved …" convention the tool requires.
+  assert.match(COMMITTED.authorization, /^Owner approved 2026-10-16 /);
+  assert.equal(homeownerAuthorizationApproved(COMMITTED), true);
+  assert.ok(COMMITTED.authorization.includes('"approve the SQL 89 production unlock after the pin PR"'));
+  assert.ok(COMMITTED.authorization.includes('"approve the SQL 89 production apply after unlock"'));
+  assert.ok(COMMITTED.authorization.includes(`production ${PRODUCTION_PRE} -> ${COMMITTED.intended_replacement_sha256}`));
+  // It approves merging the execute pin, not a run.
+  assert.match(COMMITTED.authorization, /takes effect only when the owner reviews and merges this change/);
+  assert.match(COMMITTED.authorization, /run-time approval/);
+  assert.match(COMMITTED.authorization, /authorization phrase/);
+  assert.match(COMMITTED.authorization, /one_use_id/);
+  // The guarded staging SQL executor apply run (staging pre-state -> the intended post-state).
+  assert.equal(COMMITTED.staging_acceptance.ok, true);
+  assert.equal(COMMITTED.staging_acceptance.reference, STAGING_ACCEPTANCE.reference);
+  assert.match(COMMITTED.staging_acceptance.reference, /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/actions\/runs\/\d+$/);
+  const { basis, production_differs: differs } = COMMITTED.staging_acceptance;
+  assert.ok(basis.startsWith(`Guarded staging SQL executor apply of ${STAGING_ACCEPTANCE.migration}, `));
+  assert.ok(basis.includes(`(${STAGING_ACCEPTANCE.apply_run})`));
+  assert.ok(basis.includes('read-live run #') && basis.includes(`(${STAGING_ACCEPTANCE.read_live_run})`));
+  assert.ok(basis.includes(`${STAGING_PIN.expected_live_definition_sha256} -> ${COMMITTED.intended_replacement_sha256}`));
+  assert.ok(basis.includes(STAGING_ACCEPTANCE.executor_code_sha256));
+  assert.ok(basis.includes(`(${STAGING_ACCEPTANCE.rolled_back_run})`) && /rolled back \(UNRELATED_MUTATION\)/.test(basis));
+  assert.match(basis, /result applied/);
+  assert.match(basis, /already_applied true/);
+  assert.match(basis, /precondition_failures \[\]/);
+  assert.match(basis, /43 updatable columns/);
+  assert.match(differs, /pre-states differ/);
+  assert.ok(differs.includes(STAGING_PIN.expected_live_definition_sha256));
+  assert.ok(differs.includes(PRODUCTION_PRE));
+  assert.ok(differs.includes(COMMITTED.intended_replacement_sha256));
+  // The note keeps the recorded pre-state and names the change that set execute true.
+  assert.match(COMMITTED.production_inspect.note, /SQL 87\/89 production pins: execute-authorized after staging acceptance/);
   // The pre-state recorded from the read-only production inspect, not code-derived.
   const inspect = COMMITTED.production_inspect;
   assert.equal(COMMITTED.expected_live_definition_sha256, PRODUCTION_PRE);
@@ -559,7 +613,7 @@ test('production preconditions and postconditions', () => {
 
 // --- evaluation and CLI -----------------------------------------------------------------
 
-test('the state the production inspect of 2026-10-16 read meets every precondition of the committed pin; only authorization, execute and staging acceptance refuse', async () => {
+test('the state the production inspect of 2026-10-16 read meets every precondition of the committed pin; the pending copy refuses only for authorization, execute and staging acceptance', async () => {
   const inspect = COMMITTED.production_inspect;
   const production = state({
     table_owner: 'checksops_admin',
@@ -590,13 +644,15 @@ test('the state the production inspect of 2026-10-16 read meets every preconditi
   // Drift since the inspect still refuses.
   assert.ok(sql89ProductionPreconditionFailures({ ...production, table_acl: PROD_ACL }, COMMITTED).includes('table_acl_as_inspected'));
   assert.ok(sql89ProductionPreconditionFailures({ ...production, updatable_columns: [...SQL89_COLUMNS] }, COMMITTED).includes('updatable_columns_as_inspected'));
-  // The manifest bound to the recorded pre-state: refused for authorization (pending), then
-  // for execute false and the missing staging acceptance; with only those three changed it is allowed.
+  // The manifest bound to the recorded pre-state, on the pending copy: refused for authorization
+  // (pending), then for execute false and the missing staging acceptance; with only those three
+  // changed it is allowed.
+  const locked = pending();
   const exact = manifest({}, PRODUCTION_PRE);
-  const committed = await evaluateSql89ProductionApply({ ...exact, staging_acceptance: PIN.staging_acceptance }, { root: ROOT });
-  assert.equal(committed.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  assert.match(committed.message, /authorization is not an owner approval/);
-  const approvedOnly = { ...COMMITTED, authorization: 'Owner approved test fixture' };
+  const pendingPin = await evaluateSql89ProductionApply({ ...exact, staging_acceptance: PIN.staging_acceptance }, { root: ROOT, pin: locked });
+  assert.equal(pendingPin.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.match(pendingPin.message, /authorization is not an owner approval/);
+  const approvedOnly = { ...locked, authorization: 'Owner approved test fixture' };
   assert.equal((await evaluateSql89ProductionApply(exact, { root: ROOT, pin: approvedOnly })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const accepted = { ...approvedOnly, staging_acceptance: PIN.staging_acceptance };
   assert.equal((await executeSql89ProductionApply(exact, { root: ROOT, pin: accepted, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.GUARD_APPLY_FORBIDDEN);
@@ -606,23 +662,47 @@ test('the state the production inspect of 2026-10-16 read meets every preconditi
   assert.equal(allowed.details.expected_live_definition_sha256, PRODUCTION_PRE);
 });
 
-test('evaluation: the committed (pending) pin refuses; it is bound to a recorded pre-state, an owner approval, the staging acceptance and the production gate', async () => {
-  const committed = await evaluateSql89ProductionApply(manifest(), { root: ROOT });
-  assert.equal(committed.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  assert.match(committed.message, /authorization is not an owner approval/);
+test('the committed (execute-authorized) pin evaluates with a matching manifest and reaches the connection only after every pre-connect check', async () => {
+  // Loaded from disk (no pin passed) and passed explicitly.
+  for (const opts of [{ root: ROOT }, { root: ROOT, pin: COMMITTED }]) {
+    const allowed = await evaluateSql89ProductionApply(committedManifest(), opts);
+    assert.equal(allowed.ok, true, JSON.stringify(allowed));
+    assert.equal(allowed.details.sql89_production_apply_allowed, true);
+    assert.equal(allowed.details.migration, 'sql89');
+    assert.equal(allowed.details.expected_live_definition_sha256, PRODUCTION_PRE);
+    assert.equal(allowed.details.intended_replacement_sha256, COMMITTED.intended_replacement_sha256);
+    assert.equal(allowed.details.staging_acceptance, STAGING_ACCEPTANCE.reference);
+  }
+  // The committed pin still binds the manifest: another staging reference, the fixture
+  // pre-state, the post-state as live hash or another workstream's approval refuse.
+  assert.equal((await evaluateSql89ProductionApply(committedManifest({ staging_acceptance: { ok: true, reference: STAGING_REF } }), { root: ROOT })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await evaluateSql89ProductionApply(manifest({ staging_acceptance: COMMITTED.staging_acceptance }), { root: ROOT })).code, CODES.SQL_COLLISION);
+  assert.equal((await evaluateSql89ProductionApply(committedManifest({ live_definition_sha256: INTENDED }), { root: ROOT })).code, CODES.SQL_COLLISION);
+  assert.equal((await evaluateSql89ProductionApply(committedManifest({ approval: { approved: true, workstream_id: 'another' } }), { root: ROOT })).ok, false);
+  // The committed pin with execute false (as after a record-and-retire change) refuses the apply.
+  assert.equal((await executeSql89ProductionApply(committedManifest(), { root: ROOT, pin: { ...COMMITTED, execute: false }, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.GUARD_APPLY_FORBIDDEN);
+  // The apply passes its pre-connect checks on the committed pin and stops only at the (test) connection.
+  const passes = await executeSql89ProductionApply(committedManifest(), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() }).catch((error) => error);
+  assert.match(String(passes?.message || ''), /should-not-connect/);
+});
+
+test('evaluation: a pending pin refuses; it is bound to a recorded pre-state, an owner approval, the staging acceptance and the production gate', async () => {
+  const pendingPin = await evaluateSql89ProductionApply(committedManifest(), { root: ROOT, pin: pending() });
+  assert.equal(pendingPin.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.match(pendingPin.message, /authorization is not an owner approval/);
   // No pre-state recorded (null), whatever the manifest says.
   const noPre = await evaluateSql89ProductionApply(manifest(), { root: ROOT, pin: unrecorded(PIN) });
   assert.equal(noPre.code, CODES.SQL_COLLISION);
   assert.match(noPre.message, /no recorded pre-apply live definition hash/);
   const nullManifest = await evaluateSql89ProductionApply(manifest({}, null), { root: ROOT, pin: unrecorded(PIN) });
   assert.equal(nullManifest.code, CODES.SQL_COLLISION, 'null == null is never a match');
-  const pending = await evaluateSql89ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, authorization: 'pending' } });
-  assert.equal(pending.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  const pendingAuthorization = await evaluateSql89ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, authorization: 'pending' } });
+  assert.equal(pendingAuthorization.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   for (const authorization of ['', null, 'approved', 'pending ']) {
     const result = await evaluateSql89ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, authorization } });
     assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED, String(authorization));
   }
-  const noStaging = await evaluateSql89ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, staging_acceptance: COMMITTED.staging_acceptance } });
+  const noStaging = await evaluateSql89ProductionApply(manifest(), { root: ROOT, pin: { ...PIN, staging_acceptance: PENDING_ACCEPTANCE } });
   assert.equal(noStaging.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const allowed = await evaluateSql89ProductionApply(manifest(), { root: ROOT, pin: PIN });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
@@ -640,21 +720,21 @@ test('evaluation: the committed (pending) pin refuses; it is bound to a recorded
   assert.equal(otherApproval.ok, false);
 });
 
-test('CLI with the committed pin refuses before the guard; without a receipt the guard refuses; credential flags are refused; nothing connects', async () => {
+test('CLI with the committed pin and no receipt refuses at the guard; a pending pin refuses before the guard; credential flags are refused; nothing connects', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sql89-prod-noreceipt-'));
   try {
     const input = path.join(dir, 'sql89.json');
-    fs.writeFileSync(input, JSON.stringify(manifest()));
+    fs.writeFileSync(input, JSON.stringify(committedManifest()));
     for (const extra of [{ CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, {}]) {
       const result = spawnSync(process.execPath, [CLI, '--apply', '--input', input], {
         encoding: 'utf8',
         env: { PATH: process.env.PATH, HOME: dir, ...extra },
       });
+      // Evaluation passes on the committed pin; without a receipt the guard stops it (exit 2)
+      // before the secret is resolved or any connection is made. The env flag does not bypass it.
       const out = `${result.stdout}${result.stderr}`;
-      assert.notEqual(result.status, 0, out);
-      // The committed pin has its pre-state recorded but authorization "pending".
-      assert.match(out, /PRODUCTION_APPROVAL_REQUIRED/);
-      assert.match(out, /authorization is not an owner approval/);
+      assert.equal(result.status, 2, out);
+      assert.match(out, /DEPLOYMENT_GUARD_REQUIRED/);
       assert.doesNotMatch(out, /secretsmanager|ECONNREFUSED|rolled back/i);
     }
     for (const flag of ['--password=x', '--database-url=postgresql://u:p@h/d', '--host=h', '--user=u', '--secret-arn=x']) {
@@ -666,6 +746,12 @@ test('CLI with the committed pin refuses before the guard; without a receipt the
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+  // A pending pin (authorization "pending", execute false) stops before the guard is asked.
+  const locked = await runCli(['--apply'], { input: committedManifest(), deps: { pin: pending(), enforceScriptGuard: () => { throw new Error('guard-called'); } } });
+  assert.equal(locked.spent, 0);
+  assert.match(locked.out, /PRODUCTION_APPROVAL_REQUIRED/);
+  assert.match(locked.out, /authorization is not an owner approval/);
+  assert.doesNotMatch(locked.out, /guard-called|should-not-connect/);
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'sql89-prod-noreceipt-root-'));
   try {
     const noReceipt = await runCli(['--apply'], {
@@ -689,11 +775,12 @@ test('CLI does not spend the receipt on a wrong phrase, execute false, a pending
   const notExecutable = await runCli(argv, { input: manifest(), deps: { pin: { ...PIN, execute: false }, enforceScriptGuard: () => owned() } });
   assert.equal(notExecutable.spent, 0);
   assert.match(notExecutable.out, /execute is not authorized/);
-  const pending = await runCli(argv, { input: manifest(), deps: { pin: { ...PIN, authorization: 'pending' }, enforceScriptGuard: () => { throw new Error('guard-called'); } } });
-  assert.equal(pending.spent, 0);
-  assert.match(pending.out, /PRODUCTION_APPROVAL_REQUIRED/);
-  assert.doesNotMatch(pending.out, /guard-called/);
-  const committed = await runCli(argv, { input: manifest(), deps: { pin: COMMITTED, enforceScriptGuard: () => { throw new Error('guard-called'); } } });
+  const pendingAuthorization = await runCli(argv, { input: manifest(), deps: { pin: { ...PIN, authorization: 'pending' }, enforceScriptGuard: () => { throw new Error('guard-called'); } } });
+  assert.equal(pendingAuthorization.spent, 0);
+  assert.match(pendingAuthorization.out, /PRODUCTION_APPROVAL_REQUIRED/);
+  assert.doesNotMatch(pendingAuthorization.out, /guard-called/);
+  // A pending pin (pre-authorization state) stops before the guard is even asked.
+  const committed = await runCli(argv, { input: manifest(), deps: { pin: pending(), enforceScriptGuard: () => { throw new Error('guard-called'); } } });
   assert.equal(committed.spent, 0);
   assert.match(committed.out, /PRODUCTION_APPROVAL_REQUIRED/);
   assert.doesNotMatch(committed.out, /guard-called/);
@@ -715,7 +802,7 @@ test('CLI does not spend the receipt on a wrong phrase, execute false, a pending
   const arbitrary = await runCli(argv, { input: { ...manifest(), sql_text: 'GRANT UPDATE (tenant_id) ON public.check_intake_items TO checksops' }, deps: { pin: PIN, enforceScriptGuard: () => owned() } });
   assert.equal(arbitrary.spent, 0);
   assert.match(arbitrary.out, /arbitrary SQL text is forbidden/);
-  for (const r of [phrase, notExecutable, pending, committed, noPreState, wrongOwner, reused, noFlag, arbitrary]) assert.doesNotMatch(r.out, /should-not-connect/);
+  for (const r of [phrase, notExecutable, pendingAuthorization, committed, noPreState, wrongOwner, reused, noFlag, arbitrary]) assert.doesNotMatch(r.out, /should-not-connect/);
 });
 
 test('the real guard: a staging receipt cannot authorize production; a production receipt is spent once and a refusing DB rolls back', async () => {
@@ -762,16 +849,19 @@ test('the real guard: a staging receipt cannot authorize production; a productio
   }
 });
 
-test('apply refuses before connecting: the committed pin, no pre-state, a pending authorization, execute false, no phrase, no single-use id', async () => {
+test('apply refuses before connecting: a pending pin, no pre-state, a pending authorization, execute false, no phrase, no single-use id', async () => {
   const run = (overrides, pin = PIN) => executeSql89ProductionApply(manifest(overrides), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() });
+  assert.equal((await run({}, pending({ expected_live_definition_sha256: PROD_PRE }))).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await run({}, pending({ expected_live_definition_sha256: PROD_PRE, staging_acceptance: PIN.staging_acceptance }))).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  const pendingExact = await executeSql89ProductionApply(committedManifest(), { root: ROOT, pin: pending(), connect: neverConnect, consumedPath: consumedPath() });
+  assert.equal(pendingExact.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  // The committed pin is bound to the recorded production pre-state, not the fixture's.
   const committed = await executeSql89ProductionApply(manifest(), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() });
-  assert.equal(committed.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  const committedExact = await executeSql89ProductionApply(manifest({ staging_acceptance: PIN.staging_acceptance }, PRODUCTION_PRE), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() });
-  assert.equal(committedExact.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal(committed.code, CODES.SQL_COLLISION);
   assert.equal((await run({}, unrecorded(PIN))).code, CODES.SQL_COLLISION);
   assert.equal((await run({}, { ...PIN, authorization: 'pending' })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({}, { ...PIN, execute: false })).code, CODES.GUARD_APPLY_FORBIDDEN);
-  assert.equal((await run({}, { ...PIN, staging_acceptance: COMMITTED.staging_acceptance })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await run({}, { ...PIN, staging_acceptance: PENDING_ACCEPTANCE })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({ authorization_phrase: 'yes' })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({}, { ...PIN, authorization_phrase: '' })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({ one_use_id: 'x' })).code, CODES.INVALID_MANIFEST);
@@ -994,8 +1084,8 @@ test('PostgreSQL 16, production-like (table-level arwd): inspect is read-only; a
     const connect = connectWith('checksops_admin');
     const inspect = (c = connect, pin = PIN) => inspectSql89Production({ connect: c, pin, root: ROOT });
 
-    // A pin with no recorded pre-state (as before the production inspect was recorded): the inspect reads but refuses.
-    const committed = await inspect(connect, unrecorded());
+    // The pre-authorization pin with no recorded pre-state (as before the production inspect was recorded): the inspect reads but refuses.
+    const committed = await inspect(connect, unrecorded(pending()));
     assert.equal(committed.ok, true, JSON.stringify(committed));
     assert.equal(committed.details.live_definition_sha256, PROD_PRE);
     assert.equal(committed.details.live_matches_expected, false);

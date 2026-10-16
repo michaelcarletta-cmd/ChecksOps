@@ -33,13 +33,41 @@ SELECT, INSERT and DELETE are not touched; no data changes. Afterwards SQL 71's 
 (amount updatable, no table-level UPDATE) holds in production, so SQL 71 itself is not
 applied there (its tool refuses on `no_table_level_update`).
 
-**Status:** tooling only. The pin
+**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 95);
+not applied to production. The pin
 `ops/deployment-guard/sql89-check-intake-column-update-production-apply.json` is
-`authorization: "pending"`, `execute: false`, `expected_live_definition_sha256: null`,
-`staging_acceptance.ok: false`. It authorizes nothing. The staging executor pin
-(`sql89-check-intake-column-update`) records the staging pre-state `6810985b…` from
-read-live run 82; a fresh staging read-live with this executor version should be reviewed
-(provenance and the new preconditions) before another staging apply.
+execute-authorized and waits for the owner's review and merge, then the one-shot run
+(step 4). The staging executor pin (`sql89-check-intake-column-update`) records the
+staging pre-state `6810985b…` from read-live run 82; the production pin records the
+production pre-state
+`c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4` from the read-only
+`--inspect` of 2026-10-16 (SSM `0435c387-8f9b-405d-9463-f1cc81124d36`, main `4701eb23`)
+in `expected_live_definition_sha256` and `production_inspect`.
+
+**Staging acceptance** (recorded in the production pin's `staging_acceptance`): apply run
+95, `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38929944170`, on main
+`4701eb23a` with the executor package `CodeSha256`
+`R+dlQhnD4ZtTyPUfUWGFAn4efOJ8AxdBK2BYozdBbG8=` (deploy run 93, `38929385245`):
+`6810985b…` -> `2a1d45f9…`, result applied. Read-live run 96 (`38930128476`):
+`already_applied` true, `precondition_failures` `[]`, 43 updatable columns,
+`update_grant_sources` checksops only (column-level), no table-level UPDATE. The earlier
+staging apply run 85 (`38921067055`) of the first SQL 89 file rolled back
+(`UNRELATED_MUTATION`), fixed by #1008. The pre-states differ: staging had column-level
+grants (31 columns, via checksops and authenticated), production has table-level UPDATE
+for checksops only (73 columns); the same file bytes run in both and the post-state
+`2a1d45f9…` is the same.
+
+**Production pin:** `execute: true`; `authorization` records the owner's approval of
+2026-10-16 ("approve the SQL 89 production unlock after the pin PR"; "approve the SQL 89
+production apply after unlock"): production apply of SQL 89 after the staging acceptance
+above. It takes effect only when the owner reviews and merges that change, and it does not
+itself run or approve a run: the apply still needs the owner's run-time approval for that
+workstream, a production-sql receipt owning the pinned file, the authorization phrase and
+a new `one_use_id`. `expected_live_definition_sha256` stays the recorded production
+pre-state (`c22a75fa…`), and the post-state, column set, source sha256 and rules are
+unchanged. With a pending authorization, `execute: false` or no staging acceptance,
+evaluate and apply refuse with `PRODUCTION_APPROVAL_REQUIRED` (or `GUARD_APPLY_FORBIDDEN`
+for execute); the tests keep those refusals on an explicit pending copy of the pin.
 
 Tool: `scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs`.
 Registered in the one-shot as `--migration sql89` (`ops/production-sql-one-shot.md`).
@@ -170,8 +198,8 @@ any route).
 | state | hash |
 |---|---|
 | post-state (`intended_replacement_sha256`, both environments): no table-level UPDATE, exactly the 43 columns | `2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8` |
-| production pre-state | recorded from the production inspect (table-level UPDATE, every column) |
-| staging pre-state | recorded from the staging read-live |
+| production pre-state (`expected_live_definition_sha256`, `--inspect` of 2026-10-16): table-level UPDATE, all 73 columns | `c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4` |
+| staging pre-state (staging pin, read-live run 82): column grants | `6810985b26778774a633ad17f02b634ec7c19b956d0f5302251fd1d2d05b0c7f` |
 
 File sha256: `d91ab6576a2bda45f2a9b0d21fc98241dd8ee20adc24bd34ecb68fc09f92c28a` (authored in
 commit `70518bbd7`). The file may hold only comments and exactly the four statements
@@ -189,7 +217,8 @@ the pinned `rds_host`; a password, URL, host or user flag is refused.
 
 ## Steps (each needs owner approval)
 
-0. **Staging.** Deploy main's executor, then read-live with migration
+0. **Staging** (done 2026-10-16: apply run 95, read-live run 96; see Staging acceptance
+   above). Deploy main's executor, then read-live with migration
    `sql89-check-intake-column-update`. Record its `live_definition_sha256` as the staging
    pin's `expected_live_definition_sha256` in a reviewed change, review
    `columns_to_grant` / `columns_losing_update`, apply in staging, verify `already_applied`
@@ -230,11 +259,16 @@ the pinned `rds_host`; a password, URL, host or user flag is refused.
    another role, which the REVOKE would not remove). An ADMIN-only membership (no INHERIT,
    no SET) confers no privileges and is not counted. Expect `columns_losing_update` = the 30 columns outside the
    list and `columns_to_grant` = `[]`.
-2. **Record the pre-state** in a reviewed pin change: `live_definition_sha256` into
+2. **Record the pre-state** (done 2026-10-16) in a reviewed pin change: `live_definition_sha256` into
    `expected_live_definition_sha256`, and `table_owner`, `table_acl`, `updatable_columns`,
    `updatable_columns_sha256` into `production_inspect`. This does not authorize execution.
-3. **Authorize** in a later reviewed pin change: the owner's approval in `authorization`,
-   the staging acceptance reference and `execute: true`.
+3. **Authorize** in a later reviewed pin change (done 2026-10-16, after the staging apply
+   run 95): the owner's approval in `authorization` (it must start with `Owner approved` /
+   `owner-approved`; `"pending"` refuses even with `execute: true`), the staging
+   acceptance (`ok: true`, `reference`, `basis`, `production_differs`) and `execute:
+   true`. No fresh production `--inspect` was run for that change: the `--phase inspect`
+   of step 4 is that fresh inspect, and it must report the same `live_definition_sha256`
+   and `precondition_failures` `[]` (the one-shot and the tool refuse otherwise).
 4. **Apply** through the one-shot with the owner's run-time approval for this workstream:
    `node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql89 --approval-scope sql89 --phase inspect|apply …`.
 
