@@ -85,19 +85,49 @@ export const RESET_TOTP_STEPUP_SQL = `SELECT s.id, s.tenant_id
        JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
       WHERE mine.user_id = $1::uuid
         AND theirs.user_id = $2::uuid)
+   AND NOT EXISTS (
+     SELECT 1
+       FROM public.financial_stepup_log used
+      WHERE used.user_id = s.user_id
+        AND used.action_key = $6
+        AND (used.metadata->>'stepup_id') = s.id::text)
  ORDER BY s.created_at DESC
  LIMIT 1`;
 
+/**
+ * Single use: a reset consumes its step-up. The consumption is an
+ * append-only financial_stepup_log row (the table is insert-only) whose
+ * source is not app_financial_totp, so it can never itself satisfy a step-up.
+ * It commits with the reset; a failed reset leaves the step-up unused.
+ */
+export const TEAM_RESET_TOTP_CONSUMED_ACTION = 'team.reset_totp.consumed';
+
+/** One reset at a time per caller, so two requests cannot share one step-up. */
+export const RESET_TOTP_STEPUP_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtextextended('team-reset-totp:' || $1::uuid::text, 0))`;
+
+export const RESET_TOTP_CONSUME_SQL = `INSERT INTO public.financial_stepup_log
+  (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
+VALUES ($1::uuid, $2::uuid, $3, 'totp', true, $4::jsonb)`;
+
 const loadResetStepUp = async (client, { userId, targetUserId, loginSession }) => {
   if (!loginSession) return null;
-  return (await safeQuery(client, RESET_TOTP_STEPUP_SQL, [
+  await client.query(RESET_TOTP_STEPUP_LOCK_SQL, [userId]);
+  return (await client.query(RESET_TOTP_STEPUP_SQL, [
     userId,
     targetUserId,
     TEAM_RESET_TOTP_ACTION,
     loginSession,
     TEAM_RESET_TOTP_STEPUP_MAX_AGE_MINUTES,
+    TEAM_RESET_TOTP_CONSUMED_ACTION,
   ])).rows[0] || null;
 };
+
+const consumeResetStepUp = (client, { userId, targetUserId, stepUp }) => client.query(RESET_TOTP_CONSUME_SQL, [
+  userId,
+  stepUp.tenant_id,
+  TEAM_RESET_TOTP_CONSUMED_ACTION,
+  JSON.stringify({ stepup_id: String(stepUp.id), target_user_id: targetUserId, source: 'team_reset_totp_consumed' }),
+]);
 
 export const softwareTokenEnrolled = (user = {}) => {
   const list = user.UserMFASettingList || user.userMFASettingList || [];
@@ -137,6 +167,7 @@ export const runAdminResetTotp = async ({
       spoofFieldsIgnored: spoof,
     };
   }
+  await consumeResetStepUp(client, { userId: mapping.application_user_id, targetUserId: userId, stepUp });
 
   const account = (await safeQuery(
     client,

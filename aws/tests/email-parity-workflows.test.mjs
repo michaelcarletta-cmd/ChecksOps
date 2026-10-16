@@ -599,6 +599,11 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
           result: () => ({ rows: [{ id: TENANT, name: 'Acme', custom_domain: null }] }),
         },
         {
+          // SQL 90 DEFINER: creates the invitee profile and identity link.
+          match: (sql) => sql.includes('aws_invite_create_user_identity'),
+          result: () => ({ rows: [{ user_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] }),
+        },
+        {
           match: (sql) => sql.includes('FROM public.profiles'),
           result: () => ({ rows: [] }),
         },

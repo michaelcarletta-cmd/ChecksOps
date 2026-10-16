@@ -14,7 +14,9 @@ import { test } from 'node:test';
 import { USER_ROLES_SQL } from '../functions/api/identity.mjs';
 import { executeSafeWriteRpc, TENANT_MEMBER_SQL } from '../functions/api/workflow-rpc.mjs';
 import {
+  FIRST_INVITE_LOCK_SQL,
   IDENTITY_BY_SUB_SQL,
+  INVITE_CREATE_USER_IDENTITY_SQL,
   PLATFORM_OWNER_EMAIL,
   runDeleteUser,
   runHireMortgageAgent,
@@ -193,6 +195,18 @@ const teamClient = ({
       queries.push({ sql, params });
       if (sql === TENANT_MEMBER_COUNT_SQL) return { rows: [{ member_count: tenantMemberCount }] };
       if (sql === IDENTITY_BY_SUB_SQL) return { rows: linkedUserId ? [{ application_user_id: linkedUserId }] : [] };
+      if (sql === FIRST_INVITE_LOCK_SQL) return { rows: [{}] };
+      if (/^(SAVEPOINT|ROLLBACK TO SAVEPOINT|RELEASE SAVEPOINT) tenant_invite_identity$/.test(sql)) return { rows: [] };
+      if (sql === INVITE_CREATE_USER_IDENTITY_SQL) {
+        // SQL 90 DEFINER: an existing login keeps its user; the platform owner is refused.
+        if (failProfileInsert) {
+          throw Object.assign(new Error('null value in column "email" of relation "profiles"'), { code: '23502' });
+        }
+        if (linkedUserId && ownerUserIds.includes(linkedUserId)) {
+          throw Object.assign(new Error('platform_owner_not_invitable'), { code: '42501' });
+        }
+        return { rows: [{ user_id: linkedUserId || '99999999-9999-4999-8999-999999999999' }] };
+      }
       if (sql === USER_IS_PLATFORM_OWNER_SQL) {
         assert.equal(params[1], PLATFORM_OWNER_EMAIL);
         return { rows: ownerUserIds.includes(params[0]) ? [{ '?column?': 1 }] : [] };
@@ -275,6 +289,12 @@ test('invite: the platform owner makes only the first invite of a tenant with no
     assert.deepEqual(cognitoCalls, []);
     assert.equal(client.queries.some((q) => /INSERT INTO public\.(tenant_users|profiles)/.test(q.sql)), false);
   }
+  // The count runs under the per-tenant first-invite lock (same key as SQL 90).
+  const client = teamClient({ platformOwner: true, tenantMemberCount: 0 });
+  assert.equal((await invite(client)).ok, true);
+  const sqls = client.queries.map((q) => q.sql);
+  assert.ok(sqls.indexOf(FIRST_INVITE_LOCK_SQL) >= 0 && sqls.indexOf(FIRST_INVITE_LOCK_SQL) < sqls.indexOf(TENANT_MEMBER_COUNT_SQL));
+  assert.match(FIRST_INVITE_LOCK_SQL, /pg_advisory_xact_lock\(hashtextextended\('first-invite:' \|\| \$1::uuid::text, 0\)\)/);
   assert.match(TENANT_MEMBER_COUNT_SQL, /count\(\*\)::int AS member_count/);
   assert.doesNotMatch(TENANT_MEMBER_COUNT_SQL, /role/);
 });
@@ -314,13 +334,19 @@ test('invite: an existing Cognito login keeps its linked user; the link is never
   for (const q of client.queries) {
     assert.doesNotMatch(q.sql, /DO UPDATE/);
   }
-  // With no link, a profile is created and linked with ON CONFLICT DO NOTHING.
+  // With no link, the SQL 90 DEFINER creates the profile and link (the API
+  // never writes profiles or identity_accounts itself).
   const fresh = teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }] });
   const created = await invite(fresh);
   assert.equal(created.ok, true);
-  const link = fresh.queries.find((q) => /INSERT INTO public\.identity_accounts/.test(q.sql));
-  assert.match(link.sql, /ON CONFLICT \(cognito_sub\) DO NOTHING/);
-  assert.doesNotMatch(link.sql, /DO UPDATE|SET application_user_id/);
+  const definer = fresh.queries.find((q) => q.sql === INVITE_CREATE_USER_IDENTITY_SQL);
+  assert.deepEqual(definer.params, [TENANT, 'new@example.com', 'New Person', COGNITO_SUB]);
+  assert.equal(fresh.queries.some((q) => /INSERT INTO public\.(profiles|identity_accounts)/.test(q.sql)), false);
+  // The definer and the membership run inside one savepoint, released on success.
+  const order = fresh.queries.map((q) => q.sql).filter((sql) => /tenant_invite_identity|aws_invite_create_user_identity|INSERT INTO public\.tenant_users/.test(sql));
+  assert.deepEqual(order.map((sql) => sql.split('(')[0].trim().split(/\s+/).slice(0, 3).join(' ')), [
+    'SAVEPOINT tenant_invite_identity', 'SELECT public.aws_invite_create_user_identity', 'INSERT INTO public.tenant_users', 'RELEASE SAVEPOINT tenant_invite_identity',
+  ]);
 });
 
 test('invite: a failed step after creating the Cognito user deletes it again and fails the request', async () => {
@@ -331,6 +357,21 @@ test('invite: a failed step after creating the Cognito user deletes it again and
     assert.equal(result.statusCode, 500);
     assert.equal(result.cognitoCleanup, 'deleted');
     assert.deepEqual(cognitoCalls.map(([target]) => target), ['AdminCreateUser', 'AdminDeleteUser']);
+  }
+  // Created here, but an identity mapping points at it by the time of cleanup:
+  // the login is kept.
+  {
+    const cognitoCalls = [];
+    const client = teamClient({
+      memberships: [{ tenant_id: TENANT, role: 'viewer' }], failMembershipInsert: true,
+      linkedUserId: '77777777-7777-4777-8777-777777777777',
+    });
+    const kept = await invite(client, {}, { cognitoCalls });
+    assert.equal(kept.ok, false);
+    assert.equal(kept.cognitoCleanup, 'kept_linked');
+    assert.equal(cognitoCalls.some(([target]) => target === 'AdminDeleteUser'), false);
+    const sqls = client.queries.map((q) => q.sql);
+    assert.ok(sqls.indexOf('ROLLBACK TO SAVEPOINT tenant_invite_identity') < sqls.lastIndexOf(IDENTITY_BY_SUB_SQL));
   }
   // A login that existed before this request is never deleted.
   const cognitoCalls = [];
@@ -571,5 +612,25 @@ test('homeowner intro leads and contractor profiles: the owner or a teammate; a 
     });
     assert.equal(ok.error, undefined, `${table} ${JSON.stringify(ok)}`);
     assert.equal(teammate.queries.some((q) => update.test(q.sql)), true, table);
+  }
+});
+
+test('moov-platform-bank add never targets a tenant account, even for the platform owner', async () => {
+  for (const [body, status, error] of [
+    [{ action: 'add', tenant_id: TENANT }, 403, 'tenant_target_refused'],
+    [{ action: 'add', tenantId: TENANT }, 403, 'tenant_target_refused'],
+    [{ action: 'add' }, 409, 'platform_bank_add_unavailable'],
+  ]) {
+    const queries = [];
+    const result = await platformBank.run({
+      client: { query: async (sql) => { queries.push(sql); return { rows: [{ is_owner: true }] }; } },
+      body: { ...body, routing_number: '011000015', account_number: '123456789', holder_name: 'X' },
+      // ctx.tenantId may still resolve from a membership: add must ignore it.
+      ctx: { tenantId: TENANT, isPlatformOwner: true, moovContext: { sandboxPlatformAccountId: 'acct' } },
+      fetchImpl: async () => { throw new Error('no provider call expected'); },
+    });
+    assert.equal(result.statusCode, status, JSON.stringify(body));
+    assert.equal(result.error, error);
+    assert.equal(queries.some((sql) => /payment_provider/.test(sql)), false);
   }
 });

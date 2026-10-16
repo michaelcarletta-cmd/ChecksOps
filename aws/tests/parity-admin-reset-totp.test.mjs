@@ -3,7 +3,10 @@ import { test } from 'node:test';
 import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app-services.mjs';
 import {
   MFA_RESET_PREFERENCE,
+  RESET_TOTP_CONSUME_SQL,
+  RESET_TOTP_STEPUP_LOCK_SQL,
   RESET_TOTP_STEPUP_SQL,
+  TEAM_RESET_TOTP_CONSUMED_ACTION,
   RESET_TOTP_TARGET_IS_PLATFORM_OWNER_SQL,
   RESET_TOTP_TEAMMATE_SQL,
   TEAM_RESET_TOTP_ACTION,
@@ -61,17 +64,36 @@ const STEPPED_UP = [{ user_id: CALLER, tenant_id: TENANT, action_key: 'team.rese
  */
 const teamClient = ({
   memberships = [], userRoles = [], master = false, account = null, stepUps = STEPPED_UP, targetIsOwner = false,
+  consumed = [], locks = [],
 } = {}) => sqlClient([
   {
-    // RESET_TOTP_STEPUP_SQL: the caller's own step-up, this login, a tenant shared with the target.
+    match: (sql) => sql === RESET_TOTP_STEPUP_LOCK_SQL.replace(/\s+/g, ' '),
+    result: ([caller]) => { locks.push(caller); return { rows: [{}] }; },
+  },
+  {
+    // RESET_TOTP_CONSUME_SQL: single use, an append-only consumption row.
+    match: (sql) => sql === RESET_TOTP_CONSUME_SQL.replace(/\s+/g, ' '),
+    result: ([caller, tenantId, action, metadata]) => {
+      assert.equal(action, TEAM_RESET_TOTP_CONSUMED_ACTION);
+      const parsed = JSON.parse(metadata);
+      assert.notEqual(parsed.source, 'app_financial_totp');
+      consumed.push({ caller, tenantId, ...parsed });
+      return { rows: [], rowCount: 1 };
+    },
+  },
+  {
+    // RESET_TOTP_STEPUP_SQL: the caller's own unused step-up, this login, a tenant shared with the target.
     match: (sql) => sql.includes('financial_stepup_log'),
-    result: ([caller, target, action, login, minutes]) => {
+    result: ([caller, target, action, login, minutes, consumedAction]) => {
       assert.equal(minutes, TEAM_RESET_TOTP_STEPUP_MAX_AGE_MINUTES);
+      assert.equal(consumedAction, TEAM_RESET_TOTP_CONSUMED_ACTION);
+      assert.equal(locks.at(-1), caller);
       const shared = (tenantId) => memberships.some((m) => m.user_id === caller && m.tenant_id === tenantId)
         && memberships.some((m) => m.user_id === target && m.tenant_id === tenantId);
-      const row = stepUps.find((s) => s.user_id === caller && s.action_key === action
-        && s.login_session === login && shared(s.tenant_id));
-      return { rows: row ? [{ id: 'stepup-1', tenant_id: row.tenant_id }] : [] };
+      const row = stepUps.find((s, i) => s.user_id === caller && s.action_key === action
+        && s.login_session === login && shared(s.tenant_id)
+        && !consumed.some((c) => c.caller === caller && c.stepup_id === (s.id || `stepup-${i}`)));
+      return { rows: row ? [{ id: row.id || `stepup-${stepUps.indexOf(row)}`, tenant_id: row.tenant_id }] : [] };
     },
   },
   {
@@ -276,4 +298,30 @@ test('step-up endpoint binds team.reset_totp to the caller\'s tenant and this lo
     client, mapping: { application_user_id: CALLER }, claims: { sub: COGNITO_SUB }, body: { action_key: 'team.reset_totp', tenant_id: TENANT }, spoof: {},
   });
   assert.equal(unbound.error, 'login_session_unbound');
+});
+
+test('a team.reset_totp step-up is single use: one code, one reset', async () => {
+  assert.match(RESET_TOTP_STEPUP_SQL, /NOT EXISTS \(\s*SELECT 1\s*FROM public\.financial_stepup_log used/);
+  assert.match(RESET_TOTP_STEPUP_LOCK_SQL, /pg_advisory_xact_lock\(hashtextextended\('team-reset-totp:' \|\| \$1::uuid::text, 0\)\)/);
+  const SECOND = '99999999-9999-4999-8999-999999999999';
+  const consumed = [];
+  const client = teamClient({
+    memberships: [...TEAM, { user_id: SECOND, tenant_id: TENANT, role: 'viewer' }],
+    consumed,
+  });
+  const cognitoClient = { send: async (command) => (command.constructor.name === 'AdminGetUserCommand' ? { Username: 'u' } : {}) };
+  const first = await reset(client, { cognitoClient, poolId: 'p' });
+  assert.equal(first.ok, true);
+  assert.equal(consumed.length, 1);
+  assert.equal(consumed[0].target_user_id, USER_ID);
+  assert.equal(consumed[0].tenantId, TENANT);
+  // The same step-up does not authorize another reset, of the same or another teammate.
+  for (const target of [USER_ID, SECOND]) {
+    const again = await runAdminResetTotp({
+      mapping: { application_user_id: CALLER }, claims: CLAIMS, body: { user_id: target }, spoof: {}, client, cognitoClient, poolId: 'p',
+    });
+    assert.equal(again.statusCode, 401, target);
+    assert.equal(again.error, 'totp_required');
+  }
+  assert.equal(consumed.length, 1);
 });

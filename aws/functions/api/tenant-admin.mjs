@@ -97,6 +97,21 @@ const tenantMemberCount = async (client, tenantId) => {
   return Number.isInteger(n) ? n : null;
 };
 
+/**
+ * Serializes the platform owner's first invite per tenant for the rest of the
+ * transaction, so two concurrent first invites cannot both see zero members.
+ * SQL 90's aws_first_invite_allowed takes the same lock.
+ */
+export const FIRST_INVITE_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtextextended('first-invite:' || $1::uuid::text, 0))`;
+
+/**
+ * Creates (or finds) the invitee's profile and Cognito identity link (SQL 90,
+ * SECURITY DEFINER): checks the caller is a member of the tenant or the
+ * platform owner making a locked first invite, refuses the platform owner as
+ * invitee and never re-points an existing cognito_sub. Returns the user id.
+ */
+export const INVITE_CREATE_USER_IDENTITY_SQL = `SELECT public.aws_invite_create_user_identity($1::uuid, $2::text, $3::text, $4::text)::text AS user_id`;
+
 /** True when the application user is the platform owner (identity or profile email). */
 export const USER_IS_PLATFORM_OWNER_SQL = `SELECT 1
   FROM public.identity_accounts ia
@@ -126,7 +141,16 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
  * a failed invite leaves no login behind. Best-effort: the Lambda role may not
  * hold cognito-idp:AdminDeleteUser; the response says whether it worked.
  */
-const deleteCreatedCognitoUser = async (adminCognito, email) => {
+const deleteCreatedCognitoUser = async (adminCognito, email, client, cognitoSub) => {
+  // Re-check right before deleting: never delete a login that an identity
+  // mapping (committed by another request) points at.
+  try {
+    if (cognitoSub && (await client.query(IDENTITY_BY_SUB_SQL, [String(cognitoSub)])).rows.length) {
+      return 'kept_linked';
+    }
+  } catch {
+    return 'kept_unverified';
+  }
   try {
     await adminCognito('AdminDeleteUser', { UserPoolId: POOL_ID(), Username: email });
     return 'deleted';
@@ -162,6 +186,7 @@ export const runTenantInviteUser = async ({
     if (!(await isPlatformOwner(client))) {
       return { ok: false, statusCode: 403, error: 'Not authorized — must be a member of this company', spoofFieldsIgnored: spoof };
     }
+    await client.query(FIRST_INVITE_LOCK_SQL, [tenantId]);
     if ((await tenantMemberCount(client, tenantId)) !== 0) {
       return {
         ok: false,
@@ -220,51 +245,50 @@ export const runTenantInviteUser = async ({
     }
   }
 
-  // Every step below runs in this request's one transaction (withIdentity):
-  // a failure returns ok:false, which rolls back the profile, the identity
-  // link and the membership together. A Cognito user created by this request
-  // is deleted again on failure.
-  const failInvite = async (statusCode, error, message) => ({
-    ok: false,
-    statusCode,
-    error,
-    message: message ? String(message).slice(0, 240) : undefined,
-    cognitoCleanup: isNewUser ? await deleteCreatedCognitoUser(adminCognito, email) : 'not_created_by_this_request',
-    spoofFieldsIgnored: spoof,
-  });
+  // Every step below runs in this request's one transaction (withIdentity),
+  // inside a savepoint: a failure rolls the identity link and membership back
+  // to the savepoint (and the request returns ok:false, so withIdentity rolls
+  // back the rest). A Cognito user created by this request is then deleted,
+  // unless an identity mapping still points at it.
+  const SAVEPOINT = 'tenant_invite_identity';
+  let inSavepoint = false;
+  const failInvite = async (statusCode, error, message) => {
+    if (inSavepoint) {
+      try { await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT}`); } catch { /* the request rolls back anyway */ }
+      inSavepoint = false;
+    }
+    return {
+      ok: false,
+      statusCode,
+      error,
+      message: message ? String(message).slice(0, 240) : undefined,
+      cognitoCleanup: isNewUser
+        ? await deleteCreatedCognitoUser(adminCognito, email, client, cognitoSub)
+        : 'not_created_by_this_request',
+      spoofFieldsIgnored: spoof,
+    };
+  };
   if (!cognitoSub) return failInvite(502, 'cognito_sub_missing');
 
   let appUserId = null;
   try {
-    // An existing Cognito login keeps the application user it is linked to:
-    // the invite never re-points a cognito_sub to another user.
-    appUserId = (await client.query(IDENTITY_BY_SUB_SQL, [String(cognitoSub)])).rows[0]?.application_user_id || null;
-    if (!appUserId) {
-      appUserId = (await client.query(
-        `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
-        [email],
-      )).rows[0]?.id || null;
-      if (!appUserId) {
-        appUserId = randomUUID();
-        await client.query(
-          `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
-           VALUES ($1::uuid, $2, $3, now(), now())`,
-          [appUserId, email, fullName],
-        );
-      }
-      if (String(cognitoSub) === String(appUserId)) return failInvite(500, 'unsafe_or_missing_cognito_sub');
-      await client.query(
-        `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
-         VALUES ($1, $2::uuid, $3, 'active', now(), now())
-         ON CONFLICT (cognito_sub) DO NOTHING`,
-        [cognitoSub, appUserId, email],
-      );
-      // A concurrent request may have linked this login first: use its user.
-      appUserId = (await client.query(IDENTITY_BY_SUB_SQL, [String(cognitoSub)])).rows[0]?.application_user_id || appUserId;
-    }
+    await client.query(`SAVEPOINT ${SAVEPOINT}`);
+    inSavepoint = true;
+    appUserId = (await client.query(
+      INVITE_CREATE_USER_IDENTITY_SQL,
+      [tenantId, email, fullName, String(cognitoSub)],
+    )).rows[0]?.user_id || null;
   } catch (error) {
+    if (error?.code === '42501' && /platform_owner/.test(String(error?.message || ''))) {
+      return failInvite(403, 'platform_owner_not_invitable', 'The platform owner cannot be added to a company');
+    }
+    if (error?.code === '42501') return failInvite(403, 'not_authorized', error?.message || error);
+    if (/identity_link_conflict/.test(String(error?.message || ''))) {
+      return failInvite(409, 'identity_link_conflict', 'This login is already linked to a different account.');
+    }
     return failInvite(500, 'invite_identity_failed', error?.message || error);
   }
+  if (!appUserId) return failInvite(500, 'invite_identity_failed');
 
   // The platform owner is never added to a tenant, whatever email the login uses.
   if (await userIsPlatformOwner(client, appUserId)) {
@@ -278,6 +302,8 @@ export const runTenantInviteUser = async ({
        ON CONFLICT DO NOTHING`,
       [randomUUID(), tenantId, appUserId],
     );
+    await client.query(`RELEASE SAVEPOINT ${SAVEPOINT}`);
+    inSavepoint = false;
   } catch (error) {
     // Fail loudly: an invite that did not create the membership is not an invite.
     return failInvite(500, 'tenant_membership_failed', error?.message || error);
@@ -667,7 +693,7 @@ export const runHireMortgageAgent = async ({
   await client.query(
     `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
      VALUES ($1::uuid, $2, $3, now(), now())
-     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, updated_at = now()`,
+     ON CONFLICT (id) DO NOTHING`,
     [appUserId, email, fullName],
   );
 
