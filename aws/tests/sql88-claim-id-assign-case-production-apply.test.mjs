@@ -5,12 +5,14 @@
  * on the SQL 84-87 engine.
  *
  * The committed pin records the pre-state read by the production --inspect of 2026-10-16
- * (expected_live_definition_sha256) and is execute-authorized in the same reviewed change:
- * the owner's approval of 2026-10-16 in authorization, execute true and the guarded staging
- * executor apply run in staging_acceptance. The refusals of the earlier locked state
- * (authorization "pending", execute false, no staging acceptance) stay tested with an
- * explicit copy (pending()); the no-pre-state refusals use an explicit copy with the hash
- * null (unrecorded()). The apply tests use an
+ * (expected_live_definition_sha256), the guarded staging executor apply run in
+ * staging_acceptance and the production apply of 2026-10-16 in applied; it is retired
+ * (execute false, authorization "Applied to production …"), so evaluate and apply refuse
+ * before any connection. The execute-authorized state it had before the apply (PR #1013)
+ * stays tested with an explicit copy (unlocked()); the refusals of the earlier locked state
+ * (authorization "pending", execute false, no staging acceptance) with another (pending());
+ * the no-pre-state refusals use an explicit copy with the hash null (unrecorded()). The
+ * apply tests use an
  * execute-authorized copy (authorized()) with a placeholder staging acceptance and,
  * against PostgreSQL, the pre-state the fixture's inspect read. The PostgreSQL fixture is
  * production-like: the real Supabase migrations, every object owned by the non-superuser
@@ -70,6 +72,18 @@ const pending = (extra = {}) => Object.freeze({
   execute: false,
   staging_acceptance: { ...COMMITTED.staging_acceptance, ...PENDING_ACCEPTANCE },
   ...extra,
+});
+/** The execute-authorized state before the apply (PR #1013), as an explicit copy of the retired pin. */
+const UNLOCKED_AUTHORIZATION = 'Owner approved 2026-10-16 ("approve the SQL 88 production unlock after the pin PR"; "approve the SQL 88 production apply after unlock"): test copy of the execute-authorized pin before its record-and-retire change';
+const unlocked = (extra = {}) => Object.freeze({ ...COMMITTED, authorization: UNLOCKED_AUTHORIZATION, execute: true, ...extra });
+// The production apply of 2026-10-16 recorded in applied (its one_use_id is spent).
+const APPLIED = Object.freeze({
+  apply_ssm_command_id: 'fed3d3ce-659c-49d8-b364-8c625a64cd88',
+  one_use_id: 'sql88-prod-e004a3aa-8242-4efb-b0f8-1b730c081b67',
+  workstream_id: 'prod-sql88-claim-id-assign-case-20261016',
+  source_commit: '44f42cf7ce48c5388058711022b7bc2d62e3f025',
+  tarball_sha256: 'caa963c9b0ebc67a3c5ad0d0b00ce2c7f8ae0f801b44d1c1d4365ac754e44bf5',
+  steps: ['pin', 'source', 'inspect', 'contracts', 'manifest', 'source-recheck-before-preflight', 'preflight', 'evaluate', 'source-recheck-before-apply', 'apply', 'post-apply-inspect'],
 });
 /** The committed pin (or another) with no recorded pre-state, for the no-pre-state refusals. */
 const unrecorded = (pin = COMMITTED) => Object.freeze({ ...pin, expected_live_definition_sha256: null });
@@ -148,21 +162,46 @@ async function runCli(argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' }, i
   return { out: writes.join(''), spent };
 }
 
-test('the production pin is execute-authorized after staging acceptance: the owner approval, execute true, the recorded production pre-state, the staging apply run; it names SQL 88 exactly and the production RDS; registered for the one-shot', () => {
+test('the production pin is applied and retired: execute false, the 2026-10-16 apply recorded in applied, the recorded production pre-state, the staging apply run; it names SQL 88 exactly and the production RDS; registered for the one-shot', () => {
   assert.equal(COMMITTED.id, 'sql88-claim-id-assign-case-tenant-scope-production-apply');
   assert.equal(COMMITTED.migration, 'sql88');
-  assert.equal(COMMITTED.execute, true);
-  // The owner's approval of 2026-10-16, in the "Owner approved …" convention the tool requires.
-  assert.match(COMMITTED.authorization, /^Owner approved 2026-10-16 /);
-  assert.equal(mortgageAuthorizationApproved(COMMITTED), true);
+  assert.equal(COMMITTED.execute, false);
+  // Retired: the authorization is no longer an owner approval the tool accepts.
+  assert.match(COMMITTED.authorization, /^Applied to production on 2026-10-16; execute is false again/);
+  assert.equal(mortgageAuthorizationApproved(COMMITTED), false);
+  assert.match(COMMITTED.authorization, /That approval covered that run only$/);
+  assert.ok(COMMITTED.authorization.includes(`workstream ${APPLIED.workstream_id}`));
   assert.ok(COMMITTED.authorization.includes('"approve the SQL 88 production unlock after the pin PR"'));
   assert.ok(COMMITTED.authorization.includes('"approve the SQL 88 production apply after unlock"'));
-  assert.ok(COMMITTED.authorization.includes(`production ${PRODUCTION_PRE} -> ${COMMITTED.intended_replacement_sha256}`));
-  // It approves merging the execute pin, not a run.
-  assert.match(COMMITTED.authorization, /takes effect only when the owner reviews and merges this change/);
-  assert.match(COMMITTED.authorization, /run-time approval/);
-  assert.match(COMMITTED.authorization, /authorization phrase/);
-  assert.match(COMMITTED.authorization, /one_use_id/);
+  // The production apply of 2026-10-16 (guarded production SQL one-shot).
+  const applied = COMMITTED.applied;
+  assert.equal(applied.date, '2026-10-16');
+  assert.equal(applied.started_at, '2026-10-16T17:48:32Z');
+  assert.equal(applied.finished_at, '2026-10-16T17:48:45Z');
+  assert.equal(applied.result, 'applied');
+  assert.equal(applied.runner, 'i-0c35557c4e5385406');
+  assert.equal(applied.apply_ssm_command_id, APPLIED.apply_ssm_command_id);
+  assert.equal(applied.source_commit, APPLIED.source_commit);
+  assert.deepEqual(applied.source_tarball, { file: `source-${APPLIED.source_commit}.tar.gz`, sha256: APPLIED.tarball_sha256 });
+  assert.equal(applied.workstream_id, APPLIED.workstream_id);
+  assert.equal(applied.operator, 'michaelcarletta-cmd');
+  assert.equal(applied.owner_approval, 'approve the SQL 88 production apply after unlock');
+  assert.equal(applied.one_use_id, APPLIED.one_use_id);
+  assert.equal(applied.one_use_id_consumed, true);
+  assert.deepEqual(applied.steps, APPLIED.steps.map((step) => ({ step, ok: true })));
+  assert.deepEqual(applied.receipt, { result: 'applied', before_hash: PRODUCTION_PRE, after_hash: COMMITTED.intended_replacement_sha256 });
+  assert.equal(applied.post_apply_inspect.read_only, true);
+  assert.equal(applied.post_apply_inspect.already_applied, true);
+  assert.deepEqual(applied.post_apply_inspect.precondition_failures, []);
+  assert.deepEqual(applied.post_apply_inspect.function_states, {
+    tg_claim_id_assign_case: 'intended',
+    resolve_check_case: 'tenant_scoped',
+    tg_check_intake_assign_case: 'case_original',
+    tg_loss_draft_assign_case: 'case_original',
+  });
+  assert.equal(applied.post_apply_inspect.cross_tenant_links_total_before, 0);
+  assert.equal(applied.post_apply_inspect.cross_tenant_links_total_after, 0);
+  assert.match(COMMITTED.production_evidence['2026-10-16 apply'], /execute is false/);
   // The pre-state recorded from the read-only production inspect, not code-derived.
   const inspect = COMMITTED.production_inspect;
   assert.equal(COMMITTED.expected_live_definition_sha256, PRODUCTION_PRE);
@@ -305,8 +344,10 @@ test('the pre-authorization (pending) pin is refused before any connection: no p
   assert.equal(pendingApproval.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const run = (overrides, pin = authorized()) => sql88.executeSql88ProductionApply(manifest(authorized(), overrides), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() });
   assert.equal((await run({}, pending({ expected_live_definition_sha256: FIXTURE_PRE }))).code, CODES.PRODUCTION_APPROVAL_REQUIRED, 'a pending pin');
-  // The committed pin is bound to the recorded production pre-state, not the fixture's.
-  assert.equal((await sql88.executeSql88ProductionApply(manifest(authorized()), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.SQL_COLLISION, 'the committed pin');
+  // The execute-authorized copy is bound to the recorded production pre-state, not the fixture's.
+  assert.equal((await sql88.executeSql88ProductionApply(manifest(authorized()), { root: ROOT, pin: unlocked(), connect: neverConnect, consumedPath: consumedPath() })).code, CODES.SQL_COLLISION, 'the unlocked copy');
+  // The committed (retired) pin refuses whatever the manifest says.
+  assert.equal((await sql88.executeSql88ProductionApply(manifest(authorized()), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED, 'the committed pin');
   assert.equal((await run({}, unrecorded(authorized()))).code, CODES.SQL_COLLISION, 'no pre-state');
   assert.equal((await run({}, { ...authorized(), staging_acceptance: PENDING_ACCEPTANCE })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await run({}, { ...authorized(), execute: false })).code, CODES.GUARD_APPLY_FORBIDDEN);
@@ -325,9 +366,33 @@ test('the pre-authorization (pending) pin is refused before any connection: no p
   assert.match(String(passes?.message || ''), /should-not-connect/);
 });
 
-test('the committed (execute-authorized) pin evaluates with a matching manifest and reaches the connection only after every pre-connect check', async () => {
-  // Loaded from disk (no pin passed) and passed explicitly.
+test('the committed (retired) pin refuses before any connection, also with the spent one_use_id; flipping execute alone does not revive it', async () => {
   for (const opts of [{ root: ROOT }, { root: ROOT, pin: COMMITTED }]) {
+    const refused = await sql88.evaluateSql88ProductionApply(manifest(COMMITTED), opts);
+    assert.equal(refused.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+    assert.match(refused.message, /authorization is not an owner approval/);
+    assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED), { ...opts, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  }
+  // execute true on the retired pin is still refused: its authorization records the spent run.
+  const flipped = { ...COMMITTED, execute: true };
+  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(COMMITTED), { root: ROOT, pin: flipped })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED), { root: ROOT, pin: flipped, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  // An owner approval with execute false (the retired pin's execute) refuses the apply.
+  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED), { root: ROOT, pin: { ...unlocked(), execute: false }, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.GUARD_APPLY_FORBIDDEN);
+  // The spent one_use_id is refused as a replay, even on an execute-authorized copy.
+  const spentFile = consumedPath();
+  fs.writeFileSync(spentFile, JSON.stringify({ consumed: [APPLIED.one_use_id] }));
+  try {
+    const replay = await sql88.executeSql88ProductionApply(manifest(COMMITTED, { one_use_id: APPLIED.one_use_id }), { root: ROOT, pin: unlocked(), connect: neverConnect, consumedPath: spentFile });
+    assert.equal(replay.code, CODES.RECEIPT_REUSED);
+    assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED, { one_use_id: APPLIED.one_use_id }), { root: ROOT, connect: neverConnect, consumedPath: spentFile })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  } finally {
+    fs.rmSync(spentFile, { force: true });
+  }
+});
+
+test('the execute-authorized copy (the pin before its record-and-retire change) evaluates with a matching manifest and reaches the connection only after every pre-connect check', async () => {
+  for (const opts of [{ root: ROOT, pin: unlocked() }]) {
     const allowed = await sql88.evaluateSql88ProductionApply(manifest(COMMITTED), opts);
     assert.equal(allowed.ok, true, JSON.stringify(allowed));
     assert.equal(allowed.details.sql88_production_apply_allowed, true);
@@ -336,33 +401,34 @@ test('the committed (execute-authorized) pin evaluates with a matching manifest 
     assert.equal(allowed.details.intended_replacement_sha256, COMMITTED.intended_replacement_sha256);
     assert.equal(allowed.details.staging_acceptance, STAGING_ACCEPTANCE.reference);
   }
-  // The committed pin still binds the manifest: another staging reference, the placeholder
+  // The copy still binds the manifest: another staging reference, the placeholder
   // pre-state, staging's pre-state, the post-state as live hash or another workstream's approval refuse.
-  const otherRef = await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { staging_acceptance: { ok: true, reference: STAGING_REF } }), { root: ROOT });
+  const pin = unlocked();
+  const otherRef = await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { staging_acceptance: { ok: true, reference: STAGING_REF } }), { root: ROOT, pin });
   assert.equal(otherRef.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(authorized()), { root: ROOT })).code, CODES.SQL_COLLISION);
-  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { live_definition_sha256: STAGING.expected_live_definition_sha256 }), { root: ROOT })).code, CODES.SQL_COLLISION);
-  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { live_definition_sha256: COMMITTED.intended_replacement_sha256 }), { root: ROOT })).code, CODES.SQL_COLLISION);
-  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { approval: { approved: true, workstream_id: 'another' } }), { root: ROOT })).ok, false);
-  // A wrong phrase (SQL 87's) or no single-use id refuses on the committed pin too.
-  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED, { authorization_phrase: SQL87_PIN.authorization_phrase }), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED, { one_use_id: 'x' }), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.INVALID_MANIFEST);
+  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(authorized()), { root: ROOT, pin })).code, CODES.SQL_COLLISION);
+  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { live_definition_sha256: STAGING.expected_live_definition_sha256 }), { root: ROOT, pin })).code, CODES.SQL_COLLISION);
+  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { live_definition_sha256: COMMITTED.intended_replacement_sha256 }), { root: ROOT, pin })).code, CODES.SQL_COLLISION);
+  assert.equal((await sql88.evaluateSql88ProductionApply(manifest(COMMITTED, { approval: { approved: true, workstream_id: 'another' } }), { root: ROOT, pin })).ok, false);
+  // A wrong phrase (SQL 87's) or no single-use id refuses on the copy too.
+  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED, { authorization_phrase: SQL87_PIN.authorization_phrase }), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED, { one_use_id: 'x' }), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.INVALID_MANIFEST);
   // SQL 87's spent one_use_id is not a fresh id for SQL 88 either: once in SQL 88's registry it is a replay.
   const spentFile = consumedPath();
   fs.writeFileSync(spentFile, JSON.stringify({ consumed: [SQL87_PIN.applied.one_use_id] }));
   try {
-    assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED, { one_use_id: SQL87_PIN.applied.one_use_id }), { root: ROOT, connect: neverConnect, consumedPath: spentFile })).code, CODES.RECEIPT_REUSED);
+    assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED, { one_use_id: SQL87_PIN.applied.one_use_id }), { root: ROOT, pin, connect: neverConnect, consumedPath: spentFile })).code, CODES.RECEIPT_REUSED);
   } finally {
     fs.rmSync(spentFile, { force: true });
   }
-  // The committed pin with execute false (as after a record-and-retire change) refuses the apply.
-  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED), { root: ROOT, pin: { ...COMMITTED, execute: false }, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.GUARD_APPLY_FORBIDDEN);
-  // The apply passes its pre-connect checks on the committed pin and stops only at the (test) connection.
-  const passes = await sql88.executeSql88ProductionApply(manifest(COMMITTED), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() }).catch((error) => error);
+  // With execute false (as after the record-and-retire change) the apply is refused.
+  assert.equal((await sql88.executeSql88ProductionApply(manifest(COMMITTED), { root: ROOT, pin: { ...pin, execute: false }, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.GUARD_APPLY_FORBIDDEN);
+  // The apply passes its pre-connect checks on the copy and stops only at the (test) connection.
+  const passes = await sql88.executeSql88ProductionApply(manifest(COMMITTED), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() }).catch((error) => error);
   assert.match(String(passes?.message || ''), /should-not-connect/);
 });
 
-test('CLI: the committed pin with no receipt refuses at the guard; a pending pin refuses at evaluation; with an authorized copy no receipt is DEPLOYMENT_GUARD_REQUIRED; the receipt is never spent on a wrong phrase, execute false, a wrong owner, a reused id, a missing guard flag or arbitrary SQL', async () => {
+test('CLI: the committed (retired) pin refuses at evaluation and an execute-authorized copy with no receipt at the guard; a pending pin refuses at evaluation; with an authorized copy no receipt is DEPLOYMENT_GUARD_REQUIRED; the receipt is never spent on a wrong phrase, execute false, a wrong owner, a reused id, a missing guard flag or arbitrary SQL', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sql88-prod-noreceipt-'));
   try {
     const input = path.join(dir, 'sql88.json');
@@ -371,14 +437,33 @@ test('CLI: the committed pin with no receipt refuses at the guard; a pending pin
       encoding: 'utf8',
       env: { PATH: process.env.PATH, HOME: dir, CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' },
     });
-    // Evaluation passes on the committed pin; without a receipt the guard stops it (exit 2)
-    // before the secret is resolved or any connection is made. The env flag does not bypass it.
+    // The committed pin is retired: evaluation refuses before the guard, the secret or any
+    // connection. The env flag does not bypass it.
     const out = `${result.stdout}${result.stderr}`;
-    assert.equal(result.status, 2, out);
-    assert.match(out, /DEPLOYMENT_GUARD_REQUIRED/);
+    assert.notEqual(result.status, 0, out);
+    assert.match(out, /PRODUCTION_APPROVAL_REQUIRED/);
+    assert.match(out, /authorization is not an owner approval/);
     assert.doesNotMatch(out, /secretsmanager|ECONNREFUSED|rolled back/i);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+  // The retired pin read from disk stops before the guard is asked.
+  const retired = await runCli(['--apply'], { input: manifest(COMMITTED), deps: { enforceScriptGuard: () => { throw new Error('guard-called'); } } });
+  assert.equal(retired.spent, 0);
+  assert.match(retired.out, /PRODUCTION_APPROVAL_REQUIRED/);
+  assert.doesNotMatch(retired.out, /guard-called|should-not-connect/);
+  // The execute-authorized copy with no receipt stops at the guard (DEPLOYMENT_GUARD_REQUIRED).
+  const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sql88-prod-unlocked-noreceipt-'));
+  try {
+    const unlockedNoReceipt = await runCli(['--apply'], {
+      input: manifest(COMMITTED),
+      deps: { pin: unlocked(), enforceScriptGuard: (spec) => refuseUnguardedDeploy(spec, { root: emptyRoot, env: { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1' } }) },
+    });
+    assert.equal(unlockedNoReceipt.spent, 0);
+    assert.match(unlockedNoReceipt.out, /DEPLOYMENT_GUARD_REQUIRED/);
+    assert.doesNotMatch(unlockedNoReceipt.out, /should-not-connect/);
+  } finally {
+    fs.rmSync(emptyRoot, { recursive: true, force: true });
   }
   // A pending pin (authorization "pending", execute false) stops before the guard is asked.
   const locked = await runCli(['--apply'], { input: manifest(COMMITTED), deps: { pin: pending(), enforceScriptGuard: () => { throw new Error('guard-called'); } } });
