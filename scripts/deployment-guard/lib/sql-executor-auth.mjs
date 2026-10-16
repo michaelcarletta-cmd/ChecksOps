@@ -1682,14 +1682,17 @@ export const AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE = mortgagePin(
 );
 // SQL 88 (aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql): the trigger
 // function tg_claim_id_assign_case() scoped to the row's tenant, EXECUTE left to its owner.
-// The staging pre-state is not recorded yet (null until a read-live has been recorded in
-// a reviewed pin change); apply refuses until then.
 export const AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE = mortgagePin(
   'sql88',
   'aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql',
   '88_claim_id_assign_case_tenant_scope',
   '57216e00aa0faba83a663d33531896b1782a5a56636d924b79ff06b1923cb316',
-  null,
+  // Read-live run 88 (run id 38923636741), 2026-10-16, main 117512ef1 (executor deploy
+  // run 87): tg_claim_id_assign_case case_original (PUBLIC EXECUTE), resolve_check_case
+  // tenant_scoped, case_owner_safe true, other_callers total 0; precondition_failures [].
+  // cross_tenant_links total 5 (check_cases_claim 1, homeowner_ledger_events_case 4),
+  // informational; the owner chose to continue the staging apply.
+  '57ba25f2ea69adb1a6de030cb42034d4dd1e1c0741a48a96e79afe6d90aae387',
   '15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e',
   // The commit that authored the file bytes (this branch's first commit).
   '6e903be3bfefbad9ac7f28fc024ebc0875e38c06',
