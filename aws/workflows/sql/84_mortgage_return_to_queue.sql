@@ -3,6 +3,8 @@
 -- (Cursor SQL 47, aws/isolated/mortgage-agent-compensation/sql/
 -- 47_mortgage_agent_compensation.sql, sha256 bdbdccbc...). Does NOT rewrite or
 -- reapply SQL 47.
+-- Refuses to run (55000 sql47_prerequisite_missing) when the SQL 47 objects it
+-- uses are absent.
 --
 -- Provenance: Cursor SQL 48 (aws/isolated/mortgage-agent-compensation/sql/
 -- 48_return_mortgage_request_to_queue.sql, sha256 be6c7125..., branch
@@ -23,6 +25,11 @@
 --     exclusion row is deleted: the request would then be returnable.
 --   * REVOKE ALL ... FROM PUBLIC before the grant (SQL 48 left the default
 --     PUBLIC EXECUTE in place; the body check still refused non-admins).
+--   * The tenant billing event copied into the audit row must be non-voided
+--     and belong to the request's tenant.
+--   * GATE 0 detects the existing per-check unique index exactly (see below)
+--     instead of with ILIKE, and refuses, listing the check ids, when
+--     duplicate non-voided per-check Mortgage Ops events already exist.
 --
 -- Does NOT:
 --   GRANT UPDATE ON TABLE mortgage_handling_requests
@@ -34,40 +41,100 @@
 --   implement A-to-B raw reassignment (the next agent must Accept normally)
 --   reference any provider money rail
 --
--- GATE 0 (kept from SQL 48): staging already has
---   check_billing_events_mortgage_ops_check_uidx
---   UNIQUE (check_intake_item_id)
---   WHERE event_type IN (mortgage_ops_initial, mortgage_ops_additional_check)
---     AND check_intake_item_id IS NOT NULL
--- The designed fallback unique index is created only when that protection is
--- absent, so a re-Accept after Return cannot add a second tenant charge. It is
--- an index, not a billing write; CREATE UNIQUE INDEX fails (and the whole file
--- rolls back) if duplicate per-check Mortgage Ops events already exist.
+-- GATE 0 (kept from SQL 48, made exact): a re-Accept after Return must not
+-- add a second tenant charge, so a UNIQUE index on
+-- check_billing_events (check_intake_item_id) for Mortgage Ops events must
+-- exist. An existing index counts only when it is a valid, non-expression
+-- UNIQUE index whose single key column is check_intake_item_id and that is
+-- either named check_billing_events_mortgage_ops_check_uidx (the staging
+-- index) or has exactly one of the two predicates below (PostgreSQL's
+-- normalized text):
+--   staging:  event_type IN (initial, additional) AND check_intake_item_id IS NOT NULL
+--   fallback: the same AND status IS DISTINCT FROM 'voided'
+-- Otherwise the fallback index check_billing_events_one_mortgage_ops_per_check
+-- is created, after refusing (23505 duplicate_mortgage_ops_billing_events,
+-- listing the check ids) if duplicate non-voided per-check events exist. It
+-- is an index, not a billing write.
+--
+-- Transactions: like main's other aws/workflows/sql files this has no
+-- BEGIN/COMMIT; the guarded SQL executor runs it inside one transaction, so
+-- any refusal or failure keeps nothing. Run by hand, use
+-- psql --single-transaction.
 --
 -- Idempotent: safe to run more than once.
 
 DO $$
+DECLARE
+  v_missing text[];
+BEGIN
+  SELECT array_agg(name ORDER BY name) INTO v_missing
+  FROM (
+    VALUES
+      ('public.mortgage_agent_compensation_entries', to_regclass('public.mortgage_agent_compensation_entries')::oid),
+      ('public.mortgage_agent_compensation_exclusions', to_regclass('public.mortgage_agent_compensation_exclusions')::oid),
+      ('public.mortgage_agent_compensation_audit', to_regclass('public.mortgage_agent_compensation_audit')::oid),
+      ('public.mortgage_handling_requests', to_regclass('public.mortgage_handling_requests')::oid),
+      ('public.check_billing_events', to_regclass('public.check_billing_events')::oid),
+      ('public.is_platform_owner()', to_regprocedure('public.is_platform_owner()')::oid),
+      ('auth.uid()', to_regprocedure('auth.uid()')::oid)
+  ) AS req(name, obj)
+  WHERE obj IS NULL;
+  IF v_missing IS NOT NULL THEN
+    RAISE EXCEPTION 'sql47_prerequisite_missing: SQL 84 needs SQL 47 (and the identity helpers) applied first; missing %',
+      array_to_string(v_missing, ', ')
+      USING ERRCODE = '55000';
+  END IF;
+END
+$$;
+
+DO $$
+DECLARE
+  v_dupes text;
 BEGIN
   IF EXISTS (
     SELECT 1
-    FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND tablename = 'check_billing_events'
-      AND indexdef ILIKE '%UNIQUE%'
-      AND indexdef ILIKE '%check_intake_item_id%'
-      AND indexdef ILIKE '%mortgage_ops_initial%'
-      AND indexdef ILIKE '%mortgage_ops_additional_check%'
-      AND indexdef NOT ILIKE '%(tenant_id, check_intake_item_id, event_type)%'
-      AND indexdef NOT ILIKE '%(check_intake_item_id, event_type)%'
+    FROM pg_index i
+    JOIN pg_class c ON c.oid = i.indexrelid
+    JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+    WHERE i.indrelid = 'public.check_billing_events'::regclass
+      AND i.indisunique
+      AND i.indisvalid
+      AND i.indnkeyatts = 1
+      AND i.indexprs IS NULL
+      AND a.attname = 'check_intake_item_id'
+      AND (
+        c.relname = 'check_billing_events_mortgage_ops_check_uidx'
+        OR pg_get_expr(i.indpred, i.indrelid) IN (
+          '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (check_intake_item_id IS NOT NULL))',
+          '((event_type = ANY (ARRAY[''mortgage_ops_initial''::text, ''mortgage_ops_additional_check''::text])) AND (status IS DISTINCT FROM ''voided''::text) AND (check_intake_item_id IS NOT NULL))'
+        )
+      )
   ) THEN
     RAISE NOTICE 'SQL 84: Mortgage Ops per-check unique already present';
-  ELSE
-    CREATE UNIQUE INDEX IF NOT EXISTS check_billing_events_one_mortgage_ops_per_check
-      ON public.check_billing_events (check_intake_item_id)
-      WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
-        AND status IS DISTINCT FROM 'voided'
-        AND check_intake_item_id IS NOT NULL;
+    RETURN;
   END IF;
+
+  SELECT string_agg(d.check_intake_item_id::text || ' (' || d.n || ')', ', ' ORDER BY d.check_intake_item_id)
+    INTO v_dupes
+  FROM (
+    SELECT e.check_intake_item_id, count(*) AS n
+    FROM public.check_billing_events e
+    WHERE e.event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+      AND e.status IS DISTINCT FROM 'voided'
+      AND e.check_intake_item_id IS NOT NULL
+    GROUP BY e.check_intake_item_id
+    HAVING count(*) > 1
+  ) d;
+  IF v_dupes IS NOT NULL THEN
+    RAISE EXCEPTION 'duplicate_mortgage_ops_billing_events: resolve before SQL 84; check_intake_item_id (events): %', v_dupes
+      USING ERRCODE = '23505';
+  END IF;
+
+  CREATE UNIQUE INDEX IF NOT EXISTS check_billing_events_one_mortgage_ops_per_check
+    ON public.check_billing_events (check_intake_item_id)
+    WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+      AND status IS DISTINCT FROM 'voided'
+      AND check_intake_item_id IS NOT NULL;
 END
 $$;
 
@@ -157,7 +224,9 @@ BEGIN
   SELECT e.id INTO v_event_id
   FROM public.check_billing_events e
   WHERE e.check_intake_item_id = v_req.check_intake_item_id
+    AND e.tenant_id = v_req.tenant_id
     AND e.event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+    AND e.status IS DISTINCT FROM 'voided'
   ORDER BY e.created_at
   LIMIT 1;
 

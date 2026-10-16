@@ -1,7 +1,9 @@
 /**
  * SQL 84 (aws/workflows/sql/84_mortgage_return_to_queue.sql) and SQL 85
  * (aws/workflows/sql/85_mortgage_compensation_adjust.sql): Mortgage Ops Return
- * to Queue and compensation Adjust, platform owner only.
+ * to Queue and compensation Adjust, platform owner only. SQL 86
+ * (aws/workflows/sql/86_mortgage_compensation_owner_only.sql): SQL 47's
+ * compensation admin helper becomes platform owner only.
  *
  * Static checks plus an isolated PostgreSQL 16 run on top of the real identity
  * helpers (aws/identity/sql/02_auth_uid_guc.sql), the real platform-owner
@@ -22,9 +24,11 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const SQL47_PATH = 'aws/tests/fixtures/mortgage-agent-compensation/47_mortgage_agent_compensation.sql';
 const SQL84_PATH = 'aws/workflows/sql/84_mortgage_return_to_queue.sql';
 const SQL85_PATH = 'aws/workflows/sql/85_mortgage_compensation_adjust.sql';
+const SQL86_PATH = 'aws/workflows/sql/86_mortgage_compensation_owner_only.sql';
 const SQL47 = read(SQL47_PATH);
 const SQL84 = read(SQL84_PATH);
 const SQL85 = read(SQL85_PATH);
+const SQL86 = read(SQL86_PATH);
 const AUTH_UID = read('aws/identity/sql/02_auth_uid_guc.sql');
 const OWNER_HELPERS = read('aws/rls/sql/10_owner_helpers_from_identity.sql');
 const stripComments = (sql) => sql.replace(/^\s*--.*$/gm, '');
@@ -61,7 +65,7 @@ test('SQL 84/85 are platform-owner-only forward migrations with no money side ef
   assert.match(SQL85, /^-- AWS: Mortgage Agent compensation Adjust \(SQL 85\)\./);
   for (const [name, sql, fn] of [
     ['84', SQL84, 'return_mortgage_handling_request_to_queue\\(uuid, text\\)'],
-    ['85', SQL85, 'adjust_mortgage_agent_compensation\\(uuid, integer, text, uuid, text\\)'],
+    ['85', SQL85, 'adjust_mortgage_agent_compensation\\(uuid, integer, text, uuid, text, text\\)'],
   ]) {
     const body = stripComments(sql);
     assert.doesNotMatch(body, /aws_can_admin_mortgage_agent_compensation/, `${name} admin helper`);
@@ -94,14 +98,56 @@ test('SQL 84/85 are platform-owner-only forward migrations with no money side ef
   // Every child is booked as a new 'earned' entry for the chosen pay period.
   assert.equal((b85.match(/v_period,\s+'earned',\s+v_parent\.id,/g) || []).length, 3);
   assert.match(b85, /CHECK \(action IN \('approve', 'pay', 'adjust'\)\)/);
+  // Children leave payment_batch_id NULL; the adjust batch links via audit.
+  assert.doesNotMatch(b85, /payment_batch_id/);
+  assert.match(b85, /DROP FUNCTION IF EXISTS public\.adjust_mortgage_agent_compensation\(uuid, integer, text, uuid, text\);/);
+  assert.match(b85, /NOT COALESCE\(public\.aws_is_active_mortgage_agent\(p_counterparty_agent_id\), false\)/);
+  assert.match(b85, /RAISE EXCEPTION 'adjustment_exceeds_parent'/);
+  assert.match(b85, /RAISE EXCEPTION 'adjustment_exceeds_net'/);
+  assert.match(b85, /RAISE EXCEPTION 'idempotency_key_conflict'/);
+  assert.match(b85, /CREATE UNIQUE INDEX IF NOT EXISTS mortgage_agent_compensation_batches_adjust_idem_uidx\s+ON public\.mortgage_agent_compensation_batches \(idempotency_key\)\s+WHERE action = 'adjust' AND idempotency_key IS NOT NULL;/);
+  // GATE 0 is exact, not ILIKE; the audit's billing lookup is tenant-bound and non-voided.
+  assert.doesNotMatch(b84, /ILIKE/);
+  assert.match(b84, /AND e\.tenant_id = v_req\.tenant_id\s+AND e\.event_type IN \('mortgage_ops_initial', 'mortgage_ops_additional_check'\)\s+AND e\.status IS DISTINCT FROM 'voided'/);
+  for (const sql of [SQL84, SQL85, SQL86]) {
+    assert.match(stripComments(sql), /RAISE EXCEPTION 'sql47_prerequisite_missing:/);
+    assert.doesNotMatch(stripComments(sql), /^\s*(BEGIN|COMMIT|ROLLBACK)\s*;/m);
+    assert.doesNotMatch(sql, /rolls back/);
+  }
+});
+
+test('SQL 86 makes the SQL 47 admin helper platform owner only and closes earn', () => {
+  assert.match(SQL86, /^-- AWS: Mortgage Agent compensation is platform owner only \(SQL 86\)\./);
+  const body = stripComments(SQL86);
+  assert.match(body, /CREATE OR REPLACE FUNCTION public\.aws_can_admin_mortgage_agent_compensation\(\)\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path = public\nSET row_security = off\nAS \$\$\n  SELECT COALESCE\(public\.is_platform_owner\(\), false\);\n\$\$;/);
+  // Same header as SQL 47's version, so CREATE OR REPLACE keeps its shape.
+  assert.ok(SQL47.includes(`CREATE OR REPLACE FUNCTION public.aws_can_admin_mortgage_agent_compensation()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$`));
+  assert.doesNotMatch(body, /has_role|is_master_owner|'admin'/);
+  for (const role of ['PUBLIC', 'checksops', 'authenticated']) {
+    assert.match(body, new RegExp(`REVOKE ALL ON FUNCTION public\\.earn_mortgage_agent_compensation\\(uuid\\) FROM ${role};`));
+  }
+  assert.doesNotMatch(body, /CREATE TABLE|ALTER TABLE|INSERT INTO|UPDATE public|DELETE FROM|CREATE POLICY|DROP POLICY|GRANT /);
+  // Every SQL 47 caller of the helper is compensation administration.
+  const callers = SQL47.split('\n').filter((line) => line.includes('aws_can_admin_mortgage_agent_compensation()')).length;
+  assert.equal(callers, 11); // definition, 3 RPC checks, 6 SELECT policies, 1 GRANT
 });
 
 const run = (bin, args, opts = {}) => spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
 
-const SCHEMA = `
+const ROLES = `
 CREATE ROLE checksops NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE outsider NOLOGIN;
+`;
+
+const SCHEMA = `
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE TYPE public.app_role AS ENUM ('admin', 'staff', 'client', 'contractor', 'mortgage_agent');
@@ -194,10 +240,18 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
   const skip = pgSkipReason();
   if (skip) { t.skip(skip); return; }
   const pg = startPg('pg-mortgage-return-adjust-', 57300);
-  const base = ['-h', pg.host, '-p', String(pg.port), '-U', 'ubuntu', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-X', '-q'];
+  const conn = ['-h', pg.host, '-p', String(pg.port), '-U', 'ubuntu', '-v', 'ON_ERROR_STOP=1', '-X', '-q'];
+  const base = [...conn, '-d', 'postgres'];
   const psql = (sql) => {
     const result = run(path.join(PG_BIN, 'psql'), [...base, '-A', '-t'], { input: sql });
     if (result.status !== 0) throw new Error(`psql failed (${result.status}): ${result.stderr || result.stdout}`);
+    return result.stdout.trim();
+  };
+  // Another database, one transaction per call (as the guarded executor runs a file).
+  const inDb = (db, sql) => run(path.join(PG_BIN, 'psql'), [...conn, '-d', db, '-A', '-t', '--single-transaction'], { input: sql });
+  const okDb = (db, sql) => {
+    const result = inDb(db, sql);
+    if (result.status !== 0) throw new Error(`psql ${db} failed (${result.status}): ${result.stderr || result.stdout}`);
     return result.stdout.trim();
   };
   const ident = (user) => (user
@@ -213,7 +267,7 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     return result.stderr;
   };
   const returnSql = (id, reason = 'Agent unavailable') => `SELECT status FROM public.return_mortgage_handling_request_to_queue('${id}', ${reason === null ? 'NULL' : `'${reason}'`});`;
-  const adjustSql = (parent, cents, reason, counterparty = null, period = null) => `SELECT public.adjust_mortgage_agent_compensation('${parent}', ${cents}, ${reason === null ? 'NULL' : `'${reason}'`}, ${counterparty ? `'${counterparty}'` : 'NULL'}, ${period ? `'${period}'` : 'NULL'})::text;`;
+  const adjustSql = (parent, cents, reason, counterparty = null, period = null, key = null) => `SELECT public.adjust_mortgage_agent_compensation('${parent}', ${cents}, ${reason === null ? 'NULL' : `'${reason}'`}, ${counterparty ? `'${counterparty}'` : 'NULL'}, ${period ? `'${period}'` : 'NULL'}${key === null ? '' : `, '${key}'`})::text;`;
   const accept = (id, agent) => psql(`UPDATE public.mortgage_handling_requests
      SET assigned_employee_id = '${agent}', status = 'in_progress', accepted_at = COALESCE(accepted_at, now()), updated_at = now()
    WHERE id = '${id}' AND assigned_employee_id IS NULL AND status = 'requested';`);
@@ -226,14 +280,64 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     WHERE n.nspname = 'public' AND p.proname IN ('return_mortgage_handling_request_to_queue', 'adjust_mortgage_agent_compensation');`);
 
   try {
+    psql(ROLES);
+
+    // Missing SQL 47: every file refuses with a clear error and keeps nothing.
+    psql('CREATE DATABASE bare;');
+    okDb('bare', SCHEMA + AUTH_UID + OWNER_HELPERS);
+    for (const [name, sql, missing] of [
+      ['84', SQL84, /SQL 84 needs SQL 47 .*missing public\.mortgage_agent_compensation_audit, public\.mortgage_agent_compensation_entries, public\.mortgage_agent_compensation_exclusions/],
+      ['85', SQL85, /SQL 85 needs SQL 47 .*missing public\.aws_is_active_mortgage_agent\(uuid\), public\.mortgage_agent_compensation_audit/],
+      ['86', SQL86, /SQL 86 needs SQL 47 .*missing public\.aws_can_admin_mortgage_agent_compensation\(\), public\.earn_mortgage_agent_compensation\(uuid\)/],
+    ]) {
+      const result = inDb('bare', sql);
+      assert.notEqual(result.status, 0, name);
+      assert.match(result.stderr, /sql47_prerequisite_missing/, name);
+      assert.match(result.stderr, missing, name);
+    }
+    assert.equal(okDb('bare', `SELECT count(*) FROM pg_class WHERE relname IN ('mortgage_ops_request_audit', 'check_billing_events_one_mortgage_ops_per_check');`), '0');
+
+    // GATE 0: duplicates refuse with the check ids; ILIKE look-alikes do not
+    // count; the exact staging index does.
+    psql('CREATE DATABASE dupes;');
+    okDb('dupes', SCHEMA + AUTH_UID + OWNER_HELPERS + SQL47);
+    okDb('dupes', `INSERT INTO public.check_billing_events (tenant_id, check_intake_item_id, event_type, unit_price_cents, status) VALUES
+      ('${TENANT_A}', '${CHECK1}', 'mortgage_ops_initial', 1000, 'recorded'),
+      ('${TENANT_A}', '${CHECK1}', 'mortgage_ops_additional_check', 500, 'recorded'),
+      ('${TENANT_A}', '${CHECK3}', 'mortgage_ops_initial', 1000, 'recorded'),
+      ('${TENANT_A}', '${CHECK3}', 'mortgage_ops_initial', 1000, 'voided');
+    CREATE UNIQUE INDEX decoy_mortgage_ops_check_claim ON public.check_billing_events (check_intake_item_id, claim_id)
+      WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check');`);
+    const dup = inDb('dupes', SQL84);
+    assert.notEqual(dup.status, 0);
+    assert.match(dup.stderr, new RegExp(`duplicate_mortgage_ops_billing_events: .*${CHECK1} \\(2\\)`));
+    assert.doesNotMatch(dup.stderr, new RegExp(CHECK3));
+    assert.equal(okDb('dupes', `SELECT count(*) FROM pg_class WHERE relname IN ('mortgage_ops_request_audit', 'check_billing_events_one_mortgage_ops_per_check');`), '0');
+    okDb('dupes', `UPDATE public.check_billing_events SET status = 'voided' WHERE event_type = 'mortgage_ops_additional_check';`);
+    okDb('dupes', SQL84);
+    assert.equal(okDb('dupes', `SELECT count(*) FROM pg_class WHERE relname = 'check_billing_events_one_mortgage_ops_per_check';`), '1');
+    okDb('dupes', `DROP INDEX public.check_billing_events_one_mortgage_ops_per_check;
+      DELETE FROM public.check_billing_events WHERE status = 'voided';
+      CREATE UNIQUE INDEX check_billing_events_mortgage_ops_check_uidx ON public.check_billing_events (check_intake_item_id)
+        WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check') AND check_intake_item_id IS NOT NULL;`);
+    okDb('dupes', SQL84);
+    assert.equal(okDb('dupes', `SELECT count(*) FROM pg_class WHERE relname = 'check_billing_events_one_mortgage_ops_per_check';`), '0');
+
     psql(SCHEMA);
     psql(AUTH_UID);
     psql(OWNER_HELPERS);
     psql(SQL47);
     psql(SEED);
     psql(ACCRUAL);
+    // A SQL 49-shaped five-argument body that grants a global admin; SQL 85 drops it.
+    psql(`CREATE FUNCTION public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid DEFAULT NULL, text DEFAULT NULL)
+      RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $$ SELECT '{"legacy": true}'::jsonb $$;
+      GRANT EXECUTE ON FUNCTION public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text) TO authenticated;`);
     psql(SQL84);
     psql(SQL85);
+    assert.equal(psql(`SELECT string_agg(pg_get_function_identity_arguments(p.oid), ';') FROM pg_proc p
+      WHERE p.proname = 'adjust_mortgage_agent_compensation';`),
+      'p_parent_entry_id uuid, p_amount_cents integer, p_reason text, p_counterparty_agent_id uuid, p_pay_period text, p_idempotency_key text');
     const defs = fnDefs();
     // Idempotent: both files apply again cleanly and leave the same bodies.
     psql(SQL84);
@@ -250,12 +354,12 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     // Grants: PUBLIC has no EXECUTE; the API roles do; no table write grants.
     for (const fn of [
       'public.return_mortgage_handling_request_to_queue(uuid, text)',
-      'public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text)',
+      'public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text, text)',
     ]) {
       assert.equal(psql(`SELECT has_function_privilege('outsider', '${fn}', 'EXECUTE');`), 'f', fn);
       assert.equal(psql(`SELECT has_function_privilege('authenticated', '${fn}', 'EXECUTE');`), 't', fn);
       assert.equal(psql(`SELECT has_function_privilege('checksops', '${fn}', 'EXECUTE');`), 't', fn);
-      fails(null, `SELECT ${fn.replace(/\(.*/, '')}(NULL, NULL${fn.includes('adjust') ? ', NULL' : ''});`, /permission denied for function/, 'outsider');
+      fails(null, `SELECT ${fn.replace(/\(.*/, '')}(NULL::uuid, NULL${fn.includes('adjust') ? '::integer, NULL' : ''});`, /permission denied for function/, 'outsider');
     }
     assert.equal(psql(`SELECT count(*) FROM information_schema.role_table_grants
       WHERE grantee IN ('authenticated', 'checksops', 'PUBLIC')
@@ -391,6 +495,73 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     assert.equal(psql(`SELECT count(*) FROM public.mortgage_agent_compensation_batches WHERE action = 'adjust' AND created_by = '${OWNER}';`), '3');
     assert.equal(psql(`SELECT count(*) FROM public.mortgage_agent_compensation_audit WHERE action = 'adjust' AND actor_id = '${OWNER}';`), '7');
 
+    // Children carry no payment batch; the adjust batch links via the audit rows.
+    assert.equal(psql(`SELECT count(*) FROM public.mortgage_agent_compensation_entries WHERE parent_entry_id IS NOT NULL AND payment_batch_id IS NOT NULL;`), '0');
+    assert.equal(psql(`SELECT count(DISTINCT a.batch_id) FROM public.mortgage_agent_compensation_audit a
+      JOIN public.mortgage_agent_compensation_batches b ON b.id = a.batch_id AND b.action = 'adjust'
+      WHERE a.action = 'adjust' AND a.entry_id IN (SELECT id FROM public.mortgage_agent_compensation_entries WHERE parent_entry_id = '${parentId}');`), '3');
+    assert.equal(pair.debit.payment_batch_id, null);
+    assert.match(pair.batch_id, /^[0-9a-f-]{36}$/);
+
+    // Caps: |amount| <= parent amount (1000); a debit to B <= B's net on the file.
+    // B's net is now 1000 + 250 - 100 - 1000 = 150.
+    const childCount = () => psql(`SELECT count(*) FROM public.mortgage_agent_compensation_entries WHERE parent_entry_id = '${parentId}';`);
+    fails(OWNER, adjustSql(parentId, 1001, 'too much'), /adjustment_exceeds_parent/);
+    fails(OWNER, adjustSql(parentId, -1001, 'too much'), /adjustment_exceeds_parent/);
+    fails(OWNER, adjustSql(parentId, 1001, 'too much', AGENT_A), /adjustment_exceeds_parent/);
+    fails(OWNER, adjustSql(parentId, 151, 'pair over net', AGENT_A), /adjustment_exceeds_net/);
+    fails(OWNER, adjustSql(parentId, -151, 'debit over net'), /adjustment_exceeds_net/);
+    fails(OWNER, adjustSql(parentId, 2147483647, 'huge'), /adjustment_exceeds_parent/);
+    fails(OWNER, adjustSql(parentId, -2147483648, 'huge'), /adjustment_exceeds_parent/);
+    assert.equal(childCount(), '4');
+    // A positive single adjustment is bounded only by the parent amount.
+    as(OWNER, adjustSql(parentId, 1000, 'catch-up'));
+    assert.equal(childCount(), '5');
+    // B's net is 1150: a 1000 pair now fits.
+
+    // The counterparty must be an active Mortgage Agent.
+    as(OWNER, `SELECT public.set_mortgage_agent_account_status('${AGENT_A}', 'inactive', 'test');`);
+    fails(OWNER, adjustSql(parentId, 100, 'inactive agent', AGENT_A), /invalid_counterparty/);
+    as(OWNER, `SELECT public.set_mortgage_agent_account_status('${AGENT_A}', 'active', NULL);`);
+
+    // Idempotency: a repeat returns the first result and writes nothing.
+    const first = JSON.parse(as(OWNER, adjustSql(parentId, 100, 'move', AGENT_A, null, 'dialog-key-1')));
+    assert.equal(first.idempotent_replay, false);
+    const snapshot = [childCount(), tableHash('mortgage_agent_compensation_batches'), tableHash('mortgage_agent_compensation_audit')];
+    const again = JSON.parse(as(OWNER, adjustSql(parentId, 100, 'move', AGENT_A, null, 'dialog-key-1')));
+    assert.equal(again.idempotent_replay, true);
+    assert.equal(again.batch_id, first.batch_id);
+    assert.equal(again.debit.id, first.debit.id);
+    assert.equal(again.credit.id, first.credit.id);
+    assert.deepEqual([childCount(), tableHash('mortgage_agent_compensation_batches'), tableHash('mortgage_agent_compensation_audit')], snapshot);
+    const req3Root = psql(`SELECT id FROM public.mortgage_agent_compensation_entries WHERE mortgage_request_id = '${REQ3}' AND parent_entry_id IS NULL;`);
+    for (const [cents, reason, counterparty, parent] of [
+      [200, 'move', AGENT_A, parentId],
+      [100, 'other reason', AGENT_A, parentId],
+      [100, 'move', null, parentId],
+      [100, 'move', AGENT_A, req3Root],
+    ]) {
+      fails(OWNER, adjustSql(parent, cents, reason, counterparty, null, 'dialog-key-1'), /idempotency_key_conflict/);
+    }
+    // The key is checked only after authorization.
+    fails(GLOBAL_ADMIN, adjustSql(parentId, 100, 'move', AGENT_A, null, 'dialog-key-1'), /not_authorized/);
+    fails(OWNER, adjustSql(parentId, 100, 'long key', null, null, 'k'.repeat(201)), /invalid_idempotency_key/);
+    assert.deepEqual([childCount(), tableHash('mortgage_agent_compensation_batches')], snapshot.slice(0, 2));
+    // A blank key means no key; a new key is a new adjustment.
+    as(OWNER, adjustSql(parentId, 10, 'blank key', null, null, '  '));
+    as(OWNER, adjustSql(parentId, 10, 'second key', null, null, 'dialog-key-2'));
+    assert.equal(childCount(), String(Number(snapshot[0]) + 2));
+    assert.equal(psql(`SELECT count(*) FROM public.mortgage_agent_compensation_batches WHERE action = 'adjust' AND idempotency_key IS NOT NULL;`), '2');
+
+    // SQL 47's approve and mark_paid handle children by id and attribute
+    // their own batches (payment_batch_id was NULL).
+    const childId = first.debit.id;
+    assert.equal(as(OWNER, `SELECT public.approve_mortgage_agent_compensation(ARRAY['${childId}']::uuid[], 'ok');`), '1');
+    assert.equal(psql(`SELECT b.action FROM public.mortgage_agent_compensation_entries e JOIN public.mortgage_agent_compensation_batches b ON b.id = e.payment_batch_id WHERE e.id = '${childId}';`), 'approve');
+    assert.equal(as(OWNER, `SELECT public.mark_mortgage_agent_compensation_paid(ARRAY['${childId}']::uuid[], CURRENT_DATE, 'CHK-2', NULL);`), '1');
+    assert.equal(psql(`SELECT e.status || ':' || b.action FROM public.mortgage_agent_compensation_entries e JOIN public.mortgage_agent_compensation_batches b ON b.id = e.payment_batch_id WHERE e.id = '${childId}';`), 'paid:pay');
+    assert.equal(row('mortgage_agent_compensation_entries', parentId), paidRow);
+
     // The SQL 47 fact trigger still refuses a direct parent rewrite.
     fails(null, `UPDATE public.mortgage_agent_compensation_entries SET amount_cents = 1 WHERE id = '${parentId}';`, /compensation_facts_immutable/, 'ubuntu');
 
@@ -398,6 +569,44 @@ test('SQL 84/85 run on PostgreSQL 16: platform owner only, accepted_at and billi
     assert.equal(tableHash('check_billing_events'), billingAll);
     assert.equal(tableHash('mortgage_agent_compensation_rates'), ratesHash);
     assert.equal(psql(`SELECT count(*) FROM public.mortgage_agent_compensation_entries WHERE parent_entry_id IS NULL;`), '2');
+
+    // SQL 86. Before it, SQL 47's helper lets a global admin in.
+    assert.equal(as(GLOBAL_ADMIN, 'SELECT public.aws_can_admin_mortgage_agent_compensation();'), 't');
+    assert.notEqual(as(GLOBAL_ADMIN, 'SELECT count(*) FROM public.mortgage_agent_compensation_entries;'), '0');
+    assert.equal(psql(`SELECT has_function_privilege('authenticated', 'public.earn_mortgage_agent_compensation(uuid)', 'EXECUTE');`), 't');
+    psql(SQL86);
+    psql(SQL86);
+    const helper = psql(`SELECT concat_ws('|', provolatile, prosecdef, prorettype::regtype, array_to_string(proconfig, ','))
+      FROM pg_proc WHERE oid = 'public.aws_can_admin_mortgage_agent_compensation()'::regprocedure;`);
+    assert.equal(helper, 's|t|boolean|search_path=public,row_security=off');
+    for (const user of [GLOBAL_ADMIN, TENANT_ADMIN, AGENT_A, null]) {
+      assert.equal(as(user, 'SELECT public.aws_can_admin_mortgage_agent_compensation();'), 'f');
+      for (const table of ['mortgage_agent_accounts', 'mortgage_agent_compensation_rates', 'mortgage_agent_compensation_exclusions',
+        'mortgage_agent_compensation_entries', 'mortgage_agent_compensation_batches', 'mortgage_agent_compensation_audit']) {
+        assert.equal(as(user, `SELECT count(*) FROM public.${table};`), '0', `${user} ${table}`);
+      }
+      fails(user, `SELECT public.approve_mortgage_agent_compensation(ARRAY['${plus.debit.id}']::uuid[], NULL);`, /not_authorized/);
+      fails(user, `SELECT public.mark_mortgage_agent_compensation_paid(ARRAY['${plus.debit.id}']::uuid[], CURRENT_DATE, NULL, NULL);`, /not_authorized/);
+      fails(user, `SELECT public.set_mortgage_agent_account_status('${AGENT_A}', 'inactive', NULL);`, /not_authorized/);
+    }
+    assert.equal(as(OWNER, 'SELECT public.aws_can_admin_mortgage_agent_compensation();'), 't');
+    for (const table of ['mortgage_agent_accounts', 'mortgage_agent_compensation_rates', 'mortgage_agent_compensation_exclusions',
+      'mortgage_agent_compensation_entries', 'mortgage_agent_compensation_batches', 'mortgage_agent_compensation_audit']) {
+      assert.notEqual(as(OWNER, `SELECT count(*) FROM public.${table};`), '0', table);
+    }
+    assert.equal(as(OWNER, `SELECT public.approve_mortgage_agent_compensation(ARRAY['${plus.debit.id}']::uuid[], NULL);`), '1');
+    assert.equal(as(OWNER, `SELECT public.mark_mortgage_agent_compensation_paid(ARRAY['${plus.debit.id}']::uuid[], CURRENT_DATE, NULL, NULL);`), '1');
+    assert.equal(as(OWNER, `SELECT (public.set_mortgage_agent_account_status('${AGENT_B}', 'active', NULL)).status;`), 'active');
+    assert.equal(as(OWNER, `SELECT count(*) >= 0 FROM public.mortgage_agent_compensation_reconciliation(NULL);`), 't');
+
+    // earn: no app role can call it directly; Complete still earns via the trigger.
+    for (const role of ['authenticated', 'checksops', 'outsider']) {
+      assert.equal(psql(`SELECT has_function_privilege('${role}', 'public.earn_mortgage_agent_compensation(uuid)', 'EXECUTE');`), 'f', role);
+      fails(OWNER, `SELECT public.earn_mortgage_agent_compensation('${REQ1}');`, /permission denied for function earn_mortgage_agent_compensation/, role);
+    }
+    accept(REQ_FOREIGN, AGENT_A);
+    complete(REQ_FOREIGN);
+    assert.equal(psql(`SELECT concat_ws('|', agent_user_id, status) FROM public.mortgage_agent_compensation_entries WHERE mortgage_request_id = '${REQ_FOREIGN}' AND parent_entry_id IS NULL;`), `${AGENT_A}|earned`);
   } finally {
     pg.stop();
   }
