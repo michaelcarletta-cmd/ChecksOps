@@ -9,6 +9,7 @@ that connects to the database:
 
 | `--migration` | tool it runs |
 |---|---|
+| `sql71` | `scripts/deployment-guard/sql71-review-amount-production-apply.mjs` (`ops/production-sql-71-apply.md`) |
 | `sql77`, `sql78`, `sql79` | `scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --migration <key>` |
 | `sql80` | `scripts/deployment-guard/sql80-checkalt-production-apply.mjs` |
 | `sql81` | `scripts/deployment-guard/sql81-checkalt-production-apply.mjs` (`ops/production-sql-81-apply.md`) |
@@ -27,7 +28,7 @@ To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql77`…`sql87`) |
+| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql87`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
@@ -122,7 +123,8 @@ An unexpected exception also ends in one failure summary:
    receipt path comes only from this child's output, and it must sit under
    `.deployment-guard/receipts/`.
 7. **Evaluate.** Runs `<tool> --input <manifest>`, which must report
-   `member_stakeholder_production_apply_allowed` / `sql80_production_apply_allowed` /
+   `member_stakeholder_production_apply_allowed` / `sql71_production_apply_allowed` /
+   `sql80_production_apply_allowed` /
    `sql81_production_apply_allowed` / `sql82_production_apply_allowed` /
    `sql83_production_apply_allowed` / `sql84_production_apply_allowed` /
    `sql85_production_apply_allowed` / `sql86_production_apply_allowed` /
