@@ -669,6 +669,8 @@ export const WRITE_ALLOWLIST = {
     columns: new Set([
       'name', 'slug', 'logo_url', 'invoice_letterhead_url', 'primary_color',
       'invoice_footer_note', 'invoice_default_terms',
+      // Tenant's own Company Information + document letterhead (SQL 93).
+      'company_address', 'company_phone', 'company_email', 'letterhead_url',
     ]),
     identityColumn: null,
     requiredForWrite: { update: [], insert: ['name', 'slug'] },

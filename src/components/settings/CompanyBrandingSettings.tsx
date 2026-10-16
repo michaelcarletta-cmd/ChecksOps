@@ -13,17 +13,19 @@ import { brandingPublicUrl } from "@/lib/brandingPublicUrl";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
-interface CompanyBrandingSettingsProps {
-  /**
-   * Opt-in for the platform owner's own platform branding (the
-   * `company_branding` singleton). Tenant mounts leave this off: tenant
-   * branding is edited within the tenant only and a tenant save writes only
-   * that tenant's own fields on `tenants`.
-   */
-  platformBranding?: boolean;
-}
+/**
+ * Tenant Company Information + document letterhead (tenants columns, SQL 93).
+ * Saved separately from the core branding update so a backend without these
+ * columns yet still saves the logo and invoice fields.
+ */
+const TENANT_COMPANY_INFO_COLUMNS = "company_address, company_phone, company_email, letterhead_url";
 
-export function CompanyBrandingSettings({ platformBranding = false }: CompanyBrandingSettingsProps = {}) {
+/**
+ * Each tenant edits its own branding within the tenant. Everything here is
+ * stored on the current tenant's row; the platform-owner-only
+ * `company_branding` table is never read or written.
+ */
+export function CompanyBrandingSettings() {
   // Route-scoped current organisation; never "whichever membership comes first".
   const { tenant, refreshTenant } = useTenant();
   const tenantId = tenant?.id ?? null;
@@ -41,48 +43,42 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
   const [uploading, setUploading] = useState(false);
   const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [brandingId, setBrandingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     loadSettings();
-  }, [tenantId, platformBranding]);
+  }, [tenantId]);
 
   const loadSettings = async () => {
-    // 1. Platform-owner singleton; only for the platform's own branding.
-    if (platformBranding) {
-      const { data: brandingData } = await supabase
-        .from("company_branding" as any)
-        .select("*")
-        .limit(1)
-        .maybeSingle();
+    if (!tenantId) return;
+    // 1. Application/sidebar logo, company name and allowlisted invoice fields live on the current tenant.
+    const { data: tenantRow } = await supabase
+      .from("tenants")
+      .select("name, logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+      .eq("id", tenantId)
+      .maybeSingle();
 
-      if (brandingData) {
-        const branding = brandingData as any;
-        setBrandingId(branding.id);
-        setCompanyName(branding.company_name || "");
-        setAddress(branding.company_address || "");
-        setPhone(branding.company_phone || "");
-        setEmail(branding.company_email || "");
-        setLetterheadUrl(branding.letterhead_url || null);
-      }
+    if (tenantRow) {
+      const t = tenantRow as any;
+      setCompanyName(t.name || "");
+      if (t.logo_url) setLogoUrl(t.logo_url);
+      setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
+      setInvoiceFooterNote(t.invoice_footer_note || "");
+      setInvoiceDefaultTerms(t.invoice_default_terms || "");
     }
 
-    // 2. Application/sidebar logo and allowlisted invoice fields live on the current tenant.
-    if (tenantId) {
-      const { data: tenantRow } = await supabase
-        .from("tenants")
-        .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
-        .eq("id", tenantId)
-        .maybeSingle();
-
-      if (tenantRow) {
-        const t = tenantRow as any;
-        if (t.logo_url) setLogoUrl(t.logo_url);
-        setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
-        setInvoiceFooterNote(t.invoice_footer_note || "");
-        setInvoiceDefaultTerms(t.invoice_default_terms || "");
-      }
+    // 2. The tenant's own Company Information + document letterhead.
+    const { data: infoRow } = await supabase
+      .from("tenants" as any)
+      .select(TENANT_COMPANY_INFO_COLUMNS)
+      .eq("id", tenantId)
+      .maybeSingle();
+    if (infoRow) {
+      const info = infoRow as any;
+      setAddress(info.company_address || "");
+      setPhone(info.company_phone || "");
+      setEmail(info.company_email || "");
+      setLetterheadUrl(info.letterhead_url || null);
     }
   };
 
@@ -121,15 +117,28 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
       toast({ title: "Please upload an image file (PNG, JPG)", variant: "destructive" });
       return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Letterhead must be under 5MB.", variant: "destructive" });
+      return;
+    }
+    if (!tenantId) {
+      toast({ title: "Upload failed", description: "No tenant is available to store this letterhead.", variant: "destructive" });
+      return;
+    }
 
     setUploading(true);
     try {
-      const path = `letterhead_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error } = await supabase.storage.from("company-branding").upload(path, file);
-      
+      // Same tenant-scoped branding path as the logo: tenant-logos/{tenantId}/...
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${tenantId}/letterhead-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("tenant-logos").upload(path, file, {
+        upsert: true,
+        contentType: file.type,
+      });
+
       if (error) throw error;
 
-      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
+      const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
       
       setLetterheadUrl(urlData?.publicUrl || null);
       toast({ title: "Letterhead uploaded successfully" });
@@ -182,14 +191,16 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
   const saveSettings = async () => {
     setSaving(true);
     try {
-      // Tenant's own branding first; it never depends on company_branding.
+      // Everything is stored on the current tenant's own row.
       const resolvedTenantId = tenantId;
       if (!resolvedTenantId) {
-        if (logoUrl) throw new Error("Unable to persist company logo without a tenant.");
+        if (logoUrl || letterheadUrl) throw new Error("Unable to persist company logo without a tenant.");
       } else {
+        const trimmedName = companyName.trim();
         const { error: tenantError } = await supabase
           .from("tenants")
           .update({
+            ...(trimmedName ? { name: trimmedName } : {}),
             logo_url: logoUrl,
             invoice_letterhead_url: invoiceLetterheadUrl,
             invoice_footer_note: invoiceFooterNote,
@@ -197,33 +208,18 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
           })
           .eq("id", resolvedTenantId);
         if (tenantError) throw tenantError;
+
+        const { error: infoError } = await supabase
+          .from("tenants" as any)
+          .update({
+            company_address: address,
+            company_phone: phone,
+            company_email: email,
+            letterhead_url: letterheadUrl,
+          })
+          .eq("id", resolvedTenantId);
         await refreshTenant();
-      }
-
-      if (platformBranding) {
-        const brandingData = {
-          company_name: companyName,
-          company_address: address,
-          company_phone: phone,
-          company_email: email,
-          letterhead_url: letterheadUrl,
-        };
-
-        if (brandingId) {
-          const { error } = await supabase
-            .from("company_branding" as any)
-            .update(brandingData)
-            .eq("id", brandingId);
-          if (error) throw error;
-        } else {
-          const { data, error } = await supabase
-            .from("company_branding" as any)
-            .insert(brandingData)
-            .select()
-            .single();
-          if (error) throw error;
-          if (data) setBrandingId((data as any).id);
-        }
+        if (infoError) throw infoError;
       }
 
       toast({ title: "Company settings saved" });
@@ -235,7 +231,7 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
   };
 
   const logoSrc = brandingPublicUrl(logoUrl, "tenant-logos") || logoUrl;
-  const letterheadSrc = brandingPublicUrl(letterheadUrl, "company-branding") || letterheadUrl;
+  const letterheadSrc = brandingPublicUrl(letterheadUrl, "tenant-logos") || letterheadUrl;
   const invoiceLetterheadSrc = brandingPublicUrl(invoiceLetterheadUrl, "company-branding") || invoiceLetterheadUrl;
 
   return (
@@ -248,7 +244,6 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
       />
 
       <div className="grid gap-6">
-        {platformBranding && (
         <SectionCard
           title="Company Information"
           icon={<Building2 className="h-4 w-4 text-sky-500" />}
@@ -295,7 +290,6 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
             </div>
           </div>
         </SectionCard>
-        )}
 
         <SectionCard
           title="Logos & Brand Assets"
@@ -303,7 +297,7 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
           description="Manage your company logo for the application sidebar and letterhead for generated documents."
         >
-          <div className={`grid gap-6 ${platformBranding ? "md:grid-cols-2" : ""}`}>
+          <div className="grid md:grid-cols-2 gap-6">
             {/* Sidebar Logo */}
             <div className="space-y-4">
               <Label className="text-sm font-medium">Application Sidebar Logo</Label>
@@ -339,8 +333,7 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
               </div>
             </div>
 
-            {/* Document Letterhead (company_branding.letterhead_url) */}
-            {platformBranding && (
+            {/* Document Letterhead */}
             <div className="space-y-4">
               <Label className="text-sm font-medium">Document Letterhead</Label>
               <p className="text-xs text-muted-foreground">Used at the top of generated reports, demand letters, and claim documents.</p>
@@ -374,7 +367,6 @@ export function CompanyBrandingSettings({ platformBranding = false }: CompanyBra
                 />
               </div>
             </div>
-            )}
           </div>
         </SectionCard>
 

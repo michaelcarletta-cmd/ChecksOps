@@ -486,6 +486,31 @@ export const recordPublicSignerViewed = async (deps, { tokenHash, alreadyViewed 
   }
 };
 
+/**
+ * Tenant document letterhead (SQL 93 tenants.letterhead_url), stored like the
+ * logo under tenant-logos/{tenantId}/... . Public only when an active tenant's
+ * letterhead_url names exactly this object and the object sits in that same
+ * tenant's folder. Before SQL 93 is applied the column is missing; that reads
+ * as "not public" instead of failing the logo lookup.
+ */
+export const isPublicTenantLetterheadPath = async (client, requested) => {
+  if (!requested) return false;
+  let rows;
+  try {
+    rows = (await client.query(
+      `SELECT id::text AS id, letterhead_url FROM public.tenants
+       WHERE id::text = lower(split_part($1::text, '/', 1))
+         AND letterhead_url IS NOT NULL AND subscription_status = 'active'
+       LIMIT 1`,
+      [requested],
+    )).rows || [];
+  } catch {
+    return false;
+  }
+  return rows.some((row) => storedLogoMatchesRequest(row.letterhead_url, requested)
+    && requested.toLowerCase().startsWith(`${String(row.id).toLowerCase()}/`));
+};
+
 export const isPublicBrandingPath = async (client, bucket, rel) => {
   if (!PUBLIC_BRANDING_BUCKETS.includes(bucket)) return false;
   if (bucket === 'email-assets') return rel === 'checksops-logo.png';
@@ -495,7 +520,8 @@ export const isPublicBrandingPath = async (client, bucket, rel) => {
     const result = await client.query(
       `SELECT logo_url FROM tenants_public WHERE logo_url IS NOT NULL`,
     );
-    return (result.rows || []).some((row) => storedLogoMatchesRequest(row.logo_url, requested));
+    if ((result.rows || []).some((row) => storedLogoMatchesRequest(row.logo_url, requested))) return true;
+    return isPublicTenantLetterheadPath(client, requested);
   }
   if (bucket === 'company-branding') {
     const branding = await client.query(
