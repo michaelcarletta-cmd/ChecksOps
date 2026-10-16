@@ -13,7 +13,7 @@
   "function_identities": [
     "public.aws_public_homeowner_ledger_by_token(text)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229",
   "intended_replacement_sha256": "04e41eedb372334169feb32bc65991a3ce99558b84e91b27e22a6501be641e37",
   "authorization_phrase": "REPLACE_HOMEOWNER_LEDGER_VIEW",
   "predecessors": [],
@@ -22,17 +22,43 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-16",
+    "ssm_command_id": "f1430894-0783-46cf-bbab-e7137c10ece3",
+    "source_commit": "eb540ee982bf7c69d9e1c441f1400177d0f9f550",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "function_states": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 82. The production pre-state is not code-derived (the functions may be absent, SQL 68's thin ledger view, or another version), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, proacl), precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (another signature, a non-jsonb result, other parameter names, another owner, an ACL entry the file does not revoke), stop: that needs its own reviewed change."
+    "live_definition_sha256": "9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229",
+    "function_states": {
+      "aws_public_homeowner_ledger_by_token": "other"
+    },
+    "functions": {
+      "aws_public_homeowner_ledger_by_token": {
+        "exists": true,
+        "identity_arguments": "p_token text",
+        "result": "jsonb",
+        "language": "plpgsql",
+        "security_definer": true,
+        "config": [
+          "search_path=public"
+        ],
+        "owner": "checksops_admin",
+        "proacl": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin}",
+        "definition_sha256": "1ee127e55c9e4a4f40eda5c1ac1aa7d3e58ca443f59966b7dfbcfa572076a62b",
+        "raw_endorse_token_link": false,
+        "body_matches_migration": false
+      }
+    },
+    "legacy_remint_signer": {
+      "present": true,
+      "signatures": [
+        "public.aws_public_homeowner_ledger_remint_signer(text,uuid,text) returns jsonb"
+      ],
+      "note": "Report only: SQL 82 and SQL 83 never drop or change it."
+    },
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command f1430894-0783-46cf-bbab-e7137c10ece3, node scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs --inspect on the SQL53 runner from main eb540ee98, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). public.aws_public_homeowner_ledger_by_token(text) exists once (function_states other): RETURNS jsonb, plpgsql, SECURITY DEFINER with search_path=public, owned by checksops_admin, proacl owner + checksops EXECUTE only. Its body is not Cursor SQL 73 (raw_endorse_token_link false: no raw '/endorse?token=' link) and not the SQL 82 body (body_matches_migration false); its origin is not recorded. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. It does not authorize execution: authorization stays pending, execute false and staging_acceptance ok false, so evaluate and apply still refuse with PRODUCTION_APPROVAL_REQUIRED. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -45,7 +71,7 @@
   "staging_acceptance": {
     "ok": false,
     "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql82-homeowner-ledger-view here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
-    "production_differs": "Unknown until the first inspect of each environment: staging is expected to carry Cursor's SQL 73 ledger view, so the staging and production pre-state hashes are recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql82-homeowner-ledger-view here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (the pre-state is recorded in production_inspect and expected_live_definition_sha256).",
+    "production_differs": "The pre-states differ: staging (pin AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW, read-live run 48) is 452f8f3d2411e0c3772fdf92c14e1b85785823dcb8d6567d01f1908dc9a8d783 with Cursor SQL 73's ledger view (raw_endorse_token_link true); production (production_inspect, 2026-10-16) is 9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229 with a ledger view that has no raw endorse link and is not Cursor SQL 73 (origin not recorded). Each environment's pre-state is recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
   }
 }

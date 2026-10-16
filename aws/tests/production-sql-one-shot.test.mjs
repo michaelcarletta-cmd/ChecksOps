@@ -58,7 +58,7 @@ const EVALUATORS = Object.freeze({
 });
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
 // A pin whose staging acceptance is still pending (SQL 82 to 86 today) gets a placeholder
-// reference in the execute-authorized test copy, and a pin whose pre-state is not recorded yet
+// reference in the execute-authorized test copy, and a pin whose pre-state is not recorded
 // (expected_live_definition_sha256 null) a placeholder hash; the committed pins are checked to
 // refuse below.
 const FIXTURE_STAGING_ACCEPTANCE = Object.freeze({ ok: true, reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000', basis: 'test fixture' });
@@ -511,24 +511,39 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
-  // SQL 82's to 86's committed pins have no staging acceptance and no recorded pre-state yet:
-  // even with execute flipped they stop at the pin, and their evaluators refuse the null pre-state.
+  // SQL 82's and 83's committed pins record the production pre-state; SQL 84's to 86's have
+  // none yet. All have no staging acceptance and authorization "pending": even with execute
+  // flipped they stop at the pin, and their evaluators refuse a null pre-state (explicit copy)
+  // and the pending authorization.
+  const RECORDED_PRODUCTION_PRE = {
+    sql82: '9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229',
+    sql83: 'c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936',
+    sql84: null,
+    sql85: null,
+    sql86: null,
+  };
   for (const key of ['sql82', 'sql83', 'sql84', 'sql85', 'sql86']) {
     const committed = realPin(key);
     assert.equal(committed.authorization, 'pending');
+    assert.equal(committed.execute, false);
     assert.equal(committed.staging_acceptance.ok, false);
-    assert.equal(committed.expected_live_definition_sha256, null);
+    assert.equal(committed.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     const stopped = await oneShot({ key, pin: { ...committed, execute: true }, o: { 'workstream-id': `prod-${key}-pending-test` } });
     assert.equal(stopped.result.ok, false);
     assert.equal(stopped.result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
     assert.equal(stopped.result.details.stopped_at, 'pin');
     assert.equal(stopped.runner.calls.length, 0);
     // A staging acceptance alone is not enough while the pre-state is unrecorded.
-    const unrecorded = { ...committed, execute: true, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
+    const unrecorded = { ...committed, execute: true, expected_live_definition_sha256: null, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
     const fixtureManifest = { ...committed, expected_live_definition_sha256: null, live_definition_sha256: null, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
     const refused = await EVALUATORS[key](fixtureManifest, { root: ROOT, pin: unrecorded });
     assert.equal(refused.code, CODES.SQL_COLLISION, key);
     assert.match(refused.message, /no recorded pre-apply live definition hash/, key);
+    // With the recorded pre-state and a staging acceptance, authorization "pending" still refuses.
+    if (committed.expected_live_definition_sha256 === null) continue;
+    const recordedManifest = { ...committed, live_definition_sha256: committed.expected_live_definition_sha256, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
+    const pendingApproval = await EVALUATORS[key](recordedManifest, { root: ROOT, pin: { ...committed, execute: true, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE } });
+    assert.equal(pendingApproval.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
   }
 });
 

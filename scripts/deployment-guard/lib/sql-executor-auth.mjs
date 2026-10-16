@@ -703,10 +703,12 @@ export const AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW = Object.freeze({
   // The commit that authored the current file bytes (PR #989).
   commit: '4b1fe50d1f2654f7f4ea82366eff5bbd1a067621',
   source_sha256: '1db68ee9aee1c91c146e7f70c39bef7cc015eb38f6f436bfdfd0bc49f360a934',
-  // Pending: staging carries Cursor SQL 73's ledger view, so the pre-state is not
-  // code-derived. A read-live run records it here in a reviewed pin change; until
-  // then apply refuses ("no reviewed pre-apply live definition hash").
-  expected_live_definition_sha256: null,
+  // Recorded, not code-derived: live_definition_sha256 from the guarded staging SQL
+  // executor read-live of sql82-homeowner-ledger-view, run 48 (job 116757174929),
+  // 2026-10-16. Staging carries Cursor SQL 73's ledger view (raw_endorse_token_link
+  // true); precondition_failures [], row_security_off_supported true,
+  // owner_is_executor true, non-owner ACL checksops EXECUTE only.
+  expected_live_definition_sha256: '452f8f3d2411e0c3772fdf92c14e1b85785823dcb8d6567d01f1908dc9a8d783',
   // Code-derived: sha256(homeownerStateText('sql82', homeownerAppliedStates('sql82'))),
   // re-derived from the real catalog by aws/tests/sql82-sql83-homeowner-executor.test.mjs.
   intended_replacement_sha256: '04e41eedb372334169feb32bc65991a3ce99558b84e91b27e22a6501be641e37',
@@ -719,9 +721,12 @@ export const AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES = Object.freeze({
   // The commit that authored the current file bytes (PR #989).
   commit: '4b1fe50d1f2654f7f4ea82366eff5bbd1a067621',
   source_sha256: '8443a3e7b2c1f7a61d621e2e5b7fb3dcd94beb769fb16c2d2b49f867aa5149af',
-  // Pending: staging may carry Cursor SQL 74 functions of the same names; recorded
-  // from a read-live run in a reviewed pin change before apply is possible.
-  expected_live_definition_sha256: null,
+  // Recorded, not code-derived: live_definition_sha256 from the guarded staging SQL
+  // executor read-live of sql83-homeowner-signing-capabilities, run 49
+  // (job 116757504435), 2026-10-16. Staging carries the three functions from Cursor
+  // SQL 74; precondition_failures [], row_security_off_supported true,
+  // owner_is_executor true, non-owner ACL checksops EXECUTE only.
+  expected_live_definition_sha256: 'e85f64fa17ff2146d1aa3a603c83580c8c369dd2b49d252dfc8fd45453f4a21f',
   // Code-derived: sha256(homeownerStateText('sql83', homeownerAppliedStates('sql83'))).
   intended_replacement_sha256: '78da421900f4e3d0af7110ee2b1a47f1498599a59a6dfa07953c59ad56b27163',
   function_identities: Object.freeze(HOMEOWNER_MIGRATIONS.sql83.functions.map((fn) => fn.identity)),

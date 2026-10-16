@@ -2,10 +2,13 @@
  * Production apply path for SQL 82 (homeowner ledger view) and SQL 83 (homeowner
  * signing capabilities), each its own tool and pin.
  *
- * Both committed pins are pending: execute false, no staging acceptance and no
- * recorded pre-state (expected_live_definition_sha256 null), so evaluate and apply
- * refuse. The apply tests use an execute-authorized copy with a placeholder
- * staging acceptance and, against PostgreSQL, the pre-state the real inspect read.
+ * Both committed pins record the pre-state read by the production --inspect of
+ * 2026-10-16 (expected_live_definition_sha256) but stay locked: authorization
+ * "pending", execute false and no staging acceptance, so evaluate and apply refuse
+ * with PRODUCTION_APPROVAL_REQUIRED. The no-pre-state refusals use an explicit copy
+ * with the hash null (unrecorded()). The apply tests use an execute-authorized copy
+ * with a placeholder staging acceptance and, against PostgreSQL, the pre-state the
+ * fixture's inspect read.
  * The PostgreSQL fixture is production-like: tables owned by the non-superuser
  * login checksops_admin, Cursor SQL 73's ledger view in place (SQL 82 replaces
  * it) and the SQL 83 doorways absent (SQL 83 creates them).
@@ -92,6 +95,27 @@ const authorized = (key, extra = {}) => Object.freeze({
   staging_acceptance: { ...M[key].committed.staging_acceptance, ok: true, reference: STAGING_REF, basis: 'test fixture' },
   ...extra,
 });
+/** The committed pin (or another) with no recorded pre-state, for the no-pre-state refusals. */
+const unrecorded = (key, pin = M[key].committed) => Object.freeze({ ...pin, expected_live_definition_sha256: null });
+// The production --inspect of 2026-10-16 (SSM command f1430894-0783-46cf-bbab-e7137c10ece3, source eb540ee98).
+const PRODUCTION_INSPECT = {
+  sql82: {
+    live: '9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229',
+    function_states: { aws_public_homeowner_ledger_by_token: 'other' },
+  },
+  sql83: {
+    live: 'c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936',
+    function_states: {
+      aws_public_homeowner_ledger_endorse_capability: 'absent',
+      aws_public_homeowner_pending_signatures: 'absent',
+      aws_public_homeowner_document_sign_capability: 'absent',
+    },
+  },
+};
+const STAGING_PRE = {
+  sql82: '452f8f3d2411e0c3772fdf92c14e1b85785823dcb8d6567d01f1908dc9a8d783',
+  sql83: 'e85f64fa17ff2146d1aa3a603c83580c8c369dd2b49d252dfc8fd45453f4a21f',
+};
 const TEXT = Object.fromEntries(KEYS.map((key) => [key, fs.readFileSync(path.join(ROOT, M[key].committed.filename), 'utf8')]));
 const REVIEWED = Object.fromEntries(KEYS.map((key) => [key, Object.fromEntries(Object.entries(executor.homeownerReviewedFunctiondefs(key, TEXT[key]))
   .map(([identity, def]) => [identity, sha(def)]))]));
@@ -155,15 +179,34 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('production pins: pending, execute false, no recorded pre-state, the staging post-state, production RDS, one-shot registered', () => {
+test('production pins: pending, execute false, the recorded production pre-state, the staging post-state, production RDS, one-shot registered', () => {
   for (const key of KEYS) {
     const { committed: pin, staging } = M[key];
     assert.equal(pin.migration, key);
     assert.equal(pin.authorization, 'pending');
     assert.equal(pin.execute, false);
-    assert.equal(pin.expected_live_definition_sha256, null, 'placeholder pending the first inspect');
-    assert.equal(pin.production_inspect.status, 'pending');
-    assert.equal(pin.production_inspect.live_definition_sha256, null);
+    // The pre-state recorded from the read-only production inspect, not code-derived.
+    const inspect = pin.production_inspect;
+    assert.equal(pin.expected_live_definition_sha256, PRODUCTION_INSPECT[key].live, key);
+    assert.equal(inspect.live_definition_sha256, pin.expected_live_definition_sha256, key);
+    assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256, key);
+    assert.equal(inspect.status, 'recorded');
+    assert.equal(inspect.date, '2026-10-16');
+    assert.equal(inspect.ssm_command_id, 'f1430894-0783-46cf-bbab-e7137c10ece3');
+    assert.equal(inspect.source_commit, 'eb540ee982bf7c69d9e1c441f1400177d0f9f550');
+    assert.equal(inspect.read_only, true);
+    assert.equal(inspect.connected_as, 'checksops_admin');
+    assert.deepEqual(inspect.function_states, PRODUCTION_INSPECT[key].function_states, key);
+    assert.deepEqual(inspect.precondition_failures, []);
+    assert.equal(inspect.apply_preconditions_met, false, 'the value at inspect time, before the pre-state was recorded');
+    assert.deepEqual(inspect.legacy_remint_signer.signatures, ['public.aws_public_homeowner_ledger_remint_signer(text,uuid,text) returns jsonb']);
+    assert.equal(inspect.legacy_remint_signer.present, true);
+    // Staging and production pre-states are recorded separately and differ.
+    assert.equal(staging.expected_live_definition_sha256, STAGING_PRE[key], key);
+    assert.notEqual(pin.expected_live_definition_sha256, staging.expected_live_definition_sha256, key);
+    assert.match(pin.staging_acceptance.production_differs, /pre-states differ/);
+    assert.ok(pin.staging_acceptance.production_differs.includes(pin.expected_live_definition_sha256), key);
+    assert.ok(pin.staging_acceptance.production_differs.includes(staging.expected_live_definition_sha256), key);
     assert.equal(pin.staging_acceptance.ok, false);
     assert.equal(pin.staging_acceptance.reference, null);
     assert.deepEqual(pin.predecessors, []);
@@ -186,6 +229,43 @@ test('production pins: pending, execute false, no recorded pre-state, the stagin
   }
   assert.notEqual(M.sql82.phrase, M.sql83.phrase);
   assert.match(M.sql82.committed.order_note, /before SQL 83/);
+  // SQL 82: production's ledger view is not Cursor SQL 73 (no raw endorse link) and not SQL 82.
+  assert.deepEqual(M.sql82.committed.production_inspect.functions, {
+    aws_public_homeowner_ledger_by_token: {
+      exists: true,
+      identity_arguments: 'p_token text',
+      result: 'jsonb',
+      language: 'plpgsql',
+      security_definer: true,
+      config: ['search_path=public'],
+      owner: 'checksops_admin',
+      proacl: '{checksops_admin=X/checksops_admin,checksops=X/checksops_admin}',
+      definition_sha256: '1ee127e55c9e4a4f40eda5c1ac1aa7d3e58ca443f59966b7dfbcfa572076a62b',
+      raw_endorse_token_link: false,
+      body_matches_migration: false,
+    },
+  });
+  assert.notEqual(M.sql82.committed.production_inspect.functions.aws_public_homeowner_ledger_by_token.definition_sha256,
+    HOMEOWNER_DEFINITION_SHA256['public.aws_public_homeowner_ledger_by_token(text)']);
+});
+
+test('the committed production pins are still refused: execute false and authorization pending give PRODUCTION_APPROVAL_REQUIRED, before any connection', async () => {
+  for (const key of KEYS) {
+    const { committed } = M[key];
+    assert.equal(committed.execute, false);
+    assert.equal(committed.authorization, 'pending');
+    // A manifest bound exactly to the committed pin (the recorded pre-state), even with a staging acceptance.
+    const exact = manifest(key, committed, { staging_acceptance: authorized(key).staging_acceptance });
+    const evaluation = await M[key].evaluate(exact, { root: ROOT });
+    assert.equal(evaluation.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
+    assert.match(evaluation.message, /authorization is not an owner approval/);
+    const execute = await M[key].execute(exact, { root: ROOT, connect: neverConnect, consumedPath: consumedPath() });
+    assert.equal(execute.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
+    // An owner approval alone is not enough: execute false still refuses, and so does the missing staging acceptance.
+    const approvedOnly = { ...committed, authorization: OWNER_APPROVED };
+    assert.equal((await M[key].execute(exact, { root: ROOT, pin: { ...approvedOnly, staging_acceptance: authorized(key).staging_acceptance }, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.GUARD_APPLY_FORBIDDEN, key);
+    assert.equal((await M[key].evaluate(manifest(key, committed), { root: ROOT, pin: approvedOnly })).code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
+  }
 });
 
 test('both tools are inventoried as GUARDED and their tests run in test:deployment-guard and the deployment-guard workflow', () => {
@@ -329,12 +409,15 @@ test('evaluation needs a recorded pre-state, the exact pin, a recorded staging a
   for (const key of KEYS) {
     const { committed } = M[key];
     const evaluate = (input, pin) => M[key].evaluate(input, { root: ROOT, pin });
-    // The committed pin: no pre-state recorded (null), whatever the manifest says.
-    const pending = await M[key].evaluate(manifest(key, authorized(key)), { root: ROOT });
+    // No pre-state recorded (null), whatever the manifest says.
+    const pending = await evaluate(manifest(key, authorized(key)), unrecorded(key, authorized(key)));
     assert.equal(pending.code, CODES.SQL_COLLISION, key);
     assert.match(pending.message, /no recorded pre-apply live definition hash/);
-    const nullManifest = await evaluate(manifest(key, committed), { ...committed, staging_acceptance: authorized(key).staging_acceptance });
+    const nullManifest = await evaluate(manifest(key, unrecorded(key)), unrecorded(key, { ...committed, staging_acceptance: authorized(key).staging_acceptance }));
     assert.equal(nullManifest.code, CODES.SQL_COLLISION, 'null == null is never a match');
+    // The committed pin (pre-state recorded, authorization pending): refused for approval.
+    const committedPin = await M[key].evaluate(manifest(key, authorized(key)), { root: ROOT });
+    assert.equal(committedPin.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
     // Recorded pre-state but no staging acceptance.
     const noAcceptance = await evaluate(manifest(key, authorized(key)), { ...authorized(key), staging_acceptance: committed.staging_acceptance });
     assert.equal(noAcceptance.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
@@ -370,8 +453,9 @@ test('CLI with the committed (pending) pin refuses before the guard; without a r
         });
         const out = `${result.stdout}${result.stderr}`;
         assert.notEqual(result.status, 0, out);
-        assert.match(out, /SQL_COLLISION/);
-        assert.match(out, /no recorded pre-apply live definition hash/);
+        // The committed pin has its pre-state recorded but authorization "pending".
+        assert.match(out, /PRODUCTION_APPROVAL_REQUIRED/);
+        assert.match(out, /authorization is not an owner approval/);
         assert.doesNotMatch(out, /secretsmanager|ECONNREFUSED|rolled back/i);
       }
     } finally {
@@ -405,8 +489,12 @@ test('CLI does not spend the receipt on a wrong phrase, execute false, a wrong o
     assert.match(notExecutable.out, /execute is not authorized/);
     const committed = await runCli(key, argv, { input: manifest(key, pin), deps: { pin: M[key].committed, enforceScriptGuard: () => { throw new Error('guard-called'); } } });
     assert.equal(committed.spent, 0);
-    assert.match(committed.out, /SQL_COLLISION/);
+    assert.match(committed.out, /PRODUCTION_APPROVAL_REQUIRED/);
     assert.doesNotMatch(committed.out, /guard-called/);
+    const noPreState = await runCli(key, argv, { input: manifest(key, pin), deps: { pin: unrecorded(key, pin), enforceScriptGuard: () => { throw new Error('guard-called'); } } });
+    assert.equal(noPreState.spent, 0);
+    assert.match(noPreState.out, /SQL_COLLISION/);
+    assert.doesNotMatch(noPreState.out, /guard-called/);
     const wrongOwner = await runCli(key, argv, { input: manifest(key, pin), deps: { pin, enforceScriptGuard: () => owned('aws/workflows/sql/81_checkalt_production_register.sql') } });
     assert.equal(wrongOwner.spent, 0);
     assert.match(wrongOwner.out, /RECEIPT_MISMATCH/);
@@ -421,7 +509,7 @@ test('CLI does not spend the receipt on a wrong phrase, execute false, a wrong o
     const arbitrary = await runCli(key, argv, { input: { ...manifest(key, pin), sql_text: 'DROP FUNCTION public.aws_public_homeowner_ledger_remint_signer(text, uuid)' }, deps: { pin, enforceScriptGuard: () => owned() } });
     assert.equal(arbitrary.spent, 0);
     assert.match(arbitrary.out, /arbitrary SQL text is forbidden/);
-    for (const r of [phrase, notExecutable, committed, wrongOwner, reused, noFlag, arbitrary]) assert.doesNotMatch(r.out, /should-not-connect/);
+    for (const r of [phrase, notExecutable, committed, noPreState, wrongOwner, reused, noFlag, arbitrary]) assert.doesNotMatch(r.out, /should-not-connect/);
   }
 });
 
@@ -472,10 +560,11 @@ test('the real guard: a staging receipt cannot authorize production; a productio
   }
 });
 
-test('apply refuses before connecting: the committed pin, no phrase, no single-use id, execute false, no staging acceptance', async () => {
+test('apply refuses before connecting: the committed pin, no pre-state, no phrase, no single-use id, execute false, no staging acceptance', async () => {
   for (const key of KEYS) {
     const run = (overrides, pin = authorized(key)) => M[key].execute(manifest(key, authorized(key), overrides), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() });
-    assert.equal((await M[key].execute(manifest(key, authorized(key)), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.SQL_COLLISION);
+    assert.equal((await M[key].execute(manifest(key, authorized(key)), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+    assert.equal((await run({}, unrecorded(key, authorized(key)))).code, CODES.SQL_COLLISION);
     assert.equal((await run({}, { ...authorized(key), staging_acceptance: M[key].committed.staging_acceptance })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
     assert.equal((await run({}, { ...authorized(key), execute: false })).code, CODES.GUARD_APPLY_FORBIDDEN);
     assert.equal((await run({ authorization_phrase: 'yes' })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
@@ -563,7 +652,8 @@ test('PostgreSQL 16: production inspect is read-only and reports the state; SQL 
     for (const key of KEYS) {
       const spec = HOMEOWNER_MIGRATIONS[key];
       seen.length = 0;
-      const first = await M[key].inspect({ connect, pin: M[key].committed, root: ROOT });
+      // A pin with no recorded pre-state (as before the production inspect was recorded).
+      const first = await M[key].inspect({ connect, pin: unrecorded(key), root: ROOT });
       assert.equal(first.ok, true, JSON.stringify(first));
       const d = first.details;
       assert.equal(seen[0], 'BEGIN READ ONLY');
@@ -605,12 +695,18 @@ test('PostgreSQL 16: production inspect is read-only and reports the state; SQL 
         assert.equal(row.body_matches_migration, false);
         assert.equal(d.ledger_view_raw_endorse_token_link, true);
         assert.deepEqual(d.function_states, { aws_public_homeowner_ledger_by_token: 'other' });
+        // This fixture's view is Cursor SQL 73's, so it reads as staging's recorded pre-state, not
+        // production's (whose view has no raw endorse link): the committed pin would refuse it.
+        assert.equal(d.live_definition_sha256, STAGING_PRE.sql82);
+        assert.notEqual(d.live_definition_sha256, M.sql82.committed.expected_live_definition_sha256);
       } else {
         for (const fn of spec.functions) {
           assert.equal(d.functions[fn.name].exists, false, fn.name);
           assert.equal(d.functions[fn.name].proacl, null);
         }
         assert.deepEqual(Object.values(d.function_states), ['absent', 'absent', 'absent']);
+        // All three absent: the same fingerprint as production's recorded inspect.
+        assert.equal(d.live_definition_sha256, M.sql83.committed.expected_live_definition_sha256);
         assert.equal('ledger_view_raw_endorse_token_link' in d, false);
       }
 
