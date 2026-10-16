@@ -196,7 +196,7 @@
     },
     "workflow-rpc.mjs": {
       "operation": "replace",
-      "accepted_sha256": "fd321e64253d99b77b5b364be51df9204b6a67b02eb5754ff773ee198defbdae",
+      "accepted_sha256": "37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907",
       "expected_live_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-check-case-tenant-scope-manifest-2026-10-16.json"

@@ -610,6 +610,10 @@ const executeHomeownerIntro = async ({ client, args }) => {
 const executeResolveCheckCase = async ({ client, mapping, args }) => {
   const tenantId = arg(args, '_tenant_id', 'tenant_id');
   if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: '_tenant_id' };
+  const claimId = arg(args, '_claim_id', 'claim_id');
+  const externalClaimId = arg(args, '_external_claim_id', 'external_claim_id');
+  if (claimId && !isUuid(claimId)) return { error: 'invalid_uuid', field: '_claim_id' };
+  if (externalClaimId && !isUuid(externalClaimId)) return { error: 'invalid_uuid', field: '_external_claim_id' };
   // Owner policy: owner, admin, manager and operator of this tenant act;
   // viewers, partners and platform admin/staff without a membership do not.
   const member = (await client.query(
@@ -620,28 +624,39 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
     [mapping.application_user_id, tenantId],
   )).rows[0];
   if (!member) return { error: 'not_authorized', message: 'Not a member of tenant' };
-  const claimId = arg(args, '_claim_id', 'claim_id');
-  const externalClaimId = arg(args, '_external_claim_id', 'external_claim_id');
   const claimNumber = arg(args, '_claim_number', 'claim_number');
   const insuredName = arg(args, '_insured_name', 'insured_name');
   const propertyAddress = arg(args, '_property_address', 'property_address');
   const carrierName = arg(args, '_carrier_name', 'carrier_name');
   const vExt = claimId || externalClaimId;
-  // The claim must belong to this tenant (its org, or one of this tenant's checks).
+  // When vExt names a claim, the claim must belong to this tenant (its org,
+  // or one of this tenant's checks) before any case is looked up or inserted.
+  // The org-less branch is broader than RLS (aws_can_access_claim in
+  // 11_access_helpers.sql treats NULL org_id claims as owner-only); it is
+  // acceptable because check_intake_items.claim_id links are set server-side
+  // only, so a tenant cannot attach a foreign claim to its own check.
+  // A _claim_id must be such a claim; an _external_claim_id with no claims
+  // row is allowed as before.
   let claim = null;
-  if (claimId && isUuid(claimId)) {
-    claim = (await client.query(
-      `SELECT c.* FROM public.claims c
-       WHERE c.id = $1::uuid
-         AND (c.org_id = $2::uuid
+  if (vExt) {
+    const found = (await client.query(
+      `SELECT c.*, (c.org_id = $2::uuid
            OR (c.org_id IS NULL AND EXISTS (SELECT 1 FROM public.check_intake_items ci
-                      WHERE ci.claim_id = c.id AND ci.tenant_id = $2::uuid)))
+                      WHERE ci.claim_id = c.id AND ci.tenant_id = $2::uuid))) AS in_tenant
+       FROM public.claims c
+       WHERE c.id = $1::uuid
        LIMIT 1`,
-      [claimId, tenantId],
+      [vExt, tenantId],
     )).rows[0] || null;
-    if (!claim) return { error: 'claim_not_in_tenant', message: 'Claim does not belong to this tenant' };
+    if ((found && found.in_tenant !== true) || (!found && claimId)) {
+      return { error: 'claim_not_in_tenant', message: 'Claim does not belong to this tenant' };
+    }
+    if (claimId) {
+      const { in_tenant: _inTenant, ...row } = found;
+      claim = row;
+    }
   }
-  if (vExt && isUuid(vExt)) {
+  if (vExt) {
     const existing = (await client.query(
       `SELECT id FROM public.check_cases
        WHERE tenant_id = $1::uuid AND external_system = 'freedom_crm' AND external_claim_id = $2::uuid
@@ -676,7 +691,7 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
     [
       tenantId,
       vExt ? 'freedom_crm' : 'checksops',
-      vExt && isUuid(vExt) ? vExt : null,
+      vExt || null,
       claim?.claim_number || claimNumber || null,
       claim?.policyholder_name || insuredName || null,
       claim?.policyholder_email || null,
@@ -690,7 +705,7 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
     ],
   )).rows[0];
   if (inserted) return { data: inserted.id };
-  if (vExt && isUuid(vExt)) {
+  if (vExt) {
     const again = (await client.query(
       `SELECT id FROM public.check_cases
        WHERE tenant_id = $1::uuid AND external_system = 'freedom_crm' AND external_claim_id = $2::uuid
@@ -699,7 +714,7 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
     )).rows[0];
     // check_cases_external_claim_uidx is global, so the conflicting row may
     // be another tenant's case; never return its id.
-    if (!again) return { error: 'check_case_conflict', message: 'Claim is already linked to a case outside this tenant' };
+    if (!again) return { error: 'check_case_conflict', message: 'Case could not be resolved' };
     return { data: again.id };
   }
   return { data: null };

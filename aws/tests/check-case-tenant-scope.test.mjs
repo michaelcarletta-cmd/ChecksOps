@@ -61,11 +61,16 @@ const fakeDb = ({
         assert.match(sql, /c\.org_id = \$2::uuid/);
         assert.match(sql, /check_intake_items/);
         const [claimId, tenantId] = params;
+        assert.match(sql, /AS in_tenant/);
         const c = claims.find((row) => row.id === claimId);
         if (!c) return { rows: [] };
-        const owned = c.org_id === tenantId
-          || (c.org_id == null && checks.some((ci) => ci.claim_id === c.id && ci.tenant_id === tenantId));
-        return { rows: owned ? [c] : [] };
+        // SQL three-valued logic: NULL org_id with no own check yields NULL.
+        let inTenant;
+        if (c.org_id === tenantId) inTenant = true;
+        else if (c.org_id == null) {
+          inTenant = checks.some((ci) => ci.claim_id === c.id && ci.tenant_id === tenantId) ? true : null;
+        } else inTenant = false;
+        return { rows: [{ ...c, in_tenant: inTenant }] };
       }
       if (/^\s*SELECT id FROM public\.check_cases/.test(sql)) {
         assert.match(sql, /tenant_id = \$1::uuid/);
@@ -259,4 +264,73 @@ test('claim-number path stays tenant-scoped and unchanged', async () => {
   const second = await call(client, { _claim_number: 'N-77' });
   assert.equal(second.data, first.data);
   assert.equal(inserts(client).length, 1);
+});
+
+test("_external_claim_id naming another tenant's claim is refused before any insert", async () => {
+  const client = fakeDb();
+  const result = await call(client, { _external_claim_id: FOREIGN_CLAIM, _claim_number: 'X-1' });
+  assert.equal(result.error, 'claim_not_in_tenant');
+  assert.equal(inserts(client).length, 0);
+  assert.equal(client.queries.some((q) => /FROM public\.check_cases/.test(q.sql)), false);
+  assert.equal(client.cases.length, 0);
+});
+
+test("_external_claim_id naming an org-less claim without the tenant's check is refused", async () => {
+  const client = fakeDb({ checks: [{ claim_id: ORGLESS_CLAIM, tenant_id: OTHER_TENANT }] });
+  const result = await call(client, { _external_claim_id: ORGLESS_CLAIM });
+  assert.equal(result.error, 'claim_not_in_tenant');
+  assert.equal(inserts(client).length, 0);
+});
+
+test("_external_claim_id naming the tenant's own claim is allowed", async () => {
+  const client = fakeDb();
+  const result = await call(client, { _external_claim_id: OWN_CLAIM, _insured_name: 'Given' });
+  assert.ok(result.data);
+  assert.equal(client.cases.length, 1);
+  assert.equal(client.cases[0].tenant_id, TENANT);
+  assert.equal(client.cases[0].external_claim_id, OWN_CLAIM);
+  // As before, only _claim_id copies claim fields.
+  assert.equal(client.cases[0].insured_name, 'Given');
+  assert.equal(client.cases[0].insured_email, null);
+});
+
+test('an external id with no matching claim is allowed as before', async () => {
+  const ext = '55555555-5555-4555-8555-555555555555';
+  const client = fakeDb();
+  const result = await call(client, { _external_claim_id: ext, _claim_number: 'EXT-1' });
+  assert.ok(result.data);
+  assert.equal(client.cases[0].external_system, 'freedom_crm');
+  assert.equal(client.cases[0].external_claim_id, ext);
+  assert.equal(client.cases[0].claim_number, 'EXT-1');
+});
+
+for (const [field, value] of [
+  ['_claim_id', 'not-a-uuid'],
+  ['_claim_id', "1' OR '1'='1"],
+  ['_external_claim_id', '1234'],
+  ['_external_claim_id', 42],
+]) {
+  test(`non-UUID ${field} (${JSON.stringify(value)}) is rejected before any query`, async () => {
+    const client = fakeDb();
+    const result = await call(client, { [field]: value });
+    assert.deepEqual(result, { error: 'invalid_uuid', field });
+    assert.equal(client.queries.length, 0);
+  });
+}
+
+test('a race on an unclaimed external id returns a generic conflict without an id', async () => {
+  const ext = '66666666-6666-4666-8666-666666666666';
+  const client = fakeDb();
+  const original = client.query;
+  let raced = false;
+  client.query = async (sql, params) => {
+    if (!raced && /INSERT INTO public\.check_cases/.test(sql)) {
+      raced = true;
+      client.cases.push({ id: FOREIGN_CASE, tenant_id: OTHER_TENANT, external_system: 'freedom_crm', external_claim_id: ext });
+    }
+    return original(sql, params);
+  };
+  const result = await call(client, { _external_claim_id: ext });
+  assert.deepEqual(result, { error: 'check_case_conflict', message: 'Case could not be resolved' });
+  assert.doesNotMatch(JSON.stringify(result), /tenant/i);
 });
