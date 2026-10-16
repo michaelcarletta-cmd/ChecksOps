@@ -40,6 +40,7 @@ import { evaluateSql84ProductionApply } from '../../scripts/deployment-guard/lib
 import { evaluateSql85ProductionApply } from '../../scripts/deployment-guard/lib/sql85-mortgage-compensation-adjust-production-apply.mjs';
 import { evaluateSql86ProductionApply } from '../../scripts/deployment-guard/lib/sql86-mortgage-compensation-owner-only-production-apply.mjs';
 import { evaluateSql87ProductionApply } from '../../scripts/deployment-guard/lib/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
+import { evaluateSql88ProductionApply } from '../../scripts/deployment-guard/lib/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 import { evaluateSql89ProductionApply } from '../../scripts/deployment-guard/lib/sql89-check-intake-column-update-production-apply.mjs';
 import { main as oneShotMain } from '../../scripts/deployment-guard/production-sql-one-shot.mjs';
 
@@ -60,12 +61,13 @@ const EVALUATORS = Object.freeze({
   sql85: evaluateSql85ProductionApply,
   sql86: evaluateSql86ProductionApply,
   sql87: evaluateSql87ProductionApply,
+  sql88: evaluateSql88ProductionApply,
   sql89: evaluateSql89ProductionApply,
 });
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
-// A pin whose staging acceptance is still pending (SQL 71 and SQL 89 today) gets a placeholder
+// A pin whose staging acceptance is still pending (SQL 71, SQL 88 and SQL 89 today) gets a placeholder
 // reference in the execute-authorized test copy, and a pin whose pre-state is not recorded
-// (expected_live_definition_sha256 null, SQL 71 and SQL 89 today) a placeholder hash; the committed pins are checked to
+// (expected_live_definition_sha256 null, SQL 71, SQL 88 and SQL 89 today) a placeholder hash; the committed pins are checked to
 // refuse below.
 const FIXTURE_STAGING_ACCEPTANCE = Object.freeze({ ok: true, reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000', basis: 'test fixture' });
 const FIXTURE_EXPECTED_LIVE = 'e'.repeat(64);
@@ -528,6 +530,7 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   // (explicit copy) and the pending authorization (with a placeholder pre-state for SQL 71).
   const RECORDED_PRODUCTION_PRE = {
     sql71: null,
+    sql88: null,
     sql89: null,
     sql82: '9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229',
     sql83: 'c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936',
@@ -535,7 +538,7 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     sql85: '7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d',
     sql86: 'c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b',
   };
-  for (const key of ['sql71', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86']) {
+  for (const key of ['sql71', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     const committed = EXECUTE_AUTHORIZED.includes(key)

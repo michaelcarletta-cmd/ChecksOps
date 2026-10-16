@@ -19,6 +19,7 @@ that connects to the database:
 | `sql85` | `scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs` (`ops/production-sql-84-86-apply.md`) |
 | `sql86` | `scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs` (`ops/production-sql-84-86-apply.md`) |
 | `sql87` | `scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs` (`ops/production-sql-87-apply.md`) |
+| `sql88` | `scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs` (`ops/production-sql-88-apply.md`) |
 | `sql89` | `scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs` (`ops/production-sql-89-apply.md`) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
@@ -29,7 +30,7 @@ To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql87`, `sql89`) |
+| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql89`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
@@ -129,7 +130,8 @@ An unexpected exception also ends in one failure summary:
    `sql81_production_apply_allowed` / `sql82_production_apply_allowed` /
    `sql83_production_apply_allowed` / `sql84_production_apply_allowed` /
    `sql85_production_apply_allowed` / `sql86_production_apply_allowed` /
-   `sql87_production_apply_allowed` / `sql89_production_apply_allowed` true.
+   `sql87_production_apply_allowed` / `sql88_production_apply_allowed` /
+   `sql89_production_apply_allowed` true.
 8. **Apply.** Runs `<tool> --apply --input <manifest>`.
    - This is the only child that gets `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1` and
      `CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT`.

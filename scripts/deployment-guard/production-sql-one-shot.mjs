@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One runner invocation for one production SQL migration (SQL 71, SQL 77 to 87, SQL 89,
+ * One runner invocation for one production SQL migration (SQL 71, SQL 77 to 89,
  * or any tool registered in lib/production-sql-one-shot.mjs).
  *
  *   node scripts/deployment-guard/production-sql-one-shot.mjs \
