@@ -349,6 +349,19 @@ export const createSignatureRequestRows = async ({ client, mapping, body, spoof 
   return { ok: true, requestId, request: inserted, checkFileLinked, spoofFieldsIgnored: spoof };
 };
 
+/**
+ * A completed or signed request (or one whose signers have all signed) must
+ * never be re-sent: Resend would re-mint signer tokens and re-email links for
+ * a document that is already signed.
+ */
+export const signatureRequestAlreadyComplete = (request, signers = []) => {
+  const status = String(request?.status || '').toLowerCase();
+  if (status === 'completed' || status === 'signed') return true;
+  return Array.isArray(signers)
+    && signers.length > 0
+    && signers.every((signer) => String(signer?.status || '').toLowerCase() === 'signed');
+};
+
 export const runSendSignatureRequest = async ({
   client, mapping, body, spoof, send,
 }) => {
@@ -385,6 +398,10 @@ export const runSendSignatureRequest = async ({
   const tenantId = await resolveRequestTenantId(client, request);
   const actor = await requireSignatureActor(client, { mapping, tenantId, spoof });
   if (actor.ok === false) return actor;
+  // Before any token is minted or email sent.
+  if (signatureRequestAlreadyComplete(request, signers)) {
+    return { ok: false, statusCode: 409, error: 'already_signed', requestId, spoofFieldsIgnored: spoof };
+  }
 
   const resolved = await resolveEmailBranding(client, {
     tenantId,
@@ -564,6 +581,87 @@ export const runSendSignatureRequest = async ({
   };
 };
 
+/**
+ * A request may be deleted only while nobody can have a link to it: a draft,
+ * or a request whose every email failed, with no sent_at, no final PDF, no
+ * manual-bypass links, and no signer who viewed or signed.
+ */
+export const signatureRequestDeletable = (request, signers = []) => {
+  if (!request) return false;
+  const status = String(request.status || '').toLowerCase();
+  if (status !== 'draft' && status !== 'failed') return false;
+  if (request.sent_at || request.final_pdf_path) return false;
+  if (String(request.delivery_mode || '').toLowerCase() === 'manual_bypass') return false;
+  return (Array.isArray(signers) ? signers : []).every((signer) => (
+    String(signer?.status || '').toLowerCase() !== 'signed'
+    && !signer?.signed_at
+    && !signer?.viewed_at
+    && String(signer?.delivery_status || '').toLowerCase() !== 'sent'
+  ));
+};
+
+/**
+ * Delete an unsent signature request (send-signature-request, action "delete").
+ * Same tenant-member gate as send. Deletes the row only; signers, fields and
+ * values cascade, check_files.signature_request_id is set null by its FK. The
+ * source document is left in storage because it may be a shared check file.
+ */
+export const runDeleteSignatureRequest = async ({ client, mapping, body, spoof }) => {
+  const requestId = optionalUuid(body.requestId ?? body.request_id);
+  if (!requestId) {
+    return { ok: false, statusCode: 400, error: 'missing_request_id', spoofFieldsIgnored: spoof };
+  }
+  const request = (await client.query(
+    `SELECT id, claim_id, check_intake_item_id, status, sent_at, final_pdf_path, delivery_mode
+     FROM public.signature_requests WHERE id = $1::uuid LIMIT 1`,
+    [requestId],
+  )).rows[0];
+  if (!request) {
+    return { ok: false, statusCode: 404, error: 'Request not found', spoofFieldsIgnored: spoof };
+  }
+  request.claims = await loadClaimsContext(client, request);
+  const tenantId = await resolveRequestTenantId(client, request);
+  const actor = await requireSignatureActor(client, { mapping, tenantId, spoof });
+  if (actor.ok === false) return actor;
+
+  const signers = (await client.query(
+    `SELECT id, status, signed_at, viewed_at, delivery_status
+     FROM public.signature_signers WHERE signature_request_id = $1::uuid`,
+    [requestId],
+  )).rows;
+  if (!signatureRequestDeletable(request, signers)) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'not_deletable',
+      message: 'Only draft or unsent signature requests can be deleted',
+      requestId,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  const deleted = await client.query(
+    `DELETE FROM public.signature_requests
+     WHERE id = $1::uuid
+       AND status IN ('draft', 'failed')
+       AND sent_at IS NULL
+       AND final_pdf_path IS NULL`,
+    [requestId],
+  );
+  if (Number(deleted?.rowCount || 0) !== 1) {
+    return { ok: false, statusCode: 409, error: 'not_deletable', requestId, spoofFieldsIgnored: spoof };
+  }
+  await logEvent(client, {
+    request_id: null, signer_id: null, claim_id: request.claim_id || null,
+    stage: 'request_deleted', status: 'ok',
+    message: 'Unsent signature request deleted',
+    payload: { requestId, application_user_id: mapping?.application_user_id || null },
+  });
+  return { ok: true, statusCode: 200, requestId, deleted: true, spoofFieldsIgnored: spoof };
+};
+
 export const handleSendSignatureRequest = (event, deps = {}) => withIdentityWrite(event, (ctx) => (
-  runSendSignatureRequest({ ...ctx, send: deps.sendViaSesOrSink })
+  String(ctx.body?.action || '') === 'delete'
+    ? runDeleteSignatureRequest(ctx)
+    : runSendSignatureRequest({ ...ctx, send: deps.sendViaSesOrSink })
 ), deps);
