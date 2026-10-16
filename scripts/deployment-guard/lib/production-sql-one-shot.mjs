@@ -39,6 +39,9 @@ import { SQL80_PRODUCTION_PIN_REL } from './sql80-checkalt-production-apply.mjs'
 import { SQL81_PRODUCTION_PIN_REL } from './sql81-checkalt-production-apply.mjs';
 import { SQL82_PRODUCTION_PIN_REL } from './sql82-homeowner-ledger-production-apply.mjs';
 import { SQL83_PRODUCTION_PIN_REL } from './sql83-homeowner-signing-production-apply.mjs';
+import { SQL84_PRODUCTION_PIN_REL } from './sql84-mortgage-return-to-queue-production-apply.mjs';
+import { SQL85_PRODUCTION_PIN_REL } from './sql85-mortgage-compensation-adjust-production-apply.mjs';
+import { SQL86_PRODUCTION_PIN_REL } from './sql86-mortgage-compensation-owner-only-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
@@ -117,6 +120,9 @@ const SQL80_TOOL = 'scripts/deployment-guard/sql80-checkalt-production-apply.mjs
 const SQL81_TOOL = 'scripts/deployment-guard/sql81-checkalt-production-apply.mjs';
 const SQL82_TOOL = 'scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs';
 const SQL83_TOOL = 'scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs';
+const SQL84_TOOL = 'scripts/deployment-guard/sql84-mortgage-return-to-queue-production-apply.mjs';
+const SQL85_TOOL = 'scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs';
+const SQL86_TOOL = 'scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
 const memberTool = (key) => Object.freeze({
@@ -163,6 +169,27 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL83_PRODUCTION_PIN_REL,
     allowed_key: 'sql83_production_apply_allowed',
   }),
+  sql84: Object.freeze({
+    key: 'sql84',
+    script: SQL84_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL84_PRODUCTION_PIN_REL,
+    allowed_key: 'sql84_production_apply_allowed',
+  }),
+  sql85: Object.freeze({
+    key: 'sql85',
+    script: SQL85_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL85_PRODUCTION_PIN_REL,
+    allowed_key: 'sql85_production_apply_allowed',
+  }),
+  sql86: Object.freeze({
+    key: 'sql86',
+    script: SQL86_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL86_PRODUCTION_PIN_REL,
+    allowed_key: 'sql86_production_apply_allowed',
+  }),
 });
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */
@@ -195,6 +222,11 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'pre_state_recorded',
   'row_security_off_supported',
   'ledger_view_raw_endorse_token_link',
+  'sql47_prerequisites_present',
+  'missing_prerequisites',
+  'per_check_unique_present',
+  'billing_duplicates',
+  'earn_owner',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;

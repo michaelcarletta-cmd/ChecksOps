@@ -727,6 +727,424 @@ export const AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES = Object.freeze({
   function_identities: Object.freeze(HOMEOWNER_MIGRATIONS.sql83.functions.map((fn) => fn.identity)),
 });
 
+// SQL 84 (aws/workflows/sql/84_mortgage_return_to_queue.sql), SQL 85
+// (aws/workflows/sql/85_mortgage_compensation_adjust.sql) and SQL 86
+// (aws/workflows/sql/86_mortgage_compensation_owner_only.sql): Mortgage Ops Return
+// to Queue, compensation Adjust and the platform-owner-only compensation helper, all
+// forward migrations on top of the Cursor SQL 47 compensation ledger. Independent of
+// each other (no predecessor check); the reviewed order is 84, 85, 86.
+//
+// Neither staging's nor production's pre-state is code-derived (staging may carry
+// Cursor SQL 48 / SQL 49 bodies of the same names, production may lack SQL 47), so
+// expected_live_definition_sha256 stays null until a read-live / --inspect has
+// recorded it in a reviewed pin change, and apply refuses until then. The state text
+// (mortgageStateText) is environment-independent: per function present or absent,
+// how many functions carry its name, and when present its arguments, result,
+// definition sha256, SECURITY DEFINER, proconfig, whether the executor role owns it
+// and its non-owner ACL entries; plus each migration's own tables, columns, indexes
+// and constraints (never owner names, never row data).
+export const MORTGAGE_TARGET_CONFIG = Object.freeze(['search_path=public', 'row_security=off']);
+// Non-owner function ACL entries a file's REVOKE ALL ... FROM PUBLIC (and, for SQL 86's
+// earn function, FROM checksops / authenticated) fully replaces.
+export const MORTGAGE_REPLACEABLE_ACL_ENTRIES = Object.freeze(['PUBLIC EXECUTE', 'authenticated EXECUTE', 'checksops EXECUTE']);
+// SQL 84's GATE 0: an existing per-check unique index on check_billing_events counts
+// only with exactly one of these predicates (PostgreSQL's normalized text).
+export const MORTGAGE_PER_CHECK_PREDICATES = Object.freeze({
+  staging: "((event_type = ANY (ARRAY['mortgage_ops_initial'::text, 'mortgage_ops_additional_check'::text])) AND (check_intake_item_id IS NOT NULL))",
+  fallback: "((event_type = ANY (ARRAY['mortgage_ops_initial'::text, 'mortgage_ops_additional_check'::text])) AND (status IS DISTINCT FROM 'voided'::text) AND (check_intake_item_id IS NOT NULL))",
+});
+export const MORTGAGE_FALLBACK_INDEX = 'check_billing_events_one_mortgage_ops_per_check';
+export const MORTGAGE_AUDIT_TABLE = 'mortgage_ops_request_audit';
+
+const mortgageFunction = ({
+  name, key = name, args, argNames = null, result, language = 'plpgsql', volatility = null, retset = false, config = MORTGAGE_TARGET_CONFIG,
+  role = 'target', grantees = null,
+}) => Object.freeze({
+  name,
+  // The report key (unique per migration; SQL 85's two signatures share a name).
+  key,
+  identity: `public.${name}(${args.map((arg) => arg.split(' ')[1]).join(', ')})`,
+  arguments: args.join(', '),
+  // proargnames: the parameters, then (RETURNS TABLE) the output columns.
+  arg_names: Object.freeze(argNames || args.map((arg) => arg.split(' ')[0])),
+  result,
+  language,
+  volatility,
+  retset,
+  config: Object.freeze([...config]),
+  // target: CREATE OR REPLACEd by the file; dropped: DROPped by it; acl_only: only its
+  // ACL is replaced; referenced: read (owner) only.
+  role,
+  // Non-owner EXECUTE grantees after the apply (null: the file does not set the ACL).
+  grantees: grantees ? Object.freeze([...grantees]) : null,
+});
+
+const SQL47_REQUIRED = (extra = []) => Object.freeze([
+  'public.mortgage_agent_compensation_entries',
+  'public.mortgage_agent_compensation_exclusions',
+  'public.mortgage_agent_compensation_audit',
+  ...extra,
+]);
+
+/**
+ * The objects each file needs (its own sql47_prerequisite_missing list, plus the
+ * roles), the functions it touches and the columns its bodies read (table ->
+ * columns), so the inspect can show what a live schema lacks.
+ */
+export const MORTGAGE_MIGRATIONS = Object.freeze({
+  sql84: Object.freeze({
+    key: 'sql84',
+    label: 'SQL 84',
+    prerequisites: Object.freeze([
+      ...SQL47_REQUIRED(['public.mortgage_handling_requests', 'public.check_billing_events']),
+      'public.is_platform_owner()',
+      'auth.uid()',
+      'role checksops',
+      'role authenticated',
+    ]),
+    functions: Object.freeze([
+      mortgageFunction({
+        name: 'return_mortgage_handling_request_to_queue',
+        args: ['p_request_id uuid', 'p_reason text'],
+        result: 'public.mortgage_handling_requests',
+        grantees: ['authenticated', 'checksops'],
+      }),
+    ]),
+    columns: Object.freeze({
+      mortgage_handling_requests: Object.freeze(['id', 'tenant_id', 'check_intake_item_id', 'claim_id', 'status', 'assigned_employee_id', 'accepted_at', 'completed_at', 'updated_at']),
+      check_billing_events: Object.freeze(['id', 'tenant_id', 'check_intake_item_id', 'event_type', 'status', 'created_at']),
+      mortgage_agent_compensation_exclusions: Object.freeze(['mortgage_request_id']),
+      mortgage_agent_compensation_entries: Object.freeze(['mortgage_request_id', 'parent_entry_id', 'status']),
+      mortgage_agent_compensation_audit: Object.freeze(['actor_id', 'action', 'payload']),
+    }),
+    // Relations the file creates (skipped by the unrelated-catalog snapshot).
+    new_relations: Object.freeze([`public.${MORTGAGE_AUDIT_TABLE}`, `public.${MORTGAGE_FALLBACK_INDEX}`]),
+    altered_tables: Object.freeze([]),
+  }),
+  sql85: Object.freeze({
+    key: 'sql85',
+    label: 'SQL 85',
+    prerequisites: Object.freeze([
+      ...SQL47_REQUIRED(['public.mortgage_agent_compensation_batches', 'public.user_roles']),
+      'public.is_platform_owner()',
+      'public.aws_is_active_mortgage_agent(uuid)',
+      'auth.uid()',
+      'role checksops',
+      'role authenticated',
+    ]),
+    functions: Object.freeze([
+      mortgageFunction({
+        name: 'adjust_mortgage_agent_compensation',
+        args: ['p_parent_entry_id uuid', 'p_amount_cents integer', 'p_reason text', 'p_counterparty_agent_id uuid DEFAULT NULL::uuid', 'p_pay_period text DEFAULT NULL::text', 'p_idempotency_key text DEFAULT NULL::text'],
+        result: 'jsonb',
+        grantees: ['authenticated', 'checksops'],
+      }),
+      // The Cursor SQL 49 (and first SQL 85) five-argument body, which the file drops.
+      mortgageFunction({
+        name: 'adjust_mortgage_agent_compensation',
+        key: 'adjust_mortgage_agent_compensation_five_arg',
+        args: ['p_parent_entry_id uuid', 'p_amount_cents integer', 'p_reason text', 'p_counterparty_agent_id uuid DEFAULT NULL::uuid', 'p_pay_period text DEFAULT NULL::text'],
+        result: 'jsonb',
+        role: 'dropped',
+      }),
+    ]),
+    columns: Object.freeze({
+      mortgage_agent_compensation_entries: Object.freeze(['id', 'agent_user_id', 'mortgage_request_id', 'check_intake_item_id', 'claim_id', 'tenant_id', 'classification', 'amount_cents', 'tenant_billing_event_id', 'tenant_billing_event_type', 'tenant_billing_amount_cents', 'accepted_at', 'completed_at', 'earned_at', 'pay_period', 'status', 'parent_entry_id']),
+      mortgage_agent_compensation_batches: Object.freeze(['id', 'pay_period', 'agent_user_id', 'action', 'note', 'created_by']),
+      mortgage_agent_compensation_audit: Object.freeze(['entry_id', 'batch_id', 'actor_id', 'action', 'from_status', 'to_status', 'payload']),
+      mortgage_agent_compensation_exclusions: Object.freeze(['mortgage_request_id']),
+    }),
+    new_relations: Object.freeze([
+      'public.mortgage_agent_compensation_entries_parent_idx',
+      'public.mortgage_agent_compensation_batches_adjust_idem_uidx',
+    ]),
+    // Tables the file ALTERs: the unrelated snapshot skips them whole and re-reads
+    // everything about them except the reviewed changes.
+    altered_tables: Object.freeze(['public.mortgage_agent_compensation_entries', 'public.mortgage_agent_compensation_batches']),
+    added_columns: Object.freeze({
+      'public.mortgage_agent_compensation_entries': 'adjustment_reason',
+      'public.mortgage_agent_compensation_batches': 'idempotency_key',
+    }),
+    replaced_constraints: Object.freeze(['public.mortgage_agent_compensation_batches.mortgage_agent_compensation_batches_action_check']),
+  }),
+  sql86: Object.freeze({
+    key: 'sql86',
+    label: 'SQL 86',
+    prerequisites: Object.freeze([
+      'public.mortgage_agent_compensation_entries',
+      'public.aws_can_admin_mortgage_agent_compensation()',
+      'public.earn_mortgage_agent_compensation(uuid)',
+      'public.tg_earn_mortgage_agent_compensation()',
+      'public.mortgage_agent_compensation_reconciliation(text)',
+      'role checksops',
+      'role authenticated',
+      'public.is_platform_owner()',
+    ]),
+    functions: Object.freeze([
+      mortgageFunction({
+        name: 'aws_can_admin_mortgage_agent_compensation',
+        args: [],
+        result: 'boolean',
+        language: 'sql',
+        volatility: 'STABLE',
+      }),
+      mortgageFunction({
+        name: 'mortgage_agent_compensation_reconciliation',
+        args: ['p_pay_period text DEFAULT NULL::text'],
+        argNames: ['p_pay_period', 'anomaly_type', 'mortgage_request_id', 'compensation_entry_id', 'tenant_billing_event_id', 'detail'],
+        result: 'TABLE(anomaly_type text, mortgage_request_id uuid, compensation_entry_id uuid, tenant_billing_event_id uuid, detail jsonb)',
+        volatility: 'STABLE',
+        retset: true,
+      }),
+      mortgageFunction({
+        name: 'earn_mortgage_agent_compensation',
+        args: ['p_request_id uuid'],
+        result: 'public.mortgage_agent_compensation_entries',
+        role: 'acl_only',
+        grantees: [],
+      }),
+      mortgageFunction({
+        name: 'tg_earn_mortgage_agent_compensation',
+        args: [],
+        result: 'trigger',
+        role: 'referenced',
+      }),
+    ]),
+    columns: Object.freeze({
+      mortgage_handling_requests: Object.freeze(['id', 'status', 'completed_at', 'assigned_employee_id', 'accepted_at', 'check_intake_item_id']),
+      mortgage_agent_compensation_exclusions: Object.freeze(['mortgage_request_id']),
+      mortgage_agent_compensation_entries: Object.freeze(['id', 'parent_entry_id', 'status', 'pay_period', 'mortgage_request_id', 'tenant_billing_event_id', 'amount_cents', 'classification', 'tenant_billing_event_type', 'tenant_billing_amount_cents']),
+      check_billing_events: Object.freeze(['id', 'check_intake_item_id', 'mortgage_request_id', 'event_type', 'unit_price_cents', 'status']),
+    }),
+    new_relations: Object.freeze([]),
+    altered_tables: Object.freeze([]),
+  }),
+});
+
+// sha256(pg_get_functiondef) on PostgreSQL 16 of each function the files create,
+// re-derived from the real catalog by aws/tests/sql84-sql86-mortgage-executor.test.mjs.
+export const MORTGAGE_DEFINITION_SHA256 = Object.freeze({
+  'public.return_mortgage_handling_request_to_queue(uuid, text)': '51069c48dcf0511a58dc50dcda0e03c798b4c6f2ec689461ae5d4e047534899f',
+  'public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text, text)': 'a8fa66f06698b523e222f8c14543d251a90122cbeeb43feefe906cce3db5ae8b',
+  'public.aws_can_admin_mortgage_agent_compensation()': 'b5bc3c548704351bdf502befd5cd7eaafbcf8566687ebc2164bee0c030e1884d',
+  'public.mortgage_agent_compensation_reconciliation(text)': '427f707262e9f57b4ba864f6e9a1492cc363b890e642bdfa89d5e406c654a344',
+});
+// The same for the bodies the files replace or drop, so the inspect can label them:
+// Cursor SQL 48 / SQL 49 ('cursor_original') and SQL 47 ('ledger_original'). Report only.
+export const MORTGAGE_KNOWN_DEFINITION_SHA256 = Object.freeze({
+  'public.return_mortgage_handling_request_to_queue(uuid, text)': Object.freeze({ cursor_original: '9f6811a71033b22acf2add10a000c6d6154d756f3e6a6dc785e6ed63c4e5a114' }),
+  'public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text)': Object.freeze({ cursor_original: 'e05bce276d9c6969fd69055b853467a7ec3fd970800d47604bf1ca4b7e541fd9' }),
+  'public.aws_can_admin_mortgage_agent_compensation()': Object.freeze({ ledger_original: 'ea033ce8511dff0858ca5dce65e690025488ecb36524e4140f85d6808e92386a' }),
+  'public.mortgage_agent_compensation_reconciliation(text)': Object.freeze({ ledger_original: 'edd48e8286d99a9a848917cde0a0e3ec3f92e53775127012aa7e390006721c3a' }),
+  'public.earn_mortgage_agent_compensation(uuid)': Object.freeze({ ledger_original: 'ffdc445e4d88011890887ab9b2c386cad29f006ecff316efff4a7c3f9740b293' }),
+  'public.tg_earn_mortgage_agent_compensation()': Object.freeze({ ledger_original: 'ca557bd5473fca4154bc4ae10af94e491ecb1891eb966d38755ac93a8a583c18' }),
+});
+
+/** 'absent' / 'intended' / 'cursor_original' / 'ledger_original' / 'other' for one function row. */
+export function mortgageFunctionLabel(fn, state = {}) {
+  if (state.exists !== true) return 'absent';
+  const hash = String(state.definition_sha256 || '');
+  if (fn.role === 'target' && hash === MORTGAGE_DEFINITION_SHA256[fn.identity]) return 'intended';
+  const known = MORTGAGE_KNOWN_DEFINITION_SHA256[fn.identity] || {};
+  return Object.keys(known).find((label) => known[label] === hash) || 'other';
+}
+
+const aclText = (entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`;
+const hashOrUnreadable = (value) => (SHA256_HEX_RE.test(String(value || '')) ? value : 'unreadable');
+
+function mortgageFunctionLines(fn, state = {}, states = {}, spec = {}) {
+  const id = fn.identity;
+  if (state.exists !== true) {
+    const lines = [`function ${id}: absent`];
+    if (fn.role === 'target') lines.push(`functions named ${fn.name}: ${Number(state.overload_count) || 0}`);
+    return lines;
+  }
+  const owner = `${id} owner: ${state.owner_is_executor === true ? 'executor role' : 'another role'}`;
+  const acl = (state.acl || []).map((entry) => `${id} acl ${aclText(entry)}`).sort();
+  if (fn.role === 'dropped') return [`function ${id}: present`, `${id} definition sha256 ${hashOrUnreadable(state.definition_sha256)}`, owner];
+  if (fn.role === 'acl_only') return [`function ${id}: present`, owner, ...acl];
+  if (fn.role === 'referenced') {
+    const earn = (spec.functions || []).find((other) => other.role === 'acl_only');
+    const same = earn && states[earn.identity]?.exists === true && state.owner_oid != null && state.owner_oid === states[earn.identity].owner_oid;
+    return [`function ${id}: present`, `${id} owner same as ${earn ? earn.name : 'none'}: ${same ? 'yes' : 'no'}`];
+  }
+  return [
+    `function ${id}: present`,
+    `functions named ${fn.name}: ${Number(state.overload_count) || 0}`,
+    `${id} arguments: ${String(state.arguments ?? '')}`,
+    `${id} result: ${String(state.result ?? '')}`,
+    `${id} definition sha256 ${hashOrUnreadable(state.definition_sha256)}`,
+    `${id} security definer: ${state.security_definer === true ? 'on' : 'off'}`,
+    `${id} config: ${(state.config || []).join(',') || '-'}`,
+    owner,
+    // SQL 86 leaves its two replaced functions' ACLs alone; the apply compares them before and after.
+    ...(fn.grantees ? acl : []),
+  ];
+}
+
+const tableLines = (name, table) => {
+  if (!table || table.present !== true) return [`table ${name}: absent`];
+  return [
+    `table ${name}: present`,
+    ...(table.columns || []).map((col) => `${name} column ${col.name} ${col.type}${col.not_null ? ' not null' : ''}${col.default != null ? ` default ${col.default}` : ''}`),
+    `${name} rls: ${table.rls_enabled ? 'enabled' : 'disabled'}${table.rls_forced ? ' forced' : ''}`,
+    `${name} owner: ${table.owner_is_executor === true ? 'executor role' : 'another role'}`,
+    ...(table.acl || []).map((entry) => `${name} acl ${aclText(entry)}`).sort(),
+    ...(table.policies || []).map((pol) => `${name} policy ${pol.name} ${pol.cmd}${pol.permissive === false ? ' restrictive' : ''} to ${(pol.roles || []).join(',')} using ${pol.qual ?? '-'} check ${pol.with_check ?? '-'}`).sort(),
+    ...(table.indexes || []).map((idx) => `${name} index ${idx.definition}${idx.valid === false ? ' invalid' : ''}`).sort(),
+  ];
+};
+const objectLine = (kind, name, value) => `${kind} ${name}: ${value == null ? 'absent' : value}`;
+
+/**
+ * The fingerprint text: `state.functions[identity]` as readMortgageState builds it,
+ * plus each migration's own objects (`state.objects`).
+ */
+export function mortgageStateText(key, state = {}) {
+  const spec = MORTGAGE_MIGRATIONS[key];
+  if (!spec) return null;
+  const functions = state.functions || {};
+  const objects = state.objects || {};
+  const lines = [`migration ${key}`];
+  for (const fn of spec.functions) lines.push(...mortgageFunctionLines(fn, functions[fn.identity] || {}, functions, spec));
+  if (key === 'sql84') {
+    lines.push(...tableLines(`public.${MORTGAGE_AUDIT_TABLE}`, objects.audit_table));
+    lines.push(`check_billing_events per-check unique: ${objects.per_check_unique_present === true ? 'present' : 'absent'}`);
+  }
+  if (key === 'sql85') {
+    for (const [table, column] of Object.entries(spec.added_columns)) lines.push(objectLine('column', `${table}.${column}`, objects.columns?.[`${table}.${column}`]));
+    for (const index of spec.new_relations) {
+      const row = objects.indexes?.[index];
+      lines.push(objectLine('index', index, row ? `${row.definition}${row.valid === false ? ' invalid' : ''}` : null));
+    }
+    for (const constraint of spec.replaced_constraints) lines.push(objectLine('constraint', constraint, objects.constraints?.[constraint]));
+  }
+  return lines.join('\n');
+}
+
+const AUDIT_TABLE_COLUMNS = Object.freeze([
+  ['id', 'uuid', true, 'gen_random_uuid()'],
+  ['mortgage_request_id', 'uuid', true, null],
+  ['actor_id', 'uuid', false, null],
+  ['action', 'text', true, null],
+  ['previous_agent_id', 'uuid', false, null],
+  ['reason', 'text', true, null],
+  ['from_status', 'text', false, null],
+  ['to_status', 'text', false, null],
+  ['accepted_at_preserved', 'timestamp with time zone', false, null],
+  ['tenant_billing_event_id', 'uuid', false, null],
+  ['payload', 'jsonb', true, "'{}'::jsonb"],
+  ['created_at', 'timestamp with time zone', true, 'now()'],
+].map(([name, type, notNull, def]) => Object.freeze({ name, type, not_null: notNull, default: def })));
+
+/** The audit table exactly as SQL 84 leaves it (columns, RLS, grants, policy, indexes). */
+export const MORTGAGE_AUDIT_TABLE_INTENDED = Object.freeze({
+  present: true,
+  columns: AUDIT_TABLE_COLUMNS,
+  rls_enabled: true,
+  rls_forced: false,
+  owner_is_executor: true,
+  acl: Object.freeze(['authenticated', 'checksops'].map((grantee) => Object.freeze({ grantee, privilege_type: 'SELECT', is_grantable: false }))),
+  policies: Object.freeze([Object.freeze({
+    name: 'aws_select_mortgage_ops_request_audit',
+    cmd: 'r',
+    permissive: true,
+    roles: Object.freeze(['authenticated', 'checksops']),
+    qual: 'COALESCE(public.is_platform_owner(), false)',
+    with_check: null,
+  })]),
+  indexes: Object.freeze([
+    Object.freeze({ name: 'mortgage_ops_request_audit_pkey', definition: 'CREATE UNIQUE INDEX mortgage_ops_request_audit_pkey ON public.mortgage_ops_request_audit USING btree (id)', valid: true }),
+    Object.freeze({ name: 'mortgage_ops_request_audit_request_idx', definition: 'CREATE INDEX mortgage_ops_request_audit_request_idx ON public.mortgage_ops_request_audit USING btree (mortgage_request_id, created_at DESC)', valid: true }),
+  ]),
+});
+/** SQL 85's own columns, indexes and constraint as the file leaves them. */
+export const MORTGAGE_SQL85_OBJECTS_INTENDED = Object.freeze({
+  columns: Object.freeze({
+    'public.mortgage_agent_compensation_entries.adjustment_reason': 'text',
+    'public.mortgage_agent_compensation_batches.idempotency_key': 'text',
+  }),
+  indexes: Object.freeze({
+    'public.mortgage_agent_compensation_entries_parent_idx': Object.freeze({ definition: 'CREATE INDEX mortgage_agent_compensation_entries_parent_idx ON public.mortgage_agent_compensation_entries USING btree (parent_entry_id) WHERE (parent_entry_id IS NOT NULL)', valid: true }),
+    'public.mortgage_agent_compensation_batches_adjust_idem_uidx': Object.freeze({ definition: "CREATE UNIQUE INDEX mortgage_agent_compensation_batches_adjust_idem_uidx ON public.mortgage_agent_compensation_batches USING btree (idempotency_key) WHERE ((action = 'adjust'::text) AND (idempotency_key IS NOT NULL))", valid: true }),
+  }),
+  constraints: Object.freeze({
+    'public.mortgage_agent_compensation_batches.mortgage_agent_compensation_batches_action_check': "CHECK ((action = ANY (ARRAY['approve'::text, 'pay'::text, 'adjust'::text])))",
+  }),
+});
+
+/** What each file leaves, in the shape mortgageStateText reads. */
+export function mortgageAppliedStates(key) {
+  const spec = MORTGAGE_MIGRATIONS[key];
+  const functions = {};
+  for (const fn of spec.functions) {
+    if (fn.role === 'dropped') {
+      functions[fn.identity] = { exists: false, overload_count: 0 };
+    } else if (fn.role === 'acl_only') {
+      functions[fn.identity] = { exists: true, owner_is_executor: true, acl: [] };
+    } else if (fn.role === 'referenced') {
+      functions[fn.identity] = { exists: true, owner_oid: 1 };
+    } else {
+      functions[fn.identity] = {
+        exists: true,
+        overload_count: 1,
+        arguments: fn.arguments,
+        result: fn.result,
+        definition_sha256: MORTGAGE_DEFINITION_SHA256[fn.identity],
+        security_definer: true,
+        config: [...fn.config],
+        owner_is_executor: true,
+        acl: (fn.grantees || []).map((grantee) => ({ grantee, privilege_type: 'EXECUTE', is_grantable: false })),
+      };
+    }
+  }
+  // SQL 86: the earn function and its completion trigger function share the owner.
+  for (const fn of spec.functions) if (fn.role === 'acl_only') functions[fn.identity].owner_oid = 1;
+  const objects = key === 'sql84'
+    ? { audit_table: MORTGAGE_AUDIT_TABLE_INTENDED, per_check_unique_present: true }
+    : key === 'sql85' ? MORTGAGE_SQL85_OBJECTS_INTENDED : {};
+  return { functions, objects };
+}
+
+const mortgagePin = (key, filename, migrationId, sourceSha, intendedSha) => Object.freeze({
+  filename,
+  migration_id: migrationId,
+  migration: key,
+  // The commit that authored the current file bytes (PR #992).
+  commit: '6dd5acca3022dc9564a1c7e6b1a25702c15e24cf',
+  source_sha256: sourceSha,
+  // Pending: not code-derived (Cursor SQL 48 / 49 bodies may be live, SQL 47 may be
+  // absent). A read-live run records it here in a reviewed pin change; until then
+  // apply refuses ("no reviewed pre-apply live definition hash").
+  expected_live_definition_sha256: null,
+  // Code-derived: sha256(mortgageStateText(key, mortgageAppliedStates(key))),
+  // re-derived from the real catalog by aws/tests/sql84-sql86-mortgage-executor.test.mjs.
+  intended_replacement_sha256: intendedSha,
+  function_identities: Object.freeze(MORTGAGE_MIGRATIONS[key].functions.filter((fn) => fn.role !== 'referenced').map((fn) => fn.identity)),
+});
+
+export const AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE = mortgagePin(
+  'sql84',
+  'aws/workflows/sql/84_mortgage_return_to_queue.sql',
+  '84_mortgage_return_to_queue',
+  '0b6fe69b92e66f6e66a3a2438806e67cfa31d6c741802608881fb2fec5c9e806',
+  'ff920f5453283e9ca550bb8a191905386832f44e2e35567522530b806cb0e983',
+);
+export const AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST = mortgagePin(
+  'sql85',
+  'aws/workflows/sql/85_mortgage_compensation_adjust.sql',
+  '85_mortgage_compensation_adjust',
+  '4cc77457554ed9c24407db61bc292c168db0794ed7b884180554d69989e52b3d',
+  '051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908',
+);
+export const AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY = mortgagePin(
+  'sql86',
+  'aws/workflows/sql/86_mortgage_compensation_owner_only.sql',
+  '86_mortgage_compensation_owner_only',
+  '1449df1f0c58aee2562e495d65e1327f4b6b4527005a55b5596b064de798df16',
+  'fb7e82291b146d0bf243dab1f607b2202b131c09cccac56e40de96c64542062f',
+);
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -765,6 +1183,9 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
   AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW,
   AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
+  AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE,
+  AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
+  AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -826,6 +1247,18 @@ export function isSql83HomeownerSigningCapabilities(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES);
 }
 
+export function isSql84MortgageReturnToQueue(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE);
+}
+
+export function isSql85MortgageCompensationAdjust(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST);
+}
+
+export function isSql86MortgageCompensationOwnerOnly(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -857,6 +1290,9 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql81CheckaltProductionRegister(input)) return AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER;
   if (isSql82HomeownerLedgerView(input)) return AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW;
   if (isSql83HomeownerSigningCapabilities(input)) return AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES;
+  if (isSql84MortgageReturnToQueue(input)) return AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE;
+  if (isSql85MortgageCompensationAdjust(input)) return AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST;
+  if (isSql86MortgageCompensationOwnerOnly(input)) return AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
