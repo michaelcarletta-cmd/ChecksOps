@@ -419,7 +419,9 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   const MORTGAGE = 'mortgage-agent-compensation.mjs';
   const SQL85 = 'aws/workflows/sql/85_mortgage_compensation_adjust.sql';
   assert.equal(PLAN.members[MORTGAGE].sql_before, SQL85);
-  assert.notEqual(PLAN.sql_prerequisites[SQL85]?.verified_live, true, 'SQL 85 is not yet recorded live in production');
+  assert.equal(PLAN.sql_prerequisites[SQL85]?.verified_live, true, 'SQL 85 is recorded live in production (2026-10-16 one-shot)');
+  const unverified = structuredClone(PLAN);
+  unverified.sql_prerequisites[SQL85] = { verified_live: false, evidence: null };
   // Held members sit after every member they must not block; providers.mjs stays last.
   assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('app-services.mjs'));
   assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('homeowner.mjs'));
@@ -433,9 +435,12 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: ['homeowner.mjs'], add: [] });
 
-  // The mortgage member itself is refused until SQL 85 is recorded verified live.
+  // The mortgage member is refused while SQL 85 is not recorded verified live ...
   await assert.rejects(
-    run(applyEnv(MORTGAGE), applyDeps(MORTGAGE).deps),
+    run(applyEnv(MORTGAGE), { ...applyDeps(MORTGAGE).deps, plan: unverified }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL85,
   );
+  // ... and allowed with the committed plan, where SQL 85 is verified live.
+  const mortgage = await run(applyEnv(MORTGAGE), applyDeps(MORTGAGE).deps);
+  assert.equal(mortgage.mutation, false);
 });
