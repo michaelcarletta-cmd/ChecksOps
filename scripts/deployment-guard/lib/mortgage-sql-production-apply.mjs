@@ -446,7 +446,7 @@ function migrationReport(key, details) {
         proacl: row.proacl ?? null,
       }];
     }));
-    return { case_owner: report.case_owner || null, case_owners: caseOwners, case_triggers: report.case_triggers || null };
+    return { case_owner: report.case_owner || null, case_owners: caseOwners, case_triggers: report.case_triggers || null, other_callers: report.other_callers || null };
   }
   const owners = Object.fromEntries(MORTGAGE_MIGRATIONS.sql86.functions.filter((fn) => fn.role === 'acl_only' || fn.role === 'referenced')
     .map((fn) => {

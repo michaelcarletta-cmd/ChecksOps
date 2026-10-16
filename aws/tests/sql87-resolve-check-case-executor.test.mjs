@@ -122,11 +122,11 @@ const neverConnect = async () => { throw new Error('should-not-connect'); };
 const READ_ONLY_STATEMENT_RE = /^\s*(SELECT|WITH|SAVEPOINT|RELEASE|ROLLBACK TO)\b/i;
 
 test('the pin matches the SQL file and its commit; no pre-state is recorded; the post-state is code-derived; registered everywhere', () => {
-  assert.equal(PIN.source_sha256, 'a15629e119a0526bfd876ff1afdd72889e549c21bccd2e53ebc3de7ddd84c963');
+  assert.equal(PIN.source_sha256, 'f046c76cc731c08020171ec7e846818089df1bd66a7a07a42237f14fb8c4c22a');
   assert.equal(sha(fs.readFileSync(FILE)), PIN.source_sha256);
   assert.equal(PIN.migration_id, '87_resolve_check_case_tenant_scope');
   assert.equal(PIN.migration, KEY);
-  assert.equal(PIN.commit, '4f68360ed60a1a0761601685574155faa4030eb7');
+  assert.equal(PIN.commit, 'af84133e4e2cd6f3c2f2d8b63c59555d80646c22');
   const atCommit = spawnSync('git', ['show', `${PIN.commit}:${PIN.filename}`], { cwd: ROOT, maxBuffer: 4 * 1024 * 1024 });
   if (atCommit.status === 0) assert.equal(sha(atCommit.stdout), PIN.source_sha256);
   assert.equal(PIN.expected_live_definition_sha256, null, 'no staging read-live recorded yet');
@@ -167,8 +167,17 @@ test('the file: same signature and return type, SECURITY DEFINER, search_path=pu
   assert.ok(revokePublic > 0 && grant > revokePublic);
   assert.equal((code.match(/GRANT EXECUTE/g) || []).length, 1, 'one grant, to the owner');
   assert.match(code, /'sql87_prerequisite_missing:[^']*'[\s\S]*?USING ERRCODE = '55000'/);
-  assert.equal((code.match(/RAISE EXCEPTION 'case_owner_unsafe:/g) || []).length, 3);
-  assert.equal((code.match(/USING ERRCODE = '55000'/g) || []).length, 4);
+  assert.equal((code.match(/RAISE EXCEPTION 'case_owner_unsafe:/g) || []).length, 4);
+  assert.equal((code.match(/RAISE EXCEPTION 'case_callers_unsafe:/g) || []).length, 1);
+  assert.equal((code.match(/USING ERRCODE = '55000'/g) || []).length, 6);
+  // Every guard runs before the CREATE OR REPLACE; after it only the ACL changes (L3).
+  const create = code.indexOf('CREATE OR REPLACE FUNCTION public.resolve_check_case(');
+  const lastRaise = code.lastIndexOf('RAISE EXCEPTION');
+  assert.ok(lastRaise > 0 && lastRaise < create, 'no guard after the CREATE OR REPLACE');
+  const tail = code.slice(code.indexOf('$$;', code.indexOf('AS $$', create) + 5) + 3);
+  assert.doesNotMatch(tail, /RAISE|IF |CREATE|ALTER|DROP/);
+  assert.match(tail, /REVOKE ALL ON FUNCTION public\.resolve_check_case[^;]*FROM PUBLIC;/);
+  assert.equal(code.slice(0, create).includes('REVOKE'), false, 'no ACL change before the new body');
   // The function body: both freedom_crm lookups are tenant-filtered; the claim is read only for _claim_id.
   const fnBody = body.bodies[0];
   assert.equal((fnBody.match(/WHERE tenant_id = _tenant_id\n {7}AND external_system = 'freedom_crm'\n {7}AND external_claim_id = v_ext/g) || []).length, 2);
@@ -190,6 +199,10 @@ test('the reviewed-text check refuses a wider grant, a missing revoke, an unscop
     ['claim read for an external id', 'SELECT * INTO v_claim FROM public.claims WHERE id = _claim_id;', 'SELECT * INTO v_claim FROM public.claims WHERE id = v_ext;'],
     ['secdef guard dropped', "  IF v_intake_secdef IS NOT TRUE OR v_draft_secdef IS NOT TRUE THEN", "  IF false THEN"],
     ['owner guard a notice', "    RAISE EXCEPTION 'case_owner_unsafe: resolve_check_case owner %", "    RAISE NOTICE 'case_owner_unsafe: resolve_check_case owner %"],
+    ['API role in owner allowed', "    IF pg_has_role((SELECT oid FROM pg_roles WHERE rolname = v_role), v_fn_owner, 'MEMBER') THEN", "    IF false THEN"],
+    ['callers guard dropped', '  IF v_callers IS NOT NULL THEN', '  IF false THEN'],
+    ['callers guard ignores dependents', "       AND d.refobjid = 'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)'::regprocedure", '       AND false'],
+    ['guard moved after the body', "  IF v_intake_secdef IS NOT TRUE OR v_draft_secdef IS NOT TRUE THEN", "  IF v_intake_secdef IS NOT TRUE AND false THEN"],
     ['prerequisite check dropped', "  IF v_missing IS NOT NULL THEN\n    RAISE EXCEPTION 'sql87_prerequisite_missing", "  IF false THEN\n    RAISE EXCEPTION 'sql87_prerequisite_missing"],
     ['caller check added', "  IF _tenant_id IS NULL THEN\n    RETURN NULL;\n  END IF;\n", "  IF _tenant_id IS NULL OR auth.uid() IS NULL THEN\n    RETURN NULL;\n  END IF;\n"],
     ['table change', 'COMMENT ON FUNCTION public.resolve_check_case', 'ALTER TABLE public.check_cases DISABLE ROW LEVEL SECURITY;\nCOMMENT ON FUNCTION public.resolve_check_case'],
@@ -437,9 +450,15 @@ test('PostgreSQL 16: inspect is read-only and prints no PII or ids; SQL 87 lands
       trigger_functions_security_definer: true,
       owner_is_api_role: false,
       owner_rolsuper: false,
-      owner_member_of_api_role: false,
+      api_role_member_of_owner: false,
+      api_roles_member_of_owner: [],
       api_roles_present: ['anon', 'authenticated', 'checksops', 'service_role'],
       case_owner_safe: true,
+    });
+    // The clean case: no other caller.
+    assert.deepEqual(report.other_callers, {
+      function_count: 0, functions: [], view_or_rule_count: 0, views_or_rules: [], policy_count: 0, policies: [],
+      dependent_function_count: 0, dependent_functions: [], other_dependent_count: 0, other_dependents: [], total: 0,
     });
     assert.deepEqual(report.case_triggers, {
       assign_case_on_check_intake: { present: true, enabled: true, calls_function: true },
@@ -646,10 +665,12 @@ test('PostgreSQL 16: an unsafe owner, a non-SECURITY DEFINER trigger function, a
         await as.query('ROLLBACK');
       }
     };
-    const refusedThenRestored = async (label, breakIt, restore, failures, { as = owner, file = null } = {}) => {
+    const refusedThenRestored = async (label, breakIt, restore, failures, { as = owner, file = null, report = null } = {}) => {
       await as.query(breakIt);
       const receipt = await inspect();
       for (const failure of failures) assert.ok(receipt.precondition_failures.includes(failure), `${label}: ${JSON.stringify(receipt.precondition_failures)}`);
+      if (report) report(receipt.mortgage_inspect);
+      assert.doesNotMatch(JSON.stringify(receipt.mortgage_inspect), /[0-9a-f]{8}-[0-9a-f]{4}-/i, `${label}: no ids`);
       const recorded = recordedPin(receipt.live_definition_sha256);
       const refused = await handlerFor(connect, { sql87Pin: recorded })(caseEvent({ pin: recorded }));
       assert.equal(refused.code, CODES.DEPLOYMENT_COLLISION, `${label}: ${JSON.stringify(refused)}`);
@@ -667,12 +688,51 @@ test('PostgreSQL 16: an unsafe owner, a non-SECURITY DEFINER trigger function, a
       'CREATE ROLE migrator NOLOGIN; ALTER FUNCTION public.tg_check_intake_assign_case() OWNER TO migrator',
       `ALTER FUNCTION public.tg_check_intake_assign_case() OWNER TO ${OWNER}; DROP ROLE migrator`,
       ['case_owner_safe'], { as: admin, file: /case_owner_unsafe: resolve_check_case \(owner/ });
-    await refusedThenRestored('an owner inside checksops',
-      `GRANT checksops TO ${OWNER}`, `REVOKE checksops FROM ${OWNER}`,
-      ['case_owner_safe'], { as: admin, file: /case_owner_unsafe: resolve_check_case owner \S+ is or belongs to checksops/ });
-    await refusedThenRestored('an owner inside service_role',
-      `GRANT service_role TO ${OWNER}`, `REVOKE service_role FROM ${OWNER}`,
-      ['case_owner_safe'], { as: admin, file: /belongs to service_role/ });
+    // L2: an API role that is a member of the owner (inheriting, or SET ROLE only) keeps its EXECUTE.
+    await refusedThenRestored('checksops a member of the owner',
+      `GRANT ${OWNER} TO checksops`, `REVOKE ${OWNER} FROM checksops`,
+      ['case_owner_safe'], { as: admin, file: /case_owner_unsafe: the API role checksops is a member of resolve_check_case owner/,
+        report: (r) => assert.deepEqual(r.case_owner.api_roles_member_of_owner, ['checksops']) });
+    await refusedThenRestored('authenticated a member of the owner without INHERIT',
+      `GRANT ${OWNER} TO authenticated WITH INHERIT FALSE`, `REVOKE ${OWNER} FROM authenticated`,
+      ['case_owner_safe'], { as: admin, file: /the API role authenticated is a member/ });
+    await refusedThenRestored('the owner is an API role',
+      `ALTER FUNCTION ${FN} OWNER TO service_role; ALTER FUNCTION public.tg_check_intake_assign_case() OWNER TO service_role; ALTER FUNCTION public.tg_loss_draft_assign_case() OWNER TO service_role`,
+      `ALTER FUNCTION ${FN} OWNER TO ${OWNER}; ALTER FUNCTION public.tg_check_intake_assign_case() OWNER TO ${OWNER}; ALTER FUNCTION public.tg_loss_draft_assign_case() OWNER TO ${OWNER}`,
+      ['case_owner_safe'], { as: admin, file: /case_owner_unsafe: resolve_check_case owner service_role is the API role service_role/ });
+    // The owner being a member of API roles is not refused (a CREATEROLE owner is a member,
+    // with ADMIN, of every role it created); the file still revokes their EXECUTE.
+    await admin.query(`GRANT checksops TO ${OWNER} WITH ADMIN OPTION, INHERIT FALSE, SET FALSE; GRANT service_role TO ${OWNER}`);
+    assert.deepEqual((await inspect()).precondition_failures, []);
+    await admin.query('BEGIN');
+    await admin.query(TEXT);
+    const inTx = (await admin.query(`SELECT r, has_function_privilege(r, $1, 'EXECUTE') AS can FROM unnest(ARRAY['checksops', 'service_role', $2]) r`, [FN, OWNER])).rows;
+    await admin.query('ROLLBACK');
+    assert.deepEqual(inTx.map((row) => [row.r, row.can]), [['checksops', false], ['service_role', false], [OWNER, true]]);
+    await admin.query(`REVOKE checksops FROM ${OWNER}; REVOKE service_role FROM ${OWNER}`);
+    // M1: other callers of the helper refuse (names only in the report).
+    await refusedThenRestored('a function owned by another role that calls it',
+      `CREATE ROLE reporter NOLOGIN;
+       CREATE FUNCTION public.case_report(t uuid) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$ BEGIN RETURN public.resolve_check_case(t); END $f$;
+       ALTER FUNCTION public.case_report(uuid) OWNER TO reporter`,
+      'DROP FUNCTION public.case_report(uuid); DROP ROLE reporter',
+      ['other_callers_present'], { as: admin, file: /case_callers_unsafe: .*function (public\.)?case_report\(uuid\)/,
+        report: (r) => assert.deepEqual([r.other_callers.functions, r.other_callers.total], [['public.case_report(uuid)'], 1]) });
+    await refusedThenRestored('a view that calls it',
+      'CREATE VIEW public.case_probe AS SELECT public.resolve_check_case(NULL::uuid) AS id',
+      'DROP VIEW public.case_probe',
+      ['other_callers_present'], { file: /case_callers_unsafe: .*dependent pg_rewrite/,
+        report: (r) => assert.deepEqual([r.other_callers.views_or_rules, r.other_callers.total], [['public.case_probe rule _RETURN'], 1]) });
+    await refusedThenRestored('a policy that calls it',
+      'CREATE POLICY case_probe_policy ON public.claims USING (public.resolve_check_case(org_id) IS NULL)',
+      'DROP POLICY case_probe_policy ON public.claims',
+      ['other_callers_present'], { file: /case_callers_unsafe: .*dependent pg_policy/,
+        report: (r) => assert.deepEqual(r.other_callers.policies, ['public.claims policy case_probe_policy']) });
+    await refusedThenRestored('a SQL-standard function body that calls it',
+      'CREATE FUNCTION public.case_atomic(t uuid) RETURNS uuid LANGUAGE sql BEGIN ATOMIC SELECT public.resolve_check_case(t); END',
+      'DROP FUNCTION public.case_atomic(uuid)',
+      ['other_callers_present'], { file: /case_callers_unsafe: .*dependent pg_proc/,
+        report: (r) => assert.deepEqual(r.other_callers.dependent_functions, ['public.case_atomic(uuid)']) });
     await refusedThenRestored('an EXECUTE grant the file does not revoke',
       `CREATE ROLE reporting NOLOGIN; GRANT EXECUTE ON FUNCTION ${FN} TO reporting`,
       `REVOKE EXECUTE ON FUNCTION ${FN} FROM reporting; DROP ROLE reporting`,

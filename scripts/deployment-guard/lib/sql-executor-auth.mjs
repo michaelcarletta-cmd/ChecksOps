@@ -1243,11 +1243,11 @@ export const AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE = mortgagePin(
   'sql87',
   'aws/workflows/sql/87_resolve_check_case_tenant_scope.sql',
   '87_resolve_check_case_tenant_scope',
-  'a15629e119a0526bfd876ff1afdd72889e549c21bccd2e53ebc3de7ddd84c963',
+  'f046c76cc731c08020171ec7e846818089df1bd66a7a07a42237f14fb8c4c22a',
   null,
   '794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30',
   // The commit that authored the file bytes (this branch's first commit).
-  '4f68360ed60a1a0761601685574155faa4030eb7',
+  'af84133e4e2cd6f3c2f2d8b63c59555d80646c22',
 );
 
 export const AUTHORIZED_SQL39 = Object.freeze({

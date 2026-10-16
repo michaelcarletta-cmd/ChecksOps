@@ -4412,7 +4412,7 @@ export const MORTGAGE_OUTSIDE_SHA256 = Object.freeze({
   sql84: 'dbfd54b76bd128bb1e71b4ed379532acbc33118fdcb350d5a4db63360e3dcf96',
   sql85: '77bba93b91397609a82bbb675b8f4ad0b72f38e1b9320edc62ffdd5b937811c7',
   sql86: 'fa7c20f47edc208f591a906a4741943d334c9cf8b1ce656d4472d9afd5562b04',
-  sql87: '410e339114e4b63b60e16d52e8325679a0bd81c8f83507aa18050bca325aaa64',
+  sql87: '56a592ceceaa063ff0471062f3d07e2d53053de41d8697019a2e3bc6dc80b102',
 });
 
 const mortgageTargets = (key) => (MORTGAGE_MIGRATIONS[key]?.functions || []).filter((fn) => fn.role === 'target');
@@ -4654,13 +4654,38 @@ const MORTGAGE_SNAPSHOT_PARAMS = Object.freeze({
   relations: [0], columns: [0, 1], constraints: [0, 2], policies: [0], triggers: [0], functions: [3],
 });
 
-// SQL 87: for each API role that exists, whether the case helper's owner is it or a member of it.
+// SQL 87: for each API role that exists, whether it is the case helper's owner, and
+// whether it is a member of the owner role (any membership: inherited, SET or ADMIN),
+// so it would keep the owner's EXECUTE. PUBLIC cannot be a role member.
 const CASE_OWNER_ROLES_SQL = `
-SELECT r.rolname::text AS role, p.proowner = r.oid AS owner_is_role, pg_has_role(p.proowner, r.oid, 'MEMBER') AS owner_member
+SELECT r.rolname::text AS role, p.proowner = r.oid AS owner_is_role, pg_has_role(r.oid, p.proowner, 'MEMBER') AS member_of_owner
 FROM pg_proc p
 CROSS JOIN pg_roles r
 WHERE p.oid = to_regprocedure($1) AND r.rolname = ANY($2::text[])
 ORDER BY 1
+`.trim();
+// SQL 87's case_callers_unsafe guard, as names only: other functions whose source names
+// the helper ($2: the functions allowed to), and every catalog object depending on it.
+const CASE_OTHER_CALLER_FUNCTIONS_SQL = `
+SELECT p.oid::regprocedure::text AS name
+FROM pg_proc p
+WHERE p.prosrc ILIKE '%resolve_check_case%'
+  AND NOT (p.oid = ANY (ARRAY(SELECT to_regprocedure(x) FROM unnest($1::text[]) x)))
+ORDER BY 1
+`.trim();
+const CASE_DEPENDENTS_SQL = `
+SELECT d.classid::regclass::text AS catalog,
+  CASE d.classid
+    WHEN 'pg_rewrite'::regclass THEN (SELECT r.ev_class::regclass::text || ' rule ' || r.rulename::text FROM pg_rewrite r WHERE r.oid = d.objid)
+    WHEN 'pg_policy'::regclass THEN (SELECT pol.polrelid::regclass::text || ' policy ' || pol.polname::text FROM pg_policy pol WHERE pol.oid = d.objid)
+    WHEN 'pg_proc'::regclass THEN (SELECT d.objid::regprocedure::text)
+    WHEN 'pg_attrdef'::regclass THEN (SELECT ad.adrelid::regclass::text || ' default' FROM pg_attrdef ad WHERE ad.oid = d.objid)
+    WHEN 'pg_constraint'::regclass THEN (SELECT con.conrelid::regclass::text || ' constraint ' || con.conname::text FROM pg_constraint con WHERE con.oid = d.objid)
+    ELSE d.classid::regclass::text
+  END AS name
+FROM pg_depend d
+WHERE d.refclassid = 'pg_proc'::regclass AND d.refobjid = to_regprocedure($1)
+ORDER BY 1, 2
 `.trim();
 // SQL 87: the two case triggers (report only: the file does not change them).
 const CASE_TRIGGERS_SQL = `
@@ -4911,7 +4936,7 @@ export async function readMortgageState(client, key) {
     const referenced = spec.functions.filter((fn) => fn.role === 'referenced');
     const ownerRoles = a.exists ? ((await client.query(CASE_OWNER_ROLES_SQL, [anchor.identity, [...spec.api_roles]]))?.rows || []) : [];
     const ownerIsApiRole = ownerRoles.some((row) => row.owner_is_role === true);
-    const ownerInApiRole = ownerRoles.some((row) => row.owner_member === true);
+    const apiInOwner = ownerRoles.some((row) => row.member_of_owner === true);
     const sameOwner = a.exists && referenced.every((fn) => functions[fn.key].exists && states[fn.identity].owner_oid === states[anchor.identity].owner_oid);
     const triggersSecdef = referenced.every((fn) => functions[fn.key].exists && functions[fn.key].security_definer === true);
     // SQL 87's case_owner_unsafe guard, predicted.
@@ -4922,9 +4947,29 @@ export async function readMortgageState(client, key) {
       trigger_functions_security_definer: triggersSecdef,
       owner_is_api_role: ownerIsApiRole,
       owner_rolsuper: a.exists ? a.owner_rolsuper : null,
-      owner_member_of_api_role: ownerInApiRole,
+      api_role_member_of_owner: apiInOwner,
+      api_roles_member_of_owner: ownerRoles.filter((row) => row.member_of_owner === true).map((row) => row.role),
       api_roles_present: ownerRoles.map((row) => row.role),
-      case_owner_safe: a.exists && sameOwner && triggersSecdef && !ownerIsApiRole && (a.owner_rolsuper === true || !ownerInApiRole),
+      case_owner_safe: a.exists && sameOwner && triggersSecdef && !ownerIsApiRole && !apiInOwner,
+    };
+    // SQL 87's case_callers_unsafe guard, predicted: names and counts only.
+    const allowed = [anchor.identity, ...referenced.map((fn) => fn.identity)];
+    const callerFunctions = a.exists ? ((await client.query(CASE_OTHER_CALLER_FUNCTIONS_SQL, [allowed]))?.rows || []).map((row) => String(row.name)) : [];
+    const dependents = a.exists ? ((await client.query(CASE_DEPENDENTS_SQL, [anchor.identity]))?.rows || []) : [];
+    const ofCatalog = (name) => dependents.filter((row) => row.catalog === name).map((row) => String(row.name ?? row.catalog));
+    const other = dependents.filter((row) => !['pg_rewrite', 'pg_policy', 'pg_proc'].includes(row.catalog));
+    report.other_callers = {
+      function_count: callerFunctions.length,
+      functions: callerFunctions.slice(0, 50),
+      view_or_rule_count: ofCatalog('pg_rewrite').length,
+      views_or_rules: ofCatalog('pg_rewrite').slice(0, 50),
+      policy_count: ofCatalog('pg_policy').length,
+      policies: ofCatalog('pg_policy').slice(0, 50),
+      dependent_function_count: ofCatalog('pg_proc').length,
+      dependent_functions: ofCatalog('pg_proc').slice(0, 50),
+      other_dependent_count: other.length,
+      other_dependents: other.map((row) => String(row.name ?? row.catalog)).slice(0, 50),
+      total: callerFunctions.length + dependents.length,
     };
     report.case_triggers = {};
     for (const trig of CASE_TRIGGERS) {
@@ -5038,6 +5083,7 @@ export function mortgageInspectSummary(state) {
   if (state.migration === 'sql87') {
     out.case_owner = report.case_owner;
     out.case_triggers = report.case_triggers;
+    out.other_callers = report.other_callers;
   }
   return out;
 }
@@ -5128,6 +5174,8 @@ export function mortgagePreconditionFailures(state, key) {
   }
   if (key === 'sql87') {
     check('case_owner_safe', report.case_owner?.case_owner_safe === true);
+    // Named as the condition that fails (the review's name): any other caller refuses.
+    check('other_callers_present', report.other_callers?.total === 0);
   }
   return failures;
 }
@@ -5165,7 +5213,10 @@ export function mortgagePostconditionFailures(after, key, reviewed, intendedSha2
   }
   if (key === 'sql84') check('per_check_unique_present', after?.objects?.per_check_unique_present === true);
   if (key === 'sql86') check('earn_owner_safe', after?.report?.earn_owner?.earn_owner_safe === true);
-  if (key === 'sql87') check('case_owner_safe', after?.report?.case_owner?.case_owner_safe === true);
+  if (key === 'sql87') {
+    check('case_owner_safe', after?.report?.case_owner?.case_owner_safe === true);
+    check('other_callers_present', after?.report?.other_callers?.total === 0);
+  }
   return failures;
 }
 

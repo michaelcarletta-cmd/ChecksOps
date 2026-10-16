@@ -1,7 +1,7 @@
 # Production SQL 87 (resolve_check_case tenant scope)
 
 `aws/workflows/sql/87_resolve_check_case_tenant_scope.sql` (source sha256
-`a15629e1…`, authored in `4f68360ed`). Owner approval to start the work: 2026-10-16
+`f046c76c…`, authored in `af84133e4`). Owner approval to start the work: 2026-10-16
 ("start the SQL 87 resolve_check_case fix"; Option B, an internal helper). Nothing in
 this runbook has been run yet: both pins are pending.
 
@@ -52,11 +52,22 @@ the SQL function.
   returns NULL, never that case's id. It never raises, so the triggers keep inserting.
 - EXECUTE is revoked from `PUBLIC`, `anon`, `authenticated`, `service_role` and
   `checksops` (each where the role exists) and granted to the owner only.
-- Guard `case_owner_unsafe` (55000): the helper and both trigger functions must have the
-  same owner, both trigger functions must be SECURITY DEFINER, and the owner must not be
-  or belong to an API role (unless superuser). `sql87_prerequisite_missing` (55000) when
-  `check_cases`, `claims`, `check_intake_items`, `loss_draft_tracking`, the three
-  functions or the roles `checksops` / `authenticated` are missing.
+- Guards, all in the first DO block, before the `CREATE OR REPLACE` (so a psql
+  autocommit run cannot leave the new body with the old ACL; only the REVOKE/GRANT come
+  after it):
+  - `sql87_prerequisite_missing` (55000) when `check_cases`, `claims`,
+    `check_intake_items`, `loss_draft_tracking`, the three functions or the roles
+    `checksops` / `authenticated` are missing;
+  - `case_owner_unsafe` (55000): the helper and both trigger functions must have the same
+    owner, both trigger functions must be SECURITY DEFINER, the owner must not itself be
+    an API role, and no API role (`checksops`, `authenticated`, `anon`, `service_role`;
+    PUBLIC cannot be a member) may be a member of the owner role (it would inherit or SET
+    ROLE to the owner's EXECUTE). The owner being a member of an API role is allowed: it
+    keeps its own explicit grant, and a CREATEROLE owner is a member of the roles it
+    created;
+  - `case_callers_unsafe` (55000): no function other than the two trigger functions may
+    name `resolve_check_case` in its source, and no view, rule, policy, SQL-standard
+    function body, default or constraint may depend on it.
 - No table, row, trigger or policy change.
 
 Behaviour change to know about: an org-less claim (`org_id` NULL) counts as the tenant's
@@ -92,8 +103,10 @@ Staging read-live (`mortgage_inspect`) and the production `--inspect` report, fo
 helper: state (`case_original` / `intended` / `other` / `absent`), arguments, argument
 names, result, SECURITY DEFINER, config, owner flags, non-owner ACL entries, definition
 sha256, `matches_migration`, `body_matches_migration`; for the two trigger functions:
-presence, owner flags and SECURITY DEFINER; `case_owner` (the predicted guard, with
-`case_owner_safe`); `case_triggers` (both triggers present, enabled, calling their
+presence, owner flags and SECURITY DEFINER; `case_owner` (the predicted owner guard, with
+`case_owner_safe` and `api_roles_member_of_owner`); `other_callers` (names and counts of
+other functions, views / rules, policies and other dependents; any refuses with
+`other_callers_present`); `case_triggers` (both triggers present, enabled, calling their
 functions); the prerequisites and missing columns. The staging report has no owner
 names. Neither reads table rows, so neither prints PII or row ids. Production adds owner
 names, `proacl` with grantors and the helper's definition text.
@@ -120,7 +133,7 @@ GitHub-hosted runners or Lambda.
 
    Expect `pin_executable` false, `precondition_failures` `[]`,
    `functions.resolve_check_case.state` `case_original`, `case_owner.case_owner_safe`
-   true and both `case_triggers` present. Otherwise **stop**.
+   true, `other_callers.total` 0 and both `case_triggers` present. Otherwise **stop**.
 2. **Staging pin change (reviewed PR):** record the read-live `live_definition_sha256` in
    `AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE.expected_live_definition_sha256`.
 3. **Staging apply:** `mode: apply`, `migration: sql87-resolve-check-case-tenant-scope`,

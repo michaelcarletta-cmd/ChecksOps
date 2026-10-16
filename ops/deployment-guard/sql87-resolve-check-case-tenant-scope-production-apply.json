@@ -8,8 +8,8 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/87_resolve_check_case_tenant_scope.sql",
   "migration_id": "87_resolve_check_case_tenant_scope",
-  "staging_pin_commit": "4f68360ed60a1a0761601685574155faa4030eb7",
-  "source_sha256": "a15629e119a0526bfd876ff1afdd72889e549c21bccd2e53ebc3de7ddd84c963",
+  "staging_pin_commit": "af84133e4e2cd6f3c2f2d8b63c59555d80646c22",
+  "source_sha256": "f046c76cc731c08020171ec7e846818089df1bd66a7a07a42237f14fb8c4c22a",
   "function_identities": [
     "public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)"
   ],
@@ -32,7 +32,7 @@
     "function_states": null,
     "apply_preconditions_met": null,
     "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 87. The production pre-state is not code-derived (the restored resolve_check_case may differ from migration 20260826125804, its owner and ACL are unknown, anon and service_role may or may not exist), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, security definer, proacl), case_owner, case_triggers, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (a missing prerequisite, another signature, result type or parameter names, a function owned by another role, a resolve_check_case ACL entry the file does not revoke, or case_owner.case_owner_safe false: the helper and the two case trigger functions with different owners, a trigger function that is not SECURITY DEFINER, or an owner that is or belongs to checksops / authenticated / anon / service_role without being superuser, which the file refuses with case_owner_unsafe), stop: that needs its own reviewed change."
+    "note": "Pending: no read-only production inspect has been run for SQL 87. The production pre-state is not code-derived (the restored resolve_check_case may differ from migration 20260826125804, its owner and ACL are unknown, anon and service_role may or may not exist), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, security definer, proacl), case_owner, case_triggers, other_callers, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (a missing prerequisite, another signature, result type or parameter names, a function owned by another role, a resolve_check_case ACL entry the file does not revoke, or case_owner.case_owner_safe false: the helper and the two case trigger functions with different owners, a trigger function that is not SECURITY DEFINER, an owner that is checksops / authenticated / anon / service_role, or one of those roles a member of the owner, which the file refuses with case_owner_unsafe; or other_callers_present: another function, view, rule, policy or dependent that calls resolve_check_case, which the file refuses with case_callers_unsafe), stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "function_definition_sha256": {

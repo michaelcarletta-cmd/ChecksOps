@@ -28,7 +28,8 @@ import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-gu
 import { AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE, MORTGAGE_DEFINITION_SHA256 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import { mortgageIntendedFunctionAcl, MORTGAGE_PRODUCTION } from '../../scripts/deployment-guard/lib/mortgage-sql-production-apply.mjs';
 import * as sql87 from '../../scripts/deployment-guard/lib/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
-import { ONE_SHOT_TOOLS } from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
+import { ONE_SHOT_TOOLS, pickInspect } from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
+import { sqlGuardErrorMessage } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { main as cli87 } from '../../scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 import { CLAIM_A, CLAIM_B, TENANT_A, assertNoSeededPii, caseRolesSql, caseSchemaSql } from './helpers/check-case-sql-pg.mjs';
 import { pgSkipReason, startPg } from './helpers/stakeholder-policies-pg.mjs';
@@ -141,6 +142,23 @@ test('the production pin is pending: authorization pending, execute false, no re
   assert.equal(sql87.SQL87_PRODUCTION_PIN_REL, PIN_REL);
   assert.equal(MORTGAGE_PRODUCTION.sql87.staging_pin, STAGING);
   assert.deepEqual(ONE_SHOT_TOOLS.sql87, { key: 'sql87', script: SCRIPT, args: [], pin_rel: PIN_REL, allowed_key: 'sql87_production_apply_allowed' });
+});
+
+test('SQL 87 guard errors map to fixed messages, and the one-shot records other callers as counts only', () => {
+  for (const raw of [
+    'case_owner_unsafe: the API role checksops is a member of resolve_check_case owner checksops_admin and would keep its EXECUTE',
+    'case_callers_unsafe: SQL 87 revokes EXECUTE on resolve_check_case from the API roles, but other objects call it: function public.case_report(uuid), dependent pg_rewrite 16999',
+  ]) {
+    const message = sqlGuardErrorMessage(new Error(raw));
+    assert.doesNotMatch(message, /checksops_admin|case_report|16999/);
+    assert.match(message, /run --inspect for details$/);
+  }
+  const picked = pickInspect({
+    case_owner: { case_owner_safe: false, api_roles_member_of_owner: ['checksops'] },
+    other_callers: { function_count: 1, functions: ['public.case_report(uuid)'], views_or_rules: [], view_or_rule_count: 0, policy_count: 0, policies: [], dependent_function_count: 0, other_dependent_count: 0, total: 1 },
+  });
+  assert.deepEqual(picked.other_callers, { function_count: 1, view_or_rule_count: 0, policy_count: 0, dependent_function_count: 0, other_dependent_count: 0, total: 1 });
+  assert.equal(picked.case_owner.case_owner_safe, false);
 });
 
 test('the tool is inventoried as GUARDED and its tests run in test:deployment-guard and the deployment-guard workflow', () => {
@@ -353,6 +371,8 @@ test('PostgreSQL 16: production inspect is read-only and prints no PII or row id
     assert.match(d.functions.resolve_check_case.definition, /^CREATE OR REPLACE FUNCTION public\.resolve_check_case/);
     assert.equal(d.functions.tg_check_intake_assign_case.definition, undefined, 'only the helper definition is printed');
     assert.equal(d.case_owner.case_owner_safe, true);
+    assert.equal(d.case_owner.api_role_member_of_owner, false);
+    assert.equal(d.other_callers.total, 0);
     assert.deepEqual(d.case_owners.tg_loss_draft_assign_case, {
       exists: true, rolname: PROD_OWNER, rolsuper: false, security_definer: true, member_of_checksops: false, member_of_authenticated: false, proacl: `{${PROD_OWNER}=X/${PROD_OWNER}}`,
     });
@@ -394,6 +414,26 @@ test('PostgreSQL 16: production inspect is read-only and prints no PII or row id
     assert.equal(trigger.code, CODES.UNRELATED_MUTATION);
     assert.ok(trigger.details.unrelated_changed.includes('fine_triggers_sha256'), JSON.stringify(trigger.details));
     assert.equal((await apply({ live_definition_sha256: 'f'.repeat(64) })).code, CODES.SQL_COLLISION);
+    // Another caller (a view, and a function owned by another role) refuses before anything changes.
+    await owner.query('CREATE VIEW public.case_probe AS SELECT public.resolve_check_case(NULL::uuid) AS id');
+    await admin.query(`CREATE ROLE reporter NOLOGIN;
+      CREATE FUNCTION public.case_report(t uuid) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$ BEGIN RETURN public.resolve_check_case(t); END $f$;
+      ALTER FUNCTION public.case_report(uuid) OWNER TO reporter`);
+    const callersInspect = await sql87.inspectSql87Production({ connect, pin, root: ROOT });
+    assert.ok(callersInspect.details.precondition_failures.includes('other_callers_present'));
+    assert.deepEqual(callersInspect.details.other_callers.views_or_rules, ['public.case_probe rule _RETURN']);
+    assert.deepEqual(callersInspect.details.other_callers.functions, ['public.case_report(uuid)']);
+    const callers = await apply();
+    assert.equal(callers.code, CODES.DEPLOYMENT_COLLISION);
+    assert.ok(callers.details.failed.includes('other_callers_present'));
+    await owner.query('DROP VIEW public.case_probe');
+    await admin.query('DROP FUNCTION public.case_report(uuid); DROP ROLE reporter');
+    // An API role that is a member of the owner refuses (it would keep the owner's EXECUTE).
+    await admin.query(`GRANT ${PROD_OWNER} TO checksops`);
+    const apiMember = await apply();
+    assert.equal(apiMember.code, CODES.DEPLOYMENT_COLLISION);
+    assert.ok(apiMember.details.failed.includes('case_owner_safe'));
+    await admin.query(`REVOKE ${PROD_OWNER} FROM checksops`);
 
     const consumed = consumedPath();
     const input = manifest(pin);

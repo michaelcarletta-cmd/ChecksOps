@@ -236,6 +236,8 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'per_check_unique_present',
   'billing_duplicates',
   'earn_owner',
+  'case_owner',
+  'other_callers',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
@@ -629,7 +631,11 @@ function runTool(ctx, step, args, { env, timeout }) {
 
 // Recorded inspect fields are summaries: billing_duplicates keeps its counts (and the
 // reason when unreadable), never check_ids.
-const INSPECT_RECORD_FIELDS = Object.freeze({ billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events', 'reason']) });
+const INSPECT_RECORD_FIELDS = Object.freeze({
+  billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events', 'reason']),
+  // SQL 87: counts only, never the callers' names.
+  other_callers: Object.freeze(['function_count', 'view_or_rule_count', 'policy_count', 'dependent_function_count', 'other_dependent_count', 'total']),
+});
 
 const pickFields = (value, fields) => (value && typeof value === 'object' && !Array.isArray(value)
   ? Object.fromEntries(fields.filter((field) => field in value).map((field) => [field, value[field]]))
