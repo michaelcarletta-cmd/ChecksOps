@@ -74,9 +74,9 @@ test('signature request uses shared layout and calls mailer once', async () => {
         result: () => ({ rows: [{ ok: true }] }),
       },
       {
-        // Signature Request writers: tenant owner/admin/manager/operator.
+        // Signature Request writers: any member of the owning tenant (the role is not read).
         match: (sql, params) => sql.includes('FROM public.tenant_users')
-          && sql.includes("'operator'") && params[0] === USER && params[1] === TENANT,
+          && !sql.includes('role') && params[0] === USER && params[1] === TENANT,
         result: () => ({ rows: [{ '?column?': 1 }] }),
       },
     ]),
@@ -580,7 +580,7 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
       mapping,
       spoof,
       send: capturingMailer(sent),
-      body: { tenant_id: TENANT, email: 'member@example.com', role: 'member', full_name: 'New Member' },
+      body: { tenant_id: TENANT, email: 'member@example.com', role: 'operator', full_name: 'New Member' },
       cognitoJson: async (target, payload) => {
         if (target === 'AdminCreateUser') {
           issuedInvite = payload.TemporaryPassword;
@@ -591,12 +591,17 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
       },
       client: sqlClient([
         {
-          match: (sql) => sql.includes('FROM public.tenant_users') && sql.includes('SELECT role'),
-          result: () => ({ rows: [{ role: 'admin' }] }),
+          match: (sql) => sql.includes('FROM public.tenant_users') && !sql.includes('role'),
+          result: () => ({ rows: [{ '?column?': 1 }] }),
         },
         {
           match: (sql) => sql.includes('FROM public.tenants'),
           result: () => ({ rows: [{ id: TENANT, name: 'Acme', custom_domain: null }] }),
+        },
+        {
+          // SQL 90 DEFINER: creates the invitee profile and identity link.
+          match: (sql) => sql.includes('aws_invite_create_user_identity'),
+          result: () => ({ rows: [{ user_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] }),
         },
         {
           match: (sql) => sql.includes('FROM public.profiles'),
@@ -605,6 +610,8 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
       ]),
     });
     assert.equal(invite.ok, true);
+    assert.equal(invite.invite_sent, true);
+    assert.equal(invite.is_new_user, true);
     assert.equal(invite.tempPasswordIssued, true);
     assert.ok(issuedInvite);
     assert.equal(JSON.stringify(invite).includes(issuedInvite), false);

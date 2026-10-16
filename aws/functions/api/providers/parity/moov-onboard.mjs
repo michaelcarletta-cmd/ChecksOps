@@ -1115,6 +1115,14 @@ export const sweepConfig = {
         environment,
       });
     }
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    // Only the caller's own membership of ctx.tenantId counts (any role value).
+    const member = (ctx.memberships || []).some((m) => String(m?.tenant_id) === String(ctx.tenantId));
+    if (!member) {
+      return fail('Only a member of this organization can change sweeps', 403, {
+        error: 'not_a_member',
+      });
+    }
     if (action === 'create') {
       const wallet = await syncWallet(client, {
         tenantId: ctx.tenantId, accountId, environment, fetchImpl,
@@ -1200,8 +1208,12 @@ export const invoice = {
 
 export const platformBank = {
   requireAdmin: true,
+  // Platform-level: the platform owner (is_platform_owner(), by identity)
+  // only. Tenant members and global user_roles admins are refused.
+  platformOwnerOnly: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
-    if (!ctx.isAdmin) return fail('Platform owner access required', 403);
+    const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
     const action = body.action || 'list';
@@ -1212,9 +1224,14 @@ export const platformBank = {
       return jsonResult({ success: true, banks, liveProviderCalled: true });
     }
     if (action === 'add') {
-      return bankAccountAdd.run({
-        client, mapping: { application_user_id: ctx.userId }, body, ctx: { ...ctx, tenantId: ctx.tenantId }, fetchImpl,
-      });
+      // The platform bank is the platform's own Moov account. Adding a bank
+      // here would go through bankAccountAdd, which targets a tenant's payment
+      // account: refused, whether or not a tenant_id is supplied. Tenant banks
+      // are added by the tenant's members.
+      if (body?.tenant_id || body?.tenantId) {
+        return fail('Platform bank actions never target a tenant account', 403, { error: 'tenant_target_refused' });
+      }
+      return fail('Adding the platform settlement bank is not available here', 409, { error: 'platform_bank_add_unavailable' });
     }
     return fail('Unknown platform-bank action', 400);
   },
@@ -1290,7 +1307,11 @@ export const bulkImportPreview = {
 
 export const platformTreasury = {
   requireAdmin: true,
-  run: async ({ ctx, fetchImpl }) => {
+  // Platform-level: the platform owner only (see platformBank).
+  platformOwnerOnly: true,
+  run: async ({ client, ctx, fetchImpl }) => {
+    const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
     const wallets = await moovFetch(`/accounts/${platformId}/wallets`, {

@@ -20,7 +20,6 @@ export const FINANCIAL_TOTP_ONLY_COPY =
 
 export const FINANCIAL_TOTP_ONLY_OPERATION = "deposit.submit" as const;
 
-export const FINANCIAL_TOTP_ONLY_ROLES = Object.freeze(["owner", "admin", "manager"] as const);
 
 export const FINANCIAL_TOTP_ONLY_FORBIDDEN = Object.freeze([
   "checkalt-submit-deposit",
@@ -62,10 +61,29 @@ export const collectFinancialTotpOnlyRoles = (...groups: unknown[]): string[] =>
   return [...new Set(roles)];
 };
 
-export const roleMayRunFinancialTotpOnlyTest = (roleOrRoles: unknown): boolean =>
-  collectFinancialTotpOnlyRoles(roleOrRoles).some((role) =>
-    (FINANCIAL_TOTP_ONLY_ROLES as readonly string[]).includes(role),
-  );
+/**
+ * Owner policy: every member of the tenant is a user with the same rights, so
+ * any tenant membership may run the test (role values and platform roles are
+ * ignored). Memberships come from identity/me `tenants` (as `tenant_roles`) or
+ * tenant_users rows (objects with a tenant_id).
+ */
+export const hasFinancialTotpOnlyMembership = (...groups: unknown[]): boolean => {
+  const visit = (value: unknown): boolean => {
+    if (value == null || typeof value === "string") return false;
+    if (Array.isArray(value)) return value.some((item) => visit(item));
+    if (typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      if (typeof record.tenant_id === "string" && record.tenant_id) return true;
+      if (Array.isArray(record.tenant_roles) && record.tenant_roles.some((item) => item != null)) return true;
+      return visit(record.tenants);
+    }
+    return false;
+  };
+  return groups.some((group) => visit(group));
+};
+
+export const roleMayRunFinancialTotpOnlyTest = (rolesOrMemberships: unknown): boolean =>
+  hasFinancialTotpOnlyMembership(rolesOrMemberships);
 
 /** Exact Account Security / Settings visibility predicate. */
 export const canShowFinancialTotpOnlyTestCard = (input: {

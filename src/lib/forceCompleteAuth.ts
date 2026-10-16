@@ -1,11 +1,10 @@
-/** Tenant-scoped staff/admin authorization for force-complete.
- *  Mirrors aws_can_write_tenant: membership on THAT check's tenant plus
- *  user_roles admin/staff. UUID possession is not authorization.
- *  Global admin/staff without tenant membership is denied.
- *  Platform owners may pass isPlatformOwner (aws_is_cross_tenant_reader).
+/** Tenant-scoped authorization for force-complete.
+ *  Owner policy: every member of the tenant is a user with the same rights;
+ *  partners and other tenants do not act. The caller needs a membership of
+ *  THAT check's tenant (any role value; aws_can_write_tenant after SQL 90).
+ *  Global user_roles admin/staff and platform owners get no shortcut, and UUID
+ *  possession is not authorization.
  */
-
-export const FORCE_COMPLETE_ROLES = ["admin", "staff"] as const;
 
 export type ForceCompleteAuthResult =
   | { ok: true }
@@ -16,21 +15,15 @@ export function authorizeForceComplete(opts: {
   check?: { id?: string | null; tenant_id?: string | null } | null;
   userRoles?: string[] | null;
   tenantMemberships?: Array<{ tenant_id?: string | null; role?: string | null }> | null;
-  isPlatformOwner?: boolean;
 }): ForceCompleteAuthResult {
   if (!opts.userId) return { ok: false, status: 401, error: "Unauthorized" };
   if (!opts.check?.id) return { ok: false, status: 404, error: "Check not found" };
   if (!opts.check.tenant_id) return { ok: false, status: 403, error: "forbidden" };
-  if (opts.isPlatformOwner) return { ok: true };
 
   const member = (opts.tenantMemberships || []).some(
     (row) => String(row.tenant_id || "") === String(opts.check?.tenant_id),
   );
   if (!member) return { ok: false, status: 403, error: "forbidden" };
-
-  const roles = (opts.userRoles || []).map((role) => String(role || "").toLowerCase());
-  const privileged = roles.some((role) => role === "admin" || role === "staff");
-  if (!privileged) return { ok: false, status: 403, error: "forbidden" };
   return { ok: true };
 }
 

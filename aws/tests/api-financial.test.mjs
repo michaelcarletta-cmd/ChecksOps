@@ -257,7 +257,19 @@ test('admin/staff login is not production money-movement authority', () => {
   });
   assert.equal(sim.canExecuteProduction, false);
   assert.equal(sim.canSimulate, true);
-  assert.equal(sim.roleOk, false);
+  // Owner policy: no role tiers; membership of the resource tenant is the role check.
+  assert.equal(sim.roleOk, true);
+  const outsider = evaluateFinancialAuthorization({
+    operation: 'checkalt_deposit',
+    identityOk: true,
+    membershipOk: false,
+    roles: ['admin', 'staff'],
+    simulationEnabled: true,
+    permissionsActivated: true,
+  });
+  assert.equal(outsider.roleOk, false);
+  assert.equal(outsider.canSimulate, false);
+  assert.equal(outsider.canExecuteProduction, false);
   assert.equal(FINANCIAL_OPERATIONS.checkalt_deposit.activated, false);
 });
 

@@ -53,10 +53,9 @@ import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
-import { useCanMoveChecks, useCheckAltAccess } from "@/hooks/useCanMoveChecks";
+import { useCanMoveChecks, useCheckAltAccess, useTenantMemberships } from "@/hooks/useCanMoveChecks";
 import { checkAltAccessState } from "@/lib/checkAltOperatorAccess";
 import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
-import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
@@ -292,7 +291,6 @@ export default function CheckCommandCenter() {
   const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const canMoveChecks = useCanMoveChecks();
-  const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [classFilter, setClassFilter] = useState<string>("all");
@@ -487,8 +485,14 @@ export default function CheckCommandCenter() {
 
   const canAccessManager = canMoveChecks;
 
-  // Admin: allow delete at any stage through the accepted Delete Check workflow.
-  const canDeleteAnyCheck = isAdmin;
+  // Owner policy: every member of the check's tenant may delete it at any stage
+  // through the accepted Delete Check workflow; partners may not. The server
+  // checks the check's own tenant.
+  const { memberships: deleteMemberships } = useTenantMemberships();
+  const canDeleteCheckInTenant = (checkTenantId: string | null | undefined) =>
+    !!checkTenantId && deleteMemberships.some(
+      (row) => String(row.tenant_id) === String(checkTenantId),
+    );
 
 
   const { data: checks = [], isLoading } = useQuery({
@@ -2048,10 +2052,10 @@ export default function CheckCommandCenter() {
                           ? recommendationConfig[check.deposit_recommendation]
                           : null;
                         const RecIcon = rec?.icon ?? null;
-                        const canDelete = canDeleteAnyCheck;
                         const isSelected = selectedCheck === check.id;
                         const isBulk = bulkSelected.has(check.id);
                         const isShared = (check as any)._shared;
+                        const canDelete = !isShared && canDeleteCheckInTenant(check.tenant_id);
                         const sourceTenantName = (check as any)._sourceTenantName;
                         return (
                           <TableRow
@@ -2172,6 +2176,7 @@ export default function CheckCommandCenter() {
                                     <AdminDeleteCheckButton
                                       checkId={check.id}
                                       checkNumber={check.check_number}
+                                      tenantId={check.tenant_id}
                                       onDeleted={() => {
                                         optimisticRemove(qc, [check.id]);
                                         setSelectedCheck(null);

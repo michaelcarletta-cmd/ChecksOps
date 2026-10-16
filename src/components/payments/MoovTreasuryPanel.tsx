@@ -15,7 +15,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info, Landmark, Loader2, RefreshCw } from "lucide-react";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
-import { useAuth } from "@/hooks/useAuth";
+import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 import { useToast } from "@/hooks/use-toast";
 import {
   dollarsToCents,
@@ -40,8 +40,8 @@ const money = (cents: number) =>
  * place.
  */
 export function MoovTreasuryPanel() {
-  const { userRole } = useAuth();
-  const isAdmin = userRole === "admin";
+  // Owner policy: every member of the tenant is a user with the same rights.
+  const { isMember: isAdmin } = useCurrentTenantMembership();
   const { toast } = useToast();
   const {
     enabled,
@@ -305,7 +305,7 @@ export function MoovTreasuryPanel() {
             )}
             {!isAdmin && (
               <p className="text-xs text-muted-foreground">
-                Only administrators can change treasury settings.
+                Only members of this organization can change treasury settings.
               </p>
             )}
 

@@ -248,13 +248,12 @@ export const assertNoCallerCatalogOverride = (event = {}, body = {}) => {
   return null;
 };
 
-export const assertCatalogAdmin = async (client, mapping) => {
-  const roles = (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows
-    .map((row) => String(row.role || '').toLowerCase());
+// Platform-level schema inspection: the platform owner only (a global
+// user_roles admin is not enough).
+export const assertCatalogAdmin = async (client) => {
   const owners = (await client.query(OWNER_FLAGS_SQL)).rows[0] || {};
   const authorized = owners.is_master === true
-    || owners.is_platform === true
-    || roles.includes('admin');
+    || owners.is_platform === true;
   if (!authorized) {
     return denied('admin_required', { statusCode: 403 });
   }
@@ -393,7 +392,7 @@ const runFixedCatalogQueries = async (client) => {
 };
 
 export const runTmpRlsCatalogInspect = async ({ client, mapping }) => {
-  const adminGate = await assertCatalogAdmin(client, mapping);
+  const adminGate = await assertCatalogAdmin(client);
   if (adminGate) return adminGate;
   const catalog = await runFixedCatalogQueries(client);
   return ok(catalog);

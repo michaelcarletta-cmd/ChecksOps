@@ -1,5 +1,5 @@
 import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
-import { TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from './identity.mjs';
+import { TENANT_MEMBERSHIP_SQL } from './identity.mjs';
 import { denyProviderExecution, flagSnapshot, providerExecutionEnabled } from './provider-flags.mjs';
 import { financialFlagSnapshot, financialPermissionsActivated, financialSandboxSimulationEnabled } from './financial-flags.mjs';
 import {
@@ -100,15 +100,16 @@ const membershipsOf = async (client, userId) => {
   }));
 };
 
+// Tenant role values only (informational; authorization is membership).
+// Platform user_roles are not merged in: they grant nothing in a tenant.
 const rolesOf = async (client, userId, tenantId) => {
-  const platform = (await client.query(USER_ROLES_SQL, [userId])).rows.map((row) => String(row.role || '').toLowerCase());
   const tenant = tenantId
     ? (await client.query(
       'SELECT role FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid',
       [userId, tenantId],
     )).rows.map((row) => String(row.role || '').toLowerCase())
     : [];
-  return [...new Set([...platform, ...tenant])];
+  return [...new Set(tenant)];
 };
 
 const setCertificationGuc = async (client) => {

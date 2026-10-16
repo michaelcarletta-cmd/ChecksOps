@@ -45,21 +45,22 @@ export function TenantStakeholderLimitRequests() {
   const [approvedLimit, setApprovedLimit] = useState<number>(0);
   const [notes, setNotes] = useState("");
 
-  const { data: role } = useQuery({
-    queryKey: ["tenant-user-role", tenant?.id, user?.id],
+  const { data: membership } = useQuery({
+    queryKey: ["tenant-user-membership-row", tenant?.id, user?.id],
     enabled: !!tenant?.id && !!user?.id,
     queryFn: async () => {
       const { data } = await supabase
         .from("tenant_users")
-        .select("role")
+        .select("user_id")
         .eq("tenant_id", tenant!.id)
         .eq("user_id", user!.id)
         .maybeSingle();
-      return (data?.role ?? null) as string | null;
+      return data ?? null;
     },
   });
 
-  const canApprove = role === "owner" || role === "admin";
+  // Owner policy: every member of the tenant is a user with the same rights.
+  const canApprove = Boolean(membership);
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["tenant-stakeholder-limit-requests", tenant?.id, tab],
@@ -160,7 +161,7 @@ export function TenantStakeholderLimitRequests() {
                             </Button>
                           </div>
                         ) : r.status === "pending" ? (
-                          <span className="text-xs text-muted-foreground italic">owner/admin only</span>
+                          <span className="text-xs text-muted-foreground italic">members only</span>
                         ) : (
                           <span className="text-xs text-muted-foreground" title={r.review_notes ?? ""}>
                             {r.reviewed_at ? formatDistanceToNow(new Date(r.reviewed_at), { addSuffix: true }) : "—"}

@@ -43,7 +43,6 @@ import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
 import { TenantBillingAccountPanel } from "@/components/settings/TenantBillingAccountPanel";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
@@ -97,7 +96,6 @@ function MyVerificationStatus() {
 export function WhiteLabelSettings() {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
-  const { isAdmin } = usePermissions();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
@@ -126,7 +124,9 @@ export function WhiteLabelSettings() {
       return (data?.role ?? null) as string | null;
     },
   });
-  const canManageTenant = tenantRole === "owner" || tenantRole === "admin" || isAdmin;
+  // Owner policy: every member of the tenant is a user with the same rights;
+  // platform roles give no shortcut.
+  const canManageTenant = Boolean(tenantRole);
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;

@@ -328,7 +328,12 @@ test('6. deposit_action allows prepare, assign, and mark_manual_deposit; provide
       };
     }
     if (/FROM public.deposit_provider_config/.test(sql)) return { rows: [{ '?column?': 1 }] };
-    if (/INSERT INTO public.deposit_batches/.test(sql)) return { rows: [{ id: BATCH_ID }] };
+    // A new batch is created by the SQL 90 DEFINER function (RLS cannot admit an empty batch).
+    if (/INSERT INTO public.deposit_batches/.test(sql)) throw new Error('direct batch INSERT is refused by RLS');
+    if (/aws_create_deposit_batch_for_item\(\$1::uuid, \$2::text\)/.test(sql)) {
+      assert.deepEqual(params, [ITEM_ID, 'manual_branch']);
+      return { rows: [{ id: BATCH_ID }] };
+    }
     if (/UPDATE public.deposit_items/.test(sql)) {
       assert.match(sql, /provider_assigned|manual_branch/);
       return { rows: [] };

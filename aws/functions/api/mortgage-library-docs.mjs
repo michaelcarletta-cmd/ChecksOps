@@ -21,7 +21,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 export { MORTGAGE_LIBRARY_DOC_PREFIX, MORTGAGE_LIBRARY_DOC_TYPES, isApprovedMortgageLibraryDocType };
 export const MORTGAGE_OPS_OPEN_STATUSES = Object.freeze(['requested', 'in_progress']);
-export const MORTGAGE_LIBRARY_MANAGE_ROLES = Object.freeze(['admin', 'owner']);
 
 export const isUuid = (value) => UUID_RE.test(String(value || ''));
 
@@ -60,17 +59,17 @@ const loadTenantMembership = async (client, userId, tenantId) => {
 };
 
 /**
- * Tenant document library writes are tenant owner/admin only.
- * `user_roles.admin` / `staff` / `mortgage_agent` are not tenant library managers:
- * a platform or Desk role plus ordinary membership must not mutate another
- * tenant's packet. Platform owner oversight is not a library-write grant.
+ * Tenant document library writes (Compliance & Docs). Owner policy: every
+ * member of the tenant is a user with the same rights; partners and other
+ * tenants do not act. Any tenant_users row of the caller for the tenant counts
+ * (the role column is ignored). `user_roles.admin` / `staff` / `mortgage_agent`
+ * without that membership must not mutate another tenant's packet. Platform
+ * owner oversight is not a library-write grant.
  */
 export const canManageTenantDocumentLibrary = async (client, userId, tenantId) => {
   if (!isUuid(userId) || !isUuid(tenantId)) return false;
   const membership = await loadTenantMembership(client, userId, tenantId);
-  if (!membership) return false;
-  const tenantRole = String(membership.role || '').toLowerCase();
-  return MORTGAGE_LIBRARY_MANAGE_ROLES.includes(tenantRole);
+  return Boolean(membership);
 };
 
 /**

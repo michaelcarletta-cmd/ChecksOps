@@ -34,13 +34,9 @@ const clip = (value, max) => {
   return text.length ? text : null;
 };
 
-const canManageTenantSettings = (access) => Boolean(
-  access?.canConfigure
-  || access?.platformAdmin
-  || access?.tenantAdmin
-  || access?.role === 'owner'
-  || access?.role === 'admin',
-);
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// resolveTenantAccess sets canConfigure for any member of the tenant.
+const canManageTenantSettings = (access) => Boolean(access?.canConfigure);
 
 const requireTenant = async (client, mapping, body, spoof) => {
   const tenantId = body.tenantId || body.tenant_id;

@@ -23,13 +23,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -44,9 +37,6 @@ import {
   Plus,
   Search,
   UserMinus,
-  Shield,
-  ShieldCheck,
-  Eye,
   Users,
   Mail,
   ChevronDown,
@@ -60,39 +50,17 @@ interface TenantUserManagementProps {
   onClose: () => void;
 }
 
-type TenantRole = "admin" | "operator" | "viewer";
-
+// Owner policy: every member of the tenant is a user with the same rights.
+// There are no roles to pick or change; tenant_users.role is ignored.
 interface TenantUser {
   id: string;
   user_id: string;
-  role: TenantRole;
   created_at: string;
   email?: string;
   full_name?: string;
 }
 
-const ROLE_META: Record<TenantRole, { label: string; icon: React.ReactNode; color: string; description: string }> = {
-  admin: {
-    label: "Admin",
-    icon: <ShieldCheck className="h-3.5 w-3.5" />,
-    color: "text-amber-400 bg-amber-400/10 border-amber-400/20",
-    description: "Full access — manage users, settings, and all checks",
-  },
-  operator: {
-    label: "Operator",
-    icon: <Shield className="h-3.5 w-3.5" />,
-    color: "text-blue-400 bg-blue-400/10 border-blue-400/20",
-    description: "Process checks, endorsements, and daily operations",
-  },
-  viewer: {
-    label: "Viewer",
-    icon: <Eye className="h-3.5 w-3.5" />,
-    color: "text-muted-foreground bg-muted border-border",
-    description: "Read-only access to checks and reports",
-  },
-};
-
-type SortField = "name" | "email" | "role" | "created_at";
+type SortField = "name" | "email" | "created_at";
 type SortDir = "asc" | "desc";
 
 export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: TenantUserManagementProps) {
@@ -101,11 +69,9 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
 
   // State
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<TenantRole | "all">("all");
   const [addOpen, setAddOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState<TenantRole>("operator");
   const [removeTarget, setRemoveTarget] = useState<TenantUser | null>(null);
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -115,7 +81,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
     userName: string;
   } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkRole, setBulkRole] = useState<TenantRole | "">("");
 
   // Fetch tenant users with auth user info
   const { data: users = [], isLoading } = useQuery({
@@ -123,7 +88,7 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_users")
-        .select("id, user_id, role, created_at")
+        .select("id, user_id, created_at")
         .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false });
 
@@ -156,8 +121,7 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
         !search ||
         u.email?.toLowerCase().includes(search.toLowerCase()) ||
         u.full_name?.toLowerCase().includes(search.toLowerCase());
-      const matchesRole = roleFilter === "all" || u.role === roleFilter;
-      return matchesSearch && matchesRole;
+      return matchesSearch;
     });
 
     result.sort((a, b) => {
@@ -170,10 +134,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
         case "email":
           aVal = a.email || "";
           bVal = b.email || "";
-          break;
-        case "role":
-          aVal = a.role;
-          bVal = b.role;
           break;
         case "created_at":
           aVal = a.created_at;
@@ -188,23 +148,14 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
     });
 
     return result;
-  }, [users, search, roleFilter, sortField, sortDir]);
-
-  // Role counts
-  const roleCounts = useMemo(() => {
-    const counts = { admin: 0, operator: 0, viewer: 0 };
-    users.forEach((u) => {
-      if (u.role in counts) counts[u.role as TenantRole]++;
-    });
-    return counts;
-  }, [users]);
+  }, [users, search, sortField, sortDir]);
 
   // Add user mutation
   const addUser = useMutation({
     mutationFn: async () => {
       const password = generatePassword();
       const { data, error } = await supabase.functions.invoke("create-tenant-user", {
-        body: { email: newEmail, password, full_name: newName, tenant_id: tenantId, role: newRole },
+        body: { email: newEmail, password, full_name: newName, tenant_id: tenantId },
       });
 
       if (error) throw error;
@@ -216,7 +167,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
       setAddOpen(false);
       setNewEmail("");
       setNewName("");
-      setNewRole("operator");
       setCredentialsDialog({
         email: data.email,
         password: data.password,
@@ -246,45 +196,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
     },
     onError: (err: any) => {
       toast({ title: "Failed to remove user", description: err.message, variant: "destructive" });
-    },
-  });
-
-  // Change role mutation
-  const changeRole = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: TenantRole }) => {
-      const { error } = await supabase
-        .from("tenant_users")
-        .update({ role })
-        .eq("tenant_id", tenantId)
-        .eq("user_id", userId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenant-users", tenantId] });
-    },
-    onError: (err: any) => {
-      toast({ title: "Failed to change role", description: err.message, variant: "destructive" });
-    },
-  });
-
-  // Bulk role change
-  const bulkChangeRole = useMutation({
-    mutationFn: async (role: TenantRole) => {
-      const promises = Array.from(selectedIds).map((tuId) => {
-        const user = users.find((u) => u.id === tuId);
-        if (!user) return Promise.resolve();
-        return supabase
-          .from("tenant_users")
-          .update({ role })
-          .eq("id", tuId);
-      });
-      await Promise.all(promises);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenant-users", tenantId] });
-      setSelectedIds(new Set());
-      setBulkRole("");
-      toast({ title: "Roles updated" });
     },
   });
 
@@ -355,19 +266,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
             <Badge variant="outline" className="text-xs">
               {users.length} total
             </Badge>
-            {(Object.entries(roleCounts) as [TenantRole, number][]).map(([role, count]) => (
-              <Badge
-                key={role}
-                variant="outline"
-                className={`text-xs cursor-pointer ${roleFilter === role ? ROLE_META[role].color : ""}`}
-                onClick={() => setRoleFilter(roleFilter === role ? "all" : role)}
-              >
-                {ROLE_META[role].icon}
-                <span className="ml-1">
-                  {count} {ROLE_META[role].label}{count !== 1 ? "s" : ""}
-                </span>
-              </Badge>
-            ))}
           </div>
 
           {/* Toolbar */}
@@ -385,22 +283,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2 bg-muted/50 rounded-md px-2 py-1">
                 <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
-                <Select
-                  value={bulkRole}
-                  onValueChange={(val) => {
-                    setBulkRole(val as TenantRole);
-                    if (val) bulkChangeRole.mutate(val as TenantRole);
-                  }}
-                >
-                  <SelectTrigger className="h-7 w-[120px] text-xs">
-                    <SelectValue placeholder="Change role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="operator">Operator</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
-                  </SelectContent>
-                </Select>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -462,12 +344,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
                       Email <SortIcon field="email" />
                     </TableHead>
                     <TableHead
-                      className="cursor-pointer select-none w-[140px]"
-                      onClick={() => toggleSort("role")}
-                    >
-                      Role <SortIcon field="role" />
-                    </TableHead>
-                    <TableHead
                       className="cursor-pointer select-none"
                       onClick={() => toggleSort("created_at")}
                     >
@@ -489,43 +365,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
                       </TableCell>
                       <TableCell className="font-medium">{user.full_name}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{user.email}</TableCell>
-                      <TableCell>
-                        <Select
-                          value={user.role}
-                          onValueChange={(val) =>
-                            changeRole.mutate({ userId: user.user_id, role: val as TenantRole })
-                          }
-                        >
-                          <SelectTrigger className="h-7 w-[120px] text-xs border-0 bg-transparent hover:bg-muted">
-                            <div className="flex items-center gap-1.5">
-                              <Badge
-                                variant="outline"
-                                className={`text-xs px-1.5 py-0 ${ROLE_META[user.role]?.color || ""}`}
-                              >
-                                {ROLE_META[user.role]?.icon}
-                                <span className="ml-1">{ROLE_META[user.role]?.label || user.role}</span>
-                              </Badge>
-                            </div>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(Object.entries(ROLE_META) as [TenantRole, typeof ROLE_META.admin][]).map(
-                              ([key, meta]) => (
-                                <SelectItem key={key} value={key}>
-                                  <div className="flex items-center gap-2">
-                                    {meta.icon}
-                                    <div>
-                                      <div className="font-medium text-xs">{meta.label}</div>
-                                      <div className="text-[10px] text-muted-foreground">
-                                        {meta.description}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </SelectItem>
-                              )
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
                       <TableCell className="text-muted-foreground text-xs">
                         {new Date(user.created_at).toLocaleDateString()}
                       </TableCell>
@@ -583,27 +422,6 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
                 placeholder="jane@company.com"
                 required
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={newRole} onValueChange={(v) => setNewRole(v as TenantRole)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.entries(ROLE_META) as [TenantRole, typeof ROLE_META.admin][]).map(
-                    ([key, meta]) => (
-                      <SelectItem key={key} value={key}>
-                        <div className="flex items-center gap-2">
-                          {meta.icon}
-                          <span>{meta.label}</span>
-                          <span className="text-xs text-muted-foreground">— {meta.description}</span>
-                        </div>
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>

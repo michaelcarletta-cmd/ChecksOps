@@ -127,7 +127,7 @@ test('tenant admin cannot bill mortgage handling; agent and owner fail closed', 
   assert.equal(owner.error, 'production_execution_blocked');
 });
 
-test('library manage requires tenant owner/admin membership; agents and other tenants are denied', async () => {
+test('library manage requires membership of the tenant (any stored role); agents and other tenants are denied', async () => {
   const client = sqlClient({
     memberships: {
       [`${OWNER_A}:${TENANT_A}`]: 'owner',
@@ -143,12 +143,12 @@ test('library manage requires tenant owner/admin membership; agents and other te
   });
   assert.equal(await canManageTenantDocumentLibrary(client, OWNER_A, TENANT_A), true);
   assert.equal(await canManageTenantDocumentLibrary(client, ADMIN_A, TENANT_A), true);
-  assert.equal(await canManageTenantDocumentLibrary(client, MEMBER_A, TENANT_A), false);
+  assert.equal(await canManageTenantDocumentLibrary(client, MEMBER_A, TENANT_A), true);
   assert.equal(await canManageTenantDocumentLibrary(client, AGENT, TENANT_A), false);
   assert.equal(await canManageTenantDocumentLibrary(client, OWNER_A, TENANT_B), false);
 });
 
-test('tenant-documents upload and metadata writes stay tenant-manage scoped', async () => {
+test('tenant-documents upload and metadata writes stay tenant-member scoped', async () => {
   const ownerClient = sqlClient({
     memberships: { [`${OWNER_A}:${TENANT_A}`]: 'owner' },
     documents: { [DOC_A]: { id: DOC_A, tenant_id: TENANT_A } },
@@ -165,8 +165,9 @@ test('tenant-documents upload and metadata writes stay tenant-manage scoped', as
 
   const ownerUpload = await authorizeStorageWritePath(ownerClient, 'tenant-documents', PATH_A, OWNER_A);
   assert.equal(ownerUpload.ok, true);
+  // Owner policy: a member (stored role operator) is a user with the same rights.
   const memberUpload = await authorizeStorageWritePath(memberClient, 'tenant-documents', PATH_A, MEMBER_A);
-  assert.equal(memberUpload.ok, false);
+  assert.equal(memberUpload.ok, true);
   const crossUpload = await authorizeStorageWritePath(ownerClient, 'tenant-documents', PATH_B, OWNER_A);
   assert.equal(crossUpload.ok, false);
   const agentUpload = await authorizeStorageWritePath(agentClient, 'tenant-documents', PATH_A, AGENT);
@@ -188,7 +189,7 @@ test('tenant-documents upload and metadata writes stay tenant-manage scoped', as
     values: { tenant_id: TENANT_A, doc_type: 'library:mortgage:w-9', file_path: PATH_A, file_name: 'W-9' },
     filters: [],
   });
-  assert.equal(memberInsert.error, 'not_authorized');
+  assert.equal(memberInsert.error, undefined, JSON.stringify(memberInsert));
 
   const crossInsert = await executeTenantDocuments({
     client: ownerClient,
@@ -206,7 +207,7 @@ test('tenant-documents upload and metadata writes stay tenant-manage scoped', as
     values: {},
     filters: [{ column: 'id', op: 'eq', value: DOC_A }],
   });
-  assert.equal(memberDelete.error, 'not_authorized');
+  assert.equal(memberDelete.error, undefined, JSON.stringify(memberDelete));
 
   const agentDelete = await executeTenantDocuments({
     client: agentClient,
@@ -310,4 +311,21 @@ test('loss-draft uploads require tenant membership or a workable Desk request', 
     filters: [{ column: 'id', op: 'eq', value: DRAFT_DOC }],
   });
   assert.equal(assignedDelete.rows[0].id, DRAFT_DOC);
+});
+
+test('library writes: any member (stored role viewer) uploads; the platform owner without membership does not', async () => {
+  const viewerClient = sqlClient({ memberships: { [`${OWNER_A}:${TENANT_A}`]: 'viewer' } });
+  assert.equal(await canManageTenantDocumentLibrary(viewerClient, OWNER_A, TENANT_A), true);
+  const upload = await authorizeStorageWritePath(viewerClient, 'tenant-documents', PATH_A, OWNER_A);
+  assert.equal(upload.ok, true);
+
+  const platformOwnerClient = sqlClient({ roles: { [OWNER_A]: ['admin'] } });
+  const base = platformOwnerClient.query;
+  platformOwnerClient.query = async (sql, params) => (/is_master_owner|is_platform_owner/.test(sql)
+    ? { rows: [{ is_owner: true, is_master: true, is_platform: true }] }
+    : base(sql, params));
+  assert.equal(await canManageTenantDocumentLibrary(platformOwnerClient, OWNER_A, TENANT_A), false);
+  const refused = await authorizeStorageWritePath(platformOwnerClient, 'tenant-documents', PATH_A, OWNER_A);
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error, 'rls_denied');
 });

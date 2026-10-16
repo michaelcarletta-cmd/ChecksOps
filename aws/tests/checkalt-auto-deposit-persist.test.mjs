@@ -235,10 +235,9 @@ const memberClient = ({ memberOf = FREEDOM, tenantRole = 'operator', result } = 
       if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: false }] };
       if (sql === USER_ROLES_SQL) return { rows: [] };
       if (/FROM public\.tenant_users\s+WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/.test(sql)) {
-        // Honor the role allowlist exactly as the gate's SQL spells it.
-        const allowed = [...(sql.match(/lower\(role::text\) IN \(([^)]*)\)/)?.[1] || '').matchAll(/'([^']+)'/g)].map((m) => m[1]);
-        if (!allowed.length) throw new Error('the Auto-Deposit gate must filter on tenant role');
-        const ok = params[0] === APP_ID && params[1] === memberOf && allowed.includes(tenantRole);
+        // Owner policy: any membership row counts; the gate must not read the role.
+        if (/role/.test(sql)) throw new Error('the Auto-Deposit gate must not filter on tenant role');
+        const ok = params[0] === APP_ID && params[1] === memberOf;
         return { rows: ok ? [{ role: tenantRole }] : [] };
       }
       if (sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL) {
@@ -265,8 +264,8 @@ const save = (client, args) => executeSafeWriteRpc({
   args,
 });
 
-test('tenant operators and admins can toggle Auto-Deposit and set or clear the ceiling', async () => {
-  for (const tenantRole of ['operator', 'admin', 'owner', 'manager']) {
+test('any member of the tenant (any stored role) can toggle Auto-Deposit and set or clear the ceiling', async () => {
+  for (const tenantRole of ['operator', 'admin', 'owner', 'manager', 'viewer', 'member', '']) {
     const client = memberClient({ tenantRole });
     const off = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false, auto_approve_max_cents: 200000 });
     assert.equal(off.error, undefined, tenantRole);
@@ -283,14 +282,14 @@ test('tenant operators and admins can toggle Auto-Deposit and set or clear the c
   }
 });
 
-test('viewers (and unknown roles) cannot change Auto-Deposit, and nothing is written', async () => {
-  assert.match(CHECKALT_TENANT_MEMBER_SQL, /lower\(role::text\) IN \('owner', 'admin', 'manager', 'operator'\)/);
-  for (const tenantRole of ['viewer', 'Viewer', 'member', 'partner', '']) {
-    const client = memberClient({ tenantRole });
-    const denied = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false });
-    assert.equal(denied.error, 'not_authorized', tenantRole);
-    assert.equal(client.queries.some((q) => q.sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL), false, tenantRole);
-  }
+test('the Auto-Deposit gate is membership of this tenant; the role column is not read', async () => {
+  assert.doesNotMatch(CHECKALT_TENANT_MEMBER_SQL, /role/);
+  assert.match(CHECKALT_TENANT_MEMBER_SQL, /WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/);
+  // No membership of the tenant at all: refused, nothing written.
+  const client = memberClient({ memberOf: null });
+  const denied = await save(client, { tenant_id: FREEDOM, auto_approve_enabled: false });
+  assert.equal(denied.error, 'not_authorized');
+  assert.equal(client.queries.some((q) => q.sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL), false);
 });
 
 test('a member of another tenant cannot change this tenant, and nothing is written', async () => {

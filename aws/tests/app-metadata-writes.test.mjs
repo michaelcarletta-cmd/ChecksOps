@@ -83,49 +83,86 @@ test('notifications mark-all-read updates only own rows', async () => {
   assert.equal(result.rows.length, 1);
 });
 
-test('tenant_users role updates require admin membership and valid enum', async () => {
-  const client = {
+const TEAMMATE = '11111111-1111-4111-8111-111111111111';
+const TEAM_OTHER_TENANT = '9eff5f1a-929d-4ce3-9a8b-cd96b98df42b';
+
+/** tenant_users rows of the caller. Owner policy: any membership row counts; the role is never read. */
+const teamClient = ({ memberships = [], userRoles = [] } = {}) => {
+  const calls = [];
+  return {
+    calls,
     query: async (sql, params) => {
-      if (/FROM public.tenant_users WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid LIMIT 1/.test(sql)) {
-        return { rows: [{ '?column?': 1 }] };
+      calls.push({ sql, params });
+      if (/FROM public\.user_roles/.test(sql)) {
+        return { rows: userRoles.map((role) => ({ role })) };
       }
-      if (/role = 'admin'/.test(sql)) {
-        return { rows: [{ role: 'admin' }] };
+      if (/SELECT 1 FROM public\.tenant_users/.test(sql)) {
+        const [userId, tenantId] = params;
+        assert.doesNotMatch(sql, /role/);
+        const rows = memberships.filter((m) => userId === APP_ID && m.tenant_id === tenantId);
+        return { rows: rows.length ? [{ '?column?': 1 }] : [] };
       }
-      if (/UPDATE public.tenant_users SET role/.test(sql)) {
-        assert.equal(params[2], 'viewer');
-        return { rows: [{ id: 'tu1', tenant_id: TENANT, user_id: '11111111-1111-4111-8111-111111111111', role: 'viewer' }] };
+      if (/UPDATE public\.tenant_users SET role/.test(sql)) {
+        return { rows: [{ id: 'tu1', tenant_id: params[0], user_id: params[1], role: params[2] }] };
+      }
+      if (/DELETE FROM public\.tenant_users/.test(sql)) {
+        return { rows: [{ id: 'tu1', tenant_id: params[0], user_id: params[1] }] };
       }
       return { rows: [] };
     },
   };
-  const ok = await executeAppMetadataWrite({
-    client,
-    mapping,
-    table: 'tenant_users',
-    op: 'update',
-    values: { role: 'viewer' },
-    filters: [
-      { column: 'tenant_id', op: 'eq', value: TENANT },
-      { column: 'user_id', op: 'eq', value: '11111111-1111-4111-8111-111111111111' },
-    ],
-  });
-  assert.equal(ok.rows[0].role, 'viewer');
+};
 
-  const bad = await executeAppMetadataWrite({
-    client,
-    mapping,
-    table: 'tenant_users',
-    op: 'update',
-    values: { role: 'superadmin' },
-    filters: [
-      { column: 'tenant_id', op: 'eq', value: TENANT },
-      { column: 'user_id', op: 'eq', value: '11111111-1111-4111-8111-111111111111' },
-    ],
-  });
-  assert.equal(bad.error, 'invalid_field');
+const roleUpdate = (client, role = 'viewer', tenantId = TENANT) => executeAppMetadataWrite({
+  client,
+  mapping,
+  table: 'tenant_users',
+  op: 'update',
+  values: { role },
+  filters: [
+    { column: 'tenant_id', op: 'eq', value: tenantId },
+    { column: 'user_id', op: 'eq', value: TEAMMATE },
+  ],
 });
 
+const memberRemoval = (client, tenantId = TENANT) => executeAppMetadataWrite({
+  client,
+  mapping,
+  table: 'tenant_users',
+  op: 'delete',
+  values: {},
+  filters: [
+    { column: 'tenant_id', op: 'eq', value: tenantId },
+    { column: 'user_id', op: 'eq', value: TEAMMATE },
+  ],
+});
+
+for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer', 'member']) {
+  test(`tenant_users: any member (stored role ${role}) may remove a teammate`, async () => {
+    const client = teamClient({ memberships: [{ tenant_id: TENANT, role }] });
+    const removed = await memberRemoval(client);
+    assert.equal(removed.rows.length, 1, role);
+  });
+}
+
+test('tenant_users: there is no role-change path (membership add/remove only)', async () => {
+  const client = teamClient({ memberships: [{ tenant_id: TENANT, role: 'owner' }] });
+  for (const role of ['viewer', 'admin', 'superadmin']) {
+    const result = await roleUpdate(client, role);
+    assert.equal(result.error, 'operation_not_allowlisted', role);
+  }
+  assert.equal(client.calls.some((c) => /UPDATE public\.tenant_users/.test(c.sql)), false);
+});
+
+test('tenant_users: a member of another tenant and platform admin/staff without membership cannot remove members', async () => {
+  const other = teamClient({ memberships: [{ tenant_id: TEAM_OTHER_TENANT, role: 'owner' }] });
+  assert.equal((await memberRemoval(other)).error, 'not_authorized');
+  for (const userRoles of [['admin'], ['staff']]) {
+    const platform = teamClient({ memberships: [], userRoles });
+    assert.equal((await memberRemoval(platform)).error, 'not_authorized');
+  }
+  assert.equal(other.calls.some((c) => /DELETE FROM public\.tenant_users/.test(c.sql)), false);
+});
 
 test('cash_jobs denies payment columns; homeowner ledger denies amount via clientIgnored', () => {
   assert.ok(!WRITE_ALLOWLIST.cash_jobs.columns.has('total_paid'));
@@ -308,4 +345,50 @@ test('claim number update refuses outsiders, unassigned claims, inserts, and uni
     filters: [{ column: 'id', op: 'eq', value: CLAIM_ID }],
   });
   assert.equal(conflict.error, 'claim_number_conflict');
+});
+
+test('tenant settings update: any member (stored role viewer included); other tenants and platform admin refused', async () => {
+  const update = (client) => executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { name: 'Renamed' },
+    filters: [{ column: 'id', op: 'eq', value: TENANT }],
+  });
+  const settingsClient = (memberships, userRoles = []) => {
+    const base = teamClient({ memberships, userRoles });
+    return {
+      query: async (sql, params) => {
+        if (/UPDATE public\.tenants/.test(sql)) return { rows: [{ id: TENANT, name: params[0] }] };
+        return base.query(sql, params);
+      },
+    };
+  };
+  for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer']) {
+    const ok = await update(settingsClient([{ tenant_id: TENANT, role }]));
+    assert.equal(ok.rows[0].name, 'Renamed', role);
+  }
+  assert.equal((await update(settingsClient([], ['admin']))).error, 'not_authorized');
+  assert.equal((await update(settingsClient([{ tenant_id: TEAM_OTHER_TENANT, role: 'owner' }]))).error, 'not_authorized');
+});
+
+test('tenant create stays with the platform owner; a global user_roles admin is refused', async () => {
+  const create = (isOwner, userRoles) => executeAppMetadataWrite({
+    client: {
+      query: async (sql) => {
+        if (/is_platform_owner/.test(sql)) return { rows: [{ is_owner: isOwner }] };
+        if (/FROM public\.user_roles/.test(sql)) return { rows: userRoles.map((role) => ({ role })) };
+        if (/INSERT INTO public\.tenants/.test(sql)) return { rows: [{ id: TENANT }] };
+        return { rows: [] };
+      },
+    },
+    mapping,
+    table: 'tenants',
+    op: 'insert',
+    values: { name: 'New Co', slug: 'new-co' },
+    filters: [],
+  });
+  assert.equal((await create(false, ['admin'])).error, 'not_authorized');
+  assert.equal((await create(true, [])).rows[0].id, TENANT);
 });

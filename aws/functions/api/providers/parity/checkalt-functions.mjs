@@ -13,7 +13,7 @@
  */
 import { formatCheckAltUserAmount, resolveCheckAltProviderStatus } from '../amounts.mjs';
 import { CHECKALT_UAT_HOST } from '../../sandbox-credentials.mjs';
-import { isPlatformAdmin, jsonResult, fail, checkAltParityContext } from './caller.mjs';
+import { jsonResult, fail, checkAltParityContext } from './caller.mjs';
 import { loadCheckAltTenantRoles, roleAllowsCheckAlt } from '../production/checkalt-authz.mjs';
 import { accountLast4, maskCheckAltPayload, normalizeDepositAccountNumber } from '../checkalt-account-mask.mjs';
 import {
@@ -41,16 +41,16 @@ const jwtCache = { token: null, expiresAt: null };
 /**
  * Check Alt deposit actions (submit, approve, reject, poll, prepare-image) and
  * the depositor reads (deposit history, account status) follow the production
- * rule: only the caller's tenant_users role for the tenant acted on counts
- * (owner, admin, manager or operator). Platform user_roles admin is ignored,
- * so it never lets a viewer or a non-member act on, or read, another tenant's
- * Check Alt data. A missing tenant is refused (no role row can match it).
+ * rule: only the caller's tenant_users membership of the tenant acted on
+ * counts (any role value). Platform user_roles admin is ignored, so it never
+ * lets a non-member act on, or read, another tenant's Check Alt data. A
+ * missing tenant is refused (no membership row can match it).
  */
 const denyUnlessCheckAltTenantRole = async (
   client,
   userId,
   tenantId,
-  message = 'Viewers and non-members cannot submit, approve or reject Check Alt deposits. Tenant owner/admin/manager/operator required.',
+  message = 'Non-members cannot submit, approve or reject Check Alt deposits. Membership of the tenant is required.',
 ) => {
   const roles = await loadCheckAltTenantRoles(client, userId, tenantId);
   if (roleAllowsCheckAlt(roles)) return null;
@@ -68,17 +68,23 @@ const checkAltTenantOf = (ctx) => ctx?.tenantId || null;
 
 /**
  * UAT integration setup (requireAdmin handlers: test-connection, register,
- * verify) keeps its existing contract: platform admin, or an owner/admin of
- * the target tenant. checkAltParityContext only returns resolveTenant's
- * requireAdmin refusal when body.tenant_id is set, so without this a tenant
- * viewer who omits tenant_id fell through and could register a UAT depositor
- * (with a caller-chosen deposit account) for their tenant.
+ * verify): the platform owner, or any member of the target tenant. Without
+ * this check, checkAltParityContext only refuses when body.tenant_id is set,
+ * so a caller who omits tenant_id could register a UAT depositor (with a
+ * caller-chosen deposit account) for a tenant it is not a member of.
  */
+const isPlatformOwner = async (client) => (
+  (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0]?.is_owner === true
+);
+
+// Check Alt UAT setup: the platform owner (who keeps Check Alt setup) or any
+// member of the target tenant. A global user_roles admin (ctx.isAdmin) is not
+// enough, and role tiers are ignored.
 const denyUnlessCheckAltSetupAdmin = async (client, ctx, userId, tenantId) => {
-  if (ctx.isAdmin) return null;
+  if (await isPlatformOwner(client)) return null;
   const roles = await loadCheckAltTenantRoles(client, userId, tenantId);
-  if (roles.some((role) => role === 'owner' || role === 'admin')) return null;
-  return fail('Administrator access required', 403);
+  if (roleAllowsCheckAlt(roles)) return null;
+  return fail('Membership of this company required', 403);
 };
 const MAX_TOTAL_B64_CHARS = 1_600_000;
 
@@ -163,6 +169,8 @@ const wrap = (handler) => async (event, deps = {}) => {
       mapping,
       body,
       requireAdmin: handler.requireAdmin === true,
+      // Check Alt UAT setup stays with the platform owner (or a member).
+      allowPlatformOwner: handler.requireAdmin === true,
       loadSandbox: deps.loadSandboxCredentials,
     });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
@@ -208,8 +216,8 @@ const wrap = (handler) => async (event, deps = {}) => {
 const testConnection = {
   requireAdmin: true,
   run: async ({ ctx, fetchImpl, mapping, client }) => {
-    const admin = ctx.isAdmin || await isPlatformAdmin(client, mapping.application_user_id);
-    if (!admin) return fail('Admins only', 403);
+    // Platform-level UAT connection test: the platform owner only.
+    if (!(await isPlatformOwner(client))) return fail('Platform owner only', 403);
     const cfg = uatCfg(ctx.uat);
     const creds = credentialsOf(ctx.uat);
     try {
@@ -382,7 +390,7 @@ const accountStatus = {
       client,
       mapping.application_user_id,
       tenantId,
-      'Viewers and non-members cannot read Check Alt account status. Tenant owner/admin/manager/operator required.',
+      'Non-members cannot read Check Alt account status. Membership of the tenant is required.',
     );
     if (denied) return denied;
     const acct = await loadUatTenantAccount(client, tenantId);
@@ -416,7 +424,7 @@ const depositHistory = {
       client,
       mapping.application_user_id,
       tenantId,
-      'Viewers and non-members cannot read Check Alt deposit history. Tenant owner/admin/manager/operator required.',
+      'Non-members cannot read Check Alt deposit history. Membership of the tenant is required.',
     );
     if (denied) return denied;
     const acct = await loadUatTenantAccount(client, tenantId);
@@ -449,13 +457,13 @@ const resolvePollStatus = (json) => resolveCheckAltProviderStatus(json || {});
 const pollStatus = {
   run: async ({ client, mapping, ctx, fetchImpl }) => {
     // Poll writes status onto up to 50 rows, so it needs the same tenant role
-    // as production poll (authorizePollRow: owner/admin/manager/operator).
+    // as production poll (authorizePollRow: any member of the deposit's tenant).
     const tenantId = checkAltTenantOf(ctx);
     const denied = await denyUnlessCheckAltTenantRole(
       client,
       mapping.application_user_id,
       tenantId,
-      'Viewers and non-members cannot refresh Check Alt deposit status. Tenant owner/admin/manager/operator required.',
+      'Non-members cannot refresh Check Alt deposit status. Membership of the tenant is required.',
     );
     if (denied) return denied;
     const acct = await loadUatTenantAccount(client, tenantId);
@@ -789,7 +797,7 @@ const prepareImage = {
       client,
       mapping.application_user_id,
       check.tenant_id,
-      'Viewers and non-members cannot prepare Check Alt deposit images. Tenant owner/admin/manager/operator required.',
+      'Non-members cannot prepare Check Alt deposit images. Membership of the tenant is required.',
     );
     if (denied) return denied;
     const sourcePath = side === 'front'

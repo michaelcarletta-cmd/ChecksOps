@@ -169,9 +169,14 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             checkId: request?.checkId,
           });
           if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
-          if (request?.actionKey === "wallet.fund" || isCheckBoundAction(request?.actionKey)) {
+          if (
+            request?.actionKey === "wallet.fund" ||
+            request?.actionKey === "team.reset_totp" ||
+            isCheckBoundAction(request?.actionKey)
+          ) {
             // Setup checks the code without using it up, so the same code also
-            // records this login's funding or Check Alt confirmation on the server.
+            // records this login's funding, Check Alt or teammate-reset
+            // confirmation on the server.
             const stepped = await stepUpAwsTotp({
               code: normalized.code,
               actionKey: request.actionKey,

@@ -28,6 +28,8 @@ export interface CheckAltDepositSummary {
 export interface CheckItem {
   id: string;
   claim_id: string | null;
+  /** Owning tenant (selected by the queue query; used for owner-policy role gates). */
+  tenant_id?: string | null;
   front_image_path: string;
   back_image_path: string | null;
   back_image_deposit_path?: string | null;

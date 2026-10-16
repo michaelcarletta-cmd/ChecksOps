@@ -374,8 +374,10 @@ const resolveLoginSessionBinding = async ({ claims, spoof }) => {
 /**
  * Wallet funding step-up is bound to the tenant and the current login, not to
  * an amount: one code per login covers every funding request in that login.
+ * A teammate 2FA reset (team.reset_totp) uses the same tenant + login binding;
+ * admin-reset-totp also requires it to be recent.
  */
-const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
+const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, spoof }, boundActionKey = null) => {
   const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
   const { isUuid, membershipForTenant } = await import('./financial-ownership.mjs');
   const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
@@ -389,7 +391,7 @@ const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, s
   }
   const session = await resolveLoginSessionBinding({ claims, spoof });
   if (!session.ok) return session;
-  return { ok: true, kind: 'login_session', tenantId, loginSession: session.loginSession, actionKey: WALLET_FUND_TOTP_ACTION };
+  return { ok: true, kind: 'login_session', tenantId, loginSession: session.loginSession, actionKey: boundActionKey || WALLET_FUND_TOTP_ACTION };
 };
 
 export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
@@ -404,6 +406,10 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
   const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
   if (actionKey === WALLET_FUND_TOTP_ACTION) {
     return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof });
+  }
+  const { TEAM_RESET_TOTP_ACTION } = await import('./admin-reset-totp.mjs');
+  if (actionKey === TEAM_RESET_TOTP_ACTION) {
+    return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof }, TEAM_RESET_TOTP_ACTION);
   }
   // If an older checkalt-authz.mjs is live (deploy order or rollback), keep
   // deposit.submit working rather than failing every check-bound step-up.

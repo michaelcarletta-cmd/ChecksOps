@@ -16,6 +16,7 @@ import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, 
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
+import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 
@@ -110,21 +111,8 @@ export function StakeholderAccountSettings() {
     },
   });
 
-  const { data: tenantRole } = useQuery({
-    queryKey: ["tenant-user-role", tenant?.id, user?.id],
-    enabled: !!tenant?.id && !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("role")
-        .eq("tenant_id", tenant!.id)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return (data?.role ?? null) as string | null;
-    },
-  });
-  const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
+  // Owner policy: every member of the tenant is a user with the same rights.
+  const { isMember: canManageTenant } = useCurrentTenantMembership();
 
   // One shared limit across vendors, sales reps and subcontractors.
   const CAPPED_TYPES = ["sales_rep", "subcontractor", "vendor"];

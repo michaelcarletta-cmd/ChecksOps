@@ -15,12 +15,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useTenantMemberships } from "@/hooks/useCanMoveChecks";
 import { useToast } from "@/hooks/use-toast";
 
 /**
- * Admin-only "Delete Check" button. Allows deleting a check from ANY status.
- * Requires the admin to provide a reason (logged to check_deletion_log + claim_audit_log).
+ * "Delete Check" button. Allows deleting a check from ANY status.
+ * Owner policy: every member of the tenant is a user with the same rights;
+ * partners and other tenants do not act. Shown when the user is a member of
+ * the check's tenant (tenantId), or of any tenant when tenantId is not known;
+ * the server checks the check's own tenant. Requires a reason (logged to check_deletion_log + claim_audit_log).
  */
 export function AdminDeleteCheckButton({
   checkId,
@@ -30,8 +33,10 @@ export function AdminDeleteCheckButton({
   variant = "outline",
   label = "Delete Check",
   className,
+  tenantId,
 }: {
   checkId: string;
+  tenantId?: string | null;
   checkNumber?: string | null;
   onDeleted?: () => void;
   size?: "default" | "sm" | "lg" | "icon";
@@ -40,14 +45,17 @@ export function AdminDeleteCheckButton({
   className?: string;
 }) {
   const { user } = useAuth();
-  const { isAdmin } = usePermissions();
+  const { memberships } = useTenantMemberships();
+  const canDelete = memberships.some(
+    (row) => !tenantId || String(row.tenant_id) === String(tenantId),
+  );
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reason, setReason] = useState("");
   const showLabel = Boolean(label && label.trim().length > 0);
 
-  if (!isAdmin) return null;
+  if (!canDelete) return null;
 
   const trimmed = reason.trim();
   const reasonValid = trimmed.length >= 3;

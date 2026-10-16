@@ -1,4 +1,3 @@
-import { FINANCIAL_ROLES } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { formatCheckAltUserAmount } from '../amounts.mjs';
@@ -98,26 +97,22 @@ export async function loadSessionCheckAltStepUp(client, { userId, tenantId, logi
 }
 
 /**
- * Roles that may submit, approve, reject and refresh Check Alt deposits for a
- * tenant they belong to. Viewers (for example partners added to a tenant to
- * see shared checks) may not. `roles` holds only the caller's tenant_users
- * role for the check's tenant (loadCheckAltTenantRoles); platform user_roles
- * are not consulted, and unknown roles fail closed.
+ * Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+ * `roles` holds one entry per tenant_users row of the caller for the check's
+ * tenant (loadCheckAltTenantRoles); any row allows, whatever the role value.
+ * Platform user_roles are not consulted. Partners (members of another tenant
+ * the check is shared with) have no row for the check's tenant and are refused.
  */
-export const CHECKALT_OPERATOR_ROLES = Object.freeze(['owner', 'admin', 'manager', 'operator']);
-
-export const roleAllowsCheckAlt = (roles = []) =>
-  roles.some((role) => CHECKALT_OPERATOR_ROLES.includes(String(role || '').toLowerCase()));
+export const roleAllowsCheckAlt = (roles = []) => Array.isArray(roles) && roles.length > 0;
 
 /**
  * Server-side CheckAlt production authorization.
  * Does not flip evaluateFinancialAuthorization().canExecuteProduction.
  *
- * Product policy: a member of the check's tenant (verified server-side from
- * tenant_users, never from the browser) whose role is owner, admin, manager or
- * operator may submit, approve and refresh Check Alt deposits. Viewers and
- * members of other tenants (including partner tenants a check is shared with)
- * may not. Money actions still need the caller's own step-up: there is no
+ * Product policy: any member of the check's tenant (verified server-side from
+ * tenant_users, never from the browser; the role column is ignored) may
+ * submit, approve and refresh Check Alt deposits. Members of other tenants
+ * (including partner tenants a check is shared with) may not. Money actions still need the caller's own step-up: there is no
  * second-person (dual-control) alternative.
  */
 export const evaluateCheckAltProductionAuthorization = ({
@@ -138,7 +133,6 @@ export const evaluateCheckAltProductionAuthorization = ({
     stepUpOk,
     flagsOk,
     financialPermissionActivated: financialPermissionsActivated(),
-    financialRoles: [...FINANCIAL_ROLES],
     canExecuteProductionCheckAlt: canExecute,
     canExecuteProduction: false,
     message: !identityOk
@@ -146,7 +140,7 @@ export const evaluateCheckAltProductionAuthorization = ({
       : !membershipOk
         ? 'Tenant membership of the check is required.'
         : !roleOk
-          ? 'Viewers cannot submit, approve or refresh Check Alt deposits. Owner/admin/manager/operator required.'
+          ? 'Membership of the check tenant is required.'
           : !stepUpOk
             ? 'Your own Cognito TOTP step-up is required once per login.'
             : !flagsOk
@@ -178,8 +172,8 @@ export async function authorizeCheckAltProduction({
       message: 'Server-derived check amount is required for financial step-up. Browser amount is ignored.',
     });
   }
-  // Only the caller's tenant_users role for the check's tenant decides. A
-  // platform user_roles admin/staff never lets a tenant viewer act.
+  // Only the caller's tenant_users membership of the check's tenant decides. A
+  // platform user_roles admin/staff never lets a non-member act.
   const roles = await loadCheckAltTenantRoles(client, userId, check.tenant_id);
   // Only the caller's own Check Alt step-up for this tenant, entered in this
   // login, counts. A second person's approval never substitutes for it.

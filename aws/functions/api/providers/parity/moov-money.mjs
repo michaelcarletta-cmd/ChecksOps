@@ -312,7 +312,7 @@ export const disburse = {
       [batchId],
     )).rows[0];
     if (!batch) return fail('Disbursement batch not found.', 404);
-    if (batch.tenant_id !== ctx.tenantId && !ctx.isAdmin) return fail('Forbidden', 403);
+    if (batch.tenant_id !== ctx.tenantId) return fail('Forbidden', 403);
     const tenantId = batch.tenant_id;
     if (!(await canSendPayments(client, mapping.application_user_id, tenantId, ctx.memberships))) {
       return fail('You do not have permission to send payments.', 403);

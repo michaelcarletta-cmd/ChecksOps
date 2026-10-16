@@ -315,7 +315,7 @@ test('viewer and partner (non-member) cannot create or send Signature Requests',
   assert.equal(signerUpdates(viewer).length, 0);
 });
 
-test('owner, admin, manager and operator act; platform owner keeps live access', async () => {
+test('owner, admin, manager and operator act; the platform owner without membership is refused', async () => {
   for (const role of ['owner', 'admin', 'manager', 'operator']) {
     const client = recordingClient({ role });
     const result = await runSendSignatureRequest({
@@ -323,11 +323,15 @@ test('owner, admin, manager and operator act; platform owner keeps live access',
     });
     assert.equal(result.ok, true, role);
   }
+  // Owner policy: tenant signatures are the tenant members' own; the platform
+  // owner does not act on them.
   const platform = recordingClient({ role: null, platformOwner: true });
   const result = await runSendSignatureRequest({
     mapping, spoof, body: createBody(), send: capturingMailer([]), client: platform,
   });
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 403);
+  assert.equal(platform.rows.requests.length, 0);
 });
 
 test('create branch keeps the /data/write document-path scope and claim/check consistency', async () => {

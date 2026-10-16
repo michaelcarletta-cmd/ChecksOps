@@ -45,35 +45,33 @@ test('copy makes the non-financial stop obvious', () => {
   assert.equal(FINANCIAL_TOTP_ONLY_OPERATION, 'deposit.submit');
 });
 
-test('only owner/admin/manager may start the TOTP-only path', () => {
-  assert.equal(roleMayRunFinancialTotpOnlyTest('admin'), true);
-  assert.equal(roleMayRunFinancialTotpOnlyTest(['owner']), true);
-  assert.equal(roleMayRunFinancialTotpOnlyTest(['staff', 'manager']), true);
-  assert.equal(roleMayRunFinancialTotpOnlyTest('staff'), false);
-  assert.equal(roleMayRunFinancialTotpOnlyTest('operator'), false);
-  assert.equal(roleMayRunFinancialTotpOnlyTest(['operator', 'staff']), false);
+// Owner policy: every member of a tenant is a user with the same rights, so any
+// tenant membership may run the TOTP-only test; role values and platform role
+// strings are ignored.
+const MEMBER = [{ tenant_id: FREEDOM_TENANT, role: 'viewer' }];
+
+test('any tenant membership may start the TOTP-only path; platform role strings alone do not', () => {
+  for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer', null]) {
+    assert.equal(roleMayRunFinancialTotpOnlyTest([{ tenant_id: FREEDOM_TENANT, role }]), true, String(role));
+  }
+  assert.equal(roleMayRunFinancialTotpOnlyTest({ roles: [], tenant_roles: ['viewer'] }), true);
+  assert.equal(roleMayRunFinancialTotpOnlyTest('admin'), false);
+  assert.equal(roleMayRunFinancialTotpOnlyTest(['owner']), false);
+  assert.equal(roleMayRunFinancialTotpOnlyTest(['staff', 'manager']), false);
+  assert.equal(roleMayRunFinancialTotpOnlyTest([{ role: 'admin' }]), false);
   assert.equal(roleMayRunFinancialTotpOnlyTest(null), false);
-  assert.equal(roleMayRunFinancialTotpOnlyTest([{ role: 'admin' }]), true);
   assert.deepEqual(
     collectFinancialTotpOnlyRoles('staff', { roles: ['admin'], tenant_roles: ['admin'] }),
     ['staff', 'admin'],
   );
 });
 
-test('Freedom admin sees the Financial TOTP test card from user_roles or tenant membership', () => {
+test('a Freedom member sees the Financial TOTP test card from its tenant membership', () => {
   assert.equal(
     canShowFinancialTotpOnlyTestCard({
       awsMfaAvailable: true,
       userId: FREEDOM_ADMIN,
-      roles: 'admin',
-    }),
-    true,
-  );
-  assert.equal(
-    canShowFinancialTotpOnlyTestCard({
-      awsMfaAvailable: true,
-      userId: FREEDOM_ADMIN,
-      roles: [{ role: 'admin', tenant_id: FREEDOM_TENANT }],
+      roles: [{ role: 'viewer', tenant_id: FREEDOM_TENANT }],
     }),
     true,
   );
@@ -92,11 +90,25 @@ test('Freedom admin sees the Financial TOTP test card from user_roles or tenant 
       roles: identityMeFinancialRoles({
         ok: true,
         applicationUserId: FREEDOM_ADMIN,
-        roles: ['admin'],
-        tenants: [{ role: 'admin', tenant_id: FREEDOM_TENANT }],
+        roles: [],
+        tenants: [{ role: 'viewer', tenant_id: FREEDOM_TENANT }],
       }),
     }),
     true,
+  );
+  // A platform user_roles admin with no tenant membership does not.
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: identityMeFinancialRoles({
+        ok: true,
+        applicationUserId: FREEDOM_ADMIN,
+        roles: ['admin'],
+        tenants: [],
+      }),
+    }),
+    false,
   );
 });
 
@@ -114,7 +126,7 @@ test('role lookup failure fails closed', () => {
   );
 });
 
-test('operator/staff do not see the Financial TOTP test card', () => {
+test('role strings without a tenant membership do not see the Financial TOTP test card', () => {
   assert.equal(
     canShowFinancialTotpOnlyTestCard({
       awsMfaAvailable: true,
@@ -154,7 +166,7 @@ test('requires an existing check UUID and ignores browser tenant/amount', async 
   assert.equal(isExistingCheckId('not-a-check'), false);
 
   const missing = await runFinancialTotpOnlyVerification({
-    roles: 'admin',
+    roles: MEMBER,
     checkId: '',
     requireStepUp: async () => {
       throw new Error('step-up must not run without a check');
@@ -166,7 +178,7 @@ test('requires an existing check UUID and ignores browser tenant/amount', async 
 
   const calls = [];
   const built = await runFinancialTotpOnlyVerification({
-    roles: 'admin',
+    roles: MEMBER,
     checkId: CHECK,
     browserTenantId: OTHER_TENANT,
     browserAmount: 1.23,
@@ -201,7 +213,7 @@ test('successful step-up does not continue into any provider or deposit workflow
     return true;
   };
   const result = await runFinancialTotpOnlyVerification({
-    roles: 'owner',
+    roles: MEMBER,
     checkId: CHECK,
     requireStepUp,
   });
@@ -216,7 +228,7 @@ test('successful step-up does not continue into any provider or deposit workflow
 
 test('failed or cancelled step-up also stays stopped', async () => {
   const result = await runFinancialTotpOnlyVerification({
-    roles: 'admin',
+    roles: MEMBER,
     checkId: CHECK,
     requireStepUp: async () => false,
   });

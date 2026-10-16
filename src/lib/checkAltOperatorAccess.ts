@@ -3,32 +3,22 @@
  * refresh status, Auto-Deposit save) in the SPA.
  *
  * UX only: the server is the source of truth and refuses everyone else. This
- * list mirrors CHECKALT_OPERATOR_ROLES in
- * aws/functions/api/providers/production/checkalt-authz.mjs (a test keeps the
- * two equal). Only the caller's tenant_users role for the tenant decides;
- * platform roles are ignored, viewers and unknown roles are refused, and
- * non-members (partners a check is shared with) are refused.
+ * mirrors roleAllowsCheckAlt in
+ * aws/functions/api/providers/production/checkalt-authz.mjs. Owner policy:
+ * every member of the tenant is a user with the same rights. Only the caller's
+ * tenant_users membership of the tenant decides (the role value is ignored);
+ * platform roles are ignored and non-members (partners a check is shared with)
+ * are refused.
  */
-export const CHECKALT_OPERATOR_ROLES: readonly string[] = Object.freeze([
-  "owner",
-  "admin",
-  "manager",
-  "operator",
-]);
 
 /** One tenant_users row of the signed-in user. */
 export type TenantMembership = { tenant_id: string; role: string | null };
-
-/** Same test as the server's roleAllowsCheckAlt: lower-cased, no trimming. */
-const roleAllowsCheckAlt = (role: string | null | undefined): boolean =>
-  CHECKALT_OPERATOR_ROLES.includes(String(role || "").toLowerCase());
 
 export function canOperateCheckAlt(input: {
   isTenantMember?: boolean | null;
   tenantRole?: string | null;
 } = {}): boolean {
-  if (!input.isTenantMember) return false;
-  return roleAllowsCheckAlt(input.tenantRole);
+  return Boolean(input.isTenantMember);
 }
 
 /**
@@ -42,7 +32,7 @@ export function canOperateCheckAltForTenant(
 ): boolean {
   if (!tenantId) return false;
   return (memberships ?? []).some(
-    (row) => String(row?.tenant_id ?? "") === String(tenantId) && roleAllowsCheckAlt(row?.role),
+    (row) => String(row?.tenant_id ?? "") === String(tenantId),
   );
 }
 
@@ -54,7 +44,7 @@ export function canOperateCheckAltForTenant(
 export function canOperateCheckAltInAnyTenant(
   memberships: readonly TenantMembership[] | null | undefined,
 ): boolean {
-  return (memberships ?? []).some((row) => !!row?.tenant_id && roleAllowsCheckAlt(row?.role));
+  return (memberships ?? []).some((row) => !!row?.tenant_id);
 }
 
 /**
