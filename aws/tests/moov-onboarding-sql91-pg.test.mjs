@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { enqueueOutbox, failOutboxAttempt, ONBOARDING_LOCK_SQL } from '../functions/api/providers/onboarding/store.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SQL91 = path.join(ROOT, 'workflows/sql/91_moov_onboarding.sql');
@@ -167,11 +168,44 @@ COMMIT;`);
     assert.match(as(U.owner, outbox(payload)).err, /payload_no_pii/, payload);
   }
 
-  // Documents: storage key is pinned to the tenant/verification/id prefix.
+  // Documents: storage key is pinned to files/verification-docs/{tenant}/{id}.
+  const DOC = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   const doc = (key) => `INSERT INTO public.moov_compliance_documents (id, tenant_id, environment, purpose, file_name, content_type, size_bytes, storage_key, kms_key_arn)
-    VALUES ('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', '${TENANT}', 'sandbox', 'w9', 'w9.pdf', 'application/pdf', 100, '${key}', 'arn:k');`;
-  assert.match(as(U.owner, doc(`files/tenant-documents/${OTHER}/verification/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee`)).err, /storage_key_check/);
-  assert.equal(as(U.owner, doc(`files/tenant-documents/${TENANT}/verification/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee`)).ok, true);
+    VALUES ('${DOC}', '${TENANT}', 'sandbox', 'w9', 'w9.pdf', 'application/pdf', 100, '${key}', 'arn:k');`;
+  assert.match(as(U.owner, doc(`files/verification-docs/${OTHER}/${DOC}`)).err, /storage_key_check/);
+  assert.match(as(U.owner, doc(`files/tenant-documents/${TENANT}/verification/${DOC}`)).err, /storage_key_check/);
+  assert.equal(as(U.owner, doc(`files/verification-docs/${TENANT}/${DOC}`)).ok, true);
+  // A verified document must be pinned to an S3 version.
+  assert.match(as(U.owner, `UPDATE public.moov_compliance_documents SET status = 'stored' WHERE id = '${DOC}';`).err, /version_check/);
+  assert.equal(as(U.owner, `UPDATE public.moov_compliance_documents SET status = 'stored', s3_version_id = 'v1' WHERE id = '${DOC}';`).ok, true);
+
+  // Real outbox SQL from store.mjs: ON CONFLICT enqueue, backoff, failed after 10.
+  const literal = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+  const render = (sql, params) => sql.replace(/\$(\d+)/g, (_, n) => literal(params[Number(n) - 1]));
+  const captured = [];
+  const capture = { query: async (sql, params = []) => { captured.push(render(sql, params)); return { rows: [] }; } };
+  const SUBJECT = 'cccccccc-dddd-4eee-8fff-000000000001';
+  await enqueueOutbox(capture, { tenantId: TENANT, environment: 'sandbox', kind: 'onboarding_sync', subjectId: SUBJECT, userId: U.owner, payload: { profile_id: SUBJECT } });
+  const enqueue = `${captured[0]};`;
+  assert.equal(as(U.owner, enqueue).ok, true);
+  const again = as(U.owner, enqueue);
+  assert.equal(again.ok, true, again.err);
+  const pendingCount = () => as(U.owner, `SELECT count(*) FROM public.moov_onboarding_outbox WHERE subject_id = '${SUBJECT}' AND status = 'pending';`, { onboarding: false }).out;
+  assert.equal(pendingCount(), '1');
+  const id = as(U.owner, `SELECT id FROM public.moov_onboarding_outbox WHERE subject_id = '${SUBJECT}';`, { onboarding: false }).out;
+  captured.length = 0;
+  await failOutboxAttempt(capture, { id, errorCode: 'moov_unavailable' });
+  const failSql = `${captured[0]};`;
+  assert.equal(as(U.owner, failSql).ok, true);
+  const state = () => as(U.owner, `SELECT concat_ws('/', status, attempts, (next_attempt_at > now())::text) FROM public.moov_onboarding_outbox WHERE id = '${id}';`, { onboarding: false }).out;
+  assert.equal(state(), 'pending/1/true');
+  for (let i = 0; i < 12; i += 1) assert.equal(as(U.owner, failSql).ok, true);
+  assert.equal(state(), 'failed/10');
+  // A fresh pending row can be enqueued after failure.
+  assert.equal(as(U.owner, enqueue).ok, true);
+  assert.equal(pendingCount(), '1');
+  // Advisory lock SQL runs as checksops.
+  assert.equal(as(U.owner, ONBOARDING_LOCK_SQL.replace('$1', `'${TENANT}'`).replace('$2', "'sandbox'") + ';').ok, true);
 
   // Existing payment tables: onboarding writes for owner/admin/platform only.
   const method = `INSERT INTO public.payment_provider_methods (tenant_id, environment, last_four) VALUES ('${TENANT}', 'sandbox', '6789');`;
