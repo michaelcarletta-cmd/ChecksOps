@@ -39,7 +39,7 @@ import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
-  Download, FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
+  FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
   Sparkles, MessageSquare, ArrowLeft, ShieldAlert,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -4680,7 +4680,6 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="audit" className="p-4 space-y-3 mt-0">
-              <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
               <div className="space-y-2">
               {auditLog.map((entry) => (
                 <div key={entry.id} className="flex gap-3 text-sm">
@@ -4797,78 +4796,6 @@ function CheckDetailPanel({
 /* ------------------------------------------------------------------ */
 /*  Small sub-components                                               */
 /* ------------------------------------------------------------------ */
-
-function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packetPath: string | null }) {
-  const { toast } = useToast();
-  const [generating, setGenerating] = useState(false);
-  const hasPacket = Boolean(packetPath);
-
-  const handleDownload = async () => {
-    if (!packetPath) return;
-    const { data } = await supabase.storage
-      .from("endorsement-packets")
-      .createSignedUrl(packetPath, 300);
-    if (data?.signedUrl) {
-      const a = document.createElement("a");
-      a.href = data.signedUrl;
-      a.download = packetPath.split("/").pop() ?? "endorsement-packet.svg";
-      a.click();
-    }
-  };
-
-  const handlePreview = async () => {
-    if (!packetPath) return;
-    const { data } = await supabase.storage
-      .from("endorsement-packets")
-      .createSignedUrl(packetPath, 300);
-    if (data?.signedUrl) {
-      window.open(data.signedUrl, "_blank");
-    }
-  };
-
-  const handleRegenerate = async () => {
-    setGenerating(true);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.access_token) throw new Error("Not authenticated");
-      const { error } = await supabase.functions.invoke("generate-endorsement-packet", {
-        body: { checkId, force: true },
-        headers: { Authorization: `Bearer ${session.session.access_token}` },
-      });
-      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to generate endorsement packet"));
-      toast({ title: "Endorsement packet regenerated" });
-    } catch (e: unknown) {
-      toast({
-        title: "Generation failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  return (
-    <div className="mt-2 border border-emerald-500/30 bg-emerald-500/10 rounded-lg p-3 space-y-2">
-      <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm">
-        <FileImage className="h-4 w-4 shrink-0" />
-        {hasPacket ? "Endorsement Packet Ready" : "Generate Endorsement Packet"}
-      </div>
-      <div className="flex gap-1">
-        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handlePreview} disabled={!hasPacket || generating}>
-          <Eye className="h-3 w-3 mr-1" />Preview
-        </Button>
-        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handleDownload} disabled={!hasPacket || generating}>
-          <Download className="h-3 w-3 mr-1" />Download
-        </Button>
-        <Button size="sm" variant="ghost" className="text-xs h-7" onClick={handleRegenerate} disabled={generating}>
-          <RefreshCw className={`h-3 w-3 mr-1 ${generating ? "animate-spin" : ""}`} />
-          {hasPacket ? "Regen" : "Generate"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
