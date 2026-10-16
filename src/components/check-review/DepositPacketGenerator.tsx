@@ -7,6 +7,7 @@ import { Printer, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
+import interFontUrl from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -182,10 +183,13 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       <img src="${esc(backImageUrl)}" alt="Check back with endorsements" class="check-img" />
     ` : "";
 
+    // Absolute URL: the print window is about:blank, so relative URLs would not resolve.
+    const interSrc = new URL(interFontUrl, window.location.href).href;
     printWindow.document.write(`<!DOCTYPE html><html><head>
       <title>Deposit Packet — Check #${esc(check.check_number ?? "Unknown")}</title>
       <style>
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2rem;color:#1a1a2e}
+        @font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url("${interSrc}") format('woff2')}
+        body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;padding:2rem;color:#1a1a2e}
         h1{font-size:1.25rem;margin-bottom:0.25rem}
         h2{font-size:1rem;color:#444;margin-top:1.5rem;margin-bottom:0.5rem;border-bottom:1px solid #ddd;padding-bottom:0.25rem}
         .meta{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem}
@@ -205,7 +209,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       <div class="meta">
         <div class="meta-item"><label>Carrier</label><p>${esc(check.carrier_name)}</p></div>
         <div class="meta-item"><label>Amount</label><p style="font-weight:700">${esc(fmtAmount(check.amount))}</p></div>
-        <div class="meta-item"><label>Check #</label><p style="font-family:monospace">${esc(check.check_number)}</p></div>
+        <div class="meta-item"><label>Check #</label><p style="font-variant-numeric:tabular-nums slashed-zero">${esc(check.check_number)}</p></div>
         <div class="meta-item"><label>Claim #</label><p>${esc(check.detected_claim_number)}</p></div>
         <div class="meta-item"><label>Issue Date</label><p>${esc(formatIssueDateDisplay(check.issue_date))}</p></div>
         <div class="meta-item"><label>Recommendation</label><p>${esc(check.deposit_recommendation?.replace(/_/g, " "))}</p></div>
@@ -222,7 +226,15 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       <div class="footer">Generated ${esc(new Date().toLocaleString())} · ${esc(companyName)} Deposit Packet</div>
     </body></html>`);
     printWindow.document.close();
-    printWindow.print();
+    // Wait (briefly) for Inter so the printout matches the app; print regardless.
+    const fonts = printWindow.document.fonts;
+    if (fonts?.load) {
+      Promise.race([fonts.load('16px "Inter"'), new Promise((r) => setTimeout(r, 1500))])
+        .catch(() => undefined)
+        .finally(() => printWindow.print());
+    } else {
+      printWindow.print();
+    }
   };
 
   if (!check) return null;

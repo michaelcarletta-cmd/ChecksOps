@@ -96,15 +96,6 @@ export default defineConfig(({ mode }) => {
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          {
-            urlPattern: /^https:\/\/api\.fontshare\.com\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "font-cache",
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
         ],
       },
       manifest: {

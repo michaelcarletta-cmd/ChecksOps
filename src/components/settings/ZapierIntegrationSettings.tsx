@@ -132,7 +132,7 @@ export function ZapierIntegrationSettings({ embedded }: ZapierIntegrationSetting
             <p className="text-sm text-muted-foreground mb-3">
               Use Zapier's Webhooks action to send data to these Freedom Claims endpoints:
             </p>
-            <div className="space-y-2 text-sm font-mono bg-background rounded p-3">
+            <div className="space-y-2 text-sm font-code bg-background rounded p-3">
               <div>
                 <span className="text-muted-foreground">Automations:</span>
                 <br />
