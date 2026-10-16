@@ -4,10 +4,13 @@
 `f046c76c…`, authored in `af84133e4`). Owner approval to start the work: 2026-10-16
 ("start the SQL 87 resolve_check_case fix"; Option B, an internal helper).
 
-**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 78); not
-applied to production. The production pin is execute-authorized (step 6) and waits for the
-owner's review and merge, then the one-shot run (step 7). Both pre-states are recorded,
-from read-only inspects only.
+**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 78) and
+to production (2026-10-16T16:55Z, guarded one-shot, SSM `1b57f335-6dd0-454a-8fd6-2b8aebfac1da`,
+main `72cc069fa`, one_use_id `sql87-prod-794cf181-8533-462c-b080-3d081f83a8ea`):
+`9f264af1…` -> `794dcd33…`, post-apply inspect `already_applied` true. A first attempt
+(SSM `9e8191db-…`) stopped at the source step (`STALE_PACKAGE`, the `.sha256` sidecar was not
+downloaded) before anything ran. The production pin records the apply and is `execute: false`
+again, so a re-apply needs a new reviewed change.
 
 ## The bug
 

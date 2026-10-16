@@ -65,9 +65,9 @@ const EVALUATORS = Object.freeze({
   sql89: evaluateSql89ProductionApply,
 });
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
-// A pin whose staging acceptance is still pending (SQL 71 and SQL 88 today) gets a placeholder
+// A pin whose staging acceptance is still pending (SQL 71 today) gets a placeholder
 // reference in the execute-authorized test copy, and a pin whose pre-state is not recorded
-// (expected_live_definition_sha256 null, SQL 71 and SQL 88 today) a placeholder hash; the committed pins are checked to
+// (expected_live_definition_sha256 null, SQL 71 today) a placeholder hash; the committed pins are checked to
 // refuse below.
 const FIXTURE_STAGING_ACCEPTANCE = Object.freeze({ ok: true, reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000', basis: 'test fixture' });
 const FIXTURE_EXPECTED_LIVE = 'e'.repeat(64);
@@ -75,7 +75,8 @@ const executePin = (key, extra = {}) => {
   const pin = realPin(key);
   const stagingAcceptance = pin.staging_acceptance?.ok === true ? pin.staging_acceptance : FIXTURE_STAGING_ACCEPTANCE;
   const expected = pin.expected_live_definition_sha256 ?? FIXTURE_EXPECTED_LIVE;
-  const authorization = pin.authorization === 'pending' ? 'owner-approved test fixture' : pin.authorization;
+  // A pending pin, or one retired after its apply ("Applied to production …"), gets the test approval.
+  const authorization = pin.authorization === 'pending' || /^Applied to production /.test(pin.authorization) ? 'owner-approved test fixture' : pin.authorization;
   return { ...pin, execute: true, authorization, staging_acceptance: stagingAcceptance, expected_live_definition_sha256: expected, ...extra };
 };
 
@@ -488,12 +489,13 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
-// SQL 82's to 87's and SQL 89's pins are execute-authorized (owner approved 2026-10-16) until
-// their record-and-retire changes; every other pin is execute false.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql87', 'sql89']);
+// SQL 82's to 86's and SQL 88's pins are execute-authorized (owner approved 2026-10-16) until
+// their record-and-retire changes; every other pin is execute false (SQL 87 and SQL 89 retired
+// after their 2026-10-16 applies).
+const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql88']);
 
 test('every real production pin with execute false is refused before any child', async () => {
-  // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 71's and SQL 88's pending.
+  // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's and SQL 89's since their 2026-10-16 applies, SQL 71's pending.
   assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), [...EXECUTE_AUTHORIZED]);
   for (const key of Object.keys(ONE_SHOT_TOOLS).filter((k) => realPin(k).execute === false)) {
     for (const phase of ['inspect', 'apply']) {
@@ -523,16 +525,16 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
-  // SQL 82's to 87's and SQL 89's committed pins are execute-authorized; their
-  // pre-authorization state (no staging acceptance, authorization "pending") is an explicit
-  // copy here. SQL 71's and SQL 88's committed pins are still pending, with no recorded
-  // pre-state (null). Even with execute flipped that state stops at the pin, and the
-  // evaluators refuse a null pre-state (explicit copy) and the pending authorization (with a
-  // placeholder pre-state for SQL 71 and SQL 88).
+  // SQL 82's to 86's and SQL 88's committed pins are execute-authorized, and SQL 87's and
+  // SQL 89's are retired after their applies; their pre-authorization state (no staging
+  // acceptance, authorization "pending") is an explicit copy here. SQL 71's committed pin is
+  // still pending, with no recorded pre-state (null). Even with execute flipped that state
+  // stops at the pin, and the evaluators refuse a null pre-state (explicit copy) and the
+  // pending authorization (with a placeholder pre-state for SQL 71).
   const RECORDED_PRODUCTION_PRE = {
     sql71: null,
     sql87: '9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f',
-    sql88: null,
+    sql88: 'ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b',
     sql89: 'c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4',
     sql82: '9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229',
     sql83: 'c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936',
@@ -543,9 +545,10 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
-    const committed = EXECUTE_AUTHORIZED.includes(key)
-      ? { ...real, authorization: 'pending', execute: false, staging_acceptance: { ...real.staging_acceptance, ok: false, reference: null, basis: 'Pending' } }
-      : real;
+    // Execute-authorized and applied (retired) pins get an explicit pre-authorization copy; SQL 71's committed pin is still pending.
+    const committed = real.authorization === 'pending'
+      ? real
+      : { ...real, authorization: 'pending', execute: false, staging_acceptance: { ...real.staging_acceptance, ok: false, reference: null, basis: 'Pending' } };
     assert.equal(committed.authorization, 'pending');
     assert.equal(committed.execute, false);
     assert.equal(committed.staging_acceptance.ok, false);
@@ -569,15 +572,14 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   }
 });
 
-test('the committed SQL 82 to SQL 87 and SQL 89 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the committed execute-authorized pins (SQL 82 to SQL 86, SQL 88) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     sql82: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138',
     sql83: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160',
     sql84: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38894893179',
     sql85: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712',
     sql86: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895163945',
-    sql87: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38910474178',
-    sql89: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38929944170',
+    sql88: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38927892056',
   };
   for (const key of EXECUTE_AUTHORIZED) {
     const committed = realPin(key);
