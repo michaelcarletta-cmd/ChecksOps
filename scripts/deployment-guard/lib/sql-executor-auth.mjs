@@ -1111,17 +1111,16 @@ export function mortgageAppliedStates(key) {
   return { functions, objects };
 }
 
-const mortgagePin = (key, filename, migrationId, sourceSha, intendedSha) => Object.freeze({
+const mortgagePin = (key, filename, migrationId, sourceSha, preSha, intendedSha) => Object.freeze({
   filename,
   migration_id: migrationId,
   migration: key,
   // The commit that authored the current file bytes (PR #992).
   commit: '6dd5acca3022dc9564a1c7e6b1a25702c15e24cf',
   source_sha256: sourceSha,
-  // Pending: not code-derived (Cursor SQL 48 / 49 bodies may be live, SQL 47 may be
-  // absent). A read-live run records it here in a reviewed pin change; until then
-  // apply refuses ("no reviewed pre-apply live definition hash").
-  expected_live_definition_sha256: null,
+  // Recorded, not code-derived: live_definition_sha256 from the guarded staging SQL
+  // executor read-live of this migration (see each pin below).
+  expected_live_definition_sha256: preSha,
   // Code-derived: sha256(mortgageStateText(key, mortgageAppliedStates(key))),
   // re-derived from the real catalog by aws/tests/sql84-sql86-mortgage-executor.test.mjs.
   intended_replacement_sha256: intendedSha,
@@ -1133,6 +1132,11 @@ export const AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE = mortgagePin(
   'aws/workflows/sql/84_mortgage_return_to_queue.sql',
   '84_mortgage_return_to_queue',
   '0b6fe69b92e66f6e66a3a2438806e67cfa31d6c741802608881fb2fec5c9e806',
+  // Read-live run 58 (run id 38892001098), 2026-10-16, main 2e500dad1 (executor deploy
+  // run 57): Cursor SQL 48's return_mortgage_handling_request_to_queue (cursor_original),
+  // staging's check_billing_events_mortgage_ops_check_uidx (per_check_unique_present),
+  // billing_duplicates 0, the audit table present; precondition_failures [].
+  '53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496',
   'ff920f5453283e9ca550bb8a191905386832f44e2e35567522530b806cb0e983',
 );
 export const AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST = mortgagePin(
@@ -1140,6 +1144,10 @@ export const AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST = mortgagePin(
   'aws/workflows/sql/85_mortgage_compensation_adjust.sql',
   '85_mortgage_compensation_adjust',
   '4cc77457554ed9c24407db61bc292c168db0794ed7b884180554d69989e52b3d',
+  // Read-live run 59 (run id 38892111590), 2026-10-16: the six-argument function absent,
+  // Cursor SQL 49's five-argument one (cursor_original), idempotency_key absent,
+  // batch_actions_outside_check 0; precondition_failures [].
+  '7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d',
   '051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908',
 );
 export const AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY = mortgagePin(
@@ -1147,6 +1155,9 @@ export const AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY = mortgagePin(
   'aws/workflows/sql/86_mortgage_compensation_owner_only.sql',
   '86_mortgage_compensation_owner_only',
   '1449df1f0c58aee2562e495d65e1327f4b6b4527005a55b5596b064de798df16',
+  // Read-live run 60 (run id 38892218991), 2026-10-16: all four SQL 47 functions
+  // ledger_original, earn_owner_safe true; precondition_failures [].
+  'c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b',
   'fb7e82291b146d0bf243dab1f607b2202b131c09cccac56e40de96c64542062f',
 );
 
