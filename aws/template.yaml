@@ -128,6 +128,11 @@ Globals:
         AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
         AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "true"
         AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
+        # Moov onboarding (Compliance & Docs). Production onboarding stays off;
+        # staging uses Moov sandbox through AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED.
+        AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: "false"
+        MOOV_ONBOARDING_PII_KMS_KEY_ARN: !GetAtt MoovOnboardingPiiKey.Arn
+        COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: !GetAtt ComplianceDocumentsKey.Arn
         # Webhook HMAC / sandbox epoch preserved via NoEcho parameters (not stored in git).
         AWS_MOOV_WEBHOOK_SECRET: !Ref MoovWebhookSecret
         AWS_CHECKALT_WEBHOOK_SECRET: !Ref CheckAltWebhookSecret
@@ -316,6 +321,27 @@ Resources:
             SecretArn: !Ref ProviderSecrets
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref DatabaseSecretArn
+        - Statement:
+            # EIN / representative DOB field encryption, bound to the tenant via encryption context.
+            - Sid: MoovOnboardingPiiEncryptDecrypt
+              Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+              Resource: !GetAtt MoovOnboardingPiiKey.Arn
+              Condition:
+                StringEquals:
+                  kms:EncryptionContext:app: checksops-moov-onboarding
+            # Compliance documents: SSE-KMS through S3 only (finalize reads, view presigns).
+            - Sid: ComplianceDocumentsViaS3
+              Effect: Allow
+              Action:
+                - kms:GenerateDataKey
+                - kms:Decrypt
+              Resource: !GetAtt ComplianceDocumentsKey.Arn
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
       Events:
         Root:
           Type: HttpApi
@@ -352,6 +378,96 @@ Resources:
             Status: Enabled
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
+
+  # Dedicated key for onboarding PII that ChecksOps keeps (EIN, representative DOB).
+  # Usage is granted to the API role by IAM (account-root delegation); never by grant.
+  MoovOnboardingPiiKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: ChecksOps Moov onboarding PII field encryption (EIN, representative DOB). Full SSNs are never stored.
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccountAdministrationViaIam
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+
+  MoovOnboardingPiiKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/checksops-${Environment}-moov-onboarding-pii
+      TargetKeyId: !Ref MoovOnboardingPiiKey
+
+  # Dedicated key for compliance documents at files/tenant-documents/{tenantId}/verification/.
+  ComplianceDocumentsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: ChecksOps compliance documents (SSE-KMS) under files/tenant-documents/*/verification/.
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccountAdministrationViaIam
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+
+  ComplianceDocumentsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/checksops-${Environment}-compliance-documents
+      TargetKeyId: !Ref ComplianceDocumentsKey
+
+  # Compliance documents must be written with SSE-KMS under the dedicated key.
+  PrivateFilesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PrivateFilesBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ComplianceDocumentsRequireSseKms
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub ${PrivateFilesBucket.Arn}/files/tenant-documents/*/verification/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: aws:kms
+          - Sid: ComplianceDocumentsRequireDedicatedKey
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub ${PrivateFilesBucket.Arn}/files/tenant-documents/*/verification/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt ComplianceDocumentsKey.Arn
+
+  # Lambda -> KMS for EIN/DOB field encryption without depending on the optional NAT.
+  KmsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.kms
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
 
   ChecksOpsUserPool:
     Type: AWS::Cognito::UserPool
@@ -413,6 +529,10 @@ Resources:
       Description: ChecksOps provider credentials. Populate JSON in Secrets Manager after deploy. Do not set SecretString in this template; stack updates would overwrite live values.
 
 Outputs:
+  MoovOnboardingPiiKeyArn:
+    Value: !GetAtt MoovOnboardingPiiKey.Arn
+  ComplianceDocumentsKeyArn:
+    Value: !GetAtt ComplianceDocumentsKey.Arn
   ApiUrl:
     Description: ChecksOps staging API URL
     Value: !Sub https://${ChecksOpsApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
