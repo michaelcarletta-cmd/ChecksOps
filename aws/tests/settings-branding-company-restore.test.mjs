@@ -209,6 +209,113 @@ test('failed AWS writes cannot produce a false success toast', () => {
   assert.match(catchBlock, /variant: "destructive"/);
 });
 
+test('logo tenant id comes from the current route-scoped tenant, not the first tenant_users membership', () => {
+  assert.match(company, /const \{ tenant, refreshTenant \} = useTenant\(\)/);
+  assert.match(company, /const tenantId = tenant\?\.id \?\? null/);
+  assert.doesNotMatch(company, /from\("tenant_users"\)/);
+  assert.doesNotMatch(company, /setTenantId/);
+  assert.doesNotMatch(company, /supabase\.auth\.getUser\(\)/);
+  assert.match(loadSettings, /\.from\("tenants"\)[\s\S]*\.eq\("id", tenantId\)/);
+  assert.match(company, /useEffect\(\(\) => \{\s*loadSettings\(\);\s*\}, \[tenantId, platformBranding\]\)/);
+  assert.match(logoUpload, /if \(!tenantId\)/);
+  assert.match(logoUpload, /\$\{tenantId\}\/logo-\$\{Date\.now\(\)\}\./);
+  assert.match(saveSettings, /const resolvedTenantId = tenantId;/);
+  assert.match(saveSettings, /\.from\("tenants"\)[\s\S]*\.eq\("id", resolvedTenantId\)/);
+});
+
+test('tenant Save writes tenants first and never depends on company_branding', () => {
+  // Opt-in prop, default off; no role checks.
+  assert.match(company, /\{ platformBranding = false \}: CompanyBrandingSettingsProps = \{\}/);
+  assert.doesNotMatch(company, /isPlatformOwner|useAuth|usePermissions|\brole\b/i);
+
+  const tenantWriteIdx = saveSettings.indexOf('.from("tenants")');
+  const tenantThrowIdx = saveSettings.indexOf('if (tenantError) throw tenantError');
+  const refreshIdx = saveSettings.indexOf('await refreshTenant()');
+  const gateIdx = saveSettings.indexOf('if (platformBranding) {');
+  const brandingWriteIdx = saveSettings.indexOf('.from("company_branding"');
+  assert.ok(tenantWriteIdx >= 0 && gateIdx >= 0 && brandingWriteIdx >= 0);
+  assert.ok(tenantWriteIdx < gateIdx, 'tenants write must run before any company_branding write');
+  assert.ok(refreshIdx > tenantThrowIdx && refreshIdx < gateIdx, 'tenant save completes before company_branding');
+  assert.ok(brandingWriteIdx > gateIdx, 'company_branding writes stay inside the platformBranding gate');
+  assert.doesNotMatch(saveSettings.slice(0, gateIdx), /\.from\("company_branding"/);
+
+  // Load path: company_branding is only read for platform branding.
+  const loadGateIdx = loadSettings.indexOf('if (platformBranding) {');
+  assert.ok(loadGateIdx >= 0 && loadGateIdx < loadSettings.indexOf('.from("company_branding"'));
+
+  // company_branding-only fields are not shown on tenant mounts.
+  assert.match(company, /\{platformBranding && \(\s*<SectionCard\s+title="Company Information"/);
+  assert.match(company, /\{platformBranding && \(\s*<div className="space-y-4">\s*<Label className="text-sm font-medium">Document Letterhead/);
+
+  // The only mount is the tenant Branding tab, which does not opt in.
+  assert.match(brandingTab, /<CompanyBrandingSettings \/>/);
+  assert.doesNotMatch(settings, /platformBranding/);
+});
+
+test('tenant Save persists tenants even when company_branding is skipped or fails', async () => {
+  // Execute the saveSettings body against a stub client, with JSX/TS stripped
+  // down to the async function, so ordering is checked behaviourally.
+  const bodyStart = saveSettings.indexOf('try {');
+  const bodyEnd = saveSettings.indexOf('} catch');
+  const body = saveSettings
+    .slice(bodyStart + 'try {'.length, bodyEnd)
+    .replace(/ as any/g, '');
+
+  const run = async ({ platformBranding, brandingError }) => {
+    const calls = [];
+    const toasts = [];
+    const builder = (table) => {
+      const op = { table };
+      const chain = {
+        update(values) { op.op = 'update'; op.values = values; return chain; },
+        insert(values) { op.op = 'insert'; op.values = values; return chain; },
+        select() { return chain; },
+        single() { return chain; },
+        eq(col, val) { op.eq = [col, val]; return chain; },
+        then(resolve) {
+          calls.push(op);
+          const error = table === 'company_branding' ? brandingError : null;
+          resolve({ data: error ? null : { id: 'cb-1' }, error });
+        },
+      };
+      return chain;
+    };
+    const supabase = { from: builder };
+    const fn = new Function(
+      'supabase', 'tenantId', 'logoUrl', 'invoiceLetterheadUrl', 'invoiceFooterNote',
+      'invoiceDefaultTerms', 'refreshTenant', 'platformBranding', 'brandingId', 'setBrandingId',
+      'companyName', 'address', 'phone', 'email', 'letterheadUrl', 'toast',
+      `return (async () => { ${body} })();`,
+    );
+    let refreshed = 0;
+    let thrown = null;
+    try {
+      await fn(supabase, 'tenant-current', 'https://cdn.example/logo.png', null, 'Thanks', 'Net 30',
+        async () => { refreshed += 1; }, platformBranding, 'cb-1', () => {},
+        'Acme', '1 Main', '555', 'ops@acme.test', null, (t) => toasts.push(t));
+    } catch (error) {
+      thrown = error;
+    }
+    return { calls, toasts, refreshed, thrown };
+  };
+
+  // Tenant mount: company_branding is never touched.
+  const tenantOnly = await run({ platformBranding: false, brandingError: { message: 'RLS denied' } });
+  assert.equal(tenantOnly.thrown, null);
+  assert.deepEqual(tenantOnly.calls.map((c) => c.table), ['tenants']);
+  assert.deepEqual(tenantOnly.calls[0].eq, ['id', 'tenant-current']);
+  assert.equal(tenantOnly.calls[0].values.logo_url, 'https://cdn.example/logo.png');
+  assert.equal(tenantOnly.refreshed, 1);
+  assert.deepEqual(tenantOnly.toasts, [{ title: 'Company settings saved' }]);
+
+  // Platform branding whose company_branding write fails: tenants already saved.
+  const failing = await run({ platformBranding: true, brandingError: { message: 'RLS denied' } });
+  assert.deepEqual(failing.calls.map((c) => c.table), ['tenants', 'company_branding']);
+  assert.equal(failing.refreshed, 1);
+  assert.equal(failing.thrown?.message, 'RLS denied');
+  assert.deepEqual(failing.toasts, []);
+});
+
 test('write allowlist was not broadened for branding restoration', () => {
   assert.deepEqual(
     [...WRITE_ALLOWLIST.company_branding.columns].sort(),

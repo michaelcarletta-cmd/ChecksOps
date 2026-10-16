@@ -189,7 +189,15 @@ export const publicTenantLogoUrl = (value, apiBase = publicApiBaseUrl()) => {
   const base = String(apiBase || '').replace(/\/$/, '');
   const supabase = raw.match(SUPABASE_BRANDING);
   if (supabase && BRANDING_BUCKETS.has(supabase[1]) && base) {
-    const path = decodeURIComponent(supabase[2]);
+    // Legacy Supabase paths can carry malformed percent-escapes; decodeURIComponent
+    // throws URIError on those. Skip the tenant logo (caller falls back to the
+    // platform logo) instead of failing email branding.
+    let path;
+    try {
+      path = decodeURIComponent(supabase[2]);
+    } catch {
+      return null;
+    }
     const url = `${base}/storage/public?bucket=${encodeURIComponent(supabase[1])}&path=${encodeURIComponent(path)}`;
     return isSafeHttpUrl(url) ? url : null;
   }
