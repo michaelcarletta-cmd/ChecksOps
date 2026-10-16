@@ -178,7 +178,7 @@ test("EIN only ever renders its last 4 digits", () => {
   assert.equal(maskedEin(null), "Not on file");
 });
 
-test("Reveal is visible only when the server allows submit (owner/admin/platform owner)", () => {
+test("Reveal is visible whenever the server allows submit (any tenant member or platform owner)", () => {
   assert.equal(resolveComplianceAccess({ canSubmit: true }).canRevealEin, true);
   assert.equal(resolveComplianceAccess({ canSubmit: false }).canRevealEin, false);
   assert.equal(resolveComplianceAccess({ canSubmit: undefined }).canRevealEin, false);
@@ -218,10 +218,19 @@ test("can_submit fails closed and drives the read-only view", () => {
   assert.match(repsSection, /\{!readOnly && \(\s*<Input\s+id=\{`\$\{p\}-ssn`\}/);
 });
 
-test("managers/operators/viewers see the Compliance tab read-only; doc library stays owner/admin", () => {
-  assert.match(whiteLabel, /const canViewCompliance = canManageTenant \|\| !!tenantRole;/);
+test("every tenant member gets Compliance & Docs and the document library (no role tiers)", () => {
+  assert.match(whiteLabel, /const isTenantMember = !!tenantRole;/);
+  assert.match(whiteLabel, /const canViewCompliance = isTenantMember \|\| isAdmin;/);
+  assert.doesNotMatch(whiteLabel, /canViewCompliance = canManageTenant/);
   assert.match(whiteLabel, /\{canViewCompliance && <TabsTrigger value="compliance"/);
-  assert.match(whiteLabel, /\{tenant && canManageTenant && \([\s\S]{0,200}<TenantDocumentLibrary/);
+  const tab = whiteLabel.slice(whiteLabel.indexOf('<TabsContent value="compliance"'));
+  const region = tab.slice(0, tab.indexOf("</TabsContent>"));
+  assert.match(region, /<TenantDocumentLibrary/);
+  assert.doesNotMatch(region, /canManageTenant|owner|"admin"/);
+  assert.doesNotMatch(compliance, /owner or an admin/);
+  // Editing is the server's can_submit, never a client-side role tier.
+  assert.doesNotMatch(compliance, /tenantRole|role === "(owner|admin)"/);
+  assert.equal(resolveComplianceAccess({ canSubmit: true }).readOnly, false);
 });
 
 /* ---------------- Upload flow ---------------- */

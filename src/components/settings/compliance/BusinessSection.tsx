@@ -30,7 +30,7 @@ interface Props {
   onChange: (next: BusinessForm) => void;
   einMasked: string | null;
   readOnly: boolean;
-  /** Tenant owner/admin and the platform owner only (server `can_submit`). */
+  /** Whenever the server returns `can_submit: true` (any tenant member or the platform owner). */
   canRevealEin: boolean;
   onRevealEin: () => Promise<string>;
 }

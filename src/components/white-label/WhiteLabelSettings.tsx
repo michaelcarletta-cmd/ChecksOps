@@ -127,8 +127,10 @@ export function WhiteLabelSettings() {
     },
   });
   const canManageTenant = tenantRole === "owner" || tenantRole === "admin" || isAdmin;
-  // Every tenant member sees onboarding status; the server's can_submit decides who may edit.
-  const canViewCompliance = canManageTenant || !!tenantRole;
+  // Compliance & Docs is open to every member of the tenant (no role tiers); the
+  // server's can_submit decides editing. Platform admins keep access too.
+  const isTenantMember = !!tenantRole;
+  const canViewCompliance = isTenantMember || isAdmin;
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;
@@ -228,7 +230,7 @@ export function WhiteLabelSettings() {
           {canViewCompliance && (
             <TabsContent value="compliance" className="space-y-8">
               <ComplianceSettings />
-              {tenant && canManageTenant && (
+              {tenant && (
                 <div className="pt-6 border-t border-border/60">
                   <TenantDocumentLibrary tenantId={tenant.id} />
                 </div>

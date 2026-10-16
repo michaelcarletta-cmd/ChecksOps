@@ -60,7 +60,8 @@ const SYNC_CLASS: Record<SyncTone, string> = {
  * Driven by `moov-onboarding-get`. Everything the tenant enters is saved in
  * ChecksOps and sent to Moov by `moov-onboarding-save`; documents go
  * upload-url -> PUT -> finalize. The server's `can_submit` decides who may
- * edit (tenant owner/admin and the platform owner); everyone else sees status.
+ * edit (any member of the tenant, and the platform owner); when it is false
+ * the flow is status-only.
  *
  * `adminView` is Tenant Management: read-only by default, with an explicit
  * "Edit on behalf of tenant" toggle for the platform owner.
@@ -270,7 +271,7 @@ export function ComplianceSettings({
               <Lock className="h-3.5 w-3.5 mt-px shrink-0" />
               {data.can_submit
                 ? "Read-only. Turn on “Edit on behalf of tenant” to make changes."
-                : "Read-only. Only the organization's owner or an admin can submit onboarding details."}
+                : "Read-only. Your account can't submit onboarding details for this organization."}
             </div>
           )}
         </div>
