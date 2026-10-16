@@ -1,0 +1,21 @@
+{
+  "workstream_id": "review-followups",
+  "authorization": "Owner-approved 2026-10-16 (small reviewed follow-up PR for findings from earlier reviews): homeowner.mjs and mortgage-agent-compensation.mjs may be planned for production. Each production apply still needs the owner's run-time approval, the staging acceptance run and the phrase DEPLOY <member> TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "homeowner.mjs: emailed and returned homeowner links (ledger invite, shared-document portal link, staff upload alert, portal invite login) use a request-supplied origin only when it is https://checksops.com, https://www.checksops.com or https://staging.checksops.com (never staging in production); anything else falls back to the environment's canonical origin. The endorse and document-sign links stay relative. Live production homeowner.mjs is f9f993a7 (homeowner signing links). mortgage-agent-compensation.mjs: Adjust forwards the SPA's idempotency_key (1-200 chars of [A-Za-z0-9._:-], else 400 invalid_idempotency_key) as SQL 85's sixth argument p_idempotency_key; the platform-owner gate is unchanged. It calls the six-argument function, which exists only after SQL 85, so it deploys only after production SQL 85 is applied and verified live (sql_before). Live production is c3898615 (five-argument call).",
+  "members": {
+    "homeowner.mjs": {
+      "live_sha256": "f9f993a71ea55f98681931e6d51ae283c0da84cde8e39e659db52b08a3c11897",
+      "accepted_sha256": "0269d6df4df2915e2930a283ace2aec85c368cfbe1ef83049aa4b3689ab08102",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-signing-links-manifest-2026-10-15.json"
+    },
+    "mortgage-agent-compensation.mjs": {
+      "live_sha256": "c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512",
+      "accepted_sha256": "efc4ae28488b3c9fccb7d8e76d3becd9789e129a6f6b04c434f9c01c08f873d6",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-compensation-platform-owner-manifest-2026-10-15.json"
+    }
+  }
+}
