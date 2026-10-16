@@ -445,11 +445,12 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   assert.equal(mortgage.mutation, false);
 });
 
-test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflow.mjs, held for SQL 71', async () => {
+test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflow.mjs, held for SQL 89', async () => {
   const ALLOWLIST = 'write-allowlist.mjs';
   const WORKFLOW_WRITES = 'write-check-workflow.mjs';
   const SQL71 = 'aws/workflows/sql/71_review_amount_column_grant.sql';
   const SQL52 = 'aws/workflows/sql/52_verified_ocr_micr_column_grant.sql';
+  const SQL89 = 'aws/workflows/sql/89_check_intake_items_column_update.sql';
   const MANIFEST_901 = 'aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json';
 
   // Planned as REPLACE of the 2026-10-11 production bytes, at main's bytes.
@@ -466,7 +467,7 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
   assert.equal(PLAN.members[ALLOWLIST].sql_before, null);
-  assert.equal(PLAN.members[WORKFLOW_WRITES].sql_before, SQL71);
+  assert.equal(PLAN.members[WORKFLOW_WRITES].sql_before, SQL89);
 
   // The allowlist goes first (the new workflow writer imports REVIEW_* from it);
   // the Moov send module and providers.mjs stay last.
@@ -475,8 +476,12 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   assert.deepEqual(PLAN.order.slice(-4), [ALLOWLIST, WORKFLOW_WRITES, 'providers/production/moov-send.mjs', 'providers.mjs']);
 
   // SQL prerequisites: SQL 71 and SQL 52 not yet recorded live; SQL 77-79 recorded applied.
-  assert.equal(PLAN.sql_prerequisites[SQL71]?.verified_live, false);
-  assert.equal(PLAN.sql_prerequisites[SQL52]?.verified_live, false);
+  // SQL 89 applied in production (2026-10-16 one-shot); it produced SQL 71's and SQL 52's state.
+  for (const sql of [SQL89, SQL71, SQL52]) {
+    assert.equal(PLAN.sql_prerequisites[sql]?.verified_live, true, sql);
+    assert.match(PLAN.sql_prerequisites[sql].evidence, /SSM c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77/, sql);
+  }
+  assert.match(PLAN.sql_prerequisites[SQL71].evidence, /not by a SQL 71 apply/);
   for (const sql of [
     'aws/workflows/sql/77_check_stakeholders_write_grant.sql',
     'aws/workflows/sql/78_check_partner_stakeholder_removals.sql',
@@ -497,13 +502,21 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   assert.equal(allowlist.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [ALLOWLIST], add: [] });
 
-  // write-check-workflow.mjs is refused while SQL 71 is not recorded verified live ...
+  // write-check-workflow.mjs is refused while SQL 89 is not recorded verified live ...
+  const unverified = structuredClone(PLAN);
+  unverified.sql_prerequisites[SQL89] = { verified_live: false, evidence: null };
   await assert.rejects(
-    run(applyEnv(WORKFLOW_WRITES), applyDeps(WORKFLOW_WRITES).deps),
-    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL71,
+    run(applyEnv(WORKFLOW_WRITES), { ...applyDeps(WORKFLOW_WRITES).deps, plan: unverified }),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL89,
   );
-  const verified = structuredClone(PLAN);
-  verified.sql_prerequisites[SQL71] = { verified_live: true, evidence: 'test' };
+  // ... and recording SQL 71 alone does not satisfy it ...
+  const only71 = structuredClone(unverified);
+  only71.sql_prerequisites[SQL71] = { verified_live: true, evidence: 'test' };
+  await assert.rejects(
+    run(applyEnv(WORKFLOW_WRITES), { ...applyDeps(WORKFLOW_WRITES).deps, plan: only71 }),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL89,
+  );
+  const verified = PLAN;
   // ... and, once it is, still refused before write-allowlist.mjs is live ...
   await assert.rejects(
     run(applyEnv(WORKFLOW_WRITES), { ...applyDeps(WORKFLOW_WRITES, { pending: [ALLOWLIST] }).deps, plan: verified }),
@@ -521,7 +534,7 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   assert.equal(result.mutation, false);
   assert.deepEqual(writes.calls.receipt.owned_member_ops, { replace: [WORKFLOW_WRITES], add: [] });
 
-  // The SQL 71 hold does not block members before it (homeowner.mjs, mortgage-agent-compensation.mjs).
+  // The SQL 89 hold does not block members before it (homeowner.mjs, mortgage-agent-compensation.mjs).
   for (const member of ['homeowner.mjs', 'mortgage-agent-compensation.mjs']) {
     assert.ok(PLAN.order.indexOf(member) < PLAN.order.indexOf(WORKFLOW_WRITES), member);
     const ahead = await run(applyEnv(member), applyDeps(member, { pending: [WORKFLOW_WRITES] }).deps);
