@@ -33,7 +33,6 @@ export const readinessSnapshot = () => {
     bridgesMustRemainDeployed: true,
     checkAltHandledSeparately: true,
     classA: {
-      ingestSharedCheck: true,
       homeownerLedgerAttachUpload: true,
       sendSignatureRequest: true,
       stripeFailClosed: true,

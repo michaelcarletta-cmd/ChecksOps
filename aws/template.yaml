@@ -63,11 +63,6 @@ Parameters:
     NoEcho: true
     Default: ''
     Description: Staging CHECKSOPS_SANDBOX_SECRET_EPOCH. Provide from live Lambda env at deploy; do not commit the value.
-  CrossAppBridgeSecret:
-    Type: String
-    NoEcho: true
-    Default: ''
-    Description: Staging CROSS_APP_BRIDGE_SECRET for ingest-shared-check. Provide at deploy; do not commit the value. Empty keeps ingest unauthorized.
 
 Conditions:
   CreateStagingNat: !And
@@ -109,7 +104,6 @@ Globals:
         AWS_SES_CONFIGURATION_SET: ""
         AWS_TENANT_SES_IDENTITY_DELETE_ENABLED: "false"
         AWS_TENANT_MAIL_FROM_ENABLED: "false"
-        CROSS_APP_BRIDGE_SECRET: !Ref CrossAppBridgeSecret
         AWS_COGNITO_MFA_PREFERRED: "false"
         # Preserve live staging write/workflow overlay behavior.
         AWS_WRITES_ENABLED: "true"
