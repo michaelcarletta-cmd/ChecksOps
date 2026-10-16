@@ -13,6 +13,7 @@ import {
 } from "./awsCheckAltMoneyPath.ts";
 import {
   buildFinancialStepUpRequest,
+  isStepUpRequiredError,
   type FinancialStepUpRequest,
 } from "./financialStepUp.ts";
 
@@ -131,7 +132,7 @@ export async function runCheckAltDepositClick(
     idToken?: string | null;
     fetchImpl?: typeof fetch;
     onPhase?: (phase: DepositPhase) => void;
-    requireStepUp: (request: FinancialStepUpRequest) => Promise<boolean>;
+    requireStepUp: (request: FinancialStepUpRequest, options?: { force?: boolean }) => Promise<boolean>;
     prepareCheckAltDeposit?: (
       checkId: string,
       options?: { forceFront?: boolean; forceRear?: boolean },
@@ -211,7 +212,7 @@ export async function runCheckAltDepositClick(
       actionKey: "deposit.submit",
       checkId,
       title: "Deposit Verification",
-      description: "Enter the current 6-digit code from your authenticator app to authorize this deposit.",
+      description: "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out.",
     });
     if (!built.ok) {
       const b = built as { message?: string; error?: string };
@@ -236,7 +237,22 @@ export async function runCheckAltDepositClick(
         fetchImpl: deps.fetchImpl,
       },
     ));
-    const submitted = await submit(checkId);
+    let submitted = await submit(checkId);
+    // Two-factor is once per login and the server decides. If it has no
+    // step-up for this login (new sign-in, another organization), ask once
+    // more and retry this same deposit.
+    if (submitted.error && isStepUpRequiredError(submitted.error)) {
+      phase("awaiting_verification");
+      const reverified = await deps.requireStepUp(built.request, { force: true });
+      if (!reverified) {
+        return fail("Two-factor verification is required before money can move.", {
+          prepared: true,
+          error: "totp_required",
+        });
+      }
+      phase("submitting");
+      submitted = await submit(checkId);
+    }
     if (submitted.error) {
       const mapped = checkAltProviderUserMessage(submitted.error);
       const held = /provider_disabled|production_execution_blocked|Provider not enabled/i.test(

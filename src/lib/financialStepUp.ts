@@ -1,9 +1,14 @@
 /**
  * Client-side CheckAlt / money-movement step-up binding.
  *
- * The browser may carry a check id to the Cognito step-up route. Tenant,
- * amount, and financial eligibility are derived server-side from that check.
- * Browser tenant_id / amount / amount_cents are never authorization.
+ * Check Alt two-factor is once per login, the same as Moov wallet fund and
+ * send: one verified code covers every Check Alt deposit and approval until
+ * the user signs out. The server is the authority; it records the step-up
+ * against the login and asks again (step_up_required) when it has none.
+ *
+ * The Check Alt step-up request still carries a check id so the server takes
+ * the tenant from that check. Browser tenant_id / amount / amount_cents are
+ * never authorization.
  */
 
 export const CHECK_BOUND_ACTIONS = Object.freeze([
@@ -83,6 +88,11 @@ export const buildFinancialStepUpRequest = (input: {
   };
 };
 
+/**
+ * The browser's per-login cache key. Check Alt actions share one key per
+ * user (not per check or amount); other actions keep their own session key.
+ * The cache only saves a prompt: the server still decides.
+ */
 export const stepUpCacheKey = (
   userId: string | null | undefined,
   actionKey: string,
@@ -91,7 +101,7 @@ export const stepUpCacheKey = (
   if (!userId) return null;
   if (isCheckBoundAction(actionKey)) {
     if (!checkId) return null;
-    return `${userId}|${actionKey}|${checkId}`;
+    return `${userId}|checkalt|session`;
   }
   return `${userId}|unbound|session`;
 };
@@ -99,10 +109,11 @@ export const stepUpCacheKey = (
 export const cacheAllowsReuse = (cachedKey: string | null | undefined, nextKey: string | null | undefined): boolean =>
   Boolean(cachedKey && nextKey && cachedKey === nextKey);
 
-export const changingCheckRequiresNewAuth = (
-  previousCheckId: string | null | undefined,
-  nextCheckId: string | null | undefined,
-): boolean => String(previousCheckId || "") !== String(nextCheckId || "");
+/** True when the server refused a Check Alt action for lack of this login's step-up. */
+export const isStepUpRequiredError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return message.trim() === "step_up_required";
+};
 
 export const awsStepUpBody = (request: FinancialStepUpRequest) => ({
   action_key: request.actionKey,

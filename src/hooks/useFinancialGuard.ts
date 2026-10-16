@@ -21,6 +21,8 @@ export function useFinancialGuard(tenantId?: string | null) {
         checkId?: string | null;
         amount?: unknown;
         amount_cents?: unknown;
+        /** Ask again even if this browser thinks the login is verified. */
+        force?: boolean;
       },
     ) => {
       const built = buildFinancialStepUpRequest({
@@ -33,9 +35,9 @@ export function useFinancialGuard(tenantId?: string | null) {
             : undefined,
         description: extra?.description
           || (actionKey === "deposit.submit"
-            ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
+            ? "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out."
             : actionKey === "deposit.approve"
-              ? "Enter the current 6-digit code from your authenticator app to authorize this approval."
+              ? "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out."
               : undefined),
         tenantId,
         amount: extra?.amount,
@@ -44,7 +46,7 @@ export function useFinancialGuard(tenantId?: string | null) {
       if (!built.ok) {
         throw new Error((built as { message?: string }).message ?? "Financial authorization failed");
       }
-      const ok = await requireStepUp(built.request);
+      const ok = await requireStepUp(built.request, extra?.force ? { force: true } : undefined);
       if (!ok) {
         throw new Error("Two-factor verification is required before money can move.");
       }

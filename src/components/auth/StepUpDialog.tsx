@@ -21,6 +21,7 @@ import {
   stepUpAwsTotp,
   verifyAwsTotp,
 } from "@/lib/awsMfa";
+import { isCheckBoundAction } from "@/lib/financialStepUp";
 import { TOTP_BOUNDARY_MESSAGE, normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
 import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
@@ -168,14 +169,14 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             checkId: request?.checkId,
           });
           if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
-          if (request?.actionKey === "wallet.fund") {
+          if (request?.actionKey === "wallet.fund" || isCheckBoundAction(request?.actionKey)) {
             // Setup checks the code without using it up, so the same code also
-            // records this login's funding confirmation on the server.
+            // records this login's funding or Check Alt confirmation on the server.
             const stepped = await stepUpAwsTotp({
               code: normalized.code,
               actionKey: request.actionKey,
               tenantId: request.tenantId,
-              checkId: null,
+              checkId: request.actionKey === "wallet.fund" ? null : request.checkId,
             });
             if (!stepped) throw new Error(TOTP_BOUNDARY_MESSAGE);
           }
@@ -191,7 +192,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         await onFactorsChanged();
         toast({
           title: "Verified",
-          description: request?.actionKey === "wallet.fund"
+          description: request?.actionKey === "wallet.fund" || isCheckBoundAction(request?.actionKey)
             ? "Two-factor confirmed until you sign out."
             : "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
         });
@@ -256,11 +257,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           </DialogTitle>
           <DialogDescription>
             {request?.description
-              ?? (request?.actionKey === "deposit.submit"
-                ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
-                : request?.actionKey === "deposit.approve"
-                  ? "Enter the current 6-digit code from your authenticator app to authorize this approval."
-                  : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
+              ?? (isCheckBoundAction(request?.actionKey)
+                ? "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out."
+                : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
           </DialogDescription>
         </DialogHeader>
 
