@@ -1,11 +1,10 @@
 /** Tenant-scoped authorization for force-complete.
- *  Owner policy: owner, admin, manager and operator act; viewers and partners do not.
- *  The caller needs an acting-role membership on THAT check's tenant
- *  (aws_can_write_tenant after SQL 90). Global user_roles admin/staff and
- *  platform owners get no shortcut, and UUID possession is not authorization.
+ *  Owner policy: every member of the tenant is a user with the same rights;
+ *  partners and other tenants do not act. The caller needs a membership of
+ *  THAT check's tenant (any role value; aws_can_write_tenant after SQL 90).
+ *  Global user_roles admin/staff and platform owners get no shortcut, and UUID
+ *  possession is not authorization.
  */
-
-export const FORCE_COMPLETE_ROLES = ["owner", "admin", "manager", "operator"] as const;
 
 export type ForceCompleteAuthResult =
   | { ok: true }
@@ -21,11 +20,10 @@ export function authorizeForceComplete(opts: {
   if (!opts.check?.id) return { ok: false, status: 404, error: "Check not found" };
   if (!opts.check.tenant_id) return { ok: false, status: 403, error: "forbidden" };
 
-  const actor = (opts.tenantMemberships || []).some(
-    (row) => String(row.tenant_id || "") === String(opts.check?.tenant_id)
-      && (FORCE_COMPLETE_ROLES as readonly string[]).includes(String(row.role || "").toLowerCase()),
+  const member = (opts.tenantMemberships || []).some(
+    (row) => String(row.tenant_id || "") === String(opts.check?.tenant_id),
   );
-  if (!actor) return { ok: false, status: 403, error: "forbidden" };
+  if (!member) return { ok: false, status: 403, error: "forbidden" };
   return { ok: true };
 }
 

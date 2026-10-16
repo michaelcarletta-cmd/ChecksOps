@@ -295,19 +295,25 @@ test('duplicate backfill is idempotent', async () => {
   assert.match(client.queries.find((q) => /ON CONFLICT \(request_id, file_path\) DO NOTHING/.test(q.sql)).sql, /ON CONFLICT/);
 });
 
-test('ordinary tenant member cannot perform an admin backfill', async () => {
-  const client = libraryClient({ actorRole: null, tenantRole: 'operator', member: true });
-  const result = await executeMortgageRequestLibraryDocuments({
-    client,
-    mapping: { application_user_id: MEMBER_ID },
-    op: 'upsert',
-    values: { request_id: OPEN_REQ, tenant_document_id: DOC_ID },
+// Owner policy: every member of the tenant is a user with the same rights
+// (Compliance & Docs included); the stored role is ignored.
+for (const tenantRole of ['operator', 'viewer']) {
+  test(`a tenant member (stored role ${tenantRole}) can backfill its tenant library docs`, async () => {
+    const client = libraryClient({ actorRole: null, tenantRole, member: true });
+    const result = await executeMortgageRequestLibraryDocuments({
+      client,
+      mapping: { application_user_id: MEMBER_ID },
+      op: 'upsert',
+      values: { request_id: OPEN_REQ, tenant_document_id: DOC_ID },
+    });
+    assert.equal(result.error, undefined, JSON.stringify(result));
+    assert.equal(result.rows[0].tenant_id, TENANT);
+    assert.equal(client.inserts(), 1);
   });
-  assert.equal(result.error, 'not_authorized');
-});
+}
 
-test('user_roles.admin plus ordinary membership cannot backfill tenant library docs', async () => {
-  const client = libraryClient({ actorRole: 'admin', tenantRole: 'operator', member: true });
+test('user_roles.admin without a membership of the tenant cannot backfill tenant library docs', async () => {
+  const client = libraryClient({ actorRole: 'admin', member: false });
   const result = await executeMortgageRequestLibraryDocuments({
     client,
     mapping: { application_user_id: MEMBER_ID },
@@ -315,6 +321,7 @@ test('user_roles.admin plus ordinary membership cannot backfill tenant library d
     values: { request_id: OPEN_REQ, tenant_document_id: DOC_ID },
   });
   assert.equal(result.error, 'not_authorized');
+  assert.equal(client.inserts(), 0);
 });
 
 test('non-mortgage categories are rejected', async () => {

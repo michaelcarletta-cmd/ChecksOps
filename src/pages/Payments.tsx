@@ -10,7 +10,7 @@ import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { canAccessTaxUi } from "@/lib/taxAccess";
-import { useCurrentTenantRole } from "@/hooks/useCurrentTenantRole";
+import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 import { 
   Receipt, 
   FileText, 
@@ -55,10 +55,10 @@ const Payments = () => {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "ledger");
 
-  // Owner policy: only the user's own role in this tenant counts. Owner,
-  // admin, manager and operator act (payroll); tax is owner and admin only.
-  const { role: tenantRole, canAct: isAdmin } = useCurrentTenantRole();
-  const canTax = canAccessTaxUi({ tenantRole });
+  // Owner policy: every member of the tenant is a user with the same rights
+  // (payroll and tax included). Platform roles give no shortcut.
+  const { isMember: isAdmin } = useCurrentTenantMembership();
+  const canTax = canAccessTaxUi({ isTenantMember: isAdmin });
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -179,7 +179,7 @@ const Payments = () => {
               accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
             >
               <p className="text-sm text-muted-foreground">
-                Tax profiles are limited to the owner and admin of this organization.
+                Tax profiles are limited to members of this organization.
               </p>
             </SectionCard>
           </TabsContent>

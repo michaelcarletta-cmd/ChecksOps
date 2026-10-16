@@ -12,8 +12,7 @@ import {
   isTerminalFinancial,
   mapReviewPath,
   TRANSITIONS,
-  isTenantActorRole,
-  TENANT_ACTOR_SQL,
+  TENANT_MEMBER_SQL,
 } from './workflow-transitions.mjs';
 import {
   evaluateEndorsementEligibility,
@@ -258,23 +257,12 @@ const deriveTenantId = (memberships, claimed) => {
   return { tenantId: memberships[0].tenant_id, usedClaimedMembership: false };
 };
 
-// Only the caller's own tenant_users roles for the check's tenant count.
-// Platform user_roles (admin/staff) are not read: no cross-tenant shortcut.
-const rolesOf = async (client, userId, tenantId) => {
-  if (!isUuid(tenantId)) return [];
-  const tenant = (await client.query(
-    'SELECT role FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid',
-    [userId, tenantId],
-  )).rows.map((row) => String(row.role || '').toLowerCase());
-  return [...new Set(tenant)];
-};
-
-// Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-const canTransition = (roles) => roles.some((role) => isTenantActorRole(role));
-
-const isTenantActor = async (client, userId, tenantId) => {
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Only the caller's own tenant_users row for the check's tenant counts (the role
+// column is ignored). Platform user_roles (admin/staff) are not read.
+const isTenantMember = async (client, userId, tenantId) => {
   if (!isUuid(tenantId)) return false;
-  return (await client.query(TENANT_ACTOR_SQL, [userId, tenantId])).rows.length > 0;
+  return (await client.query(TENANT_MEMBER_SQL, [userId, tenantId])).rows.length > 0;
 };
 
 const lookupWorkflowCheck = async (client, checkId) => {
@@ -493,12 +481,11 @@ export const handleCheckTransition = async (event, deps = {}) => {
     if (!decided.ok) {
       return denied(spoof, decided);
     }
-    // Owner policy: owner, admin, manager and operator of the check's tenant
-    // move it; viewers, partners and platform admin/staff do not.
-    const roles = await rolesOf(client, mapping.application_user_id, looked.check.tenant_id);
-    const roleAllowed = decided.spec.requiredRole === 'tenant_actor' && canTransition(roles);
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    const roleAllowed = decided.spec.requiredRole === 'tenant_member'
+      && await isTenantMember(client, mapping.application_user_id, looked.check.tenant_id);
     if (!roleAllowed) {
-      return denied(spoof, { error: 'insufficient_role', message: 'Transition requires an owner, admin, manager or operator of this check\'s company' });
+      return denied(spoof, { error: 'insufficient_role', message: 'Transition requires a member of this check\'s company' });
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
     if (notes.error) return denied(spoof, { statusCode: 400, ...notes });
@@ -608,9 +595,9 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
     }
-    // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-    if (!(await isTenantActor(client, mapping.application_user_id, looked.check.tenant_id))) {
-      return denied(spoof, { error: 'not_authorized', message: 'Only an owner, admin, manager or operator of this check\'s company can delete it' });
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    if (!(await isTenantMember(client, mapping.application_user_id, looked.check.tenant_id))) {
+      return denied(spoof, { error: 'not_authorized', message: 'Only a member of this check\'s company can delete it' });
     }
     if (isPartnerLinked(looked.check)) {
       return denied(spoof, {
@@ -982,8 +969,7 @@ export const handleEndorsementRenderReset = async (event, deps = {}) => {
     if (String(before.check_number || '') !== '9562') {
       return denied(spoof, { statusCode: 403, error: 'reset_scope_denied', message: 'Reset operator is restricted to McGurrin #9562' });
     }
-    const roles = await rolesOf(client, mapping.application_user_id, before.tenant_id);
-    if (!canTransition(roles)) {
+    if (!(await isTenantMember(client, mapping.application_user_id, before.tenant_id))) {
       return denied(spoof, { error: 'insufficient_role', message: 'Reset requires a tenant membership role' });
     }
     if (!before.back_image_original_path || looksGeneratedBack(before.back_image_original_path)) {

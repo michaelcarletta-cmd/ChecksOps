@@ -75,9 +75,9 @@ export const authorizeSignatureDocumentPath = async (client, { path, claimId, ch
   return rows.length > 0;
 };
 
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
 const WRITER_ROLE_SQL = `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
      LIMIT 1`;
 
 /** Tenants that own a request: the claim's org, else the check's tenant, else checks on an org-less claim. */
@@ -105,9 +105,9 @@ const owningTenantIds = async (client, { claimId, checkId }) => {
 };
 
 /**
- * RLS lets any member who can see a check or claim insert here, including
- * viewers and partner tenants. Only owner, admin, manager or operator members
- * of the owning tenant, or the platform owner, may add requests or signers.
+ * RLS lets anyone who can see a check or claim insert here, including partner
+ * tenants. Only members of the owning tenant (any role value), or the platform
+ * owner, may add requests or signers.
  * Fails closed when no owning tenant resolves.
  */
 export const authorizeSignatureWriter = async (client, { mapping, claimId, checkId }) => {
@@ -128,7 +128,7 @@ export const authorizeSignatureWriter = async (client, { mapping, claimId, check
   return false;
 };
 
-const writerDenied = { error: 'not_authorized', message: 'only owner, admin, manager or operator members may prepare signature requests' };
+const writerDenied = { error: 'not_authorized', message: 'only members of the owning company may prepare signature requests' };
 
 const lookupClaim = async (client, claimId) => {
   if (!isUuid(claimId)) return { error: 'invalid_uuid', field: 'claim_id' };

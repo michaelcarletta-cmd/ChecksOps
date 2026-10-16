@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handleDeleteCheck, FINANCIAL_DELETE_BLOCKERS } from '../functions/api/workflow-delete-check.mjs';
 import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
-import { TENANT_ACTOR_SQL } from '../functions/api/workflow-transitions.mjs';
+import { TENANT_MEMBER_SQL } from '../functions/api/workflow-transitions.mjs';
 
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
@@ -74,11 +74,11 @@ const mockClient = ({
         };
       }
       if (sql === USER_ROLES_SQL) return { rows: roles };
-      if (sql === TENANT_ACTOR_SQL) {
+      if (sql === TENANT_MEMBER_SQL) {
+        // Owner policy: any membership row of the check's tenant; the role is ignored.
         const [userId, tenantId] = params;
-        const actor = userId === APP_ID && memberships.some((m) => m.tenant_id === tenantId
-          && ['owner', 'admin', 'manager', 'operator'].includes(String(m.role).toLowerCase()));
-        return { rows: actor ? [{ '?column?': 1 }] : [] };
+        const member = userId === APP_ID && memberships.some((m) => m.tenant_id === tenantId);
+        return { rows: member ? [{ '?column?': 1 }] : [] };
       }
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id/.test(sql)) {
         return { rows: check ? [check] : [] };
@@ -170,8 +170,8 @@ test('reason shorter than 3 trimmed characters is rejected', async () => {
   assert.equal(result.field, 'reason');
 });
 
-for (const role of ['owner', 'admin', 'manager', 'operator']) {
-  test(`tenant ${role} of the check's tenant can delete it`, async () => {
+for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer', 'member']) {
+  test(`a member of the check's tenant (stored role ${role}) can delete it`, async () => {
     const client = mockClient({ memberships: [{ tenant_id: FREEDOM, role }] });
     const result = await handleDeleteCheck(
       jwtEvent({ check_id: CHECK_ID, reason: 'duplicate intake' }),
@@ -183,11 +183,10 @@ for (const role of ['owner', 'admin', 'manager', 'operator']) {
 }
 
 for (const [label, opts] of [
-  ['viewer of the check tenant', { memberships: [{ tenant_id: FREEDOM, role: 'viewer' }] }],
   ['partner (owner of the tenant the check is shared with)', { memberships: [{ tenant_id: PARTNER_TENANT, role: 'owner' }] }],
   ['platform admin without membership', { roles: [{ role: 'admin' }], memberships: [] }],
   ['platform staff without membership', { roles: [{ role: 'staff' }], memberships: [] }],
-  ['platform admin who is only a viewer', { roles: [{ role: 'admin' }], memberships: [{ tenant_id: FREEDOM, role: 'viewer' }] }],
+  ['platform admin who is a member of another tenant only', { roles: [{ role: 'admin' }], memberships: [{ tenant_id: PARTNER_TENANT, role: 'admin' }] }],
 ]) {
   test(`${label} cannot delete`, async () => {
     const client = mockClient(opts);

@@ -255,18 +255,18 @@ test('10 PR #598 granular capability request sets remain unchanged', () => {
   }
 });
 
-test('sweep changes: viewers, other-tenant members and non-members are refused before any provider call', async () => {
+test('sweep changes: other-tenant members and non-members are refused before any provider call; any member may change', async () => {
   for (const memberships of [
-    [{ tenant_id: SWEEP_TENANT, role: 'viewer' }],
     [{ tenant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', role: 'owner' }],
     [],
   ]) {
     const { result, calls } = await runSweep('disable', { sweepConfigId: SWEEP_ID, memberships });
     assert.equal(result.statusCode, 403, JSON.stringify(memberships));
-    assert.equal(result.error, 'role_not_allowed');
+    assert.equal(result.error, 'not_a_member');
     assert.equal(calls.some((c) => c.method === 'PATCH' || c.method === 'POST'), false);
   }
-  for (const role of ['owner', 'admin', 'manager', 'operator']) {
+  // Owner policy: every member is a user with the same rights, whatever role is stored.
+  for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer']) {
     const { result } = await runSweep('disable', {
       sweepConfigId: SWEEP_ID,
       memberships: [{ tenant_id: SWEEP_TENANT, role }],

@@ -30,19 +30,19 @@ const safeQuery = async (client, sql, params = []) => {
   }
 };
 
-// Owner policy: resetting a teammate's 2FA is team management. The caller must
-// be owner or admin of a tenant the target user is also a member of. Global
-// user_roles admin/staff and the master owner get no cross-tenant shortcut.
-export const RESET_TOTP_TEAM_MANAGER_SQL = `SELECT 1
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Any member may reset 2FA for a teammate: someone who shares one of the
+// caller's tenants (the role column is ignored). Global user_roles admin/staff
+// and the master owner get no cross-tenant shortcut.
+export const RESET_TOTP_TEAMMATE_SQL = `SELECT 1
   FROM public.tenant_users mine
   JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
  WHERE mine.user_id = $1::uuid
    AND theirs.user_id = $2::uuid
-   AND lower(mine.role::text) IN ('owner', 'admin')
  LIMIT 1`;
 
 const managesTeammate = async (client, userId, targetUserId) => (
-  (await safeQuery(client, RESET_TOTP_TEAM_MANAGER_SQL, [userId, targetUserId])).rows.length > 0
+  (await safeQuery(client, RESET_TOTP_TEAMMATE_SQL, [userId, targetUserId])).rows.length > 0
 );
 
 export const softwareTokenEnrolled = (user = {}) => {

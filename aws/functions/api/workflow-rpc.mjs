@@ -193,17 +193,16 @@ const requireRole = async (client, userId, allowed) => {
   return { roles };
 };
 
-// Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-// The tenant must be one of the caller's own tenant_users tenants; platform
-// admin/staff roles give no shortcut into a tenant.
-export const TENANT_ACTOR_SQL = `SELECT 1 FROM public.tenant_users
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// The tenant must be one of the caller's own tenant_users tenants (the role
+// column is ignored); platform admin/staff roles give no shortcut into a tenant.
+export const TENANT_MEMBER_SQL = `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
      LIMIT 1`;
 
-const isTenantActor = async (client, userId, tenantId) => {
+const isTenantMember = async (client, userId, tenantId) => {
   if (!isUuid(tenantId)) return false;
-  return (await client.query(TENANT_ACTOR_SQL, [userId, tenantId])).rows.length > 0;
+  return (await client.query(TENANT_MEMBER_SQL, [userId, tenantId])).rows.length > 0;
 };
 
 const arg = (args, ...keys) => {
@@ -392,7 +391,7 @@ const executeLossDraftSetLender = async ({ client, mapping, args }) => {
     [draftId],
   )).rows[0];
   if (!draft) return { error: 'rls_denied', message: 'Loss draft record not found' };
-  if (!(await isTenantActor(client, mapping.application_user_id, draft.tenant_id))) {
+  if (!(await isTenantMember(client, mapping.application_user_id, draft.tenant_id))) {
     return { error: 'not_authorized', message: 'Not authorized' };
   }
   let companyId = (await client.query(
@@ -501,8 +500,7 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
       );
     }
   } else if (action === 'admin_reset_status') {
-    // Owner policy: owner, admin, manager and operator of the draft's tenant
-    // reset it; viewers, partners and platform admin/staff do not.
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
     const draftTenant = (await client.query(
       `SELECT COALESCE(ci.tenant_id, c.org_id) AS tenant_id
          FROM public.loss_draft_tracking ld
@@ -511,7 +509,7 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
         WHERE ld.id = $1::uuid`,
       [draftId],
     )).rows[0]?.tenant_id || null;
-    if (!(await isTenantActor(client, mapping.application_user_id, draftTenant))) {
+    if (!(await isTenantMember(client, mapping.application_user_id, draftTenant))) {
       return { error: 'not_authorized', message: 'Not authorized to reset this loss draft' };
     }
     const target = String(extra?.target_status || '').trim();
@@ -633,15 +631,9 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
   const externalClaimId = arg(args, '_external_claim_id', 'external_claim_id');
   if (claimId && !isUuid(claimId)) return { error: 'invalid_uuid', field: '_claim_id' };
   if (externalClaimId && !isUuid(externalClaimId)) return { error: 'invalid_uuid', field: '_external_claim_id' };
-  // Owner policy: owner, admin, manager and operator of this tenant act;
-  // viewers, partners and platform admin/staff without a membership do not.
-  const member = (await client.query(
-    `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
-     LIMIT 1`,
-    [mapping.application_user_id, tenantId],
-  )).rows[0];
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+  // Platform admin/staff without a membership do not.
+  const member = (await client.query(TENANT_MEMBER_SQL, [mapping.application_user_id, tenantId])).rows[0];
   if (!member) return { error: 'not_authorized', message: 'Not a member of tenant' };
   const claimNumber = arg(args, '_claim_number', 'claim_number');
   const insuredName = arg(args, '_insured_name', 'insured_name');
@@ -769,8 +761,8 @@ export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
   )).rows[0];
   if (!check) return { error: 'not_authorized', message: 'check not found or not writable' };
 
-  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-  if (!(await isTenantActor(client, mapping.application_user_id, check.tenant_id))) {
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+  if (!(await isTenantMember(client, mapping.application_user_id, check.tenant_id))) {
     return { error: 'not_authorized', message: 'Check is not in the caller tenant' };
   }
 
@@ -858,7 +850,7 @@ const executeRecordCheckReturn = async ({ client, mapping, args }) => {
     [checkId],
   )).rows[0];
   if (!check) return { error: 'rls_denied', message: 'Check not found' };
-  if (!(await isTenantActor(client, mapping.application_user_id, check.tenant_id))) {
+  if (!(await isTenantMember(client, mapping.application_user_id, check.tenant_id))) {
     return { error: 'not_authorized', message: 'Not authorized to record a return for this check' };
   }
   if (check.check_stage === 'returned') {
@@ -925,18 +917,17 @@ const executeRecordCheckReturn = async ({ client, mapping, args }) => {
 
 const truthy = (value) => value === true || value === 'true' || value === 1 || value === '1';
 
-// Deposits are check work. Owner policy: owner, admin, manager and operator
-// act; viewers and partners do not. Each deposit is checked again against its
-// own check's tenant (requireDepositManagerForTenant).
-const requireManagerAdmin = async (client, userId) => {
-  const actor = (await client.query(
+// Deposits are check work. Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// The caller must belong to some tenant here; each deposit is checked again
+// against its own check's tenant (requireDepositManagerForTenant).
+const requireTenantUser = async (client, userId) => {
+  const member = (await client.query(
     `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
      LIMIT 1`,
     [userId],
   )).rows[0];
-  if (!actor) {
+  if (!member) {
     return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
   }
   return { ok: true };
@@ -951,14 +942,12 @@ const requirePlatformOwner = async (client) => {
 };
 
 export const CHECKALT_TENANT_MEMBER_SQL = `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')`;
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid`;
 
 /**
- * Check Alt member policy: the platform owner, or a tenant_users member of
- * this tenant whose role is owner, admin, manager or operator. Viewers (the
- * setting controls automatic approval of deposits) and platform admin/staff
- * without a membership of the tenant are refused.
+ * Check Alt member policy: the platform owner, or any tenant_users member of
+ * this tenant (the role column is ignored). Platform admin/staff without a
+ * membership of the tenant, partners and other tenants are refused.
  */
 const requireOwnTenantMember = async (client, userId, tenantId) => {
   const owner = await requirePlatformOwner(client);
@@ -968,7 +957,7 @@ const requireOwnTenantMember = async (client, userId, tenantId) => {
   }
   const member = (await client.query(CHECKALT_TENANT_MEMBER_SQL, [userId, tenantId])).rows[0];
   if (!member) {
-    return { error: 'not_authorized', message: 'Only members of this tenant (not viewers) can change its Auto-Deposit settings' };
+    return { error: 'not_authorized', message: 'Only members of this tenant can change its Auto-Deposit settings' };
   }
   return { ok: true };
 };
@@ -977,13 +966,13 @@ const requireDepositManagerForTenant = async (client, userId, tenantId) => {
   if (!isUuid(tenantId)) {
     return { error: 'invalid_uuid', field: 'tenant_id' };
   }
-  if (!(await isTenantActor(client, userId, tenantId))) {
+  if (!(await isTenantMember(client, userId, tenantId))) {
     return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
   }
   return { ok: true };
 };
 
-const canAccessTenant = (client, userId, tenantId) => isTenantActor(client, userId, tenantId);
+const canAccessTenant = (client, userId, tenantId) => isTenantMember(client, userId, tenantId);
 
 const executeResolveCheckReturn = async ({ client, mapping, args }) => {
   const checkId = arg(args, 'p_check_id', 'check_id');
@@ -994,7 +983,7 @@ const executeResolveCheckReturn = async ({ client, mapping, args }) => {
     [checkId],
   )).rows[0];
   if (!check) return { error: 'rls_denied', message: 'Check not found' };
-  if (!(await isTenantActor(client, mapping.application_user_id, check.tenant_id))) {
+  if (!(await isTenantMember(client, mapping.application_user_id, check.tenant_id))) {
     return { error: 'not_authorized', message: 'Not authorized' };
   }
   if (check.check_stage !== 'returned') {
@@ -1157,7 +1146,7 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
   } catch (error) {
     const message = String(error?.message || '');
     if (/not_authorized/i.test(message) || error?.code === '42501') {
-      return { error: 'not_authorized', message: 'Only members of this tenant (not viewers) can change its Auto-Deposit settings' };
+      return { error: 'not_authorized', message: 'Only members of this tenant can change its Auto-Deposit settings' };
     }
     if (/missing_required_field/i.test(message)) {
       return { error: 'missing_required_field', field: 'auto_approve_enabled' };
@@ -1189,7 +1178,7 @@ const executeDepositAction = async ({ client, mapping, args }) => {
       action,
     };
   }
-  const gated = await requireManagerAdmin(client, mapping.application_user_id);
+  const gated = await requireTenantUser(client, mapping.application_user_id);
   if (gated.error) return gated;
   const actorId = mapping.application_user_id;
   const notes = arg(args, 'p_notes', 'notes');
@@ -1388,7 +1377,7 @@ const executeClaimLedgerLinkOrCreate = async ({ client, mapping, args }) => {
   if (!isUuid(check.tenant_id)) {
     return { error: 'not_authorized', message: 'This check has no tenant, so it cannot be linked to a claim.' };
   }
-  if (!(await isTenantActor(client, mapping.application_user_id, check.tenant_id))) {
+  if (!(await isTenantMember(client, mapping.application_user_id, check.tenant_id))) {
     return { error: 'not_authorized', message: 'Not authorized to link this check' };
   }
   const rpc = await client.query(CLAIM_LEDGER_LINK_OR_CREATE_SQL, [

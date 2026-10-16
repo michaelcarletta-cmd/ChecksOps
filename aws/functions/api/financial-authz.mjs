@@ -6,7 +6,7 @@
  * authority.
  *
  * Production money movement today uses:
- *   - tenant role owner/admin/manager (Moov Edge Function)
+ *   - tenant membership of the resource (any member; no role tiers)
  *   - frontend step-up 2FA (`useFinancialGuard`) for deposit.submit,
  *     deposit.approve, disbursement.send, payroll.run
  *
@@ -15,14 +15,12 @@
  * production money movement.
  */
 
-export const FINANCIAL_ROLES = new Set(['owner', 'admin', 'manager']);
-
 export const FINANCIAL_OPERATIONS = {
   checkalt_deposit: {
     operation: 'checkalt_deposit',
     permission: 'deposit.submit',
     providers: ['checkalt'],
-    who: 'Tenant owner/admin/manager + deposit.submit + step-up. NOT activated.',
+    who: 'Tenant member + deposit.submit + step-up. NOT activated.',
     canRetry: true,
     canCancel: false,
     activated: false,
@@ -31,7 +29,7 @@ export const FINANCIAL_OPERATIONS = {
     operation: 'checkalt_approve',
     permission: 'deposit.approve',
     providers: ['checkalt'],
-    who: 'Tenant owner/admin/manager + deposit.approve + step-up. NOT activated.',
+    who: 'Tenant member + deposit.approve + step-up. NOT activated.',
     canRetry: false,
     canCancel: false,
     activated: false,
@@ -40,7 +38,7 @@ export const FINANCIAL_OPERATIONS = {
     operation: 'wallet_fund',
     permission: 'wallet.fund',
     providers: ['moov'],
-    who: 'Tenant owner/admin/manager + wallet.fund. NOT activated.',
+    who: 'Tenant member + wallet.fund. NOT activated.',
     canRetry: true,
     canCancel: true,
     activated: false,
@@ -49,7 +47,7 @@ export const FINANCIAL_OPERATIONS = {
     operation: 'disbursement',
     permission: 'disbursement.send',
     providers: ['moov', 'plaid'],
-    who: 'Tenant owner/admin/manager + disbursement.send + step-up. NOT activated.',
+    who: 'Tenant member + disbursement.send + step-up. NOT activated.',
     canRetry: true,
     canCancel: true,
     activated: false,
@@ -85,7 +83,7 @@ export const FINANCIAL_OPERATIONS = {
     operation: 'pay_homeowner',
     permission: 'stakeholder.pay',
     providers: ['moov'],
-    who: 'Tenant owner/admin/manager + stakeholder.pay. NOT activated.',
+    who: 'Tenant member + stakeholder.pay. NOT activated.',
     canRetry: true,
     canCancel: true,
     activated: false,
@@ -94,7 +92,7 @@ export const FINANCIAL_OPERATIONS = {
     operation: 'pay_contractor',
     permission: 'contractor.pay',
     providers: ['moov', 'plaid'],
-    who: 'Tenant owner/admin/manager + contractor.pay / disbursement.send. NOT activated.',
+    who: 'Tenant member + contractor.pay / disbursement.send. NOT activated.',
     canRetry: true,
     canCancel: true,
     activated: false,
@@ -137,14 +135,12 @@ export const financialPermissionSnapshot = () => (
   )
 );
 
-export const roleAllowsFinancial = (roles = []) =>
-  roles.some((role) => FINANCIAL_ROLES.has(String(role || '').toLowerCase()));
 
 /**
  * Evaluate the financial gate. Production execution is never allowed while
  * permissions remain deactivated. Sandbox simulation may proceed when the
- * caller is an authenticated tenant member with a documented financial role
- * and AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED=true.
+ * caller is an authenticated tenant member and
+ * AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED=true. Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
  */
 export const evaluateFinancialAuthorization = ({
   operation,
@@ -155,13 +151,14 @@ export const evaluateFinancialAuthorization = ({
   permissionsActivated,
 } = {}) => {
   const spec = FINANCIAL_OPERATIONS[operation] || null;
-  const roleOk = roleAllowsFinancial(roles);
+  // No role tiers: membership of the resource's tenant is the role check.
+  const roleOk = Boolean(membershipOk);
   const canExecuteProduction = Boolean(
     identityOk && membershipOk && roleOk && permissionsActivated && spec,
   );
   // Simulation certifies the architecture. It is not money movement.
-  // Authenticated tenant membership of the resource is required; a financial
-  // role is recorded but not required, and never grants production execution.
+  // Authenticated tenant membership of the resource is required and never
+  // grants production execution.
   const canSimulate = Boolean(
     identityOk && membershipOk && simulationEnabled && spec,
   );

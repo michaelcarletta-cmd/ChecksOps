@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app-services.mjs';
 import {
   MFA_RESET_PREFERENCE,
-  RESET_TOTP_TEAM_MANAGER_SQL,
+  RESET_TOTP_TEAMMATE_SQL,
   runAdminResetTotp,
   softwareTokenEnrolled,
 } from '../functions/api/admin-reset-totp.mjs';
@@ -45,8 +45,8 @@ const TENANT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const OTHER_TENANT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 /**
- * tenant_users rows; the fake evaluates the shared-tenant owner/admin join of
- * RESET_TOTP_TEAM_MANAGER_SQL. user_roles and is_master_owner are answered too,
+ * tenant_users rows; the fake evaluates the shared-tenant join of
+ * RESET_TOTP_TEAMMATE_SQL (owner policy: any member, the role is not read). user_roles and is_master_owner are answered too,
  * so a test can prove they are not consulted.
  */
 const teamClient = ({ memberships = [], userRoles = [], master = false, account = null } = {}) => sqlClient([
@@ -61,9 +61,8 @@ const teamClient = ({ memberships = [], userRoles = [], master = false, account 
   {
     match: (sql) => sql.includes('JOIN public.tenant_users theirs'),
     result: ([caller, target]) => {
-      assert.match(RESET_TOTP_TEAM_MANAGER_SQL, /lower\(mine\.role::text\) IN \('owner', 'admin'\)/);
+      assert.doesNotMatch(RESET_TOTP_TEAMMATE_SQL, /role/);
       const shared = memberships.some((mine) => mine.user_id === caller
-        && ['owner', 'admin'].includes(String(mine.role).toLowerCase())
         && memberships.some((theirs) => theirs.user_id === target && theirs.tenant_id === mine.tenant_id));
       return { rows: shared ? [{ '?column?': 1 }] : [] };
     },
@@ -82,34 +81,22 @@ const reset = (client, extra = {}) => runAdminResetTotp({
   ...extra,
 });
 
-for (const role of ['owner', 'admin']) {
-  test(`tenant ${role} may reset 2FA for a teammate of the same tenant`, async () => {
+for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer']) {
+  test(`a member (stored role ${role}) may reset 2FA for a teammate of the same tenant`, async () => {
     const result = await reset(teamClient({
       memberships: [
         { user_id: CALLER, tenant_id: TENANT, role },
         { user_id: USER_ID, tenant_id: TENANT, role: 'operator' },
       ],
     }));
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, true, role);
     assert.equal(result.removed_count, 0);
     assert.equal(result.importedUser, false);
     assert.equal(result.poolMfaChanged, false);
   });
 }
 
-for (const role of ['manager', 'operator', 'viewer']) {
-  test(`tenant ${role} cannot reset a teammate's 2FA`, async () => {
-    const result = await reset(teamClient({
-      memberships: [
-        { user_id: CALLER, tenant_id: TENANT, role },
-        { user_id: USER_ID, tenant_id: TENANT, role: 'operator' },
-      ],
-    }));
-    assert.equal(result.statusCode, 403);
-  });
-}
-
-test('owner of another tenant, platform admin/staff and the master owner without a shared owner/admin tenant are forbidden', async () => {
+test('a member of another tenant, platform admin/staff and the master owner without a shared tenant are forbidden', async () => {
   const otherTenant = await reset(teamClient({
     memberships: [
       { user_id: CALLER, tenant_id: OTHER_TENANT, role: 'owner' },

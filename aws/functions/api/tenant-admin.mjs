@@ -52,18 +52,14 @@ const cognitoJson = async (target, payload) => {
   }
 };
 
-// Team management (invite, remove, the tenant AI key) is owner and admin of
-// this tenant only. Global user_roles admin/staff and the master owner get no
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Team management (invite, remove, the tenant AI key) is open to any member of
+// the tenant. Global user_roles admin/staff and the master owner get no
 // shortcut into a tenant.
-export const TEAM_MANAGER_ROLES = Object.freeze(['owner', 'admin']);
-// public.tenant_role values an invite may assign.
-export const INVITABLE_TENANT_ROLES = Object.freeze(['admin', 'operator', 'viewer']);
-
-const assertTenantAdmin = async (client, mapping, tenantId) => {
+const assertTenantMember = async (client, mapping, tenantId) => {
   const rows = (await client.query(
     `SELECT 1 FROM public.tenant_users
      WHERE tenant_id = $1::uuid AND user_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin')
      LIMIT 1`,
     [tenantId, mapping.application_user_id],
   )).rows;
@@ -87,24 +83,17 @@ export const runTenantInviteUser = async ({
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
   const email = normalizeEmail(body.email);
-  const role = String(body.role || 'operator').trim().toLowerCase();
+  // There is no role choice: any client-supplied role is ignored. The
+  // membership row takes the column default for tenant_users.role (the repo
+  // schema default is 'viewer'), which authorization ignores.
   const fullName = body.full_name || body.fullName || email;
   if (!tenantId || !email) {
-    return { ok: false, statusCode: 400, error: 'Missing tenant_id, email, or role', spoofFieldsIgnored: spoof };
+    return { ok: false, statusCode: 400, error: 'Missing tenant_id or email', spoofFieldsIgnored: spoof };
   }
-  if (!INVITABLE_TENANT_ROLES.includes(role)) {
-    return {
-      ok: false,
-      statusCode: 400,
-      error: 'invalid_role',
-      allowedRoles: INVITABLE_TENANT_ROLES,
-      spoofFieldsIgnored: spoof,
-    };
-  }
-  // Owner policy: owner and admin of this tenant manage its team. The platform
-  // owner keeps tenant onboarding (inviting a new tenant's first users).
-  if (!(await assertTenantAdmin(client, mapping, tenantId)) && !(await isPlatformOwner(client))) {
-    return { ok: false, statusCode: 403, error: 'Not authorized — must be an owner or admin of this tenant', spoofFieldsIgnored: spoof };
+  // Any member of this tenant may invite teammates. The platform owner keeps
+  // tenant onboarding (inviting a new tenant's first user).
+  if (!(await assertTenantMember(client, mapping, tenantId)) && !(await isPlatformOwner(client))) {
+    return { ok: false, statusCode: 403, error: 'Not authorized — must be a member of this company', spoofFieldsIgnored: spoof };
   }
 
   const tenant = (await client.query(
@@ -189,10 +178,10 @@ export const runTenantInviteUser = async ({
 
   try {
     await client.query(
-      `INSERT INTO public.tenant_users (id, tenant_id, user_id, role, created_at)
-       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, now())
+      `INSERT INTO public.tenant_users (id, tenant_id, user_id, created_at)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, now())
        ON CONFLICT DO NOTHING`,
-      [randomUUID(), tenantId, appUserId, role],
+      [randomUUID(), tenantId, appUserId],
     );
   } catch (error) {
     // Fail loudly: an invite that did not create the membership is not an invite.
@@ -212,7 +201,7 @@ export const runTenantInviteUser = async ({
   const branding = await resolveEmailBranding(client, { tenantId });
   const rendered = renderTransactionalTemplate('tenant-user-invite', {
     tenantName: tenant.name,
-    role,
+    role: 'a member',
     loginUrl,
     branding,
   });
@@ -244,7 +233,6 @@ export const runTenantInviteUser = async ({
     is_new_user: isNewUser,
     isNewUser,
     email,
-    role,
     applicationUserId: appUserId,
     cognitoSub,
     tempPasswordIssued: isNewUser,
@@ -273,9 +261,9 @@ export const runDeleteUser = async ({
     return { ok: false, statusCode: 400, error: 'missing_user', spoofFieldsIgnored: spoof };
   }
   if (!(await isPlatformOwner(client))) {
-    // Owner policy: owner and admin remove a user only from the tenants where
-    // they are owner/admin. Disabling the login reaches every tenant, so it
-    // stays with the platform owner.
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    // A member removes a user only from the tenants they belong to. Disabling
+    // the login reaches every tenant, so it stays with the platform owner.
     if (!userId) {
       return { ok: false, statusCode: 400, error: 'missing_user', spoofFieldsIgnored: spoof };
     }
@@ -285,8 +273,7 @@ export const runDeleteUser = async ({
           AND ($3::uuid IS NULL OR tenant_id = $3::uuid)
           AND tenant_id IN (
             SELECT mine.tenant_id FROM public.tenant_users mine
-             WHERE mine.user_id = $2::uuid
-               AND lower(mine.role::text) IN ('owner', 'admin'))`,
+             WHERE mine.user_id = $2::uuid)`,
       [userId, mapping.application_user_id, tenantId],
     );
     if (!(removed?.rowCount > 0)) {
@@ -344,7 +331,7 @@ export const handleTenantSetOpenaiKey = async (event) => withIdentity(event, asy
   if (!tenantId || !apiKey) {
     return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
   }
-  if (!(await assertTenantAdmin(client, mapping, tenantId))) {
+  if (!(await assertTenantMember(client, mapping, tenantId))) {
     return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
   }
   const name = openaiSecretName(tenantId);
@@ -371,7 +358,7 @@ export const handleTenantValidateOpenaiKey = async (event) => withIdentity(event
 }) => {
   const tenantId = body.tenant_id || body.tenantId;
   if (!tenantId) return { ok: false, statusCode: 400, error: 'missing_tenant', spoofFieldsIgnored: spoof };
-  if (!(await assertTenantAdmin(client, mapping, tenantId))) {
+  if (!(await assertTenantMember(client, mapping, tenantId))) {
     return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
   }
   try {
@@ -394,7 +381,7 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
 }) => {
   const tenantId = body.tenant_id || body.tenantId;
   if (!tenantId) return { ok: false, statusCode: 400, error: 'missing_tenant', spoofFieldsIgnored: spoof };
-  if (!(await assertTenantAdmin(client, mapping, tenantId))) {
+  if (!(await assertTenantMember(client, mapping, tenantId))) {
     return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
   }
   try {

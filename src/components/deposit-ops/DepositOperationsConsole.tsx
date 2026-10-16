@@ -113,7 +113,7 @@ interface DepositOperationsConsoleProps {
 export function DepositOperationsConsole({ searchQuery = "" }: DepositOperationsConsoleProps = {}) {
   const { user } = useAuth();
   const { tenantId } = useTenantFilter();
-  // Check Alt Submit/Resubmit Deposit are hidden from viewers and non-members.
+  // Check Alt Submit/Resubmit Deposit are hidden from non-members (partners included).
   const checkAltAccess = useCheckAltAccess();
   const canOperateCheckAlt = checkAltAccess.canOperateIn(tenantId);
   const { toast } = useToast();

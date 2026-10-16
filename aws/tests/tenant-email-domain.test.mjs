@@ -407,20 +407,8 @@ test('SES success activates custom From; DKIM failure does not', async () => {
   assert.ok(row.last_checked_at);
 });
 
-test('authorization: member cannot configure, cross-tenant and platform admin denied, owner/admin can', async () => {
-  resetDomainRateLimits();
-  const memberClient = memoryClient({ membershipRole: 'member' });
+test('authorization: any member configures; cross-tenant and platform admin without membership are denied', async () => {
   const sesv2 = mockSes();
-  const memberStart = await runStartDomainVerification({
-    client: memberClient, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
-  });
-  assert.equal(memberStart.statusCode, 403);
-  const memberGet = await runGetEmailBranding({
-    client: memberClient, mapping, body: { tenantId: TENANT }, spoof,
-  });
-  assert.equal(memberGet.ok, true);
-  assert.equal(memberGet.settings.canConfigure, false);
-
   const stranger = memoryClient({ membershipRole: null, systemRole: null, master: false });
   const cross = await runGetEmailBranding({
     client: stranger, mapping, body: { tenantId: TENANT }, spoof,
@@ -445,20 +433,9 @@ test('authorization: member cannot configure, cross-tenant and platform admin de
     assert.equal(platformGet.statusCode, 403, JSON.stringify(opts));
   }
 
-  // Sender settings are team management: owner and admin configure; manager,
-  // operator and viewer may view only.
-  for (const role of ['manager', 'operator', 'viewer']) {
-    resetDomainRateLimits();
-    const client = memoryClient({ membershipRole: role, systemRole: 'admin' });
-    const started = await runStartDomainVerification({
-      client, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
-    });
-    assert.equal(started.statusCode, 403, role);
-    const got = await runGetEmailBranding({ client, mapping, body: { tenantId: TENANT }, spoof });
-    assert.equal(got.ok, true, role);
-    assert.equal(got.settings.canConfigure, false, role);
-  }
-  for (const role of ['owner', 'admin']) {
+  // Owner policy: every member of the tenant is a user with the same rights,
+  // whatever role value is stored.
+  for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer', 'member']) {
     resetDomainRateLimits();
     const client = memoryClient({ membershipRole: role });
     const started = await runStartDomainVerification({

@@ -74,9 +74,9 @@ test('signature request uses shared layout and calls mailer once', async () => {
         result: () => ({ rows: [{ ok: true }] }),
       },
       {
-        // Signature Request writers: tenant owner/admin/manager/operator.
+        // Signature Request writers: any member of the owning tenant (the role is not read).
         match: (sql, params) => sql.includes('FROM public.tenant_users')
-          && sql.includes("'operator'") && params[0] === USER && params[1] === TENANT,
+          && !sql.includes('role') && params[0] === USER && params[1] === TENANT,
         result: () => ({ rows: [{ '?column?': 1 }] }),
       },
     ]),
@@ -591,7 +591,7 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
       },
       client: sqlClient([
         {
-          match: (sql) => sql.includes('FROM public.tenant_users') && sql.includes("IN ('owner', 'admin')"),
+          match: (sql) => sql.includes('FROM public.tenant_users') && !sql.includes('role'),
           result: () => ({ rows: [{ '?column?': 1 }] }),
         },
         {

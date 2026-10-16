@@ -188,11 +188,11 @@ test('force-complete unauthenticated caller is denied before any write', async (
   assert.equal(updates.length, 0);
 });
 
-test('force-complete authenticated user with no tenant role is denied', async () => {
+test('force-complete authenticated user with no membership of the check tenant is denied', async () => {
   const { updates, deps } = forceCompleteDeps({
     deps: {
       loadUserRoles: async () => ['client'],
-      loadTenantMemberships: async () => [{ tenant_id: TENANT_A, role: 'client' }],
+      loadTenantMemberships: async () => [],
     },
   });
   const result = await runForceCompleteEndorsements(deps, CHECK_ID);
@@ -224,25 +224,25 @@ test('force-complete nonexistent check is denied', async () => {
   assert.equal(updates.length, 0);
 });
 
-test('force-complete: viewers, plain members and global admin/staff with only a viewer membership are denied', () => {
-  for (const [roles, role] of [[[], 'viewer'], [[], 'member'], [['admin'], 'viewer'], [['staff'], 'viewer']]) {
+test('force-complete: owner policy, any member of the check tenant is allowed whatever role is stored', () => {
+  for (const [roles, role] of [[[], 'viewer'], [[], 'member'], [[], 'client'], [['admin'], 'viewer'], [[], 'owner'], [[], 'operator']]) {
     const result = authorizeForceComplete({
       userId: USER_STAFF,
       check: { id: CHECK_ID, tenant_id: TENANT_A },
       userRoles: roles,
       tenantMemberships: [{ tenant_id: TENANT_A, role }],
     });
-    assert.equal(result.ok, false, `${roles} ${role}`);
-    assert.equal(result.status, 403);
+    assert.equal(result.ok, true, `${roles} ${role}`);
   }
-  for (const role of ['owner', 'admin', 'manager', 'operator']) {
+  for (const roles of [['admin'], ['staff']]) {
     const result = authorizeForceComplete({
       userId: USER_STAFF,
       check: { id: CHECK_ID, tenant_id: TENANT_A },
-      userRoles: [],
-      tenantMemberships: [{ tenant_id: TENANT_A, role }],
+      userRoles: roles,
+      tenantMemberships: [{ tenant_id: TENANT_B, role: 'admin' }],
     });
-    assert.equal(result.ok, true, role);
+    assert.equal(result.ok, false, String(roles));
+    assert.equal(result.status, 403);
   }
 });
 

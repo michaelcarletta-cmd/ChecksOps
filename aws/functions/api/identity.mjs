@@ -9,7 +9,7 @@ import {
   refuseSubAsApplicationId,
   verifyCognitoIdToken,
 } from './cognito.mjs';
-import { isPrivilegedRoleList, privilegedAuthPolicy } from './privileged-auth.mjs';
+import { isPrivilegedIdentity, privilegedAuthPolicy } from './privileged-auth.mjs';
 import {
   LOOKUP_MAPPING_SQL,
   LOOKUP_PRODUCTION_IDENTITY_SQL,
@@ -126,7 +126,7 @@ export const resolveIdentitySession = async ({
       } : null,
       tenants,
       roles,
-      privileged: isPrivilegedRoleList(roles) || masterOwner,
+      privileged: isPrivilegedIdentity({ tenants, isPlatformOwner: masterOwner }),
       privilegedAuth: privilegedAuthPolicy(),
       authorizationSource: 'user_roles_and_tenant_users',
       cognitoGroupsUsed: false,

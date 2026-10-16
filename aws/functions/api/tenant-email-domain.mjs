@@ -639,10 +639,10 @@ export const writeDomainAudit = async (client, mapping, {
   }
 };
 
-// Tenant settings (sender branding, sending domain) are team management:
-// owner and admin of this tenant only. No platform admin/staff bypass and no
-// cross-tenant access; the tenant must be one of the caller's own tenants.
-export const TENANT_SETTINGS_ROLES = Object.freeze(['owner', 'admin']);
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Sender branding and the sending domain are open to any member of the tenant.
+// No platform admin/staff bypass and no cross-tenant access; the tenant must be
+// one of the caller's own tenants.
 
 export const resolveTenantAccess = async (client, mapping, tenantId) => {
   const userId = mapping.application_user_id;
@@ -658,18 +658,16 @@ export const resolveTenantAccess = async (client, mapping, tenantId) => {
     master = false;
   }
   const member = Boolean(membership);
-  const tenantRole = member ? String(membership.role || '').toLowerCase() : '';
-  const tenantAdmin = TENANT_SETTINGS_ROLES.includes(tenantRole);
   return {
     platformAdmin: false,
-    tenantAdmin,
+    tenantAdmin: member,
     member,
     canView: member,
-    canConfigure: tenantAdmin,
+    canConfigure: member,
     // Deleting the SES identity stays with the master owner, and only for a
     // tenant they are a member of.
     canDeleteIdentity: member && master === true,
-    role: member ? tenantRole : null,
+    role: member ? 'member' : null,
   };
 };
 

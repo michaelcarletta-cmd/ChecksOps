@@ -1406,10 +1406,12 @@ const executeCheckCases = async ({ client, mapping, op, values, filters }) => {
     const tenantId = values.tenant_id;
     const invalid = requireUuid('tenant_id', tenantId);
     if (invalid) return invalid;
+    // Owner policy: every member of the tenant is a user with the same rights;
+    // partners, other tenants and global user_roles admin/staff do not act.
     const member = (await client.query(
-      `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       UNION ALL
-       SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff')`,
+      `SELECT 1 FROM public.tenant_users
+       WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       LIMIT 1`,
       [mapping.application_user_id, tenantId],
     )).rows[0];
     if (!member) return { error: 'not_authorized', message: 'Not a member of tenant' };

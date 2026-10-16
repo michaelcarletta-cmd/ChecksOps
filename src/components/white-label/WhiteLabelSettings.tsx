@@ -43,7 +43,6 @@ import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
 import { TenantBillingAccountPanel } from "@/components/settings/TenantBillingAccountPanel";
-import { canManageTenantTeam } from "@/lib/tenantRoleAccess";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
@@ -125,9 +124,9 @@ export function WhiteLabelSettings() {
       return (data?.role ?? null) as string | null;
     },
   });
-  // Owner policy: team management and tenant settings are owner and admin of
-  // this tenant only; platform roles give no shortcut.
-  const canManageTenant = canManageTenantTeam(tenantRole);
+  // Owner policy: every member of the tenant is a user with the same rights;
+  // platform roles give no shortcut.
+  const canManageTenant = Boolean(tenantRole);
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;

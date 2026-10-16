@@ -16,15 +16,14 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantMemberships } from "@/hooks/useCanMoveChecks";
-import { canActInTenant } from "@/lib/tenantRoleAccess";
 import { useToast } from "@/hooks/use-toast";
 
 /**
  * "Delete Check" button. Allows deleting a check from ANY status.
- * Owner policy: owner, admin, manager and operator act; viewers and partners do not.
- * Shown when the user has an acting role in the check's tenant (tenantId), or
- * in any tenant when tenantId is not known; the server checks the check's
- * own tenant. Requires a reason (logged to check_deletion_log + claim_audit_log).
+ * Owner policy: every member of the tenant is a user with the same rights;
+ * partners and other tenants do not act. Shown when the user is a member of
+ * the check's tenant (tenantId), or of any tenant when tenantId is not known;
+ * the server checks the check's own tenant. Requires a reason (logged to check_deletion_log + claim_audit_log).
  */
 export function AdminDeleteCheckButton({
   checkId,
@@ -48,7 +47,7 @@ export function AdminDeleteCheckButton({
   const { user } = useAuth();
   const { memberships } = useTenantMemberships();
   const canDelete = memberships.some(
-    (row) => (!tenantId || String(row.tenant_id) === String(tenantId)) && canActInTenant(row.role),
+    (row) => !tenantId || String(row.tenant_id) === String(tenantId),
   );
   const { toast } = useToast();
   const [open, setOpen] = useState(false);

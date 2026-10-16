@@ -778,15 +778,7 @@ export const runHomeownerLedgerSend = async ({
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
-  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-  const actor = (await client.query(
-    `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
-     LIMIT 1`,
-    [mapping.application_user_id, tenantId],
-  )).rows[0];
-  if (!actor) return { ok: false, statusCode: 403, error: 'role_not_allowed', spoofFieldsIgnored: spoof };
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act. (the membership above is the whole gate).
 
   // The claim must belong to this tenant (its org, or one of this tenant's checks).
   const claimOwned = !claimId || (await client.query(
@@ -913,15 +905,7 @@ export const runSendFileToHomeowner = async ({
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
-  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-  const actor = (await client.query(
-    `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
-     LIMIT 1`,
-    [mapping.application_user_id, file.tenant_id],
-  )).rows[0];
-  if (!actor) return { ok: false, statusCode: 403, error: 'role_not_allowed', spoofFieldsIgnored: spoof };
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act. (the membership above is the whole gate).
 
   const claim = (await client.query(
     `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,

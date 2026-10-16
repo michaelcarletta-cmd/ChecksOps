@@ -52,9 +52,9 @@ const fakeDb = ({
         return { rows: userRoles.filter((r) => r.user_id === params[0]).map(() => ({ '?column?': 1 })) };
       }
       if (/FROM public\.tenant_users/.test(sql)) {
-        assert.match(sql, /lower\(role::text\) IN \('owner', 'admin', 'manager', 'operator'\)/);
-        const ok = memberships.some((m) => m.user_id === params[0] && m.tenant_id === params[1]
-          && ['owner', 'admin', 'manager', 'operator'].includes(String(m.role).toLowerCase()));
+        // Owner policy: any membership row counts; the role column is not read.
+        assert.doesNotMatch(sql, /role/);
+        const ok = memberships.some((m) => m.user_id === params[0] && m.tenant_id === params[1]);
         return { rows: ok ? [{ '?column?': 1 }] : [] };
       }
       if (/FROM public\.claims/.test(sql)) {
@@ -220,15 +220,13 @@ test('ON CONFLICT race with an own-tenant case returns that case', async () => {
   assert.equal(result.data, own);
 });
 
-for (const role of ['viewer', 'partner']) {
-  test(`${role} role is refused`, async () => {
-    const client = fakeDb({ memberships: [{ user_id: USER, tenant_id: TENANT, role }] });
-    const result = await call(client, { _claim_id: OWN_CLAIM });
-    assert.equal(result.error, 'not_authorized');
-    assert.equal(inserts(client).length, 0);
-    assert.equal(client.queries.some((q) => /FROM public\.claims/.test(q.sql)), false);
-  });
-}
+test('a partner (member of the tenant the check is shared with) is refused', async () => {
+  const client = fakeDb({ memberships: [{ user_id: USER, tenant_id: OTHER_TENANT, role: 'admin' }] });
+  const result = await call(client, { _claim_id: OWN_CLAIM });
+  assert.equal(result.error, 'not_authorized');
+  assert.equal(inserts(client).length, 0);
+  assert.equal(client.queries.some((q) => /FROM public\.claims/.test(q.sql)), false);
+});
 
 for (const role of ['admin', 'staff']) {
   test(`global ${role} without a tenant membership is refused`, async () => {
@@ -247,8 +245,8 @@ test('a member of another tenant only is refused', async () => {
   assert.equal(inserts(client).length, 0);
 });
 
-for (const role of ['operator', 'OWNER', 'admin', 'manager']) {
-  test(`${role} member is allowed`, async () => {
+for (const role of ['operator', 'OWNER', 'admin', 'manager', 'viewer', 'member', null]) {
+  test(`member with stored role ${role} is allowed`, async () => {
     const client = fakeDb({ memberships: [{ user_id: USER, tenant_id: TENANT, role }] });
     const result = await call(client, { _claim_id: OWN_CLAIM });
     assert.ok(result.data);

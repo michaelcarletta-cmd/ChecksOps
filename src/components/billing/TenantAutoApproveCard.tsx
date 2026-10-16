@@ -26,7 +26,7 @@ import {
  * Overrides the global checkalt_config defaults for this tenant only.
  * Reads tenant_id, auto_approve_enabled, auto_approve_max_cents, and derived registered.
  * Writes only auto_approve_enabled and auto_approve_max_cents.
- * Viewers and non-members see the settings read-only, without Save
+ * Non-members see the settings read-only, without Save
  * (the server refuses their save; this is UX only).
  */
 export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: string | null } = {}) {

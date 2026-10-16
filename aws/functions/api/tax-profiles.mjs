@@ -5,8 +5,8 @@
  * reach recipient_tax_profiles. Do not log request bodies (they may contain a TIN).
  *
  * Actions: list | upsert
- * Roles: platform_owner, platform_admin (user_roles.admin), tenant owner/admin
- *        of the requested tenant_id. Cross-tenant always denied.
+ * Access: any tenant_users member of the requested tenant_id (no role tiers;
+ *         no platform owner/admin shortcut). Cross-tenant always denied.
  */
 
 import { parseBody, withIdentity, withIdentityWrite } from './data.mjs';
@@ -35,17 +35,17 @@ const MASKED_SELECT = `
 `;
 
 async function resolveAccess(client, mapping, tenantId) {
-  // Owner policy: only the caller's own tenant_users role for this tenant
-  // counts (owner/admin). No platform owner/admin/staff shortcut.
+  // Owner policy: every member of the tenant is a user with the same rights.
+  // Only the caller's own tenant_users row for this tenant counts (the role
+  // column is ignored). No platform owner/admin/staff shortcut.
   const { rows: memRows } = await client.query(
-    `SELECT role FROM public.tenant_users
+    `SELECT 1 FROM public.tenant_users
       WHERE user_id = $1 AND tenant_id = $2
       LIMIT 1`,
     [mapping.application_user_id, tenantId],
   );
-  const tenantMembershipRole = memRows[0]?.role ?? null;
 
-  return evaluateTaxAccess({ tenantMembershipRole });
+  return evaluateTaxAccess({ isTenantMember: memRows.length > 0 });
 }
 
 async function handleList(client, tenantId) {

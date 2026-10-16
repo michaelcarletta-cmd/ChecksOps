@@ -177,13 +177,12 @@ const resolveRequestTenantId = async (client, request) => {
 
 export const SIGNATURE_ACTOR_SQL = `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
      LIMIT 1`;
 
 /**
- * Signature Request writers: a tenant_users member of the owning tenant whose
- * role is owner, admin, manager or operator (viewers and partner tenants do
- * not act), or the platform owner. aws_can_write_tenant stays as the existing
+ * Signature Request writers: any tenant_users member of the owning tenant
+ * (the role column is ignored; partner tenants do not act), or the platform
+ * owner. aws_can_write_tenant stays as the existing
  * live gate. Fails closed when the owning tenant cannot be resolved.
  */
 export const requireSignatureActor = async (client, { mapping, tenantId, spoof }) => {

@@ -47,9 +47,14 @@ test('a pre-claim upload link reuses only unclaimed tokens, never another claim\
   assert.equal((await run({ claim_id: CLAIM, tenant_id: 'x' })).error, 'invalid_tenant_id');
 });
 
-test('viewers and partners cannot send pre-claim upload links either', async () => {
-  const result = await run({ claim_id: null }, client({ actor: false }));
-  assert.equal(result.error, 'role_not_allowed');
+// Owner policy: every member of the tenant is a user with the same rights. The
+// fake's `actor: false` (no owner/admin/manager/operator role) no longer matters:
+// no role query is made.
+test('a member with any stored role can send pre-claim upload links', async () => {
+  const c = client({ actor: false });
+  const result = await run({ claim_id: null }, c);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.ok(!c.queries.some((q) => /role::text/.test(q.text)));
 });
 
 test('another tenant\'s claim is refused before any token is created or sent', async () => {
@@ -64,12 +69,11 @@ test('another tenant\'s claim is refused before any token is created or sent', a
   assert.deepEqual(ownership.params, [OTHER_CLAIM, TENANT]);
 });
 
-test('viewers and partners cannot send tracking links', async () => {
+test('a member with any stored role can send tracking links', async () => {
   const c = client({ actor: false });
   const result = await run({ claim_id: CLAIM }, c);
-  assert.equal(result.statusCode, 403);
-  assert.equal(result.error, 'role_not_allowed');
-  assert.ok(!c.queries.some((q) => q.text.includes('homeowner_ledger_tokens')));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.ok(!c.queries.some((q) => /role::text/.test(q.text)));
 });
 
 test('a non-member of the tenant is refused', async () => {
@@ -97,7 +101,7 @@ test('the check-based ownership branch only applies to claims with no owning org
 
 import { runSendFileToHomeowner } from '../functions/api/homeowner.mjs';
 
-const fileClient = ({ actor = true, claimId = CLAIM, token = true } = {}) => {
+const fileClient = ({ actor = true, member = true, claimId = CLAIM, token = true } = {}) => {
   const queries = [];
   return {
     queries,
@@ -108,7 +112,7 @@ const fileClient = ({ actor = true, claimId = CLAIM, token = true } = {}) => {
         return { rows: [{ id: 'f1', check_id: '55555555-5555-4555-8555-555555555555', tenant_id: TENANT, file_name: 'a.pdf' }] };
       }
       if (text.includes('FROM public.tenant_users') && text.includes('lower(role::text)')) return { rows: actor ? [{ '?column?': 1 }] : [] };
-      if (text.includes('FROM public.tenant_users')) return { rows: [{ '?column?': 1 }] };
+      if (text.includes('FROM public.tenant_users')) return { rows: member ? [{ '?column?': 1 }] : [] };
       if (text.includes('FROM public.check_intake_items')) return { rows: [{ claim_id: claimId }] };
       if (text.includes('FROM public.homeowner_ledger_tokens')) {
         return { rows: token ? [{ token: 'tok', homeowner_email: 'home@example.com', homeowner_name: 'Ada' }] : [] };
@@ -119,9 +123,13 @@ const fileClient = ({ actor = true, claimId = CLAIM, token = true } = {}) => {
 };
 const runFile = (c) => runSendFileToHomeowner({ client: c, mapping, spoof, send, body: { check_file_id: 'f1' } });
 
-test('send-file: viewers and partners are refused', async () => {
-  const result = await runFile(fileClient({ actor: false }));
-  assert.equal(result.error, 'role_not_allowed');
+test('send-file: a member with any stored role may send; a partner (non-member) is refused', async () => {
+  const c = fileClient({ actor: false });
+  const result = await runFile(c);
+  assert.notEqual(result.error, 'role_not_allowed', JSON.stringify(result));
+  assert.ok(!c.queries.some((q) => /role::text/.test(q.text)));
+  const partner = await runFile(fileClient({ member: false }));
+  assert.equal(partner.error, 'cross_tenant_denied');
 });
 
 test('send-file: a check without a claim never borrows another claim\'s homeowner', async () => {

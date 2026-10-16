@@ -1115,13 +1115,12 @@ export const sweepConfig = {
         environment,
       });
     }
-    // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-    // Only the caller's own membership role for ctx.tenantId counts.
-    const actor = (ctx.memberships || []).some((m) => String(m?.tenant_id) === String(ctx.tenantId)
-      && ['owner', 'admin', 'manager', 'operator'].includes(String(m?.role || '').toLowerCase()));
-    if (!actor) {
-      return fail('Only an owner, admin, manager or operator of this organization can change sweeps', 403, {
-        error: 'role_not_allowed',
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    // Only the caller's own membership of ctx.tenantId counts (any role value).
+    const member = (ctx.memberships || []).some((m) => String(m?.tenant_id) === String(ctx.tenantId));
+    if (!member) {
+      return fail('Only a member of this organization can change sweeps', 403, {
+        error: 'not_a_member',
       });
     }
     if (action === 'create') {

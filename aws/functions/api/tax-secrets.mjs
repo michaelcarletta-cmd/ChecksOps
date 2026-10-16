@@ -5,7 +5,6 @@
 
 export const TAX_SECRET_TABLES = new Set(['recipient_tax_profiles']);
 export const TAX_SECRET_COLUMNS = new Set(['tin', 'tin_encrypted']);
-export const PERMITTED_TENANT_TAX_ROLES = new Set(['owner', 'admin']);
 const SAFE_TIN_METADATA_COLUMNS = new Set(['tin_on_file', 'tin_last_4', 'tin_type']);
 const TAX_SECRET_RPC_NAMES = new Set([
   'get_recipient_tin',
@@ -113,16 +112,15 @@ export const publicTaxProfile = (row) => {
   };
 };
 
-// Owner policy: tax setup and tax identifiers are team management, so only the
-// owner and admin of the tenant reach them. Platform owner, user_roles admin
-// and staff get no cross-tenant shortcut: the role must be the caller's own
-// tenant_users role for the requested tenant.
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Tax setup and tax identifiers are open to any member of the tenant. Platform
+// owner, user_roles admin and staff get no cross-tenant shortcut: the caller
+// needs their own tenant_users row for the requested tenant.
 export const evaluateTaxAccess = ({
-  tenantMembershipRole = null,
+  isTenantMember = false,
 } = {}) => {
-  const tenantRole = tenantMembershipRole == null ? '' : String(tenantMembershipRole).toLowerCase();
-  if (PERMITTED_TENANT_TAX_ROLES.has(tenantRole)) {
-    return { allowed: true, reason: 'tenant_finance_admin' };
+  if (isTenantMember === true) {
+    return { allowed: true, reason: 'tenant_member' };
   }
   return { allowed: false, reason: 'not_authorized' };
 };

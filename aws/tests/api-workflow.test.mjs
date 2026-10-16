@@ -117,8 +117,8 @@ test('linked transitions retain tenant authorization and deposited/final-state d
     roles: [],
     memberships: [{ tenant_id: FREEDOM_TENANT, role: 'member', tenant_name: 'Freedom', tenant_slug: 'freedom' }],
   })));
-  assert.equal(memberOnly.ok, false);
-  assert.equal(memberOnly.error, 'insufficient_role');
+  // Owner policy: every member is a user with the same rights (stored role 'member').
+  assert.equal(memberOnly.ok, true, JSON.stringify(memberOnly));
 
   for (const finalState of [
     { status: 'deposited', deposited_at: '2026-10-01T00:00:00Z' },
@@ -158,6 +158,7 @@ import {
   evaluateTransition,
   mapReviewPath,
   TRANSITIONS,
+  TENANT_MEMBER_SQL,
 } from '../functions/api/workflow-transitions.mjs';
 import { applicationWorkflowWritesEnabled } from '../functions/api/workflow-flags.mjs';
 import { WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
@@ -251,6 +252,10 @@ const mockClient = ({
       if (sql === TENANT_MEMBERSHIP_SQL) return { rows: memberships };
       if (sql === USER_ROLES_SQL) return { rows: roles };
       if (/SELECT role FROM public.tenant_users/.test(sql)) return { rows: memberships };
+      if (sql === TENANT_MEMBER_SQL) {
+        // Owner policy: any membership row of the check's tenant; the role is ignored.
+        return { rows: memberships.filter((m) => m.tenant_id === params[1]).map(() => ({ '?column?': 1 })) };
+      }
       if (/FROM public.check_payees/.test(sql)) return { rows: defaultPayees };
       if (/FROM public.check_endorsements/.test(sql)) return { rows: defaultEndorsements };
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id, uploaded_by/.test(sql)) {
@@ -523,7 +528,7 @@ test('provider execution routes remain disabled', async () => {
   assert.equal(body.error, 'provider_disabled');
 });
 
-/** mockClient whose tenant_users role lookup honours the tenant id. */
+/** mockClient whose tenant_users lookups honour the tenant id. */
 const tenantScopedClient = ({ memberships, roles = [], check = { ...createdRow, status: 'needs_review' } }) => {
   const client = mockClient({ memberships, roles, check });
   const inner = client.query;
@@ -542,8 +547,8 @@ const moveToEndorsing = (client) => handleCheckTransition(jwtEvent('/workflow/tr
   p_deposit_path: 'endorsements_in_progress',
 }), depsFor(client));
 
-for (const role of ['owner', 'admin', 'manager', 'operator']) {
-  test(`transition: tenant ${role} of the check's tenant can move the check`, async () => {
+for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer', 'member']) {
+  test(`transition: a member of the check's tenant (stored role ${role}) can move the check`, async () => {
     const client = tenantScopedClient({ memberships: [{ tenant_id: FREEDOM_TENANT, role }] });
     const result = await moveToEndorsing(client);
     assert.equal(result.ok, true, role);
@@ -552,10 +557,9 @@ for (const role of ['owner', 'admin', 'manager', 'operator']) {
 }
 
 for (const [label, opts] of [
-  ['viewer', { memberships: [{ tenant_id: FREEDOM_TENANT, role: 'viewer' }] }],
   ['partner (owner of another tenant the check is shared with)', { memberships: [{ tenant_id: C1C_TENANT, role: 'owner' }] }],
   ['platform admin without membership', { memberships: [], roles: [{ role: 'admin' }] }],
-  ['platform staff who is only a viewer', { memberships: [{ tenant_id: FREEDOM_TENANT, role: 'viewer' }], roles: [{ role: 'staff' }] }],
+  ['platform staff without membership', { memberships: [], roles: [{ role: 'staff' }] }],
 ]) {
   test(`transition: ${label} is refused`, async () => {
     const client = tenantScopedClient(opts);

@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, RotateCcw, Send, Trash2, UserPlus, Users, Shield } from "lucide-react";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
-import { useCurrentTenantRole } from "@/hooks/useCurrentTenantRole";
+import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 
 interface Props {
   tenantId: string;
@@ -18,11 +18,11 @@ interface Props {
 
 export function TenantUserManager({ tenantId }: Props) {
   const { toast } = useToast();
-  // Owner policy: team management (2FA resets) is owner and admin of this tenant only.
-  const { canManageTeam } = useCurrentTenantRole();
+  // Owner policy: every member of the tenant is a user with the same rights
+  // (inviting, removing and 2FA resets included).
+  const { isMember: canManageTeam } = useCurrentTenantMembership();
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<string>("operator");
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["tenant-users", tenantId],
@@ -43,10 +43,10 @@ export function TenantUserManager({ tenantId }: Props) {
   });
 
   const inviteMutation = useMutation({
-    mutationFn: async ({ email, role }: { email: string; role: string }) => {
-      // Look up user by email from profiles or auth — for now use edge function
+    mutationFn: async ({ email }: { email: string }) => {
+      // There are no roles: the invite only adds the teammate to this tenant.
       const { data, error } = await supabase.functions.invoke("tenant-invite-user", {
-        body: { tenant_id: tenantId, email, role },
+        body: { tenant_id: tenantId, email },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -63,9 +63,9 @@ export function TenantUserManager({ tenantId }: Props) {
   });
 
   const resendMutation = useMutation({
-    mutationFn: async ({ email, role }: { email: string; role: string }) => {
+    mutationFn: async ({ email }: { email: string }) => {
       const { data, error } = await supabase.functions.invoke("tenant-invite-user", {
-        body: { tenant_id: tenantId, email, role },
+        body: { tenant_id: tenantId, email },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -126,19 +126,11 @@ export function TenantUserManager({ tenantId }: Props) {
   };
 
 
-  const roleColor = (r: string) => {
-    switch (r) {
-      case "admin": return "bg-primary/20 text-primary";
-      case "operator": return "bg-sky-500/20 text-sky-400";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
-
   return (
     <div className="space-y-6">
       <SettingsHero
         title="User Management"
-        description="Invite teammates, assign roles, and manage access to your Check Center."
+        description="Invite teammates and manage access to your Check Center."
         badge="Team Access"
         icon={<Users className="h-4 w-4 text-primary" />}
       />
@@ -156,21 +148,11 @@ export function TenantUserManager({ tenantId }: Props) {
             onChange={(e) => setEmail(e.target.value)}
             className="h-9 flex-1"
           />
-          <Select value={role} onValueChange={setRole}>
-            <SelectTrigger className="h-9 w-full sm:w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="admin">Admin</SelectItem>
-              <SelectItem value="operator">Operator</SelectItem>
-              <SelectItem value="viewer">Viewer</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
         <div className="flex justify-end">
           <Button
             size="sm"
-            onClick={() => inviteMutation.mutate({ email, role })}
+            onClick={() => inviteMutation.mutate({ email })}
             disabled={!email || inviteMutation.isPending}
           >
             {inviteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
@@ -183,7 +165,7 @@ export function TenantUserManager({ tenantId }: Props) {
         title="Active Team Members"
         icon={<Shield className="h-4 w-4 text-sky-500" />}
         accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-        description="Manage roles and access for existing team members"
+        description="Manage access for existing team members"
       >
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -211,7 +193,6 @@ export function TenantUserManager({ tenantId }: Props) {
                         <div className="truncate text-xs text-muted-foreground">{u.email}</div>
                       )}
                     </div>
-                    <Badge className={`shrink-0 text-[10px] ${roleColor(u.role)}`}>{u.role}</Badge>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {canManageTeam && u.email && (
@@ -236,7 +217,7 @@ export function TenantUserManager({ tenantId }: Props) {
                       size="icon"
                       className="h-8 w-8"
                       disabled={!u.email || (resendMutation.isPending && resendMutation.variables?.email === u.email)}
-                      onClick={() => u.email && resendMutation.mutate({ email: u.email, role: u.role })}
+                      onClick={() => u.email && resendMutation.mutate({ email: u.email })}
                       title="Resend sign-in invite"
                       aria-label="Resend sign-in invite"
                     >

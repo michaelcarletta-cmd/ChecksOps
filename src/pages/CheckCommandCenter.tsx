@@ -54,7 +54,6 @@ import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 
 import { useCanMoveChecks, useCheckAltAccess, useTenantMemberships } from "@/hooks/useCanMoveChecks";
-import { canActInTenant } from "@/lib/tenantRoleAccess";
 import { checkAltAccessState } from "@/lib/checkAltOperatorAccess";
 import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
@@ -486,13 +485,13 @@ export default function CheckCommandCenter() {
 
   const canAccessManager = canMoveChecks;
 
-  // Owner policy: owner, admin, manager and operator of the check's tenant may
-  // delete it at any stage through the accepted Delete Check workflow; viewers
-  // and partners may not. The server checks the check's own tenant.
+  // Owner policy: every member of the check's tenant may delete it at any stage
+  // through the accepted Delete Check workflow; partners may not. The server
+  // checks the check's own tenant.
   const { memberships: deleteMemberships } = useTenantMemberships();
   const canDeleteCheckInTenant = (checkTenantId: string | null | undefined) =>
     !!checkTenantId && deleteMemberships.some(
-      (row) => String(row.tenant_id) === String(checkTenantId) && canActInTenant(row.role),
+      (row) => String(row.tenant_id) === String(checkTenantId),
     );
 
 

@@ -154,49 +154,36 @@ const depsFor = (client) => ({
 
 const sourceOf = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-test('tax access: ordinary member, manager, operator, and platform staff are denied', () => {
-  assert.equal(evaluateTaxAccess({ tenantMembershipRole: 'member' }).allowed, false);
-  assert.equal(evaluateTaxAccess({ tenantMembershipRole: 'manager' }).allowed, false);
-  assert.equal(evaluateTaxAccess({ tenantMembershipRole: 'operator' }).allowed, false);
-  assert.equal(evaluateTaxAccess({ tenantMembershipRole: 'viewer' }).allowed, false);
-  assert.equal(evaluateTaxAccess({ platformRoles: ['staff'], tenantMembershipRole: 'operator' }).allowed, false);
-  assert.equal(canAccessTaxUi({ tenantRole: 'operator' }), false);
-  assert.equal(canAccessTaxUi({ platformRole: 'staff', tenantRole: 'viewer' }), false);
-});
-
-test('tax access: tenant owner/admin allowed; platform admin and platform owner without that role denied', () => {
-  assert.equal(evaluateTaxAccess({ tenantMembershipRole: 'admin' }).reason, 'tenant_finance_admin');
-  assert.equal(evaluateTaxAccess({ tenantMembershipRole: 'owner' }).allowed, true);
+// Owner policy: every member of the tenant is a user with the same rights (tax
+// setup included); role tiers and platform roles are not consulted.
+test('tax access: any tenant member is allowed; non-members are denied whatever their platform role', () => {
+  assert.equal(evaluateTaxAccess({ isTenantMember: true }).allowed, true);
+  assert.equal(evaluateTaxAccess({ isTenantMember: true }).reason, 'tenant_member');
+  assert.equal(evaluateTaxAccess({ isTenantMember: false }).allowed, false);
   assert.equal(evaluateTaxAccess({ platformRoles: ['admin'] }).allowed, false);
   assert.equal(evaluateTaxAccess({ isPlatformOwner: true }).allowed, false);
-  assert.equal(evaluateTaxAccess({ isPlatformOwner: true, tenantMembershipRole: 'viewer' }).allowed, false);
-  assert.equal(canAccessTaxUi({ tenantRole: 'admin' }), true);
-  assert.equal(canAccessTaxUi({ tenantRole: 'owner' }), true);
+  assert.equal(evaluateTaxAccess({ tenantMembershipRole: 'owner' }).allowed, false);
+  assert.equal(evaluateTaxAccess().allowed, false);
+  assert.equal(canAccessTaxUi({ isTenantMember: true }), true);
+  assert.equal(canAccessTaxUi({ isTenantMember: false }), false);
+  assert.equal(canAccessTaxUi({ tenantRole: 'owner' }), false);
   assert.equal(canAccessTaxUi({ platformRole: 'admin' }), false);
   assert.equal(canAccessTaxUi({ isPlatformOwner: true }), false);
+  assert.equal(canAccessTaxUi(), false);
 });
 
-test('ordinary tenant member cannot list tax profiles', async () => {
-  const client = mockTaxClient({ tenantRole: 'member' });
-  const result = await handleTaxProfiles(
-    jwtEvent('/functions/v1/tenant-tax-profiles', 'POST', { action: 'list', tenant_id: TENANT_A }),
-    depsFor(client),
-  );
-  assert.equal(result.statusCode, 403);
-  assert.equal(result.error, 'forbidden');
-  assert.equal(result.code, 'not_authorized');
-  assert.equal(jsonHasFullTin(result, SAMPLE_TIN), false);
-});
-
-test('unauthorized tenant operator/admin-equivalent is denied', async () => {
-  const client = mockTaxClient({ tenantRole: 'operator' });
-  const result = await handleTaxProfiles(
-    jwtEvent('/functions/v1/tenant-tax-profiles', 'POST', { action: 'list', tenant_id: TENANT_A }),
-    depsFor(client),
-  );
-  assert.equal(result.statusCode, 403);
-  assert.equal(result.code, 'not_authorized');
-});
+for (const tenantRole of ['member', 'viewer', 'operator', 'manager']) {
+  test(`a tenant member with stored role ${tenantRole} lists masked tax profiles`, async () => {
+    const client = mockTaxClient({ tenantRole });
+    const result = await handleTaxProfiles(
+      jwtEvent('/functions/v1/tenant-tax-profiles', 'POST', { action: 'list', tenant_id: TENANT_A }),
+      depsFor(client),
+    );
+    assert.equal(result.statusCode, 200, JSON.stringify(result));
+    assert.equal(result.access, 'tenant_member');
+    assert.equal(jsonHasFullTin(result, SAMPLE_TIN), false);
+  });
+}
 
 test('authorized tenant admin retrieves masked metadata only', async () => {
   const client = mockTaxClient({ tenantRole: 'admin' });
@@ -206,7 +193,7 @@ test('authorized tenant admin retrieves masked metadata only', async () => {
   );
   assert.equal(result.statusCode, 200);
   assert.equal(result.ok, true);
-  assert.equal(result.access, 'tenant_finance_admin');
+  assert.equal(result.access, 'tenant_member');
   assert.equal(result.profiles[0].tin_on_file, true);
   assert.equal(result.profiles[0].tin_last_4, '6789');
   assert.equal(result.profiles[0].tin_type, 'ein');
@@ -215,7 +202,7 @@ test('authorized tenant admin retrieves masked metadata only', async () => {
   assert.equal(jsonHasFullTin(result, SAMPLE_TIN), false);
 });
 
-test('platform owner without a tenant owner/admin role cannot list tax profiles', async () => {
+test('platform owner without a tenant membership cannot list tax profiles', async () => {
   const client = mockTaxClient({ isOwner: true, tenantRole: null });
   const result = await handleTaxProfiles(
     jwtEvent('/functions/v1/tenant-tax-profiles', 'POST', { action: 'list', tenant_id: TENANT_A }),
@@ -226,7 +213,7 @@ test('platform owner without a tenant owner/admin role cannot list tax profiles'
   assert.equal(jsonHasFullTin(result, SAMPLE_TIN), false);
 });
 
-test('platform admin without a tenant owner/admin role cannot list tax profiles', async () => {
+test('platform admin without a tenant membership cannot list tax profiles', async () => {
   const client = mockTaxClient({ platformRoles: ['admin'] });
   const result = await handleTaxProfiles(
     jwtEvent('/functions/v1/tenant-tax-profiles', 'POST', { action: 'list', tenant_id: TENANT_A }),
@@ -618,7 +605,7 @@ test('spoofed x-tenant-id conflicting with body tenant_id is ignored', async () 
   assert.equal(jsonHasFullTin(denied, SAMPLE_TIN), false);
 });
 
-test('member and operator upsert is denied', async () => {
+test('a member (stored role member or operator) may upsert; the response never echoes the TIN', async () => {
   for (const role of ['member', 'operator']) {
     const client = mockTaxClient({ tenantRole: role });
     const result = await handleTaxProfiles(
@@ -630,11 +617,10 @@ test('member and operator upsert is denied', async () => {
       }),
       depsFor(client),
     );
-    assert.equal(result.statusCode, 403, role);
-    assert.equal(result.code, 'not_authorized', role);
+    assert.notEqual(result.statusCode, 403, role);
     assert.equal(jsonHasFullTin(result, SAMPLE_TIN), false);
     const insert = client.queries.find((q) => /INSERT INTO public\.recipient_tax_profiles/.test(q.sql));
-    assert.equal(insert, undefined, role);
+    assert.ok(insert, role);
   }
 });
 

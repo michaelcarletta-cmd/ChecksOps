@@ -1,18 +1,19 @@
 /**
- * Owner policy (users only, tenant roles decide) for the workflow RPCs, tenant
+ * Owner policy (users only, no tenant role tiers) for the workflow RPCs, tenant
  * team management and the platform treasury bank:
- * - owner, admin, manager and operator of the row's own tenant act on check
- *   work; viewers, partners (members of another tenant) and platform
- *   admin/staff without that membership do not;
- * - team management (invite, remove a member) is owner and admin only; the
- *   platform owner keeps tenant onboarding and disabling a login;
+ * - every member of a tenant (any tenant_users row, whatever role value is
+ *   stored, 'viewer' included) is a user with the same rights;
+ * - partners (members of another tenant), other tenants and platform
+ *   admin/staff without that membership are refused;
+ * - platform-owner-only actions (disabling a login, the platform treasury
+ *   bank) refuse members; the platform owner keeps tenant onboarding;
  * - mortgage agents keep cross-tenant access to mortgage handling requests.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { USER_ROLES_SQL } from '../functions/api/identity.mjs';
-import { executeSafeWriteRpc, TENANT_ACTOR_SQL } from '../functions/api/workflow-rpc.mjs';
-import { INVITABLE_TENANT_ROLES, runDeleteUser, runTenantInviteUser } from '../functions/api/tenant-admin.mjs';
+import { executeSafeWriteRpc, TENANT_MEMBER_SQL } from '../functions/api/workflow-rpc.mjs';
+import { runDeleteUser, runTenantInviteUser } from '../functions/api/tenant-admin.mjs';
 import { platformBank } from '../functions/api/providers/parity/moov-onboard.mjs';
 
 const USER = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -24,16 +25,15 @@ const DRAFT_ID = '9e3c2d4f-5a6b-4789-abcd-ef0123456789';
 const REQUEST_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CLAIM_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const mapping = { application_user_id: USER };
-const ACTING = ['owner', 'admin', 'manager', 'operator'];
+const ANY_ROLE = ['owner', 'admin', 'manager', 'operator', 'viewer', 'member'];
 
-const actorRows = (memberships, params) => {
+const memberRows = (memberships, params) => {
   const [userId, tenantId] = params;
-  const ok = userId === USER && memberships.some((m) => m.tenant_id === tenantId
-    && ACTING.includes(String(m.role).toLowerCase()));
+  const ok = userId === USER && memberships.some((m) => m.tenant_id === tenantId);
   return { rows: ok ? [{ '?column?': 1 }] : [] };
 };
 
-/** Fake for workflow-rpc: user_roles, the acting-role membership query and the rows each RPC reads. */
+/** Fake for workflow-rpc: user_roles, the membership query and the rows each RPC reads. */
 const rpcClient = ({ memberships = [], userRoles = [], handlers = [] } = {}) => {
   const queries = [];
   return {
@@ -41,7 +41,7 @@ const rpcClient = ({ memberships = [], userRoles = [], handlers = [] } = {}) => 
     query: async (sql, params = []) => {
       queries.push({ sql, params });
       if (sql === USER_ROLES_SQL) return { rows: userRoles.map((role) => ({ role })) };
-      if (sql === TENANT_ACTOR_SQL) return actorRows(memberships, params);
+      if (sql === TENANT_MEMBER_SQL) return memberRows(memberships, params);
       for (const [pattern, result] of handlers) {
         if (pattern.test(sql)) return typeof result === 'function' ? result(sql, params) : result;
       }
@@ -50,9 +50,9 @@ const rpcClient = ({ memberships = [], userRoles = [], handlers = [] } = {}) => 
   };
 };
 
-test('TENANT_ACTOR_SQL is the owner-policy acting-role filter for one tenant', () => {
-  assert.match(TENANT_ACTOR_SQL, /user_id = \$1::uuid AND tenant_id = \$2::uuid/);
-  assert.match(TENANT_ACTOR_SQL, /lower\(role::text\) IN \('owner', 'admin', 'manager', 'operator'\)/);
+test('TENANT_MEMBER_SQL is a plain membership check for one tenant; the role is not read', () => {
+  assert.match(TENANT_MEMBER_SQL, /user_id = \$1::uuid AND tenant_id = \$2::uuid/);
+  assert.doesNotMatch(TENANT_MEMBER_SQL, /role/);
 });
 
 // --- Loss draft admin reset ---------------------------------------------------
@@ -74,8 +74,8 @@ const lossDraftReset = (opts) => {
   }).then((result) => ({ result, client }));
 };
 
-for (const role of ACTING) {
-  test(`loss draft reset: tenant ${role} of the draft's tenant may reset it`, async () => {
+for (const role of ANY_ROLE) {
+  test(`loss draft reset: a member of the draft's tenant (stored role ${role}) may reset it`, async () => {
     const { result, client } = await lossDraftReset({ memberships: [{ tenant_id: TENANT, role }] });
     assert.equal(result.error, undefined, role);
     assert.ok(client.queries.some((q) => /UPDATE public\.loss_draft_tracking\s+SET escrow_status = \$2::text/.test(q.sql)));
@@ -83,7 +83,6 @@ for (const role of ACTING) {
 }
 
 for (const [label, opts] of [
-  ['viewer', { memberships: [{ tenant_id: TENANT, role: 'viewer' }] }],
   ['partner (owner of another tenant)', { memberships: [{ tenant_id: PARTNER_TENANT, role: 'owner' }] }],
   ['platform admin without membership', { userRoles: ['admin'] }],
   ['platform staff without membership', { userRoles: ['staff'] }],
@@ -111,11 +110,12 @@ const setCheckClaim = (opts) => {
   }).then((result) => ({ result, client }));
 };
 
-test('admin_set_check_claim: operator of the check tenant links a claim; viewer, partner and platform admin are refused', async () => {
-  const ok = await setCheckClaim({ memberships: [{ tenant_id: TENANT, role: 'operator' }] });
-  assert.equal(ok.result.data.ok, true);
+test('admin_set_check_claim: any member of the check tenant links a claim; partner and platform admin are refused', async () => {
+  for (const role of ['operator', 'viewer']) {
+    const ok = await setCheckClaim({ memberships: [{ tenant_id: TENANT, role }] });
+    assert.equal(ok.result.data.ok, true, role);
+  }
   for (const opts of [
-    { memberships: [{ tenant_id: TENANT, role: 'viewer' }] },
     { memberships: [{ tenant_id: PARTNER_TENANT, role: 'admin' }] },
     { userRoles: ['admin'] },
   ]) {
@@ -127,7 +127,7 @@ test('admin_set_check_claim: operator of the check tenant links a claim; viewer,
 
 // --- Mortgage handling requests ---------------------------------------------------
 
-test('mortgage agents keep cross-tenant access to accept handling requests; platform admin and tenant owners do not', async () => {
+test('mortgage agents keep cross-tenant access to accept handling requests; platform admin and tenant members do not', async () => {
   const accept = (opts) => {
     const client = rpcClient({
       ...opts,
@@ -182,25 +182,28 @@ const teamClient = ({ memberships = [], platformOwner = false, failMembershipIns
       queries.push({ sql, params });
       if (/is_platform_owner\(\)/.test(sql)) return { rows: [{ is_owner: platformOwner, is_master: platformOwner }] };
       if (/FROM public\.user_roles/.test(sql)) return { rows: [{ role: 'admin' }] };
-      if (/SELECT 1 FROM public\.tenant_users/.test(sql) && /IN \('owner', 'admin'\)/.test(sql)) {
+      if (/SELECT 1 FROM public\.tenant_users/.test(sql)) {
+        assert.doesNotMatch(sql, /role/);
         const [tenantId, userId] = params;
-        const ok = userId === USER && memberships.some((m) => m.tenant_id === tenantId && ['owner', 'admin'].includes(m.role));
+        const ok = userId === USER && memberships.some((m) => m.tenant_id === tenantId);
         return { rows: ok ? [{ '?column?': 1 }] : [] };
       }
       if (/FROM public\.tenants/.test(sql)) return { rows: [{ id: TENANT, name: 'Acme', custom_domain: null }] };
       if (/INSERT INTO public\.tenant_users/.test(sql)) {
+        // No role is chosen or stored by the invite: the column default applies.
+        assert.doesNotMatch(sql, /\brole\b/);
         if (failMembershipInsert) {
-          const error = new Error('invalid input value for enum tenant_role');
-          error.code = '22P02';
+          const error = new Error('null value in column "role" violates not-null constraint');
+          error.code = '23502';
           throw error;
         }
         return { rows: [], rowCount: 1 };
       }
       if (/DELETE FROM public\.tenant_users/.test(sql)) {
         if (params.length === 1) return { rows: [], rowCount: 2 };
+        assert.doesNotMatch(sql, /role/);
         const [, callerId, tenantFilter] = params;
-        const removable = memberships.filter((m) => ['owner', 'admin'].includes(m.role)
-          && (tenantFilter == null || m.tenant_id === tenantFilter));
+        const removable = memberships.filter((m) => tenantFilter == null || m.tenant_id === tenantFilter);
         return { rows: [], rowCount: callerId === USER ? removable.length : 0 };
       }
       return { rows: [] };
@@ -212,7 +215,7 @@ const invite = (client, body = {}, { mailer } = {}) => runTenantInviteUser({
   client,
   mapping,
   spoof: {},
-  body: { tenant_id: TENANT, email: 'new@example.com', role: 'operator', full_name: 'New Person', ...body },
+  body: { tenant_id: TENANT, email: 'new@example.com', full_name: 'New Person', ...body },
   send: mailer || (async () => {}),
   cognitoJson: async (target) => {
     if (target === 'AdminCreateUser') return { User: { Username: 'cog', Attributes: [{ Name: 'sub', Value: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] } };
@@ -220,25 +223,28 @@ const invite = (client, body = {}, { mailer } = {}) => runTenantInviteUser({
   },
 });
 
-test('invite: owner and admin of the tenant may invite; the platform owner keeps onboarding', async () => {
-  for (const role of ['owner', 'admin']) {
+test('invite: any member of the tenant (stored role viewer included) may invite; the platform owner keeps onboarding', async () => {
+  for (const role of ANY_ROLE) {
     const result = await invite(teamClient({ memberships: [{ tenant_id: TENANT, role }] }));
     assert.equal(result.ok, true, role);
     assert.equal(result.invite_sent, true);
     assert.equal(result.is_new_user, true);
+    assert.equal('role' in result, false);
   }
   const onboarding = await invite(teamClient({ platformOwner: true }));
   assert.equal(onboarding.ok, true);
 });
 
-test('invite: manager, operator, viewer, owner of another tenant and platform admin without membership are refused', async () => {
-  for (const memberships of [
-    [{ tenant_id: TENANT, role: 'manager' }],
-    [{ tenant_id: TENANT, role: 'operator' }],
-    [{ tenant_id: TENANT, role: 'viewer' }],
-    [{ tenant_id: PARTNER_TENANT, role: 'owner' }],
-    [],
-  ]) {
+test('invite: a client-supplied role is ignored (no role choice)', async () => {
+  const client = teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }] });
+  const result = await invite(client, { role: 'superadmin' });
+  assert.equal(result.ok, true);
+  const insert = client.queries.find((q) => /INSERT INTO public\.tenant_users/.test(q.sql));
+  assert.equal(insert.params.includes('superadmin'), false);
+});
+
+test('invite: a member of another tenant and a platform admin without membership are refused', async () => {
+  for (const memberships of [[{ tenant_id: PARTNER_TENANT, role: 'owner' }], []]) {
     const client = teamClient({ memberships });
     const result = await invite(client);
     assert.equal(result.statusCode, 403, JSON.stringify(memberships));
@@ -246,19 +252,13 @@ test('invite: manager, operator, viewer, owner of another tenant and platform ad
   }
 });
 
-test('invite: role must be a tenant_role value, and a failed membership insert fails loudly', async () => {
-  assert.deepEqual([...INVITABLE_TENANT_ROLES], ['admin', 'operator', 'viewer']);
-  const owner = [{ tenant_id: TENANT, role: 'owner' }];
-  for (const role of ['member', 'superadmin', 'owner']) {
-    const bad = await invite(teamClient({ memberships: owner }), { role });
-    assert.equal(bad.statusCode, 400, role);
-    assert.equal(bad.error, 'invalid_role');
-  }
-  const failed = await invite(teamClient({ memberships: owner, failMembershipInsert: true }));
+test('invite: a failed membership insert fails loudly; a failed email is reported, not hidden', async () => {
+  const member = [{ tenant_id: TENANT, role: 'viewer' }];
+  const failed = await invite(teamClient({ memberships: member, failMembershipInsert: true }));
   assert.equal(failed.ok, false);
   assert.equal(failed.statusCode, 500);
   assert.equal(failed.error, 'tenant_membership_failed');
-  const unsent = await invite(teamClient({ memberships: owner }), {}, {
+  const unsent = await invite(teamClient({ memberships: member }), {}, {
     mailer: async () => { throw new Error('ses throttled'); },
   });
   assert.equal(unsent.ok, true);
@@ -266,21 +266,22 @@ test('invite: role must be a tenant_role value, and a failed membership insert f
   assert.match(unsent.invite_error, /ses throttled/);
 });
 
-test('remove member: owner/admin remove only from their own owner/admin tenants; disabling the login stays platform owner', async () => {
-  const owner = teamClient({ memberships: [{ tenant_id: TENANT, role: 'owner' }] });
-  const removed = await runDeleteUser({
-    client: owner, mapping, spoof: {}, body: { user_id: TEAMMATE, tenant_id: TENANT, email: 'mate@example.com' },
-    cognitoJson: async () => { throw new Error('must not disable the login'); },
-  });
-  assert.equal(removed.ok, true);
-  assert.equal(removed.disabled, false);
-  const del = owner.queries.find((q) => /DELETE FROM public\.tenant_users/.test(q.sql));
-  assert.match(del.sql, /lower\(mine\.role::text\) IN \('owner', 'admin'\)/);
-  assert.deepEqual(del.params, [TEAMMATE, USER, TENANT]);
+test('remove member: any member removes only from its own tenants; disabling the login stays platform owner', async () => {
+  for (const role of ['viewer', 'operator', 'owner']) {
+    const member = teamClient({ memberships: [{ tenant_id: TENANT, role }] });
+    const removed = await runDeleteUser({
+      client: member, mapping, spoof: {}, body: { user_id: TEAMMATE, tenant_id: TENANT, email: 'mate@example.com' },
+      cognitoJson: async () => { throw new Error('must not disable the login'); },
+    });
+    assert.equal(removed.ok, true, role);
+    assert.equal(removed.disabled, false);
+    const del = member.queries.find((q) => /DELETE FROM public\.tenant_users/.test(q.sql));
+    assert.deepEqual(del.params, [TEAMMATE, USER, TENANT]);
+  }
 
-  for (const memberships of [[{ tenant_id: TENANT, role: 'operator' }], [{ tenant_id: TENANT, role: 'manager' }], []]) {
+  for (const memberships of [[{ tenant_id: PARTNER_TENANT, role: 'owner' }], []]) {
     const refused = await runDeleteUser({
-      client: teamClient({ memberships }), mapping, spoof: {}, body: { user_id: TEAMMATE },
+      client: teamClient({ memberships }), mapping, spoof: {}, body: { user_id: TEAMMATE, tenant_id: TENANT },
       cognitoJson: async () => { throw new Error('must not disable the login'); },
     });
     assert.equal(refused.statusCode, 403, JSON.stringify(memberships));
@@ -297,11 +298,16 @@ test('remove member: owner/admin remove only from their own owner/admin tenants;
 
 // --- Platform treasury bank ---------------------------------------------------------
 
-test('moov-platform-bank: a global user_roles admin (ctx.isAdmin) is not the platform owner', async () => {
+test('moov-platform-bank: a global user_roles admin (ctx.isAdmin) is not the platform owner; members are refused', async () => {
   const result = await platformBank.run({
     client: { query: async () => ({ rows: [{ is_owner: false }] }) },
     body: { action: 'list' },
-    ctx: { isAdmin: true, tenantId: TENANT, moovContext: { sandboxPlatformAccountId: 'acct' } },
+    ctx: {
+      isAdmin: true,
+      tenantId: TENANT,
+      memberships: [{ tenant_id: TENANT, role: 'owner' }],
+      moovContext: { sandboxPlatformAccountId: 'acct' },
+    },
     fetchImpl: async () => { throw new Error('no provider call expected'); },
   });
   assert.equal(result.statusCode, 403);
