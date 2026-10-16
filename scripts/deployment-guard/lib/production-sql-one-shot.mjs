@@ -43,6 +43,7 @@ import { SQL83_PRODUCTION_PIN_REL } from './sql83-homeowner-signing-production-a
 import { SQL84_PRODUCTION_PIN_REL } from './sql84-mortgage-return-to-queue-production-apply.mjs';
 import { SQL85_PRODUCTION_PIN_REL } from './sql85-mortgage-compensation-adjust-production-apply.mjs';
 import { SQL86_PRODUCTION_PIN_REL } from './sql86-mortgage-compensation-owner-only-production-apply.mjs';
+import { SQL87_PRODUCTION_PIN_REL } from './sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
@@ -125,6 +126,7 @@ const SQL83_TOOL = 'scripts/deployment-guard/sql83-homeowner-signing-production-
 const SQL84_TOOL = 'scripts/deployment-guard/sql84-mortgage-return-to-queue-production-apply.mjs';
 const SQL85_TOOL = 'scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs';
 const SQL86_TOOL = 'scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs';
+const SQL87_TOOL = 'scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
 const memberTool = (key) => Object.freeze({
@@ -199,6 +201,13 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL86_PRODUCTION_PIN_REL,
     allowed_key: 'sql86_production_apply_allowed',
   }),
+  sql87: Object.freeze({
+    key: 'sql87',
+    script: SQL87_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL87_PRODUCTION_PIN_REL,
+    allowed_key: 'sql87_production_apply_allowed',
+  }),
 });
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */
@@ -243,6 +252,8 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'sql52_prerequisite_met',
   'table_level_update',
   'column_update_entries',
+  'case_owner',
+  'other_callers',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
@@ -636,7 +647,11 @@ function runTool(ctx, step, args, { env, timeout }) {
 
 // Recorded inspect fields are summaries: billing_duplicates keeps its counts (and the
 // reason when unreadable), never check_ids.
-const INSPECT_RECORD_FIELDS = Object.freeze({ billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events', 'reason']) });
+const INSPECT_RECORD_FIELDS = Object.freeze({
+  billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events', 'reason']),
+  // SQL 87: counts only, never the callers' names.
+  other_callers: Object.freeze(['function_count', 'view_or_rule_count', 'policy_count', 'dependent_function_count', 'other_dependent_count', 'total']),
+});
 
 const pickFields = (value, fields) => (value && typeof value === 'object' && !Array.isArray(value)
   ? Object.fromEntries(fields.filter((field) => field in value).map((field) => [field, value[field]]))

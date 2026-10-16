@@ -924,11 +924,68 @@ export const MORTGAGE_MIGRATIONS = Object.freeze({
     new_relations: Object.freeze([]),
     altered_tables: Object.freeze([]),
   }),
+  // SQL 87 (aws/workflows/sql/87_resolve_check_case_tenant_scope.sql) is not a Mortgage
+  // Ops migration; it reuses this engine because it has SQL 86's shape: one function
+  // CREATE OR REPLACEd with its ACL left to the owner, behind an owner guard over the
+  // SECURITY DEFINER trigger functions that call it.
+  sql87: Object.freeze({
+    key: 'sql87',
+    label: 'SQL 87',
+    prerequisites: Object.freeze([
+      'public.check_cases',
+      'public.claims',
+      'public.check_intake_items',
+      'public.loss_draft_tracking',
+      'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)',
+      'public.tg_check_intake_assign_case()',
+      'public.tg_loss_draft_assign_case()',
+      'role checksops',
+      'role authenticated',
+    ]),
+    functions: Object.freeze([
+      mortgageFunction({
+        name: 'resolve_check_case',
+        args: [
+          '_tenant_id uuid',
+          '_claim_id uuid DEFAULT NULL::uuid',
+          '_external_claim_id uuid DEFAULT NULL::uuid',
+          '_claim_number text DEFAULT NULL::text',
+          '_insured_name text DEFAULT NULL::text',
+          '_property_address text DEFAULT NULL::text',
+          '_carrier_name text DEFAULT NULL::text',
+        ],
+        result: 'uuid',
+        config: ['search_path=public'],
+        grantees: [],
+      }),
+      mortgageFunction({ name: 'tg_check_intake_assign_case', args: [], result: 'trigger', config: ['search_path=public'], role: 'referenced' }),
+      mortgageFunction({ name: 'tg_loss_draft_assign_case', args: [], result: 'trigger', config: ['search_path=public'], role: 'referenced' }),
+    ]),
+    columns: Object.freeze({
+      check_cases: Object.freeze(['id', 'tenant_id', 'external_system', 'external_claim_id', 'claim_number', 'insured_name', 'insured_email', 'insured_phone', 'property_address', 'carrier_name', 'policy_number', 'mortgage_company_id', 'loan_number', 'loss_date']),
+      claims: Object.freeze(['id', 'org_id', 'claim_number', 'policyholder_name', 'policyholder_email', 'policyholder_phone', 'policyholder_address', 'insurance_company', 'policy_number', 'mortgage_company_id', 'loan_number', 'loss_date']),
+      check_intake_items: Object.freeze(['id', 'tenant_id', 'claim_id', 'case_id', 'freedom_claim_id', 'freedom_claim_number', 'detected_claim_number', 'payee_line', 'property_address', 'carrier_name']),
+      loss_draft_tracking: Object.freeze(['case_id', 'claim_id', 'check_intake_item_id']),
+    }),
+    new_relations: Object.freeze([]),
+    altered_tables: Object.freeze([]),
+    // The function the referenced trigger functions must share an owner with; their
+    // SECURITY DEFINER flag is part of the fingerprint (the revoke relies on it).
+    owner_anchor: 'resolve_check_case',
+    referenced_security_definer: true,
+    // Non-owner ACL entries the file's revokes fully replace (Supabase's anon and
+    // service_role included, where they exist).
+    replaceable_acl: Object.freeze(['PUBLIC EXECUTE', 'anon EXECUTE', 'authenticated EXECUTE', 'checksops EXECUTE', 'service_role EXECUTE']),
+    // The API roles whose EXECUTE the file revokes, and that the owner must not be or belong to.
+    api_roles: Object.freeze(['checksops', 'authenticated', 'anon', 'service_role']),
+  }),
 });
 
 // sha256(pg_get_functiondef) on PostgreSQL 16 of each function the files create,
-// re-derived from the real catalog by aws/tests/sql84-sql86-mortgage-executor.test.mjs.
+// re-derived from the real catalog by aws/tests/sql84-sql86-mortgage-executor.test.mjs
+// (SQL 87's by aws/tests/sql87-resolve-check-case-executor.test.mjs).
 export const MORTGAGE_DEFINITION_SHA256 = Object.freeze({
+  'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)': '687fecf6daec13618c2c0f371e9c249ac6d9423891612ab1976c1cee1f3bcec1',
   'public.return_mortgage_handling_request_to_queue(uuid, text)': '51069c48dcf0511a58dc50dcda0e03c798b4c6f2ec689461ae5d4e047534899f',
   'public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text, text)': 'a8fa66f06698b523e222f8c14543d251a90122cbeeb43feefe906cce3db5ae8b',
   'public.aws_can_admin_mortgage_agent_compensation()': 'b5bc3c548704351bdf502befd5cd7eaafbcf8566687ebc2164bee0c030e1884d',
@@ -943,6 +1000,10 @@ export const MORTGAGE_KNOWN_DEFINITION_SHA256 = Object.freeze({
   'public.mortgage_agent_compensation_reconciliation(text)': Object.freeze({ ledger_original: 'edd48e8286d99a9a848917cde0a0e3ec3f92e53775127012aa7e390006721c3a' }),
   'public.earn_mortgage_agent_compensation(uuid)': Object.freeze({ ledger_original: 'ffdc445e4d88011890887ab9b2c386cad29f006ecff316efff4a7c3f9740b293' }),
   'public.tg_earn_mortgage_agent_compensation()': Object.freeze({ ledger_original: 'ca557bd5473fca4154bc4ae10af94e491ecb1891eb966d38755ac93a8a583c18' }),
+  // Supabase migration 20260826125804's bodies ('case_original').
+  'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)': Object.freeze({ case_original: '461d583bd6a5c741ab3bec9b54caf181df644b7fd3198e664869e9cd3aec74fa' }),
+  'public.tg_check_intake_assign_case()': Object.freeze({ case_original: 'dbe18e99d41c8635404b720f1341c6247e03cfecb2a202e6d60a56eb38f9feb6' }),
+  'public.tg_loss_draft_assign_case()': Object.freeze({ case_original: '90fe5f87b02159917ad4641c789bb007cea240ff842ea8f8dd84bb6b2da64f06' }),
 });
 
 /** 'absent' / 'intended' / 'cursor_original' / 'ledger_original' / 'other' for one function row. */
@@ -955,6 +1016,12 @@ export function mortgageFunctionLabel(fn, state = {}) {
 }
 
 const aclText = (entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`;
+/** The function a migration's referenced functions must share an owner with (SQL 86's earn, SQL 87's helper). */
+export function mortgageOwnerAnchor(spec = {}) {
+  return (spec.functions || []).find((fn) => (spec.owner_anchor ? fn.key === spec.owner_anchor : fn.role === 'acl_only')) || null;
+}
+/** Non-owner function ACL entries the migration's REVOKEs fully replace. */
+export const mortgageReplaceableAcl = (spec = {}) => spec.replaceable_acl || MORTGAGE_REPLACEABLE_ACL_ENTRIES;
 const hashOrUnreadable = (value) => (SHA256_HEX_RE.test(String(value || '')) ? value : 'unreadable');
 
 function mortgageFunctionLines(fn, state = {}, states = {}, spec = {}) {
@@ -969,9 +1036,14 @@ function mortgageFunctionLines(fn, state = {}, states = {}, spec = {}) {
   if (fn.role === 'dropped') return [`function ${id}: present`, `${id} definition sha256 ${hashOrUnreadable(state.definition_sha256)}`, owner];
   if (fn.role === 'acl_only') return [`function ${id}: present`, owner, ...acl];
   if (fn.role === 'referenced') {
-    const earn = (spec.functions || []).find((other) => other.role === 'acl_only');
+    const earn = mortgageOwnerAnchor(spec);
     const same = earn && states[earn.identity]?.exists === true && state.owner_oid != null && state.owner_oid === states[earn.identity].owner_oid;
-    return [`function ${id}: present`, `${id} owner same as ${earn ? earn.name : 'none'}: ${same ? 'yes' : 'no'}`];
+    return [
+      `function ${id}: present`,
+      `${id} owner same as ${earn ? earn.name : 'none'}: ${same ? 'yes' : 'no'}`,
+      // SQL 87: the revoke relies on the trigger functions running as their owner.
+      ...(spec.referenced_security_definer ? [`${id} security definer: ${state.security_definer === true ? 'on' : 'off'}`] : []),
+    ];
   }
   return [
     `function ${id}: present`,
@@ -1088,7 +1160,7 @@ export function mortgageAppliedStates(key) {
     } else if (fn.role === 'acl_only') {
       functions[fn.identity] = { exists: true, owner_is_executor: true, acl: [] };
     } else if (fn.role === 'referenced') {
-      functions[fn.identity] = { exists: true, owner_oid: 1 };
+      functions[fn.identity] = { exists: true, owner_oid: 1, ...(spec.referenced_security_definer ? { security_definer: true } : {}) };
     } else {
       functions[fn.identity] = {
         exists: true,
@@ -1103,20 +1175,22 @@ export function mortgageAppliedStates(key) {
       };
     }
   }
-  // SQL 86: the earn function and its completion trigger function share the owner.
-  for (const fn of spec.functions) if (fn.role === 'acl_only') functions[fn.identity].owner_oid = 1;
+  // SQL 86: the earn function and its completion trigger function share the owner;
+  // SQL 87: the case helper and both case trigger functions do.
+  const anchor = mortgageOwnerAnchor(spec);
+  if (anchor) functions[anchor.identity].owner_oid = 1;
   const objects = key === 'sql84'
     ? { audit_table: MORTGAGE_AUDIT_TABLE_INTENDED, per_check_unique_present: true }
     : key === 'sql85' ? MORTGAGE_SQL85_OBJECTS_INTENDED : {};
   return { functions, objects };
 }
 
-const mortgagePin = (key, filename, migrationId, sourceSha, preSha, intendedSha) => Object.freeze({
+const mortgagePin = (key, filename, migrationId, sourceSha, preSha, intendedSha, commit = '6dd5acca3022dc9564a1c7e6b1a25702c15e24cf') => Object.freeze({
   filename,
   migration_id: migrationId,
   migration: key,
-  // The commit that authored the current file bytes (PR #992).
-  commit: '6dd5acca3022dc9564a1c7e6b1a25702c15e24cf',
+  // The commit that authored the current file bytes (PR #992 for SQL 84-86).
+  commit,
   source_sha256: sourceSha,
   // Recorded, not code-derived: live_definition_sha256 from the guarded staging SQL
   // executor read-live of this migration (see each pin below).
@@ -1160,6 +1234,21 @@ export const AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY = mortgagePin(
   'c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b',
   'fb7e82291b146d0bf243dab1f607b2202b131c09cccac56e40de96c64542062f',
 );
+// SQL 87 (aws/workflows/sql/87_resolve_check_case_tenant_scope.sql): resolve_check_case
+// scoped to its tenant, EXECUTE left to its owner (the two SECURITY DEFINER case
+// trigger functions). No pre-state is code-derived: expected_live_definition_sha256
+// stays null until a guarded staging read-live has been recorded in a reviewed pin
+// change, and apply refuses until then.
+export const AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE = mortgagePin(
+  'sql87',
+  'aws/workflows/sql/87_resolve_check_case_tenant_scope.sql',
+  '87_resolve_check_case_tenant_scope',
+  'f046c76cc731c08020171ec7e846818089df1bd66a7a07a42237f14fb8c4c22a',
+  null,
+  '794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30',
+  // The commit that authored the file bytes (this branch's first commit).
+  'af84133e4e2cd6f3c2f2d8b63c59555d80646c22',
+);
 
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
@@ -1202,6 +1291,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE,
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
+  AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -1275,6 +1365,10 @@ export function isSql86MortgageCompensationOwnerOnly(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY);
 }
 
+export function isSql87ResolveCheckCaseTenantScope(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -1309,6 +1403,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql84MortgageReturnToQueue(input)) return AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE;
   if (isSql85MortgageCompensationAdjust(input)) return AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST;
   if (isSql86MortgageCompensationOwnerOnly(input)) return AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY;
+  if (isSql87ResolveCheckCaseTenantScope(input)) return AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;

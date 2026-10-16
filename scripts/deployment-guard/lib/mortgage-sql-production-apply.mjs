@@ -5,7 +5,10 @@
  * columns, indexes and action CHECK, dropping the Cursor SQL 49 five-argument body)
  * and SQL 86 (aws/workflows/sql/86_mortgage_compensation_owner_only.sql: the SQL 47
  * compensation helper and reconciliation become platform owner only, and EXECUTE on
- * earn_mortgage_agent_compensation(uuid) is left to its owner).
+ * earn_mortgage_agent_compensation(uuid) is left to its owner). SQL 87
+ * (aws/workflows/sql/87_resolve_check_case_tenant_scope.sql: resolve_check_case scoped
+ * to its tenant, EXECUTE left to its owner, the two case trigger functions) has SQL
+ * 86's shape and is registered here too.
  *
  * Shared by the three official tools (sql84-mortgage-return-to-queue-production-apply.mjs,
  * sql85-mortgage-compensation-adjust-production-apply.mjs,
@@ -40,6 +43,7 @@ import {
   AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE,
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
+  AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
   MORTGAGE_MIGRATIONS,
 } from './sql-executor-auth.mjs';
 import {
@@ -90,6 +94,20 @@ export const MORTGAGE_PRODUCTION = Object.freeze({
       'public.aws_can_admin_mortgage_agent_compensation()',
       'public.mortgage_agent_compensation_reconciliation(text)',
     ]),
+  }),
+  // SQL 87 (resolve_check_case tenant scope; not Mortgage Ops) has SQL 86's shape and
+  // shares this tool. The inspect reads no row data, so it prints no PII or row ids.
+  sql87: Object.freeze({
+    key: 'sql87',
+    label: 'SQL 87',
+    pin_rel: 'ops/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.json',
+    staging_pin: AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+    allowed_key: 'sql87_production_apply_allowed',
+    // The staging handler's lock key (`${key}_mortgage_objects`) plus a production-only one.
+    lock_keys: Object.freeze(['sql87_mortgage_objects', 'sql87_check_case_objects_production']),
+    consumed_file: 'sql87-check-case-production-consumed.json',
+    script: 'sql87-resolve-check-case-tenant-scope-production-apply',
+    print_definitions: Object.freeze(['public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)']),
   }),
 });
 
@@ -413,6 +431,22 @@ function migrationReport(key, details) {
       batch_actions_outside_check: report.batch_actions_outside_check || null,
       duplicate_adjust_idempotency_keys: report.duplicate_adjust_idempotency_keys || null,
     };
+  }
+  if (key === 'sql87') {
+    // The helper and both case trigger functions: owner, SECURITY DEFINER and ACL.
+    const caseOwners = Object.fromEntries(MORTGAGE_MIGRATIONS.sql87.functions.map((fn) => {
+      const row = details.functions[fn.key] || {};
+      return [fn.key, {
+        exists: row.exists === true,
+        rolname: row.owner ?? null,
+        rolsuper: row.owner_rolsuper ?? null,
+        security_definer: row.security_definer ?? null,
+        member_of_checksops: row.owner_member_of_checksops ?? null,
+        member_of_authenticated: row.owner_member_of_authenticated ?? null,
+        proacl: row.proacl ?? null,
+      }];
+    }));
+    return { case_owner: report.case_owner || null, case_owners: caseOwners, case_triggers: report.case_triggers || null, other_callers: report.other_callers || null };
   }
   const owners = Object.fromEntries(MORTGAGE_MIGRATIONS.sql86.functions.filter((fn) => fn.role === 'acl_only' || fn.role === 'referenced')
     .map((fn) => {

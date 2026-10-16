@@ -39,6 +39,7 @@ import { evaluateSql83ProductionApply } from '../../scripts/deployment-guard/lib
 import { evaluateSql84ProductionApply } from '../../scripts/deployment-guard/lib/sql84-mortgage-return-to-queue-production-apply.mjs';
 import { evaluateSql85ProductionApply } from '../../scripts/deployment-guard/lib/sql85-mortgage-compensation-adjust-production-apply.mjs';
 import { evaluateSql86ProductionApply } from '../../scripts/deployment-guard/lib/sql86-mortgage-compensation-owner-only-production-apply.mjs';
+import { evaluateSql87ProductionApply } from '../../scripts/deployment-guard/lib/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 import { main as oneShotMain } from '../../scripts/deployment-guard/production-sql-one-shot.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -57,6 +58,7 @@ const EVALUATORS = Object.freeze({
   sql84: evaluateSql84ProductionApply,
   sql85: evaluateSql85ProductionApply,
   sql86: evaluateSql86ProductionApply,
+  sql87: evaluateSql87ProductionApply,
 });
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
 // A pin whose staging acceptance is still pending (SQL 71 today) gets a placeholder
