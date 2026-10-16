@@ -136,7 +136,8 @@ test('the pin matches the SQL file and its commit; no staging pre-state yet; the
   assert.equal(PIN.commit, '6e903be3bfefbad9ac7f28fc024ebc0875e38c06');
   const atCommit = spawnSync('git', ['show', `${PIN.commit}:${PIN.filename}`], { cwd: ROOT, maxBuffer: 4 * 1024 * 1024 });
   if (atCommit.status === 0) assert.equal(sha(atCommit.stdout), PIN.source_sha256);
-  assert.equal(PIN.expected_live_definition_sha256, null, 'recorded from a staging read-live in a reviewed pin change');
+  assert.equal(PIN.expected_live_definition_sha256, '57ba25f2ea69adb1a6de030cb42034d4dd1e1c0741a48a96e79afe6d90aae387', 'read-live run 88');
+  assert.notEqual(PIN.expected_live_definition_sha256, PIN.intended_replacement_sha256);
   assert.equal(PIN.intended_replacement_sha256, INTENDED);
   assert.equal(sha(mortgageStateText(KEY, mortgageAppliedStates(KEY))), INTENDED);
   assert.deepEqual([...PIN.function_identities], [FN]);
@@ -228,8 +229,9 @@ test('the reviewed-text check refuses a wider grant, a missing revoke, a dropped
   assert.equal(mortgageSqlIsReviewed(KEY, TEXT.replace('-- Idempotent: safe to run more than once.', '-- (reworded)')), true, 'comments alone do not matter');
 });
 
-test('apply refuses before connecting: the committed pin (no pre-state), the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
-  const pending = await handlerFor(neverConnect)(claimEvent({ expected_live_definition_sha256: 'b'.repeat(64) }));
+test('apply refuses before connecting: a pin with no pre-state, the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
+  const unrecorded = recordedPin(null);
+  const pending = await handlerFor(neverConnect, { sql88Pin: unrecorded })(claimEvent({ pin: unrecorded, expected_live_definition_sha256: 'b'.repeat(64) }));
   assert.equal(pending.code, CODES.SQL_COLLISION);
   assert.match(pending.message, /no reviewed pre-apply live definition hash/);
   const recorded = recordedPin('a'.repeat(64));
@@ -474,7 +476,9 @@ for (const withSql87 of [false, true]) {
         assert.ok(seen.slice(1, -1).every((text) => READ_ONLY_STATEMENT_RE.test(text)), JSON.stringify(seen.filter((text) => !READ_ONLY_STATEMENT_RE.test(text))));
         const report = receipt.mortgage_inspect;
         assert.deepEqual(receipt.precondition_failures, [], JSON.stringify(report));
-        assert.equal(receipt.pin_executable, false, 'the committed pin has no pre-state');
+        assert.equal(receipt.pin_executable, true);
+        // The fixture's catalog is not staging's recorded pre-state.
+        assert.notEqual(receipt.live_definition_sha256, PIN.expected_live_definition_sha256);
         assert.equal(receipt.apply_preconditions_met, false);
         assert.equal(receipt.sql47_prerequisites_present, true);
         assert.notEqual(receipt.live_definition_sha256, INTENDED);
