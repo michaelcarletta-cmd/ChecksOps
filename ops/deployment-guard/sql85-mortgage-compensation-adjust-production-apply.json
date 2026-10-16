@@ -1,0 +1,54 @@
+{
+  "id": "sql85-mortgage-compensation-adjust-production-apply",
+  "migration": "sql85",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/85_mortgage_compensation_adjust.sql",
+  "migration_id": "85_mortgage_compensation_adjust",
+  "staging_pin_commit": "6dd5acca3022dc9564a1c7e6b1a25702c15e24cf",
+  "source_sha256": "4cc77457554ed9c24407db61bc292c168db0794ed7b884180554d69989e52b3d",
+  "function_identities": [
+    "public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text, text)",
+    "public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908",
+  "authorization_phrase": "APPLY_MORTGAGE_COMPENSATION_ADJUST",
+  "predecessors": [],
+  "order_note": "Apply after SQL 84 and before SQL 86 (reviewed order). Not enforced: SQL 85 does not depend on SQL 84 or 86, so predecessors is [].",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "function_states": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 85. The production pre-state is not code-derived (SQL 47 may be absent, the Cursor bodies may or may not be live), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, proacl), precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (SQL 47 missing, a signature of adjust_mortgage_agent_compensation other than the five- and six-argument ones, another result type, another owner, an ACL entry the file does not revoke, entries or batches owned by another role, an existing adjustment_reason / idempotency_key column of another type, an existing index of the same name that differs, batch actions outside approve/pay/adjust or duplicate adjust idempotency keys), stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "function_definition_sha256": {
+      "adjust_mortgage_agent_compensation": "a8fa66f06698b523e222f8c14543d251a90122cbeeb43feefe906cce3db5ae8b"
+    },
+    "function_owner": "checksops_admin",
+    "function_acl": {
+      "adjust_mortgage_agent_compensation": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}"
+    },
+    "note": "After the unchanged SQL 85 file run as checksops_admin: only the six-argument adjust_mortgage_agent_compensation exists (the five-argument one is dropped), owned by checksops_admin, SECURITY DEFINER with search_path=public and row_security=off, the reviewed body, EXECUTE for the owner, checksops and authenticated only (PUBLIC revoked); entries.adjustment_reason and batches.idempotency_key are text; the parent index, the adjust idempotency unique index and the approve/pay/adjust CHECK are the reviewed definitions. intended_replacement_sha256 equals the staging pin's. function_owner is the expected production login (as for SQL 72 to 83); the first inspect must confirm it."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql85-mortgage-compensation-adjust here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
+    "production_differs": "Unknown until the first inspect of each environment: staging may carry Cursor SQL 49 (the five-argument adjust_mortgage_agent_compensation, adjustment_reason, the parent index and the approve/pay/adjust CHECK); production may have none of it, or no SQL 47. The staging and production pre-state hashes are recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
+  }
+}

@@ -14,6 +14,9 @@ that connects to the database:
 | `sql81` | `scripts/deployment-guard/sql81-checkalt-production-apply.mjs` (`ops/production-sql-81-apply.md`) |
 | `sql82` | `scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs` (`ops/production-sql-82-83-apply.md`) |
 | `sql83` | `scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs` (`ops/production-sql-82-83-apply.md`) |
+| `sql84` | `scripts/deployment-guard/sql84-mortgage-return-to-queue-production-apply.mjs` (`ops/production-sql-84-86-apply.md`) |
+| `sql85` | `scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs` (`ops/production-sql-84-86-apply.md`) |
+| `sql86` | `scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs` (`ops/production-sql-84-86-apply.md`) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). Tests:
@@ -23,7 +26,7 @@ To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql77`…`sql83`) |
+| `--migration <key>` | a registered key (`sql77`…`sql86`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
@@ -69,8 +72,9 @@ An unexpected exception also ends in one failure summary:
    (`ok: true` plus a reference) and an authorization phrase. SQL 82's and 83's pins are
    `execute: true` (owner approved 2026-10-16, staging acceptance recorded, see
    `ops/production-sql-82-83-apply.md`) until their record-and-retire change. Every other
-   pin is `execute: false` (SQL 81's since its 2026-10-15 record-and-retire change), so a
-   run of it refuses until an owner-merged change sets it to true. For a read-only inspect before that change, run the tool's own `--inspect`.
+   pin is `execute: false` (SQL 81's since its 2026-10-15 record-and-retire change; SQL 84's
+   to 86's are still pending, with no recorded pre-state), so a run of it refuses until an
+   owner-merged change sets it to true. For a read-only inspect before that change, run the tool's own `--inspect`.
 2. **Source.** All of these must hold:
    - The tarball's name is `source-<--commit>.tar.gz`.
    - The tarball is read into memory once. Its sha256 must equal both the `.sha256`
@@ -119,7 +123,8 @@ An unexpected exception also ends in one failure summary:
 7. **Evaluate.** Runs `<tool> --input <manifest>`, which must report
    `member_stakeholder_production_apply_allowed` / `sql80_production_apply_allowed` /
    `sql81_production_apply_allowed` / `sql82_production_apply_allowed` /
-   `sql83_production_apply_allowed` true.
+   `sql83_production_apply_allowed` / `sql84_production_apply_allowed` /
+   `sql85_production_apply_allowed` / `sql86_production_apply_allowed` true.
 8. **Apply.** Runs `<tool> --apply --input <manifest>`.
    - This is the only child that gets `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1` and
      `CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT`.

@@ -138,7 +138,7 @@ test('environment check refuses any changed executor variable', () => {
 });
 
 test('only reviewed pins are selectable and candidate members mirror the ensure pack list', () => {
-  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant', 'sql78-check-partner-stakeholder-removals', 'sql79-member-stakeholder-writes', 'sql80-checkalt-member-auto-deposit', 'sql81-checkalt-depositor-register', 'sql82-homeowner-ledger-view', 'sql83-homeowner-signing-capabilities']);
+  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant', 'sql78-check-partner-stakeholder-removals', 'sql79-member-stakeholder-writes', 'sql80-checkalt-member-auto-deposit', 'sql81-checkalt-depositor-register', 'sql82-homeowner-ledger-view', 'sql83-homeowner-signing-capabilities', 'sql84-mortgage-return-to-queue', 'sql85-mortgage-compensation-adjust', 'sql86-mortgage-compensation-owner-only']);
   assert.ok(Object.values(MIGRATIONS).every((pin) => AUTHORIZED_STAGING_SQL.includes(pin)));
   const { members, sourceOf } = candidateMembers(REPO_ROOT);
   assert.deepEqual(Object.keys(members).sort(), EXECUTOR_PACK_MEMBERS.map(([, to]) => to).sort());
@@ -510,6 +510,9 @@ test('every selectable pin refuses apply with the read-live sentinel before conn
     sqlFile81: file(MIGRATIONS['sql81-checkalt-depositor-register']),
     sqlFile82: file(MIGRATIONS['sql82-homeowner-ledger-view']),
     sqlFile83: file(MIGRATIONS['sql83-homeowner-signing-capabilities']),
+    sqlFile84: file(MIGRATIONS['sql84-mortgage-return-to-queue']),
+    sqlFile85: file(MIGRATIONS['sql85-mortgage-compensation-adjust']),
+    sqlFile86: file(MIGRATIONS['sql86-mortgage-compensation-owner-only']),
   });
   for (const [key, pin] of Object.entries(MIGRATIONS)) {
     const event = {
