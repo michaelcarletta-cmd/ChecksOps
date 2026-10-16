@@ -6,7 +6,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
-import { resolveEmailBranding } from './email-branding.mjs';
+import { resolveEmailBranding, resolveTenantDocumentBranding } from './email-branding.mjs';
 import { escapeHtml, renderChecksOpsEmail } from './email-layout.mjs';
 import { normalizePath } from './storage-paths.mjs';
 import { authorizeSignatureDocumentPath, resolveSignatureRequestIds } from './write-signature.mjs';
@@ -390,7 +390,15 @@ export const runSendSignatureRequest = async ({
   branding.company_name = resolved.companyName;
   branding.companyName = resolved.companyName;
   branding.companySubtitle = resolved.companySubtitle;
-  branding.company_email = resolved.replyTo;
+  // Tenant's own company info/letterhead; platform company_branding only for
+  // the platform's own requests.
+  const documentBranding = await resolveTenantDocumentBranding(client, { tenantId, platformRow: brandingRow });
+  branding.company_phone = documentBranding.company_phone;
+  branding.company_address = documentBranding.company_address;
+  branding.letterhead_url = documentBranding.letterhead_url;
+  // {company.email}: a tenant's own contact email, else the reply-to as before.
+  branding.company_email = (documentBranding.source === 'tenant' ? documentBranding.company_email : null)
+    || resolved.replyTo;
   branding.replyTo = resolved.replyTo;
   branding.primaryColor = resolved.primaryColor;
   branding.logoUrl = resolved.logoUrl;

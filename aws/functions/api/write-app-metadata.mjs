@@ -578,6 +578,8 @@ export const executeTenantsNarrow = async ({ client, mapping, op, values, filter
   for (const [col, max] of [
     ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
     ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
+    // Tenant's own Company Information + document letterhead (SQL 93).
+    ['company_address', 500], ['company_phone', 40], ['company_email', 200], ['letterhead_url', 512],
   ]) {
     if (col in values) {
       const text = clip(values[col], max);
