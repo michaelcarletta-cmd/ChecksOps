@@ -2,12 +2,16 @@
  * Production apply of SQL 89 (aws/workflows/sql/89_check_intake_items_column_update.sql):
  *
  *   REVOKE UPDATE ON TABLE public.check_intake_items FROM checksops;
+ *   REVOKE UPDATE ON TABLE public.check_intake_items FROM authenticated;
+ *   REVOKE UPDATE ON TABLE public.check_intake_items FROM PUBLIC;
  *   GRANT UPDATE (<the 43 SQL89_COLUMNS>) ON TABLE public.check_intake_items TO checksops;
  *
  * Production's checksops holds table-level UPDATE (ACL checksops=arwd/checksops_admin),
  * so every column is updatable. SQL 89 leaves UPDATE on exactly the columns the API
- * writes; SELECT, INSERT and DELETE stay as they are. With it, SQL 71's state (amount
- * updatable, no table-level UPDATE) holds in production.
+ * writes; SELECT, INSERT and DELETE stay as they are for every role. checksops is a
+ * member of authenticated (aws/rls/sql/01_role_shim.sql), so UPDATE held by authenticated
+ * or PUBLIC is revoked too (staging apply run 85 rolled back because it was not). With
+ * it, SQL 71's state (amount updatable, no table-level UPDATE) holds in production.
  *
  * The live fingerprint is the staging guarded executor's (readSql89State, shared through
  * sql-executor-auth.mjs): sha256 of columnUpdateStateText, i.e. whether checksops has
@@ -21,7 +25,11 @@
  *     the login may grant UPDATE, no SECURITY INVOKER function (or one owned by a role
  *     with checksops' privileges) UPDATEs the table, and SQL 70's SECURITY DEFINER
  *     aws_ingest_shared_check(jsonb) exists (otherwise the ingest falls back to an
- *     inline UPDATE as checksops of columns SQL 89 does not grant);
+ *     inline UPDATE as checksops of columns SQL 89 does not grant); the role
+ *     authenticated exists, no LOGIN role other than checksops uses its privileges
+ *     (it would lose UPDATE with it), no role other than authenticated and PUBLIC
+ *     gives checksops UPDATE (SQL 89 would not revoke it), and every UPDATE entry of
+ *     authenticated and PUBLIC was granted by the login;
  *   - the table owner, the table ACL and the set of columns checksops can UPDATE equal
  *     the values the reviewed production inspect recorded in the pin
  *     (production_inspect), so drift since that inspect refuses.
@@ -29,7 +37,8 @@
  * Apply is one transaction (lock_timeout 5s, advisory locks): the pinned file only.
  * It rolls back unless afterwards checksops has no table-level UPDATE (directly, via
  * PUBLIC or membership), can UPDATE exactly SQL89_COLUMNS through direct column grants
- * by the login, every other table privilege (SELECT, INSERT, DELETE, …), table ACL
+ * by the login and through nothing else, authenticated and PUBLIC hold no UPDATE on the
+ * table, every other table privilege (SELECT, INSERT, DELETE, …), table ACL
  * entry and column ACL entry is unchanged, and everything else in schema public (and
  * schema auth's functions) is unchanged. Runs only on a host with private reachability
  * into the production VPC.
@@ -153,7 +162,7 @@ export function readPinnedSql89(root, pin) {
     });
   }
   if (sql89StatementText(text) !== SQL89_CANONICAL_STATEMENTS) {
-    return fail(CODES.UNRELATED_MUTATION, 'SQL 89 is not exactly the pinned REVOKE and column GRANT');
+    return fail(CODES.UNRELATED_MUTATION, 'SQL 89 is not exactly the pinned REVOKEs and column GRANT');
   }
   return ok({ text, source_sha256: sha });
 }
@@ -255,6 +264,15 @@ export async function inspectSql89Production({ connect, pin, root = repoRootFrom
       unsafe_update_functions: d.unsafe_update_functions || [],
       ingest_function_present: d.ingest_function_present ?? null,
       ingest_function_security_definer: d.ingest_function_security_definer ?? null,
+      // Where checksops' UPDATE comes from (role names only), and who else uses authenticated.
+      authenticated_role_present: d.authenticated_role_present ?? null,
+      grantee_member_of: d.grantee_member_of || [],
+      authenticated_members: d.authenticated_members || [],
+      other_login_authenticated_members: d.other_login_authenticated_members || [],
+      update_grant_sources: d.update_grant_sources || [],
+      update_provenance: d.update_provenance || {},
+      other_inherited_update_roles: d.other_inherited_update_roles || [],
+      revoked_role_update_entries: d.revoked_role_update_entries || [],
       live_definition_sha256: live,
       expected_live_definition_sha256: thePin.expected_live_definition_sha256 ?? null,
       intended_replacement_sha256: thePin.intended_replacement_sha256,
@@ -363,6 +381,8 @@ export async function executeSql89ProductionApply(input = {}, ctx = {}) {
         current_user: b.current_user,
         sql89_columns_missing: b.sql89_columns_missing || [],
         unsafe_update_functions: b.unsafe_update_functions || [],
+        other_login_authenticated_members: b.other_login_authenticated_members || [],
+        other_inherited_update_roles: b.other_inherited_update_roles || [],
       }));
     }
     if (b.live_definition_sha256 !== pin.expected_live_definition_sha256
@@ -388,6 +408,7 @@ export async function executeSql89ProductionApply(input = {}, ctx = {}) {
         failed: postFailures,
         unrelated_changed: changed,
         updatable_columns_after: after.details.updatable_columns,
+        update_grant_sources_after: after.details.update_grant_sources,
       }));
     }
 

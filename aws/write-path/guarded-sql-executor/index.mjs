@@ -1816,7 +1816,7 @@ async function handleSql89CheckIntakeColumnUpdate({ event, authorization, identi
   const embedded = readEmbeddedSql(sqlFile89, pin.source_sha256);
   if (!embedded.ok) return embedded;
   if (sql89StatementText(embedded.details.text) !== SQL89_CANONICAL_STATEMENTS) {
-    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 89 is not exactly the pinned REVOKE and column GRANT');
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 89 is not exactly the pinned REVOKEs and column GRANT');
   }
   const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
   if (!readOnly && event.action !== 'apply') {
@@ -1920,6 +1920,7 @@ async function handleSql89CheckIntakeColumnUpdate({ event, authorization, identi
       return fail(CODES.UNRELATED_MUTATION, 'SQL 89 did not leave exactly the pinned checksops UPDATE columns', {
         failed: postFailures,
         unrelated_changed: changed,
+        update_grant_sources_after: sql89Report(after.details).update_grant_sources,
       });
     }
 

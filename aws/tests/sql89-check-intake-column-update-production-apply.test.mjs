@@ -1,7 +1,7 @@
 /**
  * Production apply path for SQL 89 (REVOKE UPDATE ON TABLE public.check_intake_items
- * FROM checksops; GRANT UPDATE (<43 columns>) ON TABLE public.check_intake_items TO
- * checksops).
+ * FROM checksops, FROM authenticated and FROM PUBLIC; GRANT UPDATE (<43 columns>) ON
+ * TABLE public.check_intake_items TO checksops).
  *
  * The column set is checked against the API source: every SET target of every UPDATE
  * the API issues on the table is granted, and nothing else. The committed pin is
@@ -10,7 +10,10 @@
  * with a placeholder staging acceptance and a recorded production_inspect. The
  * PostgreSQL 16 tests build the table owned by a non-superuser checksops_admin: a
  * production-like one (table-level arwd) where the apply lands exactly once, and a
- * staging-like one (column grants) where it converges; afterwards every API UPDATE
+ * staging-like one (column grants) where it converges, and one where checksops is a
+ * member of authenticated and inherits UPDATE from authenticated and PUBLIC (staging
+ * apply run 85: the old file, revoking only checksops' own UPDATE, fails the
+ * postconditions there); afterwards every API UPDATE
  * statement still runs as checksops and a write to a column SQL 89 does not grant
  * fails with 42501.
  */
@@ -32,6 +35,7 @@ import {
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE as STAGING_PIN,
   SQL89_CANONICAL_STATEMENTS,
   columnUpdateStateText,
+  readSql89State,
   sql89StatementText,
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import {
@@ -297,7 +301,8 @@ test('production pin: pending, execute false, no recorded pre-state, no staging 
   // The staging pre-state (read-live run 82) is staging's own; production records its own from --inspect.
   assert.equal(STAGING_PIN.expected_live_definition_sha256, '6810985b26778774a633ad17f02b634ec7c19b956d0f5302251fd1d2d05b0c7f');
   assert.equal(sha(SQL89_TEXT), COMMITTED.source_sha256);
-  assert.equal(COMMITTED.source_sha256, 'cadd01c13afc4ffba6f602b9f24ca7a572e240e6af00d92bf77d0119055e1afc');
+  assert.equal(COMMITTED.source_sha256, 'd91ab6576a2bda45f2a9b0d21fc98241dd8ee20adc24bd34ecb68fc09f92c28a');
+  assert.equal(COMMITTED.staging_pin_commit, '70518bbd7e459ae82d461941281465ce58d7a887');
   assert.equal(sql89StatementText(SQL89_TEXT), SQL89_CANONICAL_STATEMENTS);
   // The post-state: no table-level UPDATE, exactly the 43 columns.
   assert.equal(INTENDED, stateHash(false, SQL89_COLUMNS));
@@ -319,7 +324,7 @@ test('production pin: pending, execute false, no recorded pre-state, no staging 
   assert.equal(SQL71_PIN.expected_live_definition_sha256, null);
 });
 
-test('the pinned file is exactly the reviewed REVOKE and column GRANT; a tampered pin or file is refused', () => {
+test('the pinned file is exactly the reviewed REVOKEs and column GRANT; a tampered pin or file is refused', () => {
   assert.equal(readPinnedSql89(ROOT, COMMITTED).ok, true);
   for (const field of ['migration', 'filename', 'migration_id', 'source_sha256', 'staging_pin_commit', 'intended_replacement_sha256', 'table', 'grantee', 'target_environment', 'target_component', 'deployment_type']) {
     assert.equal(readPinnedSql89(ROOT, { ...COMMITTED, [field]: 'other' }).code, CODES.SQL_COLLISION, field);
@@ -333,6 +338,11 @@ test('the pinned file is exactly the reviewed REVOKE and column GRANT; a tampere
       ['extra column', SQL89_TEXT.replace('  updated_at\n', '  updated_at,\n  tenant_id\n')],
       ['missing column', SQL89_TEXT.replace('  amount,\n', '')],
       ['no revoke', SQL89_TEXT.replace('REVOKE UPDATE ON TABLE public.check_intake_items FROM checksops;\n', '')],
+      ['no revoke from authenticated', SQL89_TEXT.replace('REVOKE UPDATE ON TABLE public.check_intake_items FROM authenticated;\n', '')],
+      ['no revoke from PUBLIC', SQL89_TEXT.replace('REVOKE UPDATE ON TABLE public.check_intake_items FROM PUBLIC;\n', '')],
+      ['revoke from another role', SQL89_TEXT.replace('FROM PUBLIC;\n', 'FROM PUBLIC;\nREVOKE UPDATE ON TABLE public.check_intake_items FROM anon;\n')],
+      ['revoke SELECT from authenticated', SQL89_TEXT.replace('REVOKE UPDATE ON TABLE public.check_intake_items FROM authenticated;', 'REVOKE UPDATE, SELECT ON TABLE public.check_intake_items FROM authenticated;')],
+      ['revoke cascade', SQL89_TEXT.replace('FROM PUBLIC;', 'FROM PUBLIC CASCADE;')],
       ['revoke all', SQL89_TEXT.replace('REVOKE UPDATE ON TABLE', 'REVOKE ALL ON TABLE')],
       ['other grantee', SQL89_TEXT.replace(') ON TABLE public.check_intake_items TO checksops;', ') ON TABLE public.check_intake_items TO checksops, authenticated;')],
       ['extra statement', `${SQL89_TEXT}GRANT SELECT ON TABLE public.claims TO checksops;\n`],
@@ -385,6 +395,14 @@ const state = (overrides = {}) => ({
   unsafe_update_functions: [],
   ingest_function_present: true,
   ingest_function_security_definer: true,
+  authenticated_role_present: true,
+  grantee_member_of: [],
+  authenticated_members: [],
+  other_login_authenticated_members: [],
+  update_grant_sources: [{ grantee: 'checksops', table_level: true, columns: [] }],
+  other_inherited_update_roles: [],
+  revoked_role_update_entries: [],
+  revoked_role_update_grantors: [],
   live_definition_sha256: PROD_PRE,
   already_applied: false,
   ...overrides,
@@ -401,6 +419,7 @@ const postState = (overrides = {}) => state({
   column_update_entries: POST_ENTRIES,
   column_acl_entries: POST_ENTRIES,
   columns_losing_update: [],
+  update_grant_sources: [{ grantee: 'checksops', table_level: false, columns: [...SQL89_COLUMNS] }],
   live_definition_sha256: INTENDED,
   already_applied: true,
   ...overrides,
@@ -423,6 +442,12 @@ test('production preconditions and postconditions', () => {
     [{ table_acl: '{x}' }, 'table_acl_as_inspected'],
     [{ updatable_columns: SQL89_COLUMNS }, 'updatable_columns_as_inspected'],
     [{ updatable_columns_sha256: 'f'.repeat(64) }, 'updatable_columns_as_inspected'],
+    [{ authenticated_role_present: false }, 'authenticated_role_present'],
+    [{ other_login_authenticated_members: ['web_login'] }, 'authenticated_has_no_other_login_members'],
+    [{ other_login_authenticated_members: undefined }, 'authenticated_has_no_other_login_members'],
+    [{ other_inherited_update_roles: ['writer'] }, 'no_other_inherited_update'],
+    [{ other_inherited_update_roles: undefined }, 'no_other_inherited_update'],
+    [{ revoked_role_update_grantors: ['checksops_admin', 'rds_superuser'] }, 'inherited_update_granted_by_login'],
   ];
   for (const [overrides, name] of refusedPre) {
     assert.ok(sql89ProductionPreconditionFailures(state(overrides), PIN).includes(name), `${name}: ${JSON.stringify(overrides)}`);
@@ -448,6 +473,10 @@ test('production preconditions and postconditions', () => {
     [{ table_acl_entries: [...postState().table_acl_entries, 'authenticated SELECT granted by checksops_admin'].sort() }, 'other_table_acl_unchanged'],
     [{ table_acl_entries: [...postState().table_acl_entries, 'checksops UPDATE granted by checksops_admin'].sort() }, 'other_table_acl_unchanged'],
     [{ column_acl_entries: [...POST_ENTRIES, 'tenant_id authenticated SELECT granted by checksops_admin'].sort() }, 'other_column_acl_unchanged'],
+    [{ column_acl_entries: [...POST_ENTRIES, 'status authenticated UPDATE granted by checksops_admin'].sort() }, 'authenticated_and_public_hold_no_update'],
+    [{ table_acl_entries: [...postState().table_acl_entries, 'PUBLIC UPDATE granted by checksops_admin'].sort() }, 'authenticated_and_public_hold_no_update'],
+    [{ revoked_role_update_entries: ['status authenticated UPDATE granted by checksops_admin'] }, 'authenticated_and_public_hold_no_update'],
+    [{ update_grant_sources: [...postState().update_grant_sources, { grantee: 'writer', table_level: false, columns: ['status'] }] }, 'update_only_from_grantee'],
     [{ grantee_grant_option: true }, 'no_grantee_grant_option'],
     [{ table_owner: 'other' }, 'table_owner_unchanged'],
     [{ current_user: 'ubuntu' }, 'login_is_pinned_admin'],
@@ -868,6 +897,10 @@ test('PostgreSQL 16, production-like (table-level arwd): inspect is read-only; a
     assert.deepEqual(b.unsafe_update_functions, []);
     assert.deepEqual(b.update_functions.map((f) => f.signature), ['public.aws_ingest_shared_check(jsonb)', 'public.review_save_detected_claim_number(uuid,uuid,text)']);
     assert.equal(b.ingest_function_security_definer, true);
+    assert.deepEqual(b.update_grant_sources, [{ grantee: 'checksops', table_level: true, columns: [] }]);
+    assert.ok(Object.values(b.update_provenance).every((v) => JSON.stringify(v) === '["checksops (table)"]'));
+    assert.deepEqual(b.grantee_member_of, []);
+    assert.deepEqual(b.authenticated_members, []);
     assert.deepEqual(b.post_state, { live_definition_sha256: INTENDED, updatable_columns: [...SQL89_COLUMNS], table_level_update: false });
     assert.equal(seen[0], 'BEGIN READ ONLY');
     assert.equal(seen.at(-1), 'ROLLBACK');
@@ -957,7 +990,9 @@ test('PostgreSQL 16, production-like (table-level arwd): inspect is read-only; a
       ['table-level UPDATE via PUBLIC', 'GRANT UPDATE ON TABLE public.check_intake_items TO PUBLIC;', 'no_table_level_update'],
       ['INSERT revoked', 'REVOKE INSERT ON TABLE public.check_intake_items FROM checksops;', 'other_table_privileges_unchanged'],
       ['DELETE revoked', 'REVOKE DELETE ON TABLE public.check_intake_items FROM checksops;', 'other_table_privileges_unchanged'],
-      ['other grantee', 'GRANT UPDATE (status) ON TABLE public.check_intake_items TO authenticated;', 'other_column_acl_unchanged'],
+      ['other grantee', 'GRANT UPDATE (status) ON TABLE public.check_intake_items TO authenticated;', 'authenticated_and_public_hold_no_update'],
+      ['PUBLIC column UPDATE', 'GRANT UPDATE (status) ON TABLE public.check_intake_items TO PUBLIC;', 'authenticated_and_public_hold_no_update'],
+      ['INSERT granted to authenticated', 'GRANT INSERT ON TABLE public.check_intake_items TO authenticated;', 'other_table_acl_unchanged'],
     ]) {
       const result = await apply({}, { connect: withExtra(extra) });
       assert.equal(result.code, CODES.UNRELATED_MUTATION, `${label}: ${JSON.stringify(result)}`);
@@ -1089,6 +1124,179 @@ test('PostgreSQL 16, staging-like (column grants, SELECT/INSERT/DELETE table-lev
 
     const api = await runApiUpdatesAsChecksops(admin);
     assert.deepEqual(api.filter((x) => !x.ok), []);
+    const refusedColumns = await behaviourAsChecksops(admin);
+    assert.deepEqual(refusedColumns, Object.fromEntries(Object.keys(NOT_GRANTED_COLUMNS).map((c) => [c, '42501'])));
+  } finally {
+    await admin.end();
+    server.stop();
+  }
+}));
+
+// Staging as read-live run 82 found it: checksops is a member of authenticated (aws/rls/sql/01_role_shim.sql),
+// authenticated holds UPDATE (detected_claim_number, deposit_recommendation) and PUBLIC UPDATE on one column.
+const INHERITED_GRANTS = `GRANT SELECT, INSERT, DELETE ON TABLE public.check_intake_items TO checksops;
+  GRANT UPDATE (${STAGING_REPO_COLUMNS.join(', ')}) ON TABLE public.check_intake_items TO checksops;
+  GRANT SELECT ON TABLE public.check_intake_items TO authenticated;
+  GRANT UPDATE (detected_claim_number, deposit_recommendation) ON TABLE public.check_intake_items TO authenticated;
+  GRANT UPDATE (freedom_claim_number) ON TABLE public.check_intake_items TO PUBLIC;`;
+// The file as staging apply run 85 ran it: only checksops' own UPDATE revoked.
+const OLD_SQL89_TEXT = SQL89_TEXT
+  .replace('REVOKE UPDATE ON TABLE public.check_intake_items FROM authenticated;\n', '')
+  .replace('REVOKE UPDATE ON TABLE public.check_intake_items FROM PUBLIC;\n', '');
+
+const roleUpdate = async (admin, role) => (await admin.query(`
+  SELECT ARRAY(SELECT attname::text FROM pg_attribute WHERE attrelid = 'public.check_intake_items'::regclass AND attnum > 0 AND NOT attisdropped
+      AND has_column_privilege($1, attrelid, attnum, 'UPDATE') ORDER BY attname::text COLLATE "C") AS updatable,
+    has_table_privilege($1, 'public.check_intake_items', 'SELECT') AS sel,
+    (SELECT count(*)::int FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) x WHERE c.oid = 'public.check_intake_items'::regclass AND x.grantee = 0 AND x.privilege_type = 'UPDATE')
+      + (SELECT count(*)::int FROM pg_attribute a CROSS JOIN LATERAL aclexplode(a.attacl) x WHERE a.attrelid = 'public.check_intake_items'::regclass AND x.grantee = 0 AND x.privilege_type = 'UPDATE') AS public_update_entries`, [role])).rows[0];
+
+test('PostgreSQL 16, staging-like with inherited UPDATE (checksops in authenticated; authenticated and PUBLIC hold UPDATE): the old file fails the postconditions; the new one lands exactly the 43; login members and third-role UPDATE refuse', { timeout: 300000 }, async (t) => withPg(t, async (pg) => {
+  const { server, admin, connectAs } = await fixture(pg, 'pg-sql89-inh-', 55900, INHERITED_GRANTS);
+  try {
+    await admin.query('GRANT authenticated TO checksops');
+    const startColumns = [...new Set([...STAGING_REPO_COLUMNS, 'detected_claim_number', 'freedom_claim_number'])].sort();
+    const start = await catalog(admin);
+    assert.equal(start.table_level, false);
+    assert.deepEqual(start.updatable, startColumns);
+    assert.deepEqual((await roleUpdate(admin, 'authenticated')).updatable, ['deposit_recommendation', 'detected_claim_number', 'freedom_claim_number']);
+    const live = stateHash(false, startColumns);
+    const pin = authorizedPin({ live, acl: start.table_acl, columns: startColumns });
+    const connect = async () => connectAs('checksops_admin');
+    const inspect = () => inspectSql89Production({ connect, pin, root: ROOT });
+    const apply = (input = manifest({}, live), ctx = {}) => executeSql89ProductionApply(input, { root: ROOT, pin, connect, consumedPath: consumedPath(), ...ctx });
+    // A row in the table: the inspect must not read or report it.
+    await admin.query(`INSERT INTO public.check_intake_items (id, tenant_id, status, detected_claim_number) VALUES ('${ROW}', '${TENANT}', 'needs_review', 'CLM-SECRET-9')`);
+
+    // Inspect: per-column UPDATE provenance, role names only.
+    const before = await inspect();
+    assert.equal(before.ok, true, JSON.stringify(before));
+    const b = before.details;
+    assert.equal(b.live_definition_sha256, live);
+    assert.deepEqual(b.precondition_failures, []);
+    assert.equal(b.apply_preconditions_met, true);
+    assert.equal(b.authenticated_role_present, true);
+    assert.deepEqual(b.grantee_member_of, ['authenticated']);
+    assert.deepEqual(b.authenticated_members, [{ role: 'checksops', can_login: false }]);
+    assert.deepEqual(b.other_login_authenticated_members, []);
+    assert.deepEqual(b.other_inherited_update_roles, []);
+    assert.deepEqual(b.update_grant_sources, [
+      { grantee: 'checksops', table_level: false, columns: [...STAGING_REPO_COLUMNS].sort() },
+      { grantee: 'PUBLIC', table_level: false, columns: ['freedom_claim_number'] },
+      { grantee: 'authenticated', table_level: false, columns: ['deposit_recommendation', 'detected_claim_number'] },
+    ]);
+    assert.deepEqual(b.update_provenance.detected_claim_number, ['authenticated']);
+    assert.deepEqual(b.update_provenance.deposit_recommendation, ['checksops', 'authenticated']);
+    assert.deepEqual(b.update_provenance.freedom_claim_number, ['PUBLIC']);
+    assert.deepEqual(b.update_provenance.amount, ['checksops']);
+    assert.deepEqual(b.update_provenance.return_code, []);
+    assert.deepEqual(Object.keys(b.update_provenance), [...new Set([...SQL89_COLUMNS, ...startColumns])].sort());
+    assert.deepEqual(b.columns_losing_update, ['detected_claim_number', 'freedom_claim_number']);
+    assert.equal(b.revoked_role_update_entries.length, 3);
+    const text = JSON.stringify(b);
+    for (const secret of [ROW, TENANT, 'CLM-SECRET-9']) assert.ok(!text.includes(secret), secret);
+    assert.deepEqual(await catalog(admin), start, 'inspect changed nothing');
+
+    // The bug: the old file (revoke checksops only) leaves inherited UPDATE; the tool rolls it back.
+    const withText = (replacement) => async () => {
+      const client = await connect();
+      const query = client.query.bind(client);
+      client.query = (sql, params) => (String(sql) === SQL89_TEXT ? query(replacement, params) : query(sql, params));
+      return client;
+    };
+    const old = await apply(manifest({}, live), { connect: withText(OLD_SQL89_TEXT) });
+    assert.equal(old.code, CODES.UNRELATED_MUTATION, JSON.stringify(old));
+    for (const name of ['intended_state', 'updatable_columns_exact', 'authenticated_and_public_hold_no_update', 'update_only_from_grantee']) {
+      assert.ok(old.details.failed.includes(name), `${name}: ${JSON.stringify(old.details.failed)}`);
+    }
+    assert.ok(old.details.updatable_columns_after.includes('detected_claim_number'));
+    assert.ok(old.details.updatable_columns_after.includes('freedom_claim_number'));
+    assert.deepEqual(await catalog(admin), start, 'rolled back');
+    // The same through the shared rule directly, inside a transaction that is rolled back.
+    const owner = await connectAs('checksops_admin');
+    try {
+      await owner.query('BEGIN');
+      const s0 = (await readSql89State(owner)).details;
+      await owner.query(OLD_SQL89_TEXT);
+      const s1 = (await readSql89State(owner)).details;
+      assert.deepEqual(s1.updatable_columns, [...SQL89_COLUMNS, 'detected_claim_number', 'freedom_claim_number'].sort());
+      assert.ok(sql89ProductionPostconditionFailures(s0, s1, pin).includes('updatable_columns_exact'));
+    } finally {
+      await owner.query('ROLLBACK');
+      await owner.end();
+    }
+
+    // Refusals, each restored: a LOGIN member of authenticated (directly or through a group) would lose UPDATE.
+    const refused = async (label, breakIt, restore, failures) => {
+      await admin.query(breakIt);
+      try {
+        const r = await inspect();
+        assert.deepEqual(r.details.precondition_failures, failures, `${label}: ${JSON.stringify(r.details.precondition_failures)}`);
+        assert.equal(r.details.apply_preconditions_met, false, label);
+        const a = await apply();
+        assert.equal(a.code, CODES.DEPLOYMENT_COLLISION, `${label}: ${JSON.stringify(a)}`);
+        assert.deepEqual(a.details.failed, failures, label);
+        return r.details;
+      } finally {
+        await admin.query(restore);
+        assert.deepEqual((await inspect()).details.precondition_failures, [], `${label} restored`);
+        assert.deepEqual(await catalog(admin), start, `${label} restored`);
+      }
+    };
+    const web = await refused('LOGIN member', 'CREATE ROLE sql89_web LOGIN; GRANT authenticated TO sql89_web', 'DROP ROLE sql89_web',
+      ['authenticated_has_no_other_login_members']);
+    assert.deepEqual(web.other_login_authenticated_members, ['sql89_web']);
+    assert.deepEqual(web.authenticated_members, [{ role: 'checksops', can_login: false }, { role: 'sql89_web', can_login: true }]);
+    await refused('LOGIN member through a group',
+      'CREATE ROLE sql89_group NOLOGIN; GRANT authenticated TO sql89_group; CREATE ROLE sql89_web LOGIN; GRANT sql89_group TO sql89_web',
+      'DROP ROLE sql89_web; DROP ROLE sql89_group', ['authenticated_has_no_other_login_members']);
+    await refused('UPDATE through a third role checksops is a member of',
+      'CREATE ROLE sql89_writer NOLOGIN; GRANT UPDATE (status) ON public.check_intake_items TO sql89_writer; GRANT sql89_writer TO checksops',
+      'REVOKE UPDATE ON public.check_intake_items FROM sql89_writer; DROP ROLE sql89_writer', ['no_other_inherited_update']);
+    await refused('UPDATE through a role authenticated is a member of',
+      'CREATE ROLE sql89_writer NOLOGIN; GRANT UPDATE (status) ON public.check_intake_items TO sql89_writer; GRANT sql89_writer TO authenticated',
+      'REVOKE UPDATE ON public.check_intake_items FROM sql89_writer; DROP ROLE sql89_writer', ['no_other_inherited_update']);
+    // An ADMIN-only membership confers no privileges: not refused, not listed.
+    await admin.query('CREATE ROLE sql89_admin_only LOGIN; GRANT authenticated TO sql89_admin_only WITH ADMIN TRUE, INHERIT FALSE, SET FALSE');
+    const adminOnly = await inspect();
+    assert.deepEqual(adminOnly.details.precondition_failures, []);
+    assert.deepEqual(adminOnly.details.authenticated_members, [{ role: 'checksops', can_login: false }]);
+    await admin.query('DROP ROLE sql89_admin_only');
+
+    // The apply.
+    const input = manifest({}, live);
+    const consumed = consumedPath();
+    const applied = await executeSql89ProductionApply(input, { root: ROOT, pin, connect, consumedPath: consumed });
+    assert.equal(applied.ok, true, JSON.stringify(applied));
+    assert.equal(applied.details.receipt.before_hash, live);
+    assert.equal(applied.details.receipt.after_hash, INTENDED);
+    assert.deepEqual(applied.details.receipt.columns_lost_update, ['detected_claim_number', 'freedom_claim_number']);
+    const end = await catalog(admin);
+    assert.deepEqual(end, { ...start, updatable: [...SQL89_COLUMNS], table_acl: end.table_acl });
+    // SELECT, INSERT and DELETE unchanged for every role; authenticated and PUBLIC hold no UPDATE.
+    assert.equal(end.table_acl, start.table_acl);
+    const auth = await roleUpdate(admin, 'authenticated');
+    assert.deepEqual(auth.updatable, []);
+    assert.equal(auth.sel, true);
+    assert.equal(auth.public_update_entries, 0);
+    const after = await inspect();
+    assert.equal(after.details.already_applied, true);
+    assert.deepEqual(after.details.update_grant_sources, [{ grantee: 'checksops', table_level: false, columns: [...SQL89_COLUMNS] }]);
+    assert.deepEqual(after.details.revoked_role_update_entries, []);
+    assert.deepEqual(Object.keys(after.details.update_provenance), [...SQL89_COLUMNS]);
+    assert.ok(Object.values(after.details.update_provenance).every((v) => JSON.stringify(v) === '["checksops"]'));
+
+    // Replay and re-apply refused.
+    assert.equal((await executeSql89ProductionApply(input, { root: ROOT, pin, connect, consumedPath: consumed })).code, CODES.RECEIPT_REUSED);
+    const again = await apply();
+    assert.equal(again.code, CODES.UNRELATED_MUTATION);
+    assert.match(again.message, /already/);
+    assert.deepEqual(await catalog(admin), end);
+
+    // Every API UPDATE path still works as checksops; columns SQL 89 does not grant are refused.
+    await admin.query(`DELETE FROM public.check_intake_items WHERE id = '${ROW}'`);
+    const api = await runApiUpdatesAsChecksops(admin);
+    assert.deepEqual(api.filter((x) => !x.ok), [], JSON.stringify(api.filter((x) => !x.ok)));
     const refusedColumns = await behaviourAsChecksops(admin);
     assert.deepEqual(refusedColumns, Object.fromEntries(Object.keys(NOT_GRANTED_COLUMNS).map((c) => [c, '42501'])));
   } finally {

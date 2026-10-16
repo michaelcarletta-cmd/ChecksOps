@@ -7,7 +7,11 @@
  * test runs the real handler: the read-only inspect reports the updatable columns and
  * the plan through read-live, and an apply with a recorded pre-state converges
  * staging-like column grants on exactly the 43 columns, refuses replay and re-apply,
- * and rolls back drift.
+ * and rolls back drift. The fixture is staging's role shape: checksops is a member of
+ * authenticated, which holds UPDATE on columns (detected_claim_number among them), and
+ * PUBLIC holds UPDATE on one; the inspect reports where each column's UPDATE comes from
+ * and the apply leaves authenticated and PUBLIC without UPDATE (staging apply run 85
+ * rolled back because the file then revoked only checksops' own UPDATE).
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -140,15 +144,16 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
   const admin = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   await admin.connect();
   try {
-    await admin.query('CREATE ROLE checksops NOLOGIN; CREATE ROLE authenticated NOLOGIN');
+    await admin.query('CREATE ROLE checksops NOLOGIN; CREATE ROLE authenticated NOLOGIN; GRANT authenticated TO checksops');
     await admin.query(checkIntakeTableSql(SQL89_COLUMNS));
     await admin.query(`
       CREATE FUNCTION public.aws_ingest_shared_check(p_payload jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
       BEGIN UPDATE public.check_intake_items SET detected_claim_number = p_payload->>'n' WHERE false; RETURN '{}'::jsonb; END $$;
       GRANT SELECT, INSERT, DELETE ON public.check_intake_items TO checksops;
-      GRANT UPDATE (${STAGING_COLUMNS.join(', ')}, detected_claim_number) ON public.check_intake_items TO checksops;
+      GRANT UPDATE (${STAGING_COLUMNS.join(', ')}) ON public.check_intake_items TO checksops;
       GRANT SELECT ON public.check_intake_items TO authenticated;
-      GRANT UPDATE (status) ON public.check_intake_items TO authenticated;`);
+      GRANT UPDATE (status, detected_claim_number) ON public.check_intake_items TO authenticated;
+      GRANT UPDATE (freedom_claim_number) ON public.check_intake_items TO PUBLIC;`);
     const connect = async () => {
       const client = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
       await client.connect();
@@ -158,8 +163,10 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
       WHERE attrelid = 'public.check_intake_items'::regclass AND attnum > 0 AND NOT attisdropped
         AND has_column_privilege('checksops', attrelid, attnum, 'UPDATE') ORDER BY attname::text COLLATE "C") AS cols,
       has_table_privilege('checksops', 'public.check_intake_items', 'INSERT') AS ins,
-      has_column_privilege('authenticated', 'public.check_intake_items', 'status', 'UPDATE') AS auth_status`)).rows[0];
-    const preColumns = [...STAGING_COLUMNS, 'detected_claim_number'].sort();
+      has_column_privilege('authenticated', 'public.check_intake_items', 'status', 'UPDATE') AS auth_status,
+      has_table_privilege('authenticated', 'public.check_intake_items', 'SELECT') AS auth_select`)).rows[0];
+    const preColumns = [...STAGING_COLUMNS, 'detected_claim_number', 'freedom_claim_number'].sort();
+    const losing = ['detected_claim_number', 'freedom_claim_number'];
     const live = stateHash(false, preColumns);
 
     const inspect = await handlerFor(connect)(grantEvent({ action: 'inspect' }));
@@ -172,7 +179,18 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
     assert.equal(receipt.apply_preconditions_met, false, 'live state differs from the recorded pre-state');
     assert.deepEqual(receipt.precondition_failures, []);
     assert.deepEqual(receipt.column_grant_inspect.updatable_columns, preColumns);
-    assert.deepEqual(receipt.column_grant_inspect.columns_losing_update, ['detected_claim_number']);
+    assert.deepEqual(receipt.column_grant_inspect.columns_losing_update, losing);
+    assert.deepEqual(receipt.column_grant_inspect.update_grant_sources, [
+      { grantee: 'checksops', table_level: false, columns: [...STAGING_COLUMNS].sort() },
+      { grantee: 'PUBLIC', table_level: false, columns: ['freedom_claim_number'] },
+      { grantee: 'authenticated', table_level: false, columns: ['detected_claim_number', 'status'] },
+    ]);
+    assert.deepEqual(receipt.column_grant_inspect.update_provenance.detected_claim_number, ['authenticated']);
+    assert.deepEqual(receipt.column_grant_inspect.update_provenance.status, ['checksops', 'authenticated']);
+    assert.deepEqual(receipt.column_grant_inspect.update_provenance.freedom_claim_number, ['PUBLIC']);
+    assert.deepEqual(receipt.column_grant_inspect.authenticated_members, [{ role: 'checksops', can_login: false }]);
+    assert.deepEqual(receipt.column_grant_inspect.grantee_member_of, ['authenticated']);
+    assert.equal(receipt.column_grant_inspect.revoked_role_update_entry_count, 3);
     assert.deepEqual(receipt.column_grant_inspect.columns_to_grant, SQL89_COLUMNS.filter((c) => !STAGING_COLUMNS.includes(c)));
     assert.equal(receipt.column_grant_inspect.table_privileges.insert, true);
     assert.equal(receipt.column_grant_inspect.table_privileges.update, false);
@@ -182,8 +200,31 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
     assert.equal(summary.details.live_definition_sha256, live);
     assert.equal(summary.details.table_level_update, false);
     assert.deepEqual(summary.details.column_grant_inspect.updatable_columns, preColumns);
-    assert.deepEqual(summary.details.column_grant_inspect.columns_losing_update, ['detected_claim_number']);
-    assert.doesNotMatch(JSON.stringify(summary.details), /ubuntu|granted by/);
+    assert.deepEqual(summary.details.column_grant_inspect.columns_losing_update, losing);
+    assert.deepEqual(summary.details.column_grant_inspect.update_grant_sources, receipt.column_grant_inspect.update_grant_sources);
+    assert.deepEqual(summary.details.column_grant_inspect.update_provenance, receipt.column_grant_inspect.update_provenance);
+    assert.deepEqual(summary.details.column_grant_inspect.authenticated_members, [{ role: 'checksops', can_login: false }]);
+    assert.doesNotMatch(JSON.stringify(summary.details), /ubuntu|granted by|unrecognized/);
+
+    // Another LOGIN role using authenticated's privileges, or UPDATE through a third role: inspect reports it and apply refuses.
+    for (const [label, breakIt, restore, failure] of [
+      ['login member', 'CREATE ROLE sql89_web LOGIN; GRANT authenticated TO sql89_web', 'DROP ROLE sql89_web', 'authenticated_has_no_other_login_members'],
+      ['third role', 'CREATE ROLE sql89_writer NOLOGIN; GRANT UPDATE (status) ON public.check_intake_items TO sql89_writer; GRANT sql89_writer TO checksops',
+        'REVOKE UPDATE ON public.check_intake_items FROM sql89_writer; DROP ROLE sql89_writer', 'no_other_inherited_update'],
+    ]) {
+      await admin.query(breakIt);
+      try {
+        const r = await handlerFor(connect)(grantEvent({ action: 'inspect' }));
+        assert.deepEqual(r.details.receipt.precondition_failures, [failure], label);
+        const recordedHere = { ...PIN, expected_live_definition_sha256: live };
+        const refused = await handlerFor(connect, { sql89Pin: recordedHere })(grantEvent({}, recordedHere));
+        assert.equal(refused.code, CODES.DEPLOYMENT_COLLISION, label);
+        assert.deepEqual(refused.details.failed, [failure], label);
+      } finally {
+        await admin.query(restore);
+      }
+    }
+    assert.deepEqual((await updatable()).cols, preColumns);
 
     const recorded = { ...PIN, expected_live_definition_sha256: live };
     const handler = handlerFor(connect, { sql89Pin: recorded });
@@ -200,8 +241,9 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
     assert.equal(applied.details.receipt.before_hash, live);
     assert.equal(applied.details.receipt.after_hash, PIN.intended_replacement_sha256);
     assert.deepEqual(applied.details.receipt.updatable_columns_after, [...SQL89_COLUMNS]);
-    assert.deepEqual(applied.details.receipt.columns_lost_update, ['detected_claim_number']);
-    assert.deepEqual(await updatable(), { cols: [...SQL89_COLUMNS], ins: true, auth_status: true });
+    assert.deepEqual(applied.details.receipt.columns_lost_update, losing);
+    // authenticated keeps SELECT and loses UPDATE; checksops keeps INSERT.
+    assert.deepEqual(await updatable(), { cols: [...SQL89_COLUMNS], ins: true, auth_status: false, auth_select: true });
 
     assert.equal((await handler(event)).code, CODES.SQL_COLLISION, 'replay');
     const again = await handler(grantEvent({}, recorded));
@@ -210,6 +252,7 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
     const after = await handlerFor(connect)(grantEvent({ action: 'inspect' }));
     assert.equal(after.details.receipt.live_definition_sha256, PIN.intended_replacement_sha256);
     assert.equal(after.details.receipt.column_grant_inspect.already_applied, true);
+    assert.deepEqual(after.details.receipt.column_grant_inspect.update_grant_sources, [{ grantee: 'checksops', table_level: false, columns: [...SQL89_COLUMNS] }]);
 
     // A column SQL 89 does not grant is refused for checksops.
     for (const column of Object.keys(NOT_GRANTED_COLUMNS).filter((c) => c !== 'id')) {
