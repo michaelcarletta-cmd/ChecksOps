@@ -65,9 +65,9 @@ const EVALUATORS = Object.freeze({
   sql89: evaluateSql89ProductionApply,
 });
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
-// A pin whose staging acceptance is still pending (SQL 71, SQL 88 and SQL 89 today) gets a placeholder
+// A pin whose staging acceptance is still pending (SQL 71, SQL 87, SQL 88 and SQL 89 today) gets a placeholder
 // reference in the execute-authorized test copy, and a pin whose pre-state is not recorded
-// (expected_live_definition_sha256 null, SQL 71, SQL 88 and SQL 89 today) a placeholder hash; the committed pins are checked to
+// (expected_live_definition_sha256 null, SQL 71 and SQL 88 today) a placeholder hash; the committed pins are checked to
 // refuse below.
 const FIXTURE_STAGING_ACCEPTANCE = Object.freeze({ ok: true, reference: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000', basis: 'test fixture' });
 const FIXTURE_EXPECTED_LIVE = 'e'.repeat(64);
@@ -525,20 +525,23 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(runner.calls.length, 0);
   // SQL 82's to 86's committed pins are execute-authorized; their pre-authorization state
   // (no staging acceptance, authorization "pending") is an explicit copy here. SQL 71's
-  // committed pin is still pending, with no recorded pre-state (null). Even with execute
-  // flipped that state stops at the pin, and the evaluators refuse a null pre-state
-  // (explicit copy) and the pending authorization (with a placeholder pre-state for SQL 71).
+  // committed pin is still pending, with no recorded pre-state (null). SQL 87's and SQL 89's
+  // committed pins record the production pre-state (--inspect of 2026-10-16) but have no
+  // staging acceptance and authorization "pending". Even with execute flipped that state
+  // stops at the pin, and the evaluators refuse a null pre-state (explicit copy) and the
+  // pending authorization (with a placeholder pre-state for SQL 71 and SQL 88).
   const RECORDED_PRODUCTION_PRE = {
     sql71: null,
+    sql87: '9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f',
     sql88: null,
-    sql89: null,
+    sql89: 'c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4',
     sql82: '9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229',
     sql83: 'c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936',
     sql84: '53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496',
     sql85: '7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d',
     sql86: 'c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b',
   };
-  for (const key of ['sql71', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86']) {
+  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     const committed = EXECUTE_AUTHORIZED.includes(key)
