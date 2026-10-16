@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { SignatureRequests } from "@/components/claim-detail/SignatureRequests";
+import { HomeownerLibraryShare } from "@/components/check-review/HomeownerLibraryShare";
 import {
   resolveSignatureRequestClaimId,
   shouldUseSignatureClaimFallback,
@@ -371,6 +372,7 @@ export function CheckFilesSection({ checkIntakeItemId, claimId = null }: CheckFi
             );
           })
         )}
+        {linkedClaim?.id && <HomeownerLibraryShare claimId={linkedClaim.id} />}
       </CardContent>
 
       <div data-testid="signature-requests-region">
