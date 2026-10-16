@@ -101,6 +101,7 @@ import {
   handleTenantLibraryDocumentCreate,
 } from './tenant-library.mjs';
 import { handleSignatureLibraryDocumentCopy } from './signature-library-source.mjs';
+import { handlePlatformAnnouncements } from './platform-announcements.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -184,6 +185,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-company-branding-save',
   'tenant-billing-admin',
   'tenant-billing-authorize',
+  // Platform owner
+  'platform-announcements',
   // Public directory
   'public-contractor-directory',
   'lookup-partner-code-public',
@@ -364,6 +367,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleTenantBillingAdmin(event);
     case 'tenant-billing-authorize':
       return handleTenantBillingAuthorize(event);
+    case 'platform-announcements':
+      return handlePlatformAnnouncements(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);
