@@ -1,0 +1,15 @@
+{
+  "workstream_id": "check-case-tenant-scope",
+  "authorization": "Owner-approved 2026-10-16 (\"start the ensure_check_case fix\"): workflow-rpc.mjs may be planned for production as the live bytes 9a630bdb plus the resolve_check_case tenant scoping. Each apply still needs the owner's run-time approval, the staging acceptance run and the phrase DEPLOY workflow-rpc.mjs TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "executeResolveCheckCase: caller must be an owner/admin/manager/operator member of the tenant (global admin/staff bypass removed); a non-UUID _claim_id or _external_claim_id is rejected (invalid_uuid) before any query; any claim id or external id that matches a public.claims row must belong to the tenant (claims.org_id, or an org-less claim with one of the tenant's checks), else claim_not_in_tenant with nothing read or inserted; only _claim_id copies claim fields into the case; every check_cases lookup is tenant-filtered; an ON CONFLICT race on an unclaimed external id returns the generic check_case_conflict, never another tenant's id. Live staging and production are 9a630bdb (read from both Lambda packages 2026-10-15).",
+  "members": {
+    "workflow-rpc.mjs": {
+      "live_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
+      "accepted_sha256": "37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-onboarding-manifest-2026-10-15.json"
+    }
+  }
+}

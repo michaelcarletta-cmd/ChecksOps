@@ -196,10 +196,10 @@
     },
     "workflow-rpc.mjs": {
       "operation": "replace",
-      "accepted_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
-      "expected_live_sha256": "659028c2a712e3d40adcf8375b878ef27c2673e97f5f39e0cba89527ef9afe68",
+      "accepted_sha256": "37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907",
+      "expected_live_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-onboarding-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-check-case-tenant-scope-manifest-2026-10-16.json"
     },
     "providers/production/checkalt-authz.mjs": {
       "operation": "replace",

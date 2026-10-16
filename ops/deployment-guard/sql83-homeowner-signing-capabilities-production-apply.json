@@ -1,0 +1,55 @@
+{
+  "id": "sql83-homeowner-signing-capabilities-production-apply",
+  "migration": "sql83",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/83_homeowner_signing_capabilities.sql",
+  "migration_id": "83_homeowner_signing_capabilities",
+  "staging_pin_commit": "4b1fe50d1f2654f7f4ea82366eff5bbd1a067621",
+  "source_sha256": "8443a3e7b2c1f7a61d621e2e5b7fb3dcd94beb769fb16c2d2b49f867aa5149af",
+  "function_identities": [
+    "public.aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+    "public.aws_public_homeowner_pending_signatures(text)",
+    "public.aws_public_homeowner_document_sign_capability(text, uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "78da421900f4e3d0af7110ee2b1a47f1498599a59a6dfa07953c59ad56b27163",
+  "authorization_phrase": "REPLACE_HOMEOWNER_SIGNING_CAPABILITIES",
+  "predecessors": [],
+  "order_note": "Apply after SQL 82 (reviewed order). Not enforced: SQL 83 does not depend on SQL 82 and the SQL 81 template has no predecessor check, so predecessors is [].",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "function_states": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 83. The production pre-state is not code-derived (the functions may be absent, SQL 68's thin ledger view, or another version), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, proacl), precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (another signature, a non-jsonb result, other parameter names, another owner, an ACL entry the file does not revoke, an owner that cannot bypass RLS), stop: that needs its own reviewed change. SQL 83 sets row_security=off, so the owner must be superuser or BYPASSRLS, or own every RLS table its bodies read without FORCE RLS (row_security_off_supported)."
+  },
+  "intended_post_state": {
+    "function_definition_sha256": {
+      "aws_public_homeowner_ledger_endorse_capability": "066754e61334f2f988a9e5ac28fd06f840bc28cb3890a5d961c1a20d50cccbe7",
+      "aws_public_homeowner_pending_signatures": "3b632929f4b72e168ef4b42951d6845d5dbb751fa8ced92860697dda782fc5cb",
+      "aws_public_homeowner_document_sign_capability": "a45f3bfcab4f6a8a686a2e1374b50dda5fcf28731ec18bbf935ef4839c221786"
+    },
+    "function_owner": "checksops_admin",
+    "function_acl": "{checksops_admin=X/checksops_admin,checksops=X/checksops_admin}",
+    "note": "After the unchanged SQL 83 file run as checksops_admin: each function exists once (no other signature of that name in any schema), owned by checksops_admin, SECURITY DEFINER with search_path=public and row_security=off, the reviewed body (pg_get_functiondef compared with the text reconstructed from the pinned file), EXECUTE for the owner and checksops only (PUBLIC and authenticated revoked). intended_replacement_sha256 equals the staging pin's (the owner's own ACL entry is not part of the fingerprint). function_owner is the expected production login (as for SQL 72 to 81); the first inspect must confirm it."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql83-homeowner-signing-capabilities here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
+    "production_differs": "Unknown until the first inspect of each environment: staging is expected to carry Cursor's SQL 73 ledger view and possibly Cursor SQL 74 functions of the same names, so the staging and production pre-state hashes are recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
+  }
+}
