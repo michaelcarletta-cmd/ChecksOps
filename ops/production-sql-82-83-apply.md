@@ -11,16 +11,30 @@
 | Staging | guarded staging SQL executor, migration `sql82-homeowner-ledger-view` | migration `sql83-homeowner-signing-capabilities` |
 | Tests | `aws/tests/sql82-sql83-homeowner-production-apply.test.mjs`, `aws/tests/sql82-sql83-homeowner-executor.test.mjs` | (same) |
 
-**Status:** not applied to staging or production. Both production pins are
-`authorization: "pending"`, `execute: false`, `staging_acceptance.ok: false` and
-`expected_live_definition_sha256: null`, and both staging pins
-(`AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW`, `AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES`
-in `scripts/deployment-guard/lib/sql-executor-auth.mjs`) have
-`expected_live_definition_sha256: null`. So staging apply refuses with `SQL_COLLISION`
-("no reviewed pre-apply live definition hash"), and production evaluate and apply refuse
-with `SQL_COLLISION` and `PRODUCTION_APPROVAL_REQUIRED`. Every pre-state hash is recorded
-from a read-only inspect in its own reviewed change; nothing here is code-derived except
-the post-state.
+**Status:** not applied to staging or production. Both pre-states are recorded, from
+read-only inspects only (nothing here is code-derived except the post-state):
+
+- **Staging** (`AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW`,
+  `AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES` in
+  `scripts/deployment-guard/lib/sql-executor-auth.mjs`): guarded staging SQL executor
+  read-live runs of 2026-10-16, run 48 (job 116757174929) for SQL 82 and run 49 (job
+  116757504435) for SQL 83. SQL 82: Cursor SQL 73's ledger view
+  (`raw_endorse_token_link` true). SQL 83: the three functions exist from Cursor SQL 74.
+  Both: `precondition_failures` `[]`, `row_security_off_supported` true,
+  `owner_is_executor` true, non-owner ACL `checksops` EXECUTE only.
+- **Production** (`production_inspect` in each pin): `--inspect` of 2026-10-16, SSM command
+  `f1430894-0783-46cf-bbab-e7137c10ece3`, source `eb540ee98`, as `checksops_admin`,
+  `precondition_failures` `[]`. SQL 82: the ledger view exists (`other`), owned by
+  `checksops_admin`, but its body is not Cursor SQL 73 (no raw endorse link) and its
+  origin is not recorded. SQL 83: all three functions absent. Both: the legacy
+  `aws_public_homeowner_ledger_remint_signer(text,uuid,text)` is present (report only).
+
+The staging and production pre-states differ, so each is pinned separately. Production
+apply is still refused: both production pins are `authorization: "pending"`,
+`execute: false`, `staging_acceptance.ok: false` (`reference: null`), so production
+evaluate and apply refuse with `PRODUCTION_APPROVAL_REQUIRED`. Staging apply now needs
+the executor package that carries these pins (step 0, `mode: deploy`) and then
+`mode: apply` with `expected_live_definition_sha256` set to the staging pin.
 
 **Order:** SQL 82, then SQL 83. SQL 83 does not depend on SQL 82, and (as for SQL 81) the
 tools have no predecessor check, so each pin has `predecessors: []` and the order is
@@ -55,7 +69,8 @@ schema ACL or other function in `public` or `auth`. The legacy
 
 | | SQL 82 | SQL 83 |
 |---|---|---|
-| expected pre-state (staging and production) | `null`, pending the first read-live / `--inspect` | `null`, pending |
+| expected pre-state, staging (read-live run 48 / 49) | `452f8f3d2411e0c3772fdf92c14e1b85785823dcb8d6567d01f1908dc9a8d783` | `e85f64fa17ff2146d1aa3a603c83580c8c369dd2b49d252dfc8fd45453f4a21f` |
+| expected pre-state, production (`--inspect` 2026-10-16) | `9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229` | `c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936` |
 | intended post-state | `04e41eedb372334169feb32bc65991a3ce99558b84e91b27e22a6501be641e37` | `78da421900f4e3d0af7110ee2b1a47f1498599a59a6dfa07953c59ad56b27163` |
 | definition sha256 (pg_get_functiondef, PostgreSQL 16) | ledger view `962de3a5…` | endorse `066754e6…`, pending signatures `3b632929…`, document sign `a45f3bfc…` |
 | authorization phrase | `REPLACE_HOMEOWNER_LEDGER_VIEW` | `REPLACE_HOMEOWNER_SIGNING_CAPABILITIES` |
@@ -152,7 +167,7 @@ GitHub-hosted runners or Lambda.
    (any `migration`) to read the live executor `CodeSha256`, then `mode: deploy`,
    `approved_commit: <main sha>`, `expected_executor_code_sha256: <CodeSha256>` so the
    executor carries the SQL 82 / 83 files and handlers.
-1. **Staging read-live (read-only):** `mode: read-live`,
+1. **Staging read-live (read-only)** (done 2026-10-16, runs 48 and 49): `mode: read-live`,
    `migration: sql82-homeowner-ledger-view`, `approved_commit: <main sha>`,
    `expected_executor_code_sha256` optional, `expected_live_definition_sha256` empty. Then
    the same with `migration: sql83-homeowner-signing-capabilities`. Expect
@@ -162,7 +177,7 @@ GitHub-hosted runners or Lambda.
    `row_security_off_supported` true. If `precondition_failures` is not empty (another
    signature, a non-jsonb result, other parameter names, another owner, an extra grantee,
    FORCE RLS), **stop**: that needs its own reviewed change.
-2. **Staging pin change (reviewed PR):** set each staging pin's
+2. **Staging pin change (reviewed PR)** (this change records both): set each staging pin's
    `expected_live_definition_sha256` to the read-live `live_definition_sha256`.
 3. **Staging apply:** `mode: apply`, `migration: sql82-homeowner-ledger-view`,
    `approved_commit`, `expected_executor_code_sha256`, `expected_live_definition_sha256:
@@ -170,7 +185,7 @@ GitHub-hosted runners or Lambda.
    then the same for `sql83-homeowner-signing-capabilities` (pre → `78da4219…`).
 4. **Transfer:** dispatch `.github/workflows/sql53-temporary-transfer.yml` on main and copy
    `TARBALL_SHA256` from its log.
-5. **Production inspect (read-only),** on the runner from the freshly extracted tree (see
+5. **Production inspect (read-only)** (done 2026-10-16, SSM `f1430894…`), on the runner from the freshly extracted tree (see
    the SSM block in `ops/production-sql-one-shot.md`):
    `node scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs --inspect`, then
    `node scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs --inspect`.
@@ -178,12 +193,14 @@ GitHub-hosted runners or Lambda.
    own. Expect `pre_state_recorded` false, `apply_preconditions_met` false (nothing
    recorded yet) and `precondition_failures` `[]`. If `precondition_failures` is not
    empty, **stop**.
-6. **Production pin change (reviewed PR, owner-merged):** record each inspect in
-   `production_inspect` (date, SSM command id, source commit, `live_definition_sha256`,
-   `function_states`, the functions' arguments / owner / proacl, `precondition_failures`,
-   `apply_preconditions_met`, `status` no longer pending), copy `live_definition_sha256`
-   into `expected_live_definition_sha256`, record the staging apply run in
-   `staging_acceptance` (`ok: true`, `reference`), set `execute: true` and record the
+6. **Production pin change (reviewed PR, owner-merged).** Already recorded (this change):
+   each inspect in `production_inspect` (date, SSM command id, source commit,
+   `live_definition_sha256`, `function_states`, the functions' arguments / owner / proacl,
+   `precondition_failures`, `apply_preconditions_met`, `status: "recorded"`) and
+   `live_definition_sha256` copied into `expected_live_definition_sha256`. Still to do,
+   after the staging apply and a fresh production `--inspect` that reports the same
+   `live_definition_sha256` and `precondition_failures` `[]`: record the staging apply run
+   in `staging_acceptance` (`ok: true`, `reference`), set `execute: true` and record the
    approval in `authorization` (it must start with `Owner approved` or `owner-approved`;
    `"pending"` refuses even with `execute: true`). Merge to main and stage it with step 4 again.
 7. **Run** (one-shot, `ops/production-sql-one-shot.md`), SQL 82 first:

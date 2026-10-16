@@ -4,12 +4,14 @@
  * of the three homeowner signing doorways), each REVOKE ALL FROM PUBLIC and
  * authenticated and GRANT EXECUTE TO checksops.
  *
- * Neither pre-state is code-derived (staging is expected to carry Cursor's SQL 73
- * ledger view and SQL 74 doorways), so each pin's expected hash is null and apply
- * refuses until a read-live run is recorded. The intended hash is code-derived;
- * the PostgreSQL 16 tests re-derive it and the definition hashes from the real
- * catalog, starting from the real Cursor SQL 73 / 74 files (fixtures), and apply
- * through the handler with a pin copy carrying the inspected pre-state.
+ * Neither pre-state is code-derived: each pin's expected hash is recorded from a
+ * guarded staging read-live run (2026-10-16, run 48 for SQL 82 and run 49 for SQL 83;
+ * staging carries Cursor's SQL 73 ledger view and SQL 74 doorways). Tests that need
+ * the no-pre-state behaviour pass an explicit copy with the hash null (UNRECORDED).
+ * The intended hash is code-derived; the PostgreSQL 16 tests re-derive it and the
+ * definition hashes from the real catalog, starting from the real Cursor SQL 73 / 74
+ * files (fixtures), and apply through the handler with a pin copy carrying the
+ * inspected pre-state.
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -64,6 +66,14 @@ const {
 } = executorModule;
 
 const PINS = { sql82: PIN82, sql83: PIN83 };
+// The pre-states recorded from the staging read-live runs (run 48 / job 116757174929,
+// run 49 / job 116757504435, 2026-10-16).
+const RECORDED_STAGING_PRE = {
+  sql82: '452f8f3d2411e0c3772fdf92c14e1b85785823dcb8d6567d01f1908dc9a8d783',
+  sql83: 'e85f64fa17ff2146d1aa3a603c83580c8c369dd2b49d252dfc8fd45453f4a21f',
+};
+// The committed pins with no recorded pre-state, for the no-pre-state refusals.
+const UNRECORDED = Object.fromEntries(Object.entries(PINS).map(([key, pin]) => [key, { ...pin, expected_live_definition_sha256: null }]));
 const CHOICES = { sql82: 'sql82-homeowner-ledger-view', sql83: 'sql83-homeowner-signing-capabilities' };
 const FILES = { sql82: path.join(ROOT, PIN82.filename), sql83: path.join(ROOT, PIN83.filename) };
 const TEXT = { sql82: fs.readFileSync(FILES.sql82, 'utf8'), sql83: fs.readFileSync(FILES.sql83, 'utf8') };
@@ -117,7 +127,7 @@ const neverConnect = async () => {
 };
 const READ_ONLY_STATEMENT_RE = /^\s*(SELECT|WITH|SAVEPOINT|RELEASE|ROLLBACK TO)\b/i;
 
-test('pins match the SQL files and their commit; pre-states pending, post-states code-derived; registered everywhere', () => {
+test('pins match the SQL files and their commit; pre-states recorded from read-live, post-states code-derived; registered everywhere', () => {
   assert.equal(sha(fs.readFileSync(FILES.sql82)), PIN82.source_sha256);
   assert.equal(PIN82.source_sha256, '1db68ee9aee1c91c146e7f70c39bef7cc015eb38f6f436bfdfd0bc49f360a934');
   assert.equal(sha(fs.readFileSync(FILES.sql83)), PIN83.source_sha256);
@@ -125,8 +135,9 @@ test('pins match the SQL files and their commit; pre-states pending, post-states
   assert.equal(PIN82.migration_id, '82_homeowner_ledger_view');
   assert.equal(PIN83.migration_id, '83_homeowner_signing_capabilities');
   for (const [key, pin] of Object.entries(PINS)) {
-    // Pending the first read-live: no reviewed pre-apply hash yet.
-    assert.equal(pin.expected_live_definition_sha256, null, key);
+    // Recorded from the staging read-live run (not code-derived), and not the post-state.
+    assert.equal(pin.expected_live_definition_sha256, RECORDED_STAGING_PRE[key], key);
+    assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256, key);
     assert.equal(pin.intended_replacement_sha256, sha(homeownerStateText(key, homeownerAppliedStates(key))), key);
     assert.deepEqual([...pin.function_identities], HOMEOWNER_MIGRATIONS[key].functions.map((fn) => fn.identity));
     assert.equal(pin.migration, key);
@@ -159,6 +170,10 @@ test('pins match the SQL files and their commit; pre-states pending, post-states
   assert.equal(evaluateSqlExecutorAuthorization(inspectEvent('sql82'), { now: Date.parse(NOW) }).ok, true);
   const recorded = { ...PIN83, expected_live_definition_sha256: 'a'.repeat(64) };
   assert.equal(evaluateSqlExecutorAuthorization(homeownerEvent('sql83', { pin: recorded }), { now: Date.parse(NOW) }).ok, true);
+  for (const key of Object.keys(PINS)) {
+    assert.equal(evaluateSqlExecutorAuthorization(homeownerEvent(key), { now: Date.parse(NOW) }).ok, true, `${key} committed pin`);
+    assert.equal(homeownerEvent(key).expected_live_definition_sha256, RECORDED_STAGING_PRE[key], key);
+  }
 });
 
 test('the workflow offers both pins and runs this test', () => {
@@ -207,12 +222,19 @@ test('the reviewed-text check refuses SECURITY INVOKER, another search_path or r
   assert.equal(homeownerSqlIsReviewed('sql83', cursorSql74()), false);
 });
 
-test('apply refuses before connecting: the committed pins (pre-state pending), the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
+test('apply refuses before connecting: a pin with no pre-state, the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
   for (const key of ['sql82', 'sql83']) {
     const pin = PINS[key];
-    const pending = await handlerFor(neverConnect)(homeownerEvent(key, { expected_live_definition_sha256: 'b'.repeat(64) }));
+    // A pin with no recorded pre-state (explicit copy; the committed pins are recorded).
+    const pending = await handlerFor(neverConnect, { [pinKey[key]]: UNRECORDED[key] })(homeownerEvent(key, { pin: UNRECORDED[key], expected_live_definition_sha256: 'b'.repeat(64) }));
     assert.equal(pending.code, CODES.SQL_COLLISION, key);
     assert.match(pending.message, /no reviewed pre-apply live definition hash/, key);
+    // The committed (recorded) pin: any other hash, or the read-live sentinel, is refused.
+    for (const expected of ['b'.repeat(64), READ_LIVE_EXPECTED_SENTINEL]) {
+      const committed = await handlerFor(neverConnect)(homeownerEvent(key, { expected_live_definition_sha256: expected }));
+      assert.equal(committed.code, CODES.SQL_COLLISION, key);
+      assert.match(committed.message, /bound to the exact allowlisted pin/, key);
+    }
     const recorded = { ...pin, expected_live_definition_sha256: 'a'.repeat(64) };
     const extra = { [pinKey[key]]: recorded };
     const sentinel = await handlerFor(neverConnect, extra)(homeownerEvent(key, { pin: recorded, expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
@@ -359,7 +381,8 @@ function fakeDb(key, { mutate, onApply, failOnApply = false } = {}) {
 test('inspect only reads and reports each function, the clashes, RLS, columns, constraints and counts; read-live shows it without names or row data', async () => {
   for (const key of ['sql82', 'sql83']) {
     const db = fakeDb(key, { mutate: (d) => { d.extraNamed.push({ name: 'aws_public_homeowner_ledger_remint_signer', signature: 'public.aws_public_homeowner_ledger_remint_signer(text,uuid)', result: 'jsonb' }); } });
-    const inspect = await handlerFor(db.connect)(inspectEvent(key));
+    // A pin with no recorded pre-state: pin_executable false.
+    const inspect = await handlerFor(db.connect, { [pinKey[key]]: UNRECORDED[key] })(inspectEvent(key, { pin: UNRECORDED[key] }));
     assert.equal(inspect.ok, true, JSON.stringify(inspect));
     const receipt = inspect.details.receipt;
     assert.equal(receipt.before_hash, receipt.after_hash);
@@ -397,7 +420,7 @@ test('inspect only reads and reports each function, the clashes, RLS, columns, c
     assert.ok(db.seen.slice(1, -1).every((text) => READ_ONLY_STATEMENT_RE.test(text)), JSON.stringify(db.seen.filter((text) => !READ_ONLY_STATEMENT_RE.test(text))));
     assert.ok(!db.seen.some((text) => text.includes('CREATE OR REPLACE')));
 
-    const summary = readLiveSummary({ ok: true, details: inspect }, { migration: CHOICES[key], pin: PINS[key] });
+    const summary = readLiveSummary({ ok: true, details: inspect }, { migration: CHOICES[key], pin: UNRECORDED[key] });
     assert.equal(summary.ok, true, JSON.stringify(summary));
     assert.equal(summary.details.pin_executable, false);
     assert.equal(summary.details.matches_pinned_expected, false);
@@ -408,6 +431,11 @@ test('inspect only reads and reports each function, the clashes, RLS, columns, c
     assert.deepEqual(summary.details.function_states, receipt.function_states);
     assertNoSeededPii(assert, summary.details, `${key} read-live summary`);
     assertNoSeededPii(assert, inspect, `${key} executor result`);
+    // The committed pin is executable, but this fake live state is not the recorded staging pre-state.
+    const committedInspect = (await handlerFor(fakeDb(key).connect)(inspectEvent(key))).details.receipt;
+    assert.equal(committedInspect.pin_executable, true, key);
+    assert.notEqual(committedInspect.live_definition_sha256, PINS[key].expected_live_definition_sha256, key);
+    assert.equal(committedInspect.apply_preconditions_met, false, key);
   }
 });
 
@@ -561,15 +589,23 @@ test('PostgreSQL 16: from Cursor SQL 73/74, inspect reports the live state read-
     };
     for (const key of ['sql82', 'sql83']) {
       seen.length = 0;
-      const before = await handlerFor(connect)(inspectEvent(key));
+      const before = await handlerFor(connect, { [pinKey[key]]: UNRECORDED[key] })(inspectEvent(key, { pin: UNRECORDED[key] }));
       assert.equal(before.ok, true, JSON.stringify(before));
       const receipt = before.details.receipt;
       assert.equal(seen[0], 'BEGIN READ ONLY');
       assert.equal(seen.at(-1), 'ROLLBACK');
       assert.ok(seen.slice(1, -1).every((text) => READ_ONLY_STATEMENT_RE.test(text)), JSON.stringify(seen.filter((text) => !READ_ONLY_STATEMENT_RE.test(text))));
       assert.deepEqual(receipt.precondition_failures, [], `${key}: ${JSON.stringify(receipt.homeowner_inspect)}`);
-      assert.equal(receipt.apply_preconditions_met, false, 'the committed pin has no pre-state yet');
+      assert.equal(receipt.pin_executable, false);
+      assert.equal(receipt.apply_preconditions_met, false, 'a pin with no pre-state');
       assert.notEqual(receipt.live_definition_sha256, PINS[key].intended_replacement_sha256);
+      // This fixture (the real Cursor SQL 73 / 74 files, owned by the executor login, checksops
+      // EXECUTE only) reproduces the pre-state recorded from the staging read-live run, so the
+      // committed pin is ready to apply here.
+      assert.equal(receipt.live_definition_sha256, RECORDED_STAGING_PRE[key], key);
+      const committedReceipt = (await handlerFor(connect)(inspectEvent(key))).details.receipt;
+      assert.equal(committedReceipt.pin_executable, true, key);
+      assert.equal(committedReceipt.apply_preconditions_met, true, key);
       const report = receipt.homeowner_inspect;
       for (const fn of HOMEOWNER_MIGRATIONS[key].functions) {
         const row = report.functions[fn.name];
