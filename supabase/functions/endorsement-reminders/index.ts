@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     const defaultReminderSubject = brandingRow?.endorsement_reminder_subject || "Reminder: Endorsement Required — Check #{check.number}";
     const defaultReminderBody = brandingRow?.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.";
 
-    // Per-tenant brand cache so each tenant's reminders use their own company name (never Freedom's).
+    // Per-tenant brand cache so each tenant's reminders use their own company name.
     const tenantBrandCache = new Map<string, { name: string | null }>();
     async function getTenantBrand(checkId: string): Promise<{ name: string | null } | null> {
       const { data: ck } = await supabase.from("check_intake_items").select("tenant_id").eq("id", checkId).maybeSingle();
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
       }
 
       const checkInfo = endorsement.check_intake_items as any;
-      const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+      const appUrl = Deno.env.get("APP_URL") || "https://checksops.com";
       const endorsementUrl = `${appUrl}/endorse?token=${endorsement.token}`;
       let sent = false;
 

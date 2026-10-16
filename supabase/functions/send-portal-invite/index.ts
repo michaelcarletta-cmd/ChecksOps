@@ -26,10 +26,10 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { email, password, pin, userType, userName, appUrl, tenantName }: PortalInviteRequest = await req.json();
 
-    const companyName = tenantName || "Freedom Claims";
+    const companyName = tenantName || "ChecksOps";
     console.log(`Sending portal invite to ${email} for ${userType} (company: ${companyName})`);
 
-    const loginUrl = appUrl ? `${appUrl}/portal` : "https://freedomclaims.lovable.app/portal";
+    const loginUrl = appUrl ? `${appUrl}/portal` : "https://checksops.com/portal";
     const isClient = userType.toLowerCase() === "client" && pin;
     
     console.log(`Using login URL: ${loginUrl}`);
@@ -98,7 +98,7 @@ const handler = async (req: Request): Promise<Response> => {
     `;
 
     const emailResponse = await resend.emails.send({
-      from: `${companyName} <claims@freedomclaims.work>`,
+      from: `${companyName} <${Deno.env.get("FROM_EMAIL") || "noreply@checksops.com"}>`,
       to: [email],
       subject: `Your ${companyName} ${userType} Portal Access`,
       html: htmlContent,

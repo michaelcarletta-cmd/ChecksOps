@@ -96,7 +96,7 @@ export function SignatureDiagnostics({ claimId, claim }: SignatureDiagnosticsPro
   });
 
   const copySignLink = (token: string) => {
-    const url = `https://freedomclaims.lovable.app/sign?token=${token}`;
+    const url = `${window.location.origin}/sign?token=${token}`;
     navigator.clipboard.writeText(url);
     toast({ title: "Sign link copied" });
   };

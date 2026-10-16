@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 
         const geoResponse = await fetch(nominatimUrl, {
           headers: {
-            "User-Agent": "FreedomClaimsCRM/1.0 (contact@freedomadj.com)",
+            "User-Agent": "ChecksOps/1.0 (contact@freedomadj.com)",
             "Accept": "application/json",
           },
         });
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
             
             const retryResponse = await fetch(retryUrl, {
               headers: {
-                "User-Agent": "FreedomClaimsCRM/1.0 (contact@freedomadj.com)",
+                "User-Agent": "ChecksOps/1.0 (contact@freedomadj.com)",
                 "Accept": "application/json",
               },
             });

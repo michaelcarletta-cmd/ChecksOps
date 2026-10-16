@@ -226,8 +226,9 @@ test('the 43 columns are exactly the SET targets of the UPDATEs the API issues a
   const { statements, quoted } = apiUpdateStatements();
   assert.deepEqual(quoted, [], 'no UPDATE of the table outside a template literal');
   const dynamic = statements.filter((s) => s.dynamic).map((s) => s.file);
-  // The two statements built at runtime: the generic /data/write path and the ingest fallback.
-  assert.deepEqual(dynamic, ['aws/functions/api/ingest-shared-check.mjs', 'aws/functions/api/write-check-workflow.mjs']);
+  // The one statement built at runtime: the generic /data/write path. (The ingest fallback
+  // left with the retired Freedom Claims bridge; ingest-shared-check.mjs is deleted.)
+  assert.deepEqual(dynamic, ['aws/functions/api/write-check-workflow.mjs']);
   const staticTargets = new Set();
   for (const s of statements.filter((x) => !x.dynamic)) {
     assert.ok(!s.targets.includes(null), `${s.file}:${s.line} has a SET target that is not a column`);
@@ -236,7 +237,7 @@ test('the 43 columns are exactly the SET targets of the UPDATEs the API issues a
       staticTargets.add(column);
     }
   }
-  assert.ok(statements.length >= 28, String(statements.length));
+  assert.ok(statements.length >= 27, String(statements.length));
   // The generic path (write-check-workflow.mjs executeIntakeUpdate) writes only allowlisted
   // columns, plus updated_at = now() (buildSet).
   const generic = [...WRITE_ALLOWLIST.check_intake_items.columns, 'updated_at'];
@@ -249,10 +250,8 @@ test('the 43 columns are exactly the SET targets of the UPDATEs the API issues a
     assert.ok(!staticTargets.has(column), column);
     assert.ok(!WRITE_ALLOWLIST.check_intake_items.columns.has(column), column);
   }
-  // The ingest statement is the SQL 70 fallback only (42883, function missing); SQL 70 is a prerequisite.
-  const ingest = fs.readFileSync(path.join(ROOT, 'aws/functions/api/ingest-shared-check.mjs'), 'utf8');
-  assert.match(ingest, /SELECT public\.aws_ingest_shared_check\(\$1::jsonb\)/);
-  assert.match(ingest, /if \(error\?\.code !== '42883'\) throw error;\s*\}\s*return persistIngestInline\(client, plan\);/);
+  // SQL 70's ingest was a prerequisite of the (applied) SQL 89 run; the API no longer calls it.
+  assert.equal(fs.existsSync(path.join(ROOT, 'aws/functions/api/ingest-shared-check.mjs')), false);
   assert.equal(STAGING_PIN.ingest_function, 'public.aws_ingest_shared_check(jsonb)');
 });
 

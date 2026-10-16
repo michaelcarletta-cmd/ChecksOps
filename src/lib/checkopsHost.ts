@@ -4,10 +4,6 @@
  * checkops.com (and its subdomains + Lovable preview/staging) is the PUBLIC
  * white-label surface: the root shows marketing, /login authenticates, and
  * /{slug}/... loads an individual tenant's Check Center.
- *
- * The Freedom CRM lives on freedomclaims.work / freedomclaims.lovable.app /
- * localhost, where /claims, /tasks, /settings, etc. are the real routes — we
- * must never treat those paths as tenant slugs.
  */
 
 import { isAwsStaging } from "./awsStaging";

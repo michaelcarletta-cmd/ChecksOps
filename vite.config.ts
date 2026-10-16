@@ -99,9 +99,9 @@ export default defineConfig(({ mode }) => {
         ],
       },
       manifest: {
-        name: "Freedom Claims CRM",
-        short_name: "Freedom CRM",
-        description: "Property Claims Management System — works offline",
+        name: "ChecksOps",
+        short_name: "ChecksOps",
+        description: "Insurance check endorsement and deposit workflow management.",
         theme_color: "#0f172a",
         background_color: "#0f172a",
         display: "standalone",

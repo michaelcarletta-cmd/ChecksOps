@@ -142,8 +142,8 @@ async function sendResend(
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY not configured");
 
-  const fromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
-  const defaultFrom = `Freedom Claims <${fromEmail}>`;
+  const fromEmail = Deno.env.get("FROM_EMAIL") || "noreply@checksops.com";
+  const defaultFrom = `ChecksOps <${fromEmail}>`;
   const body: Record<string, unknown> = {
     from: opts?.fromOverride || defaultFrom,
     to: [to],
@@ -198,7 +198,7 @@ function replaceMergeFields(text: string, signer: any, request: any, signUrl: st
     .replace(/\{claim\.number\}/g, claim.claim_number || "N/A")
     .replace(/\{claim\.policyholder\}/g, claim.policyholder_name || "N/A")
     .replace(/\{claim\.policy_number\}/g, claim.policy_number || "N/A")
-    .replace(/\{company\.name\}/g, branding.company_name || "Freedom Claims")
+    .replace(/\{company\.name\}/g, branding.company_name || "ChecksOps")
     .replace(/\{company\.email\}/g, branding.company_email || "")
     .replace(/\{company\.phone\}/g, branding.company_phone || "")
     .replace(/\{sign\.url\}/g, signUrl)
@@ -206,7 +206,7 @@ function replaceMergeFields(text: string, signer: any, request: any, signUrl: st
 }
 
 function emailHtml(signer: any, request: any, signUrl: string, branding: BrandingConfig): string {
-  const companyName = branding.company_name || "Freedom Claims";
+  const companyName = branding.company_name || "ChecksOps";
   const headerColor = branding.esign_email_header_color || "#1a56db";
   const buttonColor = branding.esign_email_button_color || "#1a56db";
   const logoUrl = branding.letterhead_url || "";
@@ -392,7 +392,7 @@ Deno.serve(async (req) => {
     const ledgerContext = await resolveLedgerContext(sb, request.claim_id, request.check_intake_item_id);
 
     // Resolve tenant-specific From / Reply-To and visual branding (white-label override).
-    // Tenant comes from claim or shared check_intake_item; falls back to Freedom default.
+    // Tenant comes from claim or shared check_intake_item; falls back to the platform default.
     let tenantFromOverride: string | null = null;
     let tenantReplyTo: string | null = null;
     try {
@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
         tenantReplyTo = tenantRec?.email_reply_to ?? null;
 
         // For non-system (white-label) tenants, override visual branding with tenant identity
-        // so the email logo/colors/company name match the tenant — not Freedom Claims.
+        // so the email logo/colors/company name match the tenant — not the platform default.
         if (tenantRec && tenantRec.is_system_tenant === false) {
           if (tenantRec.name) branding.company_name = tenantRec.name;
           if (tenantRec.logo_url) branding.letterhead_url = tenantRec.logo_url;
@@ -439,9 +439,9 @@ Deno.serve(async (req) => {
       // checksops.com is NOT verified in Resend (notify.checksops.com is delegated
       // to Lovable Emails NS, which blocks third-party verification on that host).
       // Sending "from: notify@checksops.com" via Resend gets accepted but silently
-      // undelivered. Force the verified Resend sender (freedomclaims.work) and keep
+      // undelivered. Use the Resend-verified sender from FROM_EMAIL and keep
       // the ChecksOps display name + reply-to so homeowners still see ChecksOps.
-      const verifiedFromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
+      const verifiedFromEmail = Deno.env.get("FROM_EMAIL") || "noreply@checksops.com";
       tenantFromOverride = `ChecksOps <${verifiedFromEmail}>`;
       tenantReplyTo = "notify@checksops.com";
       branding.company_name = "ChecksOps";

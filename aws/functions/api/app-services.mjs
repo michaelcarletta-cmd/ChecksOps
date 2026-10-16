@@ -36,7 +36,6 @@ import {
   handleSendPortalInvite,
   handleGetCheckImageUrls,
   handlePublicContractorDirectory,
-  handleLookupPartnerCodePublic,
   handleHomeownerUploadCheck,
 } from './homeowner.mjs';
 import {
@@ -75,7 +74,6 @@ import {
   handleTenantSesIdentityDelete,
   handleTenantEmailPreview,
 } from './tenant-email-domain-handlers.mjs';
-import { handleIngestSharedCheck } from './ingest-shared-check.mjs';
 import { handleSendSignatureRequest } from './esign.mjs';
 import { handleCheckEndorsement } from './check-endorsement.mjs';
 import { handleCheckReconciliation } from './check-reconciliation.mjs';
@@ -150,7 +148,6 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-share-library-document-revoke',
   'homeowner-shared-document-url',
   'signature-library-document-copy',
-  'ingest-shared-check',
   'send-signature-request',
   'check-endorsement',
   'check-reconciliation',
@@ -189,7 +186,6 @@ export const CLASS_A_FUNCTIONS = new Set([
   'platform-announcements',
   // Public directory
   'public-contractor-directory',
-  'lookup-partner-code-public',
   'contractor-directory-search',
 ]);
 
@@ -299,8 +295,6 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerSharedDocumentUrl(event);
     case 'signature-library-document-copy':
       return handleSignatureLibraryDocumentCopy(event);
-    case 'ingest-shared-check':
-      return handleIngestSharedCheck(event);
     case 'send-signature-request':
       return handleSendSignatureRequest(event);
     case 'check-endorsement':
@@ -372,8 +366,6 @@ export const handleAppServiceRequest = async (event, path, method) => {
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);
-    case 'lookup-partner-code-public':
-      return handleLookupPartnerCodePublic(event);
     default: {
       const spoof = ignoredSpoof(event, parseBody(event));
       return notYet(name, spoof);
