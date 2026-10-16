@@ -93,6 +93,14 @@ import {
   handleTenantBillingAuthorize,
 } from './tenant-billing-handlers.mjs';
 import { handleMortgageAgentCompensation } from './mortgage-agent-compensation.mjs';
+import {
+  handleClaimLibraryDocuments,
+  handleHomeownerRevokeLibraryDocument,
+  handleHomeownerShareLibraryDocument,
+  handleHomeownerSharedDocumentUrl,
+  handleTenantLibraryDocumentCreate,
+} from './tenant-library.mjs';
+import { handleSignatureLibraryDocumentCopy } from './signature-library-source.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -134,6 +142,13 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-ledger-send',
   'homeowner-ledger-attach-upload',
   'homeowner-upload-check',
+  // Document Library (SQL 94): library rows, per-claim homeowner sharing, e-sign source
+  'tenant-library-document-create',
+  'claim-library-documents',
+  'homeowner-share-library-document',
+  'homeowner-share-library-document-revoke',
+  'homeowner-shared-document-url',
+  'signature-library-document-copy',
   'ingest-shared-check',
   'send-signature-request',
   'check-endorsement',
@@ -269,6 +284,18 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerLedgerSend(event);
     case 'homeowner-ledger-attach-upload':
       return handleHomeownerLedgerAttachUpload(event);
+    case 'tenant-library-document-create':
+      return handleTenantLibraryDocumentCreate(event);
+    case 'claim-library-documents':
+      return handleClaimLibraryDocuments(event);
+    case 'homeowner-share-library-document':
+      return handleHomeownerShareLibraryDocument(event);
+    case 'homeowner-share-library-document-revoke':
+      return handleHomeownerRevokeLibraryDocument(event);
+    case 'homeowner-shared-document-url':
+      return handleHomeownerSharedDocumentUrl(event);
+    case 'signature-library-document-copy':
+      return handleSignatureLibraryDocumentCopy(event);
     case 'ingest-shared-check':
       return handleIngestSharedCheck(event);
     case 'send-signature-request':

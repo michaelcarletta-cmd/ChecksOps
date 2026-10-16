@@ -51,8 +51,11 @@ test('frontend and API Mortgage Ops allowlists are identical canonical values', 
   }
   assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:evil'), false);
   assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:other'), false);
-  assert.equal(isAllowedTenantDocumentDocType('library:template:tpa'), false);
-  assert.equal(isAllowedTenantDocumentDocType('library:shingle:oakridge'), false);
+  // SQL 94: the non-mortgage library categories take a strict slug.
+  assert.equal(isAllowedTenantDocumentDocType('library:template:tpa'), true);
+  assert.equal(isAllowedTenantDocumentDocType('library:shingle:oakridge'), true);
+  assert.equal(isAllowedTenantDocumentDocType('library:template:TPA'), false);
+  assert.equal(isAllowedTenantDocumentDocType('library:other:tpa'), false);
   assert.equal(isAllowedTenantDocumentDocType('verification'), false);
   assert.deepEqual([...LEGACY_TENANT_DOCUMENT_DOC_TYPES], [
     'w9', 'license', 'insurance', 'saas_agreement', 'terms_of_service', 'privacy_policy',
@@ -224,8 +227,8 @@ test('executeTenantDocuments validates the exact allowlist before write', async 
     query: async (sql, params) => {
       queries.push({ sql, params });
       if (/FROM public.tenant_users/.test(sql)) return { rows: [{ role: 'admin' }] };
-      if (/SELECT id, tenant_id FROM public.tenant_documents/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: TENANT }] };
+      if (/SELECT id, tenant_id, doc_type FROM public.tenant_documents/.test(sql)) {
+        return { rows: [{ id: params[0], tenant_id: TENANT, doc_type: 'library:mortgage:w-9' }] };
       }
       if (/INSERT INTO public.tenant_documents/.test(sql)) {
         return { rows: [{ id: 'doc-1', doc_type: params[1] }] };
@@ -272,6 +275,7 @@ test('executeTenantDocuments validates the exact allowlist before write', async 
     values: { doc_type: 'library:template:tpa' },
     filters: [{ column: 'id', op: 'eq', value: '33333333-3333-4333-8333-333333333333' }],
   });
+  // A rename that moves the document to another category is refused.
   assert.equal(updateEvil.error, 'category_not_allowlisted');
 });
 

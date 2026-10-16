@@ -290,6 +290,7 @@ test('tenant-documents library writes require tenant owner or admin, not mere me
     bucket: 'tenant-documents',
     path,
     contentType: 'application/pdf',
+    contentLength: 1200,
   }), depsFor(memberClient, { forceStorageWrites: true }));
   assert.equal(ok.ok, true, JSON.stringify(ok));
 
