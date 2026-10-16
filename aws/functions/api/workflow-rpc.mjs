@@ -610,10 +610,13 @@ const executeHomeownerIntro = async ({ client, args }) => {
 const executeResolveCheckCase = async ({ client, mapping, args }) => {
   const tenantId = arg(args, '_tenant_id', 'tenant_id');
   if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: '_tenant_id' };
+  // Owner policy: owner, admin, manager and operator of this tenant act;
+  // viewers, partners and platform admin/staff without a membership do not.
   const member = (await client.query(
-    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-     UNION ALL
-     SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff')`,
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
+     LIMIT 1`,
     [mapping.application_user_id, tenantId],
   )).rows[0];
   if (!member) return { error: 'not_authorized', message: 'Not a member of tenant' };
@@ -624,11 +627,26 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
   const propertyAddress = arg(args, '_property_address', 'property_address');
   const carrierName = arg(args, '_carrier_name', 'carrier_name');
   const vExt = claimId || externalClaimId;
+  // The claim must belong to this tenant (its org, or one of this tenant's checks).
+  let claim = null;
+  if (claimId && isUuid(claimId)) {
+    claim = (await client.query(
+      `SELECT c.* FROM public.claims c
+       WHERE c.id = $1::uuid
+         AND (c.org_id = $2::uuid
+           OR (c.org_id IS NULL AND EXISTS (SELECT 1 FROM public.check_intake_items ci
+                      WHERE ci.claim_id = c.id AND ci.tenant_id = $2::uuid)))
+       LIMIT 1`,
+      [claimId, tenantId],
+    )).rows[0] || null;
+    if (!claim) return { error: 'claim_not_in_tenant', message: 'Claim does not belong to this tenant' };
+  }
   if (vExt && isUuid(vExt)) {
     const existing = (await client.query(
       `SELECT id FROM public.check_cases
-       WHERE external_system = 'freedom_crm' AND external_claim_id = $1::uuid LIMIT 1`,
-      [vExt],
+       WHERE tenant_id = $1::uuid AND external_system = 'freedom_crm' AND external_claim_id = $2::uuid
+       LIMIT 1`,
+      [tenantId, vExt],
     )).rows[0];
     if (existing) return { data: existing.id };
   }
@@ -642,10 +660,6 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
       [tenantId, claimNumber],
     )).rows[0];
     if (byNumber) return { data: byNumber.id };
-  }
-  let claim = null;
-  if (claimId && isUuid(claimId)) {
-    claim = (await client.query('SELECT * FROM public.claims WHERE id = $1::uuid', [claimId])).rows[0] || null;
   }
   const inserted = (await client.query(
     `INSERT INTO public.check_cases (
@@ -679,10 +693,14 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
   if (vExt && isUuid(vExt)) {
     const again = (await client.query(
       `SELECT id FROM public.check_cases
-       WHERE external_system = 'freedom_crm' AND external_claim_id = $1::uuid LIMIT 1`,
-      [vExt],
+       WHERE tenant_id = $1::uuid AND external_system = 'freedom_crm' AND external_claim_id = $2::uuid
+       LIMIT 1`,
+      [tenantId, vExt],
     )).rows[0];
-    return { data: again?.id || null };
+    // check_cases_external_claim_uidx is global, so the conflicting row may
+    // be another tenant's case; never return its id.
+    if (!again) return { error: 'check_case_conflict', message: 'Claim is already linked to a case outside this tenant' };
+    return { data: again.id };
   }
   return { data: null };
 };
