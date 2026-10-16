@@ -26,6 +26,8 @@ import {
   AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
   AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
   AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
+  AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW,
+  AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
   CHECKALT_AUTO_DEPOSIT_CONFIG,
@@ -44,6 +46,15 @@ import {
   CHECKALT_REGISTER_GRANTEES,
   CHECKALT_REGISTER_TABLE,
   checkaltRegisterStateText,
+  HOMEOWNER_DEFINITION_SHA256,
+  HOMEOWNER_EXECUTE_GRANTEES,
+  HOMEOWNER_LEGACY_FUNCTION_NAME,
+  HOMEOWNER_MIGRATIONS,
+  HOMEOWNER_RAW_ENDORSE_LINK_RE,
+  HOMEOWNER_REPLACEABLE_ACL_ENTRIES,
+  HOMEOWNER_RLS_TABLES,
+  HOMEOWNER_STATUS_TABLES,
+  homeownerStateText,
   MEMBER_STAKEHOLDER_FUNCTIONS,
   MEMBER_STAKEHOLDER_FUNCTION_SHA256,
   MEMBER_STAKEHOLDER_NEW_POLICIES,
@@ -79,6 +90,8 @@ import {
   isSql79MemberStakeholderWrites,
   isSql80CheckaltMemberAutoDeposit,
   isSql81CheckaltProductionRegister,
+  isSql82HomeownerLedgerView,
+  isSql83HomeownerSigningCapabilities,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
   STAKEHOLDER_GRANT_TABLE,
@@ -130,6 +143,8 @@ const SQL78_PARTNER_STAKEHOLDER_REMOVALS_FILE = path.join(ROOT, 'sql/78_check_pa
 const SQL79_MEMBER_STAKEHOLDER_WRITES_FILE = path.join(ROOT, 'sql/79_member_stakeholder_writes.sql');
 const SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT_FILE = path.join(ROOT, 'sql/80_checkalt_member_auto_deposit.sql');
 const SQL81_CHECKALT_PRODUCTION_REGISTER_FILE = path.join(ROOT, 'sql/81_checkalt_production_register.sql');
+const SQL82_HOMEOWNER_LEDGER_VIEW_FILE = path.join(ROOT, 'sql/82_homeowner_ledger_view.sql');
+const SQL83_HOMEOWNER_SIGNING_CAPABILITIES_FILE = path.join(ROOT, 'sql/83_homeowner_signing_capabilities.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -3645,6 +3660,704 @@ async function handleSql81CheckaltProductionRegister({
   }
 }
 
+// --- SQL 82 / SQL 83: homeowner ledger view and signing capabilities ---------
+
+// The reviewed files outside the function bodies, comments removed and whitespace collapsed.
+export const HOMEOWNER_NORMALIZED_STATEMENTS = Object.freeze({
+  sql82: [
+    'CREATE OR REPLACE FUNCTION public.aws_public_homeowner_ledger_by_token(p_token text)',
+    'RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$<body>$$;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_ledger_by_token(text) FROM PUBLIC;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_ledger_by_token(text) FROM authenticated;',
+    'GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_ledger_by_token(text) TO checksops;',
+  ].join(' '),
+  sql83: [
+    'CREATE OR REPLACE FUNCTION public.aws_public_homeowner_ledger_endorse_capability( p_token text, p_endorsement_id uuid )',
+    'RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public SET row_security = off AS $$<body>$$;',
+    'CREATE OR REPLACE FUNCTION public.aws_public_homeowner_pending_signatures(p_token text)',
+    'RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public SET row_security = off AS $$<body>$$;',
+    'CREATE OR REPLACE FUNCTION public.aws_public_homeowner_document_sign_capability( p_token text, p_signer_id uuid )',
+    'RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public SET row_security = off AS $$<body>$$;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_ledger_endorse_capability(text, uuid) FROM PUBLIC;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_ledger_endorse_capability(text, uuid) FROM authenticated;',
+    'GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_ledger_endorse_capability(text, uuid) TO checksops;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_pending_signatures(text) FROM PUBLIC;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_pending_signatures(text) FROM authenticated;',
+    'GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_pending_signatures(text) TO checksops;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_document_sign_capability(text, uuid) FROM PUBLIC;',
+    'REVOKE ALL ON FUNCTION public.aws_public_homeowner_document_sign_capability(text, uuid) FROM authenticated;',
+    'GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_document_sign_capability(text, uuid) TO checksops;',
+  ].join(' '),
+});
+
+/**
+ * Splits a file into the statements outside the function bodies (each body
+ * replaced by <body>) and the bodies in file order. Null when a body is not
+ * closed by `$$;` or a stray `$$` remains.
+ */
+export function parseHomeownerSql(text) {
+  const source = String(text || '');
+  const bodies = [];
+  let rest = '';
+  let from = 0;
+  for (;;) {
+    const open = source.indexOf('AS $$', from);
+    if (open < 0) break;
+    const close = source.indexOf('$$;', open + 5);
+    if (close < 0) return null;
+    bodies.push(source.slice(open + 5, close));
+    rest += `${source.slice(from, open)}AS $$<body>$$;`;
+    from = close + 3;
+  }
+  rest += source.slice(from);
+  const outside = rest.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim();
+  if (outside.replace(/\$\$<body>\$\$/g, '').includes('$$')) return null;
+  return { outside, bodies };
+}
+
+/** pg_get_functiondef (PostgreSQL 16) of each function a reviewed file creates, by identity. */
+export function homeownerReviewedFunctiondefs(key, text) {
+  const spec = HOMEOWNER_MIGRATIONS[key];
+  const parsed = parseHomeownerSql(text);
+  if (!spec || !parsed || parsed.bodies.length !== spec.functions.length) return null;
+  return Object.fromEntries(spec.functions.map((fn, index) => [fn.identity, [
+    `CREATE OR REPLACE FUNCTION public.${fn.name}(${fn.arguments})`,
+    ' RETURNS jsonb',
+    ' LANGUAGE plpgsql',
+    ' SECURITY DEFINER',
+    ...fn.config.map((entry) => {
+      const [name, value] = entry.split('=');
+      return ` SET ${name} TO '${value}'`;
+    }),
+    `AS $function$${parsed.bodies[index]}$function$`,
+    '',
+  ].join('\n')]));
+}
+
+/** The reviewed file is exactly the reviewed statements, bodies and functiondefs. */
+export function homeownerSqlIsReviewed(key, text) {
+  const parsed = parseHomeownerSql(text);
+  const defs = homeownerReviewedFunctiondefs(key, text);
+  return Boolean(parsed && defs)
+    && parsed.outside === HOMEOWNER_NORMALIZED_STATEMENTS[key]
+    && HOMEOWNER_MIGRATIONS[key].functions.every((fn) => hashSqlDefinition(defs[fn.identity]) === HOMEOWNER_DEFINITION_SHA256[fn.identity]);
+}
+
+// $1 is the function identity, $2 its bare name (functions of that name in any schema).
+const HOMEOWNER_FUNCTION_SQL = `
+SELECT p.oid IS NOT NULL AS present,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_functiondef(p.oid) END AS def,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_function_arguments(p.oid) END AS arguments,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_function_identity_arguments(p.oid) END AS identity_arguments,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_function_result(p.oid) END AS result,
+  p.prokind::text AS prokind,
+  p.proretset AS retset,
+  l.lanname::text AS language,
+  COALESCE(p.proargnames, ARRAY[]::text[]) AS arg_names,
+  p.prosecdef AS security_definer,
+  COALESCE(p.proconfig, ARRAY[]::text[]) AS config,
+  p.proacl::text AS proacl,
+  pg_get_userbyid(p.proowner)::text AS owner,
+  p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user) AS owner_is_executor,
+  o.rolsuper AS owner_rolsuper,
+  o.rolbypassrls AS owner_rolbypassrls,
+  (SELECT count(*)::int FROM pg_proc x WHERE x.proname = $2) AS overload_count
+FROM (SELECT to_regprocedure($1) AS oid) t
+LEFT JOIN pg_proc p ON p.oid = t.oid
+LEFT JOIN pg_language l ON l.oid = p.prolang
+LEFT JOIN pg_roles o ON o.oid = p.proowner
+`.trim();
+// Every function carrying one of the names, in any schema (overloads and other signatures).
+const HOMEOWNER_NAMED_FUNCTIONS_SQL = `
+SELECT p.proname::text AS name, p.oid::regprocedure::text AS signature, pg_get_function_result(p.oid) AS result
+FROM pg_proc p
+WHERE p.proname = ANY($1::text[])
+ORDER BY 1, 2
+`.trim();
+const HOMEOWNER_LOGIN_SQL = `
+SELECT current_user::text AS current_user, session_user::text AS session_user,
+  r.rolsuper AS rolsuper, r.rolbypassrls AS rolbypassrls
+FROM pg_roles r
+WHERE r.rolname = current_user
+`.trim();
+const HOMEOWNER_ROLES_SQL = `
+SELECT rolname::text AS rolname FROM pg_roles WHERE rolname = ANY($1::text[]) ORDER BY 1
+`.trim();
+const HOMEOWNER_TABLES_SQL = `
+SELECT c.relname::text AS relname, c.relrowsecurity AS rls_enabled, c.relforcerowsecurity AS rls_forced,
+  pg_get_userbyid(c.relowner)::text AS owner
+FROM pg_class c
+WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND c.relname = ANY($1::text[])
+ORDER BY 1
+`.trim();
+const HOMEOWNER_COLUMNS_SQL = `
+SELECT c.relname::text AS relname, a.attname::text AS attname
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p') AND c.relname = ANY($1::text[])
+  AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY 1, 2
+`.trim();
+const HOMEOWNER_CHECK_CONSTRAINTS_SQL = `
+SELECT c.relname::text AS relname, con.conname::text AS conname, pg_get_constraintdef(con.oid) AS def
+FROM pg_constraint con
+JOIN pg_class c ON c.oid = con.conrelid
+WHERE c.relnamespace = 'public'::regnamespace AND c.relname = ANY($1::text[]) AND con.contype = 'c'
+ORDER BY 1, 2
+`.trim();
+// Aggregate status counts only (never row data). Read under row_security = off inside a
+// savepoint: a login RLS would filter gets an error instead of silently partial counts.
+const HOMEOWNER_STATUS_COUNT_SQL = Object.freeze({
+  check_endorsements: {
+    columns: ['payee_type', 'status'],
+    sql: `SELECT lower(COALESCE(payee_type::text, '')) AS payee_type, lower(COALESCE(status::text, '')) AS status, count(*)::int AS n
+FROM public.check_endorsements GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 100`,
+  },
+  signature_signers: {
+    columns: ['status'],
+    sql: `SELECT lower(COALESCE(status::text, '')) AS status, count(*)::int AS n
+FROM public.signature_signers GROUP BY 1 ORDER BY 1 LIMIT 100`,
+  },
+  signature_requests: {
+    columns: ['status'],
+    sql: `SELECT lower(COALESCE(status::text, '')) AS status, count(*)::int AS n
+FROM public.signature_requests GROUP BY 1 ORDER BY 1 LIMIT 100`,
+  },
+});
+// Everything else in schema public and auth the migrations must not touch.
+const HOMEOWNER_RELATIONS_SQL = `
+SELECT c.relname::text AS relname, c.relkind::text AS relkind, c.relacl::text AS relacl,
+  c.relrowsecurity, c.relforcerowsecurity, pg_get_userbyid(c.relowner)::text AS owner
+FROM pg_class c
+WHERE c.relnamespace = 'public'::regnamespace
+ORDER BY 1, 2
+`.trim();
+const HOMEOWNER_OTHER_FUNCTIONS_SQL = `
+SELECT p.oid::regprocedure::text AS signature,
+  encode(sha256(convert_to(pg_get_functiondef(p.oid), 'UTF8')), 'hex') AS def_sha256,
+  p.proacl::text AS acl, p.prosecdef, p.proconfig::text AS config, p.proowner::regrole::text AS owner
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('public', 'auth') AND p.prokind IN ('f', 'p')
+  AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) x WHERE to_regprocedure(x) = p.oid)
+ORDER BY 1
+`.trim();
+
+const SAFE_LABEL_RE = /^[a-z0-9_ -]{0,40}$/;
+const aclLine = (entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`;
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Status literals a CHECK definition allows ('a'::text, ...); labels only. */
+const checkLiterals = (def) => [...String(def || '').matchAll(/'((?:[^']|'')*)'/g)]
+  .map((match) => match[1].replace(/''/g, "'"))
+  .map((value) => (SAFE_LABEL_RE.test(value) ? value : 'unrecognized'));
+
+/**
+ * Read-only fingerprint and readable detail of a homeowner migration's
+ * functions plus the roles, tables, columns and RLS their bodies rely on.
+ * Never reads row data. `live_definition_sha256` is the pinned fingerprint.
+ */
+export async function readHomeownerState(client, key) {
+  const spec = HOMEOWNER_MIGRATIONS[key];
+  if (!spec) return fail(CODES.INVALID_MANIFEST, `unknown homeowner migration ${key}`);
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const login = (await client.query(HOMEOWNER_LOGIN_SQL))?.rows?.[0] || {};
+  const tables = Object.keys(spec.columns);
+  const reportTables = [...new Set([...HOMEOWNER_RLS_TABLES, ...tables])].sort();
+  const roles = ((await client.query(HOMEOWNER_ROLES_SQL, [['checksops', 'authenticated']]))?.rows || []).map((row) => row.rolname);
+  const tableRows = (await client.query(HOMEOWNER_TABLES_SQL, [reportTables]))?.rows || [];
+  const columnRows = (await client.query(HOMEOWNER_COLUMNS_SQL, [tables]))?.rows || [];
+  const named = (await client.query(HOMEOWNER_NAMED_FUNCTIONS_SQL, [spec.functions.map((fn) => fn.name)]))?.rows || [];
+  const states = {};
+  const functions = {};
+  for (const fn of spec.functions) {
+    const row = (await client.query(HOMEOWNER_FUNCTION_SQL, [fn.identity, fn.name]))?.rows?.[0] || {};
+    const exists = row.present === true;
+    const acl = exists ? ((await client.query(CHECKALT_FUNCTION_ACL_SQL, [fn.identity]))?.rows || []) : [];
+    const config = Array.isArray(row.config) ? row.config.map(String) : [];
+    const def = exists && typeof row.def === 'string' ? row.def : null;
+    const state = {
+      exists,
+      overload_count: Number.isInteger(row.overload_count) ? row.overload_count : Number(row.overload_count) || 0,
+      arguments: exists ? row.arguments ?? null : null,
+      result: exists ? row.result ?? null : null,
+      definition_sha256: def ? hashSqlDefinition(def) : null,
+      security_definer: row.security_definer === true,
+      config,
+      owner_is_executor: row.owner_is_executor === true,
+      acl: acl.map((entry) => ({ grantee: entry.grantee, privilege_type: entry.privilege_type, is_grantable: entry.is_grantable === true })),
+    };
+    states[fn.identity] = state;
+    const aclLines = state.acl.map(aclLine).sort();
+    functions[fn.name] = {
+      identity: fn.identity,
+      exists,
+      overload_count: state.overload_count,
+      named_signatures: named.filter((other) => other.name === fn.name).map((other) => `${other.signature} returns ${other.result}`),
+      identity_arguments: exists ? row.identity_arguments ?? null : null,
+      arguments: state.arguments,
+      argument_names: exists ? (row.arg_names || []).map(String) : [],
+      result: state.result,
+      kind: exists ? row.prokind ?? null : null,
+      returns_set: exists ? row.retset === true : null,
+      language: exists ? row.language ?? null : null,
+      security_definer: exists ? state.security_definer : null,
+      config,
+      owner: exists ? row.owner ?? null : null,
+      owner_is_executor: exists ? state.owner_is_executor : null,
+      owner_rolsuper: exists ? row.owner_rolsuper === true : null,
+      owner_rolbypassrls: exists ? row.owner_rolbypassrls === true : null,
+      proacl: exists ? row.proacl ?? null : null,
+      acl_entries: aclLines,
+      definition_sha256: state.definition_sha256,
+      matches_migration: state.definition_sha256 != null && state.definition_sha256 === HOMEOWNER_DEFINITION_SHA256[fn.identity],
+      raw_endorse_token_link: def ? HOMEOWNER_RAW_ENDORSE_LINK_RE.test(def) : null,
+      // Whole-file comparison helpers keep the body as text only inside this process.
+      _def: def,
+    };
+  }
+  const tableMap = Object.fromEntries(reportTables.map((name) => {
+    const row = tableRows.find((entry) => entry.relname === name);
+    return [name, row
+      ? { present: true, rls_enabled: row.rls_enabled === true, rls_forced: row.rls_forced === true, owner: row.owner ?? null }
+      : { present: false, rls_enabled: null, rls_forced: null, owner: null }];
+  }));
+  const missingColumns = {};
+  for (const [table, columns] of Object.entries(spec.columns)) {
+    const have = new Set(columnRows.filter((row) => row.relname === table).map((row) => row.attname));
+    const missing = columns.filter((column) => !have.has(column));
+    if (missing.length) missingColumns[table] = missing;
+  }
+  // Which role each definer runs as after the apply: the current owner, or the login for a new function.
+  const effectiveOwner = (fn) => (fn.exists
+    ? { name: fn.owner, rolsuper: fn.owner_rolsuper, rolbypassrls: fn.owner_rolbypassrls }
+    : { name: login.current_user ?? null, rolsuper: login.rolsuper === true, rolbypassrls: login.rolbypassrls === true });
+  // With row_security = off a definer errors on any RLS table it does not bypass
+  // (superuser, BYPASSRLS, or the table owner without FORCE RLS).
+  const rowSecurity = {};
+  for (const fn of spec.functions) {
+    const owner = effectiveOwner(functions[fn.name]);
+    const blocked = tables.filter((table) => {
+      const row = tableMap[table];
+      if (!row?.present || row.rls_enabled !== true) return false;
+      if (owner.rolsuper === true || owner.rolbypassrls === true) return false;
+      return !(row.owner === owner.name && row.rls_forced !== true);
+    });
+    rowSecurity[fn.name] = {
+      owner: owner.name,
+      owner_rolsuper: owner.rolsuper === true,
+      owner_rolbypassrls: owner.rolbypassrls === true,
+      rls_tables_not_bypassed: blocked,
+    };
+  }
+  const allAcl = spec.functions.flatMap((fn) => functions[fn.name].acl_entries.map((line) => `${fn.identity} ${line}`)).sort();
+  const present = spec.functions.filter((fn) => functions[fn.name].exists);
+  return ok({
+    migration: key,
+    current_user: login.current_user ?? null,
+    session_user: login.session_user ?? null,
+    login_rolsuper: login.rolsuper === true,
+    login_rolbypassrls: login.rolbypassrls === true,
+    exists: present.length === spec.functions.length,
+    overload_count: spec.functions.reduce((sum, fn) => sum + functions[fn.name].overload_count, 0),
+    security_definer: present.every((fn) => functions[fn.name].security_definer === true),
+    config_as_reviewed: present.every((fn) => sameJson(functions[fn.name].config, fn.config)),
+    owner_is_executor: present.every((fn) => functions[fn.name].owner_is_executor === true),
+    acl_as_expected: present.length === spec.functions.length
+      && present.every((fn) => sameJson(functions[fn.name].acl_entries, HOMEOWNER_EXECUTE_GRANTEES.map((g) => `${g} EXECUTE`))),
+    acl_sha256: hashSqlDefinition(allAcl.join('\n')),
+    function_states: Object.fromEntries(spec.functions.map((fn) => {
+      const row = functions[fn.name];
+      return [fn.name, !row.exists ? 'absent' : (row.matches_migration ? 'intended' : 'other')];
+    })),
+    functions,
+    required_roles_present: ['authenticated', 'checksops'].every((role) => roles.includes(role)),
+    required_tables_present: tables.every((table) => tableMap[table]?.present === true),
+    required_columns_present: Object.keys(missingColumns).length === 0,
+    missing_columns: missingColumns,
+    tables: tableMap,
+    row_security: rowSecurity,
+    row_security_off_supported: spec.functions.every((fn) => rowSecurity[fn.name].rls_tables_not_bypassed.length === 0),
+    live_definition_sha256: hashSqlDefinition(homeownerStateText(key, states)),
+  });
+}
+
+/**
+ * Report-only reads for the inspect: the legacy re-mint function, status CHECK
+ * constraints and aggregate status counts. Never part of the fingerprint.
+ */
+export async function readHomeownerReport(client) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const legacy = (await client.query(HOMEOWNER_NAMED_FUNCTIONS_SQL, [[HOMEOWNER_LEGACY_FUNCTION_NAME]]))?.rows || [];
+  const constraintRows = (await client.query(HOMEOWNER_CHECK_CONSTRAINTS_SQL, [[...HOMEOWNER_STATUS_TABLES]]))?.rows || [];
+  const columnRows = (await client.query(HOMEOWNER_COLUMNS_SQL, [[...HOMEOWNER_STATUS_TABLES]]))?.rows || [];
+  const constraints = Object.fromEntries(HOMEOWNER_STATUS_TABLES.map((table) => [table, constraintRows
+    .filter((row) => row.relname === table && /\b(status|payee_type)\b/.test(String(row.def || '')))
+    .map((row) => ({ name: row.conname, definition: row.def, definition_sha256: hashSqlDefinition(String(row.def || '')), allowed: checkLiterals(row.def) }))]));
+  const counts = {};
+  await client.query('SAVEPOINT homeowner_status_counts');
+  try {
+    await client.query("SELECT set_config('row_security', 'off', true)");
+    for (const table of HOMEOWNER_STATUS_TABLES) {
+      const spec = HOMEOWNER_STATUS_COUNT_SQL[table];
+      const have = new Set(columnRows.filter((row) => row.relname === table).map((row) => row.attname));
+      if (!spec.columns.every((column) => have.has(column))) {
+        counts[table] = { readable: false, reason: 'table_or_columns_missing' };
+        continue;
+      }
+      await client.query('SAVEPOINT homeowner_status_count_table');
+      try {
+        const rows = (await client.query(spec.sql))?.rows || [];
+        counts[table] = {
+          readable: true,
+          groups: rows.map((row) => ({
+            ...Object.fromEntries(spec.columns.map((column) => [column, SAFE_LABEL_RE.test(String(row[column] ?? '')) ? String(row[column] ?? '') : 'unrecognized'])),
+            count: Number(row.n) || 0,
+          })),
+        };
+        await client.query('RELEASE SAVEPOINT homeowner_status_count_table');
+      } catch (error) {
+        await client.query('ROLLBACK TO SAVEPOINT homeowner_status_count_table');
+        counts[table] = {
+          readable: false,
+          reason: /row-level security/i.test(String(error?.message || '')) ? 'row_security_would_filter' : 'unreadable',
+        };
+      }
+    }
+  } finally {
+    // Restores row_security and discards anything the reads touched.
+    await client.query('ROLLBACK TO SAVEPOINT homeowner_status_counts');
+    await client.query('RELEASE SAVEPOINT homeowner_status_counts');
+  }
+  return ok({
+    legacy_remint_signer: {
+      name: HOMEOWNER_LEGACY_FUNCTION_NAME,
+      present: legacy.length > 0,
+      signatures: legacy.map((row) => `${row.signature} returns ${row.result}`),
+      note: 'reported only; SQL 82 and SQL 83 never drop it',
+    },
+    status_constraints: constraints,
+    status_counts: counts,
+  });
+}
+
+/** Strips owner names and raw text so a staging read-live shows labels, flags, counts and hashes only. */
+export function homeownerInspectSummary(state, report) {
+  const functions = Object.fromEntries(Object.entries(state.functions || {}).map(([name, row]) => [name, {
+    exists: row.exists,
+    overload_count: row.overload_count,
+    named_signatures: row.named_signatures,
+    identity_arguments: row.identity_arguments,
+    argument_names: row.argument_names,
+    result: row.result,
+    kind: row.kind,
+    returns_set: row.returns_set,
+    language: row.language,
+    security_definer: row.security_definer,
+    config: row.config,
+    owner_is_executor: row.owner_is_executor,
+    owner_rolsuper: row.owner_rolsuper,
+    owner_rolbypassrls: row.owner_rolbypassrls,
+    acl_entries: row.acl_entries,
+    definition_sha256: row.definition_sha256,
+    matches_migration: row.matches_migration,
+    body_matches_migration: row.body_matches_migration ?? null,
+    raw_endorse_token_link: row.raw_endorse_token_link,
+  }]));
+  return {
+    migration: state.migration,
+    login_rolsuper: state.login_rolsuper,
+    login_rolbypassrls: state.login_rolbypassrls,
+    functions,
+    missing_columns: state.missing_columns,
+    tables: Object.fromEntries(Object.entries(state.tables || {}).map(([name, row]) => [name, {
+      present: row.present, rls_enabled: row.rls_enabled, rls_forced: row.rls_forced,
+      owner_is_login: row.present ? row.owner === state.current_user : null,
+    }])),
+    row_security: Object.fromEntries(Object.entries(state.row_security || {}).map(([name, row]) => [name, {
+      owner_rolsuper: row.owner_rolsuper, owner_rolbypassrls: row.owner_rolbypassrls, rls_tables_not_bypassed: row.rls_tables_not_bypassed,
+    }])),
+    row_security_off_supported: state.row_security_off_supported,
+    ...(report ? {
+      legacy_remint_signer: { present: report.legacy_remint_signer.present, signatures: report.legacy_remint_signer.signatures },
+      status_constraints: Object.fromEntries(Object.entries(report.status_constraints).map(([table, rows]) => [table, rows.map((row) => ({
+        name: row.name, definition_sha256: row.definition_sha256, allowed: row.allowed,
+      }))])),
+      status_counts: report.status_counts,
+    } : {}),
+  };
+}
+
+/**
+ * Pre-apply rules shared by the staging handler and the production tool: what
+ * CREATE OR REPLACE with the same signature can replace safely. A different
+ * signature, a return-type or parameter-name clash, a procedure, a function
+ * owned by another role or an ACL entry the files do not revoke is refused.
+ */
+export function homeownerPreconditionFailures(state, key) {
+  const spec = HOMEOWNER_MIGRATIONS[key];
+  const failures = [];
+  const check = (name, passed) => { if (!passed) failures.push(name); };
+  check('required_roles_present', state?.required_roles_present === true);
+  check('required_tables_present', state?.required_tables_present === true);
+  check('required_columns_present', state?.required_columns_present === true);
+  for (const fn of spec?.functions || []) {
+    const row = state?.functions?.[fn.name];
+    if (!row) {
+      failures.push(`state_readable:${fn.name}`);
+      continue;
+    }
+    check(`no_other_signature:${fn.name}`, row.overload_count === (row.exists ? 1 : 0));
+    if (row.exists) {
+      check(`replaceable_kind:${fn.name}`, row.kind === 'f' && row.returns_set === false);
+      check(`return_type_jsonb:${fn.name}`, row.result === 'jsonb');
+      check(`argument_names_match:${fn.name}`, sameJson(row.argument_names, fn.arg_names));
+      check(`owner_is_login:${fn.name}`, row.owner_is_executor === true);
+      check(`acl_replaceable:${fn.name}`, (row.acl_entries || []).every((line) => HOMEOWNER_REPLACEABLE_ACL_ENTRIES.includes(line)));
+    }
+    if (spec.row_security_off) {
+      check(`row_security_off_supported:${fn.name}`, (state?.row_security?.[fn.name]?.rls_tables_not_bypassed || ['unknown']).length === 0);
+    }
+  }
+  return failures;
+}
+
+/** Post-apply rules shared by staging and production; `reviewed` maps identity -> sha256 of the reconstructed def. */
+export function homeownerPostconditionFailures(after, key, reviewed, intendedSha256) {
+  const spec = HOMEOWNER_MIGRATIONS[key];
+  const failures = [];
+  const check = (name, passed) => { if (!passed) failures.push(name); };
+  check('intended_state', typeof intendedSha256 === 'string' && after?.live_definition_sha256 === intendedSha256);
+  for (const fn of spec?.functions || []) {
+    const row = after?.functions?.[fn.name] || {};
+    check(`definition_is_reviewed:${fn.name}`, row.exists === true && typeof reviewed?.[fn.identity] === 'string'
+      && row.definition_sha256 === reviewed[fn.identity] && row.matches_migration === true);
+    check(`no_overloads:${fn.name}`, row.overload_count === 1);
+    check(`security_definer:${fn.name}`, row.security_definer === true);
+    check(`config_as_reviewed:${fn.name}`, sameJson(row.config, fn.config));
+    check(`owner_is_login:${fn.name}`, row.owner_is_executor === true);
+    check(`execute_checksops_only:${fn.name}`, sameJson(row.acl_entries, HOMEOWNER_EXECUTE_GRANTEES.map((g) => `${g} EXECUTE`)));
+  }
+  if (spec?.row_security_off) check('row_security_off_supported', after?.row_security_off_supported === true);
+  return failures;
+}
+
+/** Everything in schema public and auth except the migration's own functions. */
+export async function readHomeownerSchemaSnapshot(client, identities) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const relations = (await client.query(HOMEOWNER_RELATIONS_SQL))?.rows || [];
+  const policies = (await client.query(CHECKALT_ALL_POLICIES_SQL))?.rows || [];
+  const functions = (await client.query(HOMEOWNER_OTHER_FUNCTIONS_SQL, [[...identities]]))?.rows || [];
+  return {
+    relations_sha256: hashSqlDefinition(relations.map((row) => JSON.stringify(row)).join('\n')),
+    policies_sha256: hashSqlDefinition(policies.map((row) => JSON.stringify([
+      row.table_name, row.polname, row.polcmd, row.polpermissive, row.polroles, row.polqual, row.polwithcheck,
+    ])).join('\n')),
+    other_functions_sha256: hashSqlDefinition(functions.map((row) => JSON.stringify([
+      row.signature, row.def_sha256, row.acl, row.prosecdef, row.config, row.owner,
+    ])).join('\n')),
+  };
+}
+
+/**
+ * Adds the function-def-lookup comparison (body, language, SECURITY DEFINER,
+ * search_path) of each live definition with the one reconstructed from the file,
+ * and drops the definition text. The full-definition sha256 stays authoritative.
+ */
+export function withHomeownerBodyComparison(state, key, text) {
+  const reviewed = homeownerReviewedFunctiondefs(key, text) || {};
+  for (const row of Object.values(state.functions || {})) {
+    const source = reviewed[row.identity];
+    row.body_matches_migration = row._def && source ? functionDefsMatchExactly(row._def, source) : null;
+    delete row._def;
+  }
+  return state;
+}
+
+const HOMEOWNER_COMMITTED_KEYS = ['filename', 'migration_id', 'migration', 'commit', 'source_sha256', 'intended_replacement_sha256'];
+
+/** A test may supply `pin` only as the committed pin with a reviewed expected hash filled in. */
+function homeownerPinIsCommitted(pin, committed) {
+  return Boolean(pin) && HOMEOWNER_COMMITTED_KEYS.every((key) => pin[key] === committed[key])
+    && sameJson(pin.function_identities, committed.function_identities);
+}
+
+async function handleHomeownerMigration({ key, event, authorization, identity, connect, sqlFile, pin, committed }) {
+  const spec = HOMEOWNER_MIGRATIONS[key];
+  const label = spec.label;
+  if (!homeownerPinIsCommitted(pin, committed)) {
+    return fail(CODES.SQL_COLLISION, `${label} pin does not match the committed allowlist entry`);
+  }
+  const embedded = readEmbeddedSql(sqlFile, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!homeownerSqlIsReviewed(key, embedded.details.text)) {
+    return fail(CODES.UNRELATED_MUTATION, `embedded ${label} is not exactly the reviewed statements`);
+  }
+  const reviewed = Object.fromEntries(Object.entries(homeownerReviewedFunctiondefs(key, embedded.details.text))
+    .map(([fnIdentity, def]) => [fnIdentity, hashSqlDefinition(def)]));
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported ${label} executor action ${event.action}`);
+  }
+  const pinExecutable = SQL80_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, `${label} pin has no reviewed pre-apply live definition hash yet; apply is refused`);
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, `${label} apply is bound to the exact allowlisted pin`);
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  const identities = spec.functions.map((fn) => fn.identity);
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readHomeownerState(client, key);
+      const report = state.ok ? await readHomeownerReport(client).catch(() => null) : null;
+      await rollback();
+      if (!state.ok) return state;
+      withHomeownerBodyComparison(state.details, key, embedded.details.text);
+      const failures = homeownerPreconditionFailures(state.details, key);
+      const live = state.details.live_definition_sha256;
+      const alreadyApplied = live === pin.intended_replacement_sha256;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: live,
+          after_hash: live,
+          result: event.action,
+          executor_identity: identity,
+          migration: key,
+          exists: state.details.exists,
+          overload_count: state.details.overload_count,
+          security_definer: state.details.security_definer,
+          config_as_reviewed: state.details.config_as_reviewed,
+          owner_is_executor: state.details.owner_is_executor,
+          acl_as_expected: state.details.acl_as_expected,
+          acl_sha256: state.details.acl_sha256,
+          function_states: state.details.function_states,
+          required_roles_present: state.details.required_roles_present,
+          required_tables_present: state.details.required_tables_present,
+          required_columns_present: state.details.required_columns_present,
+          live_definition_sha256: live,
+          already_applied: alreadyApplied,
+          precondition_failures: failures,
+          prerequisites_ok: failures.length === 0,
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && live === pin.expected_live_definition_sha256
+            && !alreadyApplied
+            && failures.length === 0,
+          homeowner_inspect: homeownerInspectSummary(state.details, report?.ok ? report.details : null),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${key}_homeowner_functions`]);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readHomeownerState(client, key);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `the ${label} functions are already in place; refuse re-apply`, {
+        function_states: before.details.function_states,
+      });
+    }
+    const preFailures = homeownerPreconditionFailures(before.details, key);
+    if (preFailures.length) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, `${label} cannot replace the live functions safely (same signature, jsonb result, same parameter names, owned by the executor role, only PUBLIC/authenticated/checksops EXECUTE${spec.row_security_off ? ', row_security = off supported' : ''}; roles, tables and columns present)`, {
+        failed: preFailures,
+        function_states: before.details.function_states,
+      });
+    }
+    if (before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, `${label} live state is not the pinned pre-apply state`, {
+        function_states: before.details.function_states,
+        live_definition_sha256: before.details.live_definition_sha256,
+      });
+    }
+    const schemaBefore = await readHomeownerSchemaSnapshot(client, identities);
+
+    await client.query(embedded.details.text);
+
+    const after = await readHomeownerState(client, key);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const schemaAfter = await readHomeownerSchemaSnapshot(client, identities);
+    const postFailures = homeownerPostconditionFailures(after.details, key, reviewed, pin.intended_replacement_sha256);
+    const unrelated = Object.keys(schemaBefore).filter((name) => schemaBefore[name] !== schemaAfter[name]);
+    if (postFailures.length || unrelated.length) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `${label} did not land exactly on the reviewed functions and grants, or changed something else`, {
+        failed: postFailures,
+        unrelated_changed: unrelated,
+        after_hash: after.details.live_definition_sha256,
+        function_states: after.details.function_states,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        migration: key,
+        function_states: after.details.function_states,
+        acl_sha256: after.details.acl_sha256,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 // --- SQL 72: tenant-member payment write policies ---------------------------
 
 const PAYMENT_POLICIES_SQL = `
@@ -4250,6 +4963,10 @@ export function createHandler({
   sql80Pin = AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
   sqlFile81 = SQL81_CHECKALT_PRODUCTION_REGISTER_FILE,
   sql81Pin = AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
+  sqlFile82 = SQL82_HOMEOWNER_LEDGER_VIEW_FILE,
+  sql82Pin = AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW,
+  sqlFile83 = SQL83_HOMEOWNER_SIGNING_CAPABILITIES_FILE,
+  sql83Pin = AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -4313,6 +5030,18 @@ export function createHandler({
 
     if (isSql81CheckaltProductionRegister(event)) {
       return handleSql81CheckaltProductionRegister({ event, authorization, identity, connect, sqlFile81, pin: sql81Pin });
+    }
+
+    if (isSql82HomeownerLedgerView(event)) {
+      return handleHomeownerMigration({
+        key: 'sql82', event, authorization, identity, connect, sqlFile: sqlFile82, pin: sql82Pin, committed: AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW,
+      });
+    }
+
+    if (isSql83HomeownerSigningCapabilities(event)) {
+      return handleHomeownerMigration({
+        key: 'sql83', event, authorization, identity, connect, sqlFile: sqlFile83, pin: sql83Pin, committed: AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
+      });
     }
 
     if (isLedger20261007193200(event)) {

@@ -28,6 +28,8 @@ on:
           - sql79-member-stakeholder-writes
           - sql80-checkalt-member-auto-deposit
           - sql81-checkalt-depositor-register
+          - sql82-homeowner-ledger-view
+          - sql83-homeowner-signing-capabilities
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -122,6 +124,7 @@ jobs:
           node --test aws/tests/sql79-member-stakeholder-writes-executor.test.mjs
           node --test aws/tests/sql80-checkalt-member-auto-deposit-executor.test.mjs
           node --test aws/tests/sql81-checkalt-depositor-register-executor.test.mjs
+          node --test aws/tests/sql82-sql83-homeowner-executor.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
           node scripts/deployment-guard/scan-bypass.mjs

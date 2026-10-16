@@ -560,6 +560,173 @@ export const AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER = Object.freeze({
   table: CHECKALT_REGISTER_TABLE,
 });
 
+// SQL 82 (aws/workflows/sql/82_homeowner_ledger_view.sql) CREATE OR REPLACEs the
+// SECURITY DEFINER public.aws_public_homeowner_ledger_by_token(text); SQL 83
+// (aws/workflows/sql/83_homeowner_signing_capabilities.sql) CREATE OR REPLACEs three
+// sibling SECURITY DEFINER doorways. Each REVOKEs ALL FROM PUBLIC and authenticated
+// and GRANTs EXECUTE TO checksops only. SQL 83 does not depend on SQL 82; the
+// reviewed order is 82 then 83 (not enforced: the SQL 81 template has none).
+//
+// Staging already carries the Cursor branch's SQL 73 ledger view (and possibly
+// SQL 74 functions with the same names), production something else, so neither
+// pre-state is code-derived: expected_live_definition_sha256 stays null until a
+// read-live / --inspect has recorded it in a reviewed pin change, and apply refuses
+// until then. The state text has, per function in the order below: present or
+// absent, how many functions carry its name (any schema), and when present its
+// arguments, result type, the sha256 of pg_get_functiondef, SECURITY DEFINER,
+// proconfig, whether the executor role owns it and every non-owner ACL entry.
+export const HOMEOWNER_EXECUTE_GRANTEES = Object.freeze(['checksops']);
+// Non-owner function ACL entries the files' REVOKE ALL ... FROM PUBLIC / authenticated
+// and GRANT ... TO checksops fully replace. Any other entry would survive the apply.
+export const HOMEOWNER_REPLACEABLE_ACL_ENTRIES = Object.freeze(['PUBLIC EXECUTE', 'authenticated EXECUTE', 'checksops EXECUTE']);
+// Tables whose RLS / FORCE RLS the inspect reports for either migration.
+export const HOMEOWNER_RLS_TABLES = Object.freeze([
+  'homeowner_ledger_tokens', 'check_endorsements', 'signature_requests', 'signature_signers', 'check_intake_items', 'claims',
+]);
+// Status CHECK constraints and aggregate status counts the inspect reports.
+export const HOMEOWNER_STATUS_TABLES = Object.freeze(['check_endorsements', 'signature_signers', 'signature_requests']);
+// Cursor's legacy re-mint doorway: reported only, never dropped by SQL 82 or 83.
+export const HOMEOWNER_LEGACY_FUNCTION_NAME = 'aws_public_homeowner_ledger_remint_signer';
+// The raw endorsement-link pattern of Cursor SQL 73's ledger view.
+export const HOMEOWNER_RAW_ENDORSE_LINK_RE = /'\/endorse\?token='\s*\|\|/;
+
+const homeownerFunction = (name, args, argNames, rowSecurityOff) => Object.freeze({
+  name,
+  identity: `public.${name}(${args.map((arg) => arg.split(' ')[1]).join(', ')})`,
+  arguments: args.join(', '),
+  arg_names: Object.freeze([...argNames]),
+  config: Object.freeze(rowSecurityOff ? ['search_path=public', 'row_security=off'] : ['search_path=public']),
+});
+
+/**
+ * The functions each file creates and the columns its bodies read or write
+ * (table -> columns), so the inspect can show what a live schema lacks. PL/pgSQL
+ * resolves columns only at call time, so CREATE OR REPLACE succeeds without them.
+ */
+export const HOMEOWNER_MIGRATIONS = Object.freeze({
+  sql82: Object.freeze({
+    key: 'sql82',
+    label: 'SQL 82',
+    row_security_off: false,
+    functions: Object.freeze([
+      homeownerFunction('aws_public_homeowner_ledger_by_token', ['p_token text'], ['p_token'], false),
+    ]),
+    columns: Object.freeze({
+      homeowner_ledger_tokens: Object.freeze(['id', 'tenant_id', 'claim_id', 'token', 'homeowner_email', 'homeowner_name', 'revoked_at', 'expires_at', 'last_viewed_at']),
+      claims: Object.freeze(['id', 'org_id', 'claim_number', 'policyholder_address', 'loss_type', 'status', 'created_at']),
+      check_intake_items: Object.freeze(['id', 'tenant_id', 'claim_id', 'amount', 'check_stage', 'check_number']),
+      homeowner_ledger_events: Object.freeze(['id', 'tenant_id', 'claim_id', 'check_id', 'event_type', 'occurred_at', 'amount', 'actor_label', 'payload_json']),
+      homeowner_ledger_check_uploads: Object.freeze(['token_id']),
+      check_endorsements: Object.freeze(['check_id', 'tenant_id', 'payee_name', 'payee_type', 'status', 'contact_email', 'signed_at', 'request_sent_at', 'created_at']),
+      disbursement_batches: Object.freeze(['id', 'tenant_id', 'check_intake_item_id']),
+      disbursement_splits: Object.freeze(['batch_id', 'tenant_id', 'amount', 'status']),
+      claim_disbursements: Object.freeze(['claim_id', 'amount', 'status']),
+    }),
+  }),
+  sql83: Object.freeze({
+    key: 'sql83',
+    label: 'SQL 83',
+    row_security_off: true,
+    functions: Object.freeze([
+      homeownerFunction('aws_public_homeowner_ledger_endorse_capability', ['p_token text', 'p_endorsement_id uuid'], ['p_token', 'p_endorsement_id'], true),
+      homeownerFunction('aws_public_homeowner_pending_signatures', ['p_token text'], ['p_token'], true),
+      homeownerFunction('aws_public_homeowner_document_sign_capability', ['p_token text', 'p_signer_id uuid'], ['p_token', 'p_signer_id'], true),
+    ]),
+    columns: Object.freeze({
+      homeowner_ledger_tokens: Object.freeze(['token', 'tenant_id', 'claim_id', 'homeowner_email', 'homeowner_name', 'revoked_at', 'expires_at']),
+      claims: Object.freeze(['id', 'org_id']),
+      check_intake_items: Object.freeze(['id', 'tenant_id', 'claim_id']),
+      homeowner_ledger_events: Object.freeze(['tenant_id', 'claim_id']),
+      check_endorsements: Object.freeze(['id', 'check_id', 'tenant_id', 'payee_name', 'payee_type', 'status', 'token', 'contact_email', 'signed_at', 'created_at']),
+      signature_requests: Object.freeze(['id', 'claim_id', 'check_intake_item_id', 'document_name', 'status', 'sent_at', 'completed_at', 'created_at']),
+      signature_signers: Object.freeze(['id', 'signature_request_id', 'signer_name', 'signer_email', 'signer_type', 'signing_order', 'status', 'signed_at', 'access_token', 'expires_at']),
+    }),
+  }),
+});
+
+// sha256(pg_get_functiondef) on PostgreSQL 16 of each function the files create,
+// re-derived from the real catalog by aws/tests/sql82-sql83-homeowner-executor.test.mjs.
+export const HOMEOWNER_DEFINITION_SHA256 = Object.freeze({
+  'public.aws_public_homeowner_ledger_by_token(text)': '962de3a55ffccf39baf5ac5274e50df4f137dcef0b4b9f7bdd78bf72fe355ec3',
+  'public.aws_public_homeowner_ledger_endorse_capability(text, uuid)': '066754e61334f2f988a9e5ac28fd06f840bc28cb3890a5d961c1a20d50cccbe7',
+  'public.aws_public_homeowner_pending_signatures(text)': '3b632929f4b72e168ef4b42951d6845d5dbb751fa8ced92860697dda782fc5cb',
+  'public.aws_public_homeowner_document_sign_capability(text, uuid)': 'a45f3bfcab4f6a8a686a2e1374b50dda5fcf28731ec18bbf935ef4839c221786',
+});
+
+/** `states[identity]` as readHomeownerState builds it; one block per function, in file order. */
+export function homeownerStateText(key, states = {}) {
+  const spec = HOMEOWNER_MIGRATIONS[key];
+  if (!spec) return null;
+  const lines = [`migration ${key}`];
+  for (const fn of spec.functions) {
+    const state = states[fn.identity] || {};
+    const id = fn.identity;
+    if (state.exists !== true) {
+      lines.push(`function ${id}: absent`, `functions named ${fn.name}: ${Number(state.overload_count) || 0}`);
+      continue;
+    }
+    lines.push(
+      `function ${id}: present`,
+      `functions named ${fn.name}: ${Number(state.overload_count) || 0}`,
+      `${id} arguments: ${String(state.arguments ?? '')}`,
+      `${id} result: ${String(state.result ?? '')}`,
+      `${id} definition sha256 ${SHA256_HEX_RE.test(String(state.definition_sha256 || '')) ? state.definition_sha256 : 'unreadable'}`,
+      `${id} security definer: ${state.security_definer === true ? 'on' : 'off'}`,
+      `${id} config: ${(state.config || []).join(',') || '-'}`,
+      `${id} owner: ${state.owner_is_executor === true ? 'executor role' : 'another role'}`,
+      ...(state.acl || []).map((entry) => `${id} acl ${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`).sort(),
+    );
+  }
+  return lines.join('\n');
+}
+
+/** What each file leaves: the reviewed functions, owned by the executor role, EXECUTE for checksops only. */
+export function homeownerAppliedStates(key) {
+  const spec = HOMEOWNER_MIGRATIONS[key];
+  return Object.fromEntries(spec.functions.map((fn) => [fn.identity, {
+    exists: true,
+    overload_count: 1,
+    arguments: fn.arguments,
+    result: 'jsonb',
+    definition_sha256: HOMEOWNER_DEFINITION_SHA256[fn.identity],
+    security_definer: true,
+    config: [...fn.config],
+    owner_is_executor: true,
+    acl: HOMEOWNER_EXECUTE_GRANTEES.map((grantee) => ({ grantee, privilege_type: 'EXECUTE', is_grantable: false })),
+  }]));
+}
+
+export const AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW = Object.freeze({
+  filename: 'aws/workflows/sql/82_homeowner_ledger_view.sql',
+  migration_id: '82_homeowner_ledger_view',
+  migration: 'sql82',
+  // The commit that authored the current file bytes (PR #989).
+  commit: '4b1fe50d1f2654f7f4ea82366eff5bbd1a067621',
+  source_sha256: '1db68ee9aee1c91c146e7f70c39bef7cc015eb38f6f436bfdfd0bc49f360a934',
+  // Pending: staging carries Cursor SQL 73's ledger view, so the pre-state is not
+  // code-derived. A read-live run records it here in a reviewed pin change; until
+  // then apply refuses ("no reviewed pre-apply live definition hash").
+  expected_live_definition_sha256: null,
+  // Code-derived: sha256(homeownerStateText('sql82', homeownerAppliedStates('sql82'))),
+  // re-derived from the real catalog by aws/tests/sql82-sql83-homeowner-executor.test.mjs.
+  intended_replacement_sha256: '04e41eedb372334169feb32bc65991a3ce99558b84e91b27e22a6501be641e37',
+  function_identities: Object.freeze(HOMEOWNER_MIGRATIONS.sql82.functions.map((fn) => fn.identity)),
+});
+export const AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES = Object.freeze({
+  filename: 'aws/workflows/sql/83_homeowner_signing_capabilities.sql',
+  migration_id: '83_homeowner_signing_capabilities',
+  migration: 'sql83',
+  // The commit that authored the current file bytes (PR #989).
+  commit: '4b1fe50d1f2654f7f4ea82366eff5bbd1a067621',
+  source_sha256: '8443a3e7b2c1f7a61d621e2e5b7fb3dcd94beb769fb16c2d2b49f867aa5149af',
+  // Pending: staging may carry Cursor SQL 74 functions of the same names; recorded
+  // from a read-live run in a reviewed pin change before apply is possible.
+  expected_live_definition_sha256: null,
+  // Code-derived: sha256(homeownerStateText('sql83', homeownerAppliedStates('sql83'))).
+  intended_replacement_sha256: '78da421900f4e3d0af7110ee2b1a47f1498599a59a6dfa07953c59ad56b27163',
+  function_identities: Object.freeze(HOMEOWNER_MIGRATIONS.sql83.functions.map((fn) => fn.identity)),
+});
+
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
   migration_id: '39_tmp_write_policy_reconcile',
@@ -596,6 +763,8 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES,
   AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT,
   AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
+  AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW,
+  AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -649,6 +818,14 @@ export function isSql81CheckaltProductionRegister(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER);
 }
 
+export function isSql82HomeownerLedgerView(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW);
+}
+
+export function isSql83HomeownerSigningCapabilities(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -678,6 +855,8 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql79MemberStakeholderWrites(input)) return AUTHORIZED_SQL79_MEMBER_STAKEHOLDER_WRITES;
   if (isSql80CheckaltMemberAutoDeposit(input)) return AUTHORIZED_SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT;
   if (isSql81CheckaltProductionRegister(input)) return AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER;
+  if (isSql82HomeownerLedgerView(input)) return AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW;
+  if (isSql83HomeownerSigningCapabilities(input)) return AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;
