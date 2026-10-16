@@ -219,6 +219,17 @@ export function homeownerProductionPostconditionFailures(key, after, pin, review
   ];
 }
 
+/**
+ * A pin authorizes execution only with an owner approval recorded in `authorization`:
+ * the SQL 77-81 pins' "Owner approved …" / "owner-approved …" convention. "pending",
+ * an empty or a missing value refuses.
+ */
+export const OWNER_APPROVED_AUTHORIZATION_RE = /^owner[- ]approved\b/i;
+export function homeownerAuthorizationApproved(pin) {
+  const value = typeof pin?.authorization === 'string' ? pin.authorization.trim() : '';
+  return value !== '' && value.toLowerCase() !== 'pending' && OWNER_APPROVED_AUTHORIZATION_RE.test(value);
+}
+
 const alreadyApplied = (state, pin) => state.live_definition_sha256 === pin.intended_replacement_sha256;
 
 export function loadHomeownerProductionPin(key, root = repoRootFrom(import.meta.url)) {
@@ -279,6 +290,9 @@ export async function evaluateHomeownerProductionApply(key, input = {}, { root =
   if (!sql.ok) return sql;
   if (!SHA256_RE.test(String(thePin.expected_live_definition_sha256 || ''))) {
     return fail(CODES.SQL_COLLISION, `${tool.label} production pin has no recorded pre-apply live definition hash yet; run --inspect and record it in a reviewed pin change`);
+  }
+  if (!homeownerAuthorizationApproved(thePin)) {
+    return fail(CODES.PRODUCTION_APPROVAL_REQUIRED, `${tool.label} production pin authorization is not an owner approval (it is ${JSON.stringify(String(thePin.authorization ?? null).slice(0, 40))}); a reviewed pin change must record it`);
   }
   const mismatched = [
     ['target_environment', 'production'],
@@ -417,6 +431,9 @@ export async function precheckHomeownerProductionApply(key, input = {}, ctx = {}
   if (!evaluation.ok) return evaluation;
   if (pin.execute !== true) {
     return fail(CODES.GUARD_APPLY_FORBIDDEN, `${label} production execute is not authorized by this pin`);
+  }
+  if (!homeownerAuthorizationApproved(pin)) {
+    return fail(CODES.PRODUCTION_APPROVAL_REQUIRED, `${label} production pin authorization is not an owner approval`);
   }
   if (typeof pin.authorization_phrase !== 'string' || !pin.authorization_phrase || input.authorization_phrase !== pin.authorization_phrase) {
     return fail(CODES.PRODUCTION_APPROVAL_REQUIRED, `${label} production apply requires the exact authorization phrase`);

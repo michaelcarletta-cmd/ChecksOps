@@ -84,6 +84,8 @@ survive the REVOKEs); for SQL 83, each definer's owner (the current owner, or th
 for a new function) is superuser or BYPASSRLS, or owns every RLS table the bodies read
 without FORCE RLS, because `row_security=off` errors otherwise
 (`row_security_off_supported`); the live fingerprint equals the pin's and the manifest's.
+The `row_security=off` check covers only the tables the function bodies read; triggers
+on the tables they write (for example `check_endorsements`) are not inspected.
 Production also requires the connected login (`current_user` and `session_user`) to be the
 pinned owner `checksops_admin`, every existing target function to be owned by it, and
 `authenticated` not to be a member of it (recursive, INHERIT FALSE grants included).
@@ -182,7 +184,8 @@ GitHub-hosted runners or Lambda.
    `apply_preconditions_met`, `status` no longer pending), copy `live_definition_sha256`
    into `expected_live_definition_sha256`, record the staging apply run in
    `staging_acceptance` (`ok: true`, `reference`), set `execute: true` and record the
-   approval in `authorization`. Merge to main and stage it with step 4 again.
+   approval in `authorization` (it must start with `Owner approved` or `owner-approved`;
+   `"pending"` refuses even with `execute: true`). Merge to main and stage it with step 4 again.
 7. **Run** (one-shot, `ops/production-sql-one-shot.md`), SQL 82 first:
    `--migration sql82 --approval-scope sql82`, `--phase inspect`, then for the approved
    run `--phase apply`; then the same with `sql83`. The one-shot runs the inspect, the

@@ -54,7 +54,8 @@ const executePin = (key, extra = {}) => {
   const pin = realPin(key);
   const stagingAcceptance = pin.staging_acceptance?.ok === true ? pin.staging_acceptance : FIXTURE_STAGING_ACCEPTANCE;
   const expected = pin.expected_live_definition_sha256 ?? FIXTURE_EXPECTED_LIVE;
-  return { ...pin, execute: true, staging_acceptance: stagingAcceptance, expected_live_definition_sha256: expected, ...extra };
+  const authorization = pin.authorization === 'pending' ? 'owner-approved test fixture' : pin.authorization;
+  return { ...pin, execute: true, authorization, staging_acceptance: stagingAcceptance, expected_live_definition_sha256: expected, ...extra };
 };
 
 function tarballFixture() {

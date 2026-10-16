@@ -59,6 +59,13 @@ CREATE TABLE public.signature_signers (
   CONSTRAINT signature_signers_status_check CHECK (status IN ('pending', 'signed', 'declined')));
 `;
 
+/** Seeded row values (names, emails, document names) that must never appear in any inspect output. */
+export const SEEDED_PII = Object.freeze(['Private Person', 'Other Person', 'private@example.com', 'Private.pdf']);
+export function assertNoSeededPii(assert, value, label = 'output') {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  for (const pii of SEEDED_PII) assert.equal(text.includes(pii), false, `${label} contains ${pii}`);
+}
+
 export const HOMEOWNER_RLS_TABLE_NAMES = Object.freeze([
   'homeowner_ledger_tokens', 'check_endorsements', 'signature_requests', 'signature_signers', 'check_intake_items', 'claims',
 ]);

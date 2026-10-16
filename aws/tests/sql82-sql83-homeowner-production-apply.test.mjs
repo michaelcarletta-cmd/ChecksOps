@@ -36,7 +36,7 @@ import { ONE_SHOT_TOOLS } from '../../scripts/deployment-guard/lib/production-sq
 import { loadStagingSqlExecutor } from '../../scripts/deployment-guard/lib/staging-sql-executor-module.mjs';
 import { main as cli82 } from '../../scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs';
 import { main as cli83 } from '../../scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs';
-import { cursorSql73, homeownerSchemaSql } from './helpers/homeowner-sql-pg.mjs';
+import { assertNoSeededPii, cursorSql73, homeownerSchemaSql } from './helpers/homeowner-sql-pg.mjs';
 import { pgSkipReason, startPg } from './helpers/stakeholder-policies-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -83,8 +83,10 @@ const M = {
 };
 const KEYS = Object.keys(M);
 /** Execute-authorized copy with a placeholder staging acceptance and pre-state. */
+const OWNER_APPROVED = 'owner-approved 2026-10-16 in session ("approve applying SQL 8x to production"): test fixture';
 const authorized = (key, extra = {}) => Object.freeze({
   ...M[key].committed,
+  authorization: OWNER_APPROVED,
   execute: true,
   expected_live_definition_sha256: FIXTURE_PRE,
   staging_acceptance: { ...M[key].committed.staging_acceptance, ok: true, reference: STAGING_REF, basis: 'test fixture' },
@@ -485,6 +487,31 @@ test('apply refuses before connecting: the committed pin, no phrase, no single-u
   }
 });
 
+test('execute true with authorization "pending" (or no owner approval) refuses before any receipt is spent or any connection is made', async () => {
+  for (const key of KEYS) {
+    const owned = () => ({ ok: true, details: { receipt: { owned_components: [M[key].committed.filename] } } });
+    for (const authorization of ['pending', 'Pending', '', '  ', undefined, null, 'approved', 'applied', 'not owner-approved']) {
+      const pin = authorized(key, { authorization });
+      const label = `${key} ${JSON.stringify(authorization)}`;
+      const evaluation = await M[key].evaluate(manifest(key, pin), { root: ROOT, pin });
+      assert.equal(evaluation.code, CODES.PRODUCTION_APPROVAL_REQUIRED, label);
+      const execute = await M[key].execute(manifest(key, pin), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() });
+      assert.equal(execute.code, CODES.PRODUCTION_APPROVAL_REQUIRED, label);
+      const cli = await runCli(key, ['--apply'], { input: manifest(key, pin), deps: { pin, enforceScriptGuard: owned } });
+      assert.equal(cli.spent, 0, label);
+      assert.match(cli.out, /PRODUCTION_APPROVAL_REQUIRED/, label);
+      assert.doesNotMatch(cli.out, /should-not-connect/, label);
+    }
+    // Both historical spellings of the convention are accepted (SQL 77-80 "Owner approved …", SQL 80/81 "owner-approved …").
+    for (const authorization of ['Owner approved the SQL 82 production pin', 'owner-approved 2026-10-16 in session']) {
+      const pin = authorized(key, { authorization });
+      assert.equal((await M[key].evaluate(manifest(key, pin), { root: ROOT, pin })).ok, true, authorization);
+    }
+    // The committed pins themselves are "pending".
+    assert.equal(M[key].committed.authorization, 'pending');
+  }
+});
+
 // --- PostgreSQL 16 ---------------------------------------------------------------
 
 const PROD_OWNER = 'checksops_admin';
@@ -565,7 +592,7 @@ test('PostgreSQL 16: production inspect is read-only and reports the state; SQL 
         { payee_type: 'insured', status: 'sent', count: 2 }, { payee_type: 'mortgage_company', status: 'pending', count: 1 }]);
       assert.equal(d.status_constraints.check_endorsements.length, 2);
       assert.match(d.status_constraints.check_endorsements.find((row) => row.name === 'check_endorsements_status_check').definition, /'sent'::text/);
-      assert.equal(JSON.stringify(d).includes('private@example.com'), false, 'no row data');
+      assertNoSeededPii(assert, first, `${key} production inspect`);
       if (key === 'sql82') {
         const row = d.functions.aws_public_homeowner_ledger_by_token;
         assert.equal(row.exists, true);
@@ -662,6 +689,8 @@ test('PostgreSQL 16: production inspect is read-only and reports the state; SQL 
         assert.ok(Object.values(HOMEOWNER_DEFINITION_SHA256).includes(row.def), row.sig);
       }
       const after = await M[key].inspect({ connect, pin, root: ROOT });
+      assertNoSeededPii(assert, after, `${key} post-apply inspect`);
+      assertNoSeededPii(assert, applied, `${key} apply receipt`);
       assert.equal(after.details.live_definition_sha256, pin.intended_replacement_sha256);
       assert.equal(after.details.already_applied, true);
       assert.equal(after.details.apply_preconditions_met, false);

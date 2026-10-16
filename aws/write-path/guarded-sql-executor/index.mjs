@@ -4111,6 +4111,8 @@ export function homeownerPreconditionFailures(state, key) {
       check(`replaceable_kind:${fn.name}`, row.kind === 'f' && row.returns_set === false);
       check(`return_type_jsonb:${fn.name}`, row.result === 'jsonb');
       check(`argument_names_match:${fn.name}`, sameJson(row.argument_names, fn.arg_names));
+      // pg_get_function_arguments includes defaults; CREATE OR REPLACE cannot remove one.
+      check(`arguments_match:${fn.name}`, row.arguments === fn.arguments);
       check(`owner_is_login:${fn.name}`, row.owner_is_executor === true);
       check(`acl_replaceable:${fn.name}`, (row.acl_entries || []).every((line) => HOMEOWNER_REPLACEABLE_ACL_ENTRIES.includes(line)));
     }

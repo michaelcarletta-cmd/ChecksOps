@@ -42,6 +42,7 @@ import {
   CURSOR_SQL73_SHA256,
   CURSOR_SQL74_SHA256,
   LEGACY_REMINT_SQL,
+  assertNoSeededPii,
   cursorSql73,
   cursorSql74,
   homeownerSchemaSql,
@@ -405,7 +406,8 @@ test('inspect only reads and reports each function, the clashes, RLS, columns, c
     assert.deepEqual(summary.details.precondition_failures, []);
     assert.equal(summary.details.homeowner_inspect.functions[HOMEOWNER_MIGRATIONS[key].functions[0].name].raw_endorse_token_link, true);
     assert.deepEqual(summary.details.function_states, receipt.function_states);
-    assert.equal(JSON.stringify(summary.details).includes('private@example.com'), false);
+    assertNoSeededPii(assert, summary.details, `${key} read-live summary`);
+    assertNoSeededPii(assert, inspect, `${key} executor result`);
   }
 });
 
@@ -416,6 +418,7 @@ test('inspect fails the replace-safely rules: another signature, a return type o
     ['sql83', 'another signature (Cursor SQL 74 variant)', (d) => { d.extraNamed.push({ name: name('sql83', 2), signature: 'public.aws_public_homeowner_document_sign_capability(text,uuid,text)', result: 'jsonb' }); }, [`no_other_signature:${name('sql83', 2)}`]],
     ['sql82', 'return type clash', (d) => { d.fns[id('sql82')].result = 'json'; }, [`return_type_jsonb:${name('sql82')}`]],
     ['sql83', 'parameter name clash', (d) => { d.fns[id('sql83', 0)].arg_names = ['token', 'endorsement_id']; }, [`argument_names_match:${name('sql83', 0)}`]],
+    ['sql82', 'a parameter DEFAULT', (d) => { d.fns[id('sql82')].arguments = 'p_token text DEFAULT NULL::text'; }, [`arguments_match:${name('sql82')}`]],
     ['sql83', 'a set-returning function', (d) => { d.fns[id('sql83', 1)].retset = true; }, [`replaceable_kind:${name('sql83', 1)}`]],
     ['sql82', 'another owner', (d) => { d.fns[id('sql82')].owner_is_executor = false; d.fns[id('sql82')].owner = 'someone'; }, [`owner_is_login:${name('sql82')}`]],
     ['sql82', 'an anon grant the file does not revoke', (d) => { d.acl[id('sql82')].push({ grantee: 'anon', privilege_type: 'EXECUTE', is_grantable: false }); }, [`acl_replaceable:${name('sql82')}`]],
@@ -592,7 +595,8 @@ test('PostgreSQL 16: from Cursor SQL 73/74, inspect reports the live state read-
         { payee_type: 'insured', status: 'sent', count: 2 }, { payee_type: 'mortgage_company', status: 'pending', count: 1 }] });
       assert.deepEqual(report.status_counts.signature_signers, { readable: true, groups: [{ status: 'pending', count: 1 }] });
       assert.deepEqual(report.status_constraints.signature_signers.map((row) => row.allowed), [['pending', 'signed', 'declined']]);
-      assert.equal(JSON.stringify(report).includes('private@example.com'), false);
+      assertNoSeededPii(assert, before, `${key} executor result`);
+      assertNoSeededPii(assert, readLiveSummary({ ok: true, details: before }, { migration: CHOICES[key], pin: PINS[key] }), `${key} read-live summary`);
       assert.equal(JSON.stringify(report).includes(OWNER), false);
 
       const recorded = { ...PINS[key], expected_live_definition_sha256: receipt.live_definition_sha256 };
@@ -670,6 +674,11 @@ test('PostgreSQL 16: another signature, a return-type clash, a renamed parameter
        CREATE FUNCTION public.aws_public_homeowner_ledger_by_token(p_token text) RETURNS json LANGUAGE sql SECURITY DEFINER AS $$ SELECT NULL::json $$`,
       `DROP FUNCTION public.aws_public_homeowner_ledger_by_token(text); ${cursorSql73()}`,
       ['return_type_jsonb:aws_public_homeowner_ledger_by_token']);
+    await refusedThenRestored('sql82', 'a parameter DEFAULT (CREATE OR REPLACE cannot remove it)',
+      `DROP FUNCTION public.aws_public_homeowner_ledger_by_token(text);
+       CREATE FUNCTION public.aws_public_homeowner_ledger_by_token(p_token text DEFAULT NULL) RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $$ SELECT NULL::jsonb $$`,
+      `DROP FUNCTION public.aws_public_homeowner_ledger_by_token(text); ${cursorSql73()}`,
+      ['arguments_match:aws_public_homeowner_ledger_by_token']);
     await refusedThenRestored('sql83', 'a renamed parameter',
       `DROP FUNCTION public.aws_public_homeowner_ledger_endorse_capability(text, uuid);
        CREATE FUNCTION public.aws_public_homeowner_ledger_endorse_capability(p_token text, p_id uuid) RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $$ SELECT NULL::jsonb $$`,
