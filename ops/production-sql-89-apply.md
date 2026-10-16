@@ -4,8 +4,23 @@ Applies only `aws/workflows/sql/89_check_intake_items_column_update.sql`:
 
 ```sql
 REVOKE UPDATE ON TABLE public.check_intake_items FROM checksops;
+REVOKE UPDATE ON TABLE public.check_intake_items FROM authenticated;
+REVOKE UPDATE ON TABLE public.check_intake_items FROM PUBLIC;
 GRANT UPDATE (<the 43 columns below>) ON TABLE public.check_intake_items TO checksops;
 ```
+
+**Inherited UPDATE (staging apply run 85).** `checksops` is a member of `authenticated`
+(`aws/rls/sql/01_role_shim.sql:16`, `GRANT authenticated TO checksops`), so
+`has_column_privilege('checksops', …, 'UPDATE')` also counts UPDATE granted to
+`authenticated` and to PUBLIC (for example SQL 40 grants `UPDATE (deposit_recommendation)
+TO checksops, authenticated`). The first version of the file revoked only checksops' own
+UPDATE; staging apply run 85 then correctly rolled back with `UNRELATED_MUTATION`
+(`intended_state`, `updatable_columns_exact`): `detected_claim_number` (and possibly
+others) stayed updatable through an inherited grant recorded nowhere in the repo. The file
+now also revokes UPDATE from `authenticated` and PUBLIC (a table-level REVOKE also removes
+that grantee's column UPDATE grants). SELECT, INSERT and DELETE are not touched for any
+role. The fingerprint (checksops' effective UPDATE) did not change, so the staging pin's
+pre-state `6810985b…` (read-live run 82) still stands.
 
 **Why.** The read-only production inspect of 2026-10-16 (SSM
 `f3715bb0-5fd9-43a8-83e9-86350ef5bab7`, main `358ef188`) found the API role `checksops`
@@ -22,7 +37,9 @@ applied there (its tool refuses on `no_table_level_update`).
 `ops/deployment-guard/sql89-check-intake-column-update-production-apply.json` is
 `authorization: "pending"`, `execute: false`, `expected_live_definition_sha256: null`,
 `staging_acceptance.ok: false`. It authorizes nothing. The staging executor pin
-(`sql89-check-intake-column-update`) also has no pre-state until a staging read-live.
+(`sql89-check-intake-column-update`) records the staging pre-state `6810985b…` from
+read-live run 82; a fresh staging read-live with this executor version should be reviewed
+(provenance and the new preconditions) before another staging apply.
 
 Tool: `scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs`.
 Registered in the one-shot as `--migration sql89` (`ops/production-sql-one-shot.md`).
@@ -156,9 +173,10 @@ any route).
 | production pre-state | recorded from the production inspect (table-level UPDATE, every column) |
 | staging pre-state | recorded from the staging read-live |
 
-File sha256: `cadd01c13afc4ffba6f602b9f24ca7a572e240e6af00d92bf77d0119055e1afc` (authored in
-commit `cc4449a0d`). The file may hold only comments and exactly the two statements
-(`SQL89_CANONICAL_STATEMENTS`).
+File sha256: `d91ab6576a2bda45f2a9b0d21fc98241dd8ee20adc24bd34ecb68fc09f92c28a` (authored in
+commit `70518bbd7`). The file may hold only comments and exactly the four statements
+(`SQL89_CANONICAL_STATEMENTS`). The first version (`cadd01c1…`, commit `cc4449a0d`, two
+statements) is superseded.
 
 ## Where it runs
 
@@ -189,7 +207,13 @@ the pinned `rds_host`; a password, URL, host or user flag is refused.
    `column_update_entries`, `grantee_grant_option`, `grantee_update_grantors`,
    `login_can_grant`, `sql89_columns`, `sql89_columns_missing`, `columns_to_grant`,
    `columns_losing_update`, `update_functions`, `unsafe_update_functions`,
-   `ingest_function_present` / `_security_definer`, `live_definition_sha256`,
+   `ingest_function_present` / `_security_definer`, `authenticated_role_present`,
+   per-column UPDATE provenance (role names only): `update_grant_sources` (per grantee
+   among checksops, PUBLIC and every role checksops uses the privileges of: table-level
+   flag and columns), `update_provenance` (per column, for the 43 and every updatable
+   column: the grantees its UPDATE comes from), `grantee_member_of`,
+   `authenticated_members` (`role`, `can_login`), `other_login_authenticated_members`,
+   `other_inherited_update_roles`, `revoked_role_update_entries`, `live_definition_sha256`,
    `already_applied`, `post_state`, `precondition_failures`, `apply_preconditions_met`.
 
    On the first run `precondition_failures` is `table_owner_as_inspected`,
@@ -197,7 +221,14 @@ the pinned `rds_host`; a password, URL, host or user flag is refused.
    Stop on anything else: `sql89_columns_present` (a listed column is missing),
    `sql70_ingest_function_security_definer` (SQL 70 not applied), `update_functions_safe`,
    `grantee_update_granted_by_login` (an UPDATE grant the REVOKE would not remove),
-   `no_grantee_grant_option`. Expect `columns_losing_update` = the 30 columns outside the
+   `no_grantee_grant_option`, `authenticated_role_present` (the file names the role),
+   `authenticated_has_no_other_login_members` (a LOGIN role other than checksops uses
+   authenticated's privileges, directly or through a chain of INHERIT/SET memberships;
+   it would lose UPDATE), `no_other_inherited_update` (a role checksops is a member of,
+   other than authenticated, holds UPDATE on the table; SQL 89 would not revoke it),
+   `inherited_update_granted_by_login` (an UPDATE of authenticated or PUBLIC granted by
+   another role, which the REVOKE would not remove). An ADMIN-only membership (no INHERIT,
+   no SET) confers no privileges and is not counted. Expect `columns_losing_update` = the 30 columns outside the
    list and `columns_to_grant` = `[]`.
 2. **Record the pre-state** in a reviewed pin change: `live_definition_sha256` into
    `expected_live_definition_sha256`, and `table_owner`, `table_acl`, `updatable_columns`,
@@ -213,9 +244,12 @@ the pinned `rds_host`; a password, URL, host or user flag is refused.
    back unless all of these hold:
    - no table-level UPDATE for checksops (directly, via PUBLIC or membership);
    - checksops can UPDATE exactly the 43 columns, each by a direct column grant
-     `<column> checksops UPDATE granted by checksops_admin`;
-   - SELECT, INSERT, DELETE (and TRUNCATE, REFERENCES, TRIGGER) unchanged; every other
-     table and column ACL entry and the owner unchanged (the table ACL becomes
+     `<column> checksops UPDATE granted by checksops_admin`, and through no other grantee
+     (`update_only_from_grantee`);
+   - authenticated and PUBLIC hold no UPDATE on the table, table or column
+     (`authenticated_and_public_hold_no_update`);
+   - SELECT, INSERT, DELETE (and TRUNCATE, REFERENCES, TRIGGER) unchanged for every role;
+     every other table and column ACL entry and the owner unchanged (the table ACL becomes
      `checksops=ard/checksops_admin`);
    - everything else in schema public, and schema auth's functions, unchanged.
 
@@ -228,5 +262,7 @@ the pinned `rds_host`; a password, URL, host or user flag is refused.
 
 A separate owner-approved operation:
 `GRANT UPDATE ON TABLE public.check_intake_items TO checksops;` restores table-level
-UPDATE (the column grants then become redundant). Do not run it without a reason: it
-re-opens identity columns to the API role.
+UPDATE (the column grants then become redundant). UPDATE that authenticated or PUBLIC held
+before is listed in the pre-apply inspect's `update_grant_sources`; restore it only by
+re-granting exactly those columns. Do not run it without a reason: it re-opens identity
+columns to the API role.

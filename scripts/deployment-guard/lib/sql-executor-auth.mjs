@@ -158,8 +158,12 @@ export function columnUpdateStateText({ table_level_update: tableLevel, updatabl
     `updatable_columns: ${[...(columns || [])].map(String).sort().join(',')}`,
   ].join('\n');
 }
-// The file holds only comments and exactly these two statements (whitespace aside).
-export const SQL89_CANONICAL_STATEMENTS = `REVOKE UPDATE ON TABLE public.check_intake_items FROM checksops; GRANT UPDATE (${SQL89_COLUMNS.join(', ')}) ON TABLE public.check_intake_items TO checksops;`;
+// The roles SQL 89 revokes table-level UPDATE from (which also removes their column
+// UPDATE grants): checksops itself, and authenticated and PUBLIC, whose UPDATE grants
+// checksops holds through membership (aws/rls/sql/01_role_shim.sql: GRANT authenticated TO checksops).
+export const SQL89_REVOKED_GRANTEES = Object.freeze(['checksops', 'authenticated', 'PUBLIC']);
+// The file holds only comments and exactly these four statements (whitespace aside).
+export const SQL89_CANONICAL_STATEMENTS = `${SQL89_REVOKED_GRANTEES.map((g) => `REVOKE UPDATE ON TABLE public.check_intake_items FROM ${g};`).join(' ')} GRANT UPDATE (${SQL89_COLUMNS.join(', ')}) ON TABLE public.check_intake_items TO checksops;`;
 /** The file's statements with comments removed and whitespace collapsed. */
 export function sql89StatementText(text) {
   return String(text || '')
@@ -175,12 +179,17 @@ export const AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE = Object.freeze({
   filename: 'aws/workflows/sql/89_check_intake_items_column_update.sql',
   migration_id: '89_check_intake_items_column_update',
   // The commit that authored the file bytes (this branch's first commit).
-  commit: 'cc4449a0df90d6d9198ac53b6c4c65fc4b00a2c5',
-  source_sha256: 'cadd01c13afc4ffba6f602b9f24ca7a572e240e6af00d92bf77d0119055e1afc',
+  commit: '70518bbd7e459ae82d461941281465ce58d7a887',
+  source_sha256: 'd91ab6576a2bda45f2a9b0d21fc98241dd8ee20adc24bd34ecb68fc09f92c28a',
   // Staging read-live run 82 (run id 38918803201), 2026-10-16, main 39f9b21ea (executor
   // deploy run 81): no table-level UPDATE, 31 updatable columns (routing_number and
   // account_number absent; detected_claim_number present), 13 to grant, 1 losing update,
   // SQL 70 ingest SECURITY DEFINER, no unsafe update functions; precondition_failures [].
+  // Staging apply run 85 rolled back (UNRELATED_MUTATION, intended_state and
+  // updatable_columns_exact): the file then revoked only checksops' own UPDATE, and
+  // checksops kept UPDATE inherited from authenticated/PUBLIC. The fingerprint
+  // (columnUpdateStateText of checksops' effective UPDATE) is unchanged by the fix, so
+  // this recorded pre-state still describes staging.
   expected_live_definition_sha256: '6810985b26778774a633ad17f02b634ec7c19b956d0f5302251fd1d2d05b0c7f',
   // sha256(columnUpdateStateText({ table_level_update: false, updatable_columns: SQL89_COLUMNS })).
   intended_replacement_sha256: '2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8',
@@ -253,6 +262,24 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prokind IN ('f
   AND (CASE WHEN p.prosrc = '' THEN pg_catalog.pg_get_functiondef(p.oid) ELSE p.prosrc END)
     ~* '\\mupdate\\s+(only\\s+)?(public\\s*\\.\\s*)?"?${SQL89_TABLE_NAME}\\M'
 ORDER BY 1`,
+  revokedRolePresent: `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') AS present`,
+  // Roles whose privileges the grantee can use: every chain of memberships each granted
+  // with INHERIT or SET (an ADMIN-only membership confers nothing). Role names only.
+  granteeMemberOf: `WITH RECURSIVE up(roleid) AS (
+  SELECT m.roleid FROM pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles g ON g.oid = m.member
+  WHERE g.rolname = '${SQL89_GRANTEE}' AND (m.inherit_option OR m.set_option)
+  UNION
+  SELECT m.roleid FROM pg_catalog.pg_auth_members m JOIN up ON up.roleid = m.member WHERE m.inherit_option OR m.set_option
+)
+SELECT DISTINCT r.rolname::text AS role_name FROM up JOIN pg_catalog.pg_roles r ON r.oid = up.roleid ORDER BY 1`,
+  // Roles that can use authenticated's privileges (same rule), with whether each can log in.
+  authenticatedMembers: `WITH RECURSIVE down(member) AS (
+  SELECT m.member FROM pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles a ON a.oid = m.roleid
+  WHERE a.rolname = 'authenticated' AND (m.inherit_option OR m.set_option)
+  UNION
+  SELECT m.member FROM pg_catalog.pg_auth_members m JOIN down ON down.member = m.roleid WHERE m.inherit_option OR m.set_option
+)
+SELECT DISTINCT r.rolname::text AS role_name, r.rolcanlogin AS can_login FROM down JOIN pg_catalog.pg_roles r ON r.oid = down.member ORDER BY 1`,
   ingest: `SELECT p.prosecdef AS security_definer
 FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('${AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE.ingest_function}')`,
 });
@@ -297,9 +324,32 @@ export async function readSql89State(client) {
     owner_has_grantee_privileges: row.owner_has_grantee_privileges === true,
   }));
   const ingest = (await q(SQL89_READS.ingest))[0] || null;
+  const authenticatedPresent = (await q(SQL89_READS.revokedRolePresent))[0]?.present === true;
+  const memberOf = (await q(SQL89_READS.granteeMemberOf)).map((row) => String(row.role_name)).sort();
+  const authenticatedMembers = (await q(SQL89_READS.authenticatedMembers))
+    .map((row) => ({ role: String(row.role_name), can_login: row.can_login === true }))
+    .sort((a, b) => (a.role < b.role ? -1 : a.role > b.role ? 1 : 0));
   const isGrantee = (row) => row.grantee === SQL89_GRANTEE;
   const updateEntry = (row) => isGrantee(row) && row.privilege_type === 'UPDATE';
   const tableLevel = tablePrivileges.UPDATE === true;
+  // Where the grantee's UPDATE comes from: every direct UPDATE entry (table or column) of the
+  // grantee, of PUBLIC and of each role the grantee can use the privileges of.
+  const sources = [SQL89_GRANTEE, 'PUBLIC', ...memberOf.filter((r) => r !== SQL89_GRANTEE && r !== 'PUBLIC')];
+  const allUpdate = (entries) => entries.filter((row) => row.privilege_type === 'UPDATE');
+  const updateGrantSources = sources.map((grantee) => {
+    const tableUpdate = allUpdate(tableEntries).some((row) => row.grantee === grantee);
+    const cols = [...new Set(allUpdate(columnEntries).filter((row) => row.grantee === grantee).map((row) => row.column_name))].sort();
+    return { grantee, table_level: tableUpdate, columns: cols };
+  }).filter((src) => src.table_level || src.columns.length > 0);
+  const updateProvenance = {};
+  for (const name of [...new Set([...SQL89_COLUMNS, ...updatable])].sort()) {
+    updateProvenance[name] = updateGrantSources
+      .filter((src) => src.table_level || src.columns.includes(name))
+      .map((src) => (src.table_level ? `${src.grantee} (table)` : src.grantee));
+  }
+  const revokedOthers = SQL89_REVOKED_GRANTEES.filter((g) => g !== SQL89_GRANTEE);
+  const revokedOtherEntries = tableEntries.concat(columnEntries)
+    .filter((row) => row.privilege_type === 'UPDATE' && revokedOthers.includes(row.grantee));
   const state = {
     ...base,
     table_acl_entries: tableEntries.map(sql89EntryLine).sort(),
@@ -321,10 +371,22 @@ export async function readSql89State(client) {
     unsafe_update_functions: functions.filter((f) => !f.security_definer || f.owner_has_grantee_privileges).map((f) => f.signature),
     ingest_function_present: ingest !== null,
     ingest_function_security_definer: ingest?.security_definer === true,
+    authenticated_role_present: authenticatedPresent,
+    grantee_member_of: memberOf,
+    authenticated_members: authenticatedMembers,
+    other_login_authenticated_members: authenticatedMembers.filter((m) => m.can_login && m.role !== SQL89_GRANTEE).map((m) => m.role),
+    update_grant_sources: updateGrantSources,
+    update_provenance: updateProvenance,
+    // UPDATE reaching the grantee through a role SQL 89 does not revoke from.
+    other_inherited_update_roles: updateGrantSources.map((src) => src.grantee).filter((g) => !SQL89_REVOKED_GRANTEES.includes(g)),
+    revoked_role_update_entries: revokedOtherEntries
+      .map((row) => (row.column_name ? `${row.column_name} ${sql89EntryLine(row)}` : sql89EntryLine(row))).sort(),
+    revoked_role_update_grantors: [...new Set(revokedOtherEntries.map((row) => row.grantor))].sort(),
     live_definition_sha256: sql89Hash(columnUpdateStateText({ table_level_update: tableLevel, updatable_columns: updatable })),
   };
   state.already_applied = state.live_definition_sha256 === AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE.intended_replacement_sha256
     && state.table_level_update_entry === false
+    && state.revoked_role_update_entries.length === 0
     && sql89SameList(state.column_update_entries, sql89ExpectedUpdateEntries(state.grantee_update_grantors.length === 1 ? state.grantee_update_grantors[0] : null));
   return ok(state);
 }
@@ -348,6 +410,16 @@ export function sql89SharedPreconditionFailures(state) {
     ['login_can_grant', state?.login_can_grant === true],
     ['update_functions_safe', Array.isArray(state?.unsafe_update_functions) && state.unsafe_update_functions.length === 0],
     ['sql70_ingest_function_security_definer', state?.ingest_function_present === true && state?.ingest_function_security_definer === true],
+    // SQL 89 names authenticated; the REVOKE fails without the role.
+    ['authenticated_role_present', state?.authenticated_role_present === true],
+    // Every other LOGIN role that uses authenticated's privileges would lose UPDATE with it.
+    ['authenticated_has_no_other_login_members', Array.isArray(state?.other_login_authenticated_members)
+      && state.other_login_authenticated_members.length === 0],
+    // UPDATE through any other role checksops is a member of would survive SQL 89.
+    ['no_other_inherited_update', Array.isArray(state?.other_inherited_update_roles) && state.other_inherited_update_roles.length === 0],
+    // The REVOKEs from authenticated and PUBLIC remove only what the login granted.
+    ['inherited_update_granted_by_login', typeof login === 'string' && Array.isArray(state?.revoked_role_update_grantors)
+      && state.revoked_role_update_grantors.every((grantor) => grantor === login)],
   ]);
 }
 
@@ -359,6 +431,8 @@ export function sql89SharedPreconditionFailures(state) {
  */
 export function sql89PostconditionFailures(before, after) {
   const grantor = after?.current_user;
+  // ACL lines SQL 89 may remove: UPDATE of checksops, authenticated and PUBLIC (table or column).
+  const notRevokedUpdate = (line) => !new RegExp(`^(?:[a-z0-9_]+ )?(?:${SQL89_REVOKED_GRANTEES.join('|')}) UPDATE`).test(line);
   const notGranteeUpdate = (line) => !new RegExp(`^(?:[a-z0-9_]+ )?${SQL89_GRANTEE} UPDATE`).test(line);
   const otherPrivileges = (state) => SQL89_TABLE_PRIVILEGES.filter((p) => p !== 'UPDATE').map((p) => `${p}=${state?.table_privileges?.[p] === true}`);
   return sql89Failed([
@@ -368,13 +442,21 @@ export function sql89PostconditionFailures(before, after) {
     ['column_update_entries_exact', typeof grantor === 'string' && sql89SameList(after?.column_update_entries, sql89ExpectedUpdateEntries(grantor))],
     ['other_table_privileges_unchanged', sql89SameList(otherPrivileges(after), otherPrivileges(before))],
     ['other_table_acl_unchanged', sql89SameList(
-      (after?.table_acl_entries || []).filter(notGranteeUpdate),
-      (before?.table_acl_entries || []).filter(notGranteeUpdate),
+      (after?.table_acl_entries || []).filter(notRevokedUpdate),
+      (before?.table_acl_entries || []).filter(notRevokedUpdate),
     ) && !(after?.table_acl_entries || []).some((line) => !notGranteeUpdate(line))],
     ['other_column_acl_unchanged', sql89SameList(
-      (after?.column_acl_entries || []).filter(notGranteeUpdate),
-      (before?.column_acl_entries || []).filter(notGranteeUpdate),
+      (after?.column_acl_entries || []).filter(notRevokedUpdate),
+      (before?.column_acl_entries || []).filter(notRevokedUpdate),
     )],
+    // authenticated and PUBLIC hold no UPDATE on the table at all (table or column).
+    ['authenticated_and_public_hold_no_update', Array.isArray(after?.revoked_role_update_entries)
+      && after.revoked_role_update_entries.length === 0
+      && !(after?.table_acl_entries || []).concat(after?.column_acl_entries || [])
+        .some((line) => /^(?:[a-z0-9_]+ )?(?:authenticated|PUBLIC) UPDATE/.test(line))],
+    // checksops' UPDATE comes only from its own column grants.
+    ['update_only_from_grantee', sql89SameList(after?.update_grant_sources,
+      [{ grantee: SQL89_GRANTEE, table_level: false, columns: [...SQL89_COLUMNS] }])],
     ['no_grantee_grant_option', after?.grantee_grant_option === false],
     ['table_owner_unchanged', typeof before?.table_owner === 'string' && after?.table_owner === before.table_owner],
   ]);
@@ -456,6 +538,15 @@ export function sql89Report(state) {
     update_function_count: Array.isArray(state?.update_functions) ? state.update_functions.length : 0,
     unsafe_update_functions: [...(state?.unsafe_update_functions || [])],
     ingest_function_security_definer: state?.ingest_function_security_definer === true,
+    authenticated_role_present: state?.authenticated_role_present === true,
+    // Role names only (no owner or grantor names): where checksops' UPDATE comes from.
+    grantee_member_of: [...(state?.grantee_member_of || [])],
+    authenticated_members: (state?.authenticated_members || []).map((m) => ({ role: m.role, can_login: m.can_login === true })),
+    other_login_authenticated_members: [...(state?.other_login_authenticated_members || [])],
+    update_grant_sources: (state?.update_grant_sources || []).map((src) => ({ grantee: src.grantee, table_level: src.table_level === true, columns: [...src.columns] })),
+    update_provenance: Object.fromEntries(Object.entries(state?.update_provenance || {}).map(([c, v]) => [c, [...v]])),
+    other_inherited_update_roles: [...(state?.other_inherited_update_roles || [])],
+    revoked_role_update_entry_count: Array.isArray(state?.revoked_role_update_entries) ? state.revoked_role_update_entries.length : 0,
     already_applied: state?.already_applied === true,
   };
 }

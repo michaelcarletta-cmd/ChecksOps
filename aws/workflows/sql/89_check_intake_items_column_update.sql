@@ -7,17 +7,27 @@
 -- 40, 50, 52, 71 and the 2026-09-16 endorsement lock). This file makes both the
 -- same: UPDATE on exactly the 43 columns the API writes as checksops, nothing else.
 --
--- The REVOKE drops the table-level UPDATE and every column UPDATE that the owner
--- granted to checksops. The GRANT then gives back UPDATE on the listed columns.
--- SELECT, INSERT and DELETE are not touched. Run as the table owner (production:
--- checksops_admin); the reviewed tools wrap both statements in one transaction.
--- No data changes.
+-- checksops is a member of authenticated (aws/rls/sql/01_role_shim.sql), so it
+-- also holds every UPDATE granted to authenticated or to PUBLIC (staging: SQL 40
+-- grants UPDATE (deposit_recommendation) TO checksops, authenticated, and
+-- detected_claim_number was updatable through an inherited grant). The first
+-- REVOKE drops checksops' table-level UPDATE and every column UPDATE the owner
+-- granted to it; the next two do the same for authenticated and PUBLIC (a
+-- table-level REVOKE also removes that grantee's column UPDATE grants). The
+-- reviewed tools refuse when another LOGIN role uses authenticated's privileges
+-- (it would lose UPDATE too) or when UPDATE reaches checksops through any other
+-- role. The GRANT then gives checksops UPDATE on the listed columns. SELECT,
+-- INSERT and DELETE are not touched for any role. Run as the table owner
+-- (production: checksops_admin); the reviewed tools wrap every statement in one
+-- transaction. No data changes.
 --
 -- Columns and the code that writes each one: ops/production-sql-89-apply.md.
 -- Writes through SECURITY DEFINER functions (SQL 43, SQL 44, SQL 70,
 -- ocr_commit_results, deposit_action, record_check_return and the rest) run as
 -- the function owner and need no checksops grant.
 REVOKE UPDATE ON TABLE public.check_intake_items FROM checksops;
+REVOKE UPDATE ON TABLE public.check_intake_items FROM authenticated;
+REVOKE UPDATE ON TABLE public.check_intake_items FROM PUBLIC;
 GRANT UPDATE (
   account_number,
   amount,

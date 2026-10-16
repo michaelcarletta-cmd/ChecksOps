@@ -8,8 +8,8 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/89_check_intake_items_column_update.sql",
   "migration_id": "89_check_intake_items_column_update",
-  "staging_pin_commit": "cc4449a0df90d6d9198ac53b6c4c65fc4b00a2c5",
-  "source_sha256": "cadd01c13afc4ffba6f602b9f24ca7a572e240e6af00d92bf77d0119055e1afc",
+  "staging_pin_commit": "70518bbd7e459ae82d461941281465ce58d7a887",
+  "source_sha256": "d91ab6576a2bda45f2a9b0d21fc98241dd8ee20adc24bd34ecb68fc09f92c28a",
   "table": "public.check_intake_items",
   "grantee": "checksops",
   "columns": [
@@ -61,7 +61,7 @@
   "intended_replacement_sha256": "2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8",
   "authorization_phrase": "REPLACE_CHECK_INTAKE_TABLE_UPDATE_WITH_COLUMN_UPDATE_FOR_CHECKSOPS",
   "predecessors": [],
-  "prerequisites_note": "SQL 70 (aws/workflows/sql/70_ingest_shared_check.sql, SECURITY DEFINER public.aws_ingest_shared_check(jsonb)) is a prerequisite: without it ingest-shared-check.mjs falls back to an inline UPDATE as checksops of columns SQL 89 does not grant. The tool reports ingest_function_present and ingest_function_security_definer and refuses apply (sql70_ingest_function_security_definer) unless both are true. It also refuses while any SECURITY INVOKER function, or one owned by a role with checksops' privileges, UPDATEs the table (update_functions_safe).",
+  "prerequisites_note": "SQL 70 (aws/workflows/sql/70_ingest_shared_check.sql, SECURITY DEFINER public.aws_ingest_shared_check(jsonb)) is a prerequisite: without it ingest-shared-check.mjs falls back to an inline UPDATE as checksops of columns SQL 89 does not grant. The tool reports ingest_function_present and ingest_function_security_definer and refuses apply (sql70_ingest_function_security_definer) unless both are true. It also refuses while any SECURITY INVOKER function, or one owned by a role with checksops' privileges, UPDATEs the table (update_functions_safe), unless the role authenticated exists (authenticated_role_present), while any LOGIN role other than checksops uses authenticated's privileges (authenticated_has_no_other_login_members: it would lose UPDATE when SQL 89 revokes UPDATE from authenticated), while any role checksops is a member of other than authenticated holds UPDATE on the table (no_other_inherited_update: SQL 89 would not revoke it), and unless every UPDATE entry of authenticated and PUBLIC was granted by the login (inherited_update_granted_by_login).",
   "admin_login": "checksops_admin",
   "rds_identifier": "checksops-production",
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
@@ -84,7 +84,7 @@
     "live_definition_sha256": "2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8",
     "table_level_update": false,
     "updatable_columns": "exactly columns (43)",
-    "note": "After the unchanged SQL 89 file run as checksops_admin: no table-level UPDATE for checksops (directly, via PUBLIC or membership); checksops can UPDATE exactly the 43 pinned columns, each through a direct column grant \"<column> checksops UPDATE granted by checksops_admin\"; SELECT, INSERT, DELETE (and every other table privilege) unchanged, so the production table ACL becomes checksops=ard/checksops_admin; no grant option; every other table and column ACL entry, the owner, and everything else in schema public and schema auth's functions unchanged. intended_replacement_sha256 equals the staging pin's (AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE)."
+    "note": "After the unchanged SQL 89 file run as checksops_admin: no table-level UPDATE for checksops (directly, via PUBLIC or membership); checksops can UPDATE exactly the 43 pinned columns, each through a direct column grant \"<column> checksops UPDATE granted by checksops_admin\" and through no other grantee; authenticated and PUBLIC hold no UPDATE on the table (table or column); SELECT, INSERT, DELETE (and every other table privilege) unchanged for every role, so the production table ACL becomes checksops=ard/checksops_admin; no grant option; every other table and column ACL entry, the owner, and everything else in schema public and schema auth's functions unchanged. intended_replacement_sha256 equals the staging pin's (AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE)."
   },
   "staging_acceptance": {
     "ok": false,
@@ -94,6 +94,7 @@
   "notes": [
     "The owner approved on 2026-10-16 (\"option 3\") building SQL 89 and its tooling only. This pin authorizes nothing: authorization is pending, execute is false, expected_live_definition_sha256 is null and staging_acceptance.ok is false. An apply needs reviewed pin changes recording the production inspect, the staging acceptance reference, an owner approval and execute true, then the owner's run-time approval for that workstream.",
     "SQL 89 makes SQL 71's production state (amount updatable, no table-level UPDATE) true: today production's table-level UPDATE already lets checksops UPDATE amount, so SQL 71 is not applied to production on its own.",
-    "Staging: the staging executor pin (migration choice sql89-check-intake-column-update) has expected_live_definition_sha256 null until a staging read-live reports the staging pre-state and columns_to_grant / columns_losing_update."
+    "Staging: the staging executor pin (migration choice sql89-check-intake-column-update) records the staging pre-state 6810985b… from read-live run 82. Staging apply run 85 rolled back (UNRELATED_MUTATION, intended_state and updatable_columns_exact) because the file then revoked only checksops' own UPDATE while checksops, a member of authenticated, kept UPDATE granted to authenticated (e.g. detected_claim_number). The file now also revokes UPDATE from authenticated and PUBLIC; the fingerprint is unchanged, so the staging pre-state stands.",
+    "Production: --inspect now reports update_grant_sources, update_provenance, grantee_member_of and authenticated_members (role names and can_login only); the production inspect must be re-run with this tool version before a pre-state is recorded."
   ]
 }
