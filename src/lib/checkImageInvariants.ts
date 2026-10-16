@@ -329,6 +329,12 @@ export function collectEndorsedCleanStemCandidates(
   )];
 }
 
+// A type guard keeps the failure fields visible after `result` is reassigned
+// (tsconfig.app.json has strict: false, so `!result.ok` alone does not narrow).
+const isRecoverFailure = (
+  result: RecoverCleanBackOriginalResult,
+): result is RecoverCleanBackOriginalFailure => result.ok === false;
+
 export async function resolveCleanBackOriginalPath(opts: {
   record: CleanBackOriginalRecord;
   audits?: Array<CleanBackOriginalAudit | null | undefined> | null;
@@ -350,7 +356,7 @@ export async function resolveCleanBackOriginalPath(opts: {
     normalizePath: opts.normalizePath,
   });
 
-  if (!result.ok && result.canTryAudits && opts.loadAudits) {
+  if (isRecoverFailure(result) && result.canTryAudits && opts.loadAudits) {
     audits = await opts.loadAudits();
     result = recoverCleanBackOriginalPath({
       record: opts.record,
@@ -361,7 +367,7 @@ export async function resolveCleanBackOriginalPath(opts: {
     });
   }
 
-  if (!result.ok && result.canTryStemProbe && opts.probeCleanStemPaths) {
+  if (isRecoverFailure(result) && result.canTryStemProbe && opts.probeCleanStemPaths) {
     const candidates = collectEndorsedCleanStemCandidates(opts.record, opts.normalizePath);
     existingStemPaths = await opts.probeCleanStemPaths(candidates);
     result = recoverCleanBackOriginalPath({
@@ -373,7 +379,7 @@ export async function resolveCleanBackOriginalPath(opts: {
     });
   }
 
-  if (!result.ok && result.canTrySiblings && opts.loadSiblingNames && result.directory !== null) {
+  if (isRecoverFailure(result) && result.canTrySiblings && opts.loadSiblingNames && result.directory !== null) {
     siblingNames = await opts.loadSiblingNames(result.directory);
     result = recoverCleanBackOriginalPath({
       record: opts.record,
@@ -384,8 +390,8 @@ export async function resolveCleanBackOriginalPath(opts: {
     });
   }
 
-  if (!result.ok) throw new Error(result.message);
-  return result;
+  if (isRecoverFailure(result)) throw new Error(result.message);
+  return result as RecoverCleanBackOriginalSuccess;
 }
 
 export function depositImagePersistPatch(

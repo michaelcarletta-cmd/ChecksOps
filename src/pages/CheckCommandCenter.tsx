@@ -3134,8 +3134,9 @@ function CheckDetailPanel({
             .eq("check_id", check!.id)
             .order("created_at", { ascending: false })
             .limit(25);
-          return (data ?? []).map((row: { event_data?: Record<string, unknown> | null }) => {
-            const eventData = row?.event_data ?? {};
+          return (data ?? []).map((row: { event_data?: unknown }) => {
+            const raw = row?.event_data;
+            const eventData = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
             return {
               original_back_image_path: eventData.original_back_image_path as string | undefined,
               original_back_path: eventData.original_back_path as string | undefined,
@@ -4510,7 +4511,7 @@ function CheckDetailPanel({
                       if (!open) requestCloseEndorsementAdjuster();
                     }}
                   >
-                    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="max-w-7xl w-[min(96vw,1680px)] max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Adjust Received Endorsement</DialogTitle>
                       </DialogHeader>
