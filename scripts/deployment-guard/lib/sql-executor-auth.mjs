@@ -1236,15 +1236,16 @@ export const AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY = mortgagePin(
 );
 // SQL 87 (aws/workflows/sql/87_resolve_check_case_tenant_scope.sql): resolve_check_case
 // scoped to its tenant, EXECUTE left to its owner (the two SECURITY DEFINER case
-// trigger functions). No pre-state is code-derived: expected_live_definition_sha256
-// stays null until a guarded staging read-live has been recorded in a reviewed pin
-// change, and apply refuses until then.
+// trigger functions).
 export const AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE = mortgagePin(
   'sql87',
   'aws/workflows/sql/87_resolve_check_case_tenant_scope.sql',
   '87_resolve_check_case_tenant_scope',
   'f046c76cc731c08020171ec7e846818089df1bd66a7a07a42237f14fb8c4c22a',
-  null,
+  // Read-live run 74 (run id 38908546592), 2026-10-16, main 70021f724 (executor deploy
+  // run 73): resolve_check_case and both trigger functions case_original (PUBLIC EXECUTE),
+  // case_owner_safe true, other_callers total 0; precondition_failures [].
+  '8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a',
   '794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30',
   // The commit that authored the file bytes (this branch's first commit).
   'af84133e4e2cd6f3c2f2d8b63c59555d80646c22',
