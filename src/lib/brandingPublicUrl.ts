@@ -10,21 +10,25 @@ const BRANDING_FIELD_BUCKETS: Record<string, string> = {
 
 const BRANDING_BUCKETS = new Set(["tenant-logos", "email-assets", "company-branding"]);
 
-function viteAuthProvider(): string {
+function viteEnv(): { MODE?: string; VITE_AUTH_PROVIDER?: string } {
   return typeof import.meta !== "undefined"
-    ? String((import.meta as { env?: { VITE_AUTH_PROVIDER?: string } }).env?.VITE_AUTH_PROVIDER || "")
-    : "";
+    ? ((import.meta as { env?: { MODE?: string; VITE_AUTH_PROVIDER?: string } }).env || {})
+    : {};
 }
 
 /**
- * Only ChecksOps platform hosts (and localhost) serve `/prep/storage/public`
- * from the AWS API. On Freedom Claims and custom-domain hosts that path is the
- * SPA fallback (index.html), so stored logo URLs must be kept as-is there.
+ * Same backend decision as the data client (`integrations/supabase/client`):
+ * the AWS build serves `/storage/public` from the AWS API on every host,
+ * tenant custom domains included. Outside the AWS build only ChecksOps
+ * platform hosts (and localhost) with Cognito use the AWS backend; anywhere
+ * else no AWS API is in use, so the stored value is kept.
  */
 function shouldRewriteBrandingToAws(): boolean {
+  const env = viteEnv();
+  if (env.MODE === "aws") return true;
   return shouldUseAwsChecksOpsBackendFor({
     hostname: runtimeHostname(),
-    authProvider: viteAuthProvider(),
+    authProvider: String(env.VITE_AUTH_PROVIDER || ""),
   });
 }
 
@@ -68,10 +72,10 @@ export function rewriteSupabaseBrandingUrl(value: string, apiBaseUrl = apiBase()
 
 /**
  * Convert a stored Branding/logo value into the existing AWS
- * `/prep/storage/public` access path when the current host uses the ChecksOps
- * AWS backend and the value is a branding object path or a legacy Supabase
- * public URL. Freedom Claims and custom-domain hosts keep the stored value.
- * Already-public HTTPS URLs pass through.
+ * `/prep/storage/public` access path when the app uses the AWS backend (every
+ * host in the AWS build) and the value is a branding object path or a legacy
+ * Supabase public URL. Already-public HTTPS URLs pass through.
+ * javascript:/data:/blob:/file: values are always refused.
  */
 export function brandingPublicUrl(
   value: unknown,
