@@ -28,6 +28,9 @@ import {
   AUTHORIZED_SQL81_CHECKALT_PRODUCTION_REGISTER,
   AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW,
   AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
+  AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE,
+  AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
+  AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
   CHECKALT_AUTO_DEPOSIT_CONFIG,
@@ -55,6 +58,16 @@ import {
   HOMEOWNER_RLS_TABLES,
   HOMEOWNER_STATUS_TABLES,
   homeownerStateText,
+  MORTGAGE_AUDIT_TABLE,
+  MORTGAGE_AUDIT_TABLE_INTENDED,
+  MORTGAGE_DEFINITION_SHA256,
+  MORTGAGE_FALLBACK_INDEX,
+  MORTGAGE_MIGRATIONS,
+  MORTGAGE_PER_CHECK_PREDICATES,
+  MORTGAGE_REPLACEABLE_ACL_ENTRIES,
+  MORTGAGE_SQL85_OBJECTS_INTENDED,
+  mortgageFunctionLabel,
+  mortgageStateText,
   MEMBER_STAKEHOLDER_FUNCTIONS,
   MEMBER_STAKEHOLDER_FUNCTION_SHA256,
   MEMBER_STAKEHOLDER_NEW_POLICIES,
@@ -92,6 +105,9 @@ import {
   isSql81CheckaltProductionRegister,
   isSql82HomeownerLedgerView,
   isSql83HomeownerSigningCapabilities,
+  isSql84MortgageReturnToQueue,
+  isSql85MortgageCompensationAdjust,
+  isSql86MortgageCompensationOwnerOnly,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
   STAKEHOLDER_GRANT_TABLE,
@@ -145,6 +161,9 @@ const SQL80_CHECKALT_MEMBER_AUTO_DEPOSIT_FILE = path.join(ROOT, 'sql/80_checkalt
 const SQL81_CHECKALT_PRODUCTION_REGISTER_FILE = path.join(ROOT, 'sql/81_checkalt_production_register.sql');
 const SQL82_HOMEOWNER_LEDGER_VIEW_FILE = path.join(ROOT, 'sql/82_homeowner_ledger_view.sql');
 const SQL83_HOMEOWNER_SIGNING_CAPABILITIES_FILE = path.join(ROOT, 'sql/83_homeowner_signing_capabilities.sql');
+const SQL84_MORTGAGE_RETURN_TO_QUEUE_FILE = path.join(ROOT, 'sql/84_mortgage_return_to_queue.sql');
+const SQL85_MORTGAGE_COMPENSATION_ADJUST_FILE = path.join(ROOT, 'sql/85_mortgage_compensation_adjust.sql');
+const SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY_FILE = path.join(ROOT, 'sql/86_mortgage_compensation_owner_only.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -4360,6 +4379,929 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
   }
 }
 
+// --- SQL 84 / 85 / 86: Mortgage Ops Return to Queue, Adjust, owner-only helper ---
+
+// sha256 of each reviewed file outside its CREATE OR REPLACE FUNCTION bodies (each body
+// replaced by <body>), comments removed and whitespace collapsed. The test re-derives them.
+export const MORTGAGE_OUTSIDE_SHA256 = Object.freeze({
+  sql84: 'dbfd54b76bd128bb1e71b4ed379532acbc33118fdcb350d5a4db63360e3dcf96',
+  sql85: '77bba93b91397609a82bbb675b8f4ad0b72f38e1b9320edc62ffdd5b937811c7',
+  sql86: 'fa7c20f47edc208f591a906a4741943d334c9cf8b1ce656d4472d9afd5562b04',
+});
+
+const mortgageTargets = (key) => (MORTGAGE_MIGRATIONS[key]?.functions || []).filter((fn) => fn.role === 'target');
+
+/**
+ * Splits a file into the text outside its target function bodies (each body replaced
+ * by <body>) and the bodies in spec order. Null when a target's header, `AS $$` or
+ * closing `$$;` is missing, or the headers are out of order.
+ */
+export function parseMortgageSql(key, text) {
+  const source = String(text || '');
+  const targets = mortgageTargets(key);
+  if (!targets.length) return null;
+  const bodies = [];
+  let rest = '';
+  let from = 0;
+  for (const fn of targets) {
+    const header = source.indexOf(`CREATE OR REPLACE FUNCTION public.${fn.name}(`, from);
+    if (header < 0) return null;
+    const open = source.indexOf('AS $$', header);
+    if (open < 0) return null;
+    const close = source.indexOf('$$;', open + 5);
+    if (close < 0) return null;
+    bodies.push(source.slice(open + 5, close));
+    rest += `${source.slice(from, open)}AS $$<body>$$;`;
+    from = close + 3;
+  }
+  rest += source.slice(from);
+  const outside = rest.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim();
+  return { outside, bodies };
+}
+
+/** pg_get_functiondef (PostgreSQL 16) of each function a reviewed file creates, by identity. */
+export function mortgageReviewedFunctiondefs(key, text) {
+  const targets = mortgageTargets(key);
+  const parsed = parseMortgageSql(key, text);
+  if (!parsed || parsed.bodies.length !== targets.length) return null;
+  return Object.fromEntries(targets.map((fn, index) => [fn.identity, [
+    `CREATE OR REPLACE FUNCTION public.${fn.name}(${fn.arguments})`,
+    ` RETURNS ${fn.result}`,
+    ` LANGUAGE ${fn.language}`,
+    `${fn.volatility ? ` ${fn.volatility}` : ''} SECURITY DEFINER`,
+    ...fn.config.map((entry) => {
+      const [name, value] = entry.split('=');
+      return ` SET ${name} TO '${value}'`;
+    }),
+    `AS $function$${parsed.bodies[index]}$function$`,
+    '',
+  ].join('\n')]));
+}
+
+/** The reviewed file is exactly the reviewed statements, bodies and functiondefs. */
+export function mortgageSqlIsReviewed(key, text) {
+  const parsed = parseMortgageSql(key, text);
+  const defs = mortgageReviewedFunctiondefs(key, text);
+  return Boolean(parsed && defs)
+    && hashSqlDefinition(parsed.outside) === MORTGAGE_OUTSIDE_SHA256[key]
+    && mortgageTargets(key).every((fn) => hashSqlDefinition(defs[fn.identity]) === MORTGAGE_DEFINITION_SHA256[fn.identity]);
+}
+
+// $1 is the function identity, $2 its bare name (functions of that name in any schema).
+const MORTGAGE_FUNCTION_SQL = `
+SELECT p.oid IS NOT NULL AS present,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_functiondef(p.oid) END AS def,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_function_arguments(p.oid) END AS arguments,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_function_identity_arguments(p.oid) END AS identity_arguments,
+  CASE WHEN p.oid IS NOT NULL THEN pg_get_function_result(p.oid) END AS result,
+  p.prokind::text AS prokind,
+  p.proretset AS retset,
+  l.lanname::text AS language,
+  p.provolatile::text AS volatility,
+  COALESCE(p.proargnames, ARRAY[]::text[]) AS arg_names,
+  p.prosecdef AS security_definer,
+  COALESCE(p.proconfig, ARRAY[]::text[]) AS config,
+  p.proacl::text AS proacl,
+  p.proowner::text AS owner_oid,
+  pg_get_userbyid(p.proowner)::text AS owner,
+  p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user) AS owner_is_executor,
+  o.rolsuper AS owner_rolsuper,
+  o.rolbypassrls AS owner_rolbypassrls,
+  CASE WHEN p.oid IS NOT NULL AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'checksops')
+    THEN pg_has_role(p.proowner, 'checksops', 'MEMBER') END AS owner_member_of_checksops,
+  CASE WHEN p.oid IS NOT NULL AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated')
+    THEN pg_has_role(p.proowner, 'authenticated', 'MEMBER') END AS owner_member_of_authenticated,
+  (SELECT count(*)::int FROM pg_proc x WHERE x.proname = $2) AS overload_count
+FROM (SELECT to_regprocedure($1) AS oid) t
+LEFT JOIN pg_proc p ON p.oid = t.oid
+LEFT JOIN pg_language l ON l.oid = p.prolang
+LEFT JOIN pg_roles o ON o.oid = p.proowner
+`.trim();
+// Every function carrying one of the names, in any schema, with its definition hash.
+const MORTGAGE_NAMED_FUNCTIONS_SQL = `
+SELECT p.proname::text AS name, p.oid::regprocedure::text AS signature, pg_get_function_result(p.oid) AS result,
+  CASE WHEN p.prokind IN ('f', 'p') THEN encode(sha256(convert_to(pg_get_functiondef(p.oid), 'UTF8')), 'hex') END AS definition_sha256
+FROM pg_proc p
+WHERE p.proname = ANY($1::text[])
+ORDER BY 1, 2
+`.trim();
+// The objects each file's sql47_prerequisite_missing check names, plus the roles.
+const MORTGAGE_PREREQUISITES_SQL = `
+SELECT t.x AS name,
+  CASE WHEN t.x LIKE 'role %' THEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = substr(t.x, 6))
+    WHEN t.x LIKE '%(%' THEN to_regprocedure(t.x) IS NOT NULL
+    ELSE to_regclass(t.x) IS NOT NULL END AS present
+FROM unnest($1::text[]) WITH ORDINALITY AS t(x, n)
+ORDER BY t.n
+`.trim();
+const MORTGAGE_TABLE_COLUMNS_SQL = `
+SELECT a.attname::text AS name, format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS not_null,
+  pg_get_expr(d.adbin, d.adrelid) AS default_expr
+FROM pg_attribute a
+LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE a.attrelid = to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum
+`.trim();
+const MORTGAGE_TABLE_ACL_SQL = `
+SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type, a.is_grantable
+FROM pg_class c
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) a
+LEFT JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.oid = to_regclass($1) AND a.grantee <> c.relowner
+ORDER BY 1, 2, 3
+`.trim();
+const MORTGAGE_TABLE_POLICIES_SQL = `
+SELECT pol.polname::text AS name, pol.polcmd::text AS cmd, pol.polpermissive AS permissive,
+  ARRAY(SELECT CASE WHEN r = 0 THEN 'public' ELSE pg_get_userbyid(r)::text END FROM unnest(pol.polroles) r ORDER BY 1)::text[] AS roles,
+  pg_get_expr(pol.polqual, pol.polrelid) AS qual, pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+FROM pg_policy pol
+WHERE pol.polrelid = to_regclass($1)
+ORDER BY 1
+`.trim();
+const MORTGAGE_TABLE_INDEXES_SQL = `
+SELECT ci.relname::text AS name, pg_get_indexdef(i.indexrelid) AS definition, i.indisvalid AS valid,
+  i.indisunique AS is_unique, i.indnkeyatts::int AS key_count, i.indexprs IS NOT NULL AS has_expressions,
+  ARRAY(SELECT a.attname::text FROM generate_series(0, i.indnkeyatts - 1) AS k(n)
+    JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[k.n] ORDER BY k.n)::text[] AS key_columns,
+  pg_get_expr(i.indpred, i.indrelid) AS predicate
+FROM pg_index i
+JOIN pg_class ci ON ci.oid = i.indexrelid
+WHERE i.indrelid = to_regclass($1)
+ORDER BY 1
+`.trim();
+const MORTGAGE_INDEX_SQL = `
+SELECT pg_get_indexdef(i.indexrelid) AS definition, i.indisvalid AS valid
+FROM pg_index i
+WHERE i.indexrelid = to_regclass($1)
+`.trim();
+const MORTGAGE_COLUMN_TYPE_SQL = `
+SELECT format_type(a.atttypid, a.atttypmod) AS type
+FROM pg_attribute a
+WHERE a.attrelid = to_regclass($1) AND a.attname = $2 AND a.attnum > 0 AND NOT a.attisdropped
+`.trim();
+const MORTGAGE_CONSTRAINT_SQL = `
+SELECT pg_get_constraintdef(con.oid) AS definition
+FROM pg_constraint con
+WHERE con.conrelid = to_regclass($1) AND con.conname = $2
+`.trim();
+// Aggregate reads only (never row data beyond check ids in the production inspect). Run under
+// row_security = off inside a savepoint: a login RLS would filter gets an error, not partial counts.
+const MORTGAGE_BILLING_DUPLICATES_SQL = `
+SELECT count(*)::int AS groups, COALESCE(sum(d.n - 1), 0)::int AS extra_events,
+  COALESCE((array_agg(d.check_intake_item_id::text ORDER BY d.check_intake_item_id))[1:50], ARRAY[]::text[]) AS check_ids
+FROM (
+  SELECT e.check_intake_item_id, count(*) AS n
+  FROM public.check_billing_events e
+  WHERE e.event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+    AND e.status IS DISTINCT FROM 'voided'
+    AND e.check_intake_item_id IS NOT NULL
+  GROUP BY e.check_intake_item_id
+  HAVING count(*) > 1
+) d
+`.trim();
+const MORTGAGE_BATCH_ACTIONS_SQL = `
+SELECT count(*)::int AS n FROM public.mortgage_agent_compensation_batches
+WHERE action NOT IN ('approve', 'pay', 'adjust')
+`.trim();
+const MORTGAGE_IDEMPOTENCY_DUPLICATES_SQL = `
+SELECT count(*)::int AS n FROM (
+  SELECT idempotency_key FROM public.mortgage_agent_compensation_batches
+  WHERE action = 'adjust' AND idempotency_key IS NOT NULL
+  GROUP BY 1 HAVING count(*) > 1
+) d
+`.trim();
+// Everything else in schema public and auth the migrations must not touch, at column,
+// constraint, policy, trigger and function grain. Parameters (MORTGAGE_SNAPSHOT_PARAMS):
+// the relations skipped whole (the migration's new relations and their indexes), the
+// "rel.column" it adds, the "rel.constraint" it replaces, the function identities it changes.
+const MORTGAGE_SNAPSHOT_SQL = Object.freeze({
+  relations: `
+SELECT c.oid::regclass::text AS rel, c.relkind::text AS kind, c.relacl::text AS acl,
+  c.relrowsecurity, c.relforcerowsecurity, pg_get_userbyid(c.relowner)::text AS owner
+FROM pg_class c
+WHERE c.relnamespace = 'public'::regnamespace
+  AND NOT (c.oid::regclass::text = ANY($1::text[]))
+  AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indexrelid = c.oid AND i.indrelid::regclass::text = ANY($1::text[]))
+ORDER BY 1, 2`,
+  columns: `
+SELECT a.attrelid::regclass::text AS rel, a.attnum, a.attname, format_type(a.atttypid, a.atttypmod) AS type,
+  a.attnotnull, a.attacl::text AS acl, pg_get_expr(d.adbin, d.adrelid) AS default_expr
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+  AND a.attnum > 0 AND NOT a.attisdropped
+  AND NOT (a.attrelid::regclass::text = ANY($1::text[]))
+  AND NOT ((a.attrelid::regclass::text || '.' || a.attname) = ANY($2::text[]))
+ORDER BY 1, 2`,
+  constraints: `
+SELECT con.conrelid::regclass::text AS rel, con.conname, con.contype::text AS type, pg_get_constraintdef(con.oid) AS def
+FROM pg_constraint con
+WHERE con.connamespace = 'public'::regnamespace
+  AND NOT (con.conrelid::regclass::text = ANY($1::text[]))
+  AND NOT ((con.conrelid::regclass::text || '.' || con.conname) = ANY($2::text[]))
+ORDER BY 1, 2`,
+  policies: `
+SELECT pol.polrelid::regclass::text AS rel, pol.polname, pol.polcmd::text AS cmd, pol.polpermissive,
+  pol.polroles::text AS roles, pg_get_expr(pol.polqual, pol.polrelid) AS qual, pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+FROM pg_policy pol
+WHERE NOT (pol.polrelid::regclass::text = ANY($1::text[]))
+ORDER BY 1, 2`,
+  triggers: `
+SELECT t.tgrelid::regclass::text AS rel, t.tgname, t.tgenabled::text AS enabled, pg_get_triggerdef(t.oid) AS def
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+WHERE NOT t.tgisinternal AND c.relnamespace = 'public'::regnamespace
+  AND NOT (t.tgrelid::regclass::text = ANY($1::text[]))
+ORDER BY 1, 2`,
+  functions: `
+SELECT p.oid::regprocedure::text AS signature,
+  CASE WHEN p.prokind IN ('f', 'p') THEN encode(sha256(convert_to(pg_get_functiondef(p.oid), 'UTF8')), 'hex') END AS def_sha256,
+  p.proacl::text AS acl, p.prosecdef, p.proconfig::text AS config, p.proowner::regrole::text AS owner
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('public', 'auth')
+  AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) x WHERE to_regprocedure(x) = p.oid)
+ORDER BY 1`,
+});
+const MORTGAGE_SNAPSHOT_PARAMS = Object.freeze({
+  relations: [0], columns: [0, 1], constraints: [0, 2], policies: [0], triggers: [0], functions: [3],
+});
+
+const mortgageAclLine = (entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`;
+const sameMortgageJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const MORTGAGE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Runs `fn` under a savepoint with row_security off; an RLS-filtered or failing read is reported, not raised. */
+async function mortgageGuardedCount(client, name, fn) {
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    await client.query("SELECT set_config('row_security', 'off', true)");
+    const value = await fn();
+    return { readable: true, ...value };
+  } catch (error) {
+    return { readable: false, reason: /row-level security/i.test(String(error?.message || '')) ? 'row_security_would_filter' : 'unreadable' };
+  } finally {
+    // Restores row_security and discards anything the read touched.
+    await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+  }
+}
+
+async function readMortgageTable(client, regclass, login) {
+  const row = ((await client.query(HOMEOWNER_TABLES_SQL, [[regclass.replace(/^public\./, '')]]))?.rows || [])[0];
+  if (!row) return { present: false };
+  const columns = ((await client.query(MORTGAGE_TABLE_COLUMNS_SQL, [regclass]))?.rows || [])
+    .map((col) => ({ name: col.name, type: col.type, not_null: col.not_null === true, default: col.default_expr ?? null }));
+  const acl = ((await client.query(MORTGAGE_TABLE_ACL_SQL, [regclass]))?.rows || [])
+    .map((entry) => ({ grantee: entry.grantee, privilege_type: entry.privilege_type, is_grantable: entry.is_grantable === true }));
+  const policies = ((await client.query(MORTGAGE_TABLE_POLICIES_SQL, [regclass]))?.rows || [])
+    .map((pol) => ({ name: pol.name, cmd: pol.cmd, permissive: pol.permissive !== false, roles: (pol.roles || []).map(String), qual: pol.qual ?? null, with_check: pol.with_check ?? null }));
+  const indexes = ((await client.query(MORTGAGE_TABLE_INDEXES_SQL, [regclass]))?.rows || [])
+    .map((idx) => ({
+      name: idx.name,
+      definition: idx.definition,
+      valid: idx.valid === true,
+      is_unique: idx.is_unique === true,
+      key_count: Number(idx.key_count) || 0,
+      has_expressions: idx.has_expressions === true,
+      key_columns: (idx.key_columns || []).map(String),
+      predicate: idx.predicate ?? null,
+    }));
+  return {
+    present: true,
+    owner: row.owner ?? null,
+    owner_is_executor: row.owner != null && row.owner === login.current_user,
+    rls_enabled: row.rls_enabled === true,
+    rls_forced: row.rls_forced === true,
+    columns,
+    acl,
+    policies,
+    indexes,
+  };
+}
+
+/** SQL 84's GATE 0, exactly as the file evaluates it. */
+export function mortgagePerCheckIndexKind(index) {
+  if (!index?.predicate) return 'none';
+  if (index.predicate === MORTGAGE_PER_CHECK_PREDICATES.staging) return 'staging';
+  if (index.predicate === MORTGAGE_PER_CHECK_PREDICATES.fallback) return 'fallback';
+  return 'other';
+}
+export function mortgagePerCheckIndexMatches(index) {
+  return Boolean(index) && index.is_unique === true && index.valid === true && index.key_count === 1
+    && index.has_expressions === false && sameMortgageJson(index.key_columns, ['check_intake_item_id'])
+    && ['staging', 'fallback'].includes(mortgagePerCheckIndexKind(index));
+}
+
+/**
+ * Read-only fingerprint and readable detail of a mortgage migration's functions and
+ * objects plus the roles, tables, columns and SQL 47 objects they rely on. Never
+ * reads row data (only aggregate counts and, for SQL 84, duplicate check ids).
+ * `live_definition_sha256` is the pinned fingerprint.
+ */
+export async function readMortgageState(client, key) {
+  const spec = MORTGAGE_MIGRATIONS[key];
+  if (!spec) return fail(CODES.INVALID_MANIFEST, `unknown mortgage migration ${key}`);
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const login = (await client.query(HOMEOWNER_LOGIN_SQL))?.rows?.[0] || {};
+  const roles = ((await client.query(HOMEOWNER_ROLES_SQL, [['checksops', 'authenticated']]))?.rows || []).map((row) => row.rolname);
+  const prerequisites = ((await client.query(MORTGAGE_PREREQUISITES_SQL, [[...spec.prerequisites]]))?.rows || [])
+    .map((row) => ({ name: row.name, present: row.present === true }));
+  const tables = Object.keys(spec.columns);
+  const tableRows = (await client.query(HOMEOWNER_TABLES_SQL, [tables]))?.rows || [];
+  const columnRows = (await client.query(HOMEOWNER_COLUMNS_SQL, [tables]))?.rows || [];
+  const named = (await client.query(MORTGAGE_NAMED_FUNCTIONS_SQL, [[...new Set(spec.functions.map((fn) => fn.name))]]))?.rows || [];
+  const states = {};
+  const functions = {};
+  for (const fn of spec.functions) {
+    const row = (await client.query(MORTGAGE_FUNCTION_SQL, [fn.identity, fn.name]))?.rows?.[0] || {};
+    const exists = row.present === true;
+    const acl = exists ? ((await client.query(CHECKALT_FUNCTION_ACL_SQL, [fn.identity]))?.rows || []) : [];
+    const config = Array.isArray(row.config) ? row.config.map(String) : [];
+    const def = exists && typeof row.def === 'string' ? row.def : null;
+    const state = {
+      exists,
+      overload_count: Number.isInteger(row.overload_count) ? row.overload_count : Number(row.overload_count) || 0,
+      arguments: exists ? row.arguments ?? null : null,
+      result: exists ? row.result ?? null : null,
+      definition_sha256: def ? hashSqlDefinition(def) : null,
+      security_definer: row.security_definer === true,
+      config,
+      owner_is_executor: row.owner_is_executor === true,
+      owner_oid: exists ? String(row.owner_oid ?? '') || null : null,
+      acl: acl.map((entry) => ({ grantee: entry.grantee, privilege_type: entry.privilege_type, is_grantable: entry.is_grantable === true })),
+    };
+    states[fn.identity] = state;
+    functions[fn.key] = {
+      identity: fn.identity,
+      role: fn.role,
+      exists,
+      overload_count: state.overload_count,
+      named_signatures: named.filter((other) => other.name === fn.name).map((other) => ({
+        signature: other.signature,
+        result: other.result,
+        definition_sha256: other.definition_sha256 ?? null,
+      })),
+      identity_arguments: exists ? row.identity_arguments ?? null : null,
+      arguments: state.arguments,
+      argument_names: exists ? (row.arg_names || []).map(String) : [],
+      result: state.result,
+      kind: exists ? row.prokind ?? null : null,
+      returns_set: exists ? row.retset === true : null,
+      language: exists ? row.language ?? null : null,
+      volatility: exists ? row.volatility ?? null : null,
+      security_definer: exists ? state.security_definer : null,
+      config,
+      owner: exists ? row.owner ?? null : null,
+      owner_is_executor: exists ? state.owner_is_executor : null,
+      owner_rolsuper: exists ? row.owner_rolsuper === true : null,
+      owner_rolbypassrls: exists ? row.owner_rolbypassrls === true : null,
+      owner_member_of_checksops: exists ? row.owner_member_of_checksops === true : null,
+      owner_member_of_authenticated: exists ? row.owner_member_of_authenticated === true : null,
+      proacl: exists ? row.proacl ?? null : null,
+      acl_entries: state.acl.map(mortgageAclLine).sort(),
+      definition_sha256: state.definition_sha256,
+      state: mortgageFunctionLabel(fn, state),
+      matches_migration: fn.role === 'target' && state.definition_sha256 != null && state.definition_sha256 === MORTGAGE_DEFINITION_SHA256[fn.identity],
+      // Whole-file comparison helpers keep the body as text only inside this process.
+      _def: def,
+    };
+  }
+  const tableMap = Object.fromEntries(tables.map((name) => {
+    const row = tableRows.find((entry) => entry.relname === name);
+    return [name, row
+      ? { present: true, rls_enabled: row.rls_enabled === true, rls_forced: row.rls_forced === true, owner: row.owner ?? null, owner_is_executor: row.owner != null && row.owner === login.current_user }
+      : { present: false, rls_enabled: null, rls_forced: null, owner: null, owner_is_executor: null }];
+  }));
+  const missingColumns = {};
+  for (const [table, columns] of Object.entries(spec.columns)) {
+    const have = new Set(columnRows.filter((row) => row.relname === table).map((row) => row.attname));
+    const missing = columns.filter((column) => !have.has(column));
+    if (missing.length) missingColumns[table] = missing;
+  }
+
+  const objects = {};
+  const report = {};
+  if (key === 'sql84') {
+    const audit = await readMortgageTable(client, `public.${MORTGAGE_AUDIT_TABLE}`, login);
+    objects.audit_table = audit;
+    const billing = tableMap.check_billing_events?.present
+      ? ((await client.query(MORTGAGE_TABLE_INDEXES_SQL, ['public.check_billing_events']))?.rows || []).map((idx) => ({
+        name: idx.name,
+        definition: idx.definition,
+        valid: idx.valid === true,
+        is_unique: idx.is_unique === true,
+        key_count: Number(idx.key_count) || 0,
+        has_expressions: idx.has_expressions === true,
+        key_columns: (idx.key_columns || []).map(String),
+        predicate: idx.predicate ?? null,
+      }))
+      : [];
+    // Every unique index keyed on check_intake_item_id or naming a Mortgage Ops event type.
+    report.billing_per_check_indexes = billing
+      .filter((idx) => idx.is_unique && (idx.key_columns.includes('check_intake_item_id') || /mortgage_ops/.test(String(idx.predicate || ''))
+        || idx.name === MORTGAGE_FALLBACK_INDEX))
+      .map((idx) => ({ ...idx, predicate_kind: mortgagePerCheckIndexKind(idx), matches_gate0: mortgagePerCheckIndexMatches(idx) }));
+    objects.per_check_unique_present = billing.some(mortgagePerCheckIndexMatches);
+    report.fallback_index_name_taken = billing.some((idx) => idx.name === MORTGAGE_FALLBACK_INDEX);
+    report.billing_duplicates = tableMap.check_billing_events?.present && !missingColumns.check_billing_events
+      ? await mortgageGuardedCount(client, 'mortgage_billing_duplicates', async () => {
+        const row = (await client.query(MORTGAGE_BILLING_DUPLICATES_SQL))?.rows?.[0] || {};
+        return {
+          groups: Number(row.groups) || 0,
+          extra_events: Number(row.extra_events) || 0,
+          check_ids: (row.check_ids || []).map(String).filter((id) => MORTGAGE_UUID_RE.test(id)),
+        };
+      })
+      : { readable: false, reason: 'table_or_columns_missing' };
+  }
+  if (key === 'sql85') {
+    objects.columns = {};
+    for (const [table, column] of Object.entries(spec.added_columns)) {
+      objects.columns[`${table}.${column}`] = ((await client.query(MORTGAGE_COLUMN_TYPE_SQL, [table, column]))?.rows || [])[0]?.type ?? null;
+    }
+    objects.indexes = {};
+    for (const index of spec.new_relations) {
+      const row = ((await client.query(MORTGAGE_INDEX_SQL, [index]))?.rows || [])[0];
+      objects.indexes[index] = row ? { definition: row.definition, valid: row.valid === true } : null;
+    }
+    objects.constraints = {};
+    for (const constraint of spec.replaced_constraints) {
+      const [schema, table, conname] = constraint.split('.');
+      objects.constraints[constraint] = ((await client.query(MORTGAGE_CONSTRAINT_SQL, [`${schema}.${table}`, conname]))?.rows || [])[0]?.definition ?? null;
+    }
+    const batches = tableMap.mortgage_agent_compensation_batches?.present && !missingColumns.mortgage_agent_compensation_batches;
+    report.batch_actions_outside_check = batches
+      ? await mortgageGuardedCount(client, 'mortgage_batch_actions', async () => ({ count: Number((await client.query(MORTGAGE_BATCH_ACTIONS_SQL))?.rows?.[0]?.n) || 0 }))
+      : { readable: false, reason: 'table_or_columns_missing' };
+    report.duplicate_adjust_idempotency_keys = batches && objects.columns['public.mortgage_agent_compensation_batches.idempotency_key']
+      ? await mortgageGuardedCount(client, 'mortgage_idempotency_duplicates', async () => ({ count: Number((await client.query(MORTGAGE_IDEMPOTENCY_DUPLICATES_SQL))?.rows?.[0]?.n) || 0 }))
+      : { readable: true, count: 0, note: 'column absent' };
+  }
+  if (key === 'sql86') {
+    const earn = spec.functions.find((fn) => fn.role === 'acl_only');
+    const trigger = spec.functions.find((fn) => fn.role === 'referenced');
+    const e = functions[earn.key];
+    const t = functions[trigger.key];
+    const sameOwner = e.exists && t.exists && states[earn.identity].owner_oid === states[trigger.identity].owner_oid;
+    const ownerIsApiRole = e.exists && ['checksops', 'authenticated'].includes(e.owner);
+    const ownerInApiRole = e.exists && (e.owner_member_of_checksops === true || e.owner_member_of_authenticated === true);
+    // SQL 86's earn_owner_unsafe guard, predicted.
+    report.earn_owner = {
+      earn_present: e.exists,
+      trigger_function_present: t.exists,
+      same_owner: sameOwner,
+      owner_is_checksops_or_authenticated: ownerIsApiRole,
+      owner_rolsuper: e.exists ? e.owner_rolsuper : null,
+      owner_member_of_checksops: e.owner_member_of_checksops,
+      owner_member_of_authenticated: e.owner_member_of_authenticated,
+      earn_owner_safe: e.exists && t.exists && sameOwner && !ownerIsApiRole && (e.owner_rolsuper === true || !ownerInApiRole),
+    };
+  }
+  return ok({
+    migration: key,
+    current_user: login.current_user ?? null,
+    session_user: login.session_user ?? null,
+    login_rolsuper: login.rolsuper === true,
+    login_rolbypassrls: login.rolbypassrls === true,
+    prerequisites,
+    sql47_prerequisites_present: prerequisites.length === spec.prerequisites.length && prerequisites.every((row) => row.present),
+    missing_prerequisites: prerequisites.filter((row) => !row.present).map((row) => row.name),
+    function_states: Object.fromEntries(spec.functions.map((fn) => [fn.key, functions[fn.key].state])),
+    functions,
+    objects,
+    report,
+    required_roles_present: ['authenticated', 'checksops'].every((role) => roles.includes(role)),
+    required_tables_present: tables.every((table) => tableMap[table]?.present === true),
+    required_columns_present: Object.keys(missingColumns).length === 0,
+    missing_columns: missingColumns,
+    tables: tableMap,
+    live_definition_sha256: hashSqlDefinition(mortgageStateText(key, { functions: states, objects })),
+  });
+}
+
+const auditTableSummary = (table) => (table?.present ? {
+  present: true,
+  owner_is_login: table.owner_is_executor,
+  rls_enabled: table.rls_enabled,
+  rls_forced: table.rls_forced,
+  columns_match: sameMortgageJson(table.columns, MORTGAGE_AUDIT_TABLE_INTENDED.columns),
+  column_names: table.columns.map((col) => col.name),
+  acl_entries: table.acl.map(mortgageAclLine).sort(),
+  policies: table.policies.map((pol) => ({ name: pol.name, cmd: pol.cmd, roles: pol.roles, matches_migration: sameMortgageJson(pol, MORTGAGE_AUDIT_TABLE_INTENDED.policies[0]) })),
+  indexes: table.indexes.map((idx) => ({
+    name: idx.name, valid: idx.valid, matches_migration: MORTGAGE_AUDIT_TABLE_INTENDED.indexes.some((want) => want.name === idx.name && want.definition === idx.definition),
+  })),
+} : { present: false });
+
+/** Strips owner names, definitions, predicates and check ids so a staging read-live shows labels, flags, counts and hashes only. */
+export function mortgageInspectSummary(state) {
+  const functions = Object.fromEntries(Object.entries(state.functions || {}).map(([name, row]) => [name, {
+    role: row.role,
+    exists: row.exists,
+    state: row.state,
+    overload_count: row.overload_count,
+    named_signatures: row.named_signatures,
+    identity_arguments: row.identity_arguments,
+    arguments: row.arguments,
+    argument_names: row.argument_names,
+    result: row.result,
+    kind: row.kind,
+    returns_set: row.returns_set,
+    language: row.language,
+    security_definer: row.security_definer,
+    config: row.config,
+    owner_is_executor: row.owner_is_executor,
+    owner_rolsuper: row.owner_rolsuper,
+    owner_rolbypassrls: row.owner_rolbypassrls,
+    owner_member_of_checksops: row.owner_member_of_checksops,
+    owner_member_of_authenticated: row.owner_member_of_authenticated,
+    acl_entries: row.acl_entries,
+    definition_sha256: row.definition_sha256,
+    matches_migration: row.matches_migration,
+    body_matches_migration: row.body_matches_migration ?? null,
+  }]));
+  const out = {
+    migration: state.migration,
+    login_rolsuper: state.login_rolsuper,
+    login_rolbypassrls: state.login_rolbypassrls,
+    prerequisites: state.prerequisites,
+    sql47_prerequisites_present: state.sql47_prerequisites_present,
+    functions,
+    missing_columns: state.missing_columns,
+    tables: Object.fromEntries(Object.entries(state.tables || {}).map(([name, row]) => [name, {
+      present: row.present, rls_enabled: row.rls_enabled, rls_forced: row.rls_forced, owner_is_login: row.present ? row.owner_is_executor : null,
+    }])),
+  };
+  const objects = state.objects || {};
+  const report = state.report || {};
+  if (state.migration === 'sql84') {
+    out.audit_table = auditTableSummary(objects.audit_table);
+    out.per_check_unique_present = objects.per_check_unique_present === true;
+    out.billing_per_check_indexes = (report.billing_per_check_indexes || []).map((idx) => ({
+      name: idx.name, is_unique: idx.is_unique, valid: idx.valid, key_columns: idx.key_columns, has_expressions: idx.has_expressions,
+      predicate_kind: idx.predicate_kind, predicate_sha256: idx.predicate ? hashSqlDefinition(idx.predicate) : null, matches_gate0: idx.matches_gate0,
+    }));
+    out.fallback_index_name_taken = report.fallback_index_name_taken === true;
+    const dup = report.billing_duplicates || {};
+    out.billing_duplicates = dup.readable ? { readable: true, groups: dup.groups, extra_events: dup.extra_events } : { readable: false, reason: dup.reason };
+  }
+  if (state.migration === 'sql85') {
+    // Report keys are bare names (the read-live summary keeps only [a-z0-9_] keys).
+    out.added_columns = Object.fromEntries(Object.entries(objects.columns || {}).map(([name, type]) => [name.split('.').pop(), type]));
+    out.indexes = Object.fromEntries(Object.entries(objects.indexes || {}).map(([name, row]) => [name.replace(/^public\./, ''), row
+      ? { present: true, valid: row.valid, matches_migration: row.definition === MORTGAGE_SQL85_OBJECTS_INTENDED.indexes[name]?.definition }
+      : { present: false }]));
+    out.action_check = Object.fromEntries(Object.entries(objects.constraints || {}).map(([name, def]) => [name.split('.').pop(), def == null
+      ? { present: false }
+      : { present: true, includes_adjust: def === MORTGAGE_SQL85_OBJECTS_INTENDED.constraints[name], definition_sha256: hashSqlDefinition(def) }]));
+    out.batch_actions_outside_check = report.batch_actions_outside_check;
+    out.duplicate_adjust_idempotency_keys = report.duplicate_adjust_idempotency_keys;
+  }
+  if (state.migration === 'sql86') out.earn_owner = report.earn_owner;
+  return out;
+}
+
+/**
+ * Pre-apply rules shared by the staging handler and the production tool: what the file
+ * can replace safely. A missing SQL 47 object, another signature, a return-type or
+ * parameter clash, an object owned by another role, an ACL entry the file does not
+ * revoke, an audit table that differs, duplicate billing events or an unsafe earn owner
+ * is refused.
+ */
+export function mortgagePreconditionFailures(state, key) {
+  const spec = MORTGAGE_MIGRATIONS[key];
+  const failures = [];
+  const check = (name, passed) => { if (!passed) failures.push(name); };
+  check('required_roles_present', state?.required_roles_present === true);
+  check('sql47_prerequisites_present', state?.sql47_prerequisites_present === true);
+  check('required_tables_present', state?.required_tables_present === true);
+  check('required_columns_present', state?.required_columns_present === true);
+  const fns = state?.functions || {};
+  const presentWithName = (name) => (spec?.functions || []).filter((fn) => fn.name === name && fns[fn.key]?.exists === true).length;
+  for (const fn of spec?.functions || []) {
+    const row = fns[fn.key];
+    if (!row) {
+      failures.push(`state_readable:${fn.key}`);
+      continue;
+    }
+    if (fn.role === 'target') {
+      // Only the spec's own signatures of this name may exist (SQL 85 drops its five-argument one).
+      check(`no_other_signature:${fn.key}`, row.overload_count === presentWithName(fn.name));
+      if (row.exists) {
+        check(`replaceable_kind:${fn.key}`, row.kind === 'f' && row.returns_set === fn.retset);
+        check(`result_matches:${fn.key}`, row.result === fn.result);
+        check(`argument_names_match:${fn.key}`, sameMortgageJson(row.argument_names, fn.arg_names));
+        // pg_get_function_arguments includes defaults; CREATE OR REPLACE cannot remove one.
+        check(`arguments_match:${fn.key}`, row.arguments === fn.arguments);
+        check(`owner_is_login:${fn.key}`, row.owner_is_executor === true);
+        if (fn.grantees) check(`acl_replaceable:${fn.key}`, (row.acl_entries || []).every((line) => MORTGAGE_REPLACEABLE_ACL_ENTRIES.includes(line)));
+      }
+    }
+    if (fn.role === 'dropped' && row.exists) check(`owner_is_login:${fn.key}`, row.owner_is_executor === true);
+    if (fn.role === 'acl_only') {
+      check(`present:${fn.key}`, row.exists === true);
+      check(`owner_is_login:${fn.key}`, row.owner_is_executor === true);
+      check(`acl_replaceable:${fn.key}`, (row.acl_entries || []).every((line) => MORTGAGE_REPLACEABLE_ACL_ENTRIES.includes(line)));
+    }
+  }
+  const objects = state?.objects || {};
+  const report = state?.report || {};
+  if (key === 'sql84') {
+    const audit = objects.audit_table;
+    if (audit?.present) {
+      const intended = MORTGAGE_AUDIT_TABLE_INTENDED;
+      check('audit_table_owner_is_login', audit.owner_is_executor === true);
+      check('audit_table_columns_match', sameMortgageJson(audit.columns, intended.columns));
+      check('audit_table_rls_not_forced', audit.rls_forced === false);
+      check('audit_table_acl_replaceable', (audit.acl || []).every((entry) => entry.is_grantable !== true
+        && ['authenticated', 'checksops'].includes(entry.grantee) && entry.privilege_type === 'SELECT'));
+      check('audit_table_no_other_policies', (audit.policies || []).every((pol) => pol.name === intended.policies[0].name));
+      check('audit_table_indexes_match', (audit.indexes || []).every((idx) => intended.indexes.some((want) => want.name === idx.name && want.definition === idx.definition && idx.valid)));
+    }
+    if (objects.per_check_unique_present !== true) {
+      // The file creates the fallback index: the name must be free, the login must own the
+      // table, and no duplicate non-voided per-check Mortgage Ops events may exist.
+      check('fallback_index_name_free', report.fallback_index_name_taken === false);
+      check('billing_table_owner_is_login', state?.tables?.check_billing_events?.owner_is_executor === true);
+      check('billing_duplicates_readable', report.billing_duplicates?.readable === true);
+      check('no_duplicate_mortgage_ops_billing_events', report.billing_duplicates?.readable === true && report.billing_duplicates.groups === 0);
+    }
+  }
+  if (key === 'sql85') {
+    check('entries_table_owner_is_login', state?.tables?.mortgage_agent_compensation_entries?.owner_is_executor === true);
+    check('batches_table_owner_is_login', state?.tables?.mortgage_agent_compensation_batches?.owner_is_executor === true);
+    for (const [column, type] of Object.entries(MORTGAGE_SQL85_OBJECTS_INTENDED.columns)) {
+      const live = objects.columns?.[column];
+      check(`column_type_matches:${column.split('.').pop()}`, live == null || live === type);
+    }
+    for (const [index, want] of Object.entries(MORTGAGE_SQL85_OBJECTS_INTENDED.indexes)) {
+      const live = objects.indexes?.[index];
+      check(`index_matches:${index.replace(/^public\./, '')}`, live == null || (live.definition === want.definition && live.valid === true));
+    }
+    check('batch_actions_readable', report.batch_actions_outside_check?.readable === true);
+    check('batch_actions_within_new_check', report.batch_actions_outside_check?.readable === true && report.batch_actions_outside_check.count === 0);
+    check('no_duplicate_adjust_idempotency_keys', report.duplicate_adjust_idempotency_keys?.readable === true && report.duplicate_adjust_idempotency_keys.count === 0);
+  }
+  if (key === 'sql86') {
+    check('earn_owner_safe', report.earn_owner?.earn_owner_safe === true);
+  }
+  return failures;
+}
+
+/**
+ * Post-apply rules shared by staging and production; `reviewed` maps identity ->
+ * sha256 of the reconstructed def, `before` is the pre-apply state (SQL 86 leaves the
+ * ACLs of the two functions it replaces unchanged).
+ */
+export function mortgagePostconditionFailures(after, key, reviewed, intendedSha256, before) {
+  const spec = MORTGAGE_MIGRATIONS[key];
+  const failures = [];
+  const check = (name, passed) => { if (!passed) failures.push(name); };
+  check('intended_state', typeof intendedSha256 === 'string' && after?.live_definition_sha256 === intendedSha256);
+  for (const fn of spec?.functions || []) {
+    const row = after?.functions?.[fn.key] || {};
+    if (fn.role === 'target') {
+      check(`definition_is_reviewed:${fn.key}`, row.exists === true && typeof reviewed?.[fn.identity] === 'string'
+        && row.definition_sha256 === reviewed[fn.identity] && row.matches_migration === true);
+      check(`no_overloads:${fn.key}`, row.overload_count === 1);
+      check(`security_definer:${fn.key}`, row.security_definer === true);
+      check(`config_as_reviewed:${fn.key}`, sameMortgageJson(row.config, fn.config));
+      check(`owner_is_login:${fn.key}`, row.owner_is_executor === true);
+      if (fn.grantees) {
+        check(`execute_as_reviewed:${fn.key}`, sameMortgageJson(row.acl_entries, fn.grantees.map((g) => `${g} EXECUTE`).sort()));
+      } else {
+        check(`acl_unchanged:${fn.key}`, before?.functions?.[fn.key]?.exists === true && row.proacl === before.functions[fn.key].proacl);
+      }
+    }
+    if (fn.role === 'dropped') check(`dropped:${fn.key}`, row.exists === false);
+    if (fn.role === 'acl_only') {
+      check(`owner_only_execute:${fn.key}`, row.exists === true && row.owner_is_executor === true && (row.acl_entries || []).length === 0);
+      check(`definition_unchanged:${fn.key}`, before?.functions?.[fn.key]?.definition_sha256 != null && row.definition_sha256 === before.functions[fn.key].definition_sha256);
+    }
+  }
+  if (key === 'sql84') check('per_check_unique_present', after?.objects?.per_check_unique_present === true);
+  if (key === 'sql86') check('earn_owner_safe', after?.report?.earn_owner?.earn_owner_safe === true);
+  return failures;
+}
+
+/** The skip lists for one migration's unrelated-catalog snapshot. */
+export function mortgageSnapshotScope(key) {
+  const spec = MORTGAGE_MIGRATIONS[key];
+  return {
+    skip_relations: [...spec.new_relations],
+    added_columns: Object.entries(spec.added_columns || {}).map(([table, column]) => `${table}.${column}`),
+    replaced_constraints: [...(spec.replaced_constraints || [])],
+    functions_ignored: spec.functions.filter((fn) => fn.role !== 'referenced').map((fn) => fn.identity),
+  };
+}
+
+/** Everything in schema public and auth except the migration's own functions and objects. */
+export async function readMortgageSchemaSnapshot(client, key) {
+  await client.query(STAKEHOLDER_POLICY_SEARCH_PATH_SQL);
+  const scope = mortgageSnapshotScope(key);
+  const params = [scope.skip_relations, scope.added_columns, scope.replaced_constraints, scope.functions_ignored];
+  const out = {};
+  for (const [name, sql] of Object.entries(MORTGAGE_SNAPSHOT_SQL)) {
+    const rows = (await client.query(sql.trim(), MORTGAGE_SNAPSHOT_PARAMS[name].map((index) => params[index])))?.rows || [];
+    out[`${name}_sha256`] = hashSqlDefinition(rows.map((row) => JSON.stringify(row)).join('\n'));
+  }
+  return out;
+}
+
+/**
+ * Adds the function-def-lookup comparison of each live target definition with the
+ * one reconstructed from the file, and drops the definition text. The
+ * full-definition sha256 stays authoritative.
+ */
+export function withMortgageBodyComparison(state, key, text, { keepDefinitions = [] } = {}) {
+  const reviewed = mortgageReviewedFunctiondefs(key, text) || {};
+  for (const row of Object.values(state.functions || {})) {
+    const source = reviewed[row.identity];
+    row.body_matches_migration = row._def && source ? functionDefsMatchExactly(row._def, source) : null;
+    if (keepDefinitions.includes(row.identity)) row.definition = row._def;
+    delete row._def;
+  }
+  return state;
+}
+
+const MORTGAGE_COMMITTED_KEYS = ['filename', 'migration_id', 'migration', 'commit', 'source_sha256', 'intended_replacement_sha256'];
+
+/** A test may supply `pin` only as the committed pin with a reviewed expected hash filled in. */
+function mortgagePinIsCommitted(pin, committed) {
+  return Boolean(pin) && MORTGAGE_COMMITTED_KEYS.every((key) => pin[key] === committed[key])
+    && sameMortgageJson(pin.function_identities, committed.function_identities);
+}
+
+async function handleMortgageMigration({ key, event, authorization, identity, connect, sqlFile, pin, committed }) {
+  const spec = MORTGAGE_MIGRATIONS[key];
+  const label = spec.label;
+  if (!mortgagePinIsCommitted(pin, committed)) {
+    return fail(CODES.SQL_COLLISION, `${label} pin does not match the committed allowlist entry`);
+  }
+  const embedded = readEmbeddedSql(sqlFile, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (!mortgageSqlIsReviewed(key, embedded.details.text)) {
+    return fail(CODES.UNRELATED_MUTATION, `embedded ${label} is not exactly the reviewed statements`);
+  }
+  const reviewed = Object.fromEntries(Object.entries(mortgageReviewedFunctiondefs(key, embedded.details.text))
+    .map(([fnIdentity, def]) => [fnIdentity, hashSqlDefinition(def)]));
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported ${label} executor action ${event.action}`);
+  }
+  const pinExecutable = SQL80_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''));
+  if (event.action === 'apply' && !pinExecutable) {
+    return fail(CODES.SQL_COLLISION, `${label} pin has no reviewed pre-apply live definition hash yet; apply is refused`);
+  }
+  if (event.action === 'apply' && !(
+    event.filename === pin.filename
+    && event.migration_id === pin.migration_id
+    && event.source_sha256 === pin.source_sha256
+    && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+    && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+    && event.commit === pin.commit
+  )) {
+    return fail(CODES.SQL_COLLISION, `${label} apply is bound to the exact allowlisted pin`);
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readMortgageState(client, key);
+      await rollback();
+      if (!state.ok) return state;
+      withMortgageBodyComparison(state.details, key, embedded.details.text);
+      const failures = mortgagePreconditionFailures(state.details, key);
+      const live = state.details.live_definition_sha256;
+      const alreadyApplied = live === pin.intended_replacement_sha256;
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: live,
+          after_hash: live,
+          result: event.action,
+          executor_identity: identity,
+          migration: key,
+          function_states: state.details.function_states,
+          sql47_prerequisites_present: state.details.sql47_prerequisites_present,
+          required_roles_present: state.details.required_roles_present,
+          required_tables_present: state.details.required_tables_present,
+          required_columns_present: state.details.required_columns_present,
+          live_definition_sha256: live,
+          already_applied: alreadyApplied,
+          precondition_failures: failures,
+          prerequisites_ok: failures.length === 0,
+          pin_executable: pinExecutable,
+          apply_preconditions_met: pinExecutable
+            && live === pin.expected_live_definition_sha256
+            && !alreadyApplied
+            && failures.length === 0,
+          mortgage_inspect: mortgageInspectSummary(state.details),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${key}_mortgage_objects`]);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', {
+        one_use_id: event.one_use_id,
+      });
+    }
+    const before = await readMortgageState(client, key);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    if (before.details.live_definition_sha256 === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `${label} is already in place; refuse re-apply`, {
+        function_states: before.details.function_states,
+      });
+    }
+    const preFailures = mortgagePreconditionFailures(before.details, key);
+    if (preFailures.length) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, `${label} cannot be applied safely (SQL 47 present, same signatures and result types, owned by the executor role, only revocable grants, the reviewed objects or none)`, {
+        failed: preFailures,
+        function_states: before.details.function_states,
+      });
+    }
+    if (before.details.live_definition_sha256 !== pin.expected_live_definition_sha256
+      || before.details.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, `${label} live state is not the pinned pre-apply state`, {
+        function_states: before.details.function_states,
+        live_definition_sha256: before.details.live_definition_sha256,
+      });
+    }
+    const schemaBefore = await readMortgageSchemaSnapshot(client, key);
+
+    await client.query(embedded.details.text);
+
+    const after = await readMortgageState(client, key);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const schemaAfter = await readMortgageSchemaSnapshot(client, key);
+    const postFailures = mortgagePostconditionFailures(after.details, key, reviewed, pin.intended_replacement_sha256, before.details);
+    const unrelated = Object.keys(schemaBefore).filter((name) => schemaBefore[name] !== schemaAfter[name]);
+    if (postFailures.length || unrelated.length) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `${label} did not land exactly on the reviewed objects and grants, or changed something else`, {
+        failed: postFailures,
+        unrelated_changed: unrelated,
+        after_hash: after.details.live_definition_sha256,
+        function_states: after.details.function_states,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: before.details.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        migration: key,
+        function_states: after.details.function_states,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
 // --- SQL 72: tenant-member payment write policies ---------------------------
 
 const PAYMENT_POLICIES_SQL = `
@@ -4969,6 +5911,12 @@ export function createHandler({
   sql82Pin = AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW,
   sqlFile83 = SQL83_HOMEOWNER_SIGNING_CAPABILITIES_FILE,
   sql83Pin = AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
+  sqlFile84 = SQL84_MORTGAGE_RETURN_TO_QUEUE_FILE,
+  sql84Pin = AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE,
+  sqlFile85 = SQL85_MORTGAGE_COMPENSATION_ADJUST_FILE,
+  sql85Pin = AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
+  sqlFile86 = SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY_FILE,
+  sql86Pin = AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -5043,6 +5991,24 @@ export function createHandler({
     if (isSql83HomeownerSigningCapabilities(event)) {
       return handleHomeownerMigration({
         key: 'sql83', event, authorization, identity, connect, sqlFile: sqlFile83, pin: sql83Pin, committed: AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES,
+      });
+    }
+
+    if (isSql84MortgageReturnToQueue(event)) {
+      return handleMortgageMigration({
+        key: 'sql84', event, authorization, identity, connect, sqlFile: sqlFile84, pin: sql84Pin, committed: AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE,
+      });
+    }
+
+    if (isSql85MortgageCompensationAdjust(event)) {
+      return handleMortgageMigration({
+        key: 'sql85', event, authorization, identity, connect, sqlFile: sqlFile85, pin: sql85Pin, committed: AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
+      });
+    }
+
+    if (isSql86MortgageCompensationOwnerOnly(event)) {
+      return handleMortgageMigration({
+        key: 'sql86', event, authorization, identity, connect, sqlFile: sqlFile86, pin: sql86Pin, committed: AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
       });
     }
 
