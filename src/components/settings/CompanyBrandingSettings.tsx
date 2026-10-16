@@ -284,7 +284,7 @@ export function CompanyBrandingSettings() {
                 <Input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="claims@freedomclaims.com"
+                  placeholder="claims@yourcompany.com"
                 />
               </div>
             </div>
