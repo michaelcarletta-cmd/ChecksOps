@@ -5,10 +5,17 @@
  * server then verifies the stored object (HEAD + bytes + magic-byte sniff) and
  * forwards it to Moov's files API as multipart/form-data.
  *
- * S3 key: files/verification-docs/{tenantId}/{documentId} (versioned; reads pinned to one version)
+ * S3 keys (versioned bucket):
+ *   upload: files/verification-docs/uploads/{tenantId}/{documentId}  (the only presigned PUT target)
+ *   final:  files/verification-docs/final/{tenantId}/{documentId}    (server copy, pinned version)
+ * Finalize verifies the upload version, copies it to the final key and
+ * deletes the verified upload version. No presigned URL ever targets the
+ * final key, so a late re-PUT to the upload URL cannot touch the pinned copy;
+ * leftovers under uploads/ expire by lifecycle.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -110,7 +117,8 @@ export const MAX_PENDING_UPLOADS = 50;
  * bucket policy / lifecycle rule can target it with a fixed prefix.
  */
 export const DOCUMENTS_PREFIX = 'files/verification-docs/';
-export const documentStorageKey = (tenantId, documentId) => `${DOCUMENTS_PREFIX}${tenantId}/${documentId}`;
+export const documentStorageKey = (tenantId, documentId) => `${DOCUMENTS_PREFIX}uploads/${tenantId}/${documentId}`;
+export const documentFinalKey = (tenantId, documentId) => `${DOCUMENTS_PREFIX}final/${tenantId}/${documentId}`;
 
 export const sanitizeFileName = (value) => {
   const base = String(value ?? '').split(/[\\/]/).pop() || '';
@@ -266,38 +274,77 @@ const deleteStoredVersion = async (deps, bucket, key, versionId) => {
 };
 
 /**
- * Reads the uploaded object back and checks it against the row, pinned to one
- * S3 version: the version recorded at first finalize, or the current one.
+ * Reads one object version back and checks it against the row.
+ * - Already finalized: the final key at the pinned version.
+ * - First finalize: the upload key's current version; if the upload was
+ *   already promoted (a previous attempt rolled back after the copy), the
+ *   final key's current version, which only the server ever writes.
  */
 export async function verifyStoredObject(row, deps = {}) {
   const { bucket, keyArn } = requireStorageConfig();
   const s3 = s3Of(deps);
-  const pinned = row.s3_version_id || null;
+  const finalKey = row.final_storage_key || documentFinalKey(row.tenant_id, row.id);
+  const pinned = row.final_storage_key && row.s3_version_id ? row.s3_version_id : null;
+  let key = pinned ? finalKey : row.storage_key;
   let head;
   try {
-    head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: row.storage_key, ...(pinned ? { VersionId: pinned } : {}) }));
+    head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key, ...(pinned ? { VersionId: pinned } : {}) }));
   } catch {
-    throw new OnboardingError(pinned ? 'document_version_missing' : 'document_not_uploaded', 409);
+    if (pinned) throw new OnboardingError('document_version_missing', 409);
+    try {
+      key = finalKey;
+      head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    } catch {
+      throw new OnboardingError('document_not_uploaded', 409);
+    }
   }
+  const promoted = key === finalKey;
   const versionId = head?.VersionId || null;
   if (!versionId) throw new OnboardingError('document_version_missing', 409);
   if (pinned && versionId !== pinned) throw new OnboardingError('document_version_mismatch', 409);
   const reject = async (code) => {
-    // Never delete the pinned, already-accepted version on a later retry.
-    if (!pinned) await deleteStoredVersion(deps, bucket, row.storage_key, versionId);
+    // Only a not-yet-accepted upload version is removed (permanently, by version).
+    if (!promoted) await deleteStoredVersion(deps, bucket, key, versionId);
     throw new OnboardingError(code, 422);
   };
   const size = Number(row.size_bytes);
   if (Number(head?.ContentLength) !== size) await reject('document_size_mismatch');
   if (String(head?.ContentType || '').toLowerCase().split(';')[0].trim() !== row.content_type) await reject('document_type_mismatch');
   if (head?.ServerSideEncryption !== 'aws:kms' || !kmsKeyMatches(head?.SSEKMSKeyId, keyArn)) await reject('document_encryption_mismatch');
-  const got = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: row.storage_key, VersionId: versionId }));
+  const got = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key, VersionId: versionId }));
   const bytes = await bodyBytes(got?.Body);
   if (bytes.length !== size || bytes.length > MAX_DOCUMENT_BYTES) await reject('document_size_mismatch');
   if (sniffContentType(bytes) !== row.content_type) await reject('document_content_mismatch');
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   if (row.sha256 && row.sha256 !== sha256) throw new OnboardingError('document_version_mismatch', 409);
-  return { bytes, sha256, versionId };
+  return { bytes, sha256, versionId, key, promoted };
+}
+
+/**
+ * Copies the verified upload version to the final key (SSE-KMS, dedicated
+ * key) and permanently deletes that upload version. Returns the final version.
+ */
+export async function promoteToFinal(row, verified, deps = {}) {
+  const { bucket, keyArn } = requireStorageConfig();
+  const s3 = s3Of(deps);
+  const finalKey = documentFinalKey(row.tenant_id, row.id);
+  let copied;
+  try {
+    copied = await s3.send(new CopyObjectCommand({
+      Bucket: bucket,
+      Key: finalKey,
+      CopySource: `${bucket}/${verified.key}?versionId=${encodeURIComponent(verified.versionId)}`,
+      MetadataDirective: 'COPY',
+      ServerSideEncryption: 'aws:kms',
+      SSEKMSKeyId: keyArn,
+    }));
+  } catch {
+    throw new OnboardingError('document_promote_failed', 503);
+  }
+  const finalVersion = copied?.VersionId || null;
+  if (!finalVersion) throw new OnboardingError('document_version_missing', 409);
+  await deleteStoredVersion(deps, bucket, verified.key, verified.versionId);
+  return { finalKey, finalVersion };
 }
 
 /** POST /accounts/{id}/files as multipart/form-data, idempotent per document. */
@@ -329,15 +376,25 @@ export async function finalizeDocument(client, ctx, row, { deps = {}, fetchImpl,
     if (outboxId) await completeOutbox(client, { id: outboxId });
     return { document: publicDocument(row), moov_synced: true, pending: false };
   }
-  const { bytes, sha256, versionId } = await verifyStoredObject(row, deps);
+  const verified = await verifyStoredObject(row, deps);
+  const { bytes, sha256 } = verified;
+  let pin = row.final_storage_key && row.s3_version_id
+    ? { finalKey: row.final_storage_key, finalVersion: row.s3_version_id }
+    : null;
+  if (!pin) {
+    pin = verified.promoted
+      ? { finalKey: verified.key, finalVersion: verified.versionId }
+      : await promoteToFinal(row, verified, deps);
+  }
   let stored = (await client.query(
     `UPDATE public.moov_compliance_documents
      SET status = CASE WHEN status = 'pending_upload' THEN 'stored' ELSE status END,
-         sha256 = $2, s3_version_id = COALESCE(s3_version_id, $3),
+         sha256 = $2, final_storage_key = COALESCE(final_storage_key, $3),
+         s3_version_id = COALESCE(s3_version_id, $4),
          uploaded_at = COALESCE(uploaded_at, now()), updated_at = now()
      WHERE id = $1::uuid
      RETURNING *`,
-    [row.id, sha256, versionId],
+    [row.id, sha256, pin.finalKey, pin.finalVersion],
   )).rows[0] || row;
 
   const queued = outboxId ? { id: outboxId } : await enqueueOutbox(client, {
@@ -385,7 +442,7 @@ export async function finalizeDocument(client, ctx, row, { deps = {}, fetchImpl,
 
 /** Short-lived GET pinned to the verified version. */
 export async function viewUrl(row, deps = {}) {
-  if (!row || !['stored', 'sent'].includes(row.status) || !row.s3_version_id) {
+  if (!row || !['stored', 'sent'].includes(row.status) || !row.s3_version_id || !row.final_storage_key) {
     throw new OnboardingError('document_not_available', 404);
   }
   const { bucket } = requireStorageConfig();
@@ -393,7 +450,7 @@ export async function viewUrl(row, deps = {}) {
   const safeName = String(row.file_name || 'document').replace(/[^A-Za-z0-9._ -]/g, '_');
   const url = await sign(s3Of(deps), new GetObjectCommand({
     Bucket: bucket,
-    Key: row.storage_key,
+    Key: row.final_storage_key,
     VersionId: row.s3_version_id,
     ResponseContentDisposition: `attachment; filename="${safeName}"`,
     ResponseContentType: row.content_type,

@@ -105,6 +105,8 @@ export async function loadRecentStepUp(client, {
        AND tenant_id = $2::uuid
        AND action_key = $3
        AND succeeded IS TRUE
+       -- Only rows the server wrote after a verified app TOTP (insertAppStepUpLog).
+       AND (metadata->>'source') = 'app_financial_totp'
        AND created_at >= $4::timestamptz
        AND (metadata->>'check_id') = $5
        AND COALESCE((metadata->>'amount_cents')::bigint, -1) = $6::bigint

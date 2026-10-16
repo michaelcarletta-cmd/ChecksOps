@@ -25,6 +25,7 @@ import { loadSessionFundStepUp, loginSessionBinding, WALLET_FUND_TOTP_ACTION } f
 import { onboardingDeployment } from './flags.mjs';
 import { ensureMoovAccount, syncOnboardingToMoov } from './moov-sync.mjs';
 import { isNetworkError, moovErrorCode, onboardingLog, redact } from './redact.mjs';
+import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
 import {
   buildOnboardingView,
   decryptProfileEin,
@@ -134,6 +135,21 @@ const legacyRepresentatives = (list, storedReps) => {
  * Bank changes need the once-per-login financial step-up, bound to the same
  * login session as wallet.fund (one code per sign-in covers both).
  */
+/**
+ * Commits the current transaction (e.g. a reserved micro-deposit attempt) and
+ * opens a new one with the same request identity, onboarding write setting
+ * and per-tenant lock, so a later failure cannot roll the commit back.
+ */
+const commitAndContinue = async (client, ctx, mapping) => {
+  await client.query('COMMIT');
+  await client.query('BEGIN');
+  await client.query('SET TRANSACTION READ WRITE');
+  await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
+  await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || '']);
+  await client.query("SELECT set_config('request.moov_onboarding', '1', true)");
+  await lockTenantOnboarding(client, { tenantId: ctx.tenantId, environment: ctx.environment });
+};
+
 const requireBankStepUp = async (client, ctx, claims) => {
   const loginSession = loginSessionBinding(claims);
   const stepUp = await loadSessionFundStepUp(client, { userId: ctx.userId, tenantId: ctx.tenantId, loginSession });
@@ -505,7 +521,7 @@ export const ONBOARDING_HANDLERS = {
   'moov-micro-deposit-confirm': {
     access: access.submit,
     moov: true,
-    run: async ({ client, ctx, body, claims, fetchImpl }) => {
+    run: async ({ client, ctx, body, claims, mapping, fetchImpl }) => {
       const stepUp = await requireBankStepUp(client, ctx, claims);
       if (stepUp) return stepUp;
       const { code } = body ?? {};
@@ -561,13 +577,23 @@ export const ONBOARDING_HANDLERS = {
         return fail('max_attempts_exceeded', 409, { requires_restart: true });
       }
       const attempts = Number(reserved.attempts);
+      // The reserved attempt is committed before Moov is called, so it counts
+      // even if the request later fails (network error, unknown error, crash).
+      await commitAndContinue(client, ctx, mapping);
       try {
         await moovFetch(`/accounts/${acct}/bank-accounts/${bankId}/verify`, {
           method: 'PUT', scopes: scopes.bankAccountsWrite(acct), body: { code }, fetchImpl,
         });
       } catch (error) {
-        if (!(error instanceof MoovError)) throw error;
-        const errorCode = moovErrorCode(error);
+        const errorCode = error instanceof MoovError ? moovErrorCode(error) : (isNetworkError(error) ? 'moov_unreachable' : 'moov_failed');
+        if (!(error instanceof MoovError)) {
+          onboardingLog('moov_micro_deposit_confirm_failed', { tenant: ctx.tenantId, environment: ctx.environment, error_code: errorCode });
+          await client.query(
+            'UPDATE public.payment_method_verifications SET failure_reason = $2 WHERE id = $1::uuid',
+            [verificationId, errorCode],
+          );
+          return jsonResult({ success: false, verified: false, error_code: errorCode, attempts, requires_restart: attempts >= maxAttempts, liveProviderCalled: true });
+        }
         await client.query(
           `UPDATE public.payment_method_verifications SET failure_reason = $2,
              status = CASE WHEN attempts >= COALESCE(max_attempts, 3) THEN 'max_attempts_exceeded' ELSE status END

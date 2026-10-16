@@ -78,6 +78,7 @@ Parameters:
 
 Conditions:
   CreateKmsEndpoint: !Equals [!Ref CreateKmsVpcEndpoint, 'true']
+  IsProductionEnvironment: !Equals [!Ref Environment, production]
   CreateStagingNat: !And
     - !Not [!Equals [!Ref PublicSubnetId, '']]
     - !Not [!Equals [!Ref PrivateRouteTableId, '']]
@@ -395,10 +396,12 @@ Resources:
       CorsConfiguration:
         CorsRules:
           - Id: SpaPresignedUploads
-            AllowedOrigins:
-              - https://staging.checksops.com
-              - https://checksops.com
-              - https://www.checksops.com
+            # Staging stack: the staging SPA only; production stack: production SPA only.
+            AllowedOrigins: !If
+              - IsProductionEnvironment
+              - - https://checksops.com
+                - https://www.checksops.com
+              - - https://staging.checksops.com
             AllowedMethods:
               - PUT
               - GET
@@ -417,14 +420,23 @@ Resources:
             Status: Enabled
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
+          # Upload keys are scratch space (finalize copies to final/ and deletes
+          # the verified version); late or abandoned uploads expire.
+          - Id: ComplianceDocumentUploadsExpire
+            Status: Enabled
+            Prefix: files/verification-docs/uploads/
+            ExpirationInDays: 1
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
           - Id: ComplianceDocumentsExpireNoncurrentVersions
             Status: Enabled
-            Prefix: files/verification-docs/
+            Prefix: files/verification-docs/final/
             NoncurrentVersionExpiration:
               NoncurrentDays: 7
 
   # Dedicated key for onboarding PII that ChecksOps keeps (EIN, representative DOB).
-  # Root (IAM) gets key administration only, never Encrypt/Decrypt. Use is
+  # Root (IAM) gets explicit key administration only (PutKeyPolicy kept so the
+  # key cannot be locked out; no CreateGrant, Encrypt or Decrypt). Use is
   # limited to the API function role (matched by name so the key does not
   # depend on the SAM-generated role) and to the onboarding encryption context.
   MoovOnboardingPiiKey:
@@ -444,16 +456,26 @@ Resources:
             Principal:
               AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
             Action:
-              - kms:Create*
-              - kms:Describe*
-              - kms:Enable*
-              - kms:List*
-              - kms:Put*
-              - kms:Update*
-              - kms:Revoke*
-              - kms:Disable*
-              - kms:Get*
-              - kms:Delete*
+              - kms:DescribeKey
+              - kms:GetKeyPolicy
+              - kms:PutKeyPolicy
+              - kms:ListKeyPolicies
+              - kms:ListResourceTags
+              - kms:ListAliases
+              - kms:ListGrants
+              - kms:GetKeyRotationStatus
+              - kms:EnableKeyRotation
+              - kms:DisableKeyRotation
+              - kms:RotateKeyOnDemand
+              - kms:ListKeyRotations
+              - kms:EnableKey
+              - kms:DisableKey
+              - kms:UpdateKeyDescription
+              - kms:CreateAlias
+              - kms:UpdateAlias
+              - kms:DeleteAlias
+              - kms:RevokeGrant
+              - kms:RetireGrant
               - kms:TagResource
               - kms:UntagResource
               - kms:ScheduleKeyDeletion
@@ -504,16 +526,26 @@ Resources:
             Principal:
               AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
             Action:
-              - kms:Create*
-              - kms:Describe*
-              - kms:Enable*
-              - kms:List*
-              - kms:Put*
-              - kms:Update*
-              - kms:Revoke*
-              - kms:Disable*
-              - kms:Get*
-              - kms:Delete*
+              - kms:DescribeKey
+              - kms:GetKeyPolicy
+              - kms:PutKeyPolicy
+              - kms:ListKeyPolicies
+              - kms:ListResourceTags
+              - kms:ListAliases
+              - kms:ListGrants
+              - kms:GetKeyRotationStatus
+              - kms:EnableKeyRotation
+              - kms:DisableKeyRotation
+              - kms:RotateKeyOnDemand
+              - kms:ListKeyRotations
+              - kms:EnableKey
+              - kms:DisableKey
+              - kms:UpdateKeyDescription
+              - kms:CreateAlias
+              - kms:UpdateAlias
+              - kms:DeleteAlias
+              - kms:RevokeGrant
+              - kms:RetireGrant
               - kms:TagResource
               - kms:UntagResource
               - kms:ScheduleKeyDeletion
@@ -532,6 +564,8 @@ Resources:
                 aws:PrincipalArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${AWS::StackName}-ApiFunctionRole-*
               StringEquals:
                 kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+              StringLike:
+                kms:EncryptionContext:aws:s3:arn: !Sub arn:aws:s3:::${PrivateFilesBucket}/files/verification-docs/*
 
   ComplianceDocumentsKeyAlias:
     Type: AWS::KMS::Alias

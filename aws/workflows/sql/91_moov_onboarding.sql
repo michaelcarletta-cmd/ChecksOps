@@ -3,8 +3,10 @@
 -- Tables (all tenant-scoped, per environment 'sandbox' | 'production'):
 --   moov_onboarding_profiles         business profile; EIN as KMS ciphertext + last four
 --   moov_onboarding_representatives  owners/controllers; SSN last four only, DOB as KMS ciphertext + year
---   moov_compliance_documents        compliance files in S3 (SSE-KMS, files/verification-docs/{tenant}/{id},
---                                    pinned to one S3 version) and their Moov file ids
+--   moov_compliance_documents        compliance files in S3 (SSE-KMS). Upload key
+--                                    files/verification-docs/uploads/{tenant}/{id}; the verified
+--                                    version is copied to files/verification-docs/final/{tenant}/{id}
+--                                    and pinned (final key + version). Plus their Moov file ids.
 --   moov_onboarding_outbox           retry queue; payload holds ids only (no SSN, EIN, DOB)
 -- Plus payment_provider_methods.routing_last_four (bank routing number, last four only).
 --
@@ -169,6 +171,7 @@ CREATE TABLE public.moov_compliance_documents (
   size_bytes bigint NOT NULL,
   storage_key text NOT NULL,
   kms_key_arn text NOT NULL,
+  final_storage_key text,
   s3_version_id text,
   status text NOT NULL DEFAULT 'pending_upload',
   sha256 text,
@@ -192,11 +195,15 @@ CREATE TABLE public.moov_compliance_documents (
   CONSTRAINT moov_compliance_documents_content_type_check CHECK (content_type IN ('application/pdf', 'image/jpeg', 'image/png', 'text/csv')),
   CONSTRAINT moov_compliance_documents_size_check CHECK (size_bytes BETWEEN 1 AND 20971520),
   CONSTRAINT moov_compliance_documents_storage_key_check CHECK (
-    storage_key = 'files/verification-docs/' || tenant_id::text || '/' || id::text
+    storage_key = 'files/verification-docs/uploads/' || tenant_id::text || '/' || id::text
   ),
-  -- Verified documents are pinned to the S3 version that was checked.
+  CONSTRAINT moov_compliance_documents_final_key_check CHECK (
+    final_storage_key IS NULL
+    OR final_storage_key = 'files/verification-docs/final/' || tenant_id::text || '/' || id::text
+  ),
+  -- Verified documents are pinned to the final key and the S3 version that was checked.
   CONSTRAINT moov_compliance_documents_version_check CHECK (
-    status NOT IN ('stored', 'sent') OR s3_version_id IS NOT NULL
+    status NOT IN ('stored', 'sent') OR (s3_version_id IS NOT NULL AND final_storage_key IS NOT NULL)
   )
 );
 CREATE INDEX moov_compliance_documents_tenant_idx

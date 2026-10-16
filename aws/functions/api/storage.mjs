@@ -159,19 +159,11 @@ const denyBucket = (bucket) => {
   return null;
 };
 
-const COMPLIANCE_DOCUMENT_PATH = /^\/*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/+verification(\/|$)/i;
-export const isComplianceDocumentPath = (rel) => COMPLIANCE_DOCUMENT_PATH.test(String(rel || ''));
-
 export const authorizeObject = async (client, bucket, objectPath, { userId } = {}) => {
   const relRaw = normalizePath(objectPath, bucket);
   if (!relRaw) return { authorized: false, reason: 'invalid_path' };
   const rel = relRaw.split('?')[0];
   if (!rel) return { authorized: false, reason: 'invalid_path' };
-  // Moov compliance documents ({tenantId}/verification/...) are served only by
-  // moov-document-view; generic storage never reads, deletes or moves them.
-  if (bucket === 'tenant-documents' && isComplianceDocumentPath(rel)) {
-    return { authorized: false, reason: 'compliance_document_path', rel };
-  }
   const candidates = pathCandidates(bucket, objectPath);
   const queries = BUCKET_AUTH_SQL[bucket] || [];
   for (const sql of queries) {

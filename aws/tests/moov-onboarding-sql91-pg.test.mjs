@@ -168,16 +168,19 @@ COMMIT;`);
     assert.match(as(U.owner, outbox(payload)).err, /payload_no_pii/, payload);
   }
 
-  // Documents: storage key is pinned to files/verification-docs/{tenant}/{id}.
+  // Documents: upload key files/verification-docs/uploads/{tenant}/{id}; final key .../final/{tenant}/{id}.
   const DOC = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   const doc = (key) => `INSERT INTO public.moov_compliance_documents (id, tenant_id, environment, purpose, file_name, content_type, size_bytes, storage_key, kms_key_arn)
     VALUES ('${DOC}', '${TENANT}', 'sandbox', 'w9', 'w9.pdf', 'application/pdf', 100, '${key}', 'arn:k');`;
-  assert.match(as(U.owner, doc(`files/verification-docs/${OTHER}/${DOC}`)).err, /storage_key_check/);
+  assert.match(as(U.owner, doc(`files/verification-docs/uploads/${OTHER}/${DOC}`)).err, /storage_key_check/);
+  assert.match(as(U.owner, doc(`files/verification-docs/final/${TENANT}/${DOC}`)).err, /storage_key_check/);
   assert.match(as(U.owner, doc(`files/tenant-documents/${TENANT}/verification/${DOC}`)).err, /storage_key_check/);
-  assert.equal(as(U.owner, doc(`files/verification-docs/${TENANT}/${DOC}`)).ok, true);
+  assert.equal(as(U.owner, doc(`files/verification-docs/uploads/${TENANT}/${DOC}`)).ok, true);
   // A verified document must be pinned to an S3 version.
   assert.match(as(U.owner, `UPDATE public.moov_compliance_documents SET status = 'stored' WHERE id = '${DOC}';`).err, /version_check/);
-  assert.equal(as(U.owner, `UPDATE public.moov_compliance_documents SET status = 'stored', s3_version_id = 'v1' WHERE id = '${DOC}';`).ok, true);
+  assert.match(as(U.owner, `UPDATE public.moov_compliance_documents SET status = 'stored', s3_version_id = 'v1' WHERE id = '${DOC}';`).err, /version_check/);
+  assert.match(as(U.owner, `UPDATE public.moov_compliance_documents SET final_storage_key = 'files/verification-docs/uploads/${TENANT}/${DOC}' WHERE id = '${DOC}';`).err, /final_key_check/);
+  assert.equal(as(U.owner, `UPDATE public.moov_compliance_documents SET status = 'stored', s3_version_id = 'v1', final_storage_key = 'files/verification-docs/final/${TENANT}/${DOC}' WHERE id = '${DOC}';`).ok, true);
 
   // Real outbox SQL from store.mjs: ON CONFLICT enqueue, backoff, failed after 10.
   const literal = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
