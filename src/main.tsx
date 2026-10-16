@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { isCheckOpsHost, isMortgageOpsHost } from "./lib/checkopsHost";
+import "@fontsource/dancing-script/latin-400.css";
+import "@fontsource/dancing-script/latin-700.css";
 import "./index.css";
 
 // Set document title + meta based on host

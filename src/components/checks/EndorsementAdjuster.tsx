@@ -33,6 +33,7 @@ import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
 import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
 import { logAudit } from "@/hooks/useAuditLog";
 import { displayCase } from "@/lib/displayCase";
+import { SIGNATURE_FONT_FAMILY } from "@/lib/signatureFont";
 
 interface SignedEndorsementAsset extends SignatureAsset {
   payee_type: string;
@@ -895,7 +896,7 @@ export function EndorsementAdjuster({
                       style={{
                         fontSize: byLineFontPx,
                         fontStyle: "italic",
-                        fontFamily: '"Brush Script MT", cursive',
+                        fontFamily: SIGNATURE_FONT_FAMILY,
                         marginBottom: rowGap * displayScale,
                       }}
                     >
@@ -919,7 +920,7 @@ export function EndorsementAdjuster({
                   style={{
                     fontSize: byLineFontPx,
                     fontStyle: "italic",
-                    fontFamily: '"Brush Script MT", cursive',
+                    fontFamily: SIGNATURE_FONT_FAMILY,
                   }}
                 >
                   {companyName}

@@ -12,6 +12,7 @@ import {
   type EndorsementLayout as NewLayout,
   type EndorsementOverride,
 } from "@/lib/endorsementLayout";
+import { SIGNATURE_FONT_FAMILY } from "@/lib/signatureFont";
 
 export type EndorsementLayout = {
   x: number;
@@ -65,6 +66,8 @@ export type SignatureInput = {
   companyName: string;
 };
 
+// Callers drawing typed signatures should `await ensureSignatureFontLoaded()`
+// (src/lib/signatureFont.ts) first; canvas text does not wait for web fonts.
 export function renderBackCheckEndorsementToCanvas(
   ctx: CanvasRenderingContext2D,
   backImage: HTMLImageElement,
@@ -130,7 +133,7 @@ export function renderBackCheckEndorsementToCanvas(
     ctx.drawImage(sig.clientSignature, L.x, cy, sigWidth, L.signatureHeight);
     cy += L.signatureHeight + L.lineGap * 0.5;
   } else {
-    ctx.font = `italic 500 ${L.signatureFont}px "Brush Script MT", cursive`;
+    ctx.font = `italic 500 ${L.signatureFont}px ${SIGNATURE_FONT_FAMILY}`;
     ctx.fillText(sig.clientName, L.x, cy);
     cy += L.signatureFont + L.lineGap * 0.5;
   }
@@ -148,7 +151,7 @@ export function renderBackCheckEndorsementToCanvas(
     ctx.drawImage(sig.ownerSignature, L.x, cy, sigWidth, L.signatureHeight);
     cy += L.signatureHeight;
   } else {
-    ctx.font = `italic 500 ${L.signatureFont}px "Brush Script MT", cursive`;
+    ctx.font = `italic 500 ${L.signatureFont}px ${SIGNATURE_FONT_FAMILY}`;
     ctx.fillText(sig.companyName, L.x, cy);
     cy += L.signatureFont;
   }

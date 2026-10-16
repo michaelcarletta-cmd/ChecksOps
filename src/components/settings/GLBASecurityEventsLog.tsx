@@ -47,7 +47,7 @@ export function GLBASecurityEventsLog() {
                     {e.severity && <SeverityBadge severity={e.severity} />}
                   </div>
                   {e.metadata && Object.keys(e.metadata).length > 0 && (
-                    <p className="text-[11px] text-muted-foreground font-mono truncate">{JSON.stringify(e.metadata)}</p>
+                    <p className="text-[11px] text-muted-foreground font-code truncate">{JSON.stringify(e.metadata)}</p>
                   )}
                 </div>
                 <div className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
