@@ -19,6 +19,12 @@ import {
   mergeClaimAndCheckSignatureFiles,
   signatureSourceFilesQueryKey,
 } from "@/lib/signature-source-files";
+import {
+  buildCheckScopedSignatureUploadPath,
+  canDeleteSignatureRequest,
+  canResendRequest,
+  canResendSigner,
+} from "@/lib/signature-request-actions";
 
 interface SignatureRequestsProps {
   claimId: string;
@@ -170,13 +176,26 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
         ? "application/pdf" 
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-      const fileName = `signatures/${claimId}/${Date.now()}-${docData.fileName}`;
+      const fileName = buildCheckScopedSignatureUploadPath(checkIntakeItemId, docData.fileName);
       const blob = new Blob([contentUint8], { type: mimeType });
       
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, blob);
       if (uploadError) throw uploadError;
+
+      const { error: fileRowError } = await supabase.from("check_files").insert({
+        check_intake_item_id: checkIntakeItemId,
+        file_name: docData.fileName || "Document",
+        file_path: fileName,
+        file_type: mimeType,
+        file_size: blob.size,
+        category: "other",
+        source: "manual",
+      });
+      if (fileRowError) throw fileRowError;
+      queryClient.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId) });
+      queryClient.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
 
       const { data: urlData } = await supabase.storage
         .from("claim-files")
@@ -239,12 +258,25 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
       if (!isPDF && !isDocx) throw new Error("Please upload a PDF or DOCX file");
 
       const sanitizedName = uploadedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const fileName = `signatures/${claimId}/${Date.now()}-${sanitizedName}`;
+      const fileName = buildCheckScopedSignatureUploadPath(checkIntakeItemId, sanitizedName);
 
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, uploadedFile);
       if (uploadError) throw uploadError;
+
+      const { error: fileRowError } = await supabase.from("check_files").insert({
+        check_intake_item_id: checkIntakeItemId,
+        file_name: uploadedFile.name,
+        file_path: fileName,
+        file_type: uploadedFile.type || null,
+        file_size: uploadedFile.size,
+        category: "other",
+        source: "manual",
+      });
+      if (fileRowError) throw fileRowError;
+      queryClient.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId) });
+      queryClient.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
 
       const { data: urlData, error: urlError } = await supabase.storage
         .from("claim-files")
@@ -379,16 +411,15 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
 
   const deleteRequestMutation = useMutation({
     mutationFn: async (request: any) => {
-      const { error: storageError } = await supabase.storage
-        .from("claim-files")
-        .remove([request.document_path]);
-      if (storageError) console.error("Storage deletion error:", storageError);
-
-      const { error } = await supabase
-        .from("signature_requests")
-        .delete()
-        .eq("id", request.id);
-      if (error) throw error;
+      // Server-side, tenant-member gated delete of an unsent request. The source
+      // document is kept: it may be a check file that is also on the Files tab.
+      const { data, error } = await supabase.functions.invoke("send-signature-request", {
+        body: { action: "delete", requestId: request.id },
+      });
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not delete signature request"));
+      }
+      if (data && !data.ok) throw new Error(data.message || data.error || "Delete failed");
     },
     onSuccess: () => {
       toast({ title: "Signature request deleted" });
@@ -798,7 +829,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     >
                       {request.final_pdf_path ? "View Signed PDF" : "Open Document"}
                     </Button>
-                    {(request.status === "failed" || request.status === "pending") && (
+                    {canResendRequest(request) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -810,14 +841,17 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                       </Button>
                     )}
                     {getStatusBadge(request)}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteRequestMutation.mutate(request)}
-                      disabled={deleteRequestMutation.isPending}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+                    {canDeleteSignatureRequest(request) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Delete signature request"
+                        onClick={() => deleteRequestMutation.mutate(request)}
+                        disabled={deleteRequestMutation.isPending}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 {request.last_error && (
@@ -872,7 +906,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                           <span className="text-muted-foreground">({signer.signer_email})</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {signer.delivery_status === "failed" && (
+                          {canResendSigner(request, signer) && (
                             <Button
                               variant="ghost"
                               size="sm"

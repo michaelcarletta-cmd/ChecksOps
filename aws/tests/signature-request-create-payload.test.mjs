@@ -86,7 +86,10 @@ test('resend and list/delete keep requestId and table reads', () => {
   const wizard = read('src/components/claim-detail/SignatureRequests.tsx');
   assert.match(wizard, /\.from\("signature_requests"\)\s*\.select\(/);
   assert.match(wizard, /signature_signers\(\*\)/);
-  assert.match(wizard, /\.from\("signature_requests"\)\s*\.delete\(\)/);
+  // Delete goes through the server handler (send-signature-request action "delete"):
+  // the generic /data/write allowlist is insert-only, so a direct table delete 403s.
+  assert.match(wizard, /body: \{ action: "delete", requestId: request\.id \}/);
+  assert.doesNotMatch(wizard, /\.from\("signature_requests"\)\s*\.delete\(\)/);
   assert.match(wizard, /body: \{ requestId, skipEmail: false, targetSignerIds \}/);
   assert.match(read('src/App.tsx'), /path="\/sign"/);
 });
