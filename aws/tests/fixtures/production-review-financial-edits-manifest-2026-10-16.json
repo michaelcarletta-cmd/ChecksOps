@@ -1,0 +1,19 @@
+{
+  "workstream_id": "review-financial-edits",
+  "authorization": "Owner-approved 2026-10-16 (\"start steps 1-3\"): write-allowlist.mjs and write-check-workflow.mjs (PR #901, Review financial edits) may be planned for production at main's reviewed bytes. Each production apply still needs the owner's run-time approval, the staging acceptance run and the phrase DEPLOY <member> TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Apply in order write-allowlist.mjs, then write-check-workflow.mjs: the new write-check-workflow.mjs imports REVIEW_CHECK_STAGE and REVIEW_FINANCIAL_COLUMNS, which only the new write-allowlist.mjs exports. Neither member was in an earlier production manifest, so there is no previous_manifest: both live values are the 2026-10-11 production snapshot (f78e16d99), confirmed by read-only inspect run 38903720825 on main b83e5cc33. write-allowlist.mjs: amount, routing_number and account_number leave INTAKE_PROHIBITED_COLUMNS and join check_intake_items columns (Review only); check_stakeholders and check_partner_stakeholder_removals insert/delete entries; moov_invoice_customers and moov_invoices join FINANCIAL_OR_PROVIDER_TABLES. write-check-workflow.mjs: Review-only amount/routing/account edits (the UPDATE requires check_stage = review, else 409 financial_edit_requires_review); check stakeholder and partner-stakeholder-removal writes for members of the check owner's tenant; check_files signature_request_id must belong to the file's own check or its claim; mortgage handling requests record the check's claim_id; claims metadata routing; randomUUID imported from node:crypto. write-check-workflow.mjs deploys only after production SQL 71 is applied and verified live (sql_before); its routing/account edits also need SQL 52, and its stakeholder writes need SQL 77-79 (applied in production 2026-10-15). Staging acceptance: write-allowlist.mjs is main's bytes in staging (overlay inspect run 38903291914); staging write-check-workflow.mjs is 57efaf50 (2c3da20c7), which includes #901 and differs from main only by 123f6a289's randomUUID import (inspect run 38903417174); SQL 71 is applied in staging (read-live run 38903724634).",
+  "members": {
+    "write-allowlist.mjs": {
+      "live_sha256": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
+      "accepted_sha256": "9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7",
+      "operation": "replace"
+    },
+    "write-check-workflow.mjs": {
+      "live_sha256": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
+      "accepted_sha256": "1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d",
+      "operation": "replace"
+    }
+  }
+}

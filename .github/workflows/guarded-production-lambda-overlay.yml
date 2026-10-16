@@ -50,6 +50,8 @@ on:
           - app-services.mjs
           - mortgage-agent-compensation.mjs
           - providers/production/moov-wallet-fund.mjs
+          - write-allowlist.mjs
+          - write-check-workflow.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
       approved_commit:
