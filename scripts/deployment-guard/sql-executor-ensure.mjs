@@ -60,6 +60,8 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/87_resolve_check_case_tenant_scope.sql', 'sql/87_resolve_check_case_tenant_scope.sql'],
   ['aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql', 'sql/88_claim_id_assign_case_tenant_scope.sql'],
   ['aws/workflows/sql/89_check_intake_items_column_update.sql', 'sql/89_check_intake_items_column_update.sql'],
+  ['aws/rls/sql/29_mortgage_ops_library_parity.sql', 'sql/29_mortgage_ops_library_parity.sql'],
+  ['aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql', 'sql/30_tenant_documents_mortgage_doc_type.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

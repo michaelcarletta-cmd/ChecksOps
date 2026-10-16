@@ -138,7 +138,7 @@ test('environment check refuses any changed executor variable', () => {
 });
 
 test('only reviewed pins are selectable and candidate members mirror the ensure pack list', () => {
-  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant', 'sql78-check-partner-stakeholder-removals', 'sql79-member-stakeholder-writes', 'sql80-checkalt-member-auto-deposit', 'sql81-checkalt-depositor-register', 'sql82-homeowner-ledger-view', 'sql83-homeowner-signing-capabilities', 'sql84-mortgage-return-to-queue', 'sql85-mortgage-compensation-adjust', 'sql86-mortgage-compensation-owner-only', 'sql87-resolve-check-case-tenant-scope', 'sql88-claim-id-assign-case-tenant-scope', 'sql89-check-intake-column-update']);
+  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant', 'sql78-check-partner-stakeholder-removals', 'sql79-member-stakeholder-writes', 'sql80-checkalt-member-auto-deposit', 'sql81-checkalt-depositor-register', 'sql82-homeowner-ledger-view', 'sql83-homeowner-signing-capabilities', 'sql84-mortgage-return-to-queue', 'sql85-mortgage-compensation-adjust', 'sql86-mortgage-compensation-owner-only', 'sql87-resolve-check-case-tenant-scope', 'sql88-claim-id-assign-case-tenant-scope', 'sql89-check-intake-column-update', 'sql29-mortgage-ops-library-parity', 'sql30-tenant-documents-doc-type']);
   assert.ok(Object.values(MIGRATIONS).every((pin) => AUTHORIZED_STAGING_SQL.includes(pin)));
   const { members, sourceOf } = candidateMembers(REPO_ROOT);
   assert.deepEqual(Object.keys(members).sort(), EXECUTOR_PACK_MEMBERS.map(([, to]) => to).sort());
@@ -516,6 +516,8 @@ test('every selectable pin refuses apply with the read-live sentinel before conn
     sqlFile87: file(MIGRATIONS['sql87-resolve-check-case-tenant-scope']),
     sqlFile88: file(MIGRATIONS['sql88-claim-id-assign-case-tenant-scope']),
     sqlFile89: file(MIGRATIONS['sql89-check-intake-column-update']),
+    sqlFile29: file(MIGRATIONS['sql29-mortgage-ops-library-parity']),
+    sqlFile30: file(MIGRATIONS['sql30-tenant-documents-doc-type']),
   });
   for (const [key, pin] of Object.entries(MIGRATIONS)) {
     const event = {

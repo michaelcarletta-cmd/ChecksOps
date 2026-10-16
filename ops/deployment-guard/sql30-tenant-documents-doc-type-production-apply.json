@@ -1,0 +1,46 @@
+{
+  "id": "sql30-tenant-documents-doc-type-production-apply",
+  "migration": "sql30",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql",
+  "migration_id": "30_tenant_documents_mortgage_doc_type",
+  "staging_pin_commit": "0d2f1b021829f0a2f52856d59cbe95b0ff2674c1",
+  "source_sha256": "d30c7cafb232387e174eb5a3938af9e0942a006fa8b775c2d6eac490d84c7d5a",
+  "constraint": "public.tenant_documents.tenant_documents_doc_type_check",
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556",
+  "authorization_phrase": "APPLY_TENANT_DOCUMENTS_MORTGAGE_DOC_TYPE_CHECK",
+  "predecessors": [],
+  "order_note": "Before SQL 94 (aws/workflows/sql/94_document_library_restore.sql), whose CHECK supersedes SQL 30's and also accepts SQL 30's as its predecessor; SQL 30 refuses SQL 94's CHECK (check_is_supported_predecessor). Independent of SQL 29. The file's BEGIN; / COMMIT; are not executed: the tool runs the bytes between them in its own transaction so it can verify before COMMIT.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "counts": null,
+    "sql30": null,
+    "precondition_failures": null,
+    "apply_preconditions_met": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 30. Run node scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, counts (aggregate COUNT(*) only, including rows_outside_sql30_values), sql30 (check_shape, check_definition_sha256, doc_type), precondition_failures, apply_preconditions_met and live_definition_sha256 here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] stop."
+  },
+  "intended_post_state": {
+    "fingerprint": "sha256(sql30StateText(SQL30_INTENDED_STATE)) in scripts/deployment-guard/lib/sql-executor-auth.mjs",
+    "note": "After the SQL 30 bytes: tenant_documents_doc_type_check is a validated IN list of exactly the 13 values (w9, license, insurance, saas_agreement, terms_of_service, privacy_policy and the 7 canonical library:mortgage:* values). No row changes. Template, shingle, siding, catalog and letterhead library rows still need SQL 94."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql30-tenant-documents-doc-type here in the reviewed change that sets execute true. Until then evaluate and apply refuse."
+  }
+}
