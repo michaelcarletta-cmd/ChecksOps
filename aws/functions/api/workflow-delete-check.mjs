@@ -6,7 +6,8 @@
  * Admin tools path already uses. It does not invent a second deletion backend.
  *
  * Invariants (delete-check-contract):
- * - platform admin only
+ * - owner, admin, manager or operator of the check's tenant (viewers,
+ *   partners and platform admin/staff without that membership are refused)
  * - reason min 3 trimmed characters
  * - claim linkage alone does not block
  * - partner/shared and terminal financial states block
@@ -17,10 +18,9 @@
  */
 import { DeleteObjectsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
-import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
-import { isPartnerLinked, isTerminalFinancial } from './workflow-transitions.mjs';
+import { isPartnerLinked, isTerminalFinancial, TENANT_ACTOR_SQL } from './workflow-transitions.mjs';
 import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -78,9 +78,10 @@ const filesBucket = () => process.env.FILES_BUCKET || '';
 const s3Region = () => process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
 const defaultS3 = (deps) => deps.s3 || new S3Client({ region: s3Region() });
 
-const platformRolesOf = async (client, userId) => {
-  const rows = (await client.query(USER_ROLES_SQL, [userId])).rows;
-  return new Set(rows.map((row) => String(row.role || '').toLowerCase()));
+// Owner policy: owner, admin, manager and operator act; viewers and partners do not.
+const isTenantActor = async (client, userId, tenantId) => {
+  if (!isUuid(tenantId)) return false;
+  return (await client.query(TENANT_ACTOR_SQL, [userId, tenantId])).rows.length > 0;
 };
 
 const lookupWorkflowCheck = async (client, checkId) => {
@@ -314,10 +315,6 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (body.sql || body.query || body.rawSql) {
       return denied(spoof, { error: 'generic_sql_denied' });
     }
-    const roles = await platformRolesOf(client, mapping.application_user_id);
-    if (!roles.has('admin')) {
-      return denied(spoof, { error: 'not_authorized', message: 'Only admins can delete checks' });
-    }
     const checkId = body.check_id || body.checkId || body.id
       || String(event?.rawPath || '').split('/').filter(Boolean).pop();
     const reason = clip(body.reason || body.p_reason || body.delete_reason, 2000);
@@ -335,6 +332,12 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     const looked = await lookupWorkflowCheck(client, checkId);
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
+    }
+    if (!(await isTenantActor(client, mapping.application_user_id, looked.check.tenant_id))) {
+      return denied(spoof, {
+        error: 'not_authorized',
+        message: 'Only an owner, admin, manager or operator of this check\'s company can delete it',
+      });
     }
     if (isPartnerLinked(looked.check) || isTerminalFinancial(looked.check)) {
       return denied(spoof, {

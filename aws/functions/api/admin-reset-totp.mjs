@@ -10,7 +10,6 @@ import {
   AdminUserGlobalSignOutCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentityWrite } from './data.mjs';
-import { USER_ROLES_SQL } from './identity.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -31,13 +30,20 @@ const safeQuery = async (client, sql, params = []) => {
   }
 };
 
-const isAdmin = async (client, userId) => {
-  const roles = (await safeQuery(client, USER_ROLES_SQL, [userId])).rows
-    .map((row) => String(row.role || '').toLowerCase());
-  if (roles.includes('admin')) return true;
-  const master = (await safeQuery(client, 'SELECT public.is_master_owner() AS is_master')).rows[0];
-  return master?.is_master === true;
-};
+// Owner policy: resetting a teammate's 2FA is team management. The caller must
+// be owner or admin of a tenant the target user is also a member of. Global
+// user_roles admin/staff and the master owner get no cross-tenant shortcut.
+export const RESET_TOTP_TEAM_MANAGER_SQL = `SELECT 1
+  FROM public.tenant_users mine
+  JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
+ WHERE mine.user_id = $1::uuid
+   AND theirs.user_id = $2::uuid
+   AND lower(mine.role::text) IN ('owner', 'admin')
+ LIMIT 1`;
+
+const managesTeammate = async (client, userId, targetUserId) => (
+  (await safeQuery(client, RESET_TOTP_TEAM_MANAGER_SQL, [userId, targetUserId])).rows.length > 0
+);
 
 export const softwareTokenEnrolled = (user = {}) => {
   const list = user.UserMFASettingList || user.userMFASettingList || [];
@@ -47,12 +53,12 @@ export const softwareTokenEnrolled = (user = {}) => {
 export const runAdminResetTotp = async ({
   client, mapping, body, spoof, cognitoClient, poolId,
 }) => {
-  if (!await isAdmin(client, mapping.application_user_id)) {
-    return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
-  }
   const userId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
   if (!UUID_RE.test(userId)) {
     return { ok: false, statusCode: 400, error: 'invalid_user_id', spoofFieldsIgnored: spoof };
+  }
+  if (!await managesTeammate(client, mapping.application_user_id, userId)) {
+    return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
   }
 
   const account = (await safeQuery(

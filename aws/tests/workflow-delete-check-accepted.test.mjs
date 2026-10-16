@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handleDeleteCheck, FINANCIAL_DELETE_BLOCKERS } from '../functions/api/workflow-delete-check.mjs';
 import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
+import { TENANT_ACTOR_SQL } from '../functions/api/workflow-transitions.mjs';
 
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
@@ -35,8 +36,11 @@ const baseCheck = {
   check_number: '9001',
 };
 
+const PARTNER_TENANT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
 const mockClient = ({
-  roles = [{ role: 'admin' }],
+  roles = [],
+  memberships = [{ tenant_id: FREEDOM, role: 'operator' }],
   check = baseCheck,
   blockers = {},
 } = {}) => {
@@ -70,6 +74,12 @@ const mockClient = ({
         };
       }
       if (sql === USER_ROLES_SQL) return { rows: roles };
+      if (sql === TENANT_ACTOR_SQL) {
+        const [userId, tenantId] = params;
+        const actor = userId === APP_ID && memberships.some((m) => m.tenant_id === tenantId
+          && ['owner', 'admin', 'manager', 'operator'].includes(String(m.role).toLowerCase()));
+        return { rows: actor ? [{ '?column?': 1 }] : [] };
+      }
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id/.test(sql)) {
         return { rows: check ? [check] : [] };
       }
@@ -160,15 +170,37 @@ test('reason shorter than 3 trimmed characters is rejected', async () => {
   assert.equal(result.field, 'reason');
 });
 
-test('non-admin cannot delete', async () => {
-  const client = mockClient({ roles: [{ role: 'staff' }] });
-  const result = await handleDeleteCheck(
-    jwtEvent({ check_id: CHECK_ID, reason: 'duplicate intake' }),
-    depsFor(client),
-  );
-  assert.equal(result.ok, false);
-  assert.equal(result.error, 'not_authorized');
-});
+for (const role of ['owner', 'admin', 'manager', 'operator']) {
+  test(`tenant ${role} of the check's tenant can delete it`, async () => {
+    const client = mockClient({ memberships: [{ tenant_id: FREEDOM, role }] });
+    const result = await handleDeleteCheck(
+      jwtEvent({ check_id: CHECK_ID, reason: 'duplicate intake' }),
+      depsFor(client),
+    );
+    assert.equal(result.ok, true, role);
+    assert.equal(result.data.deleted, true);
+  });
+}
+
+for (const [label, opts] of [
+  ['viewer of the check tenant', { memberships: [{ tenant_id: FREEDOM, role: 'viewer' }] }],
+  ['partner (owner of the tenant the check is shared with)', { memberships: [{ tenant_id: PARTNER_TENANT, role: 'owner' }] }],
+  ['platform admin without membership', { roles: [{ role: 'admin' }], memberships: [] }],
+  ['platform staff without membership', { roles: [{ role: 'staff' }], memberships: [] }],
+  ['platform admin who is only a viewer', { roles: [{ role: 'admin' }], memberships: [{ tenant_id: FREEDOM, role: 'viewer' }] }],
+]) {
+  test(`${label} cannot delete`, async () => {
+    const client = mockClient(opts);
+    const result = await handleDeleteCheck(
+      jwtEvent({ check_id: CHECK_ID, reason: 'duplicate intake' }),
+      depsFor(client),
+    );
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'not_authorized');
+    assert.equal(client.queries.some((q) => /DELETE FROM public.check_intake_items/.test(q.sql)), false);
+    assert.equal(client.queries.some((q) => /INSERT INTO public.check_deletion_log/.test(q.sql)), false);
+  });
+}
 
 test('terminal financial checks remain blocked', async () => {
   const client = mockClient({

@@ -36,7 +36,7 @@ import {
 } from "@/hooks/useWalletOps";
 
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
-import { useAuth } from "@/hooks/useAuth";
+import { useCurrentTenantRole } from "@/hooks/useCurrentTenantRole";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
@@ -114,8 +114,8 @@ function SectionCard({
 
 export default function WalletOps() {
   const { tenant } = useTenant();
-  const { userRole } = useAuth();
-  const isAdmin = userRole === "admin";
+  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
+  const { canAct: isAdmin } = useCurrentTenantRole();
   const { toast } = useToast();
   const { enabled, isLoading: eligibilityLoading } = usePaymentProviderEligibility();
 

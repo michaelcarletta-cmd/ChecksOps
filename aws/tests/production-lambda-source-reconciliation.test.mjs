@@ -78,7 +78,10 @@ test('workflow.mjs keeps production-only Delete Check and applies claim-linked #
   assert.match(src, /DeleteObjectsCommand/);
   assert.match(src, /export const handleDeleteCheck = async/);
   assert.doesNotMatch(src, /workflow-delete-check\.mjs/);
-  assert.match(src, /const roleAllowed = looked\.check\.claim_id/);
+  // Owner policy: the check's tenant acting roles (owner, admin, manager,
+  // operator) move a check, claim-linked or not; no platform role shortcut.
+  assert.match(src, /const roleAllowed = decided\.spec\.requiredRole === 'tenant_actor' && canTransition\(roles\)/);
+  assert.doesNotMatch(src, /USER_ROLES_SQL/);
   assert.match(src, /claim_id IS NOT DISTINCT FROM \$6::uuid/);
   assert.match(src, /tenant_id IS NOT DISTINCT FROM \$8::uuid/);
   assert.match(src, /status IS NOT DISTINCT FROM \$7::text/);
@@ -155,7 +158,8 @@ test('added members are the accepted claim-settlement and extracted delete modul
   assert.match(settlement, /application_workflow_writes_disabled/);
   assert.equal(sha256('claim-settlement-rpc.mjs'), proof.members['claim-settlement-rpc.mjs'].reconciled_sha256);
   const del = read('workflow-delete-check.mjs');
-  assert.match(del, /Only admins can delete checks/);
+  assert.doesNotMatch(del, /Only admins can delete checks/);
+  assert.match(del, /Only an owner, admin, manager or operator of this check\\'s company can delete it/);
   assert.match(del, /FINANCIAL_DELETE_BLOCKERS|partner|deposited/);
 });
 

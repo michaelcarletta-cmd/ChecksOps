@@ -113,18 +113,13 @@ export const publicTaxProfile = (row) => {
   };
 };
 
+// Owner policy: tax setup and tax identifiers are team management, so only the
+// owner and admin of the tenant reach them. Platform owner, user_roles admin
+// and staff get no cross-tenant shortcut: the role must be the caller's own
+// tenant_users role for the requested tenant.
 export const evaluateTaxAccess = ({
-  isPlatformOwner = false,
-  platformRoles = [],
   tenantMembershipRole = null,
 } = {}) => {
-  if (isPlatformOwner === true) {
-    return { allowed: true, reason: 'platform_owner' };
-  }
-  const roles = Array.isArray(platformRoles) ? platformRoles.map((r) => String(r || '').toLowerCase()) : [];
-  if (roles.includes('admin')) {
-    return { allowed: true, reason: 'platform_admin' };
-  }
   const tenantRole = tenantMembershipRole == null ? '' : String(tenantMembershipRole).toLowerCase();
   if (PERMITTED_TENANT_TAX_ROLES.has(tenantRole)) {
     return { allowed: true, reason: 'tenant_finance_admin' };

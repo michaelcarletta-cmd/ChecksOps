@@ -522,3 +522,46 @@ test('provider execution routes remain disabled', async () => {
   assert.equal(result.statusCode, 403);
   assert.equal(body.error, 'provider_disabled');
 });
+
+/** mockClient whose tenant_users role lookup honours the tenant id. */
+const tenantScopedClient = ({ memberships, roles = [], check = { ...createdRow, status: 'needs_review' } }) => {
+  const client = mockClient({ memberships, roles, check });
+  const inner = client.query;
+  client.query = async (sql, params) => {
+    if (/SELECT role FROM public.tenant_users/.test(sql)) {
+      client.queries.push({ sql, params });
+      return { rows: memberships.filter((m) => m.tenant_id === params[1]).map((m) => ({ role: m.role })) };
+    }
+    return inner(sql, params);
+  };
+  return client;
+};
+
+const moveToEndorsing = (client) => handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+  check_id: CHECK_ID,
+  p_deposit_path: 'endorsements_in_progress',
+}), depsFor(client));
+
+for (const role of ['owner', 'admin', 'manager', 'operator']) {
+  test(`transition: tenant ${role} of the check's tenant can move the check`, async () => {
+    const client = tenantScopedClient({ memberships: [{ tenant_id: FREEDOM_TENANT, role }] });
+    const result = await moveToEndorsing(client);
+    assert.equal(result.ok, true, role);
+    assert.equal(result.data.check_stage, 'endorsing');
+  });
+}
+
+for (const [label, opts] of [
+  ['viewer', { memberships: [{ tenant_id: FREEDOM_TENANT, role: 'viewer' }] }],
+  ['partner (owner of another tenant the check is shared with)', { memberships: [{ tenant_id: C1C_TENANT, role: 'owner' }] }],
+  ['platform admin without membership', { memberships: [], roles: [{ role: 'admin' }] }],
+  ['platform staff who is only a viewer', { memberships: [{ tenant_id: FREEDOM_TENANT, role: 'viewer' }], roles: [{ role: 'staff' }] }],
+]) {
+  test(`transition: ${label} is refused`, async () => {
+    const client = tenantScopedClient(opts);
+    const result = await moveToEndorsing(client);
+    assert.equal(result.ok, false, label);
+    assert.equal(result.error, 'insufficient_role');
+    assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
+  });
+}

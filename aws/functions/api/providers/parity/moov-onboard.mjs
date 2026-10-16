@@ -1115,6 +1115,15 @@ export const sweepConfig = {
         environment,
       });
     }
+    // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
+    // Only the caller's own membership role for ctx.tenantId counts.
+    const actor = (ctx.memberships || []).some((m) => String(m?.tenant_id) === String(ctx.tenantId)
+      && ['owner', 'admin', 'manager', 'operator'].includes(String(m?.role || '').toLowerCase()));
+    if (!actor) {
+      return fail('Only an owner, admin, manager or operator of this organization can change sweeps', 403, {
+        error: 'role_not_allowed',
+      });
+    }
     if (action === 'create') {
       const wallet = await syncWallet(client, {
         tenantId: ctx.tenantId, accountId, environment, fetchImpl,
@@ -1201,7 +1210,10 @@ export const invoice = {
 export const platformBank = {
   requireAdmin: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
-    if (!ctx.isAdmin) return fail('Platform owner access required', 403);
+    // The platform treasury bank is the platform owner's, not a tenant's: a
+    // global user_roles admin (ctx.isAdmin) is not enough.
+    const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
     const action = body.action || 'list';

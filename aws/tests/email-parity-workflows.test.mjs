@@ -580,7 +580,7 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
       mapping,
       spoof,
       send: capturingMailer(sent),
-      body: { tenant_id: TENANT, email: 'member@example.com', role: 'member', full_name: 'New Member' },
+      body: { tenant_id: TENANT, email: 'member@example.com', role: 'operator', full_name: 'New Member' },
       cognitoJson: async (target, payload) => {
         if (target === 'AdminCreateUser') {
           issuedInvite = payload.TemporaryPassword;
@@ -591,8 +591,8 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
       },
       client: sqlClient([
         {
-          match: (sql) => sql.includes('FROM public.tenant_users') && sql.includes('SELECT role'),
-          result: () => ({ rows: [{ role: 'admin' }] }),
+          match: (sql) => sql.includes('FROM public.tenant_users') && sql.includes("IN ('owner', 'admin')"),
+          result: () => ({ rows: [{ '?column?': 1 }] }),
         },
         {
           match: (sql) => sql.includes('FROM public.tenants'),
@@ -605,6 +605,8 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
       ]),
     });
     assert.equal(invite.ok, true);
+    assert.equal(invite.invite_sent, true);
+    assert.equal(invite.is_new_user, true);
     assert.equal(invite.tempPasswordIssued, true);
     assert.ok(issuedInvite);
     assert.equal(JSON.stringify(invite).includes(issuedInvite), false);

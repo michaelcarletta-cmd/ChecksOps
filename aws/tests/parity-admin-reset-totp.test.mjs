@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app-services.mjs';
 import {
   MFA_RESET_PREFERENCE,
+  RESET_TOTP_TEAM_MANAGER_SQL,
   runAdminResetTotp,
   softwareTokenEnrolled,
 } from '../functions/api/admin-reset-totp.mjs';
@@ -39,45 +40,107 @@ test('preferred MFA enable path stays refused', async () => {
   assert.equal(softwareTokenEnrolled({ UserMFASettingList: ['SOFTWARE_TOKEN_MFA'] }), true);
 });
 
-test('non-admin is forbidden and missing cognito user is fail-closed without import', async () => {
-  const forbidden = await runAdminResetTotp({
-    mapping: { application_user_id: USER_ID },
-    body: { user_id: USER_ID },
-    spoof: { ignored: true },
-    client: sqlClient([{
-      match: (sql) => sql.includes('user_roles'),
-      result: () => ({ rows: [{ role: 'staff' }] }),
-    }]),
-  });
-  assert.equal(forbidden.statusCode, 403);
+const CALLER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const TENANT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const OTHER_TENANT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
-  const missing = await runAdminResetTotp({
-    mapping: { application_user_id: USER_ID },
-    body: { user_id: USER_ID },
-    spoof: { ignored: true },
-    client: sqlClient([
-      {
-        match: (sql) => sql.includes('user_roles'),
-        result: () => ({ rows: [{ role: 'admin' }] }),
-      },
-      {
-        match: (sql) => sql.includes('identity_accounts'),
-        result: () => ({ rows: [] }),
-      },
-    ]),
+/**
+ * tenant_users rows; the fake evaluates the shared-tenant owner/admin join of
+ * RESET_TOTP_TEAM_MANAGER_SQL. user_roles and is_master_owner are answered too,
+ * so a test can prove they are not consulted.
+ */
+const teamClient = ({ memberships = [], userRoles = [], master = false, account = null } = {}) => sqlClient([
+  {
+    match: (sql) => sql.includes('user_roles'),
+    result: () => ({ rows: userRoles.map((role) => ({ role })) }),
+  },
+  {
+    match: (sql) => sql.includes('is_master_owner'),
+    result: () => ({ rows: [{ is_master: master }] }),
+  },
+  {
+    match: (sql) => sql.includes('JOIN public.tenant_users theirs'),
+    result: ([caller, target]) => {
+      assert.match(RESET_TOTP_TEAM_MANAGER_SQL, /lower\(mine\.role::text\) IN \('owner', 'admin'\)/);
+      const shared = memberships.some((mine) => mine.user_id === caller
+        && ['owner', 'admin'].includes(String(mine.role).toLowerCase())
+        && memberships.some((theirs) => theirs.user_id === target && theirs.tenant_id === mine.tenant_id));
+      return { rows: shared ? [{ '?column?': 1 }] : [] };
+    },
+  },
+  {
+    match: (sql) => sql.includes('identity_accounts'),
+    result: () => ({ rows: account ? [account] : [] }),
+  },
+]);
+
+const reset = (client, extra = {}) => runAdminResetTotp({
+  mapping: { application_user_id: CALLER },
+  body: { user_id: USER_ID },
+  spoof: { ignored: true },
+  client,
+  ...extra,
+});
+
+for (const role of ['owner', 'admin']) {
+  test(`tenant ${role} may reset 2FA for a teammate of the same tenant`, async () => {
+    const result = await reset(teamClient({
+      memberships: [
+        { user_id: CALLER, tenant_id: TENANT, role },
+        { user_id: USER_ID, tenant_id: TENANT, role: 'operator' },
+      ],
+    }));
+    assert.equal(result.ok, true);
+    assert.equal(result.removed_count, 0);
+    assert.equal(result.importedUser, false);
+    assert.equal(result.poolMfaChanged, false);
   });
-  assert.equal(missing.ok, true);
-  assert.equal(missing.removed_count, 0);
-  assert.equal(missing.importedUser, false);
-  assert.equal(missing.poolMfaChanged, false);
+}
+
+for (const role of ['manager', 'operator', 'viewer']) {
+  test(`tenant ${role} cannot reset a teammate's 2FA`, async () => {
+    const result = await reset(teamClient({
+      memberships: [
+        { user_id: CALLER, tenant_id: TENANT, role },
+        { user_id: USER_ID, tenant_id: TENANT, role: 'operator' },
+      ],
+    }));
+    assert.equal(result.statusCode, 403);
+  });
+}
+
+test('owner of another tenant, platform admin/staff and the master owner without a shared owner/admin tenant are forbidden', async () => {
+  const otherTenant = await reset(teamClient({
+    memberships: [
+      { user_id: CALLER, tenant_id: OTHER_TENANT, role: 'owner' },
+      { user_id: USER_ID, tenant_id: TENANT, role: 'operator' },
+    ],
+  }));
+  assert.equal(otherTenant.statusCode, 403);
+  for (const userRoles of [['admin'], ['staff']]) {
+    const platform = await reset(teamClient({
+      userRoles,
+      memberships: [{ user_id: USER_ID, tenant_id: TENANT, role: 'operator' }],
+    }));
+    assert.equal(platform.statusCode, 403);
+  }
+  const master = await reset(teamClient({
+    master: true,
+    userRoles: ['admin'],
+    memberships: [{ user_id: USER_ID, tenant_id: TENANT, role: 'operator' }],
+  }));
+  assert.equal(master.statusCode, 403);
 });
 
 test('Cognito software token is disabled and never enabled', async () => {
   const calls = [];
-  const result = await runAdminResetTotp({
-    mapping: { application_user_id: USER_ID },
-    body: { user_id: USER_ID },
-    spoof: { ignored: true },
+  const result = await reset(teamClient({
+    memberships: [
+      { user_id: CALLER, tenant_id: TENANT, role: 'admin' },
+      { user_id: USER_ID, tenant_id: TENANT, role: 'viewer' },
+    ],
+    account: { email: 'ada@example.com', cognito_sub: 'sub', application_user_id: USER_ID },
+  }), {
     poolId: 'us-east-1_test',
     cognitoClient: {
       send: async (command) => {
@@ -88,16 +151,6 @@ test('Cognito software token is disabled and never enabled', async () => {
         return {};
       },
     },
-    client: sqlClient([
-      {
-        match: (sql) => sql.includes('user_roles'),
-        result: () => ({ rows: [{ role: 'admin' }] }),
-      },
-      {
-        match: (sql) => sql.includes('identity_accounts'),
-        result: () => ({ rows: [{ email: 'ada@example.com', cognito_sub: 'sub', application_user_id: USER_ID }] }),
-      },
-    ]),
   });
   assert.equal(result.ok, true);
   assert.equal(result.removed_count, 1);

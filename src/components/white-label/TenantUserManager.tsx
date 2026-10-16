@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, RotateCcw, Send, Trash2, UserPlus, Users, Shield } from "lucide-react";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrentTenantRole } from "@/hooks/useCurrentTenantRole";
 
 interface Props {
   tenantId: string;
@@ -18,7 +18,8 @@ interface Props {
 
 export function TenantUserManager({ tenantId }: Props) {
   const { toast } = useToast();
-  const { isAdmin } = usePermissions();
+  // Owner policy: team management (2FA resets) is owner and admin of this tenant only.
+  const { canManageTeam } = useCurrentTenantRole();
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>("operator");
@@ -213,7 +214,7 @@ export function TenantUserManager({ tenantId }: Props) {
                     <Badge className={`shrink-0 text-[10px] ${roleColor(u.role)}`}>{u.role}</Badge>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    {isAdmin && u.email && (
+                    {canManageTeam && u.email && (
                       <Button
                         variant="ghost"
                         size="icon"

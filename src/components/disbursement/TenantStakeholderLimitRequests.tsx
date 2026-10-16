@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Check, X, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { canActInTenant } from "@/lib/tenantRoleAccess";
 
 type Row = {
   id: string;
@@ -59,7 +60,8 @@ export function TenantStakeholderLimitRequests() {
     },
   });
 
-  const canApprove = role === "owner" || role === "admin";
+  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
+  const canApprove = canActInTenant(role);
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["tenant-stakeholder-limit-requests", tenant?.id, tab],

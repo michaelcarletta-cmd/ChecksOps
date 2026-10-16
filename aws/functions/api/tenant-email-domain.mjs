@@ -639,6 +639,11 @@ export const writeDomainAudit = async (client, mapping, {
   }
 };
 
+// Tenant settings (sender branding, sending domain) are team management:
+// owner and admin of this tenant only. No platform admin/staff bypass and no
+// cross-tenant access; the tenant must be one of the caller's own tenants.
+export const TENANT_SETTINGS_ROLES = Object.freeze(['owner', 'admin']);
+
 export const resolveTenantAccess = async (client, mapping, tenantId) => {
   const userId = mapping.application_user_id;
   const membership = (await client.query(
@@ -646,27 +651,25 @@ export const resolveTenantAccess = async (client, mapping, tenantId) => {
      WHERE tenant_id = $1::uuid AND user_id = $2::uuid LIMIT 1`,
     [tenantId, userId],
   )).rows[0];
-  const system = (await client.query(
-    `SELECT role FROM public.user_roles WHERE user_id = $1::uuid LIMIT 1`,
-    [userId],
-  )).rows[0];
   let master = false;
   try {
     master = (await client.query(`SELECT public.is_master_owner() AS is_master`)).rows[0]?.is_master === true;
   } catch {
     master = false;
   }
-  const platformAdmin = system?.role === 'admin' || master === true;
-  const tenantAdmin = membership?.role === 'admin';
   const member = Boolean(membership);
+  const tenantRole = member ? String(membership.role || '').toLowerCase() : '';
+  const tenantAdmin = TENANT_SETTINGS_ROLES.includes(tenantRole);
   return {
-    platformAdmin,
+    platformAdmin: false,
     tenantAdmin,
     member,
-    canView: platformAdmin || member,
-    canConfigure: platformAdmin || tenantAdmin,
-    canDeleteIdentity: platformAdmin && master === true,
-    role: tenantAdmin ? 'admin' : (membership?.role || (platformAdmin ? 'platform_admin' : null)),
+    canView: member,
+    canConfigure: tenantAdmin,
+    // Deleting the SES identity stays with the master owner, and only for a
+    // tenant they are a member of.
+    canDeleteIdentity: member && master === true,
+    role: member ? tenantRole : null,
   };
 };
 

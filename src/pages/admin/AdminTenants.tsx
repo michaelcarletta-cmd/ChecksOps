@@ -641,7 +641,7 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteRole, setInviteRole] = useState("operator");
   const [inviting, setInviting] = useState(false);
 
   const load = async () => {

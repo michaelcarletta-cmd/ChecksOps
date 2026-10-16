@@ -7,14 +7,10 @@ import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 
-import { useAuth } from "@/hooks/useAuth";
-import { useTenant } from "@/contexts/TenantContext";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { canAccessTaxUi } from "@/lib/taxAccess";
-import { isPlatformOwner } from "@/lib/masterMerchant";
+import { useCurrentTenantRole } from "@/hooks/useCurrentTenantRole";
 import { 
   Receipt, 
   FileText, 
@@ -56,32 +52,13 @@ const SectionCard = ({
 );
 
 const Payments = () => {
-  const { user, userRole } = useAuth();
-  const { tenant } = useTenant();
-  const isAdmin = user?.role === 'admin';
-  const platformOwner = isPlatformOwner(user?.email, user?.id);
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "ledger");
 
-  const { data: tenantRole } = useQuery({
-    queryKey: ["tenant-user-role", tenant?.id, user?.id],
-    enabled: !!tenant?.id && !!user?.id && !platformOwner && userRole !== "admin",
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("tenant_users")
-        .select("role")
-        .eq("tenant_id", tenant!.id)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      return (data?.role ?? null) as string | null;
-    },
-  });
-
-  const canTax = canAccessTaxUi({
-    isPlatformOwner: platformOwner,
-    platformRole: userRole,
-    tenantRole: tenantRole ?? null,
-  });
+  // Owner policy: only the user's own role in this tenant counts. Owner,
+  // admin, manager and operator act (payroll); tax is owner and admin only.
+  const { role: tenantRole, canAct: isAdmin } = useCurrentTenantRole();
+  const canTax = canAccessTaxUi({ tenantRole });
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -202,7 +179,7 @@ const Payments = () => {
               accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
             >
               <p className="text-sm text-muted-foreground">
-                Tax profiles are limited to the platform owner, platform admins, and tenant owner/admin roles.
+                Tax profiles are limited to the owner and admin of this organization.
               </p>
             </SectionCard>
           </TabsContent>

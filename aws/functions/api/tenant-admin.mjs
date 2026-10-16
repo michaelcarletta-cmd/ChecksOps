@@ -52,23 +52,33 @@ const cognitoJson = async (target, payload) => {
   }
 };
 
+// Team management (invite, remove, the tenant AI key) is owner and admin of
+// this tenant only. Global user_roles admin/staff and the master owner get no
+// shortcut into a tenant.
+export const TEAM_MANAGER_ROLES = Object.freeze(['owner', 'admin']);
+// public.tenant_role values an invite may assign.
+export const INVITABLE_TENANT_ROLES = Object.freeze(['admin', 'operator', 'viewer']);
+
 const assertTenantAdmin = async (client, mapping, tenantId) => {
-  const membership = (await client.query(
-    `SELECT role FROM public.tenant_users
-     WHERE tenant_id = $1::uuid AND user_id = $2::uuid LIMIT 1`,
+  const rows = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE tenant_id = $1::uuid AND user_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin')
+     LIMIT 1`,
     [tenantId, mapping.application_user_id],
-  )).rows[0];
-  const system = (await client.query(
-    `SELECT role FROM public.user_roles WHERE user_id = $1::uuid LIMIT 1`,
-    [mapping.application_user_id],
-  )).rows[0];
-  const master = (await client.query(
-    `SELECT public.is_master_owner() AS is_master`,
-  )).rows[0];
-  const ok = membership?.role === 'admin'
-    || system?.role === 'admin'
-    || master?.is_master === true;
-  return ok;
+  )).rows;
+  return rows.length > 0;
+};
+
+const isPlatformOwner = async (client) => {
+  try {
+    const row = (await client.query(
+      `SELECT public.is_platform_owner() AS is_owner, public.is_master_owner() AS is_master`,
+    )).rows[0];
+    return row?.is_owner === true || row?.is_master === true;
+  } catch {
+    return false;
+  }
 };
 
 export const runTenantInviteUser = async ({
@@ -77,13 +87,24 @@ export const runTenantInviteUser = async ({
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
   const email = normalizeEmail(body.email);
-  const role = body.role || 'member';
+  const role = String(body.role || 'operator').trim().toLowerCase();
   const fullName = body.full_name || body.fullName || email;
   if (!tenantId || !email) {
     return { ok: false, statusCode: 400, error: 'Missing tenant_id, email, or role', spoofFieldsIgnored: spoof };
   }
-  if (!(await assertTenantAdmin(client, mapping, tenantId))) {
-    return { ok: false, statusCode: 403, error: 'Not authorized — must be tenant admin or system admin', spoofFieldsIgnored: spoof };
+  if (!INVITABLE_TENANT_ROLES.includes(role)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'invalid_role',
+      allowedRoles: INVITABLE_TENANT_ROLES,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  // Owner policy: owner and admin of this tenant manage its team. The platform
+  // owner keeps tenant onboarding (inviting a new tenant's first users).
+  if (!(await assertTenantAdmin(client, mapping, tenantId)) && !(await isPlatformOwner(client))) {
+    return { ok: false, statusCode: 403, error: 'Not authorized — must be an owner or admin of this tenant', spoofFieldsIgnored: spoof };
   }
 
   const tenant = (await client.query(
@@ -166,19 +187,23 @@ export const runTenantInviteUser = async ({
     ).catch(() => {});
   }
 
-  await client.query(
-    `INSERT INTO public.tenant_users (id, tenant_id, user_id, role, created_at)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, now())
-     ON CONFLICT DO NOTHING`,
-    [randomUUID(), tenantId, appUserId, role],
-  ).catch(async () => {
+  try {
     await client.query(
-      `INSERT INTO public.tenant_users (tenant_id, user_id, role)
-       VALUES ($1::uuid, $2::uuid, $3)
+      `INSERT INTO public.tenant_users (id, tenant_id, user_id, role, created_at)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, now())
        ON CONFLICT DO NOTHING`,
-      [tenantId, appUserId, role],
-    ).catch(() => {});
-  });
+      [randomUUID(), tenantId, appUserId, role],
+    );
+  } catch (error) {
+    // Fail loudly: an invite that did not create the membership is not an invite.
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'tenant_membership_failed',
+      message: String(error?.message || error).slice(0, 240),
+      spoofFieldsIgnored: spoof,
+    };
+  }
 
   const origin = emailAssetOrigin();
   const loginUrl = tenant.custom_domain
@@ -192,20 +217,31 @@ export const runTenantInviteUser = async ({
     branding,
   });
   const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to: email,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
-  });
+  let inviteSent = true;
+  let inviteError = null;
+  try {
+    await mailer({
+      to: email,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: branding.replyTo,
+    });
+  } catch (error) {
+    inviteSent = false;
+    inviteError = String(error?.message || error).slice(0, 200);
+  }
 
   return {
     ok: true,
     statusCode: 200,
     success: true,
     invited: true,
+    // The SPA reads the snake_case fields (TenantUserManager, AdminTenants).
+    invite_sent: inviteSent,
+    invite_error: inviteError,
+    is_new_user: isNewUser,
     isNewUser,
     email,
     role,
@@ -226,35 +262,61 @@ export const handleTenantInviteUser = (event, deps = {}) => withIdentity(event, 
 
 export const handleCreateTenantUser = async (event) => handleTenantInviteUser(event);
 
-export const handleDeleteUser = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const runDeleteUser = async ({
+  client, mapping, body, spoof, cognitoJson: cognitoFn,
 }) => {
+  const adminCognito = cognitoFn || cognitoJson;
   const userId = body.userId || body.user_id;
   const email = normalizeEmail(body.email);
-  const system = (await client.query(
-    `SELECT role FROM public.user_roles WHERE user_id = $1::uuid LIMIT 1`,
-    [mapping.application_user_id],
-  )).rows[0];
-  const master = (await client.query(`SELECT public.is_master_owner() AS is_master`)).rows[0];
-  if (system?.role !== 'admin' && !master?.is_master) {
-    return { ok: false, statusCode: 403, error: 'admin_required', spoofFieldsIgnored: spoof };
-  }
+  const tenantId = body.tenant_id || body.tenantId || null;
   if (!userId && !email) {
     return { ok: false, statusCode: 400, error: 'missing_user', spoofFieldsIgnored: spoof };
   }
-  // Soft-disable: remove tenant memberships; do not hard-delete Cognito from staging automation.
+  if (!(await isPlatformOwner(client))) {
+    // Owner policy: owner and admin remove a user only from the tenants where
+    // they are owner/admin. Disabling the login reaches every tenant, so it
+    // stays with the platform owner.
+    if (!userId) {
+      return { ok: false, statusCode: 400, error: 'missing_user', spoofFieldsIgnored: spoof };
+    }
+    const removed = await client.query(
+      `DELETE FROM public.tenant_users
+        WHERE user_id = $1::uuid
+          AND ($3::uuid IS NULL OR tenant_id = $3::uuid)
+          AND tenant_id IN (
+            SELECT mine.tenant_id FROM public.tenant_users mine
+             WHERE mine.user_id = $2::uuid
+               AND lower(mine.role::text) IN ('owner', 'admin'))`,
+      [userId, mapping.application_user_id, tenantId],
+    );
+    if (!(removed?.rowCount > 0)) {
+      return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
+    }
+    return {
+      ok: true,
+      statusCode: 200,
+      disabled: false,
+      removed_from_tenants: removed.rowCount,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  // Platform owner: soft-disable. Remove tenant memberships; do not hard-delete Cognito from staging automation.
   if (userId) {
     await client.query(`DELETE FROM public.tenant_users WHERE user_id = $1::uuid`, [userId]).catch(() => {});
   }
   if (email) {
     try {
-      await cognitoJson('AdminDisableUser', { UserPoolId: POOL_ID(), Username: email });
+      await adminCognito('AdminDisableUser', { UserPoolId: POOL_ID(), Username: email });
     } catch {
       /* ignore missing user */
     }
   }
   return { ok: true, statusCode: 200, disabled: true, spoofFieldsIgnored: spoof };
-}, { write: true, commit: true });
+};
+
+export const handleDeleteUser = async (event, deps = {}) => withIdentity(event, (ctx) => (
+  runDeleteUser({ ...ctx, cognitoJson: deps.cognitoJson })
+), { write: true, commit: true, ...deps });
 
 export const handleGetInstanceUsers = async (event) => withIdentity(event, async ({
   spoof,

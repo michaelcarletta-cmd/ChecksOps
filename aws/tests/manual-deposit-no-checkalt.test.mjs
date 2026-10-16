@@ -27,7 +27,7 @@ const manualDepositClient = ({ globalRoles = [], memberships = [], itemOverrides
       const tenantAdmin = memberships.some((membership) => (
         membership.user_id === params[0]
         && (!targetScoped || membership.tenant_id === params[1])
-        && ['admin', 'owner'].includes(membership.role.toLowerCase())
+        && ['owner', 'admin', 'manager', 'operator'].includes(membership.role.toLowerCase())
       ));
       return { rows: tenantAdmin ? [{ '?column?': 1 }] : [] };
     }
@@ -82,8 +82,8 @@ test('Mark as Deposited frontend reuses deposit_action and never calls CheckAlt'
   assert.doesNotMatch(checkAltFn, /mark_manual_deposit/);
 });
 
-test('target-tenant admin and owner can mark deposited and write audit once', async () => {
-  for (const role of ['admin', 'owner']) {
+test('target-tenant owner, admin, manager and operator can mark deposited and write audit once', async () => {
+  for (const role of ['admin', 'owner', 'manager', 'operator']) {
     const { client, writes } = manualDepositClient({
       memberships: [{ user_id: APP_ID, tenant_id: FREEDOM, role }],
     });
@@ -102,18 +102,20 @@ test('target-tenant admin and owner can mark deposited and write audit once', as
   }
 });
 
-test('ordinary target-tenant membership cannot mark a deposit manually', async () => {
-  const { client, writes } = manualDepositClient({
-    memberships: [{ user_id: APP_ID, tenant_id: FREEDOM, role: 'member' }],
-  });
-  const result = await executeSafeWriteRpc({
-    client,
-    mapping: { application_user_id: APP_ID },
-    name: 'deposit_action',
-    args: { p_action: 'mark_manual_deposit', p_deposit_item_id: ITEM_ID },
-  });
-  assert.equal(result.error, 'not_authorized');
-  assert.equal(writes.length, 0);
+test('target-tenant viewers and plain members cannot mark a deposit manually', async () => {
+  for (const role of ['viewer', 'member']) {
+    const { client, writes } = manualDepositClient({
+      memberships: [{ user_id: APP_ID, tenant_id: FREEDOM, role }],
+    });
+    const result = await executeSafeWriteRpc({
+      client,
+      mapping: { application_user_id: APP_ID },
+      name: 'deposit_action',
+      args: { p_action: 'mark_manual_deposit', p_deposit_item_id: ITEM_ID },
+    });
+    assert.equal(result.error, 'not_authorized', role);
+    assert.equal(writes.length, 0);
+  }
 });
 
 test('tenant admin from another tenant cannot manually close a target-tenant deposit', async () => {
@@ -133,7 +135,7 @@ test('tenant admin from another tenant cannot manually close a target-tenant dep
   assert.equal(writes.length, 0);
 });
 
-test('platform staff and admin retain manual deposit authorization without target membership', async () => {
+test('platform staff and admin without target membership cannot mark a deposit manually', async () => {
   for (const role of ['staff', 'admin']) {
     const { client, writes } = manualDepositClient({ globalRoles: [role] });
     const result = await executeSafeWriteRpc({
@@ -142,14 +144,14 @@ test('platform staff and admin retain manual deposit authorization without targe
       name: 'deposit_action',
       args: { p_action: 'mark_manual_deposit', p_deposit_item_id: ITEM_ID },
     });
-    assert.equal(result.data.success, true);
-    assert.equal(writes.filter((sql) => /UPDATE public.check_intake_items/.test(sql)).length, 1);
+    assert.equal(result.error, 'not_authorized', role);
+    assert.equal(writes.length, 0);
   }
 });
 
 test('manual deposit still rejects invalid terminal transitions without ledger writes', async () => {
   const { client, writes } = manualDepositClient({
-    globalRoles: ['admin'],
+    memberships: [{ user_id: APP_ID, tenant_id: FREEDOM, role: 'operator' }],
     itemOverrides: { status: 'failed' },
   });
   const result = await executeSafeWriteRpc({

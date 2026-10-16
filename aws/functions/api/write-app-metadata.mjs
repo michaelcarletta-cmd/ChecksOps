@@ -366,6 +366,8 @@ export const executeSharedCheckMessages = async ({ client, mapping, op, values, 
   return { rows };
 };
 
+// public.tenant_role values (supabase/migrations/20260422135101_*.sql). A role
+// change may only assign one of these.
 const TENANT_ROLES = new Set(['admin', 'operator', 'viewer']);
 
 export const executeTenantUsers = async ({ client, mapping, op, values, filters }) => {
@@ -373,13 +375,16 @@ export const executeTenantUsers = async ({ client, mapping, op, values, filters 
   const tenantId = eqFilter(filters, 'tenant_id');
   const userId = eqFilter(filters, 'user_id');
 
+  // Owner policy: team management (role changes, removing members) is owner
+  // and admin of that tenant only. Global user_roles admin/staff give no
+  // shortcut; the tenant must be one of the caller's own tenants.
   const actorIsAdmin = async (tid) => {
-    if (!(await memberOfTenant(client, mapping.application_user_id, tid))) return false;
+    if (!isUuid(tid)) return false;
     const rows = (await client.query(
-      `SELECT role::text AS role FROM public.tenant_users
-       WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND role = 'admin'
-       UNION ALL
-       SELECT role::text FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff')`,
+      `SELECT 1 FROM public.tenant_users
+       WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+         AND lower(role::text) IN ('owner', 'admin')
+       LIMIT 1`,
       [mapping.application_user_id, tid],
     )).rows;
     return rows.length > 0;
@@ -402,7 +407,7 @@ export const executeTenantUsers = async ({ client, mapping, op, values, filters 
       return { error: 'missing_required_field', field: 'tenant_id|user_id' };
     }
     if (!(await actorIsAdmin(targetTenant))) {
-      return { error: 'not_authorized', message: 'Tenant admin required to remove members' };
+      return { error: 'not_authorized', message: 'Tenant owner or admin required to remove members' };
     }
     if (targetUser === mapping.application_user_id) {
       return { error: 'not_authorized', message: 'Cannot remove own membership via this path' };
@@ -435,7 +440,7 @@ export const executeTenantUsers = async ({ client, mapping, op, values, filters 
     if (!row) return { error: 'rls_denied', message: 'membership not found' };
     targetTenant = row.tenant_id;
     if (!(await actorIsAdmin(targetTenant))) {
-      return { error: 'not_authorized', message: 'Tenant admin required to change roles' };
+      return { error: 'not_authorized', message: 'Tenant owner or admin required to change roles' };
     }
     const rows = (await client.query(
       `UPDATE public.tenant_users SET role = $2::tenant_role, updated_at = now()
@@ -448,7 +453,7 @@ export const executeTenantUsers = async ({ client, mapping, op, values, filters 
     return { error: 'missing_required_field', field: 'tenant_id|user_id' };
   }
   if (!(await actorIsAdmin(tenantId))) {
-    return { error: 'not_authorized', message: 'Tenant admin required to change roles' };
+    return { error: 'not_authorized', message: 'Tenant owner or admin required to change roles' };
   }
   const rows = (await client.query(
     `UPDATE public.tenant_users SET role = $3::tenant_role, updated_at = now()
@@ -464,12 +469,20 @@ export const executeProfiles = async ({ client, mapping, values, filters }) => {
   const id = eqFilter(filters, 'id') || mapping.application_user_id;
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
   if (id !== mapping.application_user_id) {
-    const roles = (await client.query(
-      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
-      [mapping.application_user_id],
-    )).rows.map((row) => String(row.role || '').toLowerCase());
-    if (!roles.includes('admin')) {
-      return { error: 'not_authorized', message: 'Can only update own profile' };
+    // Owner policy: editing a teammate's profile is team management, so the
+    // caller must be owner or admin of a tenant the target also belongs to.
+    // Global user_roles admin/staff give no cross-tenant shortcut.
+    const shared = (await client.query(
+      `SELECT 1 FROM public.tenant_users mine
+         JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
+        WHERE mine.user_id = $1::uuid
+          AND theirs.user_id = $2::uuid
+          AND lower(mine.role::text) IN ('owner', 'admin')
+        LIMIT 1`,
+      [mapping.application_user_id, id],
+    )).rows;
+    if (!shared.length) {
+      return { error: 'not_authorized', message: 'Can only update own profile or a teammate\'s as owner/admin' };
     }
   }
   const out = {};
@@ -561,22 +574,18 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
   return { rows };
 };
 
-const actorIsPlatformAdmin = async (client, userId) => {
+// Tenant onboarding stays with the platform owner (is_platform_owner(); the
+// SPA uses the same check). A global user_roles admin is not enough.
+const actorIsPlatformAdmin = async (client) => {
   const owner = (await client.query(
-    `SELECT COALESCE(public.is_platform_owner(), false) AS is_owner,
-            COALESCE(public.is_master_owner(), false) AS is_master`,
+    `SELECT COALESCE(public.is_platform_owner(), false) AS is_owner`,
   )).rows[0] || {};
-  if (owner.is_owner === true || owner.is_master === true) return true;
-  const role = (await client.query(
-    `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
-    [userId],
-  )).rows[0];
-  return Boolean(role);
+  return owner.is_owner === true;
 };
 
 export const executeTenantsCreate = async ({ client, mapping, values }) => {
-  if (!(await actorIsPlatformAdmin(client, mapping.application_user_id))) {
-    return { error: 'not_authorized', message: 'Platform admin required to create a tenant' };
+  if (!(await actorIsPlatformAdmin(client))) {
+    return { error: 'not_authorized', message: 'Platform owner required to create a tenant' };
   }
   const name = clip(values.name, 200);
   if (name?.error || !name) return name?.error || { error: 'missing_required_field', field: 'name' };
@@ -601,8 +610,16 @@ export const executeTenantsNarrow = async ({ client, mapping, op, values, filter
   }
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
-  if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
-    return { error: 'not_authorized', message: 'Not a member of tenant' };
+  // Owner policy: tenant settings are owner and admin of that tenant only.
+  const settingsManager = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('owner', 'admin')
+     LIMIT 1`,
+    [mapping.application_user_id, id],
+  )).rows[0];
+  if (!settingsManager) {
+    return { error: 'not_authorized', message: 'Tenant owner or admin required to change tenant settings' };
   }
   const out = {};
   for (const [col, max] of [

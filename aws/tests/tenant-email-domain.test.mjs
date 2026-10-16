@@ -407,7 +407,7 @@ test('SES success activates custom From; DKIM failure does not', async () => {
   assert.ok(row.last_checked_at);
 });
 
-test('authorization: member cannot configure, cross-tenant denied, platform owner can', async () => {
+test('authorization: member cannot configure, cross-tenant and platform admin denied, owner/admin can', async () => {
   resetDomainRateLimits();
   const memberClient = memoryClient({ membershipRole: 'member' });
   const sesv2 = mockSes();
@@ -427,11 +427,47 @@ test('authorization: member cannot configure, cross-tenant denied, platform owne
   });
   assert.equal(cross.statusCode, 403);
 
-  const platform = memoryClient({ membershipRole: null, systemRole: 'admin', master: false });
-  const ownerStart = await runStartDomainVerification({
-    client: platform, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
-  });
-  assert.equal(ownerStart.ok, true);
+  // Owner policy: no platform admin/staff or master-owner shortcut into a tenant.
+  for (const opts of [
+    { membershipRole: null, systemRole: 'admin', master: false },
+    { membershipRole: null, systemRole: 'staff', master: false },
+    { membershipRole: null, systemRole: 'admin', master: true },
+  ]) {
+    resetDomainRateLimits();
+    const platform = memoryClient(opts);
+    const platformStart = await runStartDomainVerification({
+      client: platform, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
+    });
+    assert.equal(platformStart.statusCode, 403, JSON.stringify(opts));
+    const platformGet = await runGetEmailBranding({
+      client: platform, mapping, body: { tenantId: TENANT }, spoof,
+    });
+    assert.equal(platformGet.statusCode, 403, JSON.stringify(opts));
+  }
+
+  // Sender settings are team management: owner and admin configure; manager,
+  // operator and viewer may view only.
+  for (const role of ['manager', 'operator', 'viewer']) {
+    resetDomainRateLimits();
+    const client = memoryClient({ membershipRole: role, systemRole: 'admin' });
+    const started = await runStartDomainVerification({
+      client, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
+    });
+    assert.equal(started.statusCode, 403, role);
+    const got = await runGetEmailBranding({ client, mapping, body: { tenantId: TENANT }, spoof });
+    assert.equal(got.ok, true, role);
+    assert.equal(got.settings.canConfigure, false, role);
+  }
+  for (const role of ['owner', 'admin']) {
+    resetDomainRateLimits();
+    const client = memoryClient({ membershipRole: role });
+    const started = await runStartDomainVerification({
+      client, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
+    });
+    assert.equal(started.ok, true, role);
+    const got = await runGetEmailBranding({ client, mapping, body: { tenantId: TENANT }, spoof });
+    assert.equal(got.settings.canConfigure, true, role);
+  }
 });
 
 test('frontend cannot set verified status on save', async () => {

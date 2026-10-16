@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { Loader2, Mail, ShieldCheck, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
+import { canManageTenantTeam } from "@/lib/tenantRoleAccess";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 import {
@@ -113,7 +114,7 @@ function copyText(value: string) {
 
 export function EmailSenderSettings({ showSendingDomain = true }: { showSendingDomain?: boolean } = {}) {
   const { tenantId } = useTenantFilter();
-  const { user, userRole } = useAuth();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const aws = isAwsStaging();
 
@@ -162,10 +163,11 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
   });
 
   const settings = payload?.settings || null;
-  const platformAdmin = userRole === "admin";
+  // Owner policy: sender settings are owner and admin of this tenant only;
+  // platform roles give no shortcut.
   const canConfigure = aws
     ? Boolean(payload?.settings?.canConfigure)
-    : platformAdmin || membership?.role === "admin";
+    : canManageTenantTeam(membership?.role);
 
   const [fromName, setFromName] = useState("");
   const [replyTo, setReplyTo] = useState("");

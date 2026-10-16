@@ -164,8 +164,8 @@ function forceCompleteDeps(overrides = {}) {
     deps: {
       getUser: async () => ({ id: USER_STAFF }),
       loadCheck: async () => ({ id: CHECK_ID, tenant_id: TENANT_A }),
-      loadUserRoles: async () => ['staff'],
-      loadTenantMemberships: async () => [{ tenant_id: TENANT_A, role: 'member' }],
+      loadUserRoles: async () => [],
+      loadTenantMemberships: async () => [{ tenant_id: TENANT_A, role: 'operator' }],
       loadEndorsements: async () => endorsements,
       updateEndorsement: async (id, values) => {
         updates.push({ id, values });
@@ -224,6 +224,28 @@ test('force-complete nonexistent check is denied', async () => {
   assert.equal(updates.length, 0);
 });
 
+test('force-complete: viewers, plain members and global admin/staff with only a viewer membership are denied', () => {
+  for (const [roles, role] of [[[], 'viewer'], [[], 'member'], [['admin'], 'viewer'], [['staff'], 'viewer']]) {
+    const result = authorizeForceComplete({
+      userId: USER_STAFF,
+      check: { id: CHECK_ID, tenant_id: TENANT_A },
+      userRoles: roles,
+      tenantMemberships: [{ tenant_id: TENANT_A, role }],
+    });
+    assert.equal(result.ok, false, `${roles} ${role}`);
+    assert.equal(result.status, 403);
+  }
+  for (const role of ['owner', 'admin', 'manager', 'operator']) {
+    const result = authorizeForceComplete({
+      userId: USER_STAFF,
+      check: { id: CHECK_ID, tenant_id: TENANT_A },
+      userRoles: [],
+      tenantMemberships: [{ tenant_id: TENANT_A, role }],
+    });
+    assert.equal(result.ok, true, role);
+  }
+});
+
 test('force-complete global staff without membership is denied', () => {
   const result = authorizeForceComplete({
     userId: USER_STAFF,
@@ -235,7 +257,7 @@ test('force-complete global staff without membership is denied', () => {
   assert.equal(result.status, 403);
 });
 
-test('force-complete authorized staff for the check tenant is allowed and preserves signed metadata', async () => {
+test('force-complete authorized operator of the check tenant is allowed and preserves signed metadata', async () => {
   const { updates, endorsements, deps } = forceCompleteDeps();
   const result = await runForceCompleteEndorsements(deps, CHECK_ID);
   assert.equal(result.ok, true);
