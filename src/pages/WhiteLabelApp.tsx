@@ -22,7 +22,7 @@ const WalletOps = lazy(() => import("@/pages/WalletOps"));
 /**
  * Resolves the base path for tenant routes.
  * On checkops.com: /{slug}
- * On other hosts (freedomclaims.work, lovable previews): /wl/{slug}
+ * On other hosts (localhost, lovable previews): /wl/{slug}
  */
 function useTenantBasePath(slug?: string) {
   const location = useLocation();
