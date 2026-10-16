@@ -220,7 +220,9 @@ test("can_submit fails closed and drives the read-only view", () => {
 
 test("every tenant member gets Compliance & Docs and the document library (no role tiers)", () => {
   assert.match(whiteLabel, /const isTenantMember = !!tenantRole;/);
-  assert.match(whiteLabel, /const canViewCompliance = isTenantMember \|\| isAdmin;/);
+  assert.match(whiteLabel, /const canViewCompliance = isTenantMember \|\| isPlatformOwner\(user\?\.email\);/);
+  assert.match(whiteLabel, /import \{ isPlatformOwner \} from "@\/lib\/masterMerchant";/);
+  assert.doesNotMatch(whiteLabel, /canViewCompliance = [^;]*isAdmin/);
   assert.doesNotMatch(whiteLabel, /canViewCompliance = canManageTenant/);
   assert.match(whiteLabel, /\{canViewCompliance && <TabsTrigger value="compliance"/);
   const tab = whiteLabel.slice(whiteLabel.indexOf('<TabsContent value="compliance"'));

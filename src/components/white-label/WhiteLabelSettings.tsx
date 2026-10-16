@@ -25,6 +25,7 @@ import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -128,9 +129,9 @@ export function WhiteLabelSettings() {
   });
   const canManageTenant = tenantRole === "owner" || tenantRole === "admin" || isAdmin;
   // Compliance & Docs is open to every member of the tenant (no role tiers); the
-  // server's can_submit decides editing. Platform admins keep access too.
+  // server's can_submit decides editing. The platform owner (by email) keeps access too.
   const isTenantMember = !!tenantRole;
-  const canViewCompliance = isTenantMember || isAdmin;
+  const canViewCompliance = isTenantMember || isPlatformOwner(user?.email);
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;
