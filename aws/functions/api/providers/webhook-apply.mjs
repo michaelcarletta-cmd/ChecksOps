@@ -9,6 +9,7 @@ import { sanitize } from './parity/db.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
 import { providerExecutionEnabled } from '../provider-flags.mjs';
+import { applyOnboardingWebhookStatus } from './onboarding/webhook-status.mjs';
 
 const FUNDING_TERMINAL = ['completed', 'failed', 'returned', 'canceled'];
 
@@ -78,6 +79,13 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
           [sandboxAccount.id, eventType],
         );
         mutations.push('payment_provider_accounts');
+      }
+      // Onboarding status (account / capability / verification) on the sandbox rows.
+      const onboarding = await applyOnboardingWebhookStatus(client, {
+        environment: 'sandbox', eventType, providerAccountId, data,
+      });
+      for (const table of onboarding.mutations || []) {
+        if (!mutations.includes(table)) mutations.push(table);
       }
     }
   }

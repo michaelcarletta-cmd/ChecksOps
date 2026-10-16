@@ -211,11 +211,16 @@ export async function moovFetch(path, opts = {}) {
   if (opts.idempotencyKey) headers['X-Idempotency-Key'] = await idempotencyUuid(opts.idempotencyKey);
   if (opts.onBehalfOf) headers['X-Account-ID'] = opts.onBehalfOf;
   if (opts.extraHeaders) Object.assign(headers, opts.extraHeaders);
+  // multipart/form-data (Moov files API): fetch sets the boundary itself.
+  const multipart = opts.formData !== undefined;
+  if (multipart) delete headers['Content-Type'];
 
   const res = await fetchImpl(`${moovHost()}${path}`, {
     method: opts.method ?? 'GET',
     headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    body: multipart
+      ? opts.formData
+      : (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
   });
   const text = await res.text();
   let json = null;
