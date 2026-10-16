@@ -1,8 +1,8 @@
 {
   "id": "sql88-claim-id-assign-case-tenant-scope-production-apply",
   "migration": "sql88",
-  "authorization": "Owner approved 2026-10-16 (\"approve the SQL 88 production unlock after the pin PR\"; \"approve the SQL 88 production apply after unlock\"): production apply of SQL 88 after the staging acceptance below (production ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b -> 15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-16; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 88 production pin (ef7a3e02 -> 15fbe8f5), the read-only production inspect and the execute change on 2026-10-16 (\"approve the SQL 88 production unlock after the pin PR\"; \"approve the SQL 88 production apply after unlock\"), and approved the one apply run recorded in applied (workstream prod-sql88-claim-id-assign-case-20261016) on 2026-10-16 with \"approve the SQL 88 production apply after unlock\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -128,7 +128,7 @@
     },
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 4e8aa79f-e123-4f39-85e8-b669d4072ee8, after SQL 87 was applied; node scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 72cc069f (tarball sha256 4d8a553e...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, not superuser). The earlier read-only inspect before SQL 87 (SSM command 4b86eb75-5d78-483c-8899-50a7971e9d42) gave the same live_definition_sha256: SQL 87 does not change the SQL 88 fingerprint. tg_claim_id_assign_case is migration 20260826125804's body (case_original, definition_sha256 b03ce50d...), owned by checksops_admin, SECURITY DEFINER, proacl EXECUTE for PUBLIC, checksops_admin and checksops (SQL 88 revokes PUBLIC and checksops); resolve_check_case is SQL 87's (tenant_scoped); tg_check_intake_assign_case and tg_loss_draft_assign_case case_original; all four owned by checksops_admin and SECURITY DEFINER. case_owner.case_owner_safe true; other_callers.total 0 (trigger_count 6: the six claim_triggers present, enabled and calling it); cross_tenant_links total 0 in all 11 categories (counts only, informational). precondition_failures was []; apply_preconditions_met was false at inspect time because no pre-state was recorded yet. This reviewed change (\"SQL 88 production pin: pre-state recorded and execute-authorized after staging acceptance\") copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 4e8aa79f-e123-4f39-85e8-b669d4072ee8, after SQL 87 was applied; node scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 72cc069f (tarball sha256 4d8a553e...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, not superuser). The earlier read-only inspect before SQL 87 (SSM command 4b86eb75-5d78-483c-8899-50a7971e9d42) gave the same live_definition_sha256: SQL 87 does not change the SQL 88 fingerprint. tg_claim_id_assign_case is migration 20260826125804's body (case_original, definition_sha256 b03ce50d...), owned by checksops_admin, SECURITY DEFINER, proacl EXECUTE for PUBLIC, checksops_admin and checksops (SQL 88 revokes PUBLIC and checksops); resolve_check_case is SQL 87's (tenant_scoped); tg_check_intake_assign_case and tg_loss_draft_assign_case case_original; all four owned by checksops_admin and SECURITY DEFINER. case_owner.case_owner_safe true; other_callers.total 0 (trigger_count 6: the six claim_triggers present, enabled and calling it); cross_tenant_links total 0 in all 11 categories (counts only, informational). precondition_failures was []; apply_preconditions_met was false at inspect time because no pre-state was recorded yet. This reviewed change (\"SQL 88 production pin: pre-state recorded and execute-authorized after staging acceptance\") copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-16 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -145,5 +145,94 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38927892056",
     "basis": "Guarded staging SQL executor apply of sql88-claim-id-assign-case-tenant-scope, run #91 (38927892056) on main 13763c2c9, executor package CodeSha256 1tpvDpcA+wdCwitVyuOtZrFaBFu3d5YIGnNpkIlHYFQ= (deploy run #89, 38926313149): staging 57ba25f2ea69adb1a6de030cb42034d4dd1e1c0741a48a96e79afe6d90aae387 -> 15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e, result applied; read-live run #92 (38928065480) already_applied true, precondition_failures [], tg_claim_id_assign_case intended, acl_entries [] (owner-only EXECUTE), case_owner_safe true.",
     "production_differs": "The pre-states differ: staging (pin AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE, read-live run 88) is 57ba25f2ea69adb1a6de030cb42034d4dd1e1c0741a48a96e79afe6d90aae387 and production (production_inspect, 2026-10-16) is ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b. Staging had 5 existing cross-tenant links (check_cases_claim 1, homeowner_ledger_events_case 4; the owner chose to continue), production 0; the counts are not part of either fingerprint and the apply changes no rows. Each environment's pre-state is recorded separately. The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) run in both."
+  },
+  "applied": {
+    "date": "2026-10-16",
+    "started_at": "2026-10-16T17:48:32Z",
+    "finished_at": "2026-10-16T17:48:45Z",
+    "result": "applied",
+    "source_commit": "44f42cf7ce48c5388058711022b7bc2d62e3f025",
+    "source_tarball": {
+      "file": "source-44f42cf7ce48c5388058711022b7bc2d62e3f025.tar.gz",
+      "sha256": "caa963c9b0ebc67a3c5ad0d0b00ce2c7f8ae0f801b44d1c1d4365ac754e44bf5"
+    },
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql88-claim-id-assign-case-20261016",
+    "one_use_id": "sql88-prod-e004a3aa-8242-4efb-b0f8-1b730c081b67",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve the SQL 88 production apply after unlock",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql88; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "fed3d3ce-659c-49d8-b364-8c625a64cd88",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM fed3d3ce-659c-49d8-b364-8c625a64cd88) ran every step ok: pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply, post-apply-inspect.",
+    "steps": [
+      {
+        "step": "pin",
+        "ok": true
+      },
+      {
+        "step": "source",
+        "ok": true
+      },
+      {
+        "step": "inspect",
+        "ok": true
+      },
+      {
+        "step": "contracts",
+        "ok": true
+      },
+      {
+        "step": "manifest",
+        "ok": true
+      },
+      {
+        "step": "source-recheck-before-preflight",
+        "ok": true
+      },
+      {
+        "step": "preflight",
+        "ok": true
+      },
+      {
+        "step": "evaluate",
+        "ok": true
+      },
+      {
+        "step": "source-recheck-before-apply",
+        "ok": true
+      },
+      {
+        "step": "apply",
+        "ok": true
+      },
+      {
+        "step": "post-apply-inspect",
+        "ok": true
+      }
+    ],
+    "receipt": {
+      "result": "applied",
+      "before_hash": "ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b",
+      "after_hash": "15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "already_applied": true,
+      "precondition_failures": [],
+      "function_states": {
+        "tg_claim_id_assign_case": "intended",
+        "resolve_check_case": "tenant_scoped",
+        "tg_check_intake_assign_case": "case_original",
+        "tg_loss_draft_assign_case": "case_original"
+      },
+      "cross_tenant_links_total_before": 0,
+      "cross_tenant_links_total_after": 0,
+      "note": "The one-shot post-apply read-only --inspect: already_applied true, precondition_failures [], tg_claim_id_assign_case the intended definition; resolve_check_case (SQL 87), tg_check_intake_assign_case and tg_loss_draft_assign_case unchanged. cross_tenant_links total 0 before and after (counts only; the apply changes no rows)."
+    }
+  },
+  "production_evidence": {
+    "2026-10-16 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql88-claim-id-assign-case-20261016, main 44f42cf7c (tarball caa963c9…), owner-approved run, SSM fed3d3ce-659c-49d8-b364-8c625a64cd88, 2026-10-16T17:48:32Z–17:48:45Z: every step ok; ef7a3e02… -> 15fbe8f5…, result applied; post-apply inspect already_applied true, precondition_failures [], tg_claim_id_assign_case intended, resolve_check_case tenant_scoped, tg_check_intake_assign_case and tg_loss_draft_assign_case case_original, cross_tenant_links total 0 before and after. execute is false so the pin is no longer a standing authorization."
   }
 }

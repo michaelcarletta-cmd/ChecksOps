@@ -6,9 +6,12 @@
 executor apply run 91, read-live run 92 `already_applied`). Production: read-only inspects
 on 2026-10-16 (SSM `4b86eb75-…` before SQL 87; `4e8aa79f-…` after SQL 87)
 recorded the pre-state `ef7a3e02…`, unchanged by SQL 87, with `cross_tenant_links` total 0
-and `precondition_failures` `[]`. The production pin is execute-authorized (owner approved
-2026-10-16, staging acceptance run 91) and waits for the owner's review and merge, then the
-one-shot run. Staging had 5 existing cross-tenant links (`check_cases_claim` 1,
+and `precondition_failures` `[]`. Applied to production (2026-10-16T17:48Z, guarded
+one-shot, SSM `fed3d3ce-659c-49d8-b364-8c625a64cd88`, main `44f42cf7c`, one_use_id
+`sql88-prod-e004a3aa-8242-4efb-b0f8-1b730c081b67`): `ef7a3e02…` -> `15fbe8f5…`, post-apply
+inspect `already_applied` true, `precondition_failures` `[]`, `cross_tenant_links` total 0
+before and after. The production pin records the apply and is `execute: false` again, so a
+re-apply needs a new reviewed change. Staging had 5 existing cross-tenant links (`check_cases_claim` 1,
 `homeowner_ledger_events_case` 4); the owner chose to continue, and SQL 88 does not repair them.
 
 ## The bug
