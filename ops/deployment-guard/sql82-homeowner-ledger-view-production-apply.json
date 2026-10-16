@@ -1,8 +1,8 @@
 {
   "id": "sql82-homeowner-ledger-view-production-apply",
   "migration": "sql82",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-16 (\"approve 1 and 2\"; \"go ahead and make the SQL 82/83 production unlock change\"): production apply of SQL 82 then SQL 83 after the staging acceptance below (SQL 82: production 9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229 -> 04e41eedb372334169feb32bc65991a3ce99558b84e91b27e22a6501be641e37); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,7 +58,7 @@
     },
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command f1430894-0783-46cf-bbab-e7137c10ece3, node scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs --inspect on the SQL53 runner from main eb540ee98, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). public.aws_public_homeowner_ledger_by_token(text) exists once (function_states other): RETURNS jsonb, plpgsql, SECURITY DEFINER with search_path=public, owned by checksops_admin, proacl owner + checksops EXECUTE only. Its body is not Cursor SQL 73 (raw_endorse_token_link false: no raw '/endorse?token=' link) and not the SQL 82 body (body_matches_migration false); its origin is not recorded. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. It does not authorize execution: authorization stays pending, execute false and staging_acceptance ok false, so evaluate and apply still refuse with PRODUCTION_APPROVAL_REQUIRED. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command f1430894-0783-46cf-bbab-e7137c10ece3, node scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs --inspect on the SQL53 runner from main eb540ee98, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). public.aws_public_homeowner_ledger_by_token(text) exists once (function_states other): RETURNS jsonb, plpgsql, SECURITY DEFINER with search_path=public, owned by checksops_admin, proacl owner + checksops EXECUTE only. Its body is not Cursor SQL 73 (raw_endorse_token_link false: no raw '/endorse?token=' link) and not the SQL 82 body (body_matches_migration false); its origin is not recorded. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. That change did not authorize execution; the later reviewed change of 2026-10-16 (\"SQL 82/83 production pins: execute-authorized after staging acceptance\") set authorization, execute true and staging_acceptance, keeping this recorded pre-state. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -69,9 +69,9 @@
     "note": "After the unchanged SQL 82 file run as checksops_admin: each function exists once (no other signature of that name in any schema), owned by checksops_admin, SECURITY DEFINER with search_path=public, the reviewed body (pg_get_functiondef compared with the text reconstructed from the pinned file), EXECUTE for the owner and checksops only (PUBLIC and authenticated revoked). intended_replacement_sha256 equals the staging pin's (the owner's own ACL entry is not part of the fingerprint). function_owner is the expected production login (as for SQL 72 to 81); the first inspect must confirm it."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql82-homeowner-ledger-view here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (the pre-state is recorded in production_inspect and expected_live_definition_sha256).",
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138",
+    "basis": "Guarded staging SQL executor apply of sql82-homeowner-ledger-view, run #52 (38837281138) on main f60eb2484, executor package CodeSha256 jfKPOiADok3zVPkAZruAvCXHoXz9HRjo3N5Z1OQfbjg= (deploy run #51, 38837117005): staging 452f8f3d2411e0c3772fdf92c14e1b85785823dcb8d6567d01f1908dc9a8d783 -> 04e41eedb372334169feb32bc65991a3ce99558b84e91b27e22a6501be641e37, function_states aws_public_homeowner_ledger_by_token intended. Read-live run 38837388328 (#53) confirmed already_applied true, body_matches_migration true, raw_endorse_token_link false, non-owner ACL checksops EXECUTE only, precondition_failures [].",
     "production_differs": "The pre-states differ: staging (pin AUTHORIZED_SQL82_HOMEOWNER_LEDGER_VIEW, read-live run 48) is 452f8f3d2411e0c3772fdf92c14e1b85785823dcb8d6567d01f1908dc9a8d783 with Cursor SQL 73's ledger view (raw_endorse_token_link true); production (production_inspect, 2026-10-16) is 9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229 with a ledger view that has no raw endorse link and is not Cursor SQL 73 (origin not recorded). Each environment's pre-state is recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
   }
 }
