@@ -98,7 +98,7 @@ test('inspectResultRecord keeps status and picked fields only', () => {
 });
 
 test('the production apply and the staging executor share one fixed-message mapping', () => {
-  assert.deepEqual(FIXED_SQL_GUARD_MESSAGES.map(([prefix]) => prefix), ['duplicate_mortgage_ops_billing_events', 'earn_owner_unsafe', 'case_owner_unsafe', 'case_callers_unsafe']);
+  assert.deepEqual(FIXED_SQL_GUARD_MESSAGES.map(([prefix]) => prefix), ['duplicate_mortgage_ops_billing_events', 'earn_owner_unsafe', 'case_owner_unsafe', 'case_callers_unsafe', 'claim_case_owner_unsafe', 'claim_case_callers_unsafe']);
   for (const [prefix, fixed] of FIXED_SQL_GUARD_MESSAGES) {
     assert.equal(sqlGuardErrorMessage(new Error(`${prefix}: ${CHECK_A} owner checksops_admin`), 400), fixed);
     assert.equal(applyErrorMessage(new Error(`${prefix}: ${CHECK_A}`)), fixed);

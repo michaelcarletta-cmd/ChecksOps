@@ -8,7 +8,10 @@
  * earn_mortgage_agent_compensation(uuid) is left to its owner). SQL 87
  * (aws/workflows/sql/87_resolve_check_case_tenant_scope.sql: resolve_check_case scoped
  * to its tenant, EXECUTE left to its owner, the two case trigger functions) has SQL
- * 86's shape and is registered here too.
+ * 86's shape and is registered here too, and so is SQL 88
+ * (aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql: tg_claim_id_assign_case
+ * scoped to the row's tenant, EXECUTE left to its owner), whose inspect also counts the
+ * existing cross-tenant links (counts only).
  *
  * Shared by the three official tools (sql84-mortgage-return-to-queue-production-apply.mjs,
  * sql85-mortgage-compensation-adjust-production-apply.mjs,
@@ -44,6 +47,7 @@ import {
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+  AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
   MORTGAGE_MIGRATIONS,
 } from './sql-executor-auth.mjs';
 import {
@@ -108,6 +112,19 @@ export const MORTGAGE_PRODUCTION = Object.freeze({
     consumed_file: 'sql87-check-case-production-consumed.json',
     script: 'sql87-resolve-check-case-tenant-scope-production-apply',
     print_definitions: Object.freeze(['public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)']),
+  }),
+  // SQL 88 (tg_claim_id_assign_case tenant scope) has SQL 87's shape. Its inspect reads
+  // aggregate counts of existing cross-tenant links only: no PII and no row ids.
+  sql88: Object.freeze({
+    key: 'sql88',
+    label: 'SQL 88',
+    pin_rel: 'ops/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.json',
+    staging_pin: AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
+    allowed_key: 'sql88_production_apply_allowed',
+    lock_keys: Object.freeze(['sql88_mortgage_objects', 'sql88_claim_case_objects_production']),
+    consumed_file: 'sql88-claim-case-production-consumed.json',
+    script: 'sql88-claim-id-assign-case-tenant-scope-production-apply',
+    print_definitions: Object.freeze(['public.tg_claim_id_assign_case()']),
   }),
 });
 
@@ -448,6 +465,29 @@ function migrationReport(key, details) {
     }));
     return { case_owner: report.case_owner || null, case_owners: caseOwners, case_triggers: report.case_triggers || null, other_callers: report.other_callers || null };
   }
+  if (key === 'sql88') {
+    // Counts only (no ids, names or row data), first; then the four case functions'
+    // owner, SECURITY DEFINER and ACL, the six triggers and other callers.
+    const caseOwners = Object.fromEntries(MORTGAGE_MIGRATIONS.sql88.functions.map((fn) => {
+      const row = details.functions[fn.key] || {};
+      return [fn.key, {
+        exists: row.exists === true,
+        rolname: row.owner ?? null,
+        rolsuper: row.owner_rolsuper ?? null,
+        security_definer: row.security_definer ?? null,
+        member_of_checksops: row.owner_member_of_checksops ?? null,
+        member_of_authenticated: row.owner_member_of_authenticated ?? null,
+        proacl: row.proacl ?? null,
+      }];
+    }));
+    return {
+      cross_tenant_links: report.cross_tenant_links || null,
+      case_owner: report.case_owner || null,
+      case_owners: caseOwners,
+      claim_triggers: report.claim_triggers || null,
+      other_callers: report.other_callers || null,
+    };
+  }
   const owners = Object.fromEntries(MORTGAGE_MIGRATIONS.sql86.functions.filter((fn) => fn.role === 'acl_only' || fn.role === 'referenced')
     .map((fn) => {
       const row = details.functions[fn.key] || {};
@@ -493,6 +533,8 @@ export async function inspectMortgageProduction(key, { connect, pin, root = repo
       read_only: true,
       migration: key,
       filename: thePin.filename,
+      // SQL 88: existing cross-tenant links (counts only, informational), at the top.
+      ...(details.report?.cross_tenant_links ? { cross_tenant_links: details.report.cross_tenant_links } : {}),
       source_ok: source.ok,
       ...(source.ok ? {} : { source_error: { code: source.code, message: source.message } }),
       pin_execute: thePin.execute === true,

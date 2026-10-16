@@ -1431,12 +1431,79 @@ export const MORTGAGE_MIGRATIONS = Object.freeze({
     // The API roles whose EXECUTE the file revokes, and that the owner must not be or belong to.
     api_roles: Object.freeze(['checksops', 'authenticated', 'anon', 'service_role']),
   }),
+  // SQL 88 (aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql), on the same
+  // engine as SQL 87: the trigger function tg_claim_id_assign_case() CREATE OR REPLACEd
+  // (links only a case of the row's tenant for a claim of that tenant) with EXECUTE left
+  // to its owner, behind an owner guard over the SQL 87 case helper and the two other
+  // SECURITY DEFINER case trigger functions. The inspect also counts (never lists) the
+  // existing cross-tenant links (cross_tenant_links; report only, never a precondition).
+  sql88: Object.freeze({
+    key: 'sql88',
+    label: 'SQL 88',
+    prerequisites: Object.freeze([
+      'public.check_cases',
+      'public.claims',
+      'public.check_intake_items',
+      'public.homeowner_ledger_events',
+      'public.homeowner_ledger_tokens',
+      'public.homeowner_ledger_check_uploads',
+      'public.mortgage_releases',
+      'public.claim_check_mortgage_draws',
+      'public.signature_requests',
+      'public.tg_claim_id_assign_case()',
+      'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)',
+      'public.tg_check_intake_assign_case()',
+      'public.tg_loss_draft_assign_case()',
+      'role checksops',
+      'role authenticated',
+    ]),
+    functions: Object.freeze([
+      mortgageFunction({ name: 'tg_claim_id_assign_case', args: [], result: 'trigger', config: ['search_path=public'], grantees: [] }),
+      mortgageFunction({
+        name: 'resolve_check_case',
+        args: [
+          '_tenant_id uuid',
+          '_claim_id uuid DEFAULT NULL::uuid',
+          '_external_claim_id uuid DEFAULT NULL::uuid',
+          '_claim_number text DEFAULT NULL::text',
+          '_insured_name text DEFAULT NULL::text',
+          '_property_address text DEFAULT NULL::text',
+          '_carrier_name text DEFAULT NULL::text',
+        ],
+        result: 'uuid',
+        config: ['search_path=public'],
+        role: 'referenced',
+      }),
+      mortgageFunction({ name: 'tg_check_intake_assign_case', args: [], result: 'trigger', config: ['search_path=public'], role: 'referenced' }),
+      mortgageFunction({ name: 'tg_loss_draft_assign_case', args: [], result: 'trigger', config: ['search_path=public'], role: 'referenced' }),
+    ]),
+    columns: Object.freeze({
+      check_cases: Object.freeze(['id', 'tenant_id', 'external_system', 'external_claim_id']),
+      claims: Object.freeze(['id', 'org_id']),
+      check_intake_items: Object.freeze(['id', 'tenant_id', 'claim_id', 'case_id']),
+      loss_draft_tracking: Object.freeze(['case_id', 'claim_id', 'check_intake_item_id']),
+      homeowner_ledger_events: Object.freeze(['tenant_id', 'claim_id', 'case_id']),
+      homeowner_ledger_tokens: Object.freeze(['tenant_id', 'claim_id', 'case_id']),
+      homeowner_ledger_check_uploads: Object.freeze(['tenant_id', 'claim_id', 'case_id']),
+      mortgage_releases: Object.freeze(['claim_id', 'case_id']),
+      claim_check_mortgage_draws: Object.freeze(['claim_id', 'case_id']),
+      signature_requests: Object.freeze(['claim_id', 'case_id']),
+    }),
+    new_relations: Object.freeze([]),
+    altered_tables: Object.freeze([]),
+    owner_anchor: 'tg_claim_id_assign_case',
+    referenced_security_definer: true,
+    replaceable_acl: Object.freeze(['PUBLIC EXECUTE', 'anon EXECUTE', 'authenticated EXECUTE', 'checksops EXECUTE', 'service_role EXECUTE']),
+    api_roles: Object.freeze(['checksops', 'authenticated', 'anon', 'service_role']),
+  }),
 });
 
 // sha256(pg_get_functiondef) on PostgreSQL 16 of each function the files create,
 // re-derived from the real catalog by aws/tests/sql84-sql86-mortgage-executor.test.mjs
-// (SQL 87's by aws/tests/sql87-resolve-check-case-executor.test.mjs).
+// (SQL 87's by aws/tests/sql87-resolve-check-case-executor.test.mjs, SQL 88's by
+// aws/tests/sql88-claim-id-assign-case-executor.test.mjs).
 export const MORTGAGE_DEFINITION_SHA256 = Object.freeze({
+  'public.tg_claim_id_assign_case()': '93bd9cfab9d33aa18aaed94d67d99622b179e5ffbc27fdc320e98ac47b81f9ee',
   'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)': '687fecf6daec13618c2c0f371e9c249ac6d9423891612ab1976c1cee1f3bcec1',
   'public.return_mortgage_handling_request_to_queue(uuid, text)': '51069c48dcf0511a58dc50dcda0e03c798b4c6f2ec689461ae5d4e047534899f',
   'public.adjust_mortgage_agent_compensation(uuid, integer, text, uuid, text, text)': 'a8fa66f06698b523e222f8c14543d251a90122cbeeb43feefe906cce3db5ae8b',
@@ -1453,7 +1520,9 @@ export const MORTGAGE_KNOWN_DEFINITION_SHA256 = Object.freeze({
   'public.earn_mortgage_agent_compensation(uuid)': Object.freeze({ ledger_original: 'ffdc445e4d88011890887ab9b2c386cad29f006ecff316efff4a7c3f9740b293' }),
   'public.tg_earn_mortgage_agent_compensation()': Object.freeze({ ledger_original: 'ca557bd5473fca4154bc4ae10af94e491ecb1891eb966d38755ac93a8a583c18' }),
   // Supabase migration 20260826125804's bodies ('case_original').
-  'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)': Object.freeze({ case_original: '461d583bd6a5c741ab3bec9b54caf181df644b7fd3198e664869e9cd3aec74fa' }),
+  // SQL 88 also labels SQL 87's helper body ('tenant_scoped').
+  'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)': Object.freeze({ case_original: '461d583bd6a5c741ab3bec9b54caf181df644b7fd3198e664869e9cd3aec74fa', tenant_scoped: '687fecf6daec13618c2c0f371e9c249ac6d9423891612ab1976c1cee1f3bcec1' }),
+  'public.tg_claim_id_assign_case()': Object.freeze({ case_original: 'b03ce50dd044b85b837fb0f003098b5d2c5deabddf710ca1bb885e3e1e3f69e3' }),
   'public.tg_check_intake_assign_case()': Object.freeze({ case_original: 'dbe18e99d41c8635404b720f1341c6247e03cfecb2a202e6d60a56eb38f9feb6' }),
   'public.tg_loss_draft_assign_case()': Object.freeze({ case_original: '90fe5f87b02159917ad4641c789bb007cea240ff842ea8f8dd84bb6b2da64f06' }),
 });
@@ -1702,6 +1771,20 @@ export const AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE = mortgagePin(
   // The commit that authored the file bytes (this branch's first commit).
   'af84133e4e2cd6f3c2f2d8b63c59555d80646c22',
 );
+// SQL 88 (aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql): the trigger
+// function tg_claim_id_assign_case() scoped to the row's tenant, EXECUTE left to its owner.
+// The staging pre-state is not recorded yet (null until a read-live has been recorded in
+// a reviewed pin change); apply refuses until then.
+export const AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE = mortgagePin(
+  'sql88',
+  'aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql',
+  '88_claim_id_assign_case_tenant_scope',
+  '57216e00aa0faba83a663d33531896b1782a5a56636d924b79ff06b1923cb316',
+  null,
+  '15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e',
+  // The commit that authored the file bytes (this branch's first commit).
+  '6e903be3bfefbad9ac7f28fc024ebc0875e38c06',
+);
 
 export const AUTHORIZED_SQL39 = Object.freeze({
   filename: 'aws/rls/sql/39_tmp_write_policy_reconcile.sql',
@@ -1745,6 +1828,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+  AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
 ]);
 
@@ -1823,6 +1907,10 @@ export function isSql87ResolveCheckCaseTenantScope(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE);
 }
 
+export function isSql88ClaimIdAssignCaseTenantScope(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE);
+}
+
 export function isSql89CheckIntakeColumnUpdate(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE);
 }
@@ -1862,6 +1950,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql85MortgageCompensationAdjust(input)) return AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST;
   if (isSql86MortgageCompensationOwnerOnly(input)) return AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY;
   if (isSql87ResolveCheckCaseTenantScope(input)) return AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE;
+  if (isSql88ClaimIdAssignCaseTenantScope(input)) return AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE;
   if (isSql89CheckIntakeColumnUpdate(input)) return AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;

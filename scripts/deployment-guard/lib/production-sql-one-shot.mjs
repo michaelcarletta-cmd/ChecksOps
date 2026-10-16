@@ -44,6 +44,7 @@ import { SQL84_PRODUCTION_PIN_REL } from './sql84-mortgage-return-to-queue-produ
 import { SQL85_PRODUCTION_PIN_REL } from './sql85-mortgage-compensation-adjust-production-apply.mjs';
 import { SQL86_PRODUCTION_PIN_REL } from './sql86-mortgage-compensation-owner-only-production-apply.mjs';
 import { SQL87_PRODUCTION_PIN_REL } from './sql87-resolve-check-case-tenant-scope-production-apply.mjs';
+import { SQL88_PRODUCTION_PIN_REL } from './sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 import { SQL89_PRODUCTION_PIN_REL } from './sql89-check-intake-column-update-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
@@ -128,6 +129,7 @@ const SQL84_TOOL = 'scripts/deployment-guard/sql84-mortgage-return-to-queue-prod
 const SQL85_TOOL = 'scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs';
 const SQL86_TOOL = 'scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs';
 const SQL87_TOOL = 'scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
+const SQL88_TOOL = 'scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 const SQL89_TOOL = 'scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
@@ -210,6 +212,13 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL87_PRODUCTION_PIN_REL,
     allowed_key: 'sql87_production_apply_allowed',
   }),
+  sql88: Object.freeze({
+    key: 'sql88',
+    script: SQL88_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL88_PRODUCTION_PIN_REL,
+    allowed_key: 'sql88_production_apply_allowed',
+  }),
   sql89: Object.freeze({
     key: 'sql89',
     script: SQL89_TOOL,
@@ -221,6 +230,8 @@ export const ONE_SHOT_TOOLS = Object.freeze({
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */
 export const INSPECT_RECORD_KEYS = Object.freeze([
+  // SQL 88: existing cross-tenant links, counts only (informational), first.
+  'cross_tenant_links',
   'read_only',
   'live_definition_sha256',
   'live_matches_expected',
@@ -665,7 +676,9 @@ function runTool(ctx, step, args, { env, timeout }) {
 const INSPECT_RECORD_FIELDS = Object.freeze({
   billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events', 'reason']),
   // SQL 87: counts only, never the callers' names.
-  other_callers: Object.freeze(['function_count', 'view_or_rule_count', 'policy_count', 'dependent_function_count', 'other_dependent_count', 'total']),
+  other_callers: Object.freeze(['function_count', 'view_or_rule_count', 'policy_count', 'dependent_function_count', 'other_dependent_count', 'trigger_count', 'total']),
+  // SQL 88: per-category counts and their total (never ids).
+  cross_tenant_links: Object.freeze(['readable', 'total', 'categories', 'unreadable_categories']),
 });
 
 const pickFields = (value, fields) => (value && typeof value === 'object' && !Array.isArray(value)

@@ -34,6 +34,7 @@ on:
           - sql85-mortgage-compensation-adjust
           - sql86-mortgage-compensation-owner-only
           - sql87-resolve-check-case-tenant-scope
+          - sql88-claim-id-assign-case-tenant-scope
           - sql89-check-intake-column-update
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
@@ -132,6 +133,7 @@ jobs:
           node --test aws/tests/sql82-sql83-homeowner-executor.test.mjs
           node --test aws/tests/sql84-sql86-mortgage-executor.test.mjs
           node --test aws/tests/sql87-resolve-check-case-executor.test.mjs
+          node --test aws/tests/sql88-claim-id-assign-case-executor.test.mjs
           node --test aws/tests/sql89-check-intake-column-update-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
