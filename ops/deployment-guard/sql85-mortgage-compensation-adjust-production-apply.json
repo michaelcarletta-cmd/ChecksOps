@@ -1,8 +1,8 @@
 {
   "id": "sql85-mortgage-compensation-adjust-production-apply",
   "migration": "sql85",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-16 (\"Yes\"; \"approve the SQL 84-86 production unlock and apply\"): production apply of SQL 84, then SQL 85, then SQL 86 after the staging acceptance below (SQL 85: production 7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d -> 051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -53,7 +53,7 @@
     "batch_actions_outside_check": 0,
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d, node scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 2e500dad1, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). The six-argument adjust_mortgage_agent_compensation is absent; the five-argument one is Cursor SQL 49's (function_states cursor_original, definition_sha256 e05bce27...), owned by checksops_admin, proacl PUBLIC, authenticated and checksops EXECUTE (SQL 85 drops it). batches.idempotency_key is absent; batch_actions_outside_check 0. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. It does not authorize execution: authorization stays pending, execute false and staging_acceptance ok false, so evaluate and apply still refuse with PRODUCTION_APPROVAL_REQUIRED. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d, node scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 2e500dad1, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). The six-argument adjust_mortgage_agent_compensation is absent; the five-argument one is Cursor SQL 49's (function_states cursor_original, definition_sha256 e05bce27...), owned by checksops_admin, proacl PUBLIC, authenticated and checksops EXECUTE (SQL 85 drops it). batches.idempotency_key is absent; batch_actions_outside_check 0. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. That change did not authorize execution; the later reviewed change of 2026-10-16 (\"SQL 84/85/86 production pins: execute-authorized after staging acceptance\") set authorization, execute true and staging_acceptance, keeping this recorded pre-state. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -66,9 +66,9 @@
     "note": "After the unchanged SQL 85 file run as checksops_admin: only the six-argument adjust_mortgage_agent_compensation exists (the five-argument one is dropped), owned by checksops_admin, SECURITY DEFINER with search_path=public and row_security=off, the reviewed body, EXECUTE for the owner, checksops and authenticated only (PUBLIC revoked); entries.adjustment_reason and batches.idempotency_key are text; the parent index, the adjust idempotency unique index and the approve/pay/adjust CHECK are the reviewed definitions. intended_replacement_sha256 equals the staging pin's. function_owner is the expected production login (as for SQL 72 to 83); the first inspect must confirm it."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql85-mortgage-compensation-adjust here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (the pre-state is recorded in production_inspect and expected_live_definition_sha256).",
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712",
+    "basis": "Guarded staging SQL executor apply of sql85-mortgage-compensation-adjust, run #64 (38895045712) on main 97b981b9d, executor package CodeSha256 wA29pCAXWeGwvQfHU1FWOGzA4yUm4xqjmhG4Sr2csZU= (deploy run #62, 38894717631): staging 7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d -> 051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908, result applied; read-live run #67 (38895440060) already_applied true, precondition_failures [], six-argument adjust_mortgage_agent_compensation intended (matches_migration and body_matches_migration true, EXECUTE authenticated and checksops only), five-argument Cursor SQL 49 function absent.",
     "production_differs": "The pre-states are the same: staging (pin AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST, read-live run 59, run id 38892111590) and production (production_inspect, 2026-10-16) are both 7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d: the six-argument function absent, Cursor SQL 49's five-argument one present, idempotency_key absent. Owner names are not part of the fingerprint. Each environment's pre-state is still recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
   }
 }
