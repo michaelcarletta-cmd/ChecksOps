@@ -535,6 +535,37 @@ test('apply with a recorded pre-state replaces once; drift, replay, re-apply and
   }
 });
 
+test('a COMMIT that throws is reported as outcome unknown; no ROLLBACK is sent or claimed', async () => {
+  for (const key of ['sql82', 'sql83']) {
+    const probe = fakeDb(key);
+    const live = (await handlerFor(probe.connect)(inspectEvent(key))).details.receipt.live_definition_sha256;
+    const recorded = { ...PINS[key], expected_live_definition_sha256: live };
+    for (const lands of [true, false]) {
+      const db = fakeDb(key);
+      const connect = async () => {
+        const client = await db.connect();
+        const query = client.query;
+        client.query = async (sql, params) => {
+          if (String(sql) === 'COMMIT') {
+            if (lands) await query(sql, params);
+            else db.seen.push('COMMIT');
+            throw new Error('Connection terminated unexpectedly');
+          }
+          return query(sql, params);
+        };
+        return client;
+      };
+      const result = await handlerFor(connect, { [pinKey[key]]: recorded })(homeownerEvent(key, { pin: recorded }));
+      assert.equal(result.ok, false);
+      assert.equal(result.code, CODES.SQL_COLLISION, `${key} lands=${lands}: ${JSON.stringify(result)}`);
+      assert.match(result.message, /COMMIT outcome unknown; re-run read-live/);
+      assert.doesNotMatch(result.message, /roll/i);
+      assert.equal(result.details.commit_outcome, 'unknown');
+      assert.equal(db.seen.at(-1), 'COMMIT', `${key} lands=${lands}: no ROLLBACK after COMMIT`);
+    }
+  }
+});
+
 // --- PostgreSQL 16 ---------------------------------------------------------------
 
 const OWNER = 'sql8283_owner';

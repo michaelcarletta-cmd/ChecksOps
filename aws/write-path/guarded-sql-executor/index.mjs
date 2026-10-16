@@ -4236,6 +4236,7 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
 
   let client;
   let inTx = false;
+  let commitSent = false;
   const rollback = async () => {
     if (inTx) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -4351,6 +4352,7 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
       });
     }
 
+    commitSent = true;
     await client.query('COMMIT');
     inTx = false;
     consumeOneUse(event.one_use_id);
@@ -4369,6 +4371,14 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
       },
     });
   } catch (error) {
+    if (commitSent) {
+      // COMMIT was sent: it may have landed. No ROLLBACK is attempted or claimed.
+      inTx = false;
+      return fail(CODES.SQL_COLLISION, `${label} COMMIT outcome unknown; re-run read-live before anything else`, {
+        commit_outcome: 'unknown',
+        message: String(error?.message || error).slice(0, 400),
+      });
+    }
     await rollback();
     return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
   } finally {
@@ -5168,6 +5178,7 @@ async function handleMortgageMigration({ key, event, authorization, identity, co
 
   let client;
   let inTx = false;
+  let commitSent = false;
   const rollback = async () => {
     if (inTx) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -5275,6 +5286,7 @@ async function handleMortgageMigration({ key, event, authorization, identity, co
       });
     }
 
+    commitSent = true;
     await client.query('COMMIT');
     inTx = false;
     consumeOneUse(event.one_use_id);
@@ -5292,6 +5304,14 @@ async function handleMortgageMigration({ key, event, authorization, identity, co
       },
     });
   } catch (error) {
+    if (commitSent) {
+      // COMMIT was sent: it may have landed. No ROLLBACK is attempted or claimed.
+      inTx = false;
+      return fail(CODES.SQL_COLLISION, `${label} COMMIT outcome unknown; re-run read-live before anything else`, {
+        commit_outcome: 'unknown',
+        message: String(error?.message || error).slice(0, 400),
+      });
+    }
     await rollback();
     return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
   } finally {
