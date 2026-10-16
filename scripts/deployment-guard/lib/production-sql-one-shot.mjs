@@ -37,6 +37,8 @@ import { hashSqlDefinition } from './sql-apply.mjs';
 import { MEMBER_STAKEHOLDER_MIGRATIONS } from './sql-member-stakeholder-production-apply.mjs';
 import { SQL80_PRODUCTION_PIN_REL } from './sql80-checkalt-production-apply.mjs';
 import { SQL81_PRODUCTION_PIN_REL } from './sql81-checkalt-production-apply.mjs';
+import { SQL82_PRODUCTION_PIN_REL } from './sql82-homeowner-ledger-production-apply.mjs';
+import { SQL83_PRODUCTION_PIN_REL } from './sql83-homeowner-signing-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
@@ -113,6 +115,8 @@ export const ONE_SHOT_FLAGS = Object.freeze([
 const MEMBER_TOOL = 'scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs';
 const SQL80_TOOL = 'scripts/deployment-guard/sql80-checkalt-production-apply.mjs';
 const SQL81_TOOL = 'scripts/deployment-guard/sql81-checkalt-production-apply.mjs';
+const SQL82_TOOL = 'scripts/deployment-guard/sql82-homeowner-ledger-production-apply.mjs';
+const SQL83_TOOL = 'scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
 const memberTool = (key) => Object.freeze({
@@ -145,6 +149,20 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL81_PRODUCTION_PIN_REL,
     allowed_key: 'sql81_production_apply_allowed',
   }),
+  sql82: Object.freeze({
+    key: 'sql82',
+    script: SQL82_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL82_PRODUCTION_PIN_REL,
+    allowed_key: 'sql82_production_apply_allowed',
+  }),
+  sql83: Object.freeze({
+    key: 'sql83',
+    script: SQL83_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL83_PRODUCTION_PIN_REL,
+    allowed_key: 'sql83_production_apply_allowed',
+  }),
 });
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */
@@ -173,6 +191,10 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'function_acl',
   'function_acl_entries',
   'table_write_entries',
+  'function_states',
+  'pre_state_recorded',
+  'row_security_off_supported',
+  'ledger_view_raw_endorse_token_link',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
