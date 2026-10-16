@@ -13,7 +13,7 @@
   "function_identities": [
     "public.return_mortgage_handling_request_to_queue(uuid, text)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496",
   "intended_replacement_sha256": "ff920f5453283e9ca550bb8a191905386832f44e2e35567522530b806cb0e983",
   "authorization_phrase": "APPLY_MORTGAGE_RETURN_TO_QUEUE",
   "predecessors": [],
@@ -22,17 +22,53 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-16",
+    "ssm_command_id": "0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d",
+    "source_commit": "2e500dad1348448b2a225b972ea1e1eecad4381e",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "function_states": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 84. The production pre-state is not code-derived (SQL 47 may be absent, the Cursor bodies may or may not be live), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql84-mortgage-return-to-queue-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, proacl), precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (SQL 47 missing, another signature or result type, another owner, an ACL entry the file does not revoke, an existing mortgage_ops_request_audit that differs from the file, or, with no per-check unique index that satisfies GATE 0, the fallback index name taken, check_billing_events owned by another role or duplicate non-voided per-check Mortgage Ops events), stop: that needs its own reviewed change."
+    "live_definition_sha256": "53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496",
+    "function_states": {
+      "return_mortgage_handling_request_to_queue": "cursor_original"
+    },
+    "functions": {
+      "return_mortgage_handling_request_to_queue": {
+        "exists": true,
+        "state": "cursor_original",
+        "identity_arguments": "p_request_id uuid, p_reason text",
+        "result": "public.mortgage_handling_requests",
+        "security_definer": true,
+        "config": [
+          "search_path=public",
+          "row_security=off"
+        ],
+        "owner": "checksops_admin",
+        "proacl": "{=X/checksops_admin,checksops_admin=X/checksops_admin,checksops=X/checksops_admin,authenticated=X/checksops_admin}",
+        "definition_sha256": "9f6811a71033b22acf2add10a000c6d6154d756f3e6a6dc785e6ed63c4e5a114"
+      }
+    },
+    "audit_table": {
+      "present": true,
+      "policy": "aws_select_mortgage_ops_request_audit",
+      "policy_uses": "aws_can_admin_mortgage_agent_compensation()"
+    },
+    "per_check_unique_present": true,
+    "billing_per_check_indexes": [
+      {
+        "name": "check_billing_events_mortgage_ops_check_uidx",
+        "valid": true,
+        "predicate_kind": "staging"
+      }
+    ],
+    "fallback_index_name_taken": false,
+    "billing_duplicates": {
+      "groups": 0,
+      "extra_events": 0
+    },
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d, node scripts/deployment-guard/sql84-mortgage-return-to-queue-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 2e500dad1, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). return_mortgage_handling_request_to_queue(uuid, text) exists once with Cursor SQL 48's body (function_states cursor_original, definition_sha256 9f6811a7...): arguments p_request_id uuid, p_reason text, RETURNS public.mortgage_handling_requests, SECURITY DEFINER with search_path=public and row_security=off, owned by checksops_admin, proacl PUBLIC, authenticated and checksops EXECUTE (SQL 84 revokes PUBLIC). GATE 0 is already satisfied (per_check_unique_present true: check_billing_events_mortgage_ops_check_uidx, the staging predicate, valid), so SQL 84 creates no index; fallback_index_name_taken false; billing_duplicates groups 0, extra_events 0. public.mortgage_ops_request_audit is present with the policy aws_select_mortgage_ops_request_audit using aws_can_admin_mortgage_agent_compensation(). precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. It does not authorize execution: authorization stays pending, execute false and staging_acceptance ok false, so evaluate and apply still refuse with PRODUCTION_APPROVAL_REQUIRED. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -47,7 +83,7 @@
   "staging_acceptance": {
     "ok": false,
     "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql84-mortgage-return-to-queue here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
-    "production_differs": "Unknown until the first inspect of each environment: staging may carry Cursor SQL 48 (return_mortgage_handling_request_to_queue, the audit table, possibly its own per-check index) and has check_billing_events_mortgage_ops_check_uidx; production may have neither, or no SQL 47. The staging and production pre-state hashes are recorded separately. The post-state fingerprint is the same in both (the per-check unique gate is recorded as present, not by index name); the same file bytes (source_sha256) run in both."
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql84-mortgage-return-to-queue here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (the pre-state is recorded in production_inspect and expected_live_definition_sha256).",
+    "production_differs": "The pre-states are the same: staging (pin AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE, read-live run 58, run id 38892001098) and production (production_inspect, 2026-10-16) are both 53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496: Cursor SQL 48's return_mortgage_handling_request_to_queue, the audit table present and check_billing_events_mortgage_ops_check_uidx satisfying GATE 0. Owner names are not part of the fingerprint. Each environment's pre-state is still recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
   }
 }

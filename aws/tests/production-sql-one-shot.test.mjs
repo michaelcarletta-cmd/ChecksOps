@@ -517,15 +517,16 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(runner.calls.length, 0);
   // SQL 82's and 83's committed pins are execute-authorized; their pre-authorization state
   // (no staging acceptance, authorization "pending") is an explicit copy here. SQL 84's to
-  // 86's committed pins are pending, with no pre-state recorded yet. Even with execute
-  // flipped the pending state stops at the pin, and the evaluators refuse a null pre-state
-  // (explicit copy) and the pending authorization.
+  // 86's committed pins record the production pre-state (--inspect of 2026-10-16) but have
+  // no staging acceptance and authorization "pending". Even with execute flipped the pending
+  // state stops at the pin, and the evaluators refuse a null pre-state (explicit copy) and
+  // the pending authorization.
   const RECORDED_PRODUCTION_PRE = {
     sql82: '9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229',
     sql83: 'c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936',
-    sql84: null,
-    sql85: null,
-    sql86: null,
+    sql84: '53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496',
+    sql85: '7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d',
+    sql86: 'c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b',
   };
   for (const key of ['sql82', 'sql83', 'sql84', 'sql85', 'sql86']) {
     const real = realPin(key);
@@ -549,7 +550,6 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     assert.equal(refused.code, CODES.SQL_COLLISION, key);
     assert.match(refused.message, /no recorded pre-apply live definition hash/, key);
     // With the recorded pre-state and a staging acceptance, authorization "pending" still refuses.
-    if (committed.expected_live_definition_sha256 === null) continue;
     const recordedManifest = { ...committed, live_definition_sha256: committed.expected_live_definition_sha256, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
     const pendingApproval = await EVALUATORS[key](recordedManifest, { root: ROOT, pin: { ...committed, execute: true, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE } });
     assert.equal(pendingApproval.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);

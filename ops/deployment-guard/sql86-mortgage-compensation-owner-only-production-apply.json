@@ -15,7 +15,7 @@
     "public.mortgage_agent_compensation_reconciliation(text)",
     "public.earn_mortgage_agent_compensation(uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b",
   "intended_replacement_sha256": "fb7e82291b146d0bf243dab1f607b2202b131c09cccac56e40de96c64542062f",
   "authorization_phrase": "APPLY_MORTGAGE_COMPENSATION_OWNER_ONLY",
   "predecessors": [],
@@ -24,17 +24,74 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-16",
+    "ssm_command_id": "0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d",
+    "source_commit": "2e500dad1348448b2a225b972ea1e1eecad4381e",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "function_states": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 86. The production pre-state is not code-derived (SQL 47 may be absent, the Cursor bodies may or may not be live), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, functions (arguments, owner, proacl), precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (SQL 47 missing, another signature, result type or parameter names, a function owned by another role, an earn ACL entry the file does not revoke, or earn_owner.earn_owner_safe false: earn_mortgage_agent_compensation and tg_earn_mortgage_agent_compensation with different owners, or an owner that is or belongs to checksops / authenticated without being superuser, which the file refuses with earn_owner_unsafe), stop: that needs its own reviewed change."
+    "live_definition_sha256": "c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b",
+    "function_states": {
+      "aws_can_admin_mortgage_agent_compensation": "ledger_original",
+      "mortgage_agent_compensation_reconciliation": "ledger_original",
+      "earn_mortgage_agent_compensation": "ledger_original",
+      "tg_earn_mortgage_agent_compensation": "ledger_original"
+    },
+    "functions": {
+      "aws_can_admin_mortgage_agent_compensation": {
+        "exists": true,
+        "state": "ledger_original",
+        "owner": "checksops_admin",
+        "definition_sha256": "ea033ce8511dff0858ca5dce65e690025488ecb36524e4140f85d6808e92386a",
+        "execute_grantees": [
+          "PUBLIC",
+          "authenticated",
+          "checksops"
+        ]
+      },
+      "mortgage_agent_compensation_reconciliation": {
+        "exists": true,
+        "state": "ledger_original",
+        "owner": "checksops_admin",
+        "definition_sha256": "edd48e8286d99a9a848917cde0a0e3ec3f92e53775127012aa7e390006721c3a",
+        "execute_grantees": [
+          "PUBLIC",
+          "authenticated",
+          "checksops"
+        ]
+      },
+      "earn_mortgage_agent_compensation": {
+        "exists": true,
+        "state": "ledger_original",
+        "owner": "checksops_admin",
+        "definition_sha256": "ffdc445e4d88011890887ab9b2c386cad29f006ecff316efff4a7c3f9740b293",
+        "execute_grantees": [
+          "PUBLIC",
+          "authenticated",
+          "checksops"
+        ]
+      },
+      "tg_earn_mortgage_agent_compensation": {
+        "exists": true,
+        "state": "ledger_original",
+        "owner": "checksops_admin",
+        "definition_sha256": "ca557bd5473fca4154bc4ae10af94e491ecb1891eb966d38755ac93a8a583c18",
+        "execute_grantees": [
+          "PUBLIC"
+        ]
+      }
+    },
+    "earn_owner": {
+      "same_owner": true,
+      "owner": "checksops_admin",
+      "owner_rolsuper": false,
+      "owner_member_of_checksops": false,
+      "owner_member_of_authenticated": false,
+      "earn_owner_safe": true
+    },
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 0bd3e2c7-6b9d-4596-a36d-1ba516d73c9d, node scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 2e500dad1, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). All four SQL 47 functions are ledger_original: aws_can_admin_mortgage_agent_compensation (ea033ce8...), mortgage_agent_compensation_reconciliation (edd48e82...), earn_mortgage_agent_compensation (ffdc445e...) and tg_earn_mortgage_agent_compensation (ca557bd5...), all owned by checksops_admin. The first three have PUBLIC, authenticated and checksops EXECUTE (SQL 86 revokes all three from earn); tg_earn has PUBLIC EXECUTE. earn_owner: same_owner true, owner checksops_admin, rolsuper false, member of neither checksops nor authenticated, earn_owner_safe true. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. It does not authorize execution: authorization stays pending, execute false and staging_acceptance ok false, so evaluate and apply still refuse with PRODUCTION_APPROVAL_REQUIRED. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -50,7 +107,7 @@
   "staging_acceptance": {
     "ok": false,
     "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql86-mortgage-compensation-owner-only here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
-    "production_differs": "Unknown until the first inspect of each environment: both should carry SQL 47's aws_can_admin_mortgage_agent_compensation and mortgage_agent_compensation_reconciliation (ledger_original), but production may not have SQL 47. The staging and production pre-state hashes are recorded separately. The post-state fingerprint is the same in both (it leaves out the two replaced functions' ACLs, which the file does not change and the apply compares before and after); the same file bytes (source_sha256) run in both."
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql86-mortgage-compensation-owner-only here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (the pre-state is recorded in production_inspect and expected_live_definition_sha256).",
+    "production_differs": "The pre-states are the same: staging (pin AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY, read-live run 60, run id 38892218991) and production (production_inspect, 2026-10-16) are both c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b: all four SQL 47 functions ledger_original and earn_owner_safe true. Owner names are not part of the fingerprint. Each environment's pre-state is still recorded separately. The post-state fingerprint is the same in both (it leaves out the two replaced functions' ACLs, which the file does not change and the apply compares before and after); the same file bytes (source_sha256) run in both."
   }
 }

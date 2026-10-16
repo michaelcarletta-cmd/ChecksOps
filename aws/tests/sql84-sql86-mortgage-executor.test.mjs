@@ -5,12 +5,14 @@
  * SQL 47 compensation helper and reconciliation become platform owner only; EXECUTE
  * on earn_mortgage_agent_compensation is left to its owner).
  *
- * No pre-state is code-derived (staging may carry Cursor SQL 48 / SQL 49, production
- * may lack SQL 47), so each pin's expected hash is null and apply refuses until a
- * read-live run is recorded. The intended hash is code-derived; the PostgreSQL 16
- * tests re-derive it and the definition hashes from the real catalog, starting from
- * the real Cursor SQL 47 / 48 / 49 files (fixtures), and apply through the handler
- * with a pin copy carrying the inspected pre-state.
+ * No pre-state is code-derived: each pin's expected hash is recorded from a guarded
+ * staging read-live run (2026-10-16, main 2e500dad1: run 58 for SQL 84, run 59 for
+ * SQL 85, run 60 for SQL 86; staging carries Cursor SQL 48 / 49 and SQL 47). Tests
+ * that need the no-pre-state behaviour pass an explicit copy with the hash null
+ * (UNRECORDED). The intended hash is code-derived; the PostgreSQL 16 tests re-derive
+ * it and the definition hashes from the real catalog, starting from the real Cursor
+ * SQL 47 / 48 / 49 files (fixtures), and apply through the handler with a pin copy
+ * carrying the inspected pre-state.
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -71,6 +73,15 @@ const {
 
 const KEYS = ['sql84', 'sql85', 'sql86'];
 const PINS = { sql84: PIN84, sql85: PIN85, sql86: PIN86 };
+// The pre-states recorded from the staging read-live runs of 2026-10-16 (run 58 /
+// 38892001098, run 59 / 38892111590, run 60 / 38892218991).
+const RECORDED_STAGING_PRE = {
+  sql84: '53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496',
+  sql85: '7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d',
+  sql86: 'c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b',
+};
+// The committed pins with no recorded pre-state, for the no-pre-state refusals.
+const UNRECORDED = Object.fromEntries(Object.entries(PINS).map(([key, pin]) => [key, { ...pin, expected_live_definition_sha256: null }]));
 const CHOICES = { sql84: 'sql84-mortgage-return-to-queue', sql85: 'sql85-mortgage-compensation-adjust', sql86: 'sql86-mortgage-compensation-owner-only' };
 const FILES = Object.fromEntries(KEYS.map((key) => [key, path.join(ROOT, PINS[key].filename)]));
 const TEXT = Object.fromEntries(KEYS.map((key) => [key, fs.readFileSync(FILES[key], 'utf8')]));
@@ -125,7 +136,7 @@ const neverConnect = async () => {
 };
 const READ_ONLY_STATEMENT_RE = /^\s*(SELECT|WITH|SAVEPOINT|RELEASE|ROLLBACK TO)\b/i;
 
-test('pins match the SQL files and their commit; pre-states pending, post-states code-derived; registered everywhere', () => {
+test('pins match the SQL files and their commit; pre-states recorded from read-live, post-states code-derived; registered everywhere', () => {
   assert.equal(PIN84.source_sha256, '0b6fe69b92e66f6e66a3a2438806e67cfa31d6c741802608881fb2fec5c9e806');
   assert.equal(PIN85.source_sha256, '4cc77457554ed9c24407db61bc292c168db0794ed7b884180554d69989e52b3d');
   assert.equal(PIN86.source_sha256, '1449df1f0c58aee2562e495d65e1327f4b6b4527005a55b5596b064de798df16');
@@ -135,8 +146,9 @@ test('pins match the SQL files and their commit; pre-states pending, post-states
   for (const key of KEYS) {
     const pin = PINS[key];
     assert.equal(sha(fs.readFileSync(FILES[key])), pin.source_sha256, key);
-    // Pending the first read-live: no reviewed pre-apply hash yet.
-    assert.equal(pin.expected_live_definition_sha256, null, key);
+    // Recorded from the staging read-live run (not code-derived), and not the post-state.
+    assert.equal(pin.expected_live_definition_sha256, RECORDED_STAGING_PRE[key], key);
+    assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256, key);
     assert.equal(pin.intended_replacement_sha256, sha(mortgageStateText(key, mortgageAppliedStates(key))), key);
     assert.deepEqual([...pin.function_identities], MORTGAGE_MIGRATIONS[key].functions.filter((fn) => fn.role !== 'referenced').map((fn) => fn.identity));
     assert.equal(pin.migration, key);
@@ -160,6 +172,10 @@ test('pins match the SQL files and their commit; pre-states pending, post-states
   assert.equal(evaluateSqlExecutorAuthorization(inspectEvent('sql84'), { now: Date.parse(NOW) }).ok, true);
   const recorded = { ...PIN86, expected_live_definition_sha256: 'a'.repeat(64) };
   assert.equal(evaluateSqlExecutorAuthorization(mortgageEvent('sql86', { pin: recorded }), { now: Date.parse(NOW) }).ok, true);
+  for (const key of KEYS) {
+    assert.equal(evaluateSqlExecutorAuthorization(mortgageEvent(key), { now: Date.parse(NOW) }).ok, true, `${key} committed pin`);
+    assert.equal(mortgageEvent(key).expected_live_definition_sha256, RECORDED_STAGING_PRE[key], key);
+  }
 });
 
 test('the workflow offers the three pins and runs this test', () => {
@@ -212,12 +228,19 @@ test('the reviewed-text check refuses a wider grant, a missing revoke, an admin 
   assert.equal(mortgageSqlIsReviewed('sql84', TEXT.sql84.replace('-- Idempotent: safe to run more than once.', '-- (reworded)')), true);
 });
 
-test('apply refuses before connecting: the committed pins (pre-state pending), the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
+test('apply refuses before connecting: a pin with no pre-state, the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
   for (const key of KEYS) {
     const pin = PINS[key];
-    const pending = await handlerFor(neverConnect)(mortgageEvent(key, { expected_live_definition_sha256: 'b'.repeat(64) }));
+    // A pin with no recorded pre-state (explicit copy; the committed pins are recorded).
+    const pending = await handlerFor(neverConnect, { [pinKey[key]]: UNRECORDED[key] })(mortgageEvent(key, { pin: UNRECORDED[key], expected_live_definition_sha256: 'b'.repeat(64) }));
     assert.equal(pending.code, CODES.SQL_COLLISION, key);
     assert.match(pending.message, /no reviewed pre-apply live definition hash/, key);
+    // The committed (recorded) pin: any other hash, or the read-live sentinel, is refused.
+    for (const expected of ['b'.repeat(64), READ_LIVE_EXPECTED_SENTINEL]) {
+      const committed = await handlerFor(neverConnect)(mortgageEvent(key, { expected_live_definition_sha256: expected }));
+      assert.equal(committed.code, CODES.SQL_COLLISION, key);
+      assert.match(committed.message, /bound to the exact allowlisted pin/, key);
+    }
     const recorded = { ...pin, expected_live_definition_sha256: 'a'.repeat(64) };
     const extra = { [pinKey[key]]: recorded };
     const sentinel = await handlerFor(neverConnect, extra)(mortgageEvent(key, { pin: recorded, expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL }));
@@ -312,7 +335,7 @@ test('PostgreSQL 16: from SQL 47 and Cursor SQL 48/49, inspect reports the live 
     };
     for (const key of KEYS) {
       seen.length = 0;
-      const before = await handlerFor(connect)(inspectEvent(key));
+      const before = await handlerFor(connect, { [pinKey[key]]: UNRECORDED[key] })(inspectEvent(key, { pin: UNRECORDED[key] }));
       assert.equal(before.ok, true, JSON.stringify(before));
       const receipt = before.details.receipt;
       assert.equal(seen[0], 'BEGIN READ ONLY');
@@ -321,8 +344,16 @@ test('PostgreSQL 16: from SQL 47 and Cursor SQL 48/49, inspect reports the live 
       const report = receipt.mortgage_inspect;
       assert.deepEqual(receipt.precondition_failures, [], `${key}: ${JSON.stringify(report)}`);
       assert.equal(receipt.sql47_prerequisites_present, true);
-      assert.equal(receipt.apply_preconditions_met, false, 'the committed pin has no pre-state yet');
+      assert.equal(receipt.pin_executable, false);
+      assert.equal(receipt.apply_preconditions_met, false, 'a pin with no pre-state');
       assert.notEqual(receipt.live_definition_sha256, PINS[key].intended_replacement_sha256);
+      // This fixture (SQL 47 and the real Cursor SQL 48 / 49 files with staging's per-check
+      // index, owned by the executor login) reproduces the pre-state recorded from the staging
+      // read-live run, so the committed pin is ready to apply here.
+      assert.equal(receipt.live_definition_sha256, RECORDED_STAGING_PRE[key], key);
+      const committedReceipt = (await handlerFor(connect)(inspectEvent(key))).details.receipt;
+      assert.equal(committedReceipt.pin_executable, true, key);
+      assert.equal(committedReceipt.apply_preconditions_met, true, key);
       assert.ok(report.prerequisites.every((row) => row.present), key);
       assert.deepEqual(report.missing_columns, {});
       if (key === 'sql84') {
@@ -358,7 +389,7 @@ test('PostgreSQL 16: from SQL 47 and Cursor SQL 48/49, inspect reports the live 
         assert.equal(report.earn_owner.same_owner, true);
       }
       assertNoSeededPii(assert, before, `${key} executor result`);
-      const summary = readLiveSummary({ ok: true, details: before }, { migration: CHOICES[key], pin: PINS[key] });
+      const summary = readLiveSummary({ ok: true, details: before }, { migration: CHOICES[key], pin: UNRECORDED[key] });
       assert.equal(summary.ok, true, JSON.stringify(summary));
       assert.deepEqual(summary.details.mortgage_inspect, JSON.parse(JSON.stringify(report)), `${key} read-live keeps the whole report`);
       assertNoSeededPii(assert, summary, `${key} read-live summary`);
@@ -429,6 +460,9 @@ test('PostgreSQL 16: duplicate billing events, an unsafe earn owner, another sig
     assert.equal(clean84.mortgage_inspect.per_check_unique_present, false);
     assert.equal(clean84.mortgage_inspect.audit_table.present, false);
     assert.equal(clean84.function_states.return_mortgage_handling_request_to_queue, 'absent');
+    // Without Cursor SQL 48 this is not the recorded staging pre-state: the committed pin would refuse it.
+    assert.notEqual(clean84.live_definition_sha256, PINS.sql84.expected_live_definition_sha256);
+    assert.equal(clean84.apply_preconditions_met, false);
 
     await refusedThenRestored('sql84', 'duplicate non-voided per-check Mortgage Ops events',
       DUPLICATE_BILLING_SQL,
