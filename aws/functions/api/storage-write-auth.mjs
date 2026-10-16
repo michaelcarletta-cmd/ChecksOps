@@ -148,7 +148,9 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
         ok: false,
         statusCode: 403,
         error: 'rls_denied',
-        message: 'Tenant owner or admin required to write library documents',
+        // Owner policy: any member of the tenant writes its library; the platform
+        // owner and platform roles do not.
+        message: 'Membership of this company is required to write library documents',
       };
     }
     return { ok: true, rel, tenantId, key: s3KeyFor(bucket, rel), strategy: 'tenant' };

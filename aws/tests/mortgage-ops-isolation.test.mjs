@@ -312,3 +312,20 @@ test('loss-draft uploads require tenant membership or a workable Desk request', 
   });
   assert.equal(assignedDelete.rows[0].id, DRAFT_DOC);
 });
+
+test('library writes: any member (stored role viewer) uploads; the platform owner without membership does not', async () => {
+  const viewerClient = sqlClient({ memberships: { [`${OWNER_A}:${TENANT_A}`]: 'viewer' } });
+  assert.equal(await canManageTenantDocumentLibrary(viewerClient, OWNER_A, TENANT_A), true);
+  const upload = await authorizeStorageWritePath(viewerClient, 'tenant-documents', PATH_A, OWNER_A);
+  assert.equal(upload.ok, true);
+
+  const platformOwnerClient = sqlClient({ roles: { [OWNER_A]: ['admin'] } });
+  const base = platformOwnerClient.query;
+  platformOwnerClient.query = async (sql, params) => (/is_master_owner|is_platform_owner/.test(sql)
+    ? { rows: [{ is_owner: true, is_master: true, is_platform: true }] }
+    : base(sql, params));
+  assert.equal(await canManageTenantDocumentLibrary(platformOwnerClient, OWNER_A, TENANT_A), false);
+  const refused = await authorizeStorageWritePath(platformOwnerClient, 'tenant-documents', PATH_A, OWNER_A);
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error, 'rls_denied');
+});
