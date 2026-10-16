@@ -23,8 +23,8 @@
       "evidence": "2026-10-15 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 6c0422a9-5712-4f15-bb83-54565b0d35fb, workstream prod-sql81-checkalt-register-20261015, main 787007faf): public.aws_register_checkalt_tenant_account e12fdf2f… -> 36623cce…; post-apply read-only inspect already_applied true; recorded in ops/deployment-guard/sql81-checkalt-production-register-production-apply.json applied (#976)"
     },
     "aws/workflows/sql/85_mortgage_compensation_adjust.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "2026-10-16 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM da16269a-0aee-4196-87c4-90c554178be6, workstream prod-sql84-86-mortgage-20261016, main 079d19356, one_use_id sql85-prod-2b18a6da-7903-43b1-9e29-83cd47e58b3d): 7d5e766c… -> 051e8228…; post-apply read-only inspect already_applied true, six-argument adjust_mortgage_agent_compensation intended, five-argument function absent; staging acceptance run 38895045712 (#999)"
     }
   },
   "order": [
