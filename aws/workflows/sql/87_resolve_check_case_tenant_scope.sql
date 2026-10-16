@@ -48,13 +48,22 @@
 --    by the route's own SQL (workflow-rpc.mjs), not by this function. EXECUTE is
 --    revoked from PUBLIC, anon, authenticated, service_role and checksops (each
 --    where the role exists) and granted explicitly to the owner.
---    Guard (55000 case_owner_unsafe): resolve_check_case and both trigger
---    functions must have the same owner, both trigger functions must be SECURITY
---    DEFINER, and that owner must not be checksops, authenticated, anon or
---    service_role nor a member of one of them (a superuser owner is accepted:
---    privilege checks do not apply to it). Otherwise the revoke could take
---    EXECUTE away from the triggers, and every check intake or loss draft insert
---    without a case would fail with 42501.
+--    Guards, all checked in the first DO block before anything changes (so even a
+--    psql autocommit run cannot leave the new body with the old ACL):
+--    - 55000 case_owner_unsafe: resolve_check_case and both trigger functions must
+--      have the same owner and both trigger functions must be SECURITY DEFINER
+--      (otherwise the revoke could take EXECUTE away from the triggers and every
+--      check intake or loss draft insert without a case would fail with 42501);
+--      the owner must not itself be checksops, authenticated, anon or service_role
+--      (the owner grant would hand EXECUTE straight back to that API role); and no
+--      API role may be a member of the owner role (it would inherit or SET ROLE to
+--      the owner's EXECUTE). PUBLIC cannot be a role member. The owner being a
+--      member of an API role is not refused: the owner keeps its own explicit
+--      grant, and a CREATEROLE owner is a member of every role it created.
+--    - 55000 case_callers_unsafe: no function other than the two trigger functions
+--      may reference resolve_check_case in its source, and no view, rule, policy,
+--      SQL-standard function body, default or constraint may depend on it: the
+--      revoke would break any such caller that runs as an API role.
 --
 -- No table, column, row, trigger or policy change.
 --
@@ -65,6 +74,14 @@
 DO $$
 DECLARE
   v_missing text[];
+  v_fn_owner oid;
+  v_intake_owner oid;
+  v_draft_owner oid;
+  v_intake_secdef boolean;
+  v_draft_secdef boolean;
+  v_owner name;
+  v_role text;
+  v_callers text[];
 BEGIN
   SELECT array_agg(name ORDER BY name) INTO v_missing
   FROM (
@@ -83,6 +100,60 @@ BEGIN
   IF v_missing IS NOT NULL THEN
     RAISE EXCEPTION 'sql87_prerequisite_missing: SQL 87 needs migration 20260826125804 (resolve_check_case and its trigger functions) applied first; missing %',
       array_to_string(v_missing, ', ')
+      USING ERRCODE = '55000';
+  END IF;
+
+  SELECT p.proowner INTO v_fn_owner FROM pg_proc p
+   WHERE p.oid = 'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)'::regprocedure;
+  SELECT p.proowner, p.prosecdef INTO v_intake_owner, v_intake_secdef FROM pg_proc p
+   WHERE p.oid = 'public.tg_check_intake_assign_case()'::regprocedure;
+  SELECT p.proowner, p.prosecdef INTO v_draft_owner, v_draft_secdef FROM pg_proc p
+   WHERE p.oid = 'public.tg_loss_draft_assign_case()'::regprocedure;
+  SELECT r.rolname INTO v_owner FROM pg_roles r WHERE r.oid = v_fn_owner;
+
+  IF v_fn_owner IS DISTINCT FROM v_intake_owner OR v_fn_owner IS DISTINCT FROM v_draft_owner THEN
+    RAISE EXCEPTION 'case_owner_unsafe: resolve_check_case (owner %), tg_check_intake_assign_case (owner %) and tg_loss_draft_assign_case (owner %) must have the same owner before SQL 87 revokes EXECUTE',
+      v_owner,
+      (SELECT rolname FROM pg_roles WHERE oid = v_intake_owner),
+      (SELECT rolname FROM pg_roles WHERE oid = v_draft_owner)
+      USING ERRCODE = '55000';
+  END IF;
+  IF v_intake_secdef IS NOT TRUE OR v_draft_secdef IS NOT TRUE THEN
+    RAISE EXCEPTION 'case_owner_unsafe: tg_check_intake_assign_case and tg_loss_draft_assign_case must be SECURITY DEFINER before SQL 87 revokes EXECUTE from the roles that write check_intake_items and loss_draft_tracking'
+      USING ERRCODE = '55000';
+  END IF;
+  FOREACH v_role IN ARRAY ARRAY['checksops', 'authenticated', 'anon', 'service_role'] LOOP
+    CONTINUE WHEN NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_role);
+    IF v_owner = v_role THEN
+      RAISE EXCEPTION 'case_owner_unsafe: resolve_check_case owner % is the API role %; the owner grant would give it EXECUTE back',
+        v_owner, v_role
+        USING ERRCODE = '55000';
+    END IF;
+    IF pg_has_role((SELECT oid FROM pg_roles WHERE rolname = v_role), v_fn_owner, 'MEMBER') THEN
+      RAISE EXCEPTION 'case_owner_unsafe: the API role % is a member of resolve_check_case owner % and would keep its EXECUTE',
+        v_role, v_owner
+        USING ERRCODE = '55000';
+    END IF;
+  END LOOP;
+
+  SELECT array_agg(name ORDER BY name) INTO v_callers
+  FROM (
+    SELECT 'function ' || p.oid::regprocedure::text AS name
+      FROM pg_proc p
+     WHERE p.prosrc ILIKE '%resolve_check_case%'
+       AND p.oid NOT IN (
+         'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)'::regprocedure,
+         'public.tg_check_intake_assign_case()'::regprocedure,
+         'public.tg_loss_draft_assign_case()'::regprocedure)
+    UNION
+    SELECT 'dependent ' || d.classid::regclass::text || ' ' || d.objid::text
+      FROM pg_depend d
+     WHERE d.refclassid = 'pg_proc'::regclass
+       AND d.refobjid = 'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)'::regprocedure
+  ) AS c;
+  IF v_callers IS NOT NULL THEN
+    RAISE EXCEPTION 'case_callers_unsafe: SQL 87 revokes EXECUTE on resolve_check_case from the API roles, but other objects call it: %',
+      array_to_string(v_callers, ', ')
       USING ERRCODE = '55000';
   END IF;
 END
@@ -198,45 +269,14 @@ $$;
 COMMENT ON FUNCTION public.resolve_check_case(uuid, uuid, uuid, text, text, text, text) IS
   'Internal helper of tg_check_intake_assign_case and tg_loss_draft_assign_case (SQL 87): finds or creates the caller tenant''s case; never reads, links or copies another tenant''s claim or case. EXECUTE for its owner only.';
 
+-- Only the ACL changes here; every guard ran before the CREATE OR REPLACE.
 DO $$
 DECLARE
-  v_fn_owner oid;
-  v_intake_owner oid;
-  v_draft_owner oid;
-  v_intake_secdef boolean;
-  v_draft_secdef boolean;
   v_owner name;
-  v_super boolean;
   v_role text;
 BEGIN
-  SELECT p.proowner INTO v_fn_owner FROM pg_proc p
+  SELECT pg_get_userbyid(p.proowner) INTO v_owner FROM pg_proc p
    WHERE p.oid = 'public.resolve_check_case(uuid, uuid, uuid, text, text, text, text)'::regprocedure;
-  SELECT p.proowner, p.prosecdef INTO v_intake_owner, v_intake_secdef FROM pg_proc p
-   WHERE p.oid = 'public.tg_check_intake_assign_case()'::regprocedure;
-  SELECT p.proowner, p.prosecdef INTO v_draft_owner, v_draft_secdef FROM pg_proc p
-   WHERE p.oid = 'public.tg_loss_draft_assign_case()'::regprocedure;
-  SELECT r.rolname, r.rolsuper INTO v_owner, v_super FROM pg_roles r WHERE r.oid = v_fn_owner;
-
-  IF v_fn_owner IS DISTINCT FROM v_intake_owner OR v_fn_owner IS DISTINCT FROM v_draft_owner THEN
-    RAISE EXCEPTION 'case_owner_unsafe: resolve_check_case (owner %), tg_check_intake_assign_case (owner %) and tg_loss_draft_assign_case (owner %) must have the same owner before SQL 87 revokes EXECUTE',
-      v_owner,
-      (SELECT rolname FROM pg_roles WHERE oid = v_intake_owner),
-      (SELECT rolname FROM pg_roles WHERE oid = v_draft_owner)
-      USING ERRCODE = '55000';
-  END IF;
-  IF v_intake_secdef IS NOT TRUE OR v_draft_secdef IS NOT TRUE THEN
-    RAISE EXCEPTION 'case_owner_unsafe: tg_check_intake_assign_case and tg_loss_draft_assign_case must be SECURITY DEFINER before SQL 87 revokes EXECUTE from the roles that write check_intake_items and loss_draft_tracking'
-      USING ERRCODE = '55000';
-  END IF;
-  FOREACH v_role IN ARRAY ARRAY['checksops', 'authenticated', 'anon', 'service_role'] LOOP
-    CONTINUE WHEN NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_role);
-    IF v_owner = v_role OR (NOT v_super AND pg_has_role(v_fn_owner, v_role, 'MEMBER')) THEN
-      RAISE EXCEPTION 'case_owner_unsafe: resolve_check_case owner % is or belongs to %; SQL 87 would revoke the case triggers'' EXECUTE',
-        v_owner, v_role
-        USING ERRCODE = '55000';
-    END IF;
-  END LOOP;
-
   REVOKE ALL ON FUNCTION public.resolve_check_case(uuid, uuid, uuid, text, text, text, text) FROM PUBLIC;
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role', 'checksops'] LOOP
     CONTINUE WHEN NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_role);
