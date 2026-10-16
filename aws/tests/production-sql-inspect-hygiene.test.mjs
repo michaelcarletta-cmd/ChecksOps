@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { INSPECT_RECORD_KEYS, pickInspect } from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
+import { INSPECT_RECORD_KEYS, inspectResultRecord, pickInspect } from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
+import { FIXED_SQL_GUARD_MESSAGES, sqlGuardErrorMessage } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { applyErrorMessage } from '../../scripts/deployment-guard/lib/mortgage-sql-production-apply.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -31,10 +32,10 @@ test('pickInspect copies billing_duplicates counts only, never check_ids', () =>
   assert.doesNotMatch(JSON.stringify(picked), new RegExp(`${CHECK_A}|${CHECK_B}|check_ids`));
 });
 
-test('pickInspect keeps an unreadable billing_duplicates as readable:false', () => {
+test('pickInspect keeps an unreadable billing_duplicates as readable:false with its reason', () => {
   assert.deepEqual(
     pickInspect({ billing_duplicates: { readable: false, reason: 'table_or_columns_missing' } }),
-    { billing_duplicates: { readable: false } },
+    { billing_duplicates: { readable: false, reason: 'table_or_columns_missing' } },
   );
   assert.deepEqual(pickInspect({ billing_duplicates: null }), { billing_duplicates: null });
 });
@@ -68,5 +69,44 @@ test('the mortgage apply catch block reports only applyErrorMessage', () => {
   assert.ok(catchStart > 0);
   const catchBlock = body.slice(catchStart, body.indexOf('} finally {', catchStart));
   assert.equal((catchBlock.match(/applyErrorMessage\(error\)/g) || []).length, 2);
+  assert.doesNotMatch(catchBlock, /error\?\.message/);
+});
+
+test('inspectResultRecord keeps status and picked fields only', () => {
+  const record = inspectResultRecord({
+    ok: false,
+    code: 'SQL_COLLISION',
+    message: 'state unreadable',
+    details: {
+      read_only: true,
+      billing_duplicates: { readable: true, groups: 1, extra_events: 1, check_ids: [CHECK_A] },
+      state: { functions: { x: { owner: 'secret_owner' } } },
+      state_error: { code: '42501', message: 'permission denied' },
+    },
+  });
+  assert.deepEqual(record, {
+    ok: false,
+    code: 'SQL_COLLISION',
+    message: 'state unreadable',
+    details: {
+      read_only: true,
+      billing_duplicates: { readable: true, groups: 1, extra_events: 1 },
+      state_error: { code: '42501', message: 'permission denied' },
+    },
+  });
+  assert.equal(inspectResultRecord(null), null);
+});
+
+test('the production apply and the staging executor share one fixed-message mapping', () => {
+  assert.deepEqual(FIXED_SQL_GUARD_MESSAGES.map(([prefix]) => prefix), ['duplicate_mortgage_ops_billing_events', 'earn_owner_unsafe']);
+  for (const [prefix, fixed] of FIXED_SQL_GUARD_MESSAGES) {
+    assert.equal(sqlGuardErrorMessage(new Error(`${prefix}: ${CHECK_A} owner checksops_admin`), 400), fixed);
+    assert.equal(applyErrorMessage(new Error(`${prefix}: ${CHECK_A}`)), fixed);
+  }
+  const executor = fs.readFileSync(path.join(ROOT, 'aws/write-path/guarded-sql-executor/index.mjs'), 'utf8');
+  const start = executor.indexOf('async function handleMortgageMigration(');
+  const body = executor.slice(start, executor.indexOf('\n}\n', start));
+  const catchBlock = body.slice(body.lastIndexOf('} catch (error) {'), body.lastIndexOf('} finally {'));
+  assert.equal((catchBlock.match(/sqlGuardErrorMessage\(error, 400\)/g) || []).length, 2);
   assert.doesNotMatch(catchBlock, /error\?\.message/);
 });

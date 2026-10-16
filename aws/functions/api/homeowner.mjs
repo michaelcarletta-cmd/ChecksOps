@@ -35,14 +35,19 @@ const publicDb = async (write = false) => {
   return client;
 };
 
-// Same origins as the production API CORS AllowOrigins (aws/production/api-template.yaml)
-// plus the staging SPA. A request-supplied origin outside this list is never reflected.
-export const HOMEOWNER_LINK_ORIGINS = Object.freeze([
-  'https://checksops.com',
-  'https://www.checksops.com',
-  'https://staging.checksops.com',
-]);
-const STAGING_LINK_ORIGIN = 'https://staging.checksops.com';
+// Per-environment allow-lists. Production matches the production API CORS AllowOrigins
+// (aws/production/api-template.yaml); every other environment accepts only the staging SPA.
+// A request-supplied origin outside the list is never reflected.
+export const HOMEOWNER_LINK_ORIGINS = Object.freeze({
+  production: Object.freeze(['https://checksops.com', 'https://www.checksops.com']),
+  nonProduction: Object.freeze(['https://staging.checksops.com']),
+});
+
+// Same environment test as email-branding.mjs isProductionChecksopsEnv (emailAssetOrigin).
+const isProductionChecksopsEnv = (env = process.env.CHECKSOPS_ENV) => {
+  const value = String(env || '').trim().toLowerCase();
+  return value === 'production' || value === 'production-prep';
+};
 
 const allowedLinkOrigin = (override) => {
   const raw = String(override || '').trim();
@@ -55,16 +60,19 @@ const allowedLinkOrigin = (override) => {
   }
   if (parsed.username || parsed.password) return null;
   const origin = parsed.origin.toLowerCase();
-  if (!HOMEOWNER_LINK_ORIGINS.includes(origin)) return null;
-  // Production mail never links to staging (same rule as emailAssetOrigin).
-  const env = String(process.env.CHECKSOPS_ENV || '').trim().toLowerCase();
-  if (origin === STAGING_LINK_ORIGIN && (env === 'production' || env === 'production-prep')) return null;
-  return origin;
+  const allowed = isProductionChecksopsEnv()
+    ? HOMEOWNER_LINK_ORIGINS.production
+    : HOMEOWNER_LINK_ORIGINS.nonProduction;
+  return allowed.includes(origin) ? origin : null;
 };
 
-/** Link origin: an allow-listed request origin, else the environment's canonical origin. */
+/**
+ * Link origin: an allow-listed request origin, else the environment's canonical
+ * origin (emailAssetOrigin: SIGN_BASE_URL, APP_PUBLIC_URL, VITE_APP_URL; production
+ * never staging).
+ */
 export const appOrigin = (override) => String(
-  allowedLinkOrigin(override) || process.env.VITE_APP_URL || emailAssetOrigin(),
+  allowedLinkOrigin(override) || emailAssetOrigin(),
 ).replace(/\/$/, '');
 
 const loadLedgerTokenStaffRow = async (client, token) => {

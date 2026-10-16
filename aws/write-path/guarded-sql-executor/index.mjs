@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CODES, fail, ok } from './lib/errors.mjs';
+import { CODES, fail, ok, sqlGuardErrorMessage } from './lib/errors.mjs';
 import { functionDefsMatchExactly, readFunctionDef } from './lib/function-def-lookup.mjs';
 import { evaluateSqlCollision, hashSqlDefinition } from './lib/sql-apply.mjs';
 import {
@@ -4237,6 +4237,7 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
   let client;
   let inTx = false;
   let commitSent = false;
+  let commitDone = false;
   const rollback = async () => {
     if (inTx) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -4355,8 +4356,16 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
     commitSent = true;
     await client.query('COMMIT');
     inTx = false;
-    consumeOneUse(event.one_use_id);
+    commitDone = true;
+    // The apply is committed; failing to record the one-use id must not read as unknown.
+    let warning = null;
+    try {
+      consumeOneUse(event.one_use_id);
+    } catch (error) {
+      warning = `${label} applied (COMMITTED); one_use_id could not be recorded: ${String(error?.message || error).slice(0, 200)}`;
+    }
     return ok({
+      ...(warning ? { warning } : {}),
       receipt: {
         workstream: event.workstream_id,
         commit: event.commit,
@@ -4371,7 +4380,7 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
       },
     });
   } catch (error) {
-    if (commitSent) {
+    if (commitSent && !commitDone) {
       // COMMIT was sent: it may have landed. No ROLLBACK is attempted or claimed.
       inTx = false;
       return fail(CODES.SQL_COLLISION, `${label} COMMIT outcome unknown; re-run read-live before anything else`, {
@@ -5179,6 +5188,7 @@ async function handleMortgageMigration({ key, event, authorization, identity, co
   let client;
   let inTx = false;
   let commitSent = false;
+  let commitDone = false;
   const rollback = async () => {
     if (inTx) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -5289,8 +5299,16 @@ async function handleMortgageMigration({ key, event, authorization, identity, co
     commitSent = true;
     await client.query('COMMIT');
     inTx = false;
-    consumeOneUse(event.one_use_id);
+    commitDone = true;
+    // The apply is committed; failing to record the one-use id must not read as unknown.
+    let warning = null;
+    try {
+      consumeOneUse(event.one_use_id);
+    } catch (error) {
+      warning = `${label} applied (COMMITTED); one_use_id could not be recorded: ${String(error?.message || error).slice(0, 200)}`;
+    }
     return ok({
+      ...(warning ? { warning } : {}),
       receipt: {
         workstream: event.workstream_id,
         commit: event.commit,
@@ -5304,16 +5322,16 @@ async function handleMortgageMigration({ key, event, authorization, identity, co
       },
     });
   } catch (error) {
-    if (commitSent) {
+    if (commitSent && !commitDone) {
       // COMMIT was sent: it may have landed. No ROLLBACK is attempted or claimed.
       inTx = false;
       return fail(CODES.SQL_COLLISION, `${label} COMMIT outcome unknown; re-run read-live before anything else`, {
         commit_outcome: 'unknown',
-        message: String(error?.message || error).slice(0, 400),
+        message: sqlGuardErrorMessage(error, 400),
       });
     }
     await rollback();
-    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+    return fail(CODES.UNRELATED_MUTATION, sqlGuardErrorMessage(error, 400));
   } finally {
     await rollback();
     if (client) {

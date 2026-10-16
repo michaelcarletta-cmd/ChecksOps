@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   appOrigin,
+  handleHomeownerLedgerUpload,
   runHomeownerLedgerSend,
   runSendFileToHomeowner,
   runSendPortalInvite,
@@ -81,17 +82,33 @@ test('appOrigin never reflects a non-ChecksOps origin', () => withEnv(STAGING_EN
   }
 }));
 
-test('appOrigin keeps an allow-listed origin and drops its path', () => withEnv(STAGING_ENV, () => {
+test('non-production accepts only the staging origin, without its path', () => withEnv(STAGING_ENV, () => {
   assert.equal(appOrigin('https://staging.checksops.com'), 'https://staging.checksops.com');
-  assert.equal(appOrigin('https://www.checksops.com/'), 'https://www.checksops.com');
-  assert.equal(appOrigin('https://checksops.com/some/path'), 'https://checksops.com');
+  assert.equal(appOrigin('https://staging.checksops.com/some/path'), 'https://staging.checksops.com');
+  assert.equal(appOrigin('https://checksops.com'), 'https://staging.checksops.com');
+  assert.equal(appOrigin('https://www.checksops.com/'), 'https://staging.checksops.com');
 }));
 
-test('production falls back to checksops.com and never links to staging', () => withEnv(PRODUCTION_ENV, () => {
+test('production accepts checksops.com and www, never staging, else falls back to checksops.com', () => withEnv(PRODUCTION_ENV, () => {
   assert.equal(appOrigin(EVIL), 'https://checksops.com');
   assert.equal(appOrigin('https://staging.checksops.com'), 'https://checksops.com');
   assert.equal(appOrigin('https://www.checksops.com'), 'https://www.checksops.com');
+  assert.equal(appOrigin('https://checksops.com/x'), 'https://checksops.com');
 }));
+
+test('production-prep uses the production list', () => withEnv({ ...PRODUCTION_ENV, CHECKSOPS_ENV: 'production-prep' }, () => {
+  assert.equal(appOrigin('https://www.checksops.com'), 'https://www.checksops.com');
+  assert.equal(appOrigin('https://staging.checksops.com'), 'https://checksops.com');
+}));
+
+test('the fallback is emailAssetOrigin: SIGN_BASE_URL wins as in the templates; production never staging', async () => {
+  await withEnv({ ...STAGING_ENV, SIGN_BASE_URL: 'https://staging.checksops.com', VITE_APP_URL: undefined }, () => {
+    assert.equal(appOrigin(undefined), 'https://staging.checksops.com');
+  });
+  await withEnv({ ...PRODUCTION_ENV, SIGN_BASE_URL: undefined, VITE_APP_URL: 'https://staging.checksops.com' }, () => {
+    assert.equal(appOrigin(EVIL), 'https://checksops.com');
+  });
+});
 
 test('the emailed and returned ledger link ignores a malicious origin', () => withEnv(PRODUCTION_ENV, async () => {
   const result = await runHomeownerLedgerSend({
@@ -130,4 +147,34 @@ test('the portal invite login link ignores a malicious appUrl', () => withEnv(ST
   });
   assert.doesNotMatch(lastMail().html + lastMail().text, /evil\.example/);
   assert.match(lastMail().text, /https:\/\/staging\.checksops\.com\/login/);
+}));
+
+test('the unauthenticated upload alert ignores a request-supplied origin', () => withEnv(PRODUCTION_ENV, async () => {
+  const STAFF = '77777777-7777-4777-8777-777777777777';
+  const alerts = [];
+  const db = {
+    async query(sql) {
+      const text = String(sql);
+      if (text.includes('aws_public_homeowner_ledger_by_token')) {
+        return { rows: [{ doc: { ok: true, token: { id: 't1', tenant_id: TENANT, claim_id: CLAIM } } }] };
+      }
+      if (text.includes('INSERT INTO public.homeowner_ledger_check_uploads')) {
+        return { rows: [{ id: 'u1', front_path: 'p', status: 'uploaded', created_at: 'now' }] };
+      }
+      if (text.includes('FROM public.homeowner_ledger_tokens')) {
+        return { rows: [{ id: 't1', tenant_id: TENANT, claim_id: CLAIM, sent_by_user_id: STAFF, homeowner_name: 'Ada', homeowner_email: 'home@example.com' }] };
+      }
+      if (text.includes('FROM public.profiles')) return { rows: [{ email: 'staff@checksops.com', full_name: 'Pat' }] };
+      return { rows: [] };
+    },
+  };
+  const result = await handleHomeownerLedgerUpload(
+    { body: JSON.stringify({ token: 'ledger-token-1', front_base64: 'A'.repeat(200), origin: EVIL }) },
+    { client: db, putObject: async () => ({}), sendViaSesOrSink: async (msg) => { alerts.push(msg); return { ok: true }; } },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.notified, true);
+  assert.equal(alerts.length, 1);
+  assert.doesNotMatch(alerts[0].html + alerts[0].text, /evil\.example/);
+  assert.match(alerts[0].text, /https:\/\/checksops\.com\/checks/);
 }));

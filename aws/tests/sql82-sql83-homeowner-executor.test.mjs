@@ -566,6 +566,23 @@ test('a COMMIT that throws is reported as outcome unknown; no ROLLBACK is sent o
   }
 });
 
+test('a one_use_id that cannot be recorded after COMMIT reports applied with a warning, not outcome unknown', async () => {
+  for (const key of ['sql82', 'sql83']) {
+    const probe = fakeDb(key);
+    const live = (await handlerFor(probe.connect)(inspectEvent(key))).details.receipt.live_definition_sha256;
+    const recorded = { ...PINS[key], expected_live_definition_sha256: live };
+    const db = fakeDb(key);
+    const handler = handlerFor(db.connect, { [pinKey[key]]: recorded });
+    process.env.SQL_EXECUTOR_CONSUMED_PATH = path.join(os.tmpdir(), `missing-${process.pid}-${Date.now()}`, 'consumed.json');
+    const result = await handler(homeownerEvent(key, { pin: recorded }));
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.details.receipt.result, 'applied');
+    assert.match(result.details.warning, /applied \(COMMITTED\); one_use_id could not be recorded/);
+    assert.ok(db.seen.includes('COMMIT'));
+    assert.equal(db.seen.at(-1), 'COMMIT');
+  }
+});
+
 // --- PostgreSQL 16 ---------------------------------------------------------------
 
 const OWNER = 'sql8283_owner';

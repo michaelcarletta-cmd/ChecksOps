@@ -618,24 +618,41 @@ function runTool(ctx, step, args, { env, timeout }) {
   return { status: res.status, json, stderr_tail: String(res.stderr || '').slice(-1500), error: res.error ? String(res.error.message || res.error) : null };
 }
 
-const childFailure = (step, out) => fail(out.json?.code || CODES.DEPLOYMENT_GUARD_REQUIRED, `${step} did not succeed`, {
-  step,
-  exit_status: out.status,
-  result: out.json,
-  ...(out.json ? {} : { stderr_tail: out.stderr_tail }),
-  ...(out.error ? { spawn_error: out.error } : {}),
-});
-
-// Recorded inspect fields are summaries: billing_duplicates keeps only its counts, never check_ids.
-const INSPECT_RECORD_FIELDS = Object.freeze({ billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events']) });
+// Recorded inspect fields are summaries: billing_duplicates keeps its counts (and the
+// reason when unreadable), never check_ids.
+const INSPECT_RECORD_FIELDS = Object.freeze({ billing_duplicates: Object.freeze(['readable', 'groups', 'extra_events', 'reason']) });
 
 const pickFields = (value, fields) => (value && typeof value === 'object' && !Array.isArray(value)
   ? Object.fromEntries(fields.filter((field) => field in value).map((field) => [field, value[field]]))
   : value);
 
 export const pickInspect = (details = {}) => Object.fromEntries(INSPECT_RECORD_KEYS
-  .filter((key) => key in details)
+  .filter((key) => key in (details || {}))
   .map((key) => [key, INSPECT_RECORD_FIELDS[key] ? pickFields(details[key], INSPECT_RECORD_FIELDS[key]) : details[key]]));
+
+/** An --inspect child's JSON as recorded: its status, plus only the picked inspect fields. */
+export const inspectResultRecord = (json) => {
+  if (!json || typeof json !== 'object') return json ?? null;
+  const details = json.details && typeof json.details === 'object' ? json.details : {};
+  return {
+    ok: json.ok,
+    code: json.code ?? null,
+    message: json.message ?? null,
+    details: {
+      ...pickInspect(details),
+      ...(details.state_error ? { state_error: details.state_error } : {}),
+      ...(details.source_error ? { source_error: details.source_error } : {}),
+    },
+  };
+};
+
+const childFailure = (step, out, { inspect = false } = {}) => fail(out.json?.code || CODES.DEPLOYMENT_GUARD_REQUIRED, `${step} did not succeed`, {
+  step,
+  exit_status: out.status,
+  result: inspect ? inspectResultRecord(out.json) : out.json,
+  ...(out.json ? {} : { stderr_tail: out.stderr_tail }),
+  ...(out.error ? { spawn_error: out.error } : {}),
+});
 
 /** Step 2 checks: everything the procedure says to proceed on. */
 export function preApplyInspectFailures(details, pin, tool) {
@@ -867,7 +884,7 @@ async function runSteps(opts, ctxIn, steps, summary) {
 
   // 2. Read-only inspect.
   const inspect = runTool(ctx, 'inspect', [tool.script, ...tool.args, '--inspect'], { env: ctx.baseEnv, timeout: TIMEOUT_MS.inspect });
-  if (inspect.status !== 0 || inspect.json?.ok !== true) return stop('inspect', childFailure('inspect', inspect));
+  if (inspect.status !== 0 || inspect.json?.ok !== true) return stop('inspect', childFailure('inspect', inspect, { inspect: true }));
   const preFailures = preApplyInspectFailures(inspect.json.details, pin, tool);
   summary.pre_apply_inspect = pickInspect(inspect.json.details);
   if (preFailures.length) {
@@ -951,7 +968,7 @@ async function runSteps(opts, ctxIn, steps, summary) {
     // 8. Post-apply inspect: also after a failed apply (a COMMIT outcome can be unknown).
     const post = runTool(ctx, 'post-apply-inspect', [tool.script, ...tool.args, '--inspect'], { env: ctx.baseEnv, timeout: TIMEOUT_MS.inspect });
     const postFailures = post.status === 0 && post.json?.ok === true ? postApplyInspectFailures(post.json.details, pin, tool) : ['inspect_failed'];
-    summary.post_apply_inspect = post.json?.ok === true ? pickInspect(post.json.details) : { error: post.json || post.stderr_tail };
+    summary.post_apply_inspect = post.json?.ok === true ? pickInspect(post.json.details) : { error: post.json ? inspectResultRecord(post.json) : post.stderr_tail };
 
     if (!applyOk) {
       steps.push({ step: 'apply', ok: false, code: apply.json?.code || null });
@@ -963,7 +980,7 @@ async function runSteps(opts, ctxIn, steps, summary) {
     steps.push({ step: 'apply', ok: true, result: 'applied' });
     summary.apply_result = applyRecord;
     if (postFailures.length) {
-      return stop('post-apply-inspect', fail(CODES.DEPLOYMENT_COLLISION, 'post-apply inspect does not show the intended state', { failed: postFailures, result: post.json || post.stderr_tail }));
+      return stop('post-apply-inspect', fail(CODES.DEPLOYMENT_COLLISION, 'post-apply inspect does not show the intended state', { failed: postFailures, result: post.json ? inspectResultRecord(post.json) : post.stderr_tail }));
     }
     steps.push({ step: 'post-apply-inspect', ok: true });
 

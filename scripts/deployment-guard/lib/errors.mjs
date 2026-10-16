@@ -65,3 +65,20 @@ export function ok(details = {}) {
 export function errorEntry(code, message, details = {}) {
   return { code, message, details };
 }
+
+/**
+ * SQL 84 and SQL 86 guard RAISE texts name check ids and role names. Recorded
+ * results (production apply, staging executor) carry these fixed messages
+ * instead; the operator's --inspect / read-live is where to look for details.
+ */
+export const FIXED_SQL_GUARD_MESSAGES = Object.freeze([
+  Object.freeze(['duplicate_mortgage_ops_billing_events', 'duplicate_mortgage_ops_billing_events: resolve duplicate Mortgage Ops billing events before SQL 84; run --inspect for details']),
+  Object.freeze(['earn_owner_unsafe', 'earn_owner_unsafe: the earn function and trigger owners are not safe for SQL 86; run --inspect for details']),
+]);
+
+/** The fixed message for a SQL 84/86 guard error, else the message truncated to `limit`. */
+export function sqlGuardErrorMessage(error, limit = 300) {
+  const message = String(error?.message || error);
+  const fixed = FIXED_SQL_GUARD_MESSAGES.find(([prefix]) => message.startsWith(prefix));
+  return fixed ? fixed[1] : message.slice(0, limit);
+}
