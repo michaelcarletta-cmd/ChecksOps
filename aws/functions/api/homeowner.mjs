@@ -35,8 +35,44 @@ const publicDb = async (write = false) => {
   return client;
 };
 
-const appOrigin = (override) => String(
-  override || process.env.VITE_APP_URL || emailAssetOrigin(),
+// Per-environment allow-lists. Production matches the production API CORS AllowOrigins
+// (aws/production/api-template.yaml); every other environment accepts only the staging SPA.
+// A request-supplied origin outside the list is never reflected.
+export const HOMEOWNER_LINK_ORIGINS = Object.freeze({
+  production: Object.freeze(['https://checksops.com', 'https://www.checksops.com']),
+  nonProduction: Object.freeze(['https://staging.checksops.com']),
+});
+
+// Same environment test as email-branding.mjs isProductionChecksopsEnv (emailAssetOrigin).
+const isProductionChecksopsEnv = (env = process.env.CHECKSOPS_ENV) => {
+  const value = String(env || '').trim().toLowerCase();
+  return value === 'production' || value === 'production-prep';
+};
+
+const allowedLinkOrigin = (override) => {
+  const raw = String(override || '').trim();
+  if (!raw) return null;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.username || parsed.password) return null;
+  const origin = parsed.origin.toLowerCase();
+  const allowed = isProductionChecksopsEnv()
+    ? HOMEOWNER_LINK_ORIGINS.production
+    : HOMEOWNER_LINK_ORIGINS.nonProduction;
+  return allowed.includes(origin) ? origin : null;
+};
+
+/**
+ * Link origin: an allow-listed request origin, else the environment's canonical
+ * origin (emailAssetOrigin: SIGN_BASE_URL, APP_PUBLIC_URL, VITE_APP_URL; production
+ * never staging).
+ */
+export const appOrigin = (override) => String(
+  allowedLinkOrigin(override) || emailAssetOrigin(),
 ).replace(/\/$/, '');
 
 const loadLedgerTokenStaffRow = async (client, token) => {

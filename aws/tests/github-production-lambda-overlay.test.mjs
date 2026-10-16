@@ -414,3 +414,28 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
 });
+
+test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowner.mjs', async () => {
+  const MORTGAGE = 'mortgage-agent-compensation.mjs';
+  const SQL85 = 'aws/workflows/sql/85_mortgage_compensation_adjust.sql';
+  assert.equal(PLAN.members[MORTGAGE].sql_before, SQL85);
+  assert.notEqual(PLAN.sql_prerequisites[SQL85]?.verified_live, true, 'SQL 85 is not yet recorded live in production');
+  // Held members sit after every member they must not block; providers.mjs stays last.
+  assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('app-services.mjs'));
+  assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('homeowner.mjs'));
+  assert.equal(PLAN.order.at(-1), 'providers.mjs');
+
+  // The mortgage member is still on its live (pre-SQL 85) bytes: homeowner.mjs applies anyway.
+  const { deps, calls } = applyDeps('homeowner.mjs', { pending: [MORTGAGE] });
+  const live = await deps.inspectLive();
+  assert.equal(live.memberHashes[MORTGAGE], PLAN.members[MORTGAGE].expected_live_sha256);
+  const result = await run(applyEnv('homeowner.mjs'), deps);
+  assert.equal(result.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: ['homeowner.mjs'], add: [] });
+
+  // The mortgage member itself is refused until SQL 85 is recorded verified live.
+  await assert.rejects(
+    run(applyEnv(MORTGAGE), applyDeps(MORTGAGE).deps),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL85,
+  );
+});

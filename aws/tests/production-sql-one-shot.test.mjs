@@ -1092,3 +1092,43 @@ test('an exception in any step still returns one failure summary', async () => {
   assert.equal(printed.code, ONE_SHOT_EXCEPTION);
   assert.equal(printed.details.stopped_at, 'source (exception)');
 });
+
+// --- recorded inspect results carry no check ids ---------------------------------
+
+const DUP_CHECK_ID = '0b8f6f1e-2f0c-4c7e-9a51-6a3f1d2e4b5c';
+const DUPLICATES = { readable: true, groups: 1, extra_events: 1, check_ids: [DUP_CHECK_ID] };
+
+test('a failed pre-apply inspect records only picked fields, never check_ids', async () => {
+  const pin = executePin('sql80');
+  const { result } = await oneShot({
+    responses: { inspect: () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'SQL_COLLISION', message: 'x', details: inspectDetails('sql80', pin, { billing_duplicates: DUPLICATES }) }) }) },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.details.stopped_at, 'inspect');
+  const text = JSON.stringify(result);
+  assert.doesNotMatch(text, new RegExp(`${DUP_CHECK_ID}|check_ids|not copied`));
+  assert.match(text, /"groups":1/);
+});
+
+test('a post-apply inspect that does not show the intended state records only picked fields', async () => {
+  const pin = executePin('sql80');
+  const { result } = await oneShot({
+    responses: { 'post-apply-inspect': () => ({ status: 0, stdout: json({ ok: true, details: inspectDetails('sql80', pin, { billing_duplicates: DUPLICATES }) }), stderr: '' }) },
+  });
+  assert.equal(result.details.stopped_at, 'post-apply-inspect');
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(`${DUP_CHECK_ID}|check_ids|not copied`));
+});
+
+test('a failing post-apply inspect after a failed apply records only picked fields', async () => {
+  const pin = executePin('sql80');
+  const { result } = await oneShot({
+    responses: {
+      apply: () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'SQL_COLLISION', message: 'COMMIT outcome is unknown', details: {} }) }),
+      'post-apply-inspect': () => ({ status: 1, stdout: '', stderr: json({ ok: false, code: 'SQL_COLLISION', message: 'y', details: inspectDetails('sql80', pin, { billing_duplicates: DUPLICATES }) }) }),
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.details.post_apply_inspect.error.ok, false);
+  assert.deepEqual(result.details.post_apply_inspect.error.details.billing_duplicates, { readable: true, groups: 1, extra_events: 1 });
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(`${DUP_CHECK_ID}|check_ids|not copied`));
+});

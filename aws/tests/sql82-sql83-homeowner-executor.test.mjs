@@ -535,6 +535,54 @@ test('apply with a recorded pre-state replaces once; drift, replay, re-apply and
   }
 });
 
+test('a COMMIT that throws is reported as outcome unknown; no ROLLBACK is sent or claimed', async () => {
+  for (const key of ['sql82', 'sql83']) {
+    const probe = fakeDb(key);
+    const live = (await handlerFor(probe.connect)(inspectEvent(key))).details.receipt.live_definition_sha256;
+    const recorded = { ...PINS[key], expected_live_definition_sha256: live };
+    for (const lands of [true, false]) {
+      const db = fakeDb(key);
+      const connect = async () => {
+        const client = await db.connect();
+        const query = client.query;
+        client.query = async (sql, params) => {
+          if (String(sql) === 'COMMIT') {
+            if (lands) await query(sql, params);
+            else db.seen.push('COMMIT');
+            throw new Error('Connection terminated unexpectedly');
+          }
+          return query(sql, params);
+        };
+        return client;
+      };
+      const result = await handlerFor(connect, { [pinKey[key]]: recorded })(homeownerEvent(key, { pin: recorded }));
+      assert.equal(result.ok, false);
+      assert.equal(result.code, CODES.SQL_COLLISION, `${key} lands=${lands}: ${JSON.stringify(result)}`);
+      assert.match(result.message, /COMMIT outcome unknown; re-run read-live/);
+      assert.doesNotMatch(result.message, /roll/i);
+      assert.equal(result.details.commit_outcome, 'unknown');
+      assert.equal(db.seen.at(-1), 'COMMIT', `${key} lands=${lands}: no ROLLBACK after COMMIT`);
+    }
+  }
+});
+
+test('a one_use_id that cannot be recorded after COMMIT reports applied with a warning, not outcome unknown', async () => {
+  for (const key of ['sql82', 'sql83']) {
+    const probe = fakeDb(key);
+    const live = (await handlerFor(probe.connect)(inspectEvent(key))).details.receipt.live_definition_sha256;
+    const recorded = { ...PINS[key], expected_live_definition_sha256: live };
+    const db = fakeDb(key);
+    const handler = handlerFor(db.connect, { [pinKey[key]]: recorded });
+    process.env.SQL_EXECUTOR_CONSUMED_PATH = path.join(os.tmpdir(), `missing-${process.pid}-${Date.now()}`, 'consumed.json');
+    const result = await handler(homeownerEvent(key, { pin: recorded }));
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.details.receipt.result, 'applied');
+    assert.match(result.details.warning, /applied \(COMMITTED\); one_use_id could not be recorded/);
+    assert.ok(db.seen.includes('COMMIT'));
+    assert.equal(db.seen.at(-1), 'COMMIT');
+  }
+});
+
 // --- PostgreSQL 16 ---------------------------------------------------------------
 
 const OWNER = 'sql8283_owner';

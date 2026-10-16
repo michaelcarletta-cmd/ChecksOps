@@ -33,7 +33,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { CODES, fail, ok } from './errors.mjs';
+import { CODES, fail, ok, sqlGuardErrorMessage } from './errors.mjs';
 import { evaluateProductionGate } from './production.mjs';
 import { hashSqlDefinition } from './sql-apply.mjs';
 import {
@@ -642,11 +642,11 @@ export async function executeMortgageProductionApply(key, input = {}, ctx = {}) 
       // COMMIT may have landed before the error; a re-run is refused once the after-state is live.
       inTx = false;
       return fail(CODES.SQL_COLLISION, `${label} production COMMIT outcome is unknown; re-run --inspect before anything else`, {
-        message: String(error?.message || error).slice(0, 300),
+        message: applyErrorMessage(error),
       });
     }
     return rollback(fail(CODES.SQL_COLLISION, `${label} production apply failed and was rolled back`, {
-      message: String(error?.message || error).slice(0, 300),
+      message: applyErrorMessage(error),
     }));
   } finally {
     await client.end().catch(() => {});
@@ -660,5 +660,8 @@ export async function executeMortgageProductionApply(key, input = {}, ctx = {}) 
     }
   }
 }
+
+/** Fixed messages for SQL 84/86 guard errors (shared with the staging executor). */
+export const applyErrorMessage = (error) => sqlGuardErrorMessage(error, 300);
 
 export { createProductionDatabaseConnect };
