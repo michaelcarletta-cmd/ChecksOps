@@ -2,21 +2,13 @@ import { useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
+import {
+  combineAnnouncementSources,
+  fetchStatusNotices,
+  type PlatformAnnouncement,
+} from "@/lib/platformStatusNotices";
 
-export interface PlatformAnnouncement {
-  id: string;
-  title: string;
-  message: string;
-  severity: "info" | "maintenance" | "critical";
-  scheduled_start: string | null;
-  scheduled_end: string | null;
-  refresh_instructions: string | null;
-  is_active: boolean;
-  starts_at: string;
-  ends_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type { PlatformAnnouncement };
 
 /** Announcements currently inside their display window. */
 export function useActivePlatformAnnouncements() {
@@ -32,16 +24,19 @@ export function useActivePlatformAnnouncements() {
     refetchOnReconnect: true,
     queryFn: async (): Promise<PlatformAnnouncement[]> => {
       const nowIso = new Date().toISOString();
-      const { data, error } = await supabase
-        .from("platform_announcements" as any)
-        .select("*")
-        .eq("is_active", true)
-        .lte("starts_at", nowIso)
-        .order("created_at", { ascending: false });
-      if (error) return [];
-      return ((data ?? []) as unknown as PlatformAnnouncement[]).filter(
-        (a) => !a.ends_at || new Date(a.ends_at) > new Date()
-      );
+      // The static /status.json notice survives API outages and is readable signed out.
+      const [db, staticNotices] = await Promise.all([
+        Promise.resolve(
+          supabase
+            .from("platform_announcements" as any)
+            .select("*")
+            .eq("is_active", true)
+            .lte("starts_at", nowIso)
+            .order("created_at", { ascending: false }),
+        ).catch((error: unknown) => ({ data: null, error })),
+        fetchStatusNotices(),
+      ]);
+      return combineAnnouncementSources(db, staticNotices);
     },
   });
 

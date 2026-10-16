@@ -1,0 +1,225 @@
+name: SPA status notice
+
+# Owner-run: posts or clears the static /status.json notice that every visitor
+# (signed in or not) reads, even while the API is down. It writes exactly one
+# object, status.json, and invalidates exactly /status.json. It never builds,
+# syncs or deletes anything, so it cannot touch the deployed SPA.
+# See ops/status-notice.md.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target site"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      action:
+        description: "post a notice, or clear (writes an empty notice list)"
+        required: true
+        default: post
+        type: choice
+        options:
+          - post
+          - clear
+      title:
+        description: "post: title, up to 120 characters"
+        required: false
+        default: ""
+        type: string
+      message:
+        description: "post: message, up to 2000 characters (plain text)"
+        required: false
+        default: ""
+        type: string
+      severity:
+        description: "post: severity (critical cannot be dismissed)"
+        required: false
+        default: maintenance
+        type: choice
+        options:
+          - info
+          - maintenance
+          - critical
+      starts_at:
+        description: "Optional ISO 8601 start with offset, e.g. 2026-10-20T02:00:00Z"
+        required: false
+        default: ""
+        type: string
+      ends_at:
+        description: "Optional ISO 8601 end with offset; must be after starts_at"
+        required: false
+        default: ""
+        type: string
+      refresh_instructions:
+        description: "Optional refresh instructions, up to 500 characters"
+        required: false
+        default: ""
+        type: string
+      confirmation:
+        description: "Production only: exactly POST STATUS NOTICE TO PRODUCTION"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: spa-status-notice-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  status-notice:
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Refuse non-main or unconfirmed production
+        shell: bash
+        # Inputs reach the script only through env, never as interpolated shell source.
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "SPA status notice only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          case "$INPUT_ENVIRONMENT" in
+            staging|production) ;;
+            *) echo "environment must be staging or production"; exit 2 ;;
+          esac
+          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+            test "$INPUT_CONFIRMATION" = "POST STATUS NOTICE TO PRODUCTION" || { echo "confirmation must be exactly: POST STATUS NOTICE TO PRODUCTION"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Run status notice tests
+        run: node --test aws/tests/status-notice.test.mjs
+
+      # Built before any AWS credentials exist.
+      - name: Build and validate status.json
+        shell: bash
+        env:
+          STATUS_ENVIRONMENT: ${{ inputs.environment }}
+          STATUS_ACTION: ${{ inputs.action }}
+          STATUS_TITLE: ${{ inputs.title }}
+          STATUS_MESSAGE: ${{ inputs.message }}
+          STATUS_SEVERITY: ${{ inputs.severity }}
+          STATUS_STARTS_AT: ${{ inputs.starts_at }}
+          STATUS_ENDS_AT: ${{ inputs.ends_at }}
+          STATUS_REFRESH_INSTRUCTIONS: ${{ inputs.refresh_instructions }}
+          STATUS_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          mkdir -p .status-notice
+          node scripts/status-notice.mjs --out .status-notice/status.json
+          echo "STATUS_SHA256=$(sha256sum .status-notice/status.json | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Validate OIDC inputs
+        shell: bash
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          STAGING_SPA_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [ "$INPUT_ENVIRONMENT" = "staging" ]; then
+            test "$STAGING_SPA_DEPLOY_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingSpaUpload" || { echo "CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN does not match the dedicated staging SPA upload role"; exit 2; }
+          fi
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "GitHub did not provide an OIDC request token"; exit 2; }
+
+      # Each session policy allows only s3:PutObject on <bucket>/status.json and one
+      # CloudFront invalidation on that site's distribution. Nothing else can be read, listed or removed.
+      - name: Configure staging status notice session
+        if: ${{ inputs.environment == 'staging' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_SPA_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-status-notice-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:PutObject"],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b/status.json"},{"Effect":"Allow","Action":["cloudfront:CreateInvalidation"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1"}]}
+
+      - name: Configure production status notice session
+        if: ${{ inputs.environment == 'production' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy
+          aws-region: us-east-1
+          role-session-name: checksops-production-status-notice-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:PutObject"],"Resource":"arn:aws:s3:::checksops-production-frontend-806168576068/status.json"},{"Effect":"Allow","Action":["cloudfront:CreateInvalidation"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"}]}
+
+      - name: Resolve target and verify AWS identity
+        shell: bash
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+            EXPECTED="arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-production-status-notice-$GITHUB_RUN_ID"
+            {
+              echo "STATUS_BUCKET=checksops-production-frontend-806168576068"
+              echo "STATUS_DISTRIBUTION=E1B0ZWWO5559U5"
+              echo "STATUS_SITE=https://checksops.com"
+            } >> "$GITHUB_ENV"
+          else
+            EXPECTED="arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingSpaUpload/checksops-staging-status-notice-$GITHUB_RUN_ID"
+            {
+              echo "STATUS_BUCKET=checksops-staging-frontend-c48b"
+              echo "STATUS_DISTRIBUTION=E1CG52WRQZI7X1"
+              echo "STATUS_SITE=https://staging.checksops.com"
+            } >> "$GITHUB_ENV"
+          fi
+          test "$ARN" = "$EXPECTED" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Upload status.json only
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 cp .status-notice/status.json "s3://$STATUS_BUCKET/status.json" \
+            --cache-control "max-age=30" \
+            --content-type application/json
+
+      - name: Invalidate /status.json only
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudfront create-invalidation \
+            --distribution-id "$STATUS_DISTRIBUTION" \
+            --paths /status.json \
+            --query Invalidation.Id --output text
+
+      - name: Verify the public site serves the new status.json
+        shell: bash
+        env:
+          INPUT_ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          served=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            served="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' "$STATUS_SITE/status.json?verify=$GITHUB_RUN_ID-$attempt" | sha256sum | cut -d' ' -f1 || true)"
+            [ "$served" = "$STATUS_SHA256" ] && break
+            sleep 15
+          done
+          test "$served" = "$STATUS_SHA256" || { echo "$STATUS_SITE/status.json does not yet serve the new file"; exit 2; }
+          echo "- \`$INPUT_ACTION\` status notice live at $STATUS_SITE/status.json (sha256 \`$STATUS_SHA256\`)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: ${{ always() }}
+        run: rm -rf .status-notice

@@ -17,6 +17,26 @@ import { useAllPlatformAnnouncements, type PlatformAnnouncement } from "@/hooks/
 const DEFAULT_REFRESH =
   "When the update is complete, refresh your browser (Ctrl+Shift+R on Windows, Cmd+Shift+R on Mac) or click Refresh in the banner to load the newest version.";
 
+type AnnouncementAction =
+  | { action: "create"; [key: string]: unknown }
+  | { action: "update"; id: string; [key: string]: unknown }
+  | { action: "delete"; id: string };
+
+/** Owner-only writes go through the platform-announcements function (RLS still applies). */
+async function invokeAnnouncements(body: AnnouncementAction): Promise<string | null> {
+  const { data, error } = await supabase.functions.invoke("platform-announcements", { body });
+  if (error) {
+    const ctx = (error as { context?: { body?: { error?: string; field?: string } } }).context?.body;
+    const code = ctx?.error || (data as { error?: string } | null)?.error;
+    const field = ctx?.field || (data as { field?: string } | null)?.field;
+    return code ? `${code}${field ? ` (${field})` : ""}` : error.message;
+  }
+  if (data && (data as { ok?: boolean }).ok === false) {
+    return String((data as { error?: string }).error || "request_failed");
+  }
+  return null;
+}
+
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -47,8 +67,8 @@ export function PlatformAnnouncementsManager() {
       return;
     }
     setSaving(true);
-    const { data: userData } = await supabase.auth.getUser();
-    const { error } = await supabase.from("platform_announcements" as any).insert({
+    const error = await invokeAnnouncements({
+      action: "create",
       title: title.trim(),
       message: message.trim(),
       severity,
@@ -56,12 +76,11 @@ export function PlatformAnnouncementsManager() {
       scheduled_end: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
       ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       refresh_instructions: refreshInstructions.trim() || null,
-      created_by: userData.user?.id ?? null,
       is_active: true,
-    } as any);
+    });
     setSaving(false);
     if (error) {
-      toast({ title: "Could not publish", description: error.message, variant: "destructive" });
+      toast({ title: "Could not publish", description: error, variant: "destructive" });
       return;
     }
     toast({ title: "Announcement published", description: "Every tenant will see it on their next page load." });
@@ -69,17 +88,14 @@ export function PlatformAnnouncementsManager() {
   };
 
   const toggleActive = async (a: PlatformAnnouncement, value: boolean) => {
-    const { error } = await supabase
-      .from("platform_announcements" as any)
-      .update({ is_active: value } as any)
-      .eq("id", a.id);
-    if (error) toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    const error = await invokeAnnouncements({ action: "update", id: a.id, is_active: value });
+    if (error) toast({ title: "Update failed", description: error, variant: "destructive" });
     refresh();
   };
 
   const remove = async (a: PlatformAnnouncement) => {
-    const { error } = await supabase.from("platform_announcements" as any).delete().eq("id", a.id);
-    if (error) toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    const error = await invokeAnnouncements({ action: "delete", id: a.id });
+    if (error) toast({ title: "Delete failed", description: error, variant: "destructive" });
     refresh();
   };
 
