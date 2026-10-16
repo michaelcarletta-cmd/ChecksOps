@@ -39,7 +39,7 @@ import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
-  Download, FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
+  FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
   Sparkles, MessageSquare, ArrowLeft, ShieldAlert,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -59,7 +59,14 @@ import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
-import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
+import {
+  assertCleanBackOriginalPath,
+  isGeneratedBackArtifactPath,
+  recoverCleanBackOriginalPath,
+  resolveCleanBackOriginalPath,
+  type CleanBackOriginalAudit,
+  type CleanBackOriginalRecord,
+} from "@/lib/checkImageInvariants";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
@@ -3092,88 +3099,72 @@ function CheckDetailPanel({
     isFetching: endorsementAdjusterImageUrlFetching,
     refetch: refetchEndorsementAdjusterImageUrl,
   } = useQuery({
-    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path, (check as any)?.back_image_original_path],
+    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path, (check as any)?.back_image_original_path, (check as any)?.back_image_deposit_path],
     // Prefetch on mount so opening the adjuster is instant — resolving the
     // original back-image path can cost 1-2 round trips (audit lookup + signed
     // URL) plus a full image download to read dimensions.
-    enabled: !!check?.id && (!!check?.back_image_path || !!(check as any)?.back_image_original_path) && !isSharedView,
+    enabled: !!check?.id && (
+      !!check?.back_image_path
+      || !!(check as any)?.back_image_original_path
+      || !!(check as any)?.back_image_deposit_path
+    ) && !isSharedView,
     staleTime: 5 * 60 * 1000,
     retry: 1,
     queryFn: async () => {
-      // Prefer the explicit pristine-original pointer written by the adjuster
-      // on approve. This is the most reliable source and survives any future
-      // renames of the composited deposit artifact.
-      const looksComposited = (p: string | null) =>
-        !!p && (
-          /_endorsed(?:_\d+)?\.[^.]+$/i.test(p) ||
-          /endorsed_deposit_[^/]+\.[^.]+$/i.test(p) ||
-          /\.svg(\?|$)/i.test(p)
-        );
+      const record: CleanBackOriginalRecord = {
+        back_image_original_path: ((check as any)?.back_image_original_path as string | null) ?? null,
+        back_image_path: check!.back_image_path ?? null,
+        back_image_deposit_path: ((check as any)?.back_image_deposit_path as string | null) ?? null,
+        endorsement_render_meta: (check as any)?.endorsement_render_meta ?? null,
+      };
 
-      const currentBackPath = toStorageObjectPath(
-        check!.back_image_path ?? ((check as any)?.back_image_original_path as string | null) ?? null,
-      );
-      const explicitOriginalRaw = toStorageObjectPath(
-        ((check as any)?.back_image_original_path as string | null) ?? null,
-      );
+      const recovered = await resolveCleanBackOriginalPath({
+        record,
+        normalizePath: (value) => toStorageObjectPath(value),
+        probeCleanStemPaths: async (candidates) => {
+          const found: string[] = [];
+          for (const candidate of candidates) {
+            if (!candidate || isGeneratedBackArtifactPath(candidate)) continue;
+            const { data } = await supabase.storage
+              .from("claim-files")
+              .createSignedUrl(candidate, 3600);
+            if (data?.signedUrl) found.push(candidate);
+          }
+          return found;
+        },
+        loadAudits: async () => {
+          const { data } = await supabase
+            .from("check_audit_log")
+            .select("event_data")
+            .eq("check_id", check!.id)
+            .order("created_at", { ascending: false })
+            .limit(25);
+          return (data ?? []).map((row: { event_data?: unknown }) => {
+            const raw = row?.event_data;
+            const eventData = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+            return {
+              original_back_image_path: eventData.original_back_image_path as string | undefined,
+              original_back_path: eventData.original_back_path as string | undefined,
+              endorsed_back_image_path: eventData.endorsed_back_image_path as string | undefined,
+              composited_path: eventData.composited_path as string | undefined,
+              composited_back_path: eventData.composited_back_path as string | undefined,
+            } satisfies CleanBackOriginalAudit;
+          });
+        },
+        loadSiblingNames: async (directory) => {
+          const { data, error } = await supabase.storage
+            .from("claim-files")
+            .list(directory, { limit: 100 });
+          if (error) return [];
+          return (data ?? []).map((entry: { name?: string | null; key?: string | null; path?: string | null }) => {
+            const raw = String(entry?.name ?? entry?.key ?? entry?.path ?? "").trim();
+            if (!raw) return "";
+            return raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw;
+          }).filter(Boolean);
+        },
+      });
 
-      // Priority: use explicit original path if it's not a composite.
-      // Do not attempt to "cache bust" a presigned URL by mutating its query
-      // params; doing so breaks S3 signatures. Reuploads use new object paths,
-      // so queryKey changes are sufficient to invalidate caches.
-      const explicitOriginal =
-        explicitOriginalRaw && !looksComposited(explicitOriginalRaw)
-          ? explicitOriginalRaw
-          : null;
-
-      if (explicitOriginal) {
-        const { data } = await supabase.storage
-          .from("claim-files")
-          .createSignedUrl(explicitOriginal, 3600);
-        if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
-      }
-
-
-      const currentPath = toStorageObjectPath(
-        check!.back_image_path ?? ((check as any)?.back_image_original_path as string | null) ?? null,
-      );
-      if (!currentPath) return null;
-
-      // Detect any known "already-composited" back artifact so we don't feed
-      // the composite back into the editor (which stacks endorsements).
-      const isComposite =
-        /_endorsed(?:_\d+)?\.[^.]+$/i.test(currentPath) ||
-        /endorsed_deposit_[^/]+\.[^.]+$/i.test(currentPath) ||
-        /\.svg(\?|$)/i.test(currentPath);
-
-      let sourcePath = currentPath;
-      if (isComposite) {
-        const { data: compositeAudits } = await supabase
-          .from("check_audit_log")
-          .select("event_data")
-          .eq("check_id", check!.id)
-          .eq("event_type", "endorsement_signatures_composited")
-          .order("created_at", { ascending: false })
-          .limit(25);
-
-        const matchingAudit = (compositeAudits ?? []).find((audit: any) => {
-          const eventData = audit?.event_data ?? {};
-          return eventData.endorsed_back_image_path === currentPath ||
-            eventData.composited_path === currentPath ||
-            eventData.composited_back_path === currentPath;
-        });
-
-        const auditData = (matchingAudit?.event_data ?? compositeAudits?.[0]?.event_data ?? null) as {
-          original_back_image_path?: string;
-          original_back_path?: string;
-        } | null;
-
-        sourcePath =
-          toStorageObjectPath(auditData?.original_back_image_path) ??
-          toStorageObjectPath(auditData?.original_back_path) ??
-          currentPath;
-      }
-
+      const sourcePath = assertCleanBackOriginalPath(recovered.path);
       const { data } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
@@ -4525,7 +4516,7 @@ function CheckDetailPanel({
                       if (!open) requestCloseEndorsementAdjuster();
                     }}
                   >
-                    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="max-w-7xl w-[min(96vw,1680px)] max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Adjust Received Endorsement</DialogTitle>
                       </DialogHeader>
@@ -4545,10 +4536,18 @@ function CheckDetailPanel({
                           }
                           onUnapprovedDepositChange={setHasUnapprovedEndorsementDeposit}
                           onDepositImageApproved={async ({ depositPath }) => {
-                            const originalToPersist =
-                              ((check as any)?.back_image_original_path as string | null) ??
-                              endorsementAdjusterSourcePath;
-                            assertCleanBackOriginalPath(originalToPersist);
+                            const recovered = recoverCleanBackOriginalPath({
+                              record: {
+                                back_image_original_path: ((check as any)?.back_image_original_path as string | null) ?? null,
+                                back_image_path: check?.back_image_path ?? null,
+                                back_image_deposit_path: ((check as any)?.back_image_deposit_path as string | null) ?? null,
+                                endorsement_render_meta: (check as any)?.endorsement_render_meta ?? null,
+                              },
+                              normalizePath: (value) => toStorageObjectPath(value),
+                            });
+                            const originalToPersist = assertCleanBackOriginalPath(
+                              recovered.ok ? recovered.path : endorsementAdjusterSourcePath,
+                            );
                             const { error: saveErr } = await supabase
                               .from("check_intake_items")
                               .update({
@@ -4686,7 +4685,6 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="audit" className="p-4 space-y-3 mt-0">
-              <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
               <div className="space-y-2">
               {auditLog.map((entry) => (
                 <div key={entry.id} className="flex gap-3 text-sm">
@@ -4803,78 +4801,6 @@ function CheckDetailPanel({
 /* ------------------------------------------------------------------ */
 /*  Small sub-components                                               */
 /* ------------------------------------------------------------------ */
-
-function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packetPath: string | null }) {
-  const { toast } = useToast();
-  const [generating, setGenerating] = useState(false);
-  const hasPacket = Boolean(packetPath);
-
-  const handleDownload = async () => {
-    if (!packetPath) return;
-    const { data } = await supabase.storage
-      .from("endorsement-packets")
-      .createSignedUrl(packetPath, 300);
-    if (data?.signedUrl) {
-      const a = document.createElement("a");
-      a.href = data.signedUrl;
-      a.download = packetPath.split("/").pop() ?? "endorsement-packet.svg";
-      a.click();
-    }
-  };
-
-  const handlePreview = async () => {
-    if (!packetPath) return;
-    const { data } = await supabase.storage
-      .from("endorsement-packets")
-      .createSignedUrl(packetPath, 300);
-    if (data?.signedUrl) {
-      window.open(data.signedUrl, "_blank");
-    }
-  };
-
-  const handleRegenerate = async () => {
-    setGenerating(true);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.access_token) throw new Error("Not authenticated");
-      const { error } = await supabase.functions.invoke("generate-endorsement-packet", {
-        body: { checkId, force: true },
-        headers: { Authorization: `Bearer ${session.session.access_token}` },
-      });
-      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to generate endorsement packet"));
-      toast({ title: "Endorsement packet regenerated" });
-    } catch (e: unknown) {
-      toast({
-        title: "Generation failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  return (
-    <div className="mt-2 border border-emerald-500/30 bg-emerald-500/10 rounded-lg p-3 space-y-2">
-      <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm">
-        <FileImage className="h-4 w-4 shrink-0" />
-        {hasPacket ? "Endorsement Packet Ready" : "Generate Endorsement Packet"}
-      </div>
-      <div className="flex gap-1">
-        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handlePreview} disabled={!hasPacket || generating}>
-          <Eye className="h-3 w-3 mr-1" />Preview
-        </Button>
-        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handleDownload} disabled={!hasPacket || generating}>
-          <Download className="h-3 w-3 mr-1" />Download
-        </Button>
-        <Button size="sm" variant="ghost" className="text-xs h-7" onClick={handleRegenerate} disabled={generating}>
-          <RefreshCw className={`h-3 w-3 mr-1 ${generating ? "animate-spin" : ""}`} />
-          {hasPacket ? "Regen" : "Generate"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (

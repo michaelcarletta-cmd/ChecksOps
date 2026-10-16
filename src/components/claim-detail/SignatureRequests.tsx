@@ -25,6 +25,12 @@ import {
   useLibrarySignatureDocs,
   type LibrarySignatureDoc,
 } from "@/hooks/useLibrarySignatureSource";
+import {
+  buildCheckScopedSignatureUploadPath,
+  canDeleteSignatureRequest,
+  canResendRequest,
+  canResendSigner,
+} from "@/lib/signature-request-actions";
 
 interface SignatureRequestsProps {
   claimId: string;
@@ -198,13 +204,26 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
         ? "application/pdf" 
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-      const fileName = `signatures/${claimId}/${Date.now()}-${docData.fileName}`;
+      const fileName = buildCheckScopedSignatureUploadPath(checkIntakeItemId, docData.fileName);
       const blob = new Blob([contentUint8], { type: mimeType });
       
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, blob);
       if (uploadError) throw uploadError;
+
+      const { error: fileRowError } = await supabase.from("check_files").insert({
+        check_intake_item_id: checkIntakeItemId,
+        file_name: docData.fileName || "Document",
+        file_path: fileName,
+        file_type: mimeType,
+        file_size: blob.size,
+        category: "other",
+        source: "manual",
+      });
+      if (fileRowError) throw fileRowError;
+      queryClient.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId) });
+      queryClient.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
 
       const { data: urlData } = await supabase.storage
         .from("claim-files")
@@ -267,12 +286,25 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
       if (!isPDF && !isDocx) throw new Error("Please upload a PDF or DOCX file");
 
       const sanitizedName = uploadedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const fileName = `signatures/${claimId}/${Date.now()}-${sanitizedName}`;
+      const fileName = buildCheckScopedSignatureUploadPath(checkIntakeItemId, sanitizedName);
 
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, uploadedFile);
       if (uploadError) throw uploadError;
+
+      const { error: fileRowError } = await supabase.from("check_files").insert({
+        check_intake_item_id: checkIntakeItemId,
+        file_name: uploadedFile.name,
+        file_path: fileName,
+        file_type: uploadedFile.type || null,
+        file_size: uploadedFile.size,
+        category: "other",
+        source: "manual",
+      });
+      if (fileRowError) throw fileRowError;
+      queryClient.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId) });
+      queryClient.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
 
       const { data: urlData, error: urlError } = await supabase.storage
         .from("claim-files")
@@ -412,16 +444,15 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
 
   const deleteRequestMutation = useMutation({
     mutationFn: async (request: any) => {
-      const { error: storageError } = await supabase.storage
-        .from("claim-files")
-        .remove([request.document_path]);
-      if (storageError) console.error("Storage deletion error:", storageError);
-
-      const { error } = await supabase
-        .from("signature_requests")
-        .delete()
-        .eq("id", request.id);
-      if (error) throw error;
+      // Server-side, tenant-member gated delete of an unsent request. The source
+      // document is kept: it may be a check file that is also on the Files tab.
+      const { data, error } = await supabase.functions.invoke("send-signature-request", {
+        body: { action: "delete", requestId: request.id },
+      });
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not delete signature request"));
+      }
+      if (data && !data.ok) throw new Error(data.message || data.error || "Delete failed");
     },
     onSuccess: () => {
       toast({ title: "Signature request deleted" });
@@ -527,10 +558,12 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
               Request Signature
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create Signature Request - Step {currentStep} of 3</DialogTitle>
-              <DialogDescription>
+          <DialogContent className="w-[calc(100%-2rem)] max-w-4xl max-h-[90vh] min-w-0 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+            <DialogHeader className="min-w-0 space-y-1.5 pr-8 text-left">
+              <DialogTitle className="text-base leading-snug break-words sm:text-lg">
+                Create Signature Request - Step {currentStep} of 3
+              </DialogTitle>
+              <DialogDescription className="text-left">
                 {currentStep === 1 && "Select a document source"}
                 {currentStep === 2 && "Place signature and date fields on the document"}
                 {currentStep === 3 && "Configure signers"}
@@ -539,7 +572,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
 
             {/* Step 1: Source Selection */}
             {currentStep === 1 && (
-              <div className="space-y-4">
+              <div className="min-w-0 space-y-4">
                 <div>
                   <Label>Document Source</Label>
                   <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); setUploadedFile(null); setSelectedLibraryDoc(null); }}>
@@ -651,17 +684,17 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
 
             {/* Step 3: Signer Configuration */}
             {currentStep === 3 && (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <Label>Signers (in order)</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addSigner}>
+              <div className="min-w-0 space-y-3">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label className="min-w-0">Signers (in order)</Label>
+                  <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={addSigner}>
                     <Plus className="w-3 h-3 mr-1" />
                     Add Signer
                   </Button>
                 </div>
                 {signers.map((signer, index) => (
-                  <div key={index} className="flex gap-2 items-start">
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div key={index} className="flex min-w-0 items-start gap-2">
+                    <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
                       <Input
                         placeholder="Name"
                         value={signer.name}
@@ -703,12 +736,13 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
               </div>
             )}
 
-            <DialogFooter>
-              <div className="flex justify-between w-full">
-                <div>
+            <DialogFooter className="sticky bottom-0 z-10 min-w-0 bg-background pt-2">
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex w-full min-w-0 sm:w-auto">
                   {currentStep > 1 && (
                     <Button
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() => setCurrentStep((currentStep - 1) as 1 | 2 | 3)}
                     >
                       <ChevronLeft className="w-4 h-4 mr-2" />
@@ -716,9 +750,10 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     </Button>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
                   {currentStep === 1 && sourceType === "template" && (
                     <Button
+                      className="w-full sm:w-auto"
                       onClick={() => generateDocumentMutation.mutate()}
                       disabled={!selectedTemplate || generateDocumentMutation.isPending}
                     >
@@ -737,6 +772,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                   )}
                   {currentStep === 1 && sourceType === "claim_file" && (
                     <Button
+                      className="w-full sm:w-auto"
                       onClick={() => useClaimFileMutation.mutate()}
                       disabled={!selectedClaimFile || useClaimFileMutation.isPending}
                     >
@@ -773,6 +809,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                   )}
                   {currentStep === 1 && sourceType === "upload" && (
                     <Button
+                      className="w-full sm:w-auto"
                       onClick={() => uploadFileMutation.mutate()}
                       disabled={!uploadedFile || uploadFileMutation.isPending}
                     >
@@ -790,7 +827,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     </Button>
                   )}
                   {currentStep === 2 && (
-                    <Button onClick={() => setCurrentStep(3)}>
+                    <Button className="w-full sm:w-auto" onClick={() => setCurrentStep(3)}>
                       Next
                       <ChevronRight className="w-4 h-4 ml-2" />
                     </Button>
@@ -799,6 +836,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     <>
                       <Button
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={() => createRequestMutation.mutate({ skipEmail: true })}
                         disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
                       >
@@ -806,6 +844,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                         Generate Link Only
                       </Button>
                       <Button
+                        className="w-full sm:w-auto"
                         onClick={() => createRequestMutation.mutate({ skipEmail: false })}
                         disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
                       >
@@ -859,7 +898,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     >
                       {request.final_pdf_path ? "View Signed PDF" : "Open Document"}
                     </Button>
-                    {(request.status === "failed" || request.status === "pending") && (
+                    {canResendRequest(request) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -871,14 +910,17 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                       </Button>
                     )}
                     {getStatusBadge(request)}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteRequestMutation.mutate(request)}
-                      disabled={deleteRequestMutation.isPending}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+                    {canDeleteSignatureRequest(request) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Delete signature request"
+                        onClick={() => deleteRequestMutation.mutate(request)}
+                        disabled={deleteRequestMutation.isPending}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 {request.last_error && (
@@ -933,7 +975,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                           <span className="text-muted-foreground">({signer.signer_email})</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {signer.delivery_status === "failed" && (
+                          {canResendSigner(request, signer) && (
                             <Button
                               variant="ghost"
                               size="sm"
