@@ -87,7 +87,7 @@ and falls back to the claim-number case, exactly as #991's route answers
 
 | | staging (`AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE`) | production (`ops/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.json`) |
 |---|---|---|
-| `expected_live_definition_sha256` | `8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a` (read-live) | `9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f` (`--inspect` of 2026-10-16, SSM `4b86eb75-5d78-483c-8899-50a7971e9d42` and `0435c387-8f9b-405d-9463-f1cc81124d36`) |
+| `expected_live_definition_sha256` | `8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a` (read-live) | `9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f` (`--inspect` of 2026-10-16, SSM `4b86eb75-5d78-483c-8899-50a7971e9d42`) |
 | `intended_replacement_sha256` | `794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30` | same |
 | authorization / execute | n/a | owner approved 2026-10-16 / `true` |
 

@@ -74,8 +74,8 @@ const pending = (extra = {}) => Object.freeze({
 /** The committed pin (or another) with no recorded pre-state, for the no-pre-state refusals. */
 const unrecorded = (pin = COMMITTED) => Object.freeze({ ...pin, expected_live_definition_sha256: null });
 // The read-only production --inspect of 2026-10-16 (SSM command 4e8aa79f-e123-4f39-85e8-b669d4072ee8,
-// after SQL 87 was applied; source main 72cc069f). The earlier inspects before SQL 87 (SSM
-// 0435c387-8f9b-405d-9463-f1cc81124d36 / 4b86eb75-5d78-483c-8899-50a7971e9d42) gave the same hash.
+// after SQL 87 was applied; source main 72cc069f). The earlier inspect before SQL 87 (SSM
+// 4b86eb75-5d78-483c-8899-50a7971e9d42) gave the same hash.
 const PRODUCTION_PRE = 'ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b';
 const CROSS_TENANT_CATEGORIES = Object.freeze(Object.keys(SEEDED_CROSS_TENANT_COUNTS));
 const CLAIM_TRIGGERS = Object.freeze(['assign_case_on_ledger_events', 'assign_case_on_ledger_tokens', 'assign_case_on_ledger_uploads', 'assign_case_on_mortgage_releases', 'assign_case_on_mortgage_draws', 'assign_case_on_signature_requests']);
@@ -171,7 +171,7 @@ test('the production pin is execute-authorized after staging acceptance: the own
   assert.equal(inspect.status, 'recorded');
   assert.equal(inspect.date, '2026-10-16');
   assert.equal(inspect.ssm_command_id, '4e8aa79f-e123-4f39-85e8-b669d4072ee8');
-  assert.deepEqual(inspect.ssm_command_ids, ['4e8aa79f-e123-4f39-85e8-b669d4072ee8', '0435c387-8f9b-405d-9463-f1cc81124d36', '4b86eb75-5d78-483c-8899-50a7971e9d42']);
+  assert.deepEqual(inspect.ssm_command_ids, ['4e8aa79f-e123-4f39-85e8-b669d4072ee8', '4b86eb75-5d78-483c-8899-50a7971e9d42']);
   assert.equal(inspect.source_commit, '72cc069fa1fef0195056bfe4e2f6d7d85a6283b8');
   assert.equal(inspect.source_tarball_sha256, '4d8a553ea8989a7be30671334f143d074b1622eecb7d176c98e166e5a2fc29df');
   assert.equal(inspect.read_only, true);

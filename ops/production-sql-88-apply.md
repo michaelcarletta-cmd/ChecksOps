@@ -4,7 +4,7 @@
 `57216e00…`, authored in `6e903be3b`). Owner approval to start the work: 2026-10-16
 (SQL 88, modelled on SQL 87). **Status:** applied to staging (2026-10-16, guarded staging SQL
 executor apply run 91, read-live run 92 `already_applied`). Production: read-only inspects
-on 2026-10-16 (SSM `0435c387-…`, `4b86eb75-…` before SQL 87; `4e8aa79f-…` after SQL 87)
+on 2026-10-16 (SSM `4b86eb75-…` before SQL 87; `4e8aa79f-…` after SQL 87)
 recorded the pre-state `ef7a3e02…`, unchanged by SQL 87, with `cross_tenant_links` total 0
 and `precondition_failures` `[]`. The production pin is execute-authorized (owner approved
 2026-10-16, staging acceptance run 91) and waits for the owner's review and merge, then the

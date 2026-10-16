@@ -88,8 +88,8 @@ const APPLIED = Object.freeze({
 });
 /** The committed pin (or another) with no recorded pre-state, for the no-pre-state refusals. */
 const unrecorded = (pin = COMMITTED) => Object.freeze({ ...pin, expected_live_definition_sha256: null });
-// The read-only production --inspect of 2026-10-16 (SSM commands 4b86eb75-5d78-483c-8899-50a7971e9d42
-// and 0435c387-8f9b-405d-9463-f1cc81124d36, source main 4701eb23).
+// The read-only production --inspect of 2026-10-16 (SSM command 4b86eb75-5d78-483c-8899-50a7971e9d42,
+// source main 4701eb23).
 const PRODUCTION_PRE = '9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f';
 // The guarded staging SQL executor apply and read-live runs recorded in staging_acceptance
 // (main e043cde44, executor package deploy run 76, 38909978264).
@@ -207,7 +207,7 @@ test('the production pin is applied and retired: execute false, the 2026-10-16 a
   assert.equal(inspect.status, 'recorded');
   assert.equal(inspect.date, '2026-10-16');
   assert.equal(inspect.ssm_command_id, '4b86eb75-5d78-483c-8899-50a7971e9d42');
-  assert.deepEqual(inspect.ssm_command_ids, ['4b86eb75-5d78-483c-8899-50a7971e9d42', '0435c387-8f9b-405d-9463-f1cc81124d36']);
+  assert.deepEqual(inspect.ssm_command_ids, ['4b86eb75-5d78-483c-8899-50a7971e9d42']);
   assert.equal(inspect.source_commit, '4701eb23a52de84b367993b31d7d7c7501b4873a');
   assert.equal(inspect.source_tarball_sha256, 'aefd2eb1db2d6692a2e51eb97a51504988eb60d44dea63f157c4272176cec77f');
   assert.equal(inspect.read_only, true);
