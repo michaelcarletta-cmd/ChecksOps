@@ -8,6 +8,7 @@
  * Immediately-before live hashing happens inside the VPC executor via
  * evaluateSqlCollision. This module only binds the authorization package.
  */
+import { createHash } from 'node:crypto';
 import { CODES, errorEntry, fail, failMany, ok } from './errors.mjs';
 import { validateWorkstreamIdentity } from './identity.mjs';
 
@@ -98,6 +99,363 @@ export const AUTHORIZED_SQL71_AMOUNT_GRANT = Object.freeze({
   table: 'public.check_intake_items',
   column: 'amount',
 });
+
+// SQL 89 replaces checksops' UPDATE on check_intake_items with UPDATE on exactly
+// these columns: every SET target of an UPDATE the API issues as checksops
+// (ops/production-sql-89-apply.md cites the code for each). Sorted, unique.
+export const SQL89_COLUMNS = Object.freeze([
+  'account_number',
+  'amount',
+  'back_image_deposit_path',
+  'back_image_original_path',
+  'back_image_path',
+  'carrier_name',
+  'check_number',
+  'check_stage',
+  'deposit_recommendation',
+  'endorsement_override',
+  'endorsement_packet_path',
+  'endorsement_render_meta',
+  'endorsement_render_status',
+  'endorsement_render_version',
+  'expiration_days',
+  'front_image_path',
+  'funds_type',
+  'is_multi_payee',
+  'issue_date',
+  'mortgage_monitoring_type',
+  'mortgage_received_at',
+  'mortgage_sent_at',
+  'mortgage_tracking_number',
+  'ocr_needs_verification',
+  'ocr_status',
+  'payee_address',
+  'payee_line',
+  'pre_return_stage',
+  'property_address',
+  'return_code',
+  'return_notes',
+  'return_reason',
+  'return_recorded_by',
+  'return_resolution',
+  'return_resolved_at',
+  'return_source',
+  'returned_at',
+  'review_notes',
+  'reviewed_at',
+  'reviewed_by',
+  'routing_number',
+  'status',
+  'updated_at',
+]);
+// The canonical UPDATE privilege state of checksops on the table, hashed for the
+// live fingerprint: whether it has table-level UPDATE (by any route) and the sorted
+// set of columns it can UPDATE (by any route). Staging and production share it.
+export function columnUpdateStateText({ table_level_update: tableLevel, updatable_columns: columns } = {}) {
+  return [
+    'checksops UPDATE ON public.check_intake_items',
+    `table_level_update: ${tableLevel === true}`,
+    `updatable_columns: ${[...(columns || [])].map(String).sort().join(',')}`,
+  ].join('\n');
+}
+// The file holds only comments and exactly these two statements (whitespace aside).
+export const SQL89_CANONICAL_STATEMENTS = `REVOKE UPDATE ON TABLE public.check_intake_items FROM checksops; GRANT UPDATE (${SQL89_COLUMNS.join(', ')}) ON TABLE public.check_intake_items TO checksops;`;
+/** The file's statements with comments removed and whitespace collapsed. */
+export function sql89StatementText(text) {
+  return String(text || '')
+    .replace(/--[^\n]*/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\s+,/g, ',')
+    .replace(/,(?=\S)/g, ', ')
+    .trim();
+}
+export const AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE = Object.freeze({
+  filename: 'aws/workflows/sql/89_check_intake_items_column_update.sql',
+  migration_id: '89_check_intake_items_column_update',
+  // The commit that authored the file bytes (this branch's first commit).
+  commit: 'cc4449a0df90d6d9198ac53b6c4c65fc4b00a2c5',
+  source_sha256: 'cadd01c13afc4ffba6f602b9f24ca7a572e240e6af00d92bf77d0119055e1afc',
+  // Pending a staging read-live: the staging pre-state is recorded only from its report.
+  expected_live_definition_sha256: null,
+  // sha256(columnUpdateStateText({ table_level_update: false, updatable_columns: SQL89_COLUMNS })).
+  intended_replacement_sha256: '2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8',
+  grantee: 'checksops',
+  table: 'public.check_intake_items',
+  columns: SQL89_COLUMNS,
+  // SQL 70: the SECURITY DEFINER ingest. Without it ingest-shared-check.mjs falls back to an
+  // inline UPDATE as checksops of columns SQL 89 does not grant, so it is a prerequisite.
+  ingest_function: 'public.aws_ingest_shared_check(jsonb)',
+});
+
+// --- SQL 89 catalog reads (shared by the staging executor and the production tool) ---
+// Names are qualified through pg_namespace and pg_catalog. No table row is read.
+
+const SQL89_TABLE_NAME = 'check_intake_items';
+const SQL89_GRANTEE = AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE.grantee;
+const SQL89_TABLE_PRIVILEGES = Object.freeze(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']);
+const SQL89_TABLE_FILTER = `n.nspname = 'public' AND c.relname = '${SQL89_TABLE_NAME}' AND c.relkind IN ('r', 'p')`;
+const SQL89_READS = Object.freeze({
+  login: 'SELECT current_user::text AS current_user, session_user::text AS session_user',
+  role: `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = '${SQL89_GRANTEE}') AS present`,
+  table: `SELECT c.relacl::text AS table_acl, pg_catalog.pg_get_userbyid(c.relowner) AS table_owner,
+  pg_catalog.has_table_privilege(current_user, c.oid, 'UPDATE WITH GRANT OPTION') AS login_can_grant
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE ${SQL89_TABLE_FILTER}`,
+  // Every column and whether the grantee can UPDATE it by any route (column, table, PUBLIC, membership).
+  columns: `SELECT a.attname::text AS column_name,
+  pg_catalog.has_column_privilege('${SQL89_GRANTEE}', c.oid, a.attnum, 'UPDATE') AS can_update
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+WHERE ${SQL89_TABLE_FILTER}
+ORDER BY 1`,
+  // Table-level privileges of the grantee by any route.
+  tablePrivileges: `SELECT ${SQL89_TABLE_PRIVILEGES.map((p) => `pg_catalog.has_table_privilege('${SQL89_GRANTEE}', c.oid, '${p}') AS ${p.toLowerCase()}`).join(', ')}
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE ${SQL89_TABLE_FILTER}`,
+  // Direct table ACL entries of anyone but the owner, grantor included.
+  tableAcl: `SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee, pg_catalog.pg_get_userbyid(x.grantor) AS grantor, x.privilege_type, x.is_grantable
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(c.relacl, pg_catalog.acldefault('r', c.relowner))) x
+LEFT JOIN pg_catalog.pg_roles r ON r.oid = x.grantee
+WHERE ${SQL89_TABLE_FILTER} AND x.grantee <> c.relowner
+ORDER BY 1, 3, 2`,
+  // Every direct column ACL entry on the table (all privileges, all grantees), grantor included.
+  columnAcl: `SELECT a.attname::text AS column_name, COALESCE(r.rolname, 'PUBLIC') AS grantee,
+  pg_catalog.pg_get_userbyid(x.grantor) AS grantor, x.privilege_type, x.is_grantable
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped AND a.attacl IS NOT NULL
+CROSS JOIN LATERAL pg_catalog.aclexplode(a.attacl) x
+LEFT JOIN pg_catalog.pg_roles r ON r.oid = x.grantee
+WHERE ${SQL89_TABLE_FILTER}
+ORDER BY 1, 2, 4, 3`,
+  // Functions whose body UPDATEs the table. A SECURITY INVOKER one runs as its caller
+  // (the API runs as checksops), and a SECURITY DEFINER one owned by a role with
+  // checksops' privileges loses them too: SQL 89 refuses while either exists.
+  // A superuser owner or the table's owner needs no grant; any other owner that inherits
+  // checksops' privileges (or is checksops) would lose UPDATE with it.
+  updateFunctions: `SELECT p.oid::regprocedure::text AS signature, p.prosecdef AS security_definer,
+  (NOT o.rolsuper AND p.proowner <> COALESCE(t.relowner, 0)
+    AND COALESCE(pg_catalog.pg_has_role(p.proowner, g.oid, 'USAGE'), false)) AS owner_has_grantee_privileges
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+JOIN pg_catalog.pg_roles o ON o.oid = p.proowner
+LEFT JOIN pg_catalog.pg_roles g ON g.rolname = '${SQL89_GRANTEE}'
+LEFT JOIN pg_catalog.pg_class t ON t.oid = pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}')
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prokind IN ('f', 'p')
+  AND (CASE WHEN p.prosrc = '' THEN pg_catalog.pg_get_functiondef(p.oid) ELSE p.prosrc END)
+    ~* '\\mupdate\\s+(only\\s+)?(public\\s*\\.\\s*)?"?${SQL89_TABLE_NAME}\\M'
+ORDER BY 1`,
+  ingest: `SELECT p.prosecdef AS security_definer
+FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('${AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE.ingest_function}')`,
+});
+
+const sql89EntryLine = (row) => `${row.grantee} ${row.privilege_type}${row.is_grantable === true ? ' with grant option' : ''} granted by ${row.grantor}`;
+const sql89SameList = (a, b) => Array.isArray(a) && Array.isArray(b) && JSON.stringify(a) === JSON.stringify(b);
+const sql89Failed = (checks) => checks.filter(([, passed]) => !passed).map(([name]) => name);
+const sql89Hash = (text) => createHash('sha256').update(String(text), 'utf8').digest('hex');
+
+/**
+ * checksops' UPDATE privilege state on public.check_intake_items, the SQL 89 plan
+ * (columns it would grant and columns that would lose UPDATE), its prerequisites and
+ * the live fingerprint. Catalog reads only.
+ */
+export async function readSql89State(client) {
+  const q = async (sql) => (await client.query(sql))?.rows || [];
+  const login = (await q(SQL89_READS.login))[0] || {};
+  const rolePresent = (await q(SQL89_READS.role))[0]?.present === true;
+  const table = (await q(SQL89_READS.table))[0] || null;
+  if (!table) return fail(CODES.SQL_COLLISION, 'public.check_intake_items is missing');
+  const base = {
+    current_user: typeof login.current_user === 'string' ? login.current_user : null,
+    session_user: typeof login.session_user === 'string' ? login.session_user : null,
+    grantee_role_present: rolePresent,
+    table_present: true,
+    table_owner: table.table_owner,
+    table_acl: table.table_acl ?? null,
+    login_can_grant: table.login_can_grant === true,
+  };
+  if (!rolePresent) return ok({ ...base, live_definition_sha256: null });
+  const columnRows = await q(SQL89_READS.columns);
+  if (!columnRows.length) return fail(CODES.SQL_COLLISION, 'public.check_intake_items has no columns visible to the login');
+  const columns = columnRows.map((row) => row.column_name).sort();
+  const updatable = columnRows.filter((row) => row.can_update === true).map((row) => row.column_name).sort();
+  const privRow = (await q(SQL89_READS.tablePrivileges))[0] || {};
+  const tablePrivileges = Object.fromEntries(SQL89_TABLE_PRIVILEGES.map((p) => [p, privRow[p.toLowerCase()] === true]));
+  const tableEntries = await q(SQL89_READS.tableAcl);
+  const columnEntries = await q(SQL89_READS.columnAcl);
+  const functions = (await q(SQL89_READS.updateFunctions)).map((row) => ({
+    signature: String(row.signature),
+    security_definer: row.security_definer === true,
+    owner_has_grantee_privileges: row.owner_has_grantee_privileges === true,
+  }));
+  const ingest = (await q(SQL89_READS.ingest))[0] || null;
+  const isGrantee = (row) => row.grantee === SQL89_GRANTEE;
+  const updateEntry = (row) => isGrantee(row) && row.privilege_type === 'UPDATE';
+  const tableLevel = tablePrivileges.UPDATE === true;
+  const state = {
+    ...base,
+    table_acl_entries: tableEntries.map(sql89EntryLine).sort(),
+    table_privileges: tablePrivileges,
+    table_level_update: tableLevel,
+    table_level_update_entry: tableEntries.some(updateEntry),
+    columns,
+    updatable_columns: updatable,
+    updatable_columns_sha256: sql89Hash(updatable.join(',')),
+    column_update_entries: columnEntries.filter(updateEntry).map((row) => `${row.column_name} ${sql89EntryLine(row)}`).sort(),
+    column_acl_entries: columnEntries.map((row) => `${row.column_name} ${sql89EntryLine(row)}`).sort(),
+    grantee_grant_option: tableEntries.concat(columnEntries).some((row) => isGrantee(row) && row.is_grantable === true),
+    grantee_update_grantors: [...new Set(tableEntries.concat(columnEntries).filter(updateEntry).map((row) => row.grantor))].sort(),
+    sql89_columns: [...SQL89_COLUMNS],
+    sql89_columns_missing: SQL89_COLUMNS.filter((name) => !columns.includes(name)),
+    columns_to_grant: SQL89_COLUMNS.filter((name) => columns.includes(name) && !updatable.includes(name)),
+    columns_losing_update: updatable.filter((name) => !SQL89_COLUMNS.includes(name)),
+    update_functions: functions,
+    unsafe_update_functions: functions.filter((f) => !f.security_definer || f.owner_has_grantee_privileges).map((f) => f.signature),
+    ingest_function_present: ingest !== null,
+    ingest_function_security_definer: ingest?.security_definer === true,
+    live_definition_sha256: sql89Hash(columnUpdateStateText({ table_level_update: tableLevel, updatable_columns: updatable })),
+  };
+  state.already_applied = state.live_definition_sha256 === AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE.intended_replacement_sha256
+    && state.table_level_update_entry === false
+    && sql89SameList(state.column_update_entries, sql89ExpectedUpdateEntries(state.grantee_update_grantors.length === 1 ? state.grantee_update_grantors[0] : null));
+  return ok(state);
+}
+
+/** The direct column ACL entries SQL 89 leaves for checksops when run as `grantor`. */
+export function sql89ExpectedUpdateEntries(grantor) {
+  return SQL89_COLUMNS.map((name) => `${name} ${SQL89_GRANTEE} UPDATE granted by ${grantor}`);
+}
+
+/** Rules both environments apply before SQL 89 runs. */
+export function sql89SharedPreconditionFailures(state) {
+  const login = state?.current_user;
+  return sql89Failed([
+    ['grantee_role_present', state?.grantee_role_present === true],
+    ['table_present', state?.table_present === true],
+    ['sql89_columns_present', Array.isArray(state?.sql89_columns_missing) && state.sql89_columns_missing.length === 0],
+    ['no_grantee_grant_option', state?.grantee_grant_option === false],
+    // The REVOKE removes only what the login granted; another grantor's UPDATE would survive it.
+    ['grantee_update_granted_by_login', typeof login === 'string' && Array.isArray(state?.grantee_update_grantors)
+      && state.grantee_update_grantors.every((grantor) => grantor === login)],
+    ['login_can_grant', state?.login_can_grant === true],
+    ['update_functions_safe', Array.isArray(state?.unsafe_update_functions) && state.unsafe_update_functions.length === 0],
+    ['sql70_ingest_function_security_definer', state?.ingest_function_present === true && state?.ingest_function_security_definer === true],
+  ]);
+}
+
+/**
+ * Rules both environments apply after SQL 89 ran, inside the transaction: no table-level
+ * UPDATE (directly or via PUBLIC or membership), the updatable set and the direct column
+ * UPDATE entries exactly SQL 89's, every other table and column ACL entry and the other
+ * table privileges (SELECT, INSERT, DELETE, …) unchanged.
+ */
+export function sql89PostconditionFailures(before, after) {
+  const grantor = after?.current_user;
+  const notGranteeUpdate = (line) => !new RegExp(`^(?:[a-z0-9_]+ )?${SQL89_GRANTEE} UPDATE`).test(line);
+  const otherPrivileges = (state) => SQL89_TABLE_PRIVILEGES.filter((p) => p !== 'UPDATE').map((p) => `${p}=${state?.table_privileges?.[p] === true}`);
+  return sql89Failed([
+    ['intended_state', after?.live_definition_sha256 === AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE.intended_replacement_sha256],
+    ['no_table_level_update', after?.table_level_update === false && after?.table_level_update_entry === false],
+    ['updatable_columns_exact', sql89SameList(after?.updatable_columns, [...SQL89_COLUMNS])],
+    ['column_update_entries_exact', typeof grantor === 'string' && sql89SameList(after?.column_update_entries, sql89ExpectedUpdateEntries(grantor))],
+    ['other_table_privileges_unchanged', sql89SameList(otherPrivileges(after), otherPrivileges(before))],
+    ['other_table_acl_unchanged', sql89SameList(
+      (after?.table_acl_entries || []).filter(notGranteeUpdate),
+      (before?.table_acl_entries || []).filter(notGranteeUpdate),
+    ) && !(after?.table_acl_entries || []).some((line) => !notGranteeUpdate(line))],
+    ['other_column_acl_unchanged', sql89SameList(
+      (after?.column_acl_entries || []).filter(notGranteeUpdate),
+      (before?.column_acl_entries || []).filter(notGranteeUpdate),
+    )],
+    ['no_grantee_grant_option', after?.grantee_grant_option === false],
+    ['table_owner_unchanged', typeof before?.table_owner === 'string' && after?.table_owner === before.table_owner],
+  ]);
+}
+
+// Everything SQL 89 must leave alone, by category: schema public's ACL, every other
+// relation (owner, kind, RLS, ACL), every other table's column ACLs, functions (owner,
+// body, SECURITY DEFINER, config, ACL), policies, and this table apart from its ACLs
+// (columns, defaults, constraints, policies, triggers, RLS flags). The ACLs of this
+// table are compared entry by entry in sql89PostconditionFailures.
+const SQL89_UNRELATED_SQL = Object.freeze({
+  schema: `SELECT n.nspname::text || ' ' || pg_catalog.pg_get_userbyid(n.nspowner) || ' ' || COALESCE(n.nspacl::text, '') AS d
+FROM pg_catalog.pg_namespace n WHERE n.nspname = 'public'`,
+  relations: `SELECT c.oid::regclass::text || ' ' || c.relkind::text || ' ' || pg_catalog.pg_get_userbyid(c.relowner) || ' '
+  || c.relrowsecurity::text || ' ' || c.relforcerowsecurity::text || ' ' || COALESCE(c.relacl::text, '') AS d
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.oid <> pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}') ORDER BY 1`,
+  other_column_acls: `SELECT c.oid::regclass::text || '.' || a.attname || ' ' || a.attacl::text AS d
+FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.oid <> pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}') AND a.attnum > 0 AND a.attacl IS NOT NULL ORDER BY 1`,
+  functions: `SELECT p.oid::regprocedure::text || ' ' || pg_catalog.pg_get_userbyid(p.proowner) || ' ' || md5(p.prosrc) || ' '
+  || p.prosecdef::text || ' ' || COALESCE(p.proconfig::text, '') || ' ' || COALESCE(p.proacl::text, '') AS d
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('public', 'auth') ORDER BY 1`,
+  policies: `SELECT c.oid::regclass::text || ' ' || pol.polname || ' ' || pol.polcmd::text || ' ' || pol.polpermissive::text || ' ' || pol.polroles::text
+  || ' ' || COALESCE(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), '') || ' ' || COALESCE(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), '') AS d
+FROM pg_catalog.pg_policy pol JOIN pg_catalog.pg_class c ON c.oid = pol.polrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' ORDER BY 1`,
+  check_intake_items_except_acl: `SELECT 'relation ' || pg_catalog.pg_get_userbyid(c.relowner) || ' ' || c.relrowsecurity::text || ' ' || c.relforcerowsecurity::text AS d
+FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}')
+UNION ALL
+SELECT 'column ' || a.attnum::text || ' ' || a.attname || ' ' || pg_catalog.format_type(a.atttypid, a.atttypmod) || ' ' || a.attnotnull::text
+  || ' ' || COALESCE(pg_catalog.pg_get_expr(d.adbin, d.adrelid), '')
+FROM pg_catalog.pg_attribute a LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE a.attrelid = pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}') AND a.attnum > 0 AND NOT a.attisdropped
+UNION ALL
+SELECT 'constraint ' || con.conname || ' ' || pg_catalog.pg_get_constraintdef(con.oid)
+FROM pg_catalog.pg_constraint con WHERE con.conrelid = pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}')
+UNION ALL
+SELECT 'trigger ' || t.tgname || ' ' || t.tgenabled::text || ' ' || pg_catalog.pg_get_triggerdef(t.oid)
+FROM pg_catalog.pg_trigger t WHERE t.tgrelid = pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}') AND NOT t.tgisinternal
+UNION ALL
+SELECT 'index ' || pg_catalog.pg_get_indexdef(i.indexrelid)
+FROM pg_catalog.pg_index i WHERE i.indrelid = pg_catalog.to_regclass('public.${SQL89_TABLE_NAME}')
+ORDER BY 1`,
+});
+
+/** Hashes, by category, of everything SQL 89 must not change. */
+export async function readSql89UnrelatedSnapshot(client) {
+  const categories = {};
+  const counts = {};
+  for (const [name, sql] of Object.entries(SQL89_UNRELATED_SQL)) {
+    const rows = (await client.query(sql))?.rows || [];
+    categories[name] = sql89Hash(rows.map((row) => row.d).join('\n'));
+    counts[name] = rows.length;
+  }
+  return { categories, counts, sha256: sql89Hash(JSON.stringify(categories)) };
+}
+
+/** Category names whose hash differs between two snapshots. */
+export function sql89ChangedCategories(before, after) {
+  return Object.keys(before?.categories || {}).filter((name) => before.categories[name] !== after?.categories?.[name]);
+}
+
+/** Readable, non-sensitive SQL 89 report (no owner or grantor names, no rows) for the executor's read-live. */
+export function sql89Report(state) {
+  return {
+    table_level_update: state?.table_level_update === true,
+    table_privileges: Object.fromEntries(Object.entries(state?.table_privileges || {}).map(([p, v]) => [p.toLowerCase(), v === true])),
+    column_count: Array.isArray(state?.columns) ? state.columns.length : 0,
+    updatable_column_count: Array.isArray(state?.updatable_columns) ? state.updatable_columns.length : 0,
+    updatable_columns: [...(state?.updatable_columns || [])],
+    sql89_column_count: SQL89_COLUMNS.length,
+    columns_to_grant: [...(state?.columns_to_grant || [])],
+    columns_losing_update: [...(state?.columns_losing_update || [])],
+    sql89_columns_missing: [...(state?.sql89_columns_missing || [])],
+    grantee_grant_option: state?.grantee_grant_option === true,
+    grantee_update_grantor_count: Array.isArray(state?.grantee_update_grantors) ? state.grantee_update_grantors.length : 0,
+    update_function_count: Array.isArray(state?.update_functions) ? state.update_functions.length : 0,
+    unsafe_update_functions: [...(state?.unsafe_update_functions || [])],
+    ingest_function_security_definer: state?.ingest_function_security_definer === true,
+    already_applied: state?.already_applied === true,
+  };
+}
 
 // SQL 72 adds five tenant-member payment write policies. The "definition" is
 // the canonical presence state of exactly those policies, hashed: all absent
@@ -1293,6 +1651,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+  AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -1370,6 +1729,10 @@ export function isSql87ResolveCheckCaseTenantScope(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE);
 }
 
+export function isSql89CheckIntakeColumnUpdate(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE);
+}
+
 export function isSql39(input = {}) {
   return input.filename === AUTHORIZED_SQL39.filename
     || input.migration_id === AUTHORIZED_SQL39.migration_id;
@@ -1405,6 +1768,7 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql85MortgageCompensationAdjust(input)) return AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST;
   if (isSql86MortgageCompensationOwnerOnly(input)) return AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY;
   if (isSql87ResolveCheckCaseTenantScope(input)) return AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE;
+  if (isSql89CheckIntakeColumnUpdate(input)) return AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;

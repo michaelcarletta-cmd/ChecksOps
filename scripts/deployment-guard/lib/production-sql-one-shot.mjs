@@ -44,6 +44,7 @@ import { SQL84_PRODUCTION_PIN_REL } from './sql84-mortgage-return-to-queue-produ
 import { SQL85_PRODUCTION_PIN_REL } from './sql85-mortgage-compensation-adjust-production-apply.mjs';
 import { SQL86_PRODUCTION_PIN_REL } from './sql86-mortgage-compensation-owner-only-production-apply.mjs';
 import { SQL87_PRODUCTION_PIN_REL } from './sql87-resolve-check-case-tenant-scope-production-apply.mjs';
+import { SQL89_PRODUCTION_PIN_REL } from './sql89-check-intake-column-update-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
@@ -127,6 +128,7 @@ const SQL84_TOOL = 'scripts/deployment-guard/sql84-mortgage-return-to-queue-prod
 const SQL85_TOOL = 'scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs';
 const SQL86_TOOL = 'scripts/deployment-guard/sql86-mortgage-compensation-owner-only-production-apply.mjs';
 const SQL87_TOOL = 'scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
+const SQL89_TOOL = 'scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
 const memberTool = (key) => Object.freeze({
@@ -208,6 +210,13 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL87_PRODUCTION_PIN_REL,
     allowed_key: 'sql87_production_apply_allowed',
   }),
+  sql89: Object.freeze({
+    key: 'sql89',
+    script: SQL89_TOOL,
+    args: Object.freeze([]),
+    pin_rel: SQL89_PRODUCTION_PIN_REL,
+    allowed_key: 'sql89_production_apply_allowed',
+  }),
 });
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */
@@ -254,6 +263,12 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'column_update_entries',
   'case_owner',
   'other_callers',
+  'table_privileges',
+  'columns_to_grant',
+  'columns_losing_update',
+  'sql89_columns_missing',
+  'unsafe_update_functions',
+  'ingest_function_security_definer',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
