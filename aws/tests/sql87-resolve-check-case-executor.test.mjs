@@ -78,7 +78,7 @@ const FILE = path.join(ROOT, PIN.filename);
 const TEXT = fs.readFileSync(FILE, 'utf8');
 const DEFS = mortgageReviewedFunctiondefs(KEY, TEXT);
 const SPEC = MORTGAGE_MIGRATIONS[KEY];
-// The committed pin has no recorded pre-state; PG tests use a copy carrying the inspected one.
+// PG tests use a copy of the pin carrying the pre-state they inspected.
 const recordedPin = (expected) => Object.freeze({ ...PIN, expected_live_definition_sha256: expected });
 
 function caseEvent(overrides = {}) {
@@ -121,7 +121,7 @@ function handlerFor(connect, extra = {}) {
 const neverConnect = async () => { throw new Error('should-not-connect'); };
 const READ_ONLY_STATEMENT_RE = /^\s*(SELECT|WITH|SAVEPOINT|RELEASE|ROLLBACK TO)\b/i;
 
-test('the pin matches the SQL file and its commit; no pre-state is recorded; the post-state is code-derived; registered everywhere', () => {
+test('the pin matches the SQL file and its commit; the staging read-live pre-state is recorded; the post-state is code-derived; registered everywhere', () => {
   assert.equal(PIN.source_sha256, 'f046c76cc731c08020171ec7e846818089df1bd66a7a07a42237f14fb8c4c22a');
   assert.equal(sha(fs.readFileSync(FILE)), PIN.source_sha256);
   assert.equal(PIN.migration_id, '87_resolve_check_case_tenant_scope');
@@ -129,7 +129,8 @@ test('the pin matches the SQL file and its commit; no pre-state is recorded; the
   assert.equal(PIN.commit, 'af84133e4e2cd6f3c2f2d8b63c59555d80646c22');
   const atCommit = spawnSync('git', ['show', `${PIN.commit}:${PIN.filename}`], { cwd: ROOT, maxBuffer: 4 * 1024 * 1024 });
   if (atCommit.status === 0) assert.equal(sha(atCommit.stdout), PIN.source_sha256);
-  assert.equal(PIN.expected_live_definition_sha256, null, 'no staging read-live recorded yet');
+  assert.equal(PIN.expected_live_definition_sha256, '8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a', 'read-live run 74');
+  assert.notEqual(PIN.expected_live_definition_sha256, PIN.intended_replacement_sha256);
   assert.equal(PIN.intended_replacement_sha256, INTENDED);
   assert.equal(sha(mortgageStateText(KEY, mortgageAppliedStates(KEY))), INTENDED);
   assert.deepEqual([...PIN.function_identities], [FN]);
@@ -219,8 +220,9 @@ test('the reviewed-text check refuses a wider grant, a missing revoke, an unscop
   assert.equal(mortgageSqlIsReviewed(KEY, TEXT.replace('-- Idempotent: safe to run more than once.', '-- (reworded)')), true, 'comments alone do not matter');
 });
 
-test('apply refuses before connecting: the committed pin (no pre-state), the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
-  const pending = await handlerFor(neverConnect)(caseEvent({ expected_live_definition_sha256: 'b'.repeat(64) }));
+test('apply refuses before connecting: a pin with no pre-state, the read-live sentinel, a wrong hash, a forged pin, a tampered file', async () => {
+  const unrecorded = recordedPin(null);
+  const pending = await handlerFor(neverConnect, { sql87Pin: unrecorded })(caseEvent({ pin: unrecorded, expected_live_definition_sha256: 'b'.repeat(64) }));
   assert.equal(pending.code, CODES.SQL_COLLISION);
   assert.match(pending.message, /no reviewed pre-apply live definition hash/);
   const recorded = recordedPin('a'.repeat(64));
@@ -431,8 +433,10 @@ test('PostgreSQL 16: inspect is read-only and prints no PII or ids; SQL 87 lands
     assert.ok(seen.slice(1, -1).every((text) => READ_ONLY_STATEMENT_RE.test(text)), JSON.stringify(seen.filter((text) => !READ_ONLY_STATEMENT_RE.test(text))));
     const report = receipt.mortgage_inspect;
     assert.deepEqual(receipt.precondition_failures, [], JSON.stringify(report));
-    assert.equal(receipt.pin_executable, false);
-    assert.equal(receipt.apply_preconditions_met, false, 'the committed pin has no pre-state');
+    assert.equal(receipt.pin_executable, true);
+    // The fixture's catalog (authenticated/service_role EXECUTE) is not staging's recorded pre-state.
+    assert.notEqual(receipt.live_definition_sha256, PIN.expected_live_definition_sha256);
+    assert.equal(receipt.apply_preconditions_met, false, 'live state differs from the recorded pre-state');
     assert.equal(receipt.sql47_prerequisites_present, true);
     assert.notEqual(receipt.live_definition_sha256, INTENDED);
     assert.equal(report.functions.resolve_check_case.state, 'case_original');
