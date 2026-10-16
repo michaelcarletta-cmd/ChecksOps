@@ -1,0 +1,1053 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import { S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL } from '../functions/api/identity.mjs';
+import { handleProviderRequest } from '../functions/api/providers.mjs';
+import { resetMoovTokenCache } from '../functions/api/providers/parity/moov-client.mjs';
+import { PLATFORM_OWNER_SQL, TENANT_MOOV_ENV_SQL } from '../functions/api/providers/onboarding/context.mjs';
+import {
+  NEW_ONBOARDING_FUNCTION_NAMES,
+  ONBOARDING_FUNCTION_NAMES,
+} from '../functions/api/providers/onboarding/handlers.mjs';
+import { sniffContentType } from '../functions/api/providers/onboarding/documents.mjs';
+import {
+  applyOnboardingWebhookStatus,
+  applyProductionOnboardingWebhook,
+} from '../functions/api/providers/onboarding/webhook-status.mjs';
+import { productionOnboardingWebhookApplyEnabled } from '../functions/api/providers/onboarding/flags.mjs';
+import { redact } from '../functions/api/providers/onboarding/redact.mjs';
+import { authorizeObject, isComplianceDocumentPath } from '../functions/api/storage.mjs';
+import { sanitizeWebhookPayload } from '../functions/api/providers/webhooks.mjs';
+import { FUNCTION_BY_NAME } from '../functions/api/providers/catalog.mjs';
+
+const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const OTHER_TENANT = '9b1f7a52-1c0e-4d5a-9a3f-5d6e7f8a9b0c';
+const MOOV_ACCOUNT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const PLATFORM_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const PII_KEY = 'arn:aws:kms:us-east-1:111122223333:key/11111111-2222-4333-8444-555555555555';
+const DOC_KEY = 'arn:aws:kms:us-east-1:111122223333:key/66666666-7777-4888-8999-aaaaaaaaaaaa';
+const SSN = '123456789';
+const SSN_DASHED = '123-45-6789';
+const SSN2 = '987650001';
+const EIN = '274444321';
+
+const USERS = {
+  owner: { sub: 'sub-owner', app: '10000000-0000-4000-8000-000000000001', memberships: [[TENANT, 'owner']] },
+  admin: { sub: 'sub-admin', app: '10000000-0000-4000-8000-000000000002', memberships: [[TENANT, 'admin']] },
+  manager: { sub: 'sub-manager', app: '10000000-0000-4000-8000-000000000003', memberships: [[TENANT, 'manager']] },
+  operator: { sub: 'sub-operator', app: '10000000-0000-4000-8000-000000000004', memberships: [[TENANT, 'operator']] },
+  viewer: { sub: 'sub-viewer', app: '10000000-0000-4000-8000-000000000005', memberships: [[TENANT, 'viewer']] },
+  partner: { sub: 'sub-partner', app: '10000000-0000-4000-8000-000000000006', memberships: [[OTHER_TENANT, 'owner']] },
+  globalAdmin: { sub: 'sub-gadmin', app: '10000000-0000-4000-8000-000000000007', memberships: [], userRolesAdmin: true },
+  platformOwner: { sub: 'sub-platform', app: '10000000-0000-4000-8000-000000000008', memberships: [], platformOwner: true },
+};
+
+const BASE_ENV = {
+  AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+  AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+  AWS_MOOV_ENABLED: 'false',
+  AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: undefined,
+  MOOV_ONBOARDING_PII_KMS_KEY_ARN: PII_KEY,
+  COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: DOC_KEY,
+  FILES_BUCKET: 'checksops-test-files',
+};
+
+const withEnv = async (vars, fn) => {
+  const previous = {};
+  for (const [key, value] of Object.entries(vars)) {
+    previous[key] = process.env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+};
+
+/** Captures console output so tests can assert nothing sensitive was logged. */
+const captureConsole = async (fn) => {
+  const lines = [];
+  const orig = { log: console.log, error: console.error, warn: console.warn, info: console.info };
+  for (const k of Object.keys(orig)) console[k] = (...args) => lines.push(args.map(String).join(' '));
+  try {
+    const result = await fn();
+    return { result, lines };
+  } finally {
+    Object.assign(console, orig);
+  }
+};
+
+const jwtEvent = (name, body, user) => ({
+  rawPath: `/functions/v1/${name}`,
+  headers: { authorization: 'Bearer test-id-token', 'user-agent': 'node-test' },
+  body: JSON.stringify(body || {}),
+  requestContext: {
+    stage: 'staging',
+    http: { method: 'POST', path: `/functions/v1/${name}` },
+    authorizer: { jwt: { claims: { sub: user.sub, email: `${user.sub}@example.com`, token_use: 'id' } } },
+  },
+});
+
+// ------------------------------------------------------------------ fakes
+
+let seq = 0;
+const nextId = () => {
+  seq += 1;
+  return `ffffffff-0000-4000-8000-${String(seq).padStart(12, '0')}`;
+};
+
+/** In-memory database honoring the SQL the onboarding handlers issue. */
+const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
+  const state = {
+    tenants: {
+      [TENANT]: { id: TENANT, name: 'Freedom', legal_business_name: 'Freedom Adj', email_reply_to: 'ops@example.com', moov_allowlisted: true, moov_environment: tenantEnv },
+      [OTHER_TENANT]: { id: OTHER_TENANT, name: 'Partner', moov_allowlisted: true, moov_environment: 'sandbox' },
+    },
+    accounts: account ? [{
+      id: 'acct-row-1', tenant_id: TENANT, environment: 'sandbox', provider_account_id: MOOV_ACCOUNT,
+      onboarding_status: 'onboarding_incomplete', verification_status: 'not_started', capabilities: [],
+      tos_accepted_at: null, disabled: false, restricted: false,
+    }] : [],
+    profiles: [],
+    reps: [],
+    docs: [],
+    outbox: [],
+    methods: [],
+    verifications: [],
+    events: [],
+    writes: [],
+    gucs: [],
+    accountUpdates: [],
+  };
+  const clients = [];
+  const create = () => {
+    let user = null;
+    const client = {
+      connect: async () => {},
+      end: async () => {},
+      query: async (sql, params = []) => {
+        const text = String(sql);
+        if (/^\s*(INSERT|UPDATE|DELETE)/i.test(text)) state.writes.push({ sql: text, params });
+        if (['BEGIN', 'ROLLBACK', 'COMMIT', 'SET TRANSACTION READ WRITE'].includes(text)) return { rows: [], command: text };
+        if (text.startsWith('SELECT set_config')) {
+          if (text.includes('$1')) { if (params[0] === 'request.app_user_id') user = Object.values(USERS).find((u) => u.app === params[1]) || null; }
+          state.gucs.push(text.includes('$1') ? params : [text]);
+          return { rows: [{}] };
+        }
+        if (text === LOOKUP_MAPPING_SQL) {
+          const u = Object.values(USERS).find((x) => x.sub === params[0]);
+          return { rows: u ? [{ application_user_id: u.app, cognito_sub: u.sub, email: `${u.sub}@example.com`, status: 'active' }] : [] };
+        }
+        if (text === TENANT_MEMBERSHIP_SQL) {
+          const u = Object.values(USERS).find((x) => x.app === params[0]);
+          return { rows: (u?.memberships || []).map(([tenant_id, role]) => ({ tenant_id, role, tenant_name: 't', tenant_slug: 't' })) };
+        }
+        if (text === PLATFORM_OWNER_SQL) return { rows: [{ is_platform_owner: user?.platformOwner === true }] };
+        if (text.includes('FROM public.user_roles')) return { rows: user?.userRolesAdmin ? [{ role: 'admin' }] : [] };
+        if (text === TENANT_MOOV_ENV_SQL) {
+          const t = state.tenants[params[0]];
+          return { rows: t ? [{ moov_allowlisted: t.moov_allowlisted, moov_environment: t.moov_environment }] : [] };
+        }
+        if (text.includes('FROM public.tenants WHERE id')) return { rows: state.tenants[params[0]] ? [state.tenants[params[0]]] : [] };
+        if (text.includes('payment_idempotency_keys')) return { rows: [] };
+
+        // payment_provider_accounts
+        if (text.includes('INSERT INTO public.payment_provider_accounts')) {
+          const row = { id: nextId(), tenant_id: params[0], environment: params[1], provider_account_id: params[2], onboarding_status: 'onboarding_incomplete', capabilities: [], tos_accepted_at: null };
+          state.accounts.push(row);
+          return { rows: [row] };
+        }
+        if (text.includes('FROM public.payment_provider_accounts') && text.includes('provider_account_id = $1')) {
+          return { rows: state.accounts.filter((a) => a.provider_account_id === params[0] && a.environment === params[1]) };
+        }
+        if (text.includes('FROM public.payment_provider_accounts')) {
+          return { rows: state.accounts.filter((a) => a.tenant_id === params[0] && a.environment === params[1]) };
+        }
+        if (text.includes('UPDATE public.payment_provider_accounts')) {
+          state.accountUpdates.push({ sql: text, params });
+          if (text.includes('last_webhook_event_type = $10')) {
+            const a = state.accounts.find((x) => x.id === params[0]);
+            if (a) Object.assign(a, { capabilities: JSON.parse(params[1]), onboarding_status: params[3], verification_status: params[2] ?? a.verification_status });
+          }
+          if (text.includes('tos_accepted_at = $2')) {
+            const a = state.accounts.find((x) => x.id === params[0]);
+            if (a) a.tos_accepted_at = params[1];
+          }
+          return { rows: [] };
+        }
+
+        // profiles
+        if (text.includes('FROM public.moov_onboarding_profiles')) {
+          return { rows: state.profiles.filter((p) => p.tenant_id === params[0] && p.environment === params[1]) };
+        }
+        if (text.includes('INSERT INTO public.moov_onboarding_profiles')) {
+          let row = state.profiles.find((p) => p.tenant_id === params[0] && p.environment === params[1]);
+          const fields = {
+            legal_name: params[2], dba: params[3], business_type: params[4], email: params[5], phone: params[6],
+            website: params[7], description: params[8], address: JSON.parse(params[9]), sync_pending: true,
+          };
+          if (!row) {
+            row = { id: nextId(), tenant_id: params[0], environment: params[1], ...fields, ein_ciphertext: params[10], ein_last4: params[11], ein_key_arn: params[12] };
+            state.profiles.push(row);
+          } else {
+            Object.assign(row, fields, {
+              ein_ciphertext: params[10] ?? row.ein_ciphertext,
+              ein_last4: params[11] ?? row.ein_last4,
+              ein_key_arn: params[12] ?? row.ein_key_arn,
+            });
+          }
+          return { rows: [{ ...row }] };
+        }
+        if (text.includes('UPDATE public.moov_onboarding_profiles')) {
+          const row = state.profiles.find((p) => p.tenant_id === params[0] && p.environment === params[1]);
+          if (row && text.includes('sync_pending = $3')) Object.assign(row, { sync_pending: params[2], last_error_code: params[3], moov_account_id: params[4] ?? row.moov_account_id });
+          if (row && text.includes('last_webhook_event_type = $3')) row.last_webhook_event_type = params[2];
+          return { rows: [] };
+        }
+
+        // representatives
+        if (text.includes('FROM public.moov_onboarding_representatives') && text.includes('removed_at IS NOT NULL')) {
+          return { rows: state.reps.filter((r) => r.tenant_id === params[0] && r.environment === params[1] && r.removed_at && r.moov_representative_id) };
+        }
+        if (text.includes('FROM public.moov_onboarding_representatives') && text.includes('WHERE id = $1')) {
+          return { rows: state.reps.filter((r) => r.id === params[0] && r.tenant_id === params[1] && !r.removed_at) };
+        }
+        if (text.includes('FROM public.moov_onboarding_representatives')) {
+          return { rows: state.reps.filter((r) => r.tenant_id === params[0] && r.environment === params[1] && !r.removed_at).map((r) => ({ ...r })) };
+        }
+        if (text.includes('INSERT INTO public.moov_onboarding_representatives')) {
+          const row = {
+            id: nextId(), tenant_id: params[0], environment: params[1], first_name: params[2], last_name: params[3],
+            email: params[4], phone: params[5], title: params[6], address: JSON.parse(params[7]), is_controller: params[8],
+            is_owner: params[9], ownership_pct: params[10], dob_ciphertext: params[11], dob_year: params[12],
+            ssn_last4: params[13], ssn_resubmit_required: false, moov_representative_id: null, removed_at: null,
+          };
+          state.reps.push(row);
+          return { rows: [{ ...row }] };
+        }
+        if (text.includes('UPDATE public.moov_onboarding_representatives')) {
+          if (text.includes('first_name = $3')) {
+            const row = state.reps.find((r) => r.id === params[14]);
+            if (!row) return { rows: [] };
+            Object.assign(row, {
+              first_name: params[2], last_name: params[3], email: params[4], phone: params[5], title: params[6],
+              address: JSON.parse(params[7]), is_controller: params[8], is_owner: params[9], ownership_pct: params[10],
+              dob_ciphertext: params[11] ?? row.dob_ciphertext, dob_year: params[12] ?? row.dob_year,
+              ssn_last4: params[13] ?? row.ssn_last4,
+            });
+            return { rows: [{ ...row }] };
+          }
+          const row = state.reps.find((r) => r.id === params[0]);
+          if (!row) return { rows: [] };
+          if (text.includes('removed_at = now()')) row.removed_at = new Date().toISOString();
+          else if (text.includes('moov_representative_id = $2')) {
+            row.moov_representative_id = params[1];
+            row.last_error_code = null;
+            if (params[2]) row.ssn_resubmit_required = false;
+          } else if (text.includes('ssn_resubmit_required = true')) {
+            row.ssn_resubmit_required = true;
+            row.last_error_code = params[1];
+          } else if (text.includes('moov_representative_id = NULL')) row.moov_representative_id = null;
+          return { rows: [] };
+        }
+
+        // documents
+        if (text.includes('INSERT INTO public.moov_compliance_documents')) {
+          const row = {
+            id: params[0], tenant_id: params[1], environment: params[2], purpose: params[3], file_name: params[4],
+            content_type: params[5], size_bytes: params[6], storage_key: params[7], kms_key_arn: params[8],
+            status: 'pending_upload', moov_file_id: null, moov_status: null, uploaded_at: null,
+            representative_id: params[10] ?? null, created_at: new Date().toISOString(),
+          };
+          state.docs.push(row);
+          return { rows: [{ ...row }] };
+        }
+        if (text.includes('FROM public.moov_compliance_documents') && text.includes('WHERE id = $1')) {
+          return { rows: state.docs.filter((d) => d.id === params[0] && d.tenant_id === params[1] && d.environment === params[2]).map((d) => ({ ...d })) };
+        }
+        if (text.includes('FROM public.moov_compliance_documents')) {
+          return { rows: state.docs.filter((d) => d.tenant_id === params[0] && d.environment === params[1] && d.status !== 'rejected') };
+        }
+        if (text.includes('UPDATE public.moov_compliance_documents')) {
+          const row = state.docs.find((d) => d.id === params[0]);
+          if (!row) return { rows: [] };
+          if (text.includes("status = 'sent'")) Object.assign(row, { status: 'sent', moov_file_id: params[1], moov_status: params[2], moov_account_id: params[3] });
+          else if (text.includes('sha256 = $2')) Object.assign(row, { status: row.status === 'pending_upload' ? 'stored' : row.status, sha256: params[1], uploaded_at: row.uploaded_at || new Date().toISOString() });
+          else if (text.includes("moov_status = 'sync_failed'")) Object.assign(row, { moov_status: 'sync_failed', last_error_code: params[1] ?? 'moov_account_missing' });
+          return { rows: [{ ...row }] };
+        }
+
+        // outbox
+        if (text.includes('FROM public.moov_onboarding_outbox') && text.includes('kind = $3')) {
+          return { rows: state.outbox.filter((o) => o.tenant_id === params[0] && o.environment === params[1] && o.kind === params[2] && o.subject_id === params[3] && o.status === 'pending') };
+        }
+        if (text.includes('FROM public.moov_onboarding_outbox')) {
+          return { rows: state.outbox.filter((o) => o.tenant_id === params[0] && o.environment === params[1] && o.status === 'pending') };
+        }
+        if (text.includes('INSERT INTO public.moov_onboarding_outbox')) {
+          const row = { id: nextId(), tenant_id: params[0], environment: params[1], kind: params[2], subject_id: params[3], payload: JSON.parse(params[4]), status: 'pending', attempts: 0 };
+          state.outbox.push(row);
+          return { rows: [{ id: row.id }] };
+        }
+        if (text.includes('UPDATE public.moov_onboarding_outbox')) {
+          const row = state.outbox.find((o) => o.id === params[0]);
+          if (row) {
+            row.attempts += 1;
+            if (text.includes("status = 'completed'")) Object.assign(row, { status: 'completed', last_error_code: null });
+            else if (text.includes("status = 'abandoned'")) Object.assign(row, { status: 'abandoned', last_error_code: params[1] ?? 'document_missing' });
+            else row.last_error_code = params[1];
+          }
+          return { rows: [] };
+        }
+
+        // banks / verifications / events
+        if (text.includes('INSERT INTO public.payment_provider_methods')) {
+          const row = { id: nextId(), tenant_id: params[0], environment: params[1], provider_account_id: params[2], provider_bank_account_id: params[3], last_four: params[6], routing_last_four: params[7], verification_status: params[9], connection_status: 'connected', external_recipient_id: null };
+          state.methods.push(row);
+          return { rows: [{ id: row.id }] };
+        }
+        if (text.includes('FROM public.payment_provider_methods')) {
+          return { rows: state.methods.filter((m) => m.tenant_id === params[0] && m.environment === params[1] && (params[2] === undefined || m.id === params[2])) };
+        }
+        if (text.includes('UPDATE public.payment_provider_methods')) {
+          const m = state.methods.find((x) => x.id === params[0]);
+          if (m && text.includes("verification_status = 'verified'")) m.verification_status = 'verified';
+          if (m && text.includes("'pending_micro_deposit'")) m.verification_status = 'pending_micro_deposit';
+          return { rows: [] };
+        }
+        if (text.includes('INSERT INTO public.payment_method_verifications')) {
+          const row = { id: nextId(), tenant_id: params[0], payment_method_id: params[1], environment: params[2], provider_account_id: params[3], provider_bank_account_id: params[4], status: 'pending', attempts: 0 };
+          state.verifications.push(row);
+          return { rows: [row] };
+        }
+        if (text.includes('FROM public.payment_method_verifications')) {
+          return { rows: state.verifications.filter((v) => (v.id === params[0] || v.payment_method_id === params[0]) && v.tenant_id === params[1] && v.environment === params[2]) };
+        }
+        if (text.includes('UPDATE public.payment_method_verifications')) {
+          const v = state.verifications.find((x) => x.id === params[0]);
+          if (v && text.includes("status = 'verified'")) Object.assign(v, { status: 'verified', attempts: params[1] });
+          return { rows: [] };
+        }
+        if (text.includes('INSERT INTO public.payment_event_log')) {
+          state.events.push({ sql: text, params });
+          return { rows: [] };
+        }
+        return { rows: [] };
+      },
+    };
+    clients.push(client);
+    return client;
+  };
+  return { state, create, clients };
+};
+
+/** Reversible fake KMS. Ciphertext never contains the plaintext digits. */
+const fakeKms = () => {
+  const calls = [];
+  return {
+    calls,
+    encrypt: async (input) => {
+      calls.push({ op: 'encrypt', KeyId: input.KeyId, EncryptionContext: input.EncryptionContext });
+      const bytes = Buffer.from(input.Plaintext).map((b) => b ^ 0x5a);
+      return { CiphertextBlob: Buffer.concat([Buffer.from('CTX'), bytes]), KeyId: input.KeyId };
+    },
+    decrypt: async (input) => {
+      calls.push({ op: 'decrypt', EncryptionContext: input.EncryptionContext });
+      return { Plaintext: Buffer.from(input.CiphertextBlob).subarray(3).map((b) => b ^ 0x5a) };
+    },
+  };
+};
+
+const sandboxCreds = async () => ({
+  moov: { publicKey: 'pk_sandbox', secretKey: 'sk_sandbox', platformAccountId: PLATFORM_ID, origin: 'https://checksops.com', apiVersion: 'v2024.01.00' },
+});
+
+/** Recorded Moov fetch. `fail` routes return an error status. */
+const moovFetch = (routes = []) => {
+  const calls = [];
+  let repSeq = 0;
+  const fetchImpl = async (url, init = {}) => {
+    const method = init.method || 'GET';
+    const u = String(url);
+    calls.push({ url: u, method, headers: init.headers || {}, body: init.body });
+    const hit = routes.find((r) => u.includes(r.match) && (!r.method || r.method === method));
+    let status = hit?.status || 200;
+    let payload = hit?.body;
+    if (!hit) {
+      if (u.endsWith('/oauth2/token')) payload = { access_token: 'tok', expires_in: 300 };
+      else if (u.endsWith('/accounts') && method === 'POST') payload = { accountID: MOOV_ACCOUNT };
+      else if (/\/representatives$/.test(u) && method === 'POST') { repSeq += 1; payload = { representativeID: `rep_${repSeq}` }; }
+      else if (/\/files$/.test(u) && method === 'POST') payload = { fileID: 'file_1', fileStatus: 'pending' };
+      else if (/\/bank-accounts$/.test(u) && method === 'POST') payload = { bankAccountID: 'bank_1', status: 'new', bankName: 'Test Bank', lastFourAccountNumber: '6789' };
+      else if (/\/bank-accounts$/.test(u)) payload = [];
+      else if (/\/capabilities$/.test(u) && method === 'GET') payload = [];
+      else payload = {};
+    }
+    if (typeof hit?.status === 'function') status = hit.status();
+    return { ok: status < 400, status, text: async () => (typeof payload === 'string' ? payload : JSON.stringify(payload ?? {})) };
+  };
+  return { fetchImpl, calls };
+};
+
+const run = async (name, body, user, { db, fetch = moovFetch(), kms = fakeKms(), s3, sign, extraDeps = {} } = {}) => {
+  const event = jwtEvent(name, body, user);
+  return handleProviderRequest(event, `/functions/v1/${name}`, 'POST', {
+    loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+    createClient: () => db.create(),
+    loadSandboxCredentials: sandboxCreds,
+    fetchImpl: fetch.fetchImpl,
+    kms,
+    ...(s3 ? { s3 } : {}),
+    ...(sign ? { getSignedUrl: sign } : {}),
+    ...extraDeps,
+  });
+};
+
+const ADDRESS = { line1: '1 Main St', city: 'Austin', state: 'TX', postal_code: '78701' };
+const BUSINESS = {
+  legal_name: 'Freedom Adjusting LLC', dba: 'Freedom', type: 'llc', ein: EIN, email: 'ops@freedom.test',
+  phone: '5125550100', website: 'freedom.test', description: 'Adjusting', address: ADDRESS,
+};
+const REP = {
+  name: 'Jane Doe', email: 'jane@freedom.test', phone: '5125550101', title: 'CEO', dob: '1980-04-15',
+  ssn: SSN_DASHED, address: ADDRESS, is_controller: true, ownership_pct: 60,
+};
+const saveBody = (extra = {}) => ({ tenant_id: TENANT, business: BUSINESS, representatives: [REP], ...extra });
+
+const allPersisted = (db) => JSON.stringify([db.state.writes, db.state.profiles, db.state.reps, db.state.outbox, db.state.events]);
+
+// ------------------------------------------------------------------ tests
+
+test('catalog lists every onboarding function as a Moov function', () => {
+  for (const name of ONBOARDING_FUNCTION_NAMES) assert.equal(FUNCTION_BY_NAME[name]?.provider, 'moov', name);
+  assert.deepEqual([...NEW_ONBOARDING_FUNCTION_NAMES].sort(), [
+    'moov-document-finalize', 'moov-document-upload-url', 'moov-document-view',
+    'moov-ein-reveal', 'moov-onboarding-get', 'moov-onboarding-save',
+  ]);
+});
+
+test('access matrix: every member of the tenant (any stored role) and the platform owner submit; partners, other tenants and non-member global admins get nothing', async () => {
+  await withEnv(BASE_ENV, async () => {
+    // Owner policy: no role tiers. The stored tenant_users.role is ignored.
+    for (const who of ['owner', 'admin', 'manager', 'operator', 'viewer', 'platformOwner']) {
+      resetMoovTokenCache();
+      const db = makeDb();
+      const result = await run('moov-onboarding-save', saveBody(), USERS[who], { db });
+      assert.equal(result.ok, true, who);
+      assert.equal(result.saved, true, who);
+      assert.equal(result.moov_synced, true, who);
+      assert.equal(result.can_submit, true, who);
+      const read = await run('moov-onboarding-get', { tenant_id: TENANT }, USERS[who], { db });
+      assert.equal(read.ok, true, who);
+      assert.equal(read.can_submit, true, who);
+      const uw = await run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: { a: 1 } }, USERS[who], { db });
+      assert.equal(uw.ok, true, `${who} underwriting save`);
+      const up = await run('moov-document-upload-url', {
+        tenant_id: TENANT, purpose: 'w9', file_name: 'w9.pdf', content_type: 'application/pdf', size: 10,
+      }, USERS[who], { db, sign: async () => 'https://s3.example/put' });
+      assert.equal(up.ok, true, `${who} upload url`);
+    }
+    // A viewer-role member gets no tier-based refusal anywhere.
+    const src = readFileSync(new URL('../functions/api/providers/onboarding/context.mjs', import.meta.url), 'utf8');
+    assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''), /\.role\b/);
+    for (const who of ['partner', 'globalAdmin']) {
+      const db = makeDb();
+      for (const name of ONBOARDING_FUNCTION_NAMES) {
+        const r = await run(name, saveBody({ document_id: TENANT }), USERS[who], { db });
+        assert.equal(r.statusCode, 403, `${who} ${name}`);
+        assert.equal(r.error, 'cross_tenant_denied', `${who} ${name}`);
+      }
+      assert.equal(db.state.writes.length, 0);
+    }
+  });
+});
+
+test('tenant_id is required: no first-membership fallback', async () => {
+  await withEnv(BASE_ENV, async () => {
+    const db = makeDb();
+    for (const name of ['moov-onboarding-get', 'moov-onboarding-save', 'moov-bank-account-add', 'moov-sync', 'moov-document-upload-url']) {
+      const r = await run(name, { business: BUSINESS }, USERS.owner, { db });
+      assert.equal(r.statusCode, 400, name);
+      assert.equal(r.error, 'tenant_id_required', name);
+    }
+    const bad = await run('moov-onboarding-get', { tenant_id: 'not-a-uuid' }, USERS.owner, { db });
+    assert.equal(bad.error, 'invalid_uuid');
+    const caller = readFileSync(new URL('../functions/api/providers/parity/caller.mjs', import.meta.url), 'utf8');
+    assert.doesNotMatch(caller.slice(caller.indexOf('export async function resolveTenant'), caller.indexOf('export async function loadTenantMoovEnv')), /memberships\[0\]/);
+  });
+});
+
+test('SSN never persisted: Moov gets it once; DB writes, outbox and logs only see the last four', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch();
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody({
+      representatives: [REP, { ...REP, name: 'John Roe', ssn: SSN2, is_controller: false, ownership_pct: 40 }],
+    }), USERS.owner, { db, fetch }));
+    assert.equal(result.ok, true);
+    assert.equal(result.moov_synced, true);
+    const persisted = allPersisted(db);
+    for (const value of [SSN, SSN_DASHED, SSN2]) {
+      assert.equal(persisted.includes(value), false, `persisted ${value}`);
+      assert.equal(lines.join('\n').includes(value), false, `logged ${value}`);
+      assert.equal(JSON.stringify(result).includes(value), false, `returned ${value}`);
+    }
+    assert.deepEqual(db.state.reps.map((r) => r.ssn_last4).sort(), ['0001', '6789']);
+    for (const o of db.state.outbox) assert.deepEqual(Object.keys(o.payload), ['profile_id']);
+    // Full SSN goes to Moov only, in the representative POST.
+    const posts = fetch.calls.filter((c) => /\/representatives$/.test(c.url) && c.method === 'POST');
+    assert.equal(posts.length, 2);
+    assert.equal(JSON.parse(posts[0].body).governmentID.ssn.full, SSN);
+    const other = fetch.calls.filter((c) => !/\/representatives$/.test(c.url));
+    for (const c of other) assert.equal(String(c.body ?? '').includes(SSN), false, c.url);
+    assert.deepEqual(result.representatives.map((r) => r.ssn_last4).sort(), ['0001', '6789']);
+    assert.equal(result.representatives[0].dob_masked, '**/**/1980');
+    assert.equal(JSON.stringify(result).includes('1980-04-15'), false);
+  });
+});
+
+test('EIN encrypted at rest, masked in every read, revealed only through moov-ein-reveal to members and the platform owner with an audit row', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const kms = fakeKms();
+    const fetch = moovFetch();
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db, kms, fetch });
+    const profile = db.state.profiles[0];
+    assert.match(profile.ein_ciphertext, /^kms:v1:/);
+    assert.equal(profile.ein_ciphertext.includes(EIN), false);
+    assert.equal(profile.ein_last4, '4321');
+    assert.equal(allPersisted(db).includes(EIN), false);
+    assert.deepEqual(kms.calls.find((c) => c.op === 'encrypt').EncryptionContext, { app: 'checksops-moov-onboarding', tenant_id: TENANT, field: 'ein' });
+    assert.equal(kms.calls.find((c) => c.op === 'encrypt').KeyId, PII_KEY);
+    // Moov receives the EIN in the profile PATCH.
+    const patch = fetch.calls.find((c) => c.method === 'PATCH' && c.url.endsWith(`/accounts/${MOOV_ACCOUNT}`) && String(c.body).includes('taxID'));
+    assert.equal(JSON.parse(patch.body).profile.business.taxID.ein.number, EIN);
+
+    for (const who of ['owner', 'manager', 'viewer']) {
+      const view = await run('moov-onboarding-get', { tenant_id: TENANT }, USERS[who], { db, kms });
+      assert.equal(view.business.ein_masked, '*****4321', who);
+      assert.equal(JSON.stringify(view).includes(EIN), false, who);
+    }
+    for (const who of ['owner', 'viewer', 'operator', 'platformOwner']) {
+      const before = db.state.events.length;
+      const revealed = await run('moov-ein-reveal', { tenant_id: TENANT }, USERS[who], { db, kms });
+      assert.equal(revealed.ok, true, who);
+      assert.equal(revealed.ein, EIN, who);
+      const audit = db.state.events.slice(before).find((e) => e.params.includes('onboarding.ein_revealed') || e.sql.includes('onboarding.ein_revealed'));
+      assert.ok(audit, `audit ${who}`);
+      assert.equal(audit.params[2].includes(EIN), false);
+    }
+    for (const who of ['partner', 'globalAdmin']) {
+      const r = await run('moov-ein-reveal', { tenant_id: TENANT }, USERS[who], { db, kms });
+      assert.equal(r.statusCode, 403, who);
+      assert.equal(r.ein, undefined, who);
+    }
+  });
+});
+
+test('EIN cannot be saved without a KMS key: fails closed, nothing written', async () => {
+  await withEnv({ ...BASE_ENV, MOOV_ONBOARDING_PII_KMS_KEY_ARN: undefined }, async () => {
+    const db = makeDb();
+    const r = await run('moov-onboarding-save', saveBody(), USERS.owner, { db });
+    assert.equal(r.statusCode, 503);
+    assert.equal(r.error, 'pii_encryption_unavailable');
+    assert.equal(db.state.profiles.length, 0);
+  });
+});
+
+test('upload URL: purpose, type and 20 MB limit validated; presigned PUT signs exact type/length and requires SSE-KMS headers', async () => {
+  await withEnv(BASE_ENV, async () => {
+    const db = makeDb();
+    const signed = [];
+    const sign = async (client, command, options) => {
+      signed.push({ input: command.input, options });
+      return 'https://s3.example/presigned';
+    };
+    for (const [body, error] of [
+      [{ purpose: 'w9', file_name: 'a.exe', content_type: 'application/octet-stream', size: 10 }, 'unsupported_document_type'],
+      [{ purpose: 'w9', file_name: 'a.pdf', content_type: 'image/png', size: 10 }, 'unsupported_document_type'],
+      [{ purpose: 'w9', file_name: 'a.pdf', content_type: 'application/pdf', size: 20 * 1024 * 1024 + 1 }, 'invalid_document_size'],
+      [{ purpose: 'w9', file_name: 'a.pdf', content_type: 'application/pdf', size: 0 }, 'invalid_document_size'],
+      [{ purpose: 'selfie', file_name: 'a.pdf', content_type: 'application/pdf', size: 10 }, 'invalid_document_purpose'],
+      [{ purpose: 'representative_verification', representative_id: OTHER_TENANT, file_name: 'a.pdf', content_type: 'application/pdf', size: 10 }, 'invalid_representative_id'],
+    ]) {
+      const r = await run('moov-document-upload-url', { tenant_id: TENANT, ...body }, USERS.owner, { db, sign });
+      assert.equal(r.statusCode, 400, error);
+      assert.equal(r.error, error);
+    }
+    assert.equal(signed.length, 0);
+    const ok = await run('moov-document-upload-url', {
+      tenant_id: TENANT, purpose: 'bank_statement', file_name: '../statement.PDF', content_type: 'application/pdf', size: 1234,
+    }, USERS.admin, { db, sign });
+    assert.equal(ok.ok, true);
+    assert.equal(ok.upload_url, 'https://s3.example/presigned');
+    const doc = db.state.docs[0];
+    assert.equal(doc.status, 'pending_upload');
+    assert.equal(doc.file_name, 'statement.PDF');
+    assert.equal(doc.storage_key, `files/tenant-documents/${TENANT}/verification/${ok.document_id}`);
+    const { input, options } = signed[0];
+    assert.equal(input.Bucket, 'checksops-test-files');
+    assert.equal(input.Key, doc.storage_key);
+    assert.equal(input.ContentType, 'application/pdf');
+    assert.equal(input.ContentLength, 1234);
+    assert.equal(input.ServerSideEncryption, 'aws:kms');
+    assert.equal(input.SSEKMSKeyId, DOC_KEY);
+    assert.ok(options.expiresIn <= 300);
+    assert.deepEqual([...options.signableHeaders].sort(), ['content-length', 'content-type']);
+    assert.ok(options.unhoistableHeaders.has('x-amz-server-side-encryption'));
+    assert.ok(options.unhoistableHeaders.has('x-amz-server-side-encryption-aws-kms-key-id'));
+    assert.deepEqual(ok.headers, {
+      'Content-Type': 'application/pdf',
+      'Content-Length': '1234',
+      'x-amz-server-side-encryption': 'aws:kms',
+      'x-amz-server-side-encryption-aws-kms-key-id': DOC_KEY,
+    });
+  });
+});
+
+test('real presigner: type, length and SSE-KMS headers are signed, not hoisted to the query', async () => {
+  await withEnv(BASE_ENV, async () => {
+    const db = makeDb();
+    const s3 = new S3Client({ region: 'us-east-1', credentials: { accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'secret' } });
+    const r = await run('moov-document-upload-url', {
+      tenant_id: TENANT, purpose: 'w9', file_name: 'w9.png', content_type: 'image/png', size: 2048,
+    }, USERS.owner, { db, s3, sign: getSignedUrl });
+    const url = new URL(r.upload_url);
+    const signedHeaders = url.searchParams.get('X-Amz-SignedHeaders').split(';');
+    for (const h of ['content-length', 'content-type', 'host', 'x-amz-server-side-encryption', 'x-amz-server-side-encryption-aws-kms-key-id']) {
+      assert.ok(signedHeaders.includes(h), h);
+    }
+    assert.equal(url.searchParams.get('x-amz-server-side-encryption'), null);
+    assert.equal(url.searchParams.get('X-Amz-Expires'), '300');
+  });
+});
+
+const PDF = new Uint8Array([...Buffer.from('%PDF-1.7\n'), 1, 2, 3, 4]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 1]);
+
+const fakeS3 = ({ bytes, contentType, size = bytes.length, sse = 'aws:kms', key = DOC_KEY }) => {
+  const sent = [];
+  return {
+    sent,
+    send: async (command) => {
+      const kind = command.constructor.name;
+      sent.push({ kind, input: command.input });
+      if (kind === 'HeadObjectCommand') return { ContentLength: size, ContentType: contentType, ServerSideEncryption: sse, SSEKMSKeyId: key };
+      if (kind === 'GetObjectCommand') return { Body: { transformToByteArray: async () => bytes } };
+      return {};
+    },
+  };
+};
+
+const uploadDoc = async (db, { contentType = 'application/pdf', fileName = 'a.pdf', size = PDF.length, purpose = 'business_verification' } = {}) => {
+  const r = await run('moov-document-upload-url', { tenant_id: TENANT, purpose, file_name: fileName, content_type: contentType, size }, USERS.owner, {
+    db, sign: async () => 'https://s3.example/put',
+  });
+  assert.equal(r.ok, true);
+  return r.document_id;
+};
+
+test('finalize rejects size, type, encryption and magic-byte mismatches and deletes the object', async () => {
+  await withEnv(BASE_ENV, async () => {
+    for (const [s3opts, error] of [
+      [{ bytes: PDF, contentType: 'application/pdf', size: PDF.length + 1 }, 'document_size_mismatch'],
+      [{ bytes: PDF, contentType: 'image/png' }, 'document_type_mismatch'],
+      [{ bytes: PDF, contentType: 'application/pdf', sse: 'AES256' }, 'document_encryption_mismatch'],
+      [{ bytes: PDF, contentType: 'application/pdf', key: 'arn:aws:kms:us-east-1:111122223333:key/other' }, 'document_encryption_mismatch'],
+      [{ bytes: new Uint8Array([...PNG, 0, 0, 0]).slice(0, PDF.length), contentType: 'application/pdf' }, 'document_content_mismatch'],
+    ]) {
+      const db = makeDb();
+      const id = await uploadDoc(db);
+      const s3 = fakeS3(s3opts);
+      const fetch = moovFetch();
+      const r = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch });
+      assert.equal(r.statusCode, 422, error);
+      assert.equal(r.error, error);
+      assert.ok(s3.sent.some((c) => c.kind === 'DeleteObjectCommand'), error);
+      assert.equal(fetch.calls.filter((c) => c.url.includes('/files')).length, 0, error);
+    }
+    assert.equal(sniffContentType(Buffer.from('a,b\n1,2\n')), 'text/csv');
+    assert.equal(sniffContentType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), 'image/jpeg');
+    assert.equal(sniffContentType(new Uint8Array([0x4d, 0x5a, 0x00, 0x01])), null);
+  });
+});
+
+test('finalize sends the verified bytes to Moov files as multipart and records moov_file_id; retry is a no-op', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const id = await uploadDoc(db, { purpose: 'w9' });
+    const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+    const fetch = moovFetch();
+    const r = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch });
+    assert.equal(r.ok, true);
+    assert.equal(r.moov_synced, true);
+    assert.equal(r.document.moov_file_id, 'file_1');
+    assert.equal(r.document.moov_status, 'pending');
+    const call = fetch.calls.find((c) => c.url.endsWith(`/accounts/${MOOV_ACCOUNT}/files`));
+    assert.equal(call.method, 'POST');
+    assert.ok(call.body instanceof FormData);
+    assert.equal(call.headers['Content-Type'], undefined);
+    const file = call.body.get('file');
+    assert.equal(file.type, 'application/pdf');
+    assert.equal(file.name, 'a.pdf');
+    assert.deepEqual(new Uint8Array(await file.arrayBuffer()), PDF);
+    assert.equal(call.body.get('filePurpose'), 'business_verification');
+    assert.equal(JSON.parse(call.body.get('metadata')).checksops_purpose, 'w9');
+    assert.equal(db.state.outbox[0].status, 'completed');
+    const again = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch });
+    assert.equal(again.document.moov_file_id, 'file_1');
+    assert.equal(fetch.calls.filter((c) => c.url.endsWith('/files')).length, 1);
+    // Members may view; partners may not.
+    const view = await run('moov-document-view', { tenant_id: TENANT, document_id: id }, USERS.viewer, { db, sign: async (c, cmd, o) => `https://s3.example/get?exp=${o.expiresIn}&key=${cmd.input.Key}` });
+    assert.equal(view.ok, true);
+    assert.match(view.url, /exp=60/);
+    const alias = await run('moov-account-file-view', { tenant_id: TENANT, file_id: id }, USERS.platformOwner, { db, sign: async () => 'https://s3.example/get' });
+    assert.equal(alias.ok, true);
+    const partner = await run('moov-document-view', { tenant_id: TENANT, document_id: id }, USERS.partner, { db, sign: async () => 'x' });
+    assert.equal(partner.statusCode, 403);
+  });
+});
+
+test('Moov file failure leaves the document stored and pending; moov-sync retries from the outbox', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const id = await uploadDoc(db);
+    const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+    const failing = moovFetch([{ match: '/files', method: 'POST', status: 503, body: { error: 'down' } }]);
+    const r = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch: failing });
+    assert.equal(r.ok, true);
+    assert.equal(r.pending, true);
+    assert.equal(r.error_code, 'moov_unavailable');
+    assert.equal(r.document.moov_file_id, null);
+    assert.equal(db.state.docs[0].moov_status, 'sync_failed');
+    assert.equal(db.state.outbox[0].status, 'pending');
+    const retry = await run('moov-sync', { tenant_id: TENANT }, USERS.owner, { db, s3, fetch: moovFetch() });
+    assert.equal(retry.ok, true);
+    assert.equal(db.state.docs[0].moov_file_id, 'file_1');
+    assert.equal(db.state.outbox[0].status, 'completed');
+  });
+});
+
+test('legacy file upload is refused with a pointer to the new flow', async () => {
+  await withEnv(BASE_ENV, async () => {
+    const db = makeDb();
+    const r = await run('moov-account-file-upload', { tenant_id: TENANT, file_base64: 'JVBERi0=' }, USERS.owner, { db });
+    assert.equal(r.statusCode, 410);
+    assert.equal(r.error, 'use_moov_document_upload_url');
+    assert.deepEqual(r.replacement, ['moov-document-upload-url', 'moov-document-finalize']);
+    const files = await run('moov-account-files', { tenant_id: TENANT }, USERS.viewer, { db });
+    assert.equal(files.ok, true);
+    assert.equal(files.account_connected, true);
+    assert.ok(Array.isArray(files.representatives));
+  });
+});
+
+test('Moov failure after save returns saved+pending, flags SSN re-entry, and moov-sync re-sends everything except the SSN', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const failing = moovFetch([{ match: '/representatives', method: 'POST', status: 502, body: { error: 'bad gateway' } }]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: failing }));
+    assert.equal(result.ok, true);
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, false);
+    assert.equal(result.pending, true);
+    assert.equal(result.error_code, 'moov_unavailable');
+    assert.equal(result.sync.pending, true);
+    assert.equal(result.representatives[0].ssn_resubmit_required, true);
+    assert.equal(db.state.outbox[0].status, 'pending');
+    assert.equal(lines.join('\n').includes(SSN), false);
+    assert.equal(allPersisted(db).includes(SSN), false);
+
+    const retryFetch = moovFetch();
+    const retry = await run('moov-sync', { tenant_id: TENANT }, USERS.admin, { db, fetch: retryFetch });
+    assert.equal(retry.ok, true);
+    const patch = retryFetch.calls.find((c) => c.method === 'PATCH' && String(c.body).includes('legalBusinessName'));
+    assert.ok(patch, 'profile re-sent');
+    assert.equal(JSON.parse(patch.body).profile.business.taxID.ein.number, EIN);
+    for (const c of retryFetch.calls) assert.equal(String(c.body ?? '').includes(SSN), false);
+    assert.equal(retryFetch.calls.filter((c) => /\/representatives$/.test(c.url) && c.method === 'POST').length, 0);
+    assert.equal(db.state.reps[0].ssn_resubmit_required, true);
+
+    // Owner re-enters the SSN: the person is created and the flag clears.
+    const fixed = await run('moov-onboarding-save', saveBody({
+      representatives: [{ ...REP, id: db.state.reps[0].id }],
+    }), USERS.owner, { db, fetch: moovFetch() });
+    assert.equal(fixed.moov_synced, true);
+    assert.equal(fixed.representatives[0].ssn_resubmit_required, false);
+    assert.equal(db.state.reps[0].moov_representative_id, 'rep_1');
+  });
+});
+
+test('re-entering a person without an SSN after a failed send is refused (SSN must be re-entered)', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: moovFetch([{ match: '/representatives', method: 'POST', status: 500 }]) });
+    const { ssn, ...noSsn } = REP;
+    const r = await run('moov-onboarding-save', saveBody({ representatives: [{ ...noSsn, id: db.state.reps[0].id }] }), USERS.owner, { db });
+    assert.equal(r.statusCode, 400);
+    assert.equal(r.field, 'representatives[0].ssn');
+    assert.equal(String(r.message).includes(ssn), false);
+  });
+});
+
+test('representative upsert is idempotent: stored moov_representative_id is PATCHed, never re-POSTed', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    // First run: capability request fails after the person was created at Moov.
+    const first = await run('moov-onboarding-save', saveBody(), USERS.owner, {
+      db, fetch: moovFetch([{ match: '/capabilities', method: 'POST', status: 500 }]),
+    });
+    assert.equal(first.pending, true);
+    assert.equal(db.state.reps[0].moov_representative_id, 'rep_1');
+    assert.equal(db.state.reps[0].ssn_resubmit_required, false);
+    const { ssn: _omit, ...noSsn } = REP;
+    const second = moovFetch();
+    const r = await run('moov-onboarding-save', saveBody({ representatives: [{ ...noSsn, id: db.state.reps[0].id, title: 'President' }] }), USERS.owner, { db, fetch: second });
+    assert.equal(r.moov_synced, true);
+    assert.equal(second.calls.filter((c) => /\/representatives$/.test(c.url) && c.method === 'POST').length, 0);
+    const patch = second.calls.find((c) => c.method === 'PATCH' && c.url.endsWith('/representatives/rep_1'));
+    assert.ok(patch);
+    const body = JSON.parse(patch.body);
+    assert.equal(body.responsibilities.jobTitle, 'President');
+    assert.equal(body.governmentID, undefined);
+    assert.deepEqual(body.birthDate, { year: 1980, month: 4, day: 15 });
+    assert.equal(db.state.reps.length, 1);
+    assert.equal(db.state.outbox.filter((o) => o.status === 'pending').length, 0);
+  });
+});
+
+test('save creates the Moov account when none exists, then returns the masked shape with can_submit', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb({ account: false });
+    const fetch = moovFetch();
+    const r = await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch });
+    assert.equal(r.ok, true);
+    assert.equal(r.account.connected, true);
+    assert.equal(r.can_submit, true);
+    const create = fetch.calls.find((c) => c.url.endsWith('/accounts') && c.method === 'POST');
+    assert.ok(create.headers['X-Idempotency-Key']);
+    assert.equal(JSON.parse(create.body).foreignID, TENANT);
+    assert.equal(db.state.accounts[0].environment, 'sandbox');
+    for (const key of ['ok', 'environment', 'account', 'business', 'representatives', 'documents', 'banks', 'sync', 'can_submit']) {
+      assert.ok(key in r, key);
+    }
+    assert.deepEqual(Object.keys(r.business).sort(), ['address', 'dba', 'description', 'ein_masked', 'email', 'legal_name', 'phone', 'type', 'website']);
+    assert.deepEqual(r.business.address, { line1: '1 Main St', city: 'Austin', state: 'TX', postal_code: '78701', country: 'US' });
+  });
+});
+
+test('environment always comes from the server: body environment is ignored, staging binds sandbox', async () => {
+  await withEnv(BASE_ENV, async () => {
+    const db = makeDb({ tenantEnv: 'production' });
+    const r = await run('moov-onboarding-get', { tenant_id: TENANT, environment: 'production', moov_environment: 'production' }, USERS.owner, { db });
+    assert.equal(r.environment, 'sandbox');
+    assert.equal(r.productionExecution, false);
+    const db2 = makeDb();
+    const r2 = await run('moov-onboarding-get', { tenant_id: TENANT, environment: 'production' }, USERS.owner, { db: db2 });
+    assert.equal(r2.environment, 'sandbox');
+  });
+});
+
+test('production still refuses every onboarding function while AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED is off', async () => {
+  const PROD = { ...BASE_ENV, AWS_PROVIDER_EXECUTION_ENABLED: 'true', AWS_MOOV_ENABLED: 'true', AWS_PROVIDER_LIVE_READS_ENABLED: 'true' };
+  for (const flag of [undefined, 'false', 'TRUE', '1']) {
+    await withEnv({ ...PROD, AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: flag }, async () => {
+      let clients = 0;
+      for (const name of ONBOARDING_FUNCTION_NAMES) {
+        const result = await handleProviderRequest(jwtEvent(name, { tenant_id: TENANT }, USERS.owner), `/functions/v1/${name}`, 'POST', {
+          createClient: () => { clients += 1; return makeDb().create(); },
+          loadDatabaseCredentials: async () => ({}),
+        });
+        assert.equal(result.statusCode, 403, `${name} ${flag}`);
+        assert.equal(result.error, 'production_execution_blocked', `${name} ${flag}`);
+        assert.equal(result.tranche4HardBlock, true, name);
+      }
+      assert.equal(clients, 0);
+      assert.equal(productionOnboardingWebhookApplyEnabled(), false);
+    });
+  }
+  // Money movement stays blocked even with the onboarding flag on.
+  await withEnv({ ...PROD, AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true' }, async () => {
+    for (const name of ['moov-transfer-create', 'moov-tenant-fee-charge', 'moov-recipient-create', 'moov-platform-bank']) {
+      const result = await handleProviderRequest(jwtEvent(name, { tenant_id: TENANT }, USERS.owner), `/functions/v1/${name}`, 'POST', {});
+      assert.equal(result.error, 'production_execution_blocked', name);
+    }
+  });
+});
+
+test('production with the flag on: production tenant binds production credentials from Secrets Manager; sandbox tenants are refused', async () => {
+  const PROD = { ...BASE_ENV, AWS_PROVIDER_EXECUTION_ENABLED: 'true', AWS_MOOV_ENABLED: 'true', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true' };
+  await withEnv(PROD, async () => {
+    resetMoovTokenCache();
+    const db = makeDb({ tenantEnv: 'production', account: false });
+    let sandboxLoaded = false;
+    const fetch = moovFetch();
+    const r = await run('moov-onboarding-save', saveBody(), USERS.owner, {
+      db, fetch,
+      extraDeps: {
+        loadProviderSecrets: async () => ({ MOOV_PUBLIC_KEY: 'pk_live', MOOV_SECRET_KEY: 'sk_live', MOOV_ACCOUNT_ID: PLATFORM_ID }),
+        loadSandboxCredentials: async () => { sandboxLoaded = true; return {}; },
+      },
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.environment, 'production');
+    assert.equal(sandboxLoaded, false);
+    assert.equal(db.state.profiles[0].environment, 'production');
+    assert.equal(db.state.accounts[0].environment, 'production');
+    const oauth = fetch.calls.find((c) => c.url.endsWith('/oauth2/token'));
+    assert.equal(oauth.headers.Authorization, `Basic ${Buffer.from('pk_live:sk_live').toString('base64')}`);
+
+    const sandboxTenant = makeDb({ tenantEnv: 'sandbox' });
+    const refused = await run('moov-onboarding-get', { tenant_id: TENANT }, USERS.owner, { db: sandboxTenant });
+    assert.equal(refused.statusCode, 503);
+    assert.equal(refused.error, 'production_provider_context_unresolved');
+  });
+});
+
+test('bank add stores last four only and banks[] ids drive micro-deposit initiate/confirm', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch([{ match: '/bank-accounts/bank_1', method: 'GET', body: { status: 'new' } }]);
+    const added = await run('moov-bank-account-add', {
+      tenant_id: TENANT, holder_name: 'Freedom LLC', routing_number: '021000021', account_number: '000123456789',
+    }, USERS.owner, { db, fetch });
+    assert.equal(added.ok, true);
+    assert.equal(added.routing_masked, '*****0021');
+    assert.equal(allPersisted(db).includes('000123456789'), false);
+    assert.equal(allPersisted(db).includes('021000021'), false);
+    const view = await run('moov-onboarding-get', { tenant_id: TENANT }, USERS.viewer, { db });
+    assert.deepEqual(view.banks, [{ id: added.payment_method_id, last4: '6789', routing_masked: '*****0021', status: 'pending', verification: 'pending' }]);
+    const init = await run('moov-micro-deposit-initiate', { tenant_id: TENANT, payment_method_id: added.payment_method_id }, USERS.owner, { db, fetch });
+    assert.equal(init.ok, true);
+    const confirm = await run('moov-micro-deposit-confirm', { tenant_id: TENANT, payment_method_id: added.payment_method_id, code: '1234' }, USERS.owner, { db, fetch });
+    assert.equal(confirm.ok, true);
+    assert.equal(confirm.verified, true);
+    const put = fetch.calls.find((c) => c.method === 'PUT' && c.url.endsWith('/verify'));
+    assert.deepEqual(JSON.parse(put.body), { code: '1234' });
+  });
+});
+
+test('webhook status: capability and verification events update only the matching environment rows', async () => {
+  const db = makeDb();
+  db.state.accounts.push({ id: 'acct-prod', tenant_id: TENANT, environment: 'production', provider_account_id: MOOV_ACCOUNT, capabilities: [], verification_status: 'pending' });
+  const client = db.create();
+  const sandbox = await applyOnboardingWebhookStatus(client, {
+    environment: 'sandbox', eventType: 'capability.updated', providerAccountId: MOOV_ACCOUNT,
+    data: { accountID: MOOV_ACCOUNT, capabilityID: 'transfers', status: 'enabled' },
+  });
+  assert.equal(sandbox.applied, true);
+  assert.deepEqual(db.state.accounts[0].capabilities, [{ capability: 'transfers', status: 'enabled' }]);
+  assert.deepEqual(db.state.accounts[1].capabilities, []);
+  const update = db.state.accountUpdates.at(-1);
+  assert.match(update.sql, /WHERE id = \$1::uuid AND environment = \$11/);
+  assert.equal(update.params[10], 'sandbox');
+
+  await applyOnboardingWebhookStatus(client, {
+    environment: 'sandbox', eventType: 'account.updated', providerAccountId: MOOV_ACCOUNT,
+    data: { verification: { status: 'verified' } },
+  });
+  assert.equal(db.state.accounts[0].verification_status, 'verified');
+  assert.equal(db.state.accounts[0].onboarding_status, 'active');
+
+  const prod = await applyProductionOnboardingWebhook(client, {
+    type: 'capability.requested', data: { accountID: MOOV_ACCOUNT, capabilityID: 'collect-funds.ach' },
+  });
+  assert.equal(prod.applied, true);
+  assert.equal(prod.financialTablesMutated, false);
+  assert.deepEqual(db.state.accounts[1].capabilities, [{ capability: 'collect-funds.ach', status: 'pending' }]);
+  const skipped = await applyProductionOnboardingWebhook(client, { type: 'transfer.updated', data: { transferID: 't' } });
+  assert.equal(skipped.applied, false);
+  const missing = await applyOnboardingWebhookStatus(client, { environment: 'sandbox', eventType: 'account.updated', providerAccountId: 'unknown' });
+  assert.equal(missing.applied, false);
+});
+
+test('production onboarding webhook apply needs the flag, production execution and non-dry-run', async () => {
+  await withEnv({ AWS_PROVIDER_EXECUTION_ENABLED: 'true', AWS_MOOV_ENABLED: 'true', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true', AWS_PROVIDER_WEBHOOK_DRY_RUN: 'false' }, async () => {
+    assert.equal(productionOnboardingWebhookApplyEnabled(), true);
+  });
+  await withEnv({ AWS_PROVIDER_EXECUTION_ENABLED: 'true', AWS_MOOV_ENABLED: 'true', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true', AWS_PROVIDER_WEBHOOK_DRY_RUN: undefined }, async () => {
+    assert.equal(productionOnboardingWebhookApplyEnabled(), false);
+  });
+  await withEnv({ AWS_PROVIDER_EXECUTION_ENABLED: 'true', AWS_MOOV_ENABLED: 'true', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: undefined, AWS_PROVIDER_WEBHOOK_DRY_RUN: 'false' }, async () => {
+    assert.equal(productionOnboardingWebhookApplyEnabled(), false);
+  });
+});
+
+test('redaction: SSN, EIN, DOB, account and routing numbers never survive log or webhook sanitizing', () => {
+  const sample = {
+    ssn: SSN, ein: EIN, dob: '1980-04-15', birthDate: { year: 1980 }, accountNumber: '000123456789',
+    routing_number: '021000021', taxID: { ein: { number: EIN } }, governmentID: { ssn: { full: SSN } },
+    note: `ssn ${SSN_DASHED} ein 27-4444321`, file_base64: 'JVBERi0=',
+  };
+  const text = JSON.stringify(redact(sample));
+  for (const v of [SSN, SSN_DASHED, EIN, '27-4444321', '000123456789', '021000021', '1980-04-15', 'JVBERi0=']) {
+    assert.equal(text.includes(v), false, v);
+  }
+  const hook = JSON.stringify(sanitizeWebhookPayload(sample));
+  for (const v of [SSN, EIN, '000123456789', '021000021']) assert.equal(hook.includes(v), false, v);
+});
+
+test('generic storage never serves compliance documents', async () => {
+  assert.equal(isComplianceDocumentPath(`${TENANT}/verification/${OTHER_TENANT}`), true);
+  assert.equal(isComplianceDocumentPath(`${TENANT}/library/x.pdf`), false);
+  const client = { query: async () => ({ rows: [{ path: 'x' }] }) };
+  const r = await authorizeObject(client, 'tenant-documents', `${TENANT}/verification/${OTHER_TENANT}`, { userId: USERS.owner.app });
+  assert.equal(r.authorized, false);
+  assert.equal(r.reason, 'compliance_document_path');
+});
+
+test('SQL 91: tenant-scoped tables with RLS, member/platform-owner writers, no SSN column, ids-only outbox', () => {
+  const sql = readFileSync(new URL('../workflows/sql/91_moov_onboarding.sql', import.meta.url), 'utf8');
+  for (const table of ['moov_onboarding_profiles', 'moov_onboarding_representatives', 'moov_compliance_documents', 'moov_onboarding_outbox']) {
+    assert.match(sql, new RegExp(`CREATE TABLE public\\.${table} \\(`));
+    assert.match(sql, new RegExp(`ALTER TABLE public\\.${table} ENABLE ROW LEVEL SECURITY`));
+    assert.match(sql, new RegExp(`aws_select_${table} ON public\\.${table}[\\s\\S]*?aws_can_access_tenant\\(tenant_id\\)`));
+    assert.match(sql, new RegExp(`aws_insert_${table} ON public\\.${table}[\\s\\S]*?aws_moov_onboarding_writer\\(tenant_id\\)`));
+    assert.match(sql, new RegExp(`REVOKE ALL ON TABLE public\\.${table} FROM PUBLIC`));
+  }
+  assert.doesNotMatch(sql, /\bssn(_full)?\s+(text|varchar|char)/i);
+  assert.match(sql, /ssn_last4 text/);
+  assert.match(sql, /is_platform_owner\(\)/);
+  const start = sql.indexOf('CREATE OR REPLACE FUNCTION public.aws_can_submit_moov_onboarding');
+  const submitter = sql.slice(start, sql.indexOf('$$;', start));
+  assert.match(submitter, /is_platform_owner\(\)/);
+  assert.match(submitter, /tu\.user_id = auth\.uid\(\)/);
+  assert.doesNotMatch(submitter, /has_role\(|user_roles|aws_is_cross_tenant_reader|\.role\b/);
+  assert.match(sql, /moov_onboarding_outbox_payload_no_pii/);
+  const allowed = JSON.parse(readFileSync(new URL('../functions/api/allowed-tables.json', import.meta.url), 'utf8'));
+  for (const table of ['moov_onboarding_profiles', 'moov_onboarding_representatives', 'moov_compliance_documents', 'moov_onboarding_outbox']) {
+    assert.equal(allowed.includes(table), false, table);
+  }
+  const allowlist = readFileSync(new URL('../functions/api/write-allowlist.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(allowlist, /moov_onboarding|moov_compliance/);
+});
+
+test('template: dedicated KMS keys, SSE-KMS enforcement on the verification prefix, production onboarding flag off', () => {
+  const t = readFileSync(new URL('../template.yaml', import.meta.url), 'utf8');
+  assert.match(t, /MoovOnboardingPiiKey:\n\s+Type: AWS::KMS::Key/);
+  assert.match(t, /ComplianceDocumentsKey:\n\s+Type: AWS::KMS::Key/);
+  assert.match(t, /EnableKeyRotation: true/);
+  assert.match(t, /AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: "false"/);
+  assert.match(t, /MOOV_ONBOARDING_PII_KMS_KEY_ARN: !GetAtt MoovOnboardingPiiKey\.Arn/);
+  assert.match(t, /COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: !GetAtt ComplianceDocumentsKey\.Arn/);
+  assert.match(t, /files\/tenant-documents\/\*\/verification\/\*/);
+  assert.match(t, /s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt ComplianceDocumentsKey\.Arn/);
+  assert.match(t, /kms:ViaService: !Sub s3\.\$\{AWS::Region\}\.amazonaws\.com/);
+  assert.match(t, /Environment:\n\s+Type: String\n\s+Default: staging\n\s+AllowedValues:\n\s+- staging/);
+});

@@ -656,7 +656,8 @@ test('UAT Check Alt approve/reject: a platform admin with no tenant membership i
     const client = parityClient({ tenantRole: 'admin', platformAdmin: true, operations: pendingUatOp(OTHER_TENANT) });
     const result = await parityApprove(client, fetchImpl, { tenant_id: OTHER_TENANT, deposit_id: UAT_DEPOSIT_ID, action: 'approve' });
     assert.equal(result.statusCode, 403);
-    assert.equal(result.error, 'financial_unauthorized');
+    // A global user_roles admin no longer bypasses membership: refused at tenant resolution.
+    assert.equal(result.error, 'cross_tenant_denied');
     assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
   });
 });
@@ -806,7 +807,8 @@ test('UAT Check Alt poll-status: viewers and platform-only admins are refused, n
       const result = await parityPoll(client, fetchImpl, body);
       const label = `${tenantRole} ${platformAdmin} ${JSON.stringify(body)}`;
       assert.equal(result.statusCode, 403, label);
-      assert.equal(result.error, 'financial_unauthorized', label);
+      // Naming a tenant the caller is not a member of is refused at tenant resolution.
+      assert.equal(result.error, body.tenant_id && (!tenantRole || body.tenant_id === OTHER_TENANT) ? 'cross_tenant_denied' : 'financial_unauthorized', label);
       assert.equal(anyProviderCall(calls), false, label);
       assert.equal(pollUpdated(client), false, label);
     }
@@ -878,7 +880,8 @@ test('UAT Check Alt deposit-history and account-status: scoped to a tenant the c
         const result = await parityCall(fn, client, fetchImpl, body);
         const label = `${fn} ${tenantRole} ${platformAdmin} ${JSON.stringify(body)}`;
         assert.equal(result.statusCode, 403, label);
-        assert.equal(result.error, 'financial_unauthorized', label);
+        // Naming a tenant the caller is not a member of is refused at tenant resolution.
+        assert.equal(result.error, body.tenant_id && (!tenantRole || body.tenant_id === OTHER_TENANT) ? 'cross_tenant_denied' : 'financial_unauthorized', label);
         assert.equal(anyProviderCall(calls), false, label);
       }
       // A non-member naming another tenant is refused before the handler runs.
