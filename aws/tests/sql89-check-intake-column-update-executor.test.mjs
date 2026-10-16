@@ -2,8 +2,8 @@
  * Staging VPC executor support for SQL 89 (checksops: column-level UPDATE on
  * check_intake_items instead of table-level UPDATE).
  *
- * The committed pin has no staging pre-state (expected_live_definition_sha256 null)
- * until a read-live records it, so apply refuses before connecting. The PostgreSQL 16
+ * The committed pin carries the staging pre-state from read-live run 82; a pin
+ * without one refuses apply before connecting. The PostgreSQL 16
  * test runs the real handler: the read-only inspect reports the updatable columns and
  * the plan through read-live, and an apply with a recorded pre-state converges
  * staging-like column grants on exactly the 43 columns, refuses replay and re-apply,
@@ -81,11 +81,12 @@ function handlerFor(connect, extra = {}) {
 }
 const neverConnect = async () => { throw new Error('should-not-connect'); };
 
-test('pin: the file, its authoring commit, the intended hash, no staging pre-state yet; selectable and packed', () => {
+test('pin: the file, its authoring commit, the intended hash, the recorded staging pre-state; selectable and packed', () => {
   assert.equal(sha(fs.readFileSync(SQL_FILE)), PIN.source_sha256);
   assert.equal(sql89StatementText(fs.readFileSync(SQL_FILE, 'utf8')), SQL89_CANONICAL_STATEMENTS);
   assert.equal(PIN.intended_replacement_sha256, stateHash(false, SQL89_COLUMNS));
-  assert.equal(PIN.expected_live_definition_sha256, null);
+  assert.equal(PIN.expected_live_definition_sha256, '6810985b26778774a633ad17f02b634ec7c19b956d0f5302251fd1d2d05b0c7f', 'read-live run 82');
+  assert.notEqual(PIN.expected_live_definition_sha256, PIN.intended_replacement_sha256);
   assert.deepEqual(PIN.columns, SQL89_COLUMNS);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(PIN));
   assert.equal(resolveAuthorizedMigration({ filename: PIN.filename, migration_id: PIN.migration_id }), PIN);
@@ -100,7 +101,8 @@ test('pin: the file, its authoring commit, the intended hash, no staging pre-sta
 });
 
 test('apply refuses before connecting: no reviewed pre-state, a read-live sentinel, another pin, a tampered file', async () => {
-  const unrecorded = await handlerFor(neverConnect)(grantEvent());
+  const unrecordedPin = { ...PIN, expected_live_definition_sha256: null };
+  const unrecorded = await handlerFor(neverConnect, { sql89Pin: unrecordedPin })(grantEvent({ expected_live_definition_sha256: 'b'.repeat(64) }, unrecordedPin));
   assert.equal(unrecorded.code, CODES.SQL_COLLISION);
   assert.match(unrecorded.message, /no reviewed pre-apply live definition hash/);
   const recorded = { ...PIN, expected_live_definition_sha256: 'c'.repeat(64) };
@@ -164,8 +166,10 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
     assert.equal(inspect.ok, true, JSON.stringify(inspect));
     const receipt = inspect.details.receipt;
     assert.equal(receipt.live_definition_sha256, live);
-    assert.equal(receipt.pin_executable, false);
-    assert.equal(receipt.apply_preconditions_met, false, 'no reviewed pre-state yet');
+    assert.equal(receipt.pin_executable, true);
+    // The fixture's grants are not staging's recorded pre-state.
+    assert.notEqual(receipt.live_definition_sha256, PIN.expected_live_definition_sha256);
+    assert.equal(receipt.apply_preconditions_met, false, 'live state differs from the recorded pre-state');
     assert.deepEqual(receipt.precondition_failures, []);
     assert.deepEqual(receipt.column_grant_inspect.updatable_columns, preColumns);
     assert.deepEqual(receipt.column_grant_inspect.columns_losing_update, ['detected_claim_number']);
