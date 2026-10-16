@@ -85,8 +85,10 @@ test("Item #4 Compliance and Documents still provides Payment Account", () => {
   assert.match(whiteLabel, /Compliance & Docs/);
   assert.match(whiteLabel, /<ComplianceSettings \/>/);
   assert.match(compliance, /title="Payment Account Setup"/);
-  assert.match(compliance, /PaymentAccountPanel/);
-  assert.match(compliance, /PaymentReadinessPanel/);
+  // Onboarding is one flow driven by moov-onboarding-get; bank setup + verification is its BankSection.
+  assert.match(compliance, /useMoovOnboarding/);
+  assert.match(compliance, /<BankSection/);
+  assert.match(compliance, /title="Terms of Service"/);
 });
 
 test("Item #4 Funding & Billing and pending cards remain", () => {

@@ -1,7 +1,4 @@
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
-import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
-
-import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { PaymentProviderAdmin } from "@/components/payments/PaymentProviderAdmin";
 import { PlatformFeeSchedulePanel } from "@/components/payments/PlatformFeeSchedulePanel";
 import { WalletPanel } from "@/components/payments/WalletPanel";
@@ -10,22 +7,19 @@ import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccou
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 
 /**
- * Provider-neutral payment settings. The bank connection widget underneath
- * still routes to whichever rail the organization is on today.
+ * Provider-neutral payment settings. Onboarding (identity, documents, terms,
+ * underwriting, bank verification) lives only in Settings -> Compliance & Docs;
+ * this tab shows the account summary and wallet tools.
  */
 export function PaymentSettingsTab() {
   return (
     <div className="space-y-4 pt-2">
       <PaymentAccountPanel />
-      <PaymentReadinessPanel />
-      <VerificationDocumentsPanel />
       <WalletPanel />
       <MoovTreasuryPanel />
       <PlatformFeeSchedulePanel />
       <TenantBankAccountSettings />
       {PAYMENT_FLAGS.SHOW_PAYMENT_ADMIN && <PaymentProviderAdmin />}
-
     </div>
   );
 }
-
