@@ -408,6 +408,48 @@ test('e-sign "From Document Library": a member copies a non-mortgage PDF/DOCX in
   }
 });
 
+test('the platform owner (no membership) gets nothing: homeowner Library sharing, revoke, list and e-sign library copy are members only', async () => {
+  const PLATFORM_OWNER = 'f0d3c2a0-6dc0-4680-92dd-a013e1141c9f';
+  /** fakeClient, but every platform-owner probe answers true (and is recorded). */
+  const ownerClient = () => {
+    const base = fakeClient();
+    const probes = [];
+    return {
+      probes,
+      writes: base.writes,
+      query: async (sql, params = []) => {
+        if (/is_platform_owner|is_master_owner|aws_is_cross_tenant_reader/.test(String(sql))) {
+          probes.push(String(sql));
+          return { rows: [{ is_owner: true, is_platform: true, is_master: true, ok: true }] };
+        }
+        return base.query(sql, params);
+      },
+    };
+  };
+  const owner = { application_user_id: PLATFORM_OWNER };
+  const body = { tenant_id: TENANT, claim_id: CLAIM, tenant_document_id: DOC };
+  for (const [label, runFn] of [
+    ['share', runHomeownerShareLibraryDocument],
+    ['revoke', runHomeownerRevokeLibraryDocument],
+    ['list', runClaimLibraryDocuments],
+  ]) {
+    const client = ownerClient();
+    const result = await runFn({ client, mapping: owner, body, spoof: [] });
+    assert.equal(result.error, 'not_authorized', label);
+    assert.equal(client.writes().length, 0, label);
+    assert.deepEqual(client.probes, [], `${label}: no platform-owner branch`);
+  }
+  const s3 = fakeS3();
+  const client = ownerClient();
+  const copied = await runSignatureLibraryDocumentCopy({
+    client, mapping: owner, body: { tenant_document_id: DOC, claim_id: CLAIM }, spoof: [],
+    deps: { s3: s3.s3, getSignedUrl: async () => 'https://s3.example/get' },
+  });
+  assert.equal(copied.error, 'not_authorized');
+  assert.equal(s3.sent.some((c) => c.name === 'CopyObjectCommand'), false);
+  assert.deepEqual(client.probes, [], 'e-sign copy: no platform-owner branch');
+});
+
 test('routes are registered; the Library UI no longer offers tenant-wide homeowner sharing', () => {
   for (const name of ['tenant-library-document-create', 'claim-library-documents', 'homeowner-share-library-document', 'homeowner-share-library-document-revoke', 'homeowner-shared-document-url', 'signature-library-document-copy']) {
     assert.ok(CLASS_A_FUNCTIONS.has(name), name);
