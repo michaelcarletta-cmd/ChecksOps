@@ -5,7 +5,7 @@
  * server then verifies the stored object (HEAD + bytes + magic-byte sniff) and
  * forwards it to Moov's files API as multipart/form-data.
  *
- * S3 key: files/tenant-documents/{tenantId}/verification/{documentId}
+ * S3 key: files/verification-docs/{tenantId}/{documentId} (versioned; reads pinned to one version)
  */
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -79,11 +79,38 @@ export const ALLOWED_CONTENT_TYPES = Object.freeze(['application/pdf', 'image/jp
 
 const filesBucket = () => String(process.env.FILES_BUCKET || '').trim();
 export const documentsKeyArn = () => String(process.env[DOCUMENTS_KMS_KEY_ENV] || '').trim();
-const s3Of = (deps) => deps.s3 || new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 
-export const documentStorageKey = (tenantId, documentId) => (
-  `files/tenant-documents/${tenantId}/verification/${documentId}`
-);
+/**
+ * S3 client for compliance documents. Checksums only when S3 requires them:
+ * with the SDK default (WHEN_SUPPORTED) a presigned PUT carries
+ * x-amz-checksum-crc32 for an empty body and S3 rejects the browser upload.
+ */
+export const DOCUMENTS_S3_CONFIG = Object.freeze({
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
+});
+export const createDocumentsS3Client = (extra = {}) => new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  ...DOCUMENTS_S3_CONFIG,
+  ...extra,
+});
+let defaultS3 = null;
+const s3Of = (deps) => {
+  if (deps.s3) return deps.s3;
+  if (!defaultS3) defaultS3 = createDocumentsS3Client();
+  return defaultS3;
+};
+
+/** Pending (issued, not finalized) upload rows allowed per tenant per day. */
+export const MAX_PENDING_UPLOADS = 50;
+
+/**
+ * Dedicated prefix outside every generic storage bucket mapping
+ * (files/{bucket}/...), so generic storage can never resolve it and the
+ * bucket policy / lifecycle rule can target it with a fixed prefix.
+ */
+export const DOCUMENTS_PREFIX = 'files/verification-docs/';
+export const documentStorageKey = (tenantId, documentId) => `${DOCUMENTS_PREFIX}${tenantId}/${documentId}`;
 
 export const sanitizeFileName = (value) => {
   const base = String(value ?? '').split(/[\\/]/).pop() || '';
@@ -156,6 +183,15 @@ const kmsKeyMatches = (reported, configured) => {
 export async function createUploadUrl(client, ctx, body, deps = {}) {
   const request = validateUploadRequest(body || {});
   const { bucket, keyArn } = requireStorageConfig();
+  const pending = Number((await client.query(
+    `SELECT count(*)::int AS pending FROM public.moov_compliance_documents
+     WHERE tenant_id = $1::uuid AND environment = $2 AND status = 'pending_upload'
+       AND upload_url_issued_at > now() - interval '1 day'`,
+    [ctx.tenantId, ctx.environment],
+  )).rows[0]?.pending ?? 0);
+  if (pending >= MAX_PENDING_UPLOADS) {
+    throw new OnboardingError('too_many_pending_uploads', 429, { max: MAX_PENDING_UPLOADS });
+  }
   let representativeId = null;
   if (body?.representative_id !== undefined && body?.representative_id !== null && body?.representative_id !== '') {
     const rid = String(body.representative_id);
@@ -219,50 +255,53 @@ const bodyBytes = async (body) => {
   return new Uint8Array(Buffer.concat(chunks));
 };
 
-const deleteStoredObject = async (deps, bucket, key) => {
+/**
+ * Permanently removes the rejected version (a versioned bucket would otherwise
+ * keep it behind a delete marker). Without a version id, falls back to a plain delete.
+ */
+const deleteStoredVersion = async (deps, bucket, key, versionId) => {
   try {
-    await s3Of(deps).send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    await s3Of(deps).send(new DeleteObjectCommand({ Bucket: bucket, Key: key, ...(versionId ? { VersionId: versionId } : {}) }));
   } catch { /* the object stays private and unreferenced; the row is not marked stored */ }
 };
 
-/** Reads the uploaded object back and checks it against the pending row. */
+/**
+ * Reads the uploaded object back and checks it against the row, pinned to one
+ * S3 version: the version recorded at first finalize, or the current one.
+ */
 export async function verifyStoredObject(row, deps = {}) {
   const { bucket, keyArn } = requireStorageConfig();
   const s3 = s3Of(deps);
+  const pinned = row.s3_version_id || null;
   let head;
   try {
-    head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: row.storage_key }));
+    head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: row.storage_key, ...(pinned ? { VersionId: pinned } : {}) }));
   } catch {
-    throw new OnboardingError('document_not_uploaded', 409);
+    throw new OnboardingError(pinned ? 'document_version_missing' : 'document_not_uploaded', 409);
   }
+  const versionId = head?.VersionId || null;
+  if (!versionId) throw new OnboardingError('document_version_missing', 409);
+  if (pinned && versionId !== pinned) throw new OnboardingError('document_version_mismatch', 409);
+  const reject = async (code) => {
+    // Never delete the pinned, already-accepted version on a later retry.
+    if (!pinned) await deleteStoredVersion(deps, bucket, row.storage_key, versionId);
+    throw new OnboardingError(code, 422);
+  };
   const size = Number(row.size_bytes);
-  if (Number(head?.ContentLength) !== size) {
-    await deleteStoredObject(deps, bucket, row.storage_key);
-    throw new OnboardingError('document_size_mismatch', 422);
-  }
-  if (String(head?.ContentType || '').toLowerCase().split(';')[0].trim() !== row.content_type) {
-    await deleteStoredObject(deps, bucket, row.storage_key);
-    throw new OnboardingError('document_type_mismatch', 422);
-  }
-  if (head?.ServerSideEncryption !== 'aws:kms' || !kmsKeyMatches(head?.SSEKMSKeyId, keyArn)) {
-    await deleteStoredObject(deps, bucket, row.storage_key);
-    throw new OnboardingError('document_encryption_mismatch', 422);
-  }
-  const got = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: row.storage_key }));
+  if (Number(head?.ContentLength) !== size) await reject('document_size_mismatch');
+  if (String(head?.ContentType || '').toLowerCase().split(';')[0].trim() !== row.content_type) await reject('document_type_mismatch');
+  if (head?.ServerSideEncryption !== 'aws:kms' || !kmsKeyMatches(head?.SSEKMSKeyId, keyArn)) await reject('document_encryption_mismatch');
+  const got = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: row.storage_key, VersionId: versionId }));
   const bytes = await bodyBytes(got?.Body);
-  if (bytes.length !== size || bytes.length > MAX_DOCUMENT_BYTES) {
-    await deleteStoredObject(deps, bucket, row.storage_key);
-    throw new OnboardingError('document_size_mismatch', 422);
-  }
-  if (sniffContentType(bytes) !== row.content_type) {
-    await deleteStoredObject(deps, bucket, row.storage_key);
-    throw new OnboardingError('document_content_mismatch', 422);
-  }
-  return { bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
+  if (bytes.length !== size || bytes.length > MAX_DOCUMENT_BYTES) await reject('document_size_mismatch');
+  if (sniffContentType(bytes) !== row.content_type) await reject('document_content_mismatch');
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  if (row.sha256 && row.sha256 !== sha256) throw new OnboardingError('document_version_mismatch', 409);
+  return { bytes, sha256, versionId };
 }
 
-/** POST /accounts/{id}/files as multipart/form-data. */
-export async function sendDocumentToMoov({ accountId, row, bytes, fetchImpl }) {
+/** POST /accounts/{id}/files as multipart/form-data, idempotent per document. */
+export async function sendDocumentToMoov({ accountId, row, bytes, environment, fetchImpl }) {
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: row.content_type }), row.file_name);
   form.append('filePurpose', MOOV_FILE_PURPOSE[row.purpose] || 'business_verification');
@@ -274,25 +313,31 @@ export async function sendDocumentToMoov({ accountId, row, bytes, fetchImpl }) {
   return moovFetch(`/accounts/${accountId}/files`, {
     method: 'POST',
     scopes: scopes.filesWrite(accountId),
+    idempotencyKey: `checksops-file-${environment}-${row.id}`,
     formData: form,
     fetchImpl,
   });
 }
 
 /**
- * Verify, then send to Moov. Retryable: a document already sent returns as is;
- * a Moov failure leaves it stored with a pending outbox row.
+ * Verify, then send to Moov. Retryable: a document already sent returns as is
+ * (completing its outbox row); a Moov failure leaves it stored with a pending
+ * outbox row.
  */
 export async function finalizeDocument(client, ctx, row, { deps = {}, fetchImpl, outboxId = null } = {}) {
-  if (row.moov_file_id) return { document: publicDocument(row), moov_synced: true, pending: false };
-  const { bytes, sha256 } = await verifyStoredObject(row, deps);
+  if (row.moov_file_id) {
+    if (outboxId) await completeOutbox(client, { id: outboxId });
+    return { document: publicDocument(row), moov_synced: true, pending: false };
+  }
+  const { bytes, sha256, versionId } = await verifyStoredObject(row, deps);
   let stored = (await client.query(
     `UPDATE public.moov_compliance_documents
      SET status = CASE WHEN status = 'pending_upload' THEN 'stored' ELSE status END,
-         sha256 = $2, uploaded_at = COALESCE(uploaded_at, now()), updated_at = now()
+         sha256 = $2, s3_version_id = COALESCE(s3_version_id, $3),
+         uploaded_at = COALESCE(uploaded_at, now()), updated_at = now()
      WHERE id = $1::uuid
      RETURNING *`,
-    [row.id, sha256],
+    [row.id, sha256, versionId],
   )).rows[0] || row;
 
   const queued = outboxId ? { id: outboxId } : await enqueueOutbox(client, {
@@ -310,7 +355,9 @@ export async function finalizeDocument(client, ctx, row, { deps = {}, fetchImpl,
     return { document: publicDocument(stored), moov_synced: false, pending: true, error_code: 'moov_account_missing' };
   }
   try {
-    const uploaded = await sendDocumentToMoov({ accountId: account.provider_account_id, row: stored, bytes, fetchImpl });
+    const uploaded = await sendDocumentToMoov({
+      accountId: account.provider_account_id, row: stored, bytes, environment: ctx.environment, fetchImpl,
+    });
     const fileId = uploaded?.fileID ?? uploaded?.fileId ?? null;
     if (!fileId) throw new OnboardingError('moov_file_id_missing', 502);
     stored = (await client.query(
@@ -336,14 +383,18 @@ export async function finalizeDocument(client, ctx, row, { deps = {}, fetchImpl,
   }
 }
 
+/** Short-lived GET pinned to the verified version. */
 export async function viewUrl(row, deps = {}) {
-  if (!row || !['stored', 'sent'].includes(row.status)) throw new OnboardingError('document_not_available', 404);
+  if (!row || !['stored', 'sent'].includes(row.status) || !row.s3_version_id) {
+    throw new OnboardingError('document_not_available', 404);
+  }
   const { bucket } = requireStorageConfig();
   const sign = deps.getSignedUrl || getSignedUrl;
   const safeName = String(row.file_name || 'document').replace(/[^A-Za-z0-9._ -]/g, '_');
   const url = await sign(s3Of(deps), new GetObjectCommand({
     Bucket: bucket,
     Key: row.storage_key,
+    VersionId: row.s3_version_id,
     ResponseContentDisposition: `attachment; filename="${safeName}"`,
     ResponseContentType: row.content_type,
   }), { expiresIn: VIEW_URL_EXPIRES_SECONDS });

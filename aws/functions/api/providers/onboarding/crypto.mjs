@@ -37,13 +37,19 @@ const defaultKms = async () => {
 
 const kmsOf = async (deps = {}) => deps.kms || defaultKms();
 
-const contextFor = (tenantId, field) => ({
-  app: 'checksops-moov-onboarding',
-  tenant_id: String(tenantId),
-  field: String(field),
-});
+const contextFor = (tenantId, field, environment) => {
+  if (environment !== 'sandbox' && environment !== 'production') {
+    throw new OnboardingError('pii_environment_unresolved', 500);
+  }
+  return {
+    app: 'checksops-moov-onboarding',
+    environment,
+    tenant_id: String(tenantId),
+    field: String(field),
+  };
+};
 
-export async function encryptPii(deps, { tenantId, field, plaintext }) {
+export async function encryptPii(deps, { tenantId, field, environment, plaintext }) {
   const keyArn = piiKeyArn();
   if (!keyArn) throw new OnboardingError('pii_encryption_unavailable', 503);
   const kms = await kmsOf(deps);
@@ -52,7 +58,7 @@ export async function encryptPii(deps, { tenantId, field, plaintext }) {
     out = await kms.encrypt({
       KeyId: keyArn,
       Plaintext: Buffer.from(String(plaintext), 'utf8'),
-      EncryptionContext: contextFor(tenantId, field),
+      EncryptionContext: contextFor(tenantId, field, environment),
     });
   } catch {
     throw new OnboardingError('pii_encryption_failed', 503);
@@ -62,7 +68,7 @@ export async function encryptPii(deps, { tenantId, field, plaintext }) {
   return { ciphertext: `${CIPHER_PREFIX}${Buffer.from(blob).toString('base64')}`, keyArn: out?.KeyId || keyArn };
 }
 
-export async function decryptPii(deps, { tenantId, field, ciphertext }) {
+export async function decryptPii(deps, { tenantId, field, environment, ciphertext }) {
   if (!ciphertext) return null;
   const raw = String(ciphertext);
   if (!raw.startsWith(CIPHER_PREFIX)) throw new OnboardingError('pii_ciphertext_invalid', 500);
@@ -71,7 +77,7 @@ export async function decryptPii(deps, { tenantId, field, ciphertext }) {
   try {
     out = await kms.decrypt({
       CiphertextBlob: Buffer.from(raw.slice(CIPHER_PREFIX.length), 'base64'),
-      EncryptionContext: contextFor(tenantId, field),
+      EncryptionContext: contextFor(tenantId, field, environment),
       ...(piiKeyArn() ? { KeyId: piiKeyArn() } : {}),
     });
   } catch {

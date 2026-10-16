@@ -21,6 +21,7 @@ import {
   resolveOnboardingEnvironment,
 } from './context.mjs';
 import { createUploadUrl, finalizeDocument, viewUrl } from './documents.mjs';
+import { loadSessionFundStepUp, loginSessionBinding, WALLET_FUND_TOTP_ACTION } from '../production/moov-fund-authz.mjs';
 import { onboardingDeployment } from './flags.mjs';
 import { ensureMoovAccount, syncOnboardingToMoov } from './moov-sync.mjs';
 import { isNetworkError, moovErrorCode, onboardingLog, redact } from './redact.mjs';
@@ -31,7 +32,8 @@ import {
   loadAccount,
   loadDocument,
   loadDocuments,
-  loadPendingOutbox,
+  loadDueOutbox,
+  lockTenantOnboarding,
   loadProfile,
   loadRepresentatives,
   maskLast4,
@@ -114,19 +116,38 @@ async function saveOnboarding(client, ctx, { business, representatives }, { deps
   };
 }
 
+/**
+ * Legacy camelCase bodies identify an existing person by its Moov
+ * representative id (never by name). Anything else is a new person.
+ */
 const legacyRepresentatives = (list, storedReps) => {
   if (!Array.isArray(list)) return list;
-  const byName = new Map(storedReps.map((r) => [`${r.first_name} ${r.last_name}`.toLowerCase(), r.id]));
+  const byMoovId = new Map(storedReps.filter((r) => r.moov_representative_id).map((r) => [String(r.moov_representative_id), r.id]));
   return list.map((rep) => {
-    const key = `${String(rep?.firstName ?? rep?.first_name ?? '').trim()} ${String(rep?.lastName ?? rep?.last_name ?? '').trim()}`.toLowerCase();
-    return rep?.id ? rep : { ...rep, id: byName.get(key) ?? undefined };
+    if (rep?.id) return rep;
+    const moovId = rep?.representativeID ?? rep?.representativeId ?? rep?.moov_representative_id ?? null;
+    return { ...rep, id: moovId ? (byMoovId.get(String(moovId)) ?? undefined) : undefined };
+  });
+};
+
+/**
+ * Bank changes need the once-per-login financial step-up, bound to the same
+ * login session as wallet.fund (one code per sign-in covers both).
+ */
+const requireBankStepUp = async (client, ctx, claims) => {
+  const loginSession = loginSessionBinding(claims);
+  const stepUp = await loadSessionFundStepUp(client, { userId: ctx.userId, tenantId: ctx.tenantId, loginSession });
+  if (stepUp) return null;
+  return fail('totp_required', 401, {
+    actionKey: WALLET_FUND_TOTP_ACTION,
+    message: 'Enter your two-factor code to change bank details.',
   });
 };
 
 // ------------------------------------------------------------ outbox retry + status pull
 
 async function drainOutbox(client, ctx, { deps, fetchImpl }) {
-  const pending = await loadPendingOutbox(client, ctx.tenantId, ctx.environment);
+  const pending = await loadDueOutbox(client, ctx.tenantId, ctx.environment);
   const results = [];
   for (const item of pending) {
     if (item.kind === 'onboarding_sync') {
@@ -352,7 +373,9 @@ export const ONBOARDING_HANDLERS = {
   'moov-bank-account-add': {
     access: access.submit,
     moov: true,
-    run: async ({ client, ctx, body, fetchImpl }) => {
+    run: async ({ client, ctx, body, claims, fetchImpl }) => {
+      const stepUp = await requireBankStepUp(client, ctx, claims);
+      if (stepUp) return stepUp;
       const holderName = String(body?.holder_name ?? '').trim();
       const holderType = body?.holder_type === 'individual' ? 'individual' : 'business';
       const bankAccountType = body?.bank_account_type === 'savings' ? 'savings' : 'checking';
@@ -414,7 +437,10 @@ export const ONBOARDING_HANDLERS = {
   'moov-bank-link-token': {
     access: access.submit,
     moov: true,
-    run: async ({ client, ctx, fetchImpl }) => {
+    run: async ({ client, ctx, claims, fetchImpl }) => {
+      // Links a bank through Moov Drops: same step-up as any bank change.
+      const stepUp = await requireBankStepUp(client, ctx, claims);
+      if (stepUp) return stepUp;
       const account = await loadAccount(client, ctx.tenantId, ctx.environment);
       if (!account?.provider_account_id) return fail('Set up the payment account first.', 409);
       const token = await moovToken(scopes.dropBankLink(account.provider_account_id), undefined, fetchImpl);
@@ -425,7 +451,9 @@ export const ONBOARDING_HANDLERS = {
   'moov-micro-deposit-initiate': {
     access: access.submit,
     moov: true,
-    run: async ({ client, ctx, body, fetchImpl }) => {
+    run: async ({ client, ctx, body, claims, fetchImpl }) => {
+      const stepUp = await requireBankStepUp(client, ctx, claims);
+      if (stepUp) return stepUp;
       const params = [ctx.tenantId, ctx.environment];
       let sql = `SELECT * FROM public.payment_provider_methods
         WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
@@ -477,7 +505,9 @@ export const ONBOARDING_HANDLERS = {
   'moov-micro-deposit-confirm': {
     access: access.submit,
     moov: true,
-    run: async ({ client, ctx, body, fetchImpl }) => {
+    run: async ({ client, ctx, body, claims, fetchImpl }) => {
+      const stepUp = await requireBankStepUp(client, ctx, claims);
+      if (stepUp) return stepUp;
       const { code } = body ?? {};
       const byVerification = isUuid(body?.verification_id);
       if (!byVerification && !isUuid(body?.payment_method_id)) {
@@ -489,11 +519,13 @@ export const ONBOARDING_HANDLERS = {
       const verification = (await client.query(
         byVerification
           ? `SELECT * FROM public.payment_method_verifications
-             WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = $3`
+             WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = $3
+             FOR UPDATE`
           : `SELECT * FROM public.payment_method_verifications
              WHERE payment_method_id = $1::uuid AND tenant_id = $2::uuid AND environment = $3
                AND status = 'pending'
-             ORDER BY created_at DESC NULLS LAST LIMIT 1`,
+             ORDER BY created_at DESC NULLS LAST LIMIT 1
+             FOR UPDATE`,
         [byVerification ? body.verification_id : body.payment_method_id, ctx.tenantId, ctx.environment],
       )).rows[0];
       if (!verification) return fail('Verification not found.', 404);
@@ -518,10 +550,17 @@ export const ONBOARDING_HANDLERS = {
         return ok({ already_verified: true, liveProviderCalled: true });
       }
       const maxAttempts = verification.max_attempts ?? 3;
-      if (verification.attempts >= maxAttempts) {
+      // Reserve the attempt atomically (row locked above) before calling Moov.
+      const reserved = (await client.query(
+        `UPDATE public.payment_method_verifications SET attempts = attempts + 1
+         WHERE id = $1::uuid AND attempts < COALESCE(max_attempts, 3)
+         RETURNING attempts`,
+        [verificationId],
+      )).rows[0];
+      if (!reserved) {
         return fail('max_attempts_exceeded', 409, { requires_restart: true });
       }
-      const attempts = verification.attempts + 1;
+      const attempts = Number(reserved.attempts);
       try {
         await moovFetch(`/accounts/${acct}/bank-accounts/${bankId}/verify`, {
           method: 'PUT', scopes: scopes.bankAccountsWrite(acct), body: { code }, fetchImpl,
@@ -530,10 +569,10 @@ export const ONBOARDING_HANDLERS = {
         if (!(error instanceof MoovError)) throw error;
         const errorCode = moovErrorCode(error);
         await client.query(
-          `UPDATE public.payment_method_verifications SET attempts = $2, failure_reason = $3,
-             status = CASE WHEN $2 >= COALESCE(max_attempts, 3) THEN 'max_attempts_exceeded' ELSE status END
+          `UPDATE public.payment_method_verifications SET failure_reason = $2,
+             status = CASE WHEN attempts >= COALESCE(max_attempts, 3) THEN 'max_attempts_exceeded' ELSE status END
            WHERE id = $1::uuid`,
-          [verificationId, attempts, errorCode],
+          [verificationId, errorCode],
         );
         // Recorded attempt must persist, so this is an ok:false-free result.
         return jsonResult({ success: false, verified: false, error_code: 'invalid_code', attempts, requires_restart: attempts >= maxAttempts, liveProviderCalled: true });
@@ -548,16 +587,21 @@ export const ONBOARDING_HANDLERS = {
   },
 
   'moov-tos-token': {
+    // The server accepts the Moov terms itself (moov-tos-accept with accepted:true
+    // mints the terms token with the caller's IP and user agent), so no Moov
+    // access token (profile.write) is ever handed to the browser.
     access: access.submit,
-    moov: true,
-    run: async ({ client, ctx, fetchImpl }) => {
+    run: async ({ client, ctx }) => {
       const account = await loadAccount(client, ctx.tenantId, ctx.environment);
-      const accountId = account?.provider_account_id || null;
-      const sessionScopes = accountId
-        ? [`/accounts/${accountId}/profile.write`, `/accounts/${accountId}/profile.read`, '/ping.read']
-        : ['/ping.read'];
-      const token = await moovToken(sessionScopes, undefined, fetchImpl);
-      return ok({ token, account_id: accountId, public_key: null, liveProviderCalled: true });
+      return ok({
+        token: null,
+        public_key: null,
+        account_id: account?.provider_account_id ?? null,
+        server_accept: true,
+        accept_with: 'moov-tos-accept',
+        message: 'Call moov-tos-accept with { accepted: true }; the server records the acceptance with Moov.',
+        liveProviderCalled: false,
+      });
     },
   },
 
@@ -681,13 +725,7 @@ export const ONBOARDING_HANDLERS = {
         feePlanUnavailable: true,
       });
       result.source = 'live_provider';
-      // Readers see readiness; only submitters record it.
-      if (ctx.canSubmit) {
-        await client.query(
-          `UPDATE public.payment_provider_accounts SET readiness = $2::jsonb, readiness_checked_at = now() WHERE id = $1::uuid`,
-          [account.id, JSON.stringify(redact(result))],
-        );
-      }
+      // Read-only: readiness is computed for the caller, never written.
       return ok({ readiness: result, liveProviderCalled: true });
     },
   },
@@ -721,9 +759,11 @@ export async function handleMoovOnboarding(name, event, deps = {}) {
     if (who.error) return { ...who, ...base };
     const env = await resolveOnboardingEnvironment(client, who.tenantId, deployment);
     if (env.error) return { ...env, ...base };
-    if (who.canSubmit) {
-      // Lets SQL 91 write policies accept this request's onboarding writes.
+    if (wanted === 'submit' && who.canSubmit) {
+      // Write handlers only: lets SQL 91 write policies accept this request's
+      // onboarding writes, and serializes them per tenant + environment.
       await client.query("SELECT set_config('request.moov_onboarding', '1', true)");
+      await lockTenantOnboarding(client, { tenantId: who.tenantId, environment: env.environment });
     }
     const ctx = {
       tenantId: who.tenantId,

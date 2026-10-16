@@ -3,7 +3,8 @@
 -- Tables (all tenant-scoped, per environment 'sandbox' | 'production'):
 --   moov_onboarding_profiles         business profile; EIN as KMS ciphertext + last four
 --   moov_onboarding_representatives  owners/controllers; SSN last four only, DOB as KMS ciphertext + year
---   moov_compliance_documents        compliance files in S3 (SSE-KMS) and their Moov file ids
+--   moov_compliance_documents        compliance files in S3 (SSE-KMS, files/verification-docs/{tenant}/{id},
+--                                    pinned to one S3 version) and their Moov file ids
 --   moov_onboarding_outbox           retry queue; payload holds ids only (no SSN, EIN, DOB)
 -- Plus payment_provider_methods.routing_last_four (bank routing number, last four only).
 --
@@ -168,6 +169,7 @@ CREATE TABLE public.moov_compliance_documents (
   size_bytes bigint NOT NULL,
   storage_key text NOT NULL,
   kms_key_arn text NOT NULL,
+  s3_version_id text,
   status text NOT NULL DEFAULT 'pending_upload',
   sha256 text,
   moov_account_id text,
@@ -190,7 +192,11 @@ CREATE TABLE public.moov_compliance_documents (
   CONSTRAINT moov_compliance_documents_content_type_check CHECK (content_type IN ('application/pdf', 'image/jpeg', 'image/png', 'text/csv')),
   CONSTRAINT moov_compliance_documents_size_check CHECK (size_bytes BETWEEN 1 AND 20971520),
   CONSTRAINT moov_compliance_documents_storage_key_check CHECK (
-    storage_key = 'files/tenant-documents/' || tenant_id::text || '/verification/' || id::text
+    storage_key = 'files/verification-docs/' || tenant_id::text || '/' || id::text
+  ),
+  -- Verified documents are pinned to the S3 version that was checked.
+  CONSTRAINT moov_compliance_documents_version_check CHECK (
+    status NOT IN ('stored', 'sent') OR s3_version_id IS NOT NULL
   )
 );
 CREATE INDEX moov_compliance_documents_tenant_idx
@@ -209,6 +215,7 @@ CREATE TABLE public.moov_onboarding_outbox (
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
   status text NOT NULL DEFAULT 'pending',
   attempts integer NOT NULL DEFAULT 0,
+  next_attempt_at timestamptz,
   last_error_code text,
   created_by uuid REFERENCES public.identity_accounts(application_user_id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -216,7 +223,9 @@ CREATE TABLE public.moov_onboarding_outbox (
   completed_at timestamptz,
   CONSTRAINT moov_onboarding_outbox_environment_check CHECK (environment IN ('sandbox', 'production')),
   CONSTRAINT moov_onboarding_outbox_kind_check CHECK (kind IN ('onboarding_sync', 'document_upload')),
-  CONSTRAINT moov_onboarding_outbox_status_check CHECK (status IN ('pending', 'completed', 'abandoned')),
+  -- 'failed': retries exhausted (10 attempts with backoff); a new save enqueues a fresh row.
+  CONSTRAINT moov_onboarding_outbox_status_check CHECK (status IN ('pending', 'completed', 'abandoned', 'failed')),
+  CONSTRAINT moov_onboarding_outbox_attempts_check CHECK (attempts BETWEEN 0 AND 10),
   -- Ids only: no sensitive keys and no SSN/EIN-shaped values anywhere in the payload.
   CONSTRAINT moov_onboarding_outbox_payload_no_pii CHECK (
     payload::text !~* '"(ssn|ssn_full|ein|tax_?id|government_?id|dob|birth_?date|account_?number|routing_?number|file_?base64)"\s*:'

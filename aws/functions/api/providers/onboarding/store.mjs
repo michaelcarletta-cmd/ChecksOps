@@ -241,7 +241,7 @@ export async function upsertProfile(client, deps, { tenantId, environment, field
   let einLast4 = null;
   let einKey = null;
   if (ein) {
-    const enc = await encryptPii(deps, { tenantId, field: 'ein', plaintext: ein });
+    const enc = await encryptPii(deps, { tenantId, field: 'ein', environment, plaintext: ein });
     einCipher = enc.ciphertext;
     einKey = enc.keyArn;
     einLast4 = ein.slice(-4);
@@ -273,7 +273,7 @@ export async function upsertRepresentative(client, deps, { tenantId, environment
   let dobCipher = null;
   let dobYear = null;
   if (rep.dob) {
-    const enc = await encryptPii(deps, { tenantId, field: 'representative_dob', plaintext: rep.dob });
+    const enc = await encryptPii(deps, { tenantId, field: 'representative_dob', environment, plaintext: rep.dob });
     dobCipher = enc.ciphertext;
     dobYear = Number(rep.dob.slice(0, 4));
   }
@@ -327,36 +327,64 @@ export const markRepresentativeSsnResubmit = (client, { id, errorCode }) => clie
   [id, errorCode],
 );
 
+/**
+ * Serializes onboarding writes per tenant + environment for the rest of the
+ * transaction (save, finalize, moov-sync, outbox drain, bank changes).
+ */
+export const ONBOARDING_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtextextended('moov-onboarding:' || $1 || ':' || $2, 0))`;
+export const lockTenantOnboarding = (client, { tenantId, environment }) => client.query(
+  ONBOARDING_LOCK_SQL, [String(tenantId), String(environment)],
+);
+
+/** Retry policy: exponential backoff, then the row is marked failed. */
+export const OUTBOX_MAX_ATTEMPTS = 10;
+
 /** Outbox payload holds ids only (enforced again by a CHECK in SQL 91). */
 export async function enqueueOutbox(client, { tenantId, environment, kind, subjectId, userId, payload = {} }) {
-  const existing = (await client.query(
+  const inserted = (await client.query(
+    `INSERT INTO public.moov_onboarding_outbox
+      (tenant_id, environment, kind, subject_id, payload, status, attempts, created_by)
+     VALUES ($1::uuid, $2, $3, $4::uuid, $5::jsonb, 'pending', 0, $6::uuid)
+     ON CONFLICT (tenant_id, environment, kind, subject_id) WHERE status = 'pending' DO NOTHING
+     RETURNING id`,
+    [tenantId, environment, kind, subjectId, JSON.stringify(payload), userId],
+  )).rows[0];
+  if (inserted) return inserted;
+  return (await client.query(
     `SELECT id FROM public.moov_onboarding_outbox
      WHERE tenant_id = $1::uuid AND environment = $2 AND kind = $3 AND subject_id = $4::uuid AND status = 'pending'
      LIMIT 1`,
     [tenantId, environment, kind, subjectId],
   )).rows[0];
-  if (existing) return existing;
-  return (await client.query(
-    `INSERT INTO public.moov_onboarding_outbox
-      (tenant_id, environment, kind, subject_id, payload, status, attempts, created_by)
-     VALUES ($1::uuid, $2, $3, $4::uuid, $5::jsonb, 'pending', 0, $6::uuid)
-     RETURNING id`,
-    [tenantId, environment, kind, subjectId, JSON.stringify(payload), userId],
-  )).rows[0];
 }
+
+/** Pending rows whose backoff has elapsed. */
+export const loadDueOutbox = async (client, tenantId, environment) => (await client.query(
+  `SELECT id, kind, subject_id, status, attempts, last_error_code, updated_at
+   FROM public.moov_onboarding_outbox
+   WHERE tenant_id = $1::uuid AND environment = $2 AND status = 'pending'
+     AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+   ORDER BY created_at ASC
+   FOR UPDATE`,
+  [tenantId, environment],
+)).rows;
 
 export const completeOutbox = (client, { id }) => client.query(
   `UPDATE public.moov_onboarding_outbox
-   SET status = 'completed', attempts = attempts + 1, last_error_code = NULL, completed_at = now(), updated_at = now()
-   WHERE id = $1::uuid`,
+   SET status = 'completed', attempts = attempts + 1, last_error_code = NULL, next_attempt_at = NULL,
+       completed_at = now(), updated_at = now()
+   WHERE id = $1::uuid AND status = 'pending'`,
   [id],
 );
 
 export const failOutboxAttempt = (client, { id, errorCode }) => client.query(
   `UPDATE public.moov_onboarding_outbox
-   SET attempts = attempts + 1, last_error_code = $2, updated_at = now()
-   WHERE id = $1::uuid`,
-  [id, errorCode],
+   SET attempts = attempts + 1, last_error_code = $2, updated_at = now(),
+       status = CASE WHEN attempts + 1 >= $3 THEN 'failed' ELSE status END,
+       next_attempt_at = CASE WHEN attempts + 1 >= $3 THEN NULL
+         ELSE now() + make_interval(secs => LEAST(21600, 60 * power(2, attempts))) END
+   WHERE id = $1::uuid AND status = 'pending'`,
+  [id, errorCode, OUTBOX_MAX_ATTEMPTS],
 );
 
 export const setProfileSyncState = (client, { tenantId, environment, pending, errorCode, moovAccountId = null }) => client.query(
@@ -371,12 +399,16 @@ export const setProfileSyncState = (client, { tenantId, environment, pending, er
 
 export async function decryptProfileEin(deps, profile) {
   if (!profile?.ein_ciphertext) return null;
-  return decryptPii(deps, { tenantId: profile.tenant_id, field: 'ein', ciphertext: profile.ein_ciphertext });
+  return decryptPii(deps, {
+    tenantId: profile.tenant_id, field: 'ein', environment: profile.environment, ciphertext: profile.ein_ciphertext,
+  });
 }
 
 export async function decryptRepresentativeDob(deps, rep) {
   if (!rep?.dob_ciphertext) return null;
-  return decryptPii(deps, { tenantId: rep.tenant_id, field: 'representative_dob', ciphertext: rep.dob_ciphertext });
+  return decryptPii(deps, {
+    tenantId: rep.tenant_id, field: 'representative_dob', environment: rep.environment, ciphertext: rep.dob_ciphertext,
+  });
 }
 
 // ---------------------------------------------------------------- masked shape

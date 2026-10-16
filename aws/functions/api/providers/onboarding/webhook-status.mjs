@@ -91,18 +91,24 @@ export async function applyProductionOnboardingWebhook(client, payload) {
   }
   const data = payload?.data ?? payload;
   const providerAccountId = payload?.accountID ?? data?.accountID ?? payload?.accountId ?? null;
-  await client.query("SELECT set_config('request.provider_webhook_apply', '1', true)");
   await client.query("SELECT set_config('request.aws_financial_permissions_activated', '0', true)");
-  const result = await applyOnboardingWebhookStatus(client, {
-    environment: 'production', eventType, providerAccountId, data,
-  });
-  if (result.applied) {
-    await client.query(
-      `INSERT INTO public.payment_event_log (provider, environment, tenant_id, event_type, new_status, provider_metadata)
-       VALUES ('moov', 'production', $1::uuid, $2, $3, $4::jsonb)`,
-      [result.tenantId, eventType.slice(0, 120), result.onboarding_status, JSON.stringify({ account_id: providerAccountId })],
-    );
-    result.mutations.push('payment_event_log');
+  await client.query("SELECT set_config('request.provider_webhook_apply', '1', true)");
+  try {
+    const result = await applyOnboardingWebhookStatus(client, {
+      environment: 'production', eventType, providerAccountId, data,
+    });
+    if (result.applied) {
+      await client.query(
+        `INSERT INTO public.payment_event_log (provider, environment, tenant_id, event_type, new_status, provider_metadata)
+         VALUES ('moov', 'production', $1::uuid, $2, $3, $4::jsonb)`,
+        [result.tenantId, eventType.slice(0, 120), result.onboarding_status, JSON.stringify({ account_id: providerAccountId })],
+      );
+      result.mutations.push('payment_event_log');
+    }
+    return { ...result, financialTablesMutated: false };
+  } finally {
+    // Scoped to this apply only: later steps in the same webhook transaction
+    // (e.g. applyCollectionV2ProviderCompletion) must not inherit it.
+    await client.query("SELECT set_config('request.provider_webhook_apply', '0', true)");
   }
-  return { ...result, financialTablesMutated: false };
 }
