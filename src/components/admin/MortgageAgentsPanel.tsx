@@ -10,9 +10,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Loader2, Plus, RefreshCw, ShieldAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, KeyRound, Loader2, Plus, RefreshCw, ShieldAlert } from "lucide-react";
 import { isAwsStaging } from "@/lib/awsStaging";
 import { isPlatformOwner } from "@/lib/masterMerchant";
+import { adjustmentAmountError, adjustmentCaps, newIdempotencyKey, parseDollarsToCents } from "@/lib/mortgageCompensationAmount";
 
 type CompensationTotals = {
   initial_count: number;
@@ -180,6 +181,13 @@ export function MortgageAgentsPanel() {
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustCounterparty, setAdjustCounterparty] = useState("none");
+  // One idempotency key per opened Adjust dialog: a double-click or a retry
+  // after a lost response replays the first adjustment instead of adding one.
+  const [adjustKey, setAdjustKey] = useState("");
+  const [payConfirmAll, setPayConfirmAll] = useState(false);
+  const [returnBusy, setReturnBusy] = useState(false);
+  const [adjustBusy, setAdjustBusy] = useState(false);
+  const [payBusy, setPayBusy] = useState(false);
   // Return to Queue and Adjust are platform owner only (the API and SQL 84/85
   // refuse everyone else); hide them unless this session is the platform owner.
   const [platformOwner, setPlatformOwner] = useState(false);
@@ -246,8 +254,21 @@ export function MortgageAgentsPanel() {
     }
   };
 
+  const payTargets = useMemo(() => {
+    const unpaid = entries.filter((e) => e.status === "earned" || e.status === "approved");
+    const chosen = selected.length ? unpaid.filter((e) => selected.includes(e.id)) : unpaid;
+    return {
+      all: selected.length === 0,
+      ids: chosen.map((e) => e.id),
+      totalCents: chosen.reduce((sum, e) => sum + Number(e.amount_cents || 0), 0),
+    };
+  }, [entries, selected]);
+
   const markPaid = async (ids: string[]) => {
+    if (payBusy) return;
     if (!ids.length) return toast.error("Select entries to mark paid");
+    if (payTargets.all && !payConfirmAll) return toast.error("Confirm marking every unpaid entry in this view paid");
+    setPayBusy(true);
     try {
       const result = await invokeCompensation({
         action: "mark_paid",
@@ -261,10 +282,31 @@ export function MortgageAgentsPanel() {
       setPayOpen(false);
       setPayRef("");
       setPayNote("");
+      setPayConfirmAll(false);
       await load();
     } catch (error: unknown) {
       toast.error(errorMessage(error, "Mark paid failed"));
+    } finally {
+      setPayBusy(false);
     }
+  };
+
+  const sendPasswordReset = async (agent: AgentRow) => {
+    if (!platformOwner) return;
+    if (!agent.email) return toast.error("No email on file for this agent");
+    if (isAwsStaging()) {
+      const { error } = await supabase.auth.resetPasswordForEmail(agent.email);
+      if (error) return toast.error(error.message);
+      toast.success(
+        `AWS staging: Cognito reset requested for ${agent.email} (Tester mailbox delivery rules apply).`,
+      );
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(agent.email, {
+      redirectTo: `${window.location.origin}/mortgage-ops/login`,
+    });
+    if (error) return toast.error(error.message);
+    toast.success(`Password reset email sent to ${agent.email}`);
   };
 
   const setStatus = async (agent: AgentRow, status: "active" | "inactive") => {
@@ -283,9 +325,10 @@ export function MortgageAgentsPanel() {
   };
 
   const returnToQueue = async () => {
-    if (!platformOwner || !returnTarget) return;
+    if (!platformOwner || !returnTarget || returnBusy) return;
     const reason = returnReason.trim();
     if (!reason) return toast.error("A return reason is required");
+    setReturnBusy(true);
     try {
       await invokeCompensation({
         action: "return_to_queue",
@@ -298,15 +341,37 @@ export function MortgageAgentsPanel() {
       await load();
     } catch (error: unknown) {
       toast.error(errorMessage(error, "Return to Queue failed"));
+    } finally {
+      setReturnBusy(false);
     }
   };
 
+  const adjustLimits = adjustTarget ? adjustmentCaps(adjustTarget, adjustTarget.adjustments || []) : null;
+
+  const openAdjust = (entry: EntryRow) => {
+    setAdjustTarget(entry);
+    setAdjustAmount("");
+    setAdjustReason("");
+    setAdjustCounterparty("none");
+    setAdjustKey(newIdempotencyKey());
+  };
+
+  const closeAdjust = () => {
+    setAdjustTarget(null);
+    setAdjustReason("");
+    setAdjustAmount("");
+    setAdjustCounterparty("none");
+    setAdjustKey("");
+  };
+
   const submitAdjust = async () => {
-    if (!platformOwner || !adjustTarget) return;
+    if (!platformOwner || !adjustTarget || !adjustLimits || adjustBusy) return;
     const reason = adjustReason.trim();
-    const amount = Math.round(Number(adjustAmount) * 100);
+    const amount = parseDollarsToCents(adjustAmount);
     if (!reason) return toast.error("An adjustment reason is required");
-    if (!Number.isInteger(amount) || amount === 0) return toast.error("Enter a nonzero dollar amount");
+    const amountError = adjustmentAmountError(amount, adjustLimits, adjustCounterparty !== "none");
+    if (amountError || amount === null) return toast.error(amountError || "Enter a dollar amount");
+    setAdjustBusy(true);
     try {
       await invokeCompensation({
         action: "adjust",
@@ -314,15 +379,15 @@ export function MortgageAgentsPanel() {
         amount_cents: amount,
         reason,
         counterparty_agent_id: adjustCounterparty === "none" ? null : adjustCounterparty,
+        idempotency_key: adjustKey,
       });
       toast.success("Adjustment recorded. Parent compensation facts were not rewritten.");
-      setAdjustTarget(null);
-      setAdjustAmount("");
-      setAdjustReason("");
-      setAdjustCounterparty("none");
+      closeAdjust();
       await load();
     } catch (error: unknown) {
       toast.error(errorMessage(error, "Adjust failed"));
+    } finally {
+      setAdjustBusy(false);
     }
   };
 
@@ -437,6 +502,16 @@ export function MortgageAgentsPanel() {
                         <TableCell className="text-center">{agent.completed_count}</TableCell>
                         <TableCell className="text-right space-x-2">
                           <Button size="sm" variant="outline" onClick={() => drillAgent(agent.application_user_id)}>Files</Button>
+                          {platformOwner ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void sendPasswordReset(agent)}
+                              title="Send password reset email"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </Button>
+                          ) : null}
                           {agent.account_status === "active" ? (
                             <Button size="sm" variant="ghost" onClick={() => setStatus(agent, "inactive")}>Deactivate</Button>
                           ) : (
@@ -616,12 +691,7 @@ export function MortgageAgentsPanel() {
                             <TableCell colSpan={8}>
                               <EntryDrilldown
                                 entry={entry}
-                                onAdjust={platformOwner ? () => {
-                                  setAdjustTarget(entry);
-                                  setAdjustAmount("");
-                                  setAdjustReason("");
-                                  setAdjustCounterparty("none");
-                                } : undefined}
+                                onAdjust={platformOwner ? () => openAdjust(entry) : undefined}
                               />
                             </TableCell>
                           </TableRow>
@@ -692,14 +762,15 @@ export function MortgageAgentsPanel() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => { setReturnTarget(null); setReturnReason(""); }}>Cancel</Button>
-            <Button onClick={() => void returnToQueue()} disabled={!returnReason.trim()}>
+            <Button onClick={() => void returnToQueue()} disabled={returnBusy || !returnReason.trim()}>
+              {returnBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               Confirm return
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={platformOwner && !!adjustTarget} onOpenChange={(open) => { if (!open) { setAdjustTarget(null); setAdjustReason(""); setAdjustAmount(""); setAdjustCounterparty("none"); } }}>
+      <Dialog open={platformOwner && !!adjustTarget} onOpenChange={(open) => { if (!open && !adjustBusy) closeAdjust(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Adjust compensation</DialogTitle>
@@ -712,7 +783,13 @@ export function MortgageAgentsPanel() {
           <div className="space-y-3">
             <div>
               <Label>Signed amount (dollars)</Label>
-              <Input value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="10.00 or -5.00" />
+              <Input value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="10.00 or -5.00" inputMode="decimal" />
+              {adjustLimits ? (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="adjustment-cap">
+                  At most {dollars(adjustLimits.maxAbsCents)} either way (the original entry).
+                  A debit to this agent, or a wrong-agent move, is limited to the agent's remaining {dollars(adjustLimits.maxDebitCents)} on this file.
+                </p>
+              ) : null}
             </div>
             <div>
               <Label>Reason (required)</Label>
@@ -734,13 +811,16 @@ export function MortgageAgentsPanel() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { setAdjustTarget(null); setAdjustReason(""); setAdjustAmount(""); setAdjustCounterparty("none"); }}>Cancel</Button>
-            <Button onClick={() => void submitAdjust()} disabled={!adjustReason.trim()}>Record adjustment</Button>
+            <Button variant="ghost" onClick={closeAdjust} disabled={adjustBusy}>Cancel</Button>
+            <Button onClick={() => void submitAdjust()} disabled={adjustBusy || !adjustReason.trim()}>
+              {adjustBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+              Record adjustment
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={payOpen} onOpenChange={setPayOpen}>
+      <Dialog open={payOpen} onOpenChange={(open) => { if (!payBusy) { setPayOpen(open); if (!open) setPayConfirmAll(false); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record payment</DialogTitle>
@@ -750,10 +830,28 @@ export function MortgageAgentsPanel() {
             <div><Label>Payment date</Label><Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} /></div>
             <div><Label>Reference</Label><Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Check / ACH / memo" /></div>
             <div><Label>Note</Label><Input value={payNote} onChange={(e) => setPayNote(e.target.value)} /></div>
+            <p className="text-sm" data-testid="mark-paid-summary">
+              {payTargets.ids.length} {payTargets.ids.length === 1 ? "entry" : "entries"}, total {dollars(payTargets.totalCents)}
+            </p>
+            {payTargets.all && payTargets.ids.length > 0 ? (
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={payConfirmAll}
+                  onChange={(e) => setPayConfirmAll(e.target.checked)}
+                  data-testid="mark-paid-confirm-all"
+                />
+                <span>Nothing is selected. Mark every unpaid entry in this view paid ({payTargets.ids.length} entries, {dollars(payTargets.totalCents)}).</span>
+              </label>
+            ) : null}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setPayOpen(false)}>Cancel</Button>
-            <Button onClick={() => markPaid(selected.length ? selected : entries.filter((e) => e.status !== "paid").map((e) => e.id))}>
+            <Button variant="ghost" onClick={() => setPayOpen(false)} disabled={payBusy}>Cancel</Button>
+            <Button
+              onClick={() => void markPaid(payTargets.ids)}
+              disabled={payBusy || payTargets.ids.length === 0 || (payTargets.all && !payConfirmAll)}
+            >
+              {payBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               Mark paid
             </Button>
           </DialogFooter>
