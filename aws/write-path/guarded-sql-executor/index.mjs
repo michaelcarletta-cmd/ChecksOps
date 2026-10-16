@@ -32,6 +32,7 @@ import {
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+  AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
   CHECKALT_AUTO_DEPOSIT_CONFIG,
@@ -112,6 +113,15 @@ import {
   isSql85MortgageCompensationAdjust,
   isSql86MortgageCompensationOwnerOnly,
   isSql87ResolveCheckCaseTenantScope,
+  isSql89CheckIntakeColumnUpdate,
+  readSql89State,
+  readSql89UnrelatedSnapshot,
+  SQL89_CANONICAL_STATEMENTS,
+  sql89ChangedCategories,
+  sql89PostconditionFailures,
+  sql89Report,
+  sql89SharedPreconditionFailures,
+  sql89StatementText,
   isTenantUsersSameCheckPermissions,
   STAKEHOLDER_GRANT_PRIVILEGES,
   STAKEHOLDER_GRANT_TABLE,
@@ -169,6 +179,7 @@ const SQL84_MORTGAGE_RETURN_TO_QUEUE_FILE = path.join(ROOT, 'sql/84_mortgage_ret
 const SQL85_MORTGAGE_COMPENSATION_ADJUST_FILE = path.join(ROOT, 'sql/85_mortgage_compensation_adjust.sql');
 const SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY_FILE = path.join(ROOT, 'sql/86_mortgage_compensation_owner_only.sql');
 const SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/87_resolve_check_case_tenant_scope.sql');
+const SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE = path.join(ROOT, 'sql/89_check_intake_items_column_update.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -1784,6 +1795,151 @@ async function handleSql71AmountGrant({ event, authorization, identity, connect,
         executor_identity: identity,
         updatable_columns_before: before.details.updatable_columns,
         updatable_columns_after: after.details.updatable_columns,
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
+// --- SQL 89: column-level UPDATE on check_intake_items for checksops ---------
+
+const SQL89_SHA256_RE = /^[0-9a-f]{64}$/;
+
+async function handleSql89CheckIntakeColumnUpdate({ event, authorization, identity, connect, sqlFile89, pin }) {
+  const embedded = readEmbeddedSql(sqlFile89, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  if (sql89StatementText(embedded.details.text) !== SQL89_CANONICAL_STATEMENTS) {
+    return fail(CODES.UNRELATED_MUTATION, 'embedded SQL 89 is not exactly the pinned REVOKE and column GRANT');
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported SQL 89 executor action ${event.action}`);
+  }
+  if (event.action === 'apply') {
+    if (!SQL89_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''))) {
+      return fail(CODES.SQL_COLLISION, 'SQL 89 pin has no reviewed pre-apply live definition hash; run read-live and record it in a reviewed pin change');
+    }
+    if (!(
+      event.filename === pin.filename
+      && event.migration_id === pin.migration_id
+      && event.source_sha256 === pin.source_sha256
+      && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+      && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+      && event.commit === pin.commit
+    )) {
+      return fail(CODES.SQL_COLLISION, 'SQL 89 apply is bound to the exact allowlisted pin');
+    }
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      const state = await readSql89State(client);
+      if (!state.ok) return state;
+      const s = state.details;
+      const failures = sql89SharedPreconditionFailures(s);
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: s.live_definition_sha256,
+          after_hash: s.live_definition_sha256,
+          result: event.action,
+          executor_identity: identity,
+          live_definition_sha256: s.live_definition_sha256,
+          table_present: s.table_present === true,
+          table_level_update: s.table_level_update === true,
+          pin_executable: SQL89_SHA256_RE.test(String(pin.expected_live_definition_sha256 || '')),
+          precondition_failures: failures,
+          apply_preconditions_met: failures.length === 0
+            && s.already_applied !== true
+            && s.live_definition_sha256 === pin.expected_live_definition_sha256,
+          column_grant_inspect: sql89Report(s),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['sql89_check_intake_column_update']);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', { one_use_id: event.one_use_id });
+    }
+    const before = await readSql89State(client);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    const b = before.details;
+    if (b.already_applied === true) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'checksops already has exactly the SQL 89 column UPDATE grants; refuse re-apply');
+    }
+    if (b.live_definition_sha256 !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'expected live privilege state changed immediately before apply');
+    }
+    const preFailures = sql89SharedPreconditionFailures(b);
+    if (preFailures.length) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'SQL 89 pre-apply conditions are not met', { failed: preFailures });
+    }
+    const snapshotBefore = await readSql89UnrelatedSnapshot(client);
+
+    await client.query(embedded.details.text);
+
+    const after = await readSql89State(client);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const snapshotAfter = await readSql89UnrelatedSnapshot(client);
+    const postFailures = sql89PostconditionFailures(b, after.details);
+    const changed = sql89ChangedCategories(snapshotBefore, snapshotAfter);
+    if (postFailures.length || changed.length) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, 'SQL 89 did not leave exactly the pinned checksops UPDATE columns', {
+        failed: postFailures,
+        unrelated_changed: changed,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: b.live_definition_sha256,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        updatable_columns_before: b.updatable_columns,
+        updatable_columns_after: after.details.updatable_columns,
+        columns_lost_update: b.columns_losing_update,
+        columns_gained_update: b.columns_to_grant,
+        table_level_update: after.details.table_level_update,
       },
     });
   } catch (error) {
@@ -6072,6 +6228,8 @@ export function createHandler({
   sql86Pin = AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   sqlFile87 = SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE_FILE,
   sql87Pin = AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+  sqlFile89 = SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE,
+  sql89Pin = AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -6171,6 +6329,10 @@ export function createHandler({
       return handleMortgageMigration({
         key: 'sql87', event, authorization, identity, connect, sqlFile: sqlFile87, pin: sql87Pin, committed: AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
       });
+    }
+
+    if (isSql89CheckIntakeColumnUpdate(event)) {
+      return handleSql89CheckIntakeColumnUpdate({ event, authorization, identity, connect, sqlFile89, pin: sql89Pin });
     }
 
     if (isLedger20261007193200(event)) {
