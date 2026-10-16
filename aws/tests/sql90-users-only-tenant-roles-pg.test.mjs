@@ -18,6 +18,16 @@ import { AWS_ROOT, applyBaseSchema, pgSkipReason, policyBlock, startPg } from '.
 
 const SQL_90 = path.join(AWS_ROOT, 'workflows/sql/90_users_only_tenant_roles.sql');
 const SQL_80 = path.join(AWS_ROOT, 'workflows/sql/80_checkalt_member_auto_deposit.sql');
+const SQL_35 = path.join(AWS_ROOT, 'rls/sql/35_manager_partner_parity.sql');
+
+/** SQL 35 without tenants_public (its tenants columns are not in this fixture). */
+const sql35ManagerViews = () => {
+  const text = fs.readFileSync(SQL_35, 'utf8');
+  const fnEnd = text.indexOf('-- Active-tenant public columns only.');
+  const viewsStart = text.indexOf('-- Non-secret CheckAlt settings');
+  assert.ok(fnEnd > 0 && viewsStart > fnEnd);
+  return text.slice(0, fnEnd) + text.slice(viewsStart);
+};
 
 const TENANT_A = '11111111-1111-4111-8111-111111111111';
 const TENANT_B = '33333333-3333-4333-8333-333333333333';
@@ -31,6 +41,9 @@ const B_OWNER = 'a1000000-0000-4000-8000-000000000009';
 const TEAMMATE = 'a1000000-0000-4000-8000-00000000000a';
 const PLATFORM_OWNER = 'a1000000-0000-4000-8000-00000000000b';
 const NEWCOMER = 'a1000000-0000-4000-8000-00000000000c';
+const TENANT_EMPTY = '44444444-4444-4444-8444-444444444444';
+const CHECK_A = '55555555-5555-4555-8555-555555555555';
+const CLAIM_A = '66666666-6666-4666-8666-666666666666';
 
 const MEMBERS = [OWNER, OPERATOR, VIEWER, GLOBAL_ADMIN_VIEWER];
 const OUTSIDERS = [GLOBAL_ADMIN, GLOBAL_STAFF, B_OWNER];
@@ -41,7 +54,22 @@ CREATE TABLE public.recipient_tax_profiles (
 CREATE TABLE public.checkalt_tenant_accounts (
   tenant_id uuid PRIMARY KEY, auto_approve_enabled boolean NOT NULL DEFAULT false,
   auto_approve_max_cents integer, updated_at timestamptz DEFAULT now());
-INSERT INTO public.tenants (id, name) VALUES ('${TENANT_A}', 'A'), ('${TENANT_B}', 'B');
+CREATE TABLE public.tenant_email_settings (tenant_id uuid PRIMARY KEY, from_name text);
+CREATE TABLE public.checkalt_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), singleton boolean NOT NULL DEFAULT true, base_url text, merchant text,
+  fi_key text, business_unit text, depositor_account_id text, default_enabled boolean, auto_approve_enabled boolean,
+  auto_approve_max_cents integer, notes text, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(),
+  updated_by uuid);
+CREATE TABLE public.deposit_provider_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), provider text, display_name text, is_active boolean, is_stubbed boolean,
+  capabilities jsonb, config jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+INSERT INTO public.checkalt_config (merchant, fi_key, depositor_account_id) VALUES ('M-1', 'FI-1', '123456789');
+INSERT INTO public.deposit_provider_config (provider, display_name, is_active, is_stubbed, capabilities, config)
+  VALUES ('checkalt', 'Check Alt', true, false, '{"rdc": true}', '{"secret": "x"}');
+INSERT INTO public.tenants (id, name) VALUES ('${TENANT_A}', 'A'), ('${TENANT_B}', 'B'), ('${TENANT_EMPTY}', 'Empty');
+INSERT INTO public.tenant_email_settings (tenant_id, from_name) VALUES ('${TENANT_A}', 'A');
+INSERT INTO public.check_intake_items (id, tenant_id) VALUES ('${CHECK_A}', '${TENANT_A}');
+INSERT INTO public.claims (id, org_id) VALUES ('${CLAIM_A}', '${TENANT_A}');
 INSERT INTO public.identity_accounts (application_user_id, email, status) VALUES
   ('${OWNER}', 'o@example.com', 'active'), ('${OPERATOR}', 'op@example.com', 'active'),
   ('${VIEWER}', 'v@example.com', 'active'), ('${GLOBAL_ADMIN_VIEWER}', 'gav@example.com', 'active'),
@@ -68,7 +96,7 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
   try {
     await applyBaseSchema(client);
     await client.query(SEED);
-    for (const table of ['tenant_users', 'tenants', 'recipient_tax_profiles', 'user_roles']) {
+    for (const table of ['tenant_users', 'tenants', 'recipient_tax_profiles', 'user_roles', 'tenant_email_settings', 'checkalt_tenant_accounts']) {
       await client.query(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`);
       await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.${table} TO checksops`);
     }
@@ -80,7 +108,12 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
     await client.query(policyBlock('21_proposed_write_policies.sql', 'aws_write_user_roles'));
     await client.query(policyBlock('24_complete_write_policies.sql', 'aws_write_recipient_tax_profiles'));
     await client.query(policyBlock('12_final_select_policies.sql', 'aws_select_recipient_tax_profiles'));
+    await client.query(policyBlock('21_proposed_write_policies.sql', 'aws_write_tenant_email_settings'));
+    await client.query(policyBlock('24_complete_write_policies.sql', 'aws_write_checkalt_tenant_accounts'));
+    await client.query(`CREATE POLICY aws_select_tenant_email_settings ON public.tenant_email_settings FOR SELECT TO authenticated USING (true)`);
+    await client.query(`CREATE POLICY aws_select_checkalt_tenant_accounts ON public.checkalt_tenant_accounts FOR SELECT TO authenticated USING (true)`);
     await client.query(fs.readFileSync(SQL_80, 'utf8'));
+    await client.query(sql35ManagerViews());
 
     /** One API request: a transaction as checksops (RLS on) for this user. */
     const as = async (user, fn) => {
@@ -107,6 +140,11 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
     assert.equal(await fn(OWNER, 'aws_can_write_tenant', TENANT_A), false);
     assert.equal(await fn(GLOBAL_ADMIN_VIEWER, 'aws_can_write_tenant', TENANT_A), true);
     await assert.rejects(saveAutoDeposit(VIEWER, TENANT_A), (error) => error.code === '42501');
+    assert.equal(await fn(PLATFORM_OWNER, 'aws_can_write_tenant', TENANT_A), true);
+    const saved80 = await saveAutoDeposit(PLATFORM_OWNER, TENANT_A);
+    assert.equal(saved80.auto_approve_enabled, true);
+    // SQL 35: a stored tenant owner reads the platform-wide Check Alt config.
+    assert.equal(await rowCount(OWNER, 'SELECT merchant, fi_key FROM public.checkalt_config_public', []), 1);
 
     // Refuses to run without its prerequisites, and changes nothing.
     await client.query('BEGIN');
@@ -159,6 +197,89 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
     assert.equal(await rowCount(PLATFORM_OWNER, "INSERT INTO public.user_roles (user_id, role) VALUES ($1, 'mortgage_agent')", [TEAMMATE]), 1);
     assert.equal(await rowCount(PLATFORM_OWNER, 'DELETE FROM public.user_roles WHERE user_id = $1', [GLOBAL_ADMIN_VIEWER]), 1);
 
+    // The platform owner has no tenant write branch: tenant helpers, tenant
+    // settings, email sender, team membership edits and Auto-Deposit refuse it.
+    assert.equal(await fn(PLATFORM_OWNER, 'aws_can_write_tenant', TENANT_A), false);
+    assert.equal(await fn(PLATFORM_OWNER, 'aws_can_write_check', CHECK_A), false);
+    assert.equal(await fn(PLATFORM_OWNER, 'aws_can_write_claim', CLAIM_A), false);
+    assert.equal(await fn(OWNER, 'aws_can_write_check', CHECK_A), true);
+    assert.equal(await fn(VIEWER, 'aws_can_write_claim', CLAIM_A), true);
+    assert.equal(await fn(B_OWNER, 'aws_can_write_check', CHECK_A), false);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.tenants SET name = $1 WHERE id = $2', ['A2', TENANT_A]), 0);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.tenant_email_settings SET from_name = $1 WHERE tenant_id = $2', ['X', TENANT_A]), 0);
+    assert.equal(await rowCount(VIEWER, 'UPDATE public.tenant_email_settings SET from_name = $1 WHERE tenant_id = $2', ['X', TENANT_A]), 1);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'DELETE FROM public.tenant_users WHERE user_id = $1 AND tenant_id = $2', [TEAMMATE, TENANT_A]), 0);
+    await assert.rejects(saveAutoDeposit(PLATFORM_OWNER, TENANT_A), (error) => error.code === '42501');
+
+    // Tenant create stays with the platform owner.
+    assert.equal(await rowCount(PLATFORM_OWNER, 'INSERT INTO public.tenants (id, name) VALUES (gen_random_uuid(), $1)', ['New']), 1);
+    for (const user of [...MEMBERS, ...OUTSIDERS]) {
+      await assert.rejects(as(user, () => client.query(
+        'INSERT INTO public.tenants (id, name) VALUES (gen_random_uuid(), $1)', ['New'],
+      )), /row-level security/, user);
+    }
+
+    // First invite only: the platform owner may add the first member of a
+    // tenant with no members, never a member of a tenant that has members, and
+    // never itself.
+    assert.equal(await rowCount(PLATFORM_OWNER, 'INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_EMPTY, NEWCOMER, 'viewer']), 1);
+    await assert.rejects(as(PLATFORM_OWNER, () => client.query(
+      'INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_A, NEWCOMER, 'viewer'],
+    )), /row-level security/);
+    await assert.rejects(as(PLATFORM_OWNER, () => client.query(
+      'INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_EMPTY, PLATFORM_OWNER, 'viewer'],
+    )), /row-level security/);
+    // Two rows in one statement: the second is no longer a first invite.
+    await assert.rejects(as(PLATFORM_OWNER, async () => {
+      await client.query('INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_EMPTY, NEWCOMER, 'viewer']);
+      await client.query('INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_EMPTY, TEAMMATE, 'viewer']);
+    }), /row-level security/);
+    // A member cannot add the platform owner either.
+    await assert.rejects(as(OWNER, () => client.query(
+      'INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, $3)', [TENANT_A, PLATFORM_OWNER, 'viewer'],
+    )), /row-level security/);
+    assert.equal(await fn(PLATFORM_OWNER, 'aws_is_platform_owner_user', PLATFORM_OWNER), true);
+    assert.equal(await fn(OWNER, 'aws_is_platform_owner_user', OWNER), false);
+    assert.equal(await fn(OWNER, 'aws_tenant_has_no_members', TENANT_EMPTY), true);
+    assert.equal(await fn(OWNER, 'aws_tenant_has_no_members', TENANT_A), false);
+
+    // tenant_users rows are never updated under RLS (tenant_users.role included).
+    for (const user of [...MEMBERS, PLATFORM_OWNER]) {
+      assert.equal(await rowCount(user, "UPDATE public.tenant_users SET role = 'owner' WHERE tenant_id = $1", [TENANT_A]), 0, user);
+    }
+
+    // Check Alt setup (the tenant depositor row) is the platform owner's; members
+    // change Auto-Deposit only through the DEFINER function.
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.checkalt_tenant_accounts SET auto_approve_max_cents = 1 WHERE tenant_id = $1', [TENANT_A]), 1);
+    for (const user of [...MEMBERS, ...OUTSIDERS]) {
+      assert.equal(await rowCount(user, 'UPDATE public.checkalt_tenant_accounts SET auto_approve_max_cents = 1 WHERE tenant_id = $1', [TENANT_A]), 0, user);
+    }
+
+    // SQL 35 views: the platform-wide Check Alt config is the platform owner's;
+    // members see only provider name and status.
+    assert.equal(await rowCount(PLATFORM_OWNER, 'SELECT merchant, fi_key FROM public.checkalt_config_public', []), 1);
+    for (const user of [...MEMBERS, ...OUTSIDERS]) {
+      assert.equal(await rowCount(user, 'SELECT merchant, fi_key FROM public.checkalt_config_public', []), 0, user);
+    }
+    const providers = (user) => as(user, async () => (await client.query(
+      'SELECT provider, display_name, is_active, is_stubbed, capabilities FROM public.deposit_provider_config_public',
+    )).rows);
+    for (const user of MEMBERS) {
+      const rows = await providers(user);
+      assert.equal(rows.length, 1, user);
+      assert.equal(rows[0].display_name, 'Check Alt');
+      assert.equal(rows[0].is_active, true);
+      assert.equal(rows[0].capabilities, null, user);
+    }
+    assert.deepEqual((await providers(PLATFORM_OWNER))[0].capabilities, { rdc: true });
+    for (const user of [GLOBAL_ADMIN, GLOBAL_STAFF]) {
+      assert.equal((await providers(user)).length, 0, user);
+    }
+    const viewColumns = (await client.query(`
+      SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'deposit_provider_config_public' ORDER BY ordinal_position`)).rows.map((r) => r.column_name);
+    assert.equal(viewColumns.includes('config'), false);
+
     // Data is not rewritten: the stored role values are left as they were.
     const roles = (await client.query('SELECT role FROM public.tenant_users ORDER BY role')).rows.map((r) => r.role);
     assert.ok(roles.includes('viewer') && roles.includes('operator') && roles.includes('owner'));
@@ -193,6 +314,23 @@ test('SQL 90 file: membership-only helpers, no role tiers, no user_roles admin/s
   assert.doesNotMatch(code, /ALTER TYPE|UPDATE public\.tenant_users/);
   assert.doesNotMatch(code, /^\s*(BEGIN|COMMIT)\s*;/im);
   assert.match(code, /CREATE POLICY aws_write_user_roles ON public\.user_roles[\s\S]*?is_platform_owner\(\)/);
+  // The platform owner has no tenant write branch in the tenant helpers.
+  for (const name of ['aws_can_write_tenant', 'aws_can_write_check', 'aws_can_write_claim']) {
+    const start = code.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
+    const body = code.slice(start, code.indexOf('$$;', start));
+    assert.doesNotMatch(body, /cross_tenant_reader|is_platform_owner|is_master_owner/, name);
+  }
+  // Policies replaced without the cross-tenant-reader branch.
+  for (const policy of ['aws_insert_tenant_users', 'aws_delete_tenant_users', 'aws_write_tenants',
+    'aws_write_tenant_email_settings', 'aws_write_deposit_batches', 'aws_write_homeowner_check_uploads',
+    'aws_write_referral_events', 'aws_write_tenant_partnerships']) {
+    const start = code.indexOf(`CREATE POLICY ${policy} ON`);
+    assert.ok(start >= 0, policy);
+    const end = code.indexOf(policy.startsWith('aws_insert') || policy.startsWith('aws_delete') || policy === 'aws_write_tenants' ? ';' : "';", start);
+    assert.doesNotMatch(code.slice(start, end), /cross_tenant_reader/, policy);
+  }
+  // No tenant_users UPDATE policy: tenant_users.role cannot be changed under RLS.
+  assert.doesNotMatch(code, /CREATE POLICY \w+ ON public\.tenant_users\s+FOR (ALL|UPDATE)/);
   for (const name of ['aws_is_tenant_member', 'aws_can_write_tenant', 'aws_can_write_same_tenant_user', 'aws_can_access_tax_profiles']) {
     const start = code.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
     assert.ok(start >= 0, name);
