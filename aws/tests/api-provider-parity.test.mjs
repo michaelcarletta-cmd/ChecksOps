@@ -1123,13 +1123,14 @@ test('platform bank and treasury: platform owner only; a member or a global admi
         assert.equal(calls.some((c) => c.url.includes(`/accounts/${PLATFORM_ID}/`)), true, fn);
       }
     }
-    // With no tenant there is no tenant payment account to add a bank to.
-    {
+    // Platform bank add never targets a tenant payment account: refused with a
+    // tenant_id (any tenant) and without one.
+    for (const [body, status] of [[{ action: 'add' }, 409], [{ action: 'add', tenant_id: FREEDOM_TENANT }, 403]]) {
       const { fetchImpl, calls } = recordedFetch([]);
       const client = withPlatformOwner(parityClient({ tenantRole: null, platformAdmin: false }), true);
-      const result = await runParityHandler('moov-platform-bank', jwtEvent('/functions/v1/moov-platform-bank', 'POST', { action: 'add' }), parityDeps(client, fetchImpl));
-      assert.equal(result.statusCode, 400);
-      assert.equal(calls.length, 0);
+      const result = await runParityHandler('moov-platform-bank', jwtEvent('/functions/v1/moov-platform-bank', 'POST', body), parityDeps(client, fetchImpl));
+      assert.equal(result.statusCode, status, JSON.stringify(body));
+      assert.equal(calls.some((c) => /bank-accounts/.test(c.url)), false);
     }
     // Other (tenant) Moov handlers still need a tenant, even for the platform owner.
     {

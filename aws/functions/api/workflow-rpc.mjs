@@ -943,6 +943,9 @@ const requirePlatformOwner = async (client) => {
   return { ok: true };
 };
 
+/** SQL 90: creates a one-item batch for a pending deposit item of the caller's tenant. */
+export const CREATE_DEPOSIT_BATCH_FOR_ITEM_SQL = `SELECT public.aws_create_deposit_batch_for_item($1::uuid, $2::text)::text AS id`;
+
 export const CHECKALT_TENANT_MEMBER_SQL = `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid`;
 
@@ -1312,12 +1315,14 @@ const executeDepositAction = async ({ client, mapping, args }) => {
   const batchId = arg(args, 'p_batch_id', 'batch_id');
   let resolvedBatchId = isUuid(batchId) ? batchId : null;
   if (!resolvedBatchId) {
+    // A new batch has no deposit items yet, so RLS (membership through the
+    // batch's items) cannot admit it: SQL 90's DEFINER function checks the
+    // caller is a member of the item's tenant and creates it.
     resolvedBatchId = (await client.query(
-      `INSERT INTO public.deposit_batches (provider, total_items, total_amount, created_by)
-       VALUES ($1::public.deposit_provider, 1, $2::numeric, $3::uuid)
-       RETURNING id`,
-      [String(provider), item.amount, actorId],
+      CREATE_DEPOSIT_BATCH_FOR_ITEM_SQL,
+      [depositItemId, String(provider)],
     )).rows[0]?.id;
+    if (!resolvedBatchId) return { error: 'rls_denied', message: 'Deposit batch was not created' };
   } else {
     await client.query(
       `UPDATE public.deposit_batches

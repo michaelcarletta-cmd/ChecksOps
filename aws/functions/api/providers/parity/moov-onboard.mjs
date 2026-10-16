@@ -1224,13 +1224,14 @@ export const platformBank = {
       return jsonResult({ success: true, banks, liveProviderCalled: true });
     }
     if (action === 'add') {
-      // bankAccountAdd links a bank to a tenant's payment account. With no
-      // tenant (the platform owner is not a member of one) there is no
-      // account to add to.
-      if (!ctx.tenantId) return fail('tenant_id is required to add a bank account', 400);
-      return bankAccountAdd.run({
-        client, mapping: { application_user_id: ctx.userId }, body, ctx: { ...ctx, tenantId: ctx.tenantId }, fetchImpl,
-      });
+      // The platform bank is the platform's own Moov account. Adding a bank
+      // here would go through bankAccountAdd, which targets a tenant's payment
+      // account: refused, whether or not a tenant_id is supplied. Tenant banks
+      // are added by the tenant's members.
+      if (body?.tenant_id || body?.tenantId) {
+        return fail('Platform bank actions never target a tenant account', 403, { error: 'tenant_target_refused' });
+      }
+      return fail('Adding the platform settlement bank is not available here', 409, { error: 'platform_bank_add_unavailable' });
     }
     return fail('Unknown platform-bank action', 400);
   },
