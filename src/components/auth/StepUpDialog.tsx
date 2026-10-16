@@ -199,7 +199,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           title: "Verified",
           description: request?.actionKey === "wallet.fund" || isCheckBoundAction(request?.actionKey)
             ? "Two-factor confirmed until you sign out."
-            : "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
+            : "Two-factor confirmed for this session. Production CheckAlt still requires membership of the check's company server-side.",
         });
         onResolved(true);
         return;
@@ -218,13 +218,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
 
       const { data: userData } = await supabase.auth.getUser();
       if (userData.user) {
-        await supabase.from("financial_stepup_log").insert({
-          user_id: userData.user.id,
-          tenant_id: request?.tenantId ?? null,
-          action_key: request?.actionKey ?? "unknown",
-          factor_type: "totp",
-          succeeded: true,
-        });
+        // Step-ups are recorded only by the server after it verifies the code
+        // (auth-financial-totp insertAppStepUpLog). The browser never writes
+        // financial_stepup_log: that table is not in the write allowlist.
         if (mode === "enroll") {
           await supabase
             .from("profiles")
