@@ -10,7 +10,7 @@
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
  *      expected live definition, which no reviewed pin can equal, so the
- *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 89) refuse apply with it
+ *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89) refuse apply with it
  *      before connecting.
  *
  * Failures print only an error code and a fixed message: executor and driver
@@ -89,7 +89,7 @@ const SHA256_KEYS = Object.freeze(['default_acl_sha256', 'acl_sha256', 'function
 // Label maps: values must be short lowercase labels; keys are pinned object names.
 const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state', 'function_states']);
 
-// SQL 82/83, 84/85/86/87 and 89 reports: flags, counts, hashes and short catalog text (types, signatures,
+// SQL 82/83, 84/85/86/87/88 and 89 reports: flags, counts, hashes and short catalog text (types, signatures,
 // grantee roles, status labels, column names). The executor never puts owner names, definitions or
 // row data in it; anything else that slips in reads 'unrecognized'.
 const REPORT_KEY_RE = /^[a-z0-9_]{1,64}$/;
@@ -178,6 +178,10 @@ export function readLiveSummary(invokeResult, { migration, pin } = {}) {
   }
   if (receipt.homeowner_inspect && typeof receipt.homeowner_inspect === 'object') {
     summary.homeowner_inspect = reportOnly(receipt.homeowner_inspect);
+  }
+  // SQL 88: existing cross-tenant links, counts only, first so a reviewer sees them.
+  if (receipt.cross_tenant_links && typeof receipt.cross_tenant_links === 'object') {
+    summary.cross_tenant_links = reportOnly(receipt.cross_tenant_links);
   }
   if (receipt.mortgage_inspect && typeof receipt.mortgage_inspect === 'object') {
     summary.mortgage_inspect = reportOnly(receipt.mortgage_inspect);

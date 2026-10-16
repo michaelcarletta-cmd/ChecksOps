@@ -32,6 +32,7 @@ import {
   AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST,
   AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+  AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
   CHECKALT_AUTO_DEPOSIT_COMMENT_SHA256,
@@ -113,6 +114,7 @@ import {
   isSql85MortgageCompensationAdjust,
   isSql86MortgageCompensationOwnerOnly,
   isSql87ResolveCheckCaseTenantScope,
+  isSql88ClaimIdAssignCaseTenantScope,
   isSql89CheckIntakeColumnUpdate,
   readSql89State,
   readSql89UnrelatedSnapshot,
@@ -179,6 +181,7 @@ const SQL84_MORTGAGE_RETURN_TO_QUEUE_FILE = path.join(ROOT, 'sql/84_mortgage_ret
 const SQL85_MORTGAGE_COMPENSATION_ADJUST_FILE = path.join(ROOT, 'sql/85_mortgage_compensation_adjust.sql');
 const SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY_FILE = path.join(ROOT, 'sql/86_mortgage_compensation_owner_only.sql');
 const SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/87_resolve_check_case_tenant_scope.sql');
+const SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/88_claim_id_assign_case_tenant_scope.sql');
 const SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE = path.join(ROOT, 'sql/89_check_intake_items_column_update.sql');
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
@@ -4561,6 +4564,7 @@ async function handleHomeownerMigration({ key, event, authorization, identity, c
 
 // --- SQL 84 / 85 / 86: Mortgage Ops Return to Queue, Adjust, owner-only helper ---
 // --- SQL 87 (resolve_check_case tenant scope) reuses this engine (SQL 86's shape) ---
+// --- SQL 88 (tg_claim_id_assign_case tenant scope) reuses it too (SQL 87's shape) ---
 
 // sha256 of each reviewed file outside its CREATE OR REPLACE FUNCTION bodies (each body
 // replaced by <body>), comments removed and whitespace collapsed. The test re-derives them.
@@ -4569,6 +4573,7 @@ export const MORTGAGE_OUTSIDE_SHA256 = Object.freeze({
   sql85: '77bba93b91397609a82bbb675b8f4ad0b72f38e1b9320edc62ffdd5b937811c7',
   sql86: 'fa7c20f47edc208f591a906a4741943d334c9cf8b1ce656d4472d9afd5562b04',
   sql87: '56a592ceceaa063ff0471062f3d07e2d53053de41d8697019a2e3bc6dc80b102',
+  sql88: 'e4d0a56456429a4b056a70c059b04c5168e0bc5e4673f8c3e3dbf0c5ab1f03e1',
 });
 
 const mortgageTargets = (key) => (MORTGAGE_MIGRATIONS[key]?.functions || []).filter((fn) => fn.role === 'target');
@@ -4855,6 +4860,104 @@ const CASE_TRIGGERS = Object.freeze([
   Object.freeze({ name: 'assign_case_on_loss_draft', rel: 'loss_draft_tracking', fn: 'public.tg_loss_draft_assign_case()' }),
 ]);
 
+// SQL 88's claim_case_callers_unsafe guard, as names only: other functions whose source
+// names the trigger function ($1). Its dependents come from CASE_DEPENDENTS_SQL; the
+// triggers (pg_trigger) that run it are allowed and counted apart.
+const CLAIM_CASE_OTHER_CALLER_FUNCTIONS_SQL = `
+SELECT p.oid::regprocedure::text AS name
+FROM pg_proc p
+WHERE p.prosrc ILIKE '%tg_claim_id_assign_case%'
+  AND p.oid IS DISTINCT FROM to_regprocedure($1)
+ORDER BY 1
+`.trim();
+// SQL 88: the six triggers that run tg_claim_id_assign_case (report only: the file does not change them).
+const CLAIM_CASE_TRIGGERS = Object.freeze([
+  ['assign_case_on_ledger_events', 'homeowner_ledger_events'],
+  ['assign_case_on_ledger_tokens', 'homeowner_ledger_tokens'],
+  ['assign_case_on_ledger_uploads', 'homeowner_ledger_check_uploads'],
+  ['assign_case_on_mortgage_releases', 'mortgage_releases'],
+  ['assign_case_on_mortgage_draws', 'claim_check_mortgage_draws'],
+  ['assign_case_on_signature_requests', 'signature_requests'],
+].map(([name, rel]) => Object.freeze({ name, rel, fn: 'public.tg_claim_id_assign_case()' })));
+
+// SQL 88: existing cross-tenant links the old case lookups could have made, as aggregate
+// counts only (never ids, names or row data), each in its own savepoint with row_security
+// off (mortgageGuardedCount). Informational: never a precondition and never hashed.
+// "claim c belongs to tenant t" is PR #991's / SQL 87's rule: c.org_id = t, or c.org_id IS
+// NULL and one of t's check_intake_items references c.
+const claimBelongs = (claim, tenant) => `COALESCE(${claim}.org_id = ${tenant} OR (${claim}.org_id IS NULL AND EXISTS (
+    SELECT 1 FROM public.check_intake_items x WHERE x.claim_id = ${claim}.id AND x.tenant_id = ${tenant})), false)`;
+const claimIdTableCount = (table, tenant) => `
+SELECT count(*)::int AS n
+FROM public.${table} r
+JOIN public.check_cases cc ON cc.id = r.case_id
+LEFT JOIN public.claims c ON c.id = r.claim_id
+WHERE ${tenant ? 'r.tenant_id IS DISTINCT FROM cc.tenant_id OR ' : ''}(c.id IS NOT NULL AND NOT ${claimBelongs('c', 'cc.tenant_id')})`.trim();
+export const CROSS_TENANT_LINK_COUNTS = Object.freeze([
+  // A check linked to a case of another tenant (or a check with no tenant linked to a case).
+  ['check_intake_items_case', ['check_intake_items', 'check_cases'], `
+SELECT count(*)::int AS n
+FROM public.check_intake_items ci
+JOIN public.check_cases cc ON cc.id = ci.case_id
+WHERE cc.tenant_id IS DISTINCT FROM ci.tenant_id`.trim()],
+  // A check (with a tenant) naming a claim that does not belong to that tenant.
+  ['check_intake_items_claim', ['check_intake_items', 'claims'], `
+SELECT count(*)::int AS n
+FROM public.check_intake_items ci
+JOIN public.claims c ON c.id = ci.claim_id
+WHERE ci.tenant_id IS NOT NULL AND NOT ${claimBelongs('c', 'ci.tenant_id')}`.trim()],
+  // A loss draft linked to a case of a tenant other than its check's.
+  ['loss_draft_tracking_case', ['loss_draft_tracking', 'check_intake_items', 'check_cases'], `
+SELECT count(*)::int AS n
+FROM public.loss_draft_tracking l
+JOIN public.check_intake_items ci ON ci.id = l.check_intake_item_id
+JOIN public.check_cases cc ON cc.id = l.case_id
+WHERE cc.tenant_id IS DISTINCT FROM ci.tenant_id`.trim()],
+  // A loss draft naming a claim that does not belong to its check's tenant.
+  ['loss_draft_tracking_claim', ['loss_draft_tracking', 'check_intake_items', 'claims'], `
+SELECT count(*)::int AS n
+FROM public.loss_draft_tracking l
+JOIN public.check_intake_items ci ON ci.id = l.check_intake_item_id
+JOIN public.claims c ON c.id = l.claim_id
+WHERE ci.tenant_id IS NOT NULL AND NOT ${claimBelongs('c', 'ci.tenant_id')}`.trim()],
+  // A freedom_crm case whose external claim does not belong to the case's tenant.
+  ['check_cases_claim', ['check_cases', 'claims'], `
+SELECT count(*)::int AS n
+FROM public.check_cases cc
+JOIN public.claims c ON c.id = cc.external_claim_id
+WHERE cc.external_system = 'freedom_crm' AND NOT ${claimBelongs('c', 'cc.tenant_id')}`.trim()],
+  // A tg_claim_id_assign_case row linked to a case of another tenant (tables with a
+  // tenant_id), or to a case whose tenant its claim does not belong to.
+  ...[
+    ['homeowner_ledger_events', true],
+    ['homeowner_ledger_tokens', true],
+    ['homeowner_ledger_check_uploads', true],
+    ['mortgage_releases', false],
+    ['claim_check_mortgage_draws', false],
+    ['signature_requests', false],
+  ].map(([table, tenant]) => [`${table}_case`, [table, 'check_cases', 'claims', 'check_intake_items'], claimIdTableCount(table, tenant)]),
+].map(([key, tables, sql]) => Object.freeze({ key, tables: Object.freeze(tables), sql })));
+
+/** SQL 88's cross_tenant_links: per-category counts (null when unreadable) and their total. */
+async function readCrossTenantLinks(client, tableMap) {
+  const categories = {};
+  const unreadable = [];
+  for (const row of CROSS_TENANT_LINK_COUNTS) {
+    const present = row.tables.every((table) => tableMap[table]?.present === true);
+    const result = present
+      ? await mortgageGuardedCount(client, `sql88_cross_${row.key}`, async () => ({ n: Number((await client.query(row.sql))?.rows?.[0]?.n) || 0 }))
+      : { readable: false, reason: 'table_missing' };
+    categories[row.key] = result.readable ? result.n : null;
+    if (!result.readable) unreadable.push(`${row.key}:${result.reason}`);
+  }
+  return {
+    readable: unreadable.length === 0,
+    total: Object.values(categories).reduce((sum, n) => sum + (Number.isInteger(n) ? n : 0), 0),
+    categories,
+    unreadable_categories: unreadable,
+  };
+}
+
 const mortgageAclLine = (entry) => `${entry.grantee} ${entry.privilege_type}${entry.is_grantable === true ? ' with grant option' : ''}`;
 const sameMortgageJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const MORTGAGE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -5135,6 +5238,59 @@ export async function readMortgageState(client, key) {
         : { present: false, enabled: false, calls_function: false };
     }
   }
+  if (key === 'sql88') {
+    const anchor = mortgageOwnerAnchor(spec);
+    const a = functions[anchor.key];
+    const referenced = spec.functions.filter((fn) => fn.role === 'referenced');
+    const ownerRoles = a.exists ? ((await client.query(CASE_OWNER_ROLES_SQL, [anchor.identity, [...spec.api_roles]]))?.rows || []) : [];
+    const ownerIsApiRole = ownerRoles.some((row) => row.owner_is_role === true);
+    const apiInOwner = ownerRoles.some((row) => row.member_of_owner === true);
+    const sameOwner = a.exists && referenced.every((fn) => functions[fn.key].exists && states[fn.identity].owner_oid === states[anchor.identity].owner_oid);
+    const allSecdef = a.exists && a.security_definer === true
+      && referenced.every((fn) => functions[fn.key].exists && functions[fn.key].security_definer === true);
+    // SQL 88's claim_case_owner_unsafe guard, predicted.
+    report.case_owner = {
+      trigger_function_present: a.exists,
+      case_functions_present: referenced.every((fn) => functions[fn.key].exists),
+      same_owner: sameOwner,
+      all_security_definer: allSecdef,
+      owner_is_api_role: ownerIsApiRole,
+      owner_rolsuper: a.exists ? a.owner_rolsuper : null,
+      api_role_member_of_owner: apiInOwner,
+      api_roles_member_of_owner: ownerRoles.filter((row) => row.member_of_owner === true).map((row) => row.role),
+      api_roles_present: ownerRoles.map((row) => row.role),
+      case_owner_safe: a.exists && sameOwner && allSecdef && !ownerIsApiRole && !apiInOwner,
+    };
+    // SQL 88's claim_case_callers_unsafe guard, predicted: names and counts only; the
+    // triggers that run the function are allowed (trigger_count).
+    const callerFunctions = a.exists ? ((await client.query(CLAIM_CASE_OTHER_CALLER_FUNCTIONS_SQL, [anchor.identity]))?.rows || []).map((row) => String(row.name)) : [];
+    const allDependents = a.exists ? ((await client.query(CASE_DEPENDENTS_SQL, [anchor.identity]))?.rows || []) : [];
+    const dependents = allDependents.filter((row) => row.catalog !== 'pg_trigger');
+    const ofCatalog = (name) => dependents.filter((row) => row.catalog === name).map((row) => String(row.name ?? row.catalog));
+    const other = dependents.filter((row) => !['pg_rewrite', 'pg_policy', 'pg_proc'].includes(row.catalog));
+    report.other_callers = {
+      function_count: callerFunctions.length,
+      functions: callerFunctions.slice(0, 50),
+      view_or_rule_count: ofCatalog('pg_rewrite').length,
+      views_or_rules: ofCatalog('pg_rewrite').slice(0, 50),
+      policy_count: ofCatalog('pg_policy').length,
+      policies: ofCatalog('pg_policy').slice(0, 50),
+      dependent_function_count: ofCatalog('pg_proc').length,
+      dependent_functions: ofCatalog('pg_proc').slice(0, 50),
+      other_dependent_count: other.length,
+      other_dependents: other.map((row) => String(row.name ?? row.catalog)).slice(0, 50),
+      trigger_count: allDependents.length - dependents.length,
+      total: callerFunctions.length + dependents.length,
+    };
+    report.claim_triggers = {};
+    for (const trig of CLAIM_CASE_TRIGGERS) {
+      const row = ((await client.query(CASE_TRIGGERS_SQL, [trig.name, trig.fn]))?.rows || []).find((r) => r.rel === `public.${trig.rel}` || r.rel === trig.rel);
+      report.claim_triggers[trig.name] = row
+        ? { present: true, enabled: row.enabled !== 'D', calls_function: row.calls_function === true }
+        : { present: false, enabled: false, calls_function: false };
+    }
+    report.cross_tenant_links = await readCrossTenantLinks(client, tableMap);
+  }
   return ok({
     migration: key,
     current_user: login.current_user ?? null,
@@ -5241,6 +5397,13 @@ export function mortgageInspectSummary(state) {
     out.case_triggers = report.case_triggers;
     out.other_callers = report.other_callers;
   }
+  if (state.migration === 'sql88') {
+    // Counts only: no ids, names or row data.
+    out.cross_tenant_links = report.cross_tenant_links;
+    out.case_owner = report.case_owner;
+    out.claim_triggers = report.claim_triggers;
+    out.other_callers = report.other_callers;
+  }
   return out;
 }
 
@@ -5328,11 +5491,12 @@ export function mortgagePreconditionFailures(state, key) {
   if (key === 'sql86') {
     check('earn_owner_safe', report.earn_owner?.earn_owner_safe === true);
   }
-  if (key === 'sql87') {
+  if (key === 'sql87' || key === 'sql88') {
     check('case_owner_safe', report.case_owner?.case_owner_safe === true);
     // Named as the condition that fails (the review's name): any other caller refuses.
     check('other_callers_present', report.other_callers?.total === 0);
   }
+  // SQL 88's cross_tenant_links are informational: never a precondition.
   return failures;
 }
 
@@ -5369,7 +5533,7 @@ export function mortgagePostconditionFailures(after, key, reviewed, intendedSha2
   }
   if (key === 'sql84') check('per_check_unique_present', after?.objects?.per_check_unique_present === true);
   if (key === 'sql86') check('earn_owner_safe', after?.report?.earn_owner?.earn_owner_safe === true);
-  if (key === 'sql87') {
+  if (key === 'sql87' || key === 'sql88') {
     check('case_owner_safe', after?.report?.case_owner?.case_owner_safe === true);
     check('other_callers_present', after?.report?.other_callers?.total === 0);
   }
@@ -5504,6 +5668,8 @@ async function handleMortgageMigration({ key, event, authorization, identity, co
             && !alreadyApplied
             && failures.length === 0,
           mortgage_inspect: mortgageInspectSummary(state.details),
+          // SQL 88: shown at the top of the receipt too (counts only; informational).
+          ...(state.details.report?.cross_tenant_links ? { cross_tenant_links: state.details.report.cross_tenant_links } : {}),
         },
       });
     }
@@ -6228,6 +6394,8 @@ export function createHandler({
   sql86Pin = AUTHORIZED_SQL86_MORTGAGE_COMPENSATION_OWNER_ONLY,
   sqlFile87 = SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE_FILE,
   sql87Pin = AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+  sqlFile88 = SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE_FILE,
+  sql88Pin = AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
   sqlFile89 = SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE,
   sql89Pin = AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   sqlFile39 = SQL39_FILE,
@@ -6328,6 +6496,12 @@ export function createHandler({
     if (isSql87ResolveCheckCaseTenantScope(event)) {
       return handleMortgageMigration({
         key: 'sql87', event, authorization, identity, connect, sqlFile: sqlFile87, pin: sql87Pin, committed: AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
+      });
+    }
+
+    if (isSql88ClaimIdAssignCaseTenantScope(event)) {
+      return handleMortgageMigration({
+        key: 'sql88', event, authorization, identity, connect, sqlFile: sqlFile88, pin: sql88Pin, committed: AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
       });
     }
 

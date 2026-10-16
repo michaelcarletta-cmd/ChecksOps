@@ -1,0 +1,54 @@
+{
+  "id": "sql88-claim-id-assign-case-tenant-scope-production-apply",
+  "migration": "sql88",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/88_claim_id_assign_case_tenant_scope.sql",
+  "migration_id": "88_claim_id_assign_case_tenant_scope",
+  "staging_pin_commit": "6e903be3bfefbad9ac7f28fc024ebc0875e38c06",
+  "source_sha256": "57216e00aa0faba83a663d33531896b1782a5a56636d924b79ff06b1923cb316",
+  "function_identities": [
+    "public.tg_claim_id_assign_case()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e",
+  "authorization_phrase": "APPLY_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE",
+  "predecessors": [],
+  "order_note": "Independent of SQL 87 (it does not call resolve_check_case; it only needs the same owner and SECURITY DEFINER on the case helper and trigger functions, which SQL 87 keeps). Needs supabase migration 20260826125804 (tg_claim_id_assign_case, resolve_check_case, tg_check_intake_assign_case, tg_loss_draft_assign_case and the six claim_id case triggers' tables) on the database; the file refuses with sql88_prerequisite_missing otherwise.",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "function_states": null,
+    "cross_tenant_links": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 88. The production pre-state is not code-derived (the restored tg_claim_id_assign_case may differ from migration 20260826125804, its owner and ACL are unknown, anon and service_role may or may not exist), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, cross_tenant_links (the per-category counts and total; counts only, informational, they do not block the apply), functions (arguments, owner, security definer, proacl), case_owner, claim_triggers, other_callers, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (a missing prerequisite, another signature or result type, a function owned by another role, a tg_claim_id_assign_case ACL entry the file does not revoke, or case_owner.case_owner_safe false: the four case functions with different owners, one that is not SECURITY DEFINER, an owner that is checksops / authenticated / anon / service_role, or one of those roles a member of the owner, which the file refuses with claim_case_owner_unsafe; or other_callers_present: another function, view, rule, policy or non-trigger dependent that uses tg_claim_id_assign_case, which the file refuses with claim_case_callers_unsafe), stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "function_definition_sha256": {
+      "tg_claim_id_assign_case": "93bd9cfab9d33aa18aaed94d67d99622b179e5ffbc27fdc320e98ac47b81f9ee"
+    },
+    "function_owner": "checksops_admin",
+    "function_acl": {
+      "tg_claim_id_assign_case": "{checksops_admin=X/checksops_admin}"
+    },
+    "note": "After the unchanged SQL 88 file run as checksops_admin: tg_claim_id_assign_case is the reviewed definition (links the freedom_crm case for NEW.claim_id only when the case is the row's tenant's, for the tables with a tenant_id, and the claim belongs to the case's tenant by PR #991's / SQL 87's rule; never raises), owned by checksops_admin, SECURITY DEFINER with search_path=public, and EXECUTE for its owner only (PUBLIC, anon, authenticated, service_role and checksops revoked); resolve_check_case, tg_check_intake_assign_case and tg_loss_draft_assign_case are unchanged, SECURITY DEFINER and owned by the same role; the six triggers are unchanged. No row changes: existing cross-tenant links (cross_tenant_links) stay as they are and need their own reviewed change. intended_replacement_sha256 equals the staging pin's. function_owner is the expected production login (as for SQL 72 to 87); the first inspect must confirm it."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql88-claim-id-assign-case-tenant-scope here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
+    "production_differs": "Unknown until the first inspect of each environment: both should carry migration 20260826125804's tg_claim_id_assign_case (case_original), but owners, ACLs, the presence of anon / service_role and the cross-tenant link counts may differ. The staging and production pre-state hashes are recorded separately (the counts are not part of them). The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) run in both."
+  }
+}
