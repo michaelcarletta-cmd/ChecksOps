@@ -351,21 +351,12 @@ export const handleMfaVerify = async (event, deps = {}) => {
 };
 
 /**
- * Wallet funding step-up is bound to the tenant and the current login, not to
- * an amount: one code per login covers every funding request in that login.
+ * The login a financial step-up is recorded against (moov-fund-authz.mjs
+ * loginSessionBinding: sub + origin_jti, or auth_time). Shared by wallet
+ * funding and Check Alt: both ask for two-factor once per login.
  */
-const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
-  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
-  const { isUuid, membershipForTenant } = await import('./financial-ownership.mjs');
-  const { WALLET_FUND_TOTP_ACTION, loginSessionBinding } = await import('./providers/production/moov-fund-authz.mjs');
-  const tenantId = String(body.tenant_id || body.tenantId || '').trim();
-  if (!isUuid(tenantId)) {
-    return { ok: false, statusCode: 400, error: 'tenant_id is required', spoofFieldsIgnored: spoof, ...financialGate() };
-  }
-  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
-  if (!membershipForTenant(memberships, tenantId)) {
-    return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof, ...financialGate() };
-  }
+const resolveLoginSessionBinding = async ({ claims, spoof }) => {
+  const { loginSessionBinding } = await import('./providers/production/moov-fund-authz.mjs');
   const loginSession = loginSessionBinding(claims);
   if (!loginSession) {
     return {
@@ -377,7 +368,28 @@ const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, s
       ...financialGate(),
     };
   }
-  return { ok: true, kind: 'login_session', tenantId, loginSession, actionKey: WALLET_FUND_TOTP_ACTION };
+  return { ok: true, loginSession };
+};
+
+/**
+ * Wallet funding step-up is bound to the tenant and the current login, not to
+ * an amount: one code per login covers every funding request in that login.
+ */
+const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
+  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
+  const { isUuid, membershipForTenant } = await import('./financial-ownership.mjs');
+  const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
+  const tenantId = String(body.tenant_id || body.tenantId || '').trim();
+  if (!isUuid(tenantId)) {
+    return { ok: false, statusCode: 400, error: 'tenant_id is required', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+  if (!membershipForTenant(memberships, tenantId)) {
+    return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const session = await resolveLoginSessionBinding({ claims, spoof });
+  if (!session.ok) return session;
+  return { ok: true, kind: 'login_session', tenantId, loginSession: session.loginSession, actionKey: WALLET_FUND_TOTP_ACTION };
 };
 
 export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
@@ -458,7 +470,12 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
       ...financialGate(),
     };
   }
-  return { ok: true, check, amountCents, actionKey };
+  // Check Alt two-factor is once per login, like wallet funding: the step-up
+  // is recorded against this login and the check's tenant. The check and its
+  // server-side amount are kept in the log only as an audit trail.
+  const session = await resolveLoginSessionBinding({ claims, spoof });
+  if (!session.ok) return session;
+  return { ok: true, check, amountCents, actionKey, loginSession: session.loginSession };
 };
 
 export const insertAppStepUpLog = async (client, mapping, bound) => {
@@ -502,6 +519,7 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
       JSON.stringify({
         check_id: bound.check.id,
         amount_cents: bound.amountCents,
+        login_session: bound.loginSession,
         operation: bound.actionKey,
         source: 'app_financial_totp',
       }),

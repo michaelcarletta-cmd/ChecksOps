@@ -6,7 +6,6 @@ import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
 import {
   authorizeCheckAltProduction,
-  CHECKALT_APPROVE_ACTION,
   serverAmountCentsFromCheck,
 } from './checkalt-authz.mjs';
 import {
@@ -119,8 +118,9 @@ export async function handleProductionCheckAltApprove({
   )).rows[0] || null;
 
   const requireStepUp = actionName === 'approve';
-  // Approve binds the proof to the check, so it needs the check itself; it never
-  // compares the deposit row with a stand-in built from that same row.
+  // Approve evaluates the caller's role against the check, so it needs the check
+  // itself; it never compares the deposit row with a stand-in built from that
+  // same row.
   if (requireStepUp && !checkRow) {
     return fail('deposit_binding_mismatch', 409, {
       message: 'The check for this deposit could not be found. Approve was not sent.',
@@ -130,9 +130,9 @@ export async function handleProductionCheckAltApprove({
   }
   const check = checkRow || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
   if (requireStepUp) {
-    // The deposit.approve step-up is bound to the check's tenant, id and
-    // server-side amount. Approve only when the deposit row being approved is
-    // that same tenant, check and amount, so the proof covers this deposit.
+    // Two-factor is once per login and is not bound to this check. Approve
+    // only when the deposit row being approved is the same tenant, check and
+    // amount as its check, so the role and tenant checks cover this deposit.
     const rowCents = row.amount_cents !== undefined && row.amount_cents !== null && row.amount_cents !== ''
       ? Number(row.amount_cents)
       : serverAmountCentsFromCheck({ amount: row.amount });
@@ -153,12 +153,12 @@ export async function handleProductionCheckAltApprove({
   const authz = await authorizeCheckAltProduction({
     client,
     mapping,
+    claims,
     memberships,
     check,
     requireStepUp,
-    actionKey: CHECKALT_APPROVE_ACTION,
-    // Only this user's deposit.approve TOTP authorizes approve. A dual-control
-    // record or a deposit.submit step-up does not.
+    // Only this user's own Check Alt step-up from this login authorizes
+    // approve. A dual-control record never does.
     allowDualControl: false,
   });
   if (!authz.ok && (authz.error === 'financial_unauthorized' || authz.error === 'cross_tenant_denied')) {

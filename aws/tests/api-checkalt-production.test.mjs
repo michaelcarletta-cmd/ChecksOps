@@ -15,10 +15,7 @@ import {
   PRODUCTION_CHECKALT_HTTP_SECRET_NAMES,
   PRODUCTION_CHECKALT_SECRET_NAMES,
 } from '../functions/api/providers/production/checkalt-secrets.mjs';
-import {
-  evaluateCheckAltProductionAuthorization,
-  stepUpMatchesCheck,
-} from '../functions/api/providers/production/checkalt-authz.mjs';
+import { evaluateCheckAltProductionAuthorization } from '../functions/api/providers/production/checkalt-authz.mjs';
 import {
   isLegacyDepositRow,
   pickBlockingDeposit,
@@ -49,6 +46,10 @@ const APPROVER_APP = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const DEPOSIT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OTHER_CHECK_ID = '55555555-5555-4555-8555-555555555555';
 const OTHER_DEPOSIT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+// The Cognito login every request below belongs to, unless a test says otherwise.
+const ORIGIN_JTI = 'origin-jti-login-1';
+const LOGIN_SESSION = `${COGNITO_SUB}:jti:${ORIGIN_JTI}`;
+const LOGIN_CLAIMS = { sub: COGNITO_SUB, origin_jti: ORIGIN_JTI };
 
 const jwtEvent = (pathName, method, body, extra = {}) => ({
   rawPath: pathName,
@@ -61,7 +62,14 @@ const jwtEvent = (pathName, method, body, extra = {}) => ({
     stage: 'staging',
     http: { method, path: pathName },
     authorizer: extra.auth === null ? undefined : {
-      jwt: { claims: { sub: extra.sub || COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id' } },
+      jwt: {
+        claims: extra.claims || {
+          sub: extra.sub || COGNITO_SUB,
+          email: 'owner@freedomadj.com',
+          token_use: 'id',
+          origin_jti: ORIGIN_JTI,
+        },
+      },
     },
   },
 });
@@ -121,6 +129,7 @@ const productionSecrets = () => ({
 const createStore = ({
   role = 'admin',
   tenantId = FREEDOM_TENANT,
+  checkId = CHECK_ID,
   checkOverrides = {},
   memberships = null,
   payees,
@@ -128,23 +137,23 @@ const createStore = ({
 } = {}) => {
   const deposits = [];
   const stepups = [];
-  const eligible = buildCompletedEndorsementState({ checkId: CHECK_ID, tenantId });
+  const eligible = buildCompletedEndorsementState({ checkId, tenantId });
   const check = {
-    id: CHECK_ID,
+    id: checkId,
     tenant_id: tenantId,
     amount: 12.34,
     check_number: '1001',
-    front_image_path: `checks/${CHECK_ID}/front.jpg`,
-    back_image_path: `checks/${CHECK_ID}/back.svg`,
-    back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
+    front_image_path: `checks/${checkId}/front.jpg`,
+    back_image_path: `checks/${checkId}/back.svg`,
+    back_image_deposit_path: `checks/${checkId}/back.jpg`,
     status: 'approved_for_deposit',
     check_stage: 'ready_for_deposit',
     endorsement_render_meta: { checkalt_rear_fingerprint: eligible.fingerprint },
     ...checkOverrides,
   };
   const files = {
-    [`checks/${CHECK_ID}/front.checkalt.jpg`]: readyJpeg(),
-    [`checks/${CHECK_ID}/back.checkalt.jpg`]: readyJpeg(),
+    [`checks/${checkId}/front.checkalt.jpg`]: readyJpeg(),
+    [`checks/${checkId}/back.checkalt.jpg`]: readyJpeg(),
   };
   return {
     deposits,
@@ -248,17 +257,19 @@ const identityClient = (store) => ({
           )),
         };
       }
-      const [userId, tenantId, actionKey, since, checkId, amountCents] = params;
+      // Once-per-login lookup: user, tenant, Check Alt action, app TOTP, login session.
+      const [userId, tenantId, actionKeys, loginSession] = params;
+      if (!Array.isArray(actionKeys) || !loginSession) return { rows: [] };
       return {
         rows: store.stepups.filter((row) => (
           row.user_id === userId
           && row.tenant_id === tenantId
-          && row.action_key === actionKey
+          && actionKeys.includes(row.action_key)
           && row.succeeded === true
-          && row.metadata?.check_id === checkId
-          && Number(row.metadata?.amount_cents) === Number(amountCents)
-          && new Date(row.created_at) >= new Date(since)
-        )),
+          && row.factor_type === 'totp'
+          && row.metadata?.source === 'app_financial_totp'
+          && row.metadata?.login_session === loginSession
+        )).slice(-1),
       };
     }
     if (text.includes('INSERT INTO public.financial_stepup_log')) {
@@ -486,6 +497,7 @@ const grantStepUp = (store, {
   checkId = CHECK_ID,
   tenantId = FREEDOM_TENANT,
   amountCents = 1234,
+  loginSession = LOGIN_SESSION,
   createdAt = new Date().toISOString(),
 } = {}) => {
   store.stepups.push({
@@ -495,7 +507,13 @@ const grantStepUp = (store, {
     action_key: action,
     factor_type: action === 'checkalt.dual_control' ? 'dual_control' : 'totp',
     succeeded: true,
-    metadata: { check_id: checkId, amount_cents: amountCents, operation: action },
+    metadata: {
+      check_id: checkId,
+      amount_cents: amountCents,
+      login_session: loginSession,
+      operation: action,
+      source: 'app_financial_totp',
+    },
     created_at: createdAt,
   });
 };
@@ -904,7 +922,7 @@ test('direct submit helper uses check amount cents and refuses client image byte
     const ok = await handleProductionCheckAltSubmit({
       client,
       mapping,
-      claims: { sub: COGNITO_SUB },
+      claims: LOGIN_CLAIMS,
       body: { check_intake_item_id: CHECK_ID },
       spoof: {},
       fetchImpl: fetchImpl(store),
@@ -1004,7 +1022,7 @@ test('existing CheckAlt row for another tenant cannot be used or cross-read', as
   assert.equal(cross.createdDeposit, false);
 });
 
-test('TOTP is bound to check and amount; tenant-wide leftover does not authorize', async () => {
+test('a Check Alt step-up row without this login session does not authorize', async () => {
   const leftover = createStore();
   leftover.stepups.push({
     id: crypto.randomUUID(),
@@ -1013,44 +1031,165 @@ test('TOTP is bound to check and amount; tenant-wide leftover does not authorize
     action_key: 'deposit.submit',
     factor_type: 'totp',
     succeeded: true,
-    metadata: {},
+    metadata: { check_id: CHECK_ID, amount_cents: 1234, operation: 'deposit.submit', source: 'app_financial_totp' },
     created_at: new Date().toISOString(),
   });
   const leftoverResult = await submitOnce(leftover);
   assert.equal(leftoverResult.error, 'step_up_required');
   assert.equal(leftover.processPosts, 0);
 
-  const otherCheck = createStore();
-  grantStepUp(otherCheck, { checkId: OTHER_CHECK_ID, amountCents: 1234 });
-  const other = await submitOnce(otherCheck);
-  assert.equal(other.error, 'step_up_required');
-  assert.equal(otherCheck.processPosts, 0);
+  // Same login string, but not recorded by the app TOTP step-up.
+  const foreignSource = createStore();
+  grantStepUp(foreignSource);
+  foreignSource.stepups[0].metadata.source = 'browser';
+  assert.equal((await submitOnce(foreignSource)).error, 'step_up_required');
+  const failedRow = createStore();
+  grantStepUp(failedRow);
+  failedRow.stepups[0].succeeded = false;
+  assert.equal((await submitOnce(failedRow)).error, 'step_up_required');
+  assert.equal(foreignSource.processPosts + failedRow.processPosts, 0);
+});
 
-  const amountChanged = createStore();
-  grantStepUp(amountChanged, { amountCents: 1234 });
-  amountChanged.check.amount = 56.78;
-  const changed = await submitOnce(amountChanged);
-  assert.equal(changed.error, 'step_up_required');
-  assert.equal(amountChanged.processPosts, 0);
+test('one verification authorizes two different checks and amounts in the same login session', async () => {
+  // One step-up, entered hours ago for the first check: no check, amount or 30-minute binding.
+  const first = createStore();
+  grantStepUp(first, { createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() });
+  const stepups = first.stepups;
+  assert.equal(stepups.length, 1);
 
-  const expired = createStore();
-  grantStepUp(expired, { createdAt: new Date(Date.now() - 31 * 60 * 1000).toISOString() });
-  const stale = await submitOnce(expired);
-  assert.equal(stale.error, 'step_up_required');
-  assert.equal(expired.processPosts, 0);
+  const one = await submitOnce(first);
+  assert.equal(one.statusCode, 200, JSON.stringify(one));
+  assert.equal(one.userAmount, 1234);
+  assert.equal(first.processPosts, 1);
 
-  assert.equal(stepUpMatchesCheck({
-    tenant_id: FREEDOM_TENANT,
-    action_key: 'deposit.submit',
-    succeeded: true,
-    metadata: { check_id: CHECK_ID, amount_cents: 1234 },
-  }, { tenantId: FREEDOM_TENANT, checkId: CHECK_ID, amountCents: 1234, actionKey: 'deposit.submit' }), true);
-  assert.equal(stepUpMatchesCheck({
-    tenant_id: FREEDOM_TENANT,
-    action_key: 'deposit.submit',
-    succeeded: true,
-    metadata: { check_id: CHECK_ID, amount_cents: 1234 },
-  }, { tenantId: FREEDOM_TENANT, checkId: CHECK_ID, amountCents: 5678, actionKey: 'deposit.submit' }), false);
+  const second = createStore({ checkId: OTHER_CHECK_ID, checkOverrides: { amount: 56.78 } });
+  second.stepups = stepups;
+  const two = await submitOnce(second, { check_intake_item_id: OTHER_CHECK_ID });
+  assert.equal(two.statusCode, 200, JSON.stringify(two));
+  assert.equal(two.userAmount, 5678);
+  assert.equal(second.processPosts, 1);
+  assert.equal(second.deposits[0].check_intake_item_id, OTHER_CHECK_ID);
+  assert.equal(second.deposits[0].amount_cents, 5678);
+
+  // The same login's verification also approves a third deposit with another amount.
+  const third = createStore({ checkOverrides: { amount: 1546.72 } });
+  third.stepups = stepups;
+  pendingApprovalDeposit(third, { amount: 1546.72, amount_cents: 154672 });
+  const approved = await approveOnce(third);
+  assert.equal(approved.ok, true, JSON.stringify(approved));
+  assert.equal(approved.approvePosted, true);
+  assert.equal(third.approvePosts, 1);
+
+  // Still exactly one verification; nothing minted another.
+  assert.equal(stepups.length, 1);
+});
+
+test('a new login session (different origin_jti or auth_time) requires verification again', async () => {
+  const newLogins = [
+    { sub: COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id', origin_jti: 'origin-jti-login-2' },
+    { sub: COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id', auth_time: 1791000000 },
+    // No origin_jti and no auth_time: the login cannot be identified, so it fails closed.
+    { sub: COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id' },
+  ];
+  for (const claims of newLogins) {
+    const submit = createStore();
+    grantStepUp(submit);
+    const refused = await submitOnce(submit, {}, { claims });
+    assert.equal(refused.statusCode, 403, JSON.stringify(claims));
+    assert.equal(refused.error, 'step_up_required');
+    assert.equal(submit.processPosts, 0);
+    assert.equal(submit.deposits.length, 0);
+
+    const approve = createStore();
+    pendingApprovalDeposit(approve);
+    grantStepUp(approve, { action: 'deposit.approve' });
+    const event = jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }, { claims });
+    const result = await withEnv(productionFlags, () => handleProviderRequest(
+      event,
+      '/functions/v1/checkalt-approve-deposit',
+      'POST',
+      submitDeps(approve),
+    ));
+    assertApproveRefused(approve, result);
+  }
+
+  // auth_time logins: a different sign-in time is a new login; the same one reuses the code.
+  const authTimeSession = `${COGNITO_SUB}:auth:1791000000`;
+  const later = createStore();
+  grantStepUp(later, { loginSession: authTimeSession });
+  const laterLogin = await submitOnce(later, {}, { claims: { sub: COGNITO_SUB, token_use: 'id', auth_time: 1791000500 } });
+  assert.equal(laterLogin.error, 'step_up_required');
+  assert.equal(later.processPosts, 0);
+  const sameLogin = await submitOnce(later, {}, { claims: { sub: COGNITO_SUB, token_use: 'id', auth_time: 1791000000 } });
+  assert.equal(sameLogin.statusCode, 200, JSON.stringify(sameLogin));
+  assert.equal(later.processPosts, 1);
+});
+
+test('another user\'s login session cannot use its verification', async () => {
+  const OTHER_SUB = 'd5497519-71f2-81f3-bcc7-f7205f9f7f60';
+  for (const proof of [
+    // The other user's own verification in the same tenant.
+    { userId: APPROVER_APP, loginSession: `${OTHER_SUB}:jti:${ORIGIN_JTI}` },
+    // The other user's row carrying this caller's login string.
+    { userId: APPROVER_APP, loginSession: LOGIN_SESSION },
+    // A row for this user but recorded for the other user's login.
+    { userId: FREEDOM_APP, loginSession: `${OTHER_SUB}:jti:${ORIGIN_JTI}` },
+    // This user's own verification for a different tenant.
+    { tenantId: C1C_TENANT },
+  ]) {
+    const store = createStore();
+    store.rolesByUser = { [APPROVER_APP]: 'admin', [FREEDOM_APP]: 'admin' };
+    grantStepUp(store, proof);
+    const refused = await submitOnce(store);
+    assert.equal(refused.error, 'step_up_required', JSON.stringify(proof));
+    assert.equal(store.processPosts, 0);
+
+    const approve = createStore();
+    approve.rolesByUser = { [APPROVER_APP]: 'admin', [FREEDOM_APP]: 'admin' };
+    pendingApprovalDeposit(approve);
+    grantStepUp(approve, { action: 'deposit.approve', ...proof });
+    assertApproveRefused(approve, await approveOnce(approve));
+  }
+});
+
+test('viewers and partners are still refused with a verified login session', async () => {
+  const viewer = createStore({ role: 'viewer' });
+  grantStepUp(viewer);
+  grantStepUp(viewer, { action: 'deposit.approve' });
+  const submitted = await submitOnce(viewer);
+  assert.equal(submitted.statusCode, 403);
+  assert.equal(submitted.error, 'financial_unauthorized');
+  assert.equal(viewer.processPosts, 0);
+  pendingApprovalDeposit(viewer);
+  assertApproveRefused(viewer, await approveOnce(viewer), 'financial_unauthorized');
+
+  // A partner holds a verified session for its own tenant and even a row for the owner tenant.
+  const partner = createStore({ memberships: partnerMemberships });
+  grantStepUp(partner, { tenantId: C1C_TENANT });
+  grantStepUp(partner, { tenantId: FREEDOM_TENANT });
+  const partnerSubmit = await submitOnce(partner);
+  assert.equal(partnerSubmit.statusCode, 403);
+  assert.equal(partnerSubmit.error, 'tenant_membership_required');
+  assert.equal(partner.processPosts, 0);
+  pendingApprovalDeposit(partner);
+  assertApproveRefused(partner, await approveOnce(partner), 'cross_tenant_denied');
+});
+
+test('a login session with no verification is refused for submit and approve', async () => {
+  const store = createStore({ role: 'owner' });
+  const refused = await submitOnce(store);
+  assert.equal(refused.statusCode, 403);
+  assert.equal(refused.error, 'step_up_required');
+  assert.equal(refused.evaluation?.stepUpOk, false);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 0);
+
+  const approve = createStore({ role: 'owner' });
+  pendingApprovalDeposit(approve);
+  assertApproveRefused(approve, await approveOnce(approve));
 });
 
 test('a valid recent dual-control row from another tenant member never substitutes for the submitter step-up', async () => {
@@ -1383,11 +1522,14 @@ test('approve without a deposit.approve step-up is refused before CheckAlt is ca
   assertApproveRefused(store, await approveOnce(store));
 });
 
-test('approve refuses a deposit.submit step-up and a dual-control record for the same check', async () => {
+test('approve accepts this login\'s deposit.submit step-up; a dual-control record never counts', async () => {
   const submitOnly = createStore();
   pendingApprovalDeposit(submitOnly);
   grantStepUp(submitOnly, { action: 'deposit.submit' });
-  assertApproveRefused(submitOnly, await approveOnce(submitOnly));
+  const approved = await approveOnce(submitOnly);
+  assert.equal(approved.ok, true, JSON.stringify(approved));
+  assert.equal(approved.approvePosted, true);
+  assert.equal(submitOnly.approvePosts, 1);
 
   const dualOnly = createStore();
   pendingApprovalDeposit(dualOnly);
@@ -1395,12 +1537,11 @@ test('approve refuses a deposit.submit step-up and a dual-control record for the
   assertApproveRefused(dualOnly, await approveOnce(dualOnly));
 });
 
-test('approve refuses a deposit.approve step-up for another check, amount, tenant, or user', async () => {
+test('approve refuses a deposit.approve step-up for another tenant, user, or login', async () => {
   for (const proof of [
-    { checkId: OTHER_CHECK_ID },
-    { amountCents: 1235 },
     { tenantId: C1C_TENANT },
     { userId: APPROVER_APP },
+    { loginSession: `${COGNITO_SUB}:jti:origin-jti-login-0` },
   ]) {
     const store = createStore();
     pendingApprovalDeposit(store);
@@ -1436,14 +1577,19 @@ test('approve refuses when the deposit check row is missing (no self-comparison)
   assertApproveRefused(store, await approveOnce(store), 'deposit_binding_mismatch');
 });
 
-test('approve refuses an expired deposit.approve step-up', async () => {
+test('a deposit.approve step-up for another check and amount, earlier in this login, still approves', async () => {
   const store = createStore();
   pendingApprovalDeposit(store);
   grantStepUp(store, {
     action: 'deposit.approve',
+    checkId: OTHER_CHECK_ID,
+    amountCents: 1235,
     createdAt: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
   });
-  assertApproveRefused(store, await approveOnce(store));
+  const result = await approveOnce(store);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.approvePosted, true);
+  assert.equal(store.approvePosts, 1);
 });
 
 test('a valid deposit.approve step-up approves once; replaying it never POSTs approve again', async () => {
@@ -1628,12 +1774,20 @@ test('valid deposit.approve step-up plus CheckAlt approve failure stays approval
   assert.equal(store.deposits[0].status, 'pending_approval');
 });
 
-test('submit still accepts only a deposit.submit step-up', async () => {
+test('submit accepts this login\'s deposit.approve step-up; other step-up actions never count', async () => {
   const approveOnly = createStore();
   grantStepUp(approveOnly, { action: 'deposit.approve' });
-  const denied = await submitOnce(approveOnly);
-  assert.equal(denied.error, 'step_up_required');
-  assert.equal(approveOnly.processPosts, 0);
+  const accepted = await submitOnce(approveOnly);
+  assert.equal(accepted.statusCode, 200, JSON.stringify(accepted));
+  assert.equal(approveOnly.processPosts, 1);
+
+  for (const action of ['wallet.fund', 'checkalt.dual_control']) {
+    const other = createStore();
+    grantStepUp(other, { action });
+    const denied = await submitOnce(other);
+    assert.equal(denied.error, 'step_up_required', action);
+    assert.equal(other.processPosts, 0);
+  }
 });
 
 const PROCESS_40 = (reference = 9001, extra = {}) => ({

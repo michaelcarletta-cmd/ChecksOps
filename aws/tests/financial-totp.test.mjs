@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
+  FINANCIAL_STEPUP_TTL_MS,
   FINANCIAL_TOTP_ISSUER,
   FINANCIAL_TOTP_PREP,
   assertNoSecretLeak,
@@ -21,7 +22,7 @@ import {
   verifyFinancialTotp,
   wrapKeyFromHex,
 } from '../functions/api/financial-totp.mjs';
-import { CHECKALT_TOTP_ACTION, TOTP_STEPUP_TTL_MS } from '../functions/api/providers/production/checkalt-authz.mjs';
+import { CHECKALT_TOTP_ACTION } from '../functions/api/providers/production/checkalt-authz.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const USER = '7dbb3009-f059-4767-b5dc-1c5c72379330';
@@ -129,7 +130,8 @@ test('successful step-up binds application user, tenant, action, resource, amoun
   assert.equal(bound.action_key, CHECKALT_TOTP_ACTION);
   assert.equal(bound.metadata.check_id, CHECK);
   assert.equal(bound.metadata.amount_cents, 1234);
-  assert.equal(bound.ttl_ms, TOTP_STEPUP_TTL_MS);
+  // Unused prep helper; Check Alt enforcement is once per login (checkalt-authz.mjs).
+  assert.equal(bound.ttl_ms, FINANCIAL_STEPUP_TTL_MS);
   assert.equal(bound.metadata.source, 'app_financial_totp');
   assert.equal(bindFinancialStepUp({ applicationUserId: USER }).ok, false);
 });

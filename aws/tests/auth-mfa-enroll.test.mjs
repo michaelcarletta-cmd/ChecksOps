@@ -25,6 +25,8 @@ const OTHER_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const CHECK = 'a3a4a153-46e1-4c28-a273-79a9bd04f3a6';
 const OTHER_CHECK = '55555555-5555-4555-8555-555555555555';
 const NOW = Date.UTC(2026, 8, 11, 1, 0, 0);
+const ORIGIN_JTI = 'origin-jti-login-1';
+const LOGIN_SESSION = `${TESTER_SUB}:jti:${ORIGIN_JTI}`;
 const WRAP_HEX = 'ab'.repeat(32);
 
 const eventOf = (body) => ({
@@ -156,7 +158,7 @@ const depsOf = (store, extra = {}) => ({
     return fn({
       client: store.client,
       mapping: store.mapping,
-      claims: { sub: TESTER_SUB, email: TESTER_EMAIL },
+      claims: extra.claims || { sub: TESTER_SUB, email: TESTER_EMAIL, origin_jti: ORIGIN_JTI },
       body,
       spoof: { ignored: true, bodyUserId: body.user_id || null, bodyTenantId: body.tenant_id || null },
     });
@@ -325,7 +327,7 @@ test('amount change and action mismatch are rejected', async () => {
   assert.equal(store.stepups.length, 0);
 });
 
-test('deposit.approve TOTP uses the same check/amount binding as deposit.submit', async () => {
+test('deposit.approve TOTP is recorded against the login, with the check and amount kept for audit', async () => {
   const store = createStore();
   const { code } = await enrollTester(store);
   const stepped = await handleMfaStepUp(eventOf({
@@ -346,7 +348,7 @@ test('deposit.approve TOTP uses the same check/amount binding as deposit.submit'
   assert.equal(store.stepups[0].metadata.check_id, CHECK);
   assert.equal(store.stepups[0].metadata.amount_cents, 1234);
   assert.equal(store.stepups[0].metadata.source, 'app_financial_totp');
-  assert.equal(Object.prototype.hasOwnProperty.call(store.stepups[0].metadata, 'login_session'), false);
+  assert.equal(store.stepups[0].metadata.login_session, LOGIN_SESSION);
 });
 
 test('deposit.approve TOTP fails closed without a check, on amount mismatch, and on replay', async () => {
@@ -390,6 +392,34 @@ test('deposit.approve TOTP fails closed without a check, on amount mismatch, and
   assert.equal(store.stepups.length, 1);
 });
 
+test('Check Alt step-up without a login session is refused and does not use the code', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  for (const action_key of [CHECKALT_TOTP_ACTION, 'deposit.approve']) {
+    const unbound = await handleMfaStepUp(eventOf({ code, action_key, check_intake_item_id: CHECK }), depsOf(store, {
+      claims: { sub: TESTER_SUB, email: TESTER_EMAIL },
+    }));
+    assert.equal(unbound.ok, false);
+    assert.equal(unbound.statusCode, 401);
+    assert.equal(unbound.error, 'login_session_unbound');
+  }
+  assert.equal(store.stepups.length, 0);
+  // The code was not consumed, so the same login can still use it.
+  const stepped = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(store.stepups[0].metadata.login_session, LOGIN_SESSION);
+});
+
+test('Check Alt step-up falls back to auth_time when origin_jti is absent', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const stepped = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store, {
+    claims: { sub: TESTER_SUB, email: TESTER_EMAIL, auth_time: 1791000000 },
+  }));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(store.stepups[0].metadata.login_session, `${TESTER_SUB}:auth:1791000000`);
+});
+
 test('deposit.approve TOTP is refused for a check in another tenant', async () => {
   const store = createStore({
     checks: [{ id: CHECK, tenant_id: OTHER_TENANT, amount: 12.34, status: 'ready' }],
@@ -406,7 +436,7 @@ test('deposit.approve TOTP is refused for a check in another tenant', async () =
   assert.equal(store.stepups.length, 0);
 });
 
-test('deposit.submit step-up log is unchanged', async () => {
+test('deposit.submit step-up log records the login session and keeps check and amount for audit', async () => {
   const store = createStore();
   const { code } = await enrollTester(store);
   const stepped = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
@@ -415,6 +445,7 @@ test('deposit.submit step-up log is unchanged', async () => {
   assert.deepEqual(store.stepups[0].metadata, {
     check_id: CHECK,
     amount_cents: 1234,
+    login_session: LOGIN_SESSION,
     operation: 'deposit.submit',
     source: 'app_financial_totp',
   });

@@ -21,9 +21,13 @@ import {
 /**
  * Two-factor step-up gate for money movement.
  *
- * Deposit submit/approve are bound to a server-side check id. A successful
- * TOTP for one check cannot authorize a different check. Tenant and amount
- * are not taken from the browser as authority.
+ * Once per login: Check Alt deposits and approvals, like Moov wallet fund and
+ * send, ask for a code once and then reuse that login's verification for
+ * every check and amount until the user signs out. Each kind of step-up is
+ * remembered separately for this tab's login (sessionStorage, cleared on sign
+ * out). The server is the authority: when it answers step_up_required, the
+ * caller asks again with `force`. Tenant and amount are not taken from the
+ * browser as authority.
  */
 
 const VERIFIED_KEY = "checksops_stepup_verified_scope";
@@ -47,27 +51,30 @@ interface StepUpContextValue {
 
 const StepUpContext = createContext<StepUpContextValue | null>(null);
 
-function readVerifiedScope(userId: string | null): string | null {
-  if (!userId) return null;
+function readVerifiedScopes(userId: string | null): string[] {
+  if (!userId) return [];
   try {
     const raw = sessionStorage.getItem(VERIFIED_KEY);
-    if (!raw) return null;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (parsed?.userId !== userId || typeof parsed?.key !== "string") return null;
-    return parsed.key;
+    if (parsed?.userId !== userId) return [];
+    const keys = Array.isArray(parsed?.keys) ? parsed.keys : [parsed?.key];
+    return keys.filter((key: unknown): key is string => typeof key === "string" && key.startsWith(`${userId}|`));
   } catch {
-    return null;
+    return [];
   }
 }
 
-function writeVerifiedScope(userId: string, key: string) {
+function writeVerifiedScopes(userId: string, keys: string[]) {
   try {
-    sessionStorage.setItem(VERIFIED_KEY, JSON.stringify({ userId, key }));
+    sessionStorage.setItem(VERIFIED_KEY, JSON.stringify({ userId, keys }));
     sessionStorage.removeItem(LEGACY_VERIFIED_KEY);
   } catch {
     /* ignore */
   }
 }
+
+const withScope = (keys: string[], key: string) => (keys.includes(key) ? keys : [...keys, key]);
 
 function clearVerifiedScope() {
   try {
@@ -80,7 +87,7 @@ function clearVerifiedScope() {
 
 export function StepUpProvider({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
-  const [verifiedKey, setVerifiedKey] = useState<string | null>(null);
+  const [verifiedKeys, setVerifiedKeys] = useState<string[]>([]);
   const [totpEnrolled, setTotpEnrolled] = useState<boolean | null>(null);
   const [request, setRequest] = useState<StepUpRequest | null>(null);
   const resolverRef = useRef<((ok: boolean) => void) | null>(null);
@@ -112,12 +119,12 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
       const resolved = uid || (awsMfaAvailable() ? awsAuthUserId() : null);
       setUserId(resolved);
       if (!resolved) {
-        setVerifiedKey(null);
+        setVerifiedKeys([]);
         setTotpEnrolled(null);
         clearVerifiedScope();
         return;
       }
-      setVerifiedKey(readVerifiedScope(resolved));
+      setVerifiedKeys(readVerifiedScopes(resolved));
       await refreshFactors();
 
       if (!awsMfaAvailable()) {
@@ -125,8 +132,9 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
         if (active && aal?.currentLevel === "aal2") {
           const sessionKey = stepUpCacheKey(resolved, "disbursement.send", null);
           if (sessionKey) {
-            writeVerifiedScope(resolved, sessionKey);
-            setVerifiedKey(sessionKey);
+            const keys = withScope(readVerifiedScopes(resolved), sessionKey);
+            writeVerifiedScopes(resolved, keys);
+            setVerifiedKeys(keys);
           }
         }
       }
@@ -159,14 +167,16 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
         return Promise.resolve(false);
       }
       const nextKey = stepUpCacheKey(userId, next.actionKey, next.checkId);
-      if (!options?.force && cacheAllowsReuse(verifiedKey, nextKey)) return Promise.resolve(true);
+      if (!options?.force && verifiedKeys.some((key) => cacheAllowsReuse(key, nextKey))) {
+        return Promise.resolve(true);
+      }
       return new Promise<boolean>((resolve) => {
         resolverRef.current = resolve;
         requestRef.current = next;
         setRequest(next);
       });
     },
-    [userId, verifiedKey],
+    [userId, verifiedKeys],
   );
 
   const finish = useCallback(
@@ -175,8 +185,9 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
       if (ok && userId && current) {
         const key = stepUpCacheKey(userId, current.actionKey, current.checkId);
         if (key) {
-          writeVerifiedScope(userId, key);
-          setVerifiedKey(key);
+          const keys = withScope(readVerifiedScopes(userId), key);
+          writeVerifiedScopes(userId, keys);
+          setVerifiedKeys(keys);
         }
       }
       requestRef.current = null;
@@ -187,7 +198,7 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
     [userId],
   );
 
-  const verified = Boolean(verifiedKey);
+  const verified = verifiedKeys.length > 0;
   const value = useMemo<StepUpContextValue>(
     () => ({ requireStepUp, verified, totpEnrolled, refreshFactors }),
     [requireStepUp, verified, totpEnrolled, refreshFactors],

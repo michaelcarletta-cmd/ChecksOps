@@ -309,30 +309,81 @@ test('historical CheckAlt reference does not regenerate images and still require
   assert.equal(result.historicalReference, true);
 });
 
-test('wrong check, amount, tenant, and expired step-up cannot authorize deposit.submit', async () => {
-  const { stepUpMatchesCheck, TOTP_STEPUP_TTL_MS } = await import(
-    '../functions/api/providers/production/checkalt-authz.mjs'
-  );
-  const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
-  const row = {
-    tenant_id: TENANT,
-    action_key: 'deposit.submit',
-    succeeded: true,
-    metadata: { check_id: CHECK, amount_cents: 1234, operation: 'deposit.submit' },
+test('a second check in the same login submits without another code; the server can still ask again', async () => {
+  const OTHER = '623442f0-a408-4db5-85be-14bae231a722';
+  // A stand-in for useStepUp: one prompt per login unless forced.
+  let loginVerified = false;
+  const prompts = [];
+  const requireStepUp = async (request, options) => {
+    if (loginVerified && !options?.force) return true;
+    prompts.push({ checkId: request.checkId, force: options?.force === true });
+    loginVerified = true;
+    return true;
   };
-  assert.equal(stepUpMatchesCheck(row, {
-    tenantId: TENANT, checkId: CHECK, amountCents: 1234, actionKey: 'deposit.submit',
-  }), true);
-  assert.equal(stepUpMatchesCheck(row, {
-    tenantId: TENANT, checkId: '623442f0-a408-4db5-85be-14bae231a722', amountCents: 1234, actionKey: 'deposit.submit',
-  }), false);
-  assert.equal(stepUpMatchesCheck(row, {
-    tenantId: TENANT, checkId: CHECK, amountCents: 9999, actionKey: 'deposit.submit',
-  }), false);
-  assert.equal(stepUpMatchesCheck(row, {
-    tenantId: '4f172140-f57a-4744-8050-95f4f07b13b4', checkId: CHECK, amountCents: 1234, actionKey: 'deposit.submit',
-  }), false);
-  assert.equal(TOTP_STEPUP_TTL_MS, 30 * 60 * 1000);
+  const deposit = (checkId, submit) => {
+    resetDepositInFlightForTests();
+    return runCheckAltDepositClick(checkId, {
+      authProvider: 'cognito',
+      apiBaseUrl: '/prep',
+      preflight: async () => ready(),
+      requireStepUp,
+      submit,
+    });
+  };
+  const submitted = [];
+  const ok = async (id) => {
+    submitted.push(id);
+    return { error: null, data: {} };
+  };
+  assert.equal((await deposit(CHECK, ok)).submitted, true);
+  assert.equal((await deposit(OTHER, ok)).submitted, true);
+  assert.deepEqual(prompts, [{ checkId: CHECK, force: false }]);
+  assert.deepEqual(submitted, [CHECK, OTHER]);
+
+  // The server has no step-up for this login (for example a new sign-in): ask once, retry once.
+  let calls = 0;
+  const needsCode = async (id) => {
+    calls += 1;
+    submitted.push(id);
+    return calls === 1 ? { error: new Error('step_up_required') } : { error: null, data: {} };
+  };
+  const retried = await deposit(OTHER, needsCode);
+  assert.equal(retried.submitted, true);
+  assert.equal(calls, 2);
+  assert.deepEqual(prompts.at(-1), { checkId: OTHER, force: true });
+
+  // Declining the new code never submits again.
+  let declinedCalls = 0;
+  resetDepositInFlightForTests();
+  const declined = await runCheckAltDepositClick(CHECK, {
+    authProvider: 'cognito',
+    apiBaseUrl: '/prep',
+    preflight: async () => ready(),
+    requireStepUp: async (_request, options) => !options?.force,
+    submit: async () => {
+      declinedCalls += 1;
+      return { error: new Error('step_up_required') };
+    },
+  });
+  assert.equal(declined.ok, false);
+  assert.equal(declined.error, 'totp_required');
+  assert.equal(declinedCalls, 1);
+
+  // Other refusals are not turned into a code prompt.
+  let refusedPrompts = 0;
+  resetDepositInFlightForTests();
+  const refused = await runCheckAltDepositClick(CHECK, {
+    authProvider: 'cognito',
+    apiBaseUrl: '/prep',
+    preflight: async () => ready(),
+    requireStepUp: async (_request, options) => {
+      if (options?.force) refusedPrompts += 1;
+      return true;
+    },
+    submit: async () => ({ error: new Error('financial_unauthorized') }),
+  });
+  assert.equal(refused.ok, false);
+  assert.equal(refusedPrompts, 0);
 });
 
 test('Command Center and deposit ops no longer require a separate Prepare click', () => {
