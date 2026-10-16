@@ -44,7 +44,7 @@ const STATEMENT = 'approve applying SQL 80 to production';
 const RECEIPT = path.join(receiptDir(ROOT), 'production::production-sql.json');
 
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
-// A pin whose staging acceptance is still pending (SQL 82 and 83 today) gets a placeholder
+// A pin whose staging acceptance is still pending (none today) gets a placeholder
 // reference in the execute-authorized test copy, and a pin whose pre-state is not recorded
 // (expected_live_definition_sha256 null) a placeholder hash; the committed pins are checked to
 // refuse below.
@@ -473,10 +473,14 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
+// SQL 82's and 83's pins are execute-authorized (owner approved 2026-10-16) until their
+// record-and-retire change; every other pin is execute false.
+const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83']);
+
 test('every real production pin with execute false is refused before any child', async () => {
-  // Every pin is retired (execute false), SQL 81's since its 2026-10-15 record-and-retire change.
-  assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), []);
-  for (const key of Object.keys(ONE_SHOT_TOOLS)) {
+  // Every other pin is retired or pending (execute false), SQL 81's since its 2026-10-15 record-and-retire change.
+  assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), [...EXECUTE_AUTHORIZED]);
+  for (const key of Object.keys(ONE_SHOT_TOOLS).filter((k) => realPin(k).execute === false)) {
     for (const phase of ['inspect', 'apply']) {
       const { result, runner } = await oneShot({ key, pin: null, o: { phase } });
       assert.equal(realPin(key).execute, false);
@@ -504,15 +508,20 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
-  // SQL 82's and 83's committed pins record the production pre-state but have no staging
-  // acceptance and authorization "pending": even with execute flipped they stop at the pin, and
-  // their evaluators refuse a null pre-state (explicit copy) and the pending authorization.
+  // SQL 82's and 83's committed pins are execute-authorized; their pre-authorization state
+  // (no staging acceptance, authorization "pending") is an explicit copy here. Even with
+  // execute flipped that state stops at the pin, and the evaluators refuse a null pre-state
+  // (explicit copy) and the pending authorization.
   const RECORDED_PRODUCTION_PRE = {
     sql82: '9892d5ca12b426c303fdfdd4f92c9ef9a2a84ab94031989b09ee6c860a981229',
     sql83: 'c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936',
   };
   for (const key of ['sql82', 'sql83']) {
-    const committed = realPin(key);
+    const real = realPin(key);
+    assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
+    const committed = EXECUTE_AUTHORIZED.includes(key)
+      ? { ...real, authorization: 'pending', execute: false, staging_acceptance: { ...real.staging_acceptance, ok: false, reference: null, basis: 'Pending' } }
+      : real;
     assert.equal(committed.authorization, 'pending');
     assert.equal(committed.execute, false);
     assert.equal(committed.staging_acceptance.ok, false);
@@ -533,6 +542,42 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     const recordedManifest = { ...committed, live_definition_sha256: committed.expected_live_definition_sha256, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
     const pendingApproval = await evaluate(recordedManifest, { root: ROOT, pin: { ...committed, execute: true, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE } });
     assert.equal(pendingApproval.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
+  }
+});
+
+test('the committed SQL 82 and SQL 83 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+  const STAGING_REFERENCE = {
+    sql82: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138',
+    sql83: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160',
+  };
+  for (const key of EXECUTE_AUTHORIZED) {
+    const committed = realPin(key);
+    assert.equal(committed.execute, true);
+    assert.match(committed.authorization, /^Owner approved 2026-10-16 /);
+    assert.equal(committed.staging_acceptance.ok, true);
+    assert.equal(committed.staging_acceptance.reference, STAGING_REFERENCE[key]);
+    for (const phase of ['inspect', 'apply']) {
+      // pin: null makes the one-shot read the committed pin from disk.
+      const { result, runner } = await oneShot({ key, pin: null, o: { phase, 'workstream-id': `prod-${key}-committed-pin-test` } });
+      assert.equal(result.ok, true, `${key} ${phase}: ${JSON.stringify(result)}`);
+      assert.deepEqual(result.details.steps[0], { step: 'pin', ok: true, pin: ONE_SHOT_TOOLS[key].pin_rel, execute: true, staging_acceptance: STAGING_REFERENCE[key] });
+      assert.equal(runner.steps()[0], 'inspect');
+      if (phase === 'inspect') {
+        assert.ok(!runner.steps().includes('apply'), key);
+        continue;
+      }
+      const manifest = lastManifest(runner);
+      for (const field of ['filename', 'migration_id', 'source_sha256', 'expected_live_definition_sha256', 'intended_replacement_sha256', 'authorization_phrase']) {
+        assert.equal(manifest[field], committed[field], `${key} ${field}`);
+      }
+      assert.deepEqual(manifest.staging_acceptance, committed.staging_acceptance);
+      // The tool's own evaluator, with the committed pin loaded from disk, allows it.
+      const evaluate = key === 'sql82' ? evaluateSql82ProductionApply : evaluateSql83ProductionApply;
+      const allowed = await evaluate(manifest, { root: ROOT });
+      assert.equal(allowed.ok, true, `${key}: ${JSON.stringify(allowed)}`);
+      assert.equal(allowed.details[ONE_SHOT_TOOLS[key].allowed_key], true);
+      assert.equal(allowed.details.staging_acceptance, STAGING_REFERENCE[key]);
+    }
   }
 });
 

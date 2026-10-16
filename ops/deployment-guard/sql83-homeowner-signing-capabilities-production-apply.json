@@ -1,8 +1,8 @@
 {
   "id": "sql83-homeowner-signing-capabilities-production-apply",
   "migration": "sql83",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-16 (\"approve 1 and 2\"; \"go ahead and make the SQL 82/83 production unlock change\"): production apply of SQL 82 then SQL 83 after the staging acceptance below (SQL 83: production c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936 -> 78da421900f4e3d0af7110ee2b1a47f1498599a59a6dfa07953c59ad56b27163); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -45,7 +45,7 @@
     },
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command f1430894-0783-46cf-bbab-e7137c10ece3, node scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs --inspect on the SQL53 runner from main eb540ee98, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). All three functions are absent (function_states absent: no function of those names in any schema), so SQL 83 would create them, owned by checksops_admin. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. It does not authorize execution: authorization stays pending, execute false and staging_acceptance ok false, so evaluate and apply still refuse with PRODUCTION_APPROVAL_REQUIRED. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop. SQL 83 sets row_security=off, so the owner must be superuser or BYPASSRLS, or own every RLS table its bodies read without FORCE RLS (row_security_off_supported)."
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command f1430894-0783-46cf-bbab-e7137c10ece3, node scripts/deployment-guard/sql83-homeowner-signing-production-apply.mjs --inspect on the SQL53 runner from main eb540ee98, BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). All three functions are absent (function_states absent: no function of those names in any schema), so SQL 83 would create them, owned by checksops_admin. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. That change did not authorize execution; the later reviewed change of 2026-10-16 (\"SQL 82/83 production pins: execute-authorized after staging acceptance\") set authorization, execute true and staging_acceptance, keeping this recorded pre-state. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop. SQL 83 sets row_security=off, so the owner must be superuser or BYPASSRLS, or own every RLS table its bodies read without FORCE RLS (row_security_off_supported)."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -58,9 +58,9 @@
     "note": "After the unchanged SQL 83 file run as checksops_admin: each function exists once (no other signature of that name in any schema), owned by checksops_admin, SECURITY DEFINER with search_path=public and row_security=off, the reviewed body (pg_get_functiondef compared with the text reconstructed from the pinned file), EXECUTE for the owner and checksops only (PUBLIC and authenticated revoked). intended_replacement_sha256 equals the staging pin's (the owner's own ACL entry is not part of the fingerprint). function_owner is the expected production login (as for SQL 72 to 81); the first inspect must confirm it."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql83-homeowner-signing-capabilities here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (the pre-state is recorded in production_inspect and expected_live_definition_sha256).",
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160",
+    "basis": "Guarded staging SQL executor apply of sql83-homeowner-signing-capabilities, run #54 (38837509160) on main f60eb2484, executor package CodeSha256 jfKPOiADok3zVPkAZruAvCXHoXz9HRjo3N5Z1OQfbjg= (deploy run #51, 38837117005): staging e85f64fa17ff2146d1aa3a603c83580c8c369dd2b49d252dfc8fd45453f4a21f -> 78da421900f4e3d0af7110ee2b1a47f1498599a59a6dfa07953c59ad56b27163, function_states intended for all three functions. Read-live run 38837610315 (#55) confirmed already_applied true, each function matches_migration and body_matches_migration true, config search_path=public,row_security=off, non-owner ACL checksops EXECUTE only, row_security_off_supported true.",
     "production_differs": "The pre-states differ: staging (pin AUTHORIZED_SQL83_HOMEOWNER_SIGNING_CAPABILITIES, read-live run 49) is e85f64fa17ff2146d1aa3a603c83580c8c369dd2b49d252dfc8fd45453f4a21f with the three functions present from Cursor SQL 74; production (production_inspect, 2026-10-16) is c01704546922410e1f08088b39c69f02fbe004dcb919b12635d0908eb34e7936 with all three absent. Each environment's pre-state is recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
   }
 }
