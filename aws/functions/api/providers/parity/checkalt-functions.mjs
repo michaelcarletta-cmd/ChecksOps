@@ -169,6 +169,8 @@ const wrap = (handler) => async (event, deps = {}) => {
       mapping,
       body,
       requireAdmin: handler.requireAdmin === true,
+      // Check Alt UAT setup stays with the platform owner (or a member).
+      allowPlatformOwner: handler.requireAdmin === true,
       loadSandbox: deps.loadSandboxCredentials,
     });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };

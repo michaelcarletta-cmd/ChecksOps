@@ -5,6 +5,7 @@ import { handleProviderRequest } from '../functions/api/providers.mjs';
 import { resetMoovTokenCache } from '../functions/api/providers/parity/moov-client.mjs';
 import { selectRail } from '../functions/api/providers/parity/rail-router.mjs';
 import { runParityHandler } from '../functions/api/providers/parity/dispatch.mjs';
+import { resolveTenant } from '../functions/api/providers/parity/caller.mjs';
 import { formatCheckAltUserAmount } from '../functions/api/providers/amounts.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 
@@ -654,7 +655,9 @@ test('UAT Check Alt approve/reject: a platform admin with no tenant membership i
     const client = parityClient({ tenantRole: 'admin', platformAdmin: true, operations: pendingUatOp(OTHER_TENANT) });
     const result = await parityApprove(client, fetchImpl, { tenant_id: OTHER_TENANT, deposit_id: UAT_DEPOSIT_ID, action: 'approve' });
     assert.equal(result.statusCode, 403);
-    assert.equal(result.error, 'financial_unauthorized');
+    // A supplied tenant_id that is not one of the caller's memberships is refused
+    // by resolveTenant (no global admin bypass), before the handler runs.
+    assert.equal(result.error, 'cross_tenant_denied');
     assert.equal(providerCalled(calls, '/fincapture/deposit/approve'), false);
   });
 });
@@ -805,7 +808,8 @@ test('UAT Check Alt poll-status: platform-only admins and other tenants are refu
       const result = await parityPoll(client, fetchImpl, body);
       const label = `${tenantRole} ${platformAdmin} ${JSON.stringify(body)}`;
       assert.equal(result.statusCode, 403, label);
-      assert.equal(result.error, 'financial_unauthorized', label);
+      // A named tenant the caller is not a member of: refused by resolveTenant.
+      assert.equal(result.error, body.tenant_id ? 'cross_tenant_denied' : 'financial_unauthorized', label);
       assert.equal(anyProviderCall(calls), false, label);
       assert.equal(pollUpdated(client), false, label);
     }
@@ -875,7 +879,7 @@ test('UAT Check Alt deposit-history and account-status: scoped to a tenant the c
         const result = await parityCall(fn, client, fetchImpl, body);
         const label = `${fn} ${tenantRole} ${platformAdmin} ${JSON.stringify(body)}`;
         assert.equal(result.statusCode, 403, label);
-        assert.equal(result.error, 'financial_unauthorized', label);
+        assert.equal(result.error, body.tenant_id ? 'cross_tenant_denied' : 'financial_unauthorized', label);
         assert.equal(anyProviderCall(calls), false, label);
       }
       // A non-member naming another tenant is refused before the handler runs.
@@ -1006,6 +1010,103 @@ test('UAT Check Alt verify: a missing or unknown action is 400 with no provider 
       assert.equal(result.statusCode, 400, JSON.stringify(body));
       assert.equal(result.error, 'invalid_action', JSON.stringify(body));
       assert.equal(calls.length, 0, JSON.stringify(body));
+    }
+  });
+});
+
+
+// --- resolveTenant: users only, no tiers, no global admin bypass ----------------
+
+const ownerQueryClient = (isOwner) => ({
+  query: async (sql) => {
+    if (sql.includes('is_platform_owner')) return { rows: [{ is_owner: isOwner }] };
+    if (sql.includes('FROM public.user_roles')) return { rows: [{ role: 'admin' }] };
+    return { rows: [] };
+  },
+});
+const MEMBERSHIP = { tenant_id: FREEDOM_TENANT, role: 'viewer', tenant_name: 'Freedom', tenant_slug: 'freedom' };
+
+test('resolveTenant: a member (any stored role, requireAdmin too) resolves its own tenant; an omitted tenant_id uses its OWN membership', async () => {
+  for (const requireAdmin of [false, true]) {
+    const named = await resolveTenant(ownerQueryClient(false), { body: { tenant_id: FREEDOM_TENANT }, memberships: [MEMBERSHIP], requireAdmin });
+    assert.deepEqual(named, { tenantId: FREEDOM_TENANT, isPlatformOwner: false });
+    const omitted = await resolveTenant(ownerQueryClient(false), { body: {}, memberships: [MEMBERSHIP], requireAdmin });
+    assert.deepEqual(omitted, { tenantId: FREEDOM_TENANT, isPlatformOwner: false });
+  }
+  // The fallback only ever picks one of the caller's own memberships.
+  const second = await resolveTenant(ownerQueryClient(false), {
+    body: {}, memberships: [{ tenant_id: OTHER_TENANT, role: 'operator' }, MEMBERSHIP],
+  });
+  assert.equal(second.tenantId, OTHER_TENANT);
+});
+
+test('resolveTenant: a global user_roles admin who is not a member is refused, named tenant or not', async () => {
+  const named = await resolveTenant(ownerQueryClient(false), { body: { tenant_id: FREEDOM_TENANT }, memberships: [], requireAdmin: true });
+  assert.equal(named.statusCode, 403);
+  assert.equal(named.error, 'cross_tenant_denied');
+  const omitted = await resolveTenant(ownerQueryClient(false), { body: {}, memberships: [] });
+  assert.equal(omitted.statusCode, 403);
+  // A member of one tenant cannot name another.
+  const other = await resolveTenant(ownerQueryClient(false), { body: { tenant_id: OTHER_TENANT }, memberships: [MEMBERSHIP] });
+  assert.equal(other.error, 'cross_tenant_denied');
+});
+
+test('resolveTenant: the platform owner reaches a foreign tenant only through platform-owner handlers', async () => {
+  const ordinary = await resolveTenant(ownerQueryClient(true), { body: { tenant_id: FREEDOM_TENANT }, memberships: [] });
+  assert.equal(ordinary.error, 'cross_tenant_denied');
+  const platform = await resolveTenant(ownerQueryClient(true), {
+    body: { tenant_id: FREEDOM_TENANT }, memberships: [], allowPlatformOwner: true,
+  });
+  assert.deepEqual(platform, { tenantId: FREEDOM_TENANT, isPlatformOwner: true });
+  const noTenant = await resolveTenant(ownerQueryClient(true), { body: {}, memberships: [], allowPlatformOwner: true });
+  assert.deepEqual(noTenant, { tenantId: null, isPlatformOwner: true });
+  // allowPlatformOwner does nothing for someone who is not the platform owner.
+  const admin = await resolveTenant(ownerQueryClient(false), {
+    body: { tenant_id: FREEDOM_TENANT }, memberships: [], allowPlatformOwner: true,
+  });
+  assert.equal(admin.error, 'cross_tenant_denied');
+});
+
+const withPlatformOwner = (client, isOwner) => {
+  const base = client.query;
+  client.query = async (sql, params) => (sql.includes('is_platform_owner')
+    ? { rows: [{ is_owner: isOwner }] }
+    : base(sql, params));
+  return client;
+};
+
+test('platform bank and treasury: platform owner only; a member or a global admin is refused', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    for (const fn of ['moov-platform-bank', 'platform-treasury']) {
+      // A tenant member (and global admin) who is not the platform owner.
+      {
+        const { fetchImpl, calls } = recordedFetch([]);
+        const client = withPlatformOwner(parityClient({ tenantRole: 'owner', platformAdmin: true }), false);
+        const result = await runParityHandler(fn, jwtEvent(`/functions/v1/${fn}`, 'POST', { action: 'list' }), parityDeps(client, fetchImpl));
+        assert.equal(result.statusCode, 403, fn);
+        assert.equal(result.error, 'Platform owner access required', fn);
+        assert.equal(calls.some((c) => c.url.includes('/accounts/')), false, fn);
+      }
+      // A global admin naming a tenant it is not a member of.
+      {
+        const { fetchImpl, calls } = recordedFetch([]);
+        const client = withPlatformOwner(parityClient({ tenantRole: null, platformAdmin: true }), false);
+        const result = await runParityHandler(fn, jwtEvent(`/functions/v1/${fn}`, 'POST', { action: 'list', tenant_id: FREEDOM_TENANT }), parityDeps(client, fetchImpl));
+        assert.equal(result.statusCode, 403, fn);
+        assert.equal(calls.length, 0, fn);
+      }
+      // The platform owner, with no membership, naming a tenant: reaches the provider.
+      {
+        resetMoovTokenCache();
+        const { fetchImpl, calls } = recordedFetch([
+          { match: '/oauth2/token', method: 'POST', body: { access_token: 'tok', expires_in: 300 } },
+          { match: `/accounts/${PLATFORM_ID}/`, body: [] },
+        ]);
+        const client = withPlatformOwner(parityClient({ tenantRole: null, platformAdmin: false }), true);
+        const result = await runParityHandler(fn, jwtEvent(`/functions/v1/${fn}`, 'POST', { action: 'list', tenant_id: FREEDOM_TENANT }), parityDeps(client, fetchImpl));
+        assert.equal(result.success, true, `${fn} ${JSON.stringify(result)}`);
+        assert.equal(calls.some((c) => c.url.includes(`/accounts/${PLATFORM_ID}/`)), true, fn);
+      }
     }
   });
 });

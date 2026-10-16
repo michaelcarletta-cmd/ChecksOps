@@ -1208,9 +1208,10 @@ export const invoice = {
 
 export const platformBank = {
   requireAdmin: true,
+  // Platform-level: the platform owner (is_platform_owner(), by identity)
+  // only. Tenant members and global user_roles admins are refused.
+  platformOwnerOnly: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
-    // The platform treasury bank is the platform owner's, not a tenant's: a
-    // global user_roles admin (ctx.isAdmin) is not enough.
     const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
     if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
@@ -1301,7 +1302,11 @@ export const bulkImportPreview = {
 
 export const platformTreasury = {
   requireAdmin: true,
-  run: async ({ ctx, fetchImpl }) => {
+  // Platform-level: the platform owner only (see platformBank).
+  platformOwnerOnly: true,
+  run: async ({ client, ctx, fetchImpl }) => {
+    const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
     const wallets = await moovFetch(`/accounts/${platformId}/wallets`, {

@@ -231,7 +231,7 @@ export async function resolveInvoiceTenant({ client, userId, body }) {
   const tenant = await resolveTenant(client, { userId, body, memberships, requireAdmin: false });
   if (tenant.error) return tenant;
   if (!tenant.tenantId) return fail('tenant_id is required', 400);
-  return { tenantId: tenant.tenantId, isAdmin: tenant.isAdmin, memberships };
+  return { tenantId: tenant.tenantId, memberships };
 }
 
 async function loadInvoiceRow(client, { invoiceId, tenantId }) {
