@@ -248,15 +248,24 @@ test('tenants write accepts company info for members of that tenant only', async
   assert.equal(updates.length, 1);
 });
 
-test('SQL 93 adds nullable tenant columns idempotently with a member-only update policy', () => {
+test('SQL 93 adds nullable tenant columns idempotently; one members-only tenants UPDATE policy plus a column guard', () => {
   const sql = read('aws/workflows/sql/93_tenant_company_info.sql');
+  const code = sql.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
   for (const col of ['company_address', 'company_phone', 'company_email', 'letterhead_url']) {
     assert.match(sql, new RegExp(`ALTER TABLE public\\.tenants ADD COLUMN IF NOT EXISTS ${col} TEXT;`));
   }
-  assert.doesNotMatch(sql, /NOT NULL|DEFAULT/);
-  assert.match(sql, /DROP POLICY IF EXISTS aws_member_update_tenant_branding ON public\.tenants;/);
-  assert.match(sql, /FOR UPDATE TO authenticated/);
-  assert.equal((sql.match(/id IN \(SELECT public\.aws_user_tenant_ids\(\)\)/g) || []).length, 2);
-  assert.doesNotMatch(sql, /has_role|aws_can_write_tenant\(id\)|admin'::|staff'::/);
-  assert.doesNotMatch(sql, /company_branding\s+(SET|ADD)|ALTER TABLE public\.company_branding/);
+  for (const line of code.split('\n').filter((l) => /ADD COLUMN/.test(l))) assert.doesNotMatch(line, /NOT NULL|DEFAULT/);
+  // SQL 90's aws_write_tenants is the only tenants UPDATE policy; SQL 93 adds none.
+  assert.match(code, /DROP POLICY IF EXISTS aws_member_update_tenant_branding ON public\.tenants;/);
+  assert.doesNotMatch(code, /CREATE POLICY/);
+  assert.match(code, /sql93_prerequisite_missing/);
+  assert.match(code, /policyname = 'aws_write_tenants'/);
+  // Sensitive columns are refused by a BEFORE UPDATE trigger for end-user requests.
+  assert.match(code, /CREATE TRIGGER aws_tenants_member_column_guard\s+BEFORE UPDATE ON public\.tenants/);
+  assert.match(code, /tenant_column_not_member_writable/);
+  for (const col of ['slug', 'moov_environment', 'payment_provider', 'moov_allowlisted', 'is_test_account', 'is_system_tenant', 'ein', 'kyc_status']) {
+    assert.doesNotMatch(code, new RegExp(`'${col}'`), col);
+  }
+  assert.doesNotMatch(code, /has_role|aws_can_write_tenant\(id\)|admin'::|staff'::/);
+  assert.doesNotMatch(code, /company_branding\s+(SET|ADD)|ALTER TABLE public\.company_branding/);
 });

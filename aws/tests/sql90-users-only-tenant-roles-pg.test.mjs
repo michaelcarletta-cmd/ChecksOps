@@ -17,6 +17,7 @@ import { test } from 'node:test';
 import { AWS_ROOT, applyBaseSchema, pgSkipReason, policyBlock, startPg } from './helpers/stakeholder-policies-pg.mjs';
 
 const SQL_90 = path.join(AWS_ROOT, 'workflows/sql/90_users_only_tenant_roles.sql');
+const SQL_93 = path.join(AWS_ROOT, 'workflows/sql/93_tenant_company_info.sql');
 const SQL_80 = path.join(AWS_ROOT, 'workflows/sql/80_checkalt_member_auto_deposit.sql');
 const SQL_35 = path.join(AWS_ROOT, 'rls/sql/35_manager_partner_parity.sql');
 
@@ -462,6 +463,61 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
       assert.ok(row.proconfig.includes('search_path=public'), row.proname);
       assert.ok(row.proconfig.includes('row_security=off'), row.proname);
     }
+
+    // --- SQL 93 on top of SQL 90: one members-only tenants UPDATE policy, and
+    // a column guard so a member cannot change sensitive tenants columns. ----
+    await client.query(`ALTER TABLE public.tenants
+      ADD COLUMN slug text, ADD COLUMN moov_environment text, ADD COLUMN payment_provider text,
+      ADD COLUMN moov_allowlisted boolean NOT NULL DEFAULT false, ADD COLUMN is_test_account boolean NOT NULL DEFAULT false,
+      ADD COLUMN is_system_tenant boolean, ADD COLUMN ein text, ADD COLUMN kyc_status text NOT NULL DEFAULT 'pending',
+      ADD COLUMN monthly_rate_cents integer NOT NULL DEFAULT 0, ADD COLUMN logo_url text, ADD COLUMN primary_color text,
+      ADD COLUMN invoice_footer_note text, ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now()`);
+    await client.query(`UPDATE public.tenants SET slug = 'a', moov_environment = 'sandbox', payment_provider = 'moov' WHERE id = '${TENANT_A}'`);
+    // The permissive branding policy an earlier SQL 93 draft created.
+    await client.query(`CREATE POLICY aws_member_update_tenant_branding ON public.tenants FOR UPDATE TO authenticated
+      USING (public.aws_is_authenticated() AND id IN (SELECT public.aws_user_tenant_ids()))
+      WITH CHECK (public.aws_is_authenticated() AND id IN (SELECT public.aws_user_tenant_ids()))`);
+    // SQL 93 refuses to run without SQL 90's tenants UPDATE policy.
+    await client.query('BEGIN');
+    await client.query('DROP POLICY aws_write_tenants ON public.tenants');
+    await assert.rejects(client.query(fs.readFileSync(SQL_93, 'utf8')),
+      (error) => error.code === '55000' && /sql93_prerequisite_missing/.test(error.message));
+    await client.query('ROLLBACK');
+    await client.query(fs.readFileSync(SQL_93, 'utf8'));
+    await client.query(fs.readFileSync(SQL_93, 'utf8'));
+    const tenantWritePolicies = (await client.query(`
+      SELECT policyname FROM pg_policies
+       WHERE schemaname = 'public' AND tablename = 'tenants' AND cmd IN ('UPDATE', 'ALL')
+       ORDER BY policyname`)).rows.map((r) => r.policyname);
+    assert.deepEqual(tenantWritePolicies, ['aws_write_tenants']);
+
+    const guardRefused = (error) => error.code === '42501' && /tenant_column_not_member_writable/.test(error.message);
+    for (const user of MEMBERS) {
+      assert.equal(await rowCount(user,
+        `UPDATE public.tenants SET name = $1, company_address = $2, company_phone = $3, company_email = $4,
+           letterhead_url = $5, logo_url = $6, primary_color = $7, invoice_footer_note = $8, updated_at = now()
+         WHERE id = $9`,
+        ['A3', '1 Main St', '555-0100', 'a@example.com', 'x/letterhead.png', 'x/logo.png', '#123456', 'Thanks', TENANT_A]), 1, user);
+      for (const [column, value] of [
+        ['slug', 'a-new'], ['moov_environment', 'production'], ['payment_provider', 'other'],
+        ['moov_allowlisted', true], ['is_test_account', true], ['is_system_tenant', true],
+        ['ein', '12-3456789'], ['kyc_status', 'approved'], ['monthly_rate_cents', 0 + 1],
+      ]) {
+        await assert.rejects(rowCount(user, `UPDATE public.tenants SET ${column} = $1 WHERE id = $2`, [value, TENANT_A]),
+          guardRefused, `${user} ${column}`);
+      }
+      // An allowed column next to a sensitive one is refused as a whole.
+      await assert.rejects(rowCount(user, 'UPDATE public.tenants SET name = $1, slug = $2 WHERE id = $3', ['A4', 'a-4', TENANT_A]),
+        guardRefused, user);
+      // Writing a sensitive column's current value changes nothing and is not refused.
+      assert.equal(await rowCount(user, "UPDATE public.tenants SET slug = 'a', name = 'A5' WHERE id = $1", [TENANT_A]), 1, user);
+    }
+    // Partners, other tenants, global admin/staff and the platform owner still update nothing.
+    for (const user of [...OUTSIDERS, PLATFORM_OWNER]) {
+      assert.equal(await rowCount(user, 'UPDATE public.tenants SET name = $1 WHERE id = $2', ['A6', TENANT_A]), 0, user);
+    }
+    // Server-side writes with no end-user caller (table owner, no request.app_user_id) are not limited.
+    assert.equal((await client.query(`UPDATE public.tenants SET moov_environment = 'production' WHERE id = '${TENANT_A}'`)).rowCount, 1);
   } finally {
     await client.end().catch(() => {});
     server.stop();
