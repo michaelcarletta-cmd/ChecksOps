@@ -7,6 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, RotateCcw, Loader2, Users } from "lucide-react";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
+import { useStepUp } from "@/hooks/useStepUp";
+import { useTenant } from "@/contexts/TenantContext";
+import { resetTeammateTotp } from "@/lib/teamResetTotp";
 
 interface Profile {
   id: string;
@@ -55,6 +58,8 @@ export function UserManagementSettings() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Record<string, string | undefined>>({});
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const { requireStepUp } = useStepUp();
+  const { tenant } = useTenant();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -272,11 +277,7 @@ export function UserManagementSettings() {
 
     try {
       setResettingUserId(userId);
-      const { data, error } = await supabase.functions.invoke("admin-reset-totp", {
-        body: { user_id: userId },
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Two-factor reset failed");
+      await resetTeammateTotp({ userId, tenantId: tenant?.id, requireStepUp });
       toast({
         title: "Two-factor reset",
         description: `${userEmail} can now sign in by magic link and set up a new authenticator.`,

@@ -15,6 +15,7 @@ import {
   AdminGetUserCommand,
   AdminDisableUserCommand,
   AdminSetUserPasswordCommand,
+  AdminDeleteUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity } from './data.mjs';
 import { normalizeEmail } from './email-policy.mjs';
@@ -34,6 +35,7 @@ const cognitoJson = async (target, payload) => {
     AdminGetUser: AdminGetUserCommand,
     AdminDisableUser: AdminDisableUserCommand,
     AdminSetUserPassword: AdminSetUserPasswordCommand,
+    AdminDeleteUser: AdminDeleteUserCommand,
   };
   const Command = commands[target];
   if (!Command) {
@@ -66,6 +68,7 @@ const assertTenantMember = async (client, mapping, tenantId) => {
   return rows.length > 0;
 };
 
+// is_master_owner() is an alias of is_platform_owner() (aws/rls/sql/10).
 const isPlatformOwner = async (client) => {
   try {
     const row = (await client.query(
@@ -74,6 +77,61 @@ const isPlatformOwner = async (client) => {
     return row?.is_owner === true || row?.is_master === true;
   } catch {
     return false;
+  }
+};
+
+/** The platform owner's mailbox (public.is_platform_owner() is identity-email based). */
+export const PLATFORM_OWNER_EMAIL = 'checksopsadmin@gmail.com';
+
+/**
+ * How many tenant_users rows the tenant has. The platform owner reads every
+ * tenant's rows (aws_select_tenant_users). null when it cannot be read, so the
+ * first-invite check fails closed.
+ */
+export const TENANT_MEMBER_COUNT_SQL = `SELECT count(*)::int AS member_count
+  FROM public.tenant_users
+ WHERE tenant_id = $1::uuid`;
+
+const tenantMemberCount = async (client, tenantId) => {
+  const n = (await client.query(TENANT_MEMBER_COUNT_SQL, [tenantId])).rows[0]?.member_count;
+  return Number.isInteger(n) ? n : null;
+};
+
+/** True when the application user is the platform owner (identity or profile email). */
+export const USER_IS_PLATFORM_OWNER_SQL = `SELECT 1
+  FROM public.identity_accounts ia
+ WHERE ia.application_user_id = $1::uuid
+   AND lower(ia.email) = $2
+ UNION ALL
+SELECT 1
+  FROM public.profiles p
+ WHERE p.id = $1::uuid
+   AND lower(p.email) = $2
+ LIMIT 1`;
+
+export const userIsPlatformOwner = async (client, userId) => (
+  (await client.query(USER_IS_PLATFORM_OWNER_SQL, [userId, PLATFORM_OWNER_EMAIL])).rows.length > 0
+);
+
+/** The application user an existing Cognito login is already linked to. */
+export const IDENTITY_BY_SUB_SQL = `SELECT application_user_id::text AS application_user_id
+  FROM public.identity_accounts
+ WHERE cognito_sub = $1
+ LIMIT 1`;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Removes a Cognito user this request created, after a later step failed, so
+ * a failed invite leaves no login behind. Best-effort: the Lambda role may not
+ * hold cognito-idp:AdminDeleteUser; the response says whether it worked.
+ */
+const deleteCreatedCognitoUser = async (adminCognito, email) => {
+  try {
+    await adminCognito('AdminDeleteUser', { UserPoolId: POOL_ID(), Username: email });
+    return 'deleted';
+  } catch (error) {
+    return `delete_failed:${String(error?.name || 'CognitoError').slice(0, 80)}`;
   }
 };
 
@@ -90,10 +148,29 @@ export const runTenantInviteUser = async ({
   if (!tenantId || !email) {
     return { ok: false, statusCode: 400, error: 'Missing tenant_id or email', spoofFieldsIgnored: spoof };
   }
-  // Any member of this tenant may invite teammates. The platform owner keeps
-  // tenant onboarding (inviting a new tenant's first user).
-  if (!(await assertTenantMember(client, mapping, tenantId)) && !(await isPlatformOwner(client))) {
-    return { ok: false, statusCode: 403, error: 'Not authorized — must be a member of this company', spoofFieldsIgnored: spoof };
+  if (!UUID_RE.test(String(tenantId))) {
+    return { ok: false, statusCode: 400, error: 'invalid_uuid', field: 'tenant_id', spoofFieldsIgnored: spoof };
+  }
+  // The platform owner is never a member of a tenant.
+  if (email === PLATFORM_OWNER_EMAIL) {
+    return { ok: false, statusCode: 403, error: 'platform_owner_not_invitable', message: 'The platform owner cannot be added to a company', spoofFieldsIgnored: spoof };
+  }
+  // Any member of this tenant may invite teammates. The platform owner may
+  // only make a new tenant's first invite: the tenant must have no
+  // tenant_users rows yet.
+  if (!(await assertTenantMember(client, mapping, tenantId))) {
+    if (!(await isPlatformOwner(client))) {
+      return { ok: false, statusCode: 403, error: 'Not authorized — must be a member of this company', spoofFieldsIgnored: spoof };
+    }
+    if ((await tenantMemberCount(client, tenantId)) !== 0) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'first_invite_only',
+        message: 'This company already has members; its members invite teammates',
+        spoofFieldsIgnored: spoof,
+      };
+    }
   }
 
   const tenant = (await client.query(
@@ -143,37 +220,55 @@ export const runTenantInviteUser = async ({
     }
   }
 
-  let appUserId = (await client.query(
-    `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
-    [email],
-  )).rows[0]?.id;
-  if (!appUserId) {
-    appUserId = randomUUID();
-    await client.query(
-      `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
-       VALUES ($1::uuid, $2, $3, now(), now())
-       ON CONFLICT (id) DO NOTHING`,
-      [appUserId, email, fullName],
-    ).catch(async () => {
+  // Every step below runs in this request's one transaction (withIdentity):
+  // a failure returns ok:false, which rolls back the profile, the identity
+  // link and the membership together. A Cognito user created by this request
+  // is deleted again on failure.
+  const failInvite = async (statusCode, error, message) => ({
+    ok: false,
+    statusCode,
+    error,
+    message: message ? String(message).slice(0, 240) : undefined,
+    cognitoCleanup: isNewUser ? await deleteCreatedCognitoUser(adminCognito, email) : 'not_created_by_this_request',
+    spoofFieldsIgnored: spoof,
+  });
+  if (!cognitoSub) return failInvite(502, 'cognito_sub_missing');
+
+  let appUserId = null;
+  try {
+    // An existing Cognito login keeps the application user it is linked to:
+    // the invite never re-points a cognito_sub to another user.
+    appUserId = (await client.query(IDENTITY_BY_SUB_SQL, [String(cognitoSub)])).rows[0]?.application_user_id || null;
+    if (!appUserId) {
+      appUserId = (await client.query(
+        `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
+        [email],
+      )).rows[0]?.id || null;
+      if (!appUserId) {
+        appUserId = randomUUID();
+        await client.query(
+          `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
+           VALUES ($1::uuid, $2, $3, now(), now())`,
+          [appUserId, email, fullName],
+        );
+      }
+      if (String(cognitoSub) === String(appUserId)) return failInvite(500, 'unsafe_or_missing_cognito_sub');
       await client.query(
-        `INSERT INTO public.profiles (id, email, full_name)
-         VALUES ($1::uuid, $2, $3)`,
-        [appUserId, email, fullName],
-      ).catch(() => {});
-    });
+        `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+         VALUES ($1, $2::uuid, $3, 'active', now(), now())
+         ON CONFLICT (cognito_sub) DO NOTHING`,
+        [cognitoSub, appUserId, email],
+      );
+      // A concurrent request may have linked this login first: use its user.
+      appUserId = (await client.query(IDENTITY_BY_SUB_SQL, [String(cognitoSub)])).rows[0]?.application_user_id || appUserId;
+    }
+  } catch (error) {
+    return failInvite(500, 'invite_identity_failed', error?.message || error);
   }
 
-  if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
-    await client.query(
-      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
-       VALUES ($1, $2::uuid, $3, 'active', now(), now())
-       ON CONFLICT (cognito_sub) DO UPDATE
-         SET application_user_id = EXCLUDED.application_user_id,
-             email = EXCLUDED.email,
-             status = 'active',
-             linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
-      [cognitoSub, appUserId, email],
-    ).catch(() => {});
+  // The platform owner is never added to a tenant, whatever email the login uses.
+  if (await userIsPlatformOwner(client, appUserId)) {
+    return failInvite(403, 'platform_owner_not_invitable', 'The platform owner cannot be added to a company');
   }
 
   try {
@@ -185,13 +280,7 @@ export const runTenantInviteUser = async ({
     );
   } catch (error) {
     // Fail loudly: an invite that did not create the membership is not an invite.
-    return {
-      ok: false,
-      statusCode: 500,
-      error: 'tenant_membership_failed',
-      message: String(error?.message || error).slice(0, 240),
-      spoofFieldsIgnored: spoof,
-    };
+    return failInvite(500, 'tenant_membership_failed', error?.message || error);
   }
 
   const origin = emailAssetOrigin();
@@ -287,16 +376,27 @@ export const runDeleteUser = async ({
       spoofFieldsIgnored: spoof,
     };
   }
-  // Platform owner: soft-disable. Remove tenant memberships; do not hard-delete Cognito from staging automation.
-  if (userId) {
-    await client.query(`DELETE FROM public.tenant_users WHERE user_id = $1::uuid`, [userId]).catch(() => {});
+  // Platform owner: disable the login (soft-disable; Cognito is not
+  // hard-deleted). Tenant memberships are the tenant's own: the platform owner
+  // does not edit them (RLS has no platform-owner tenant_users write), its
+  // members remove teammates.
+  let loginEmail = email;
+  if (!loginEmail && userId) {
+    loginEmail = normalizeEmail((await client.query(
+      `SELECT email FROM public.identity_accounts WHERE application_user_id = $1::uuid LIMIT 1`,
+      [userId],
+    )).rows[0]?.email);
   }
-  if (email) {
-    try {
-      await adminCognito('AdminDisableUser', { UserPoolId: POOL_ID(), Username: email });
-    } catch {
-      /* ignore missing user */
-    }
+  if (!loginEmail) {
+    return { ok: false, statusCode: 404, error: 'login_not_found', spoofFieldsIgnored: spoof };
+  }
+  if (loginEmail === PLATFORM_OWNER_EMAIL) {
+    return { ok: false, statusCode: 403, error: 'platform_owner_protected', spoofFieldsIgnored: spoof };
+  }
+  try {
+    await adminCognito('AdminDisableUser', { UserPoolId: POOL_ID(), Username: loginEmail });
+  } catch {
+    /* ignore missing user */
   }
   return { ok: true, statusCode: 200, disabled: true, spoofFieldsIgnored: spoof };
 };
@@ -406,19 +506,19 @@ export const runHireMortgageAgent = async ({
   client, mapping, body, spoof, send, cognitoJson: cognitoFn,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
-  const system = (await client.query(
-    `SELECT role FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
-    [mapping.application_user_id],
-  )).rows[0];
-  const master = (await client.query(`SELECT public.is_master_owner() AS is_master`)).rows[0];
-  if (!master?.is_master && !system) {
-    return { ok: false, statusCode: 403, error: 'Admin access required', spoofFieldsIgnored: spoof };
+  // Hiring a mortgage agent grants a platform role (user_roles): the platform
+  // owner only. A global user_roles admin is not enough.
+  if (!(await isPlatformOwner(client))) {
+    return { ok: false, statusCode: 403, error: 'Platform owner access required', spoofFieldsIgnored: spoof };
   }
 
   const email = normalizeEmail(body.email);
   const fullName = String(body.full_name || body.fullName || '').trim();
   if (!email || !fullName) {
     return { ok: false, statusCode: 400, error: 'Name and email are required', spoofFieldsIgnored: spoof };
+  }
+  if (email === PLATFORM_OWNER_EMAIL) {
+    return { ok: false, statusCode: 403, error: 'platform_owner_protected', spoofFieldsIgnored: spoof };
   }
 
   const providedPassword = body.password && String(body.password).length >= 8
@@ -514,6 +614,36 @@ export const runHireMortgageAgent = async ({
     };
   }
 
+  // Never re-point an existing Cognito login to another application user.
+  const linkedUserId = (await client.query(IDENTITY_BY_SUB_SQL, [String(cognitoSub)])).rows[0]?.application_user_id || null;
+  if (linkedUserId && appUserId && String(linkedUserId) !== String(appUserId)) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'identity_link_conflict',
+      message: 'This login is already linked to a different account.',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (linkedUserId && !appUserId) {
+    const linkedRoles = (await client.query(
+      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
+      [linkedUserId],
+    )).rows.map((r) => r.role);
+    if (linkedRoles.includes('staff') || linkedRoles.includes('admin') || linkedRoles.includes('mortgage_agent')) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'identity_link_conflict',
+        message: 'This login is already linked to an account with platform roles.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    appUserId = linkedUserId;
+  }
+  if (appUserId && await userIsPlatformOwner(client, appUserId)) {
+    return { ok: false, statusCode: 403, error: 'platform_owner_protected', spoofFieldsIgnored: spoof };
+  }
   if (!appUserId) {
     appUserId = randomUUID();
     created = true;
@@ -530,11 +660,7 @@ export const runHireMortgageAgent = async ({
   await client.query(
     `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
      VALUES ($1, $2::uuid, $3, 'active', now(), now())
-     ON CONFLICT (cognito_sub) DO UPDATE
-       SET application_user_id = EXCLUDED.application_user_id,
-           email = EXCLUDED.email,
-           status = 'active',
-           linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
+     ON CONFLICT (cognito_sub) DO NOTHING`,
     [cognitoSub, appUserId, email],
   );
 

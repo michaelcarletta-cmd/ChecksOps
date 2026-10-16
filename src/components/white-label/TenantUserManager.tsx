@@ -11,6 +11,8 @@ import { Loader2, RotateCcw, Send, Trash2, UserPlus, Users, Shield } from "lucid
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
 import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
+import { useStepUp } from "@/hooks/useStepUp";
+import { resetTeammateTotp } from "@/lib/teamResetTotp";
 
 interface Props {
   tenantId: string;
@@ -22,6 +24,7 @@ export function TenantUserManager({ tenantId }: Props) {
   // (inviting, removing and 2FA resets included).
   const { isMember: canManageTeam } = useCurrentTenantMembership();
   const qc = useQueryClient();
+  const { requireStepUp } = useStepUp();
   const [email, setEmail] = useState("");
 
   const { data: users = [], isLoading } = useQuery({
@@ -101,14 +104,8 @@ export function TenantUserManager({ tenantId }: Props) {
   });
 
   const resetTwoFactorMutation = useMutation({
-    mutationFn: async ({ userId }: { userId: string; email: string }) => {
-      const { data, error } = await supabase.functions.invoke("admin-reset-totp", {
-        body: { user_id: userId },
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Two-factor reset failed");
-      return data;
-    },
+    mutationFn: async ({ userId }: { userId: string; email: string }) =>
+      resetTeammateTotp({ userId, tenantId, requireStepUp }),
     onSuccess: (_data, variables) => {
       toast({
         title: "Two-factor reset",
