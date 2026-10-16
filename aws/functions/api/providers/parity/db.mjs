@@ -1,5 +1,5 @@
 
-const SENSITIVE = /accountnumber|routingnumber|ssn|taxid|password|secret|token|accesstoken|cardnumber|cvv/i;
+const SENSITIVE = /accountnumber|routingnumber|ssn|taxid|governmentid|birthdate|^dob$|^ein$|password|secret|token|accesstoken|cardnumber|cvv/i;
 
 export const sanitize = (value) => {
   if (Array.isArray(value)) return value.map(sanitize);

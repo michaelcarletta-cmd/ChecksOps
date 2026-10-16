@@ -838,20 +838,6 @@ export const WRITE_ALLOWLIST = {
       reason: 'Attach the homeowner signer to an existing request. Token minting stays in send-signature-request.',
     },
   },
-  financial_stepup_log: {
-    tranche: 7,
-    ops: new Set(['insert']),
-    columns: new Set(['tenant_id', 'action_key', 'factor_type', 'succeeded', 'metadata']),
-    identityColumn: 'user_id',
-    requiredForWrite: { insert: ['action_key'] },
-    filterColumns: new Set([]),
-    clientIgnored: new Set(['id', 'created_at', 'updated_at']),
-    frontend: {
-      file: 'StepUpDialog',
-      op: 'insert',
-      reason: 'Append-only TOTP step-up audit. user_id is server-derived. Not a money-movement table.',
-    },
-  },
 };
 
 export const FINANCIAL_OR_PROVIDER_TABLES = new Set([

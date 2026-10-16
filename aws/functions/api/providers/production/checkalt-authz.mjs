@@ -88,6 +88,7 @@ export async function loadSessionCheckAltStepUp(client, { userId, tenantId, logi
        AND action_key = ANY($3::text[])
        AND succeeded IS TRUE
        AND factor_type = 'totp'
+       -- Only rows the server wrote after a verified app TOTP (insertAppStepUpLog).
        AND (metadata->>'source') = 'app_financial_totp'
        AND (metadata->>'login_session') = $4
      ORDER BY created_at DESC

@@ -6,11 +6,13 @@ import { loadProviderSecrets, webhookSecret } from '../provider-secrets.mjs';
 import { providerWebhookDryRun } from '../provider-flags.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './hmac.mjs';
 import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
+import { productionOnboardingWebhookApplyEnabled } from './onboarding/flags.mjs';
+import { applyProductionOnboardingWebhook } from './onboarding/webhook-status.mjs';
 import { applyCollectionV2ProviderCompletion } from '../tenant-collection-v2-settlement.mjs';
 
 const { Client } = pg;
 
-const DROP_KEYS = /account_number|routing_number|secret|password|token|authorization|ssn|dob|bank_account|iban|plaid_access/i;
+const DROP_KEYS = /account_?number|routing_?number|secret|password|token|authorization|ssn|dob|birth_?date|tax_?id|government_?id|^ein$|bank_account|iban|plaid_access/i;
 
 export const sanitizeWebhookPayload = (value) => {
   if (value === undefined || value === null) return null;
@@ -203,6 +205,10 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       } else if (provider === 'checkalt') {
         applyResult = await applyCheckAltWebhook(client, parsed.payload);
       }
+    } else if (!stored.duplicate && provider === 'moov' && productionOnboardingWebhookApplyEnabled()) {
+      // Production: onboarding status only (account / capability / verification),
+      // behind AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED. Money movement is never applied here.
+      applyResult = await applyProductionOnboardingWebhook(client, parsed.payload);
     } else if (stored.duplicate) {
       applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
     }
