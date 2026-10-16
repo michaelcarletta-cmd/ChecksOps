@@ -127,7 +127,13 @@ test('PostgreSQL 16: inspect and read-live report the plan; apply converges once
     t.skip(reason);
     return;
   }
-  const pg = (await import('pg')).default;
+  let pg;
+  try {
+    pg = (await import('pg')).default;
+  } catch {
+    t.skip('pg module is not installed');
+    return;
+  }
   const server = startPg('pg-sql89-exec-', 58900);
   const admin = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   await admin.connect();
