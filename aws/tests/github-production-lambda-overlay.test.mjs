@@ -475,7 +475,7 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   assert.equal(PLAN.order.indexOf(WORKFLOW_WRITES), PLAN.order.indexOf(ALLOWLIST) + 1);
   assert.deepEqual(PLAN.order.slice(-4), [ALLOWLIST, WORKFLOW_WRITES, 'providers/production/moov-send.mjs', 'providers.mjs']);
 
-  // SQL prerequisites: SQL 71 and SQL 52 not yet recorded live; SQL 77-79 recorded applied.
+  // SQL prerequisites: SQL 89, 71 and 52 recorded live from the SQL 89 apply; SQL 77-79 recorded applied.
   // SQL 89 applied in production (2026-10-16 one-shot); it produced SQL 71's and SQL 52's state.
   for (const sql of [SQL89, SQL71, SQL52]) {
     assert.equal(PLAN.sql_prerequisites[sql]?.verified_live, true, sql);
