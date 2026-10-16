@@ -633,7 +633,7 @@ function replaceEndorsementMergeFields(text: string, payeeName: string, checkNum
     .replace(/\{check\.carrier\}/g, carrier)
     .replace(/\{check\.amount\}/g, amountStr)
     .replace(/\{endorse\.url\}/g, endorsementUrl)
-    .replace(/\{company\.name\}/g, branding.company_name || "Freedom Claims")
+    .replace(/\{company\.name\}/g, branding.company_name || "ChecksOps")
     .replace(/\{company\.email\}/g, branding.company_email || "")
     .replace(/\{company\.phone\}/g, branding.company_phone || "");
 }
@@ -651,7 +651,7 @@ function buildEndorsementEmailHtml(
     : "N/A";
   const headerColor = branding.endorsement_email_header_color || "#1e293b";
   const buttonColor = branding.endorsement_email_button_color || "#2563eb";
-  const companyName = branding.company_name || "Freedom Claims";
+  const companyName = branding.company_name || "ChecksOps";
   const logoUrl = branding.letterhead_url || "";
 
   const rawBody = branding.endorsement_email_body || "An insurance check requires your endorsement before it can be processed. Please review the details below and complete your endorsement.";
@@ -718,7 +718,7 @@ function buildCombinedEndorsementEmailHtml(
     : "N/A";
   const headerColor = branding.endorsement_email_header_color || "#1e293b";
   const buttonColor = branding.endorsement_email_button_color || "#2563eb";
-  const companyName = branding.company_name || "Freedom Claims";
+  const companyName = branding.company_name || "ChecksOps";
   const logoUrl = branding.letterhead_url || "";
   const logoBlock = logoUrl
     ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(companyName)}" style="max-height:48px;max-width:200px;object-fit:contain;" />`
@@ -1007,7 +1007,7 @@ Deno.serve(async (req) => {
         const appUrl = getAppUrl(supabaseUrl);
 
         // Ensure endorsement has an active, non-expiring token before sending.
-        // Mirrors Freedom Claims flow: links sent to payees never auto-expire —
+        // Links sent to payees never auto-expire —
         // they remain valid until the endorsement is completed or rejected.
         let activeToken: string = endorsement.token ?? "";
         if (!activeToken) {
@@ -1436,7 +1436,7 @@ Deno.serve(async (req) => {
 
                     const claimLabel = claimInfo?.claim_number || linkedCheck.claim_id;
                     const insuredName = claimInfo?.insured_name || "the insured";
-                    const companyName = tenantForNotif?.email_from_name || tenantForNotif?.name || brandingForNotif?.company_name || "Freedom Claims";
+                    const companyName = tenantForNotif?.email_from_name || tenantForNotif?.name || brandingForNotif?.company_name || "ChecksOps";
 
                     await invokeSendEmail(supabaseUrl, serviceKey, {
                       to: notifEmail,

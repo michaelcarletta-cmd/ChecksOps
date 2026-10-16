@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
 
     const geoResponse = await fetch(nominatimUrl, {
       headers: {
-        "User-Agent": "FreedomClaimsCRM/1.0 (contact@freedomadj.com)",
+        "User-Agent": "ChecksOps/1.0 (contact@freedomadj.com)",
         "Accept": "application/json",
       },
     });
@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
         const retryUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(simpleAddress)}&limit=1&countrycodes=us`;
         const retryResponse = await fetch(retryUrl, {
           headers: {
-            "User-Agent": "FreedomClaimsCRM/1.0 (contact@freedomadj.com)",
+            "User-Agent": "ChecksOps/1.0 (contact@freedomadj.com)",
             "Accept": "application/json",
           },
         });

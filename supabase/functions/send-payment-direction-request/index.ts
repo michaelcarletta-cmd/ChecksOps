@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    const companyName = branding?.company_name || "Freedom Claims";
+    const companyName = branding?.company_name || "ChecksOps";
     const headerColor = branding?.endorsement_email_header_color || "#1e3a5f";
     const buttonColor = branding?.endorsement_email_button_color || "#1a56db";
     const logoUrl = branding?.letterhead_url || "";
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
     // Send email via Resend
     if (claim.policyholder_email && RESEND_API_KEY) {
       try {
-        const fromDomain = branding?.email_from_domain || "notifications@freedomclaims.com";
+        const fromDomain = branding?.email_from_domain || Deno.env.get("FROM_EMAIL") || "noreply@checksops.com";
         const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
         const resendResponse = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
           method: "POST",
