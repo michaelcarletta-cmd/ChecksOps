@@ -33,11 +33,14 @@ SELECT, INSERT and DELETE are not touched; no data changes. Afterwards SQL 71's 
 (amount updatable, no table-level UPDATE) holds in production, so SQL 71 itself is not
 applied there (its tool refuses on `no_table_level_update`).
 
-**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 95);
-not applied to production. The pin
-`ops/deployment-guard/sql89-check-intake-column-update-production-apply.json` is
-execute-authorized and waits for the owner's review and merge, then the one-shot run
-(step 4). The staging executor pin (`sql89-check-intake-column-update`) records the
+**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 95) and
+to production (2026-10-16T16:59Z, guarded one-shot, SSM `c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77`,
+main `72cc069fa`, one_use_id `sql89-prod-0173e55c-b155-44c8-b9c4-5c221c5f1053`):
+`c22a75fa…` -> `2a1d45f9…`; post-apply inspect `already_applied` true, 43 updatable
+columns, no table-level UPDATE. The pin
+`ops/deployment-guard/sql89-check-intake-column-update-production-apply.json` records the
+apply and is `execute: false` again. The overlay plan records SQL 89, 71 and 52 verified live
+(#1012). The staging executor pin (`sql89-check-intake-column-update`) records the
 staging pre-state `6810985b…` from read-live run 82; the production pin records the
 production pre-state
 `c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4` from the read-only

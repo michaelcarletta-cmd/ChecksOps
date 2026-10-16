@@ -1,8 +1,8 @@
 {
   "id": "sql88-claim-id-assign-case-tenant-scope-production-apply",
   "migration": "sql88",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-16 (\"approve the SQL 88 production unlock after the pin PR\"; \"approve the SQL 88 production apply after unlock\"): production apply of SQL 88 after the staging acceptance below (production ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b -> 15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.tg_claim_id_assign_case()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b",
   "intended_replacement_sha256": "15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e",
   "authorization_phrase": "APPLY_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE",
   "predecessors": [],
@@ -22,18 +22,113 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-16",
+    "ssm_command_id": "4e8aa79f-e123-4f39-85e8-b669d4072ee8",
+    "ssm_command_ids": [
+      "4e8aa79f-e123-4f39-85e8-b669d4072ee8",
+      "4b86eb75-5d78-483c-8899-50a7971e9d42"
+    ],
+    "source_commit": "72cc069fa1fef0195056bfe4e2f6d7d85a6283b8",
+    "source_tarball_sha256": "4d8a553ea8989a7be30671334f143d074b1622eecb7d176c98e166e5a2fc29df",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "function_states": null,
-    "cross_tenant_links": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 88. The production pre-state is not code-derived (the restored tg_claim_id_assign_case may differ from migration 20260826125804, its owner and ACL are unknown, anon and service_role may or may not exist), so expected_live_definition_sha256 is null and evaluate and apply refuse. Run node scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, live_definition_sha256, function_states, cross_tenant_links (the per-category counts and total; counts only, informational, they do not block the apply), functions (arguments, owner, security definer, proacl), case_owner, claim_triggers, other_callers, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] (a missing prerequisite, another signature or result type, a function owned by another role, a tg_claim_id_assign_case ACL entry the file does not revoke, or case_owner.case_owner_safe false: the four case functions with different owners, one that is not SECURITY DEFINER, an owner that is checksops / authenticated / anon / service_role, or one of those roles a member of the owner, which the file refuses with claim_case_owner_unsafe; or other_callers_present: another function, view, rule, policy or non-trigger dependent that uses tg_claim_id_assign_case, which the file refuses with claim_case_callers_unsafe), stop: that needs its own reviewed change."
+    "login_rolsuper": false,
+    "live_definition_sha256": "ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b",
+    "function_states": {
+      "tg_claim_id_assign_case": "case_original",
+      "resolve_check_case": "tenant_scoped",
+      "tg_check_intake_assign_case": "case_original",
+      "tg_loss_draft_assign_case": "case_original"
+    },
+    "cross_tenant_links": {
+      "readable": true,
+      "total": 0,
+      "categories": {
+        "check_intake_items_case": 0,
+        "check_intake_items_claim": 0,
+        "loss_draft_tracking_case": 0,
+        "loss_draft_tracking_claim": 0,
+        "check_cases_claim": 0,
+        "homeowner_ledger_events_case": 0,
+        "homeowner_ledger_tokens_case": 0,
+        "homeowner_ledger_check_uploads_case": 0,
+        "mortgage_releases_case": 0,
+        "claim_check_mortgage_draws_case": 0,
+        "signature_requests_case": 0
+      },
+      "unreadable_categories": []
+    },
+    "functions": {
+      "tg_claim_id_assign_case": {
+        "exists": true,
+        "state": "case_original",
+        "owner": "checksops_admin",
+        "security_definer": true,
+        "proacl": "{=X/checksops_admin,checksops_admin=X/checksops_admin,checksops=X/checksops_admin}",
+        "definition_sha256": "b03ce50dd044b85b837fb0f003098b5d2c5deabddf710ca1bb885e3e1e3f69e3"
+      },
+      "resolve_check_case": {
+        "exists": true,
+        "state": "tenant_scoped",
+        "owner": "checksops_admin",
+        "security_definer": true
+      },
+      "tg_check_intake_assign_case": {
+        "exists": true,
+        "state": "case_original",
+        "owner": "checksops_admin",
+        "security_definer": true
+      },
+      "tg_loss_draft_assign_case": {
+        "exists": true,
+        "state": "case_original",
+        "owner": "checksops_admin",
+        "security_definer": true
+      }
+    },
+    "case_owner": {
+      "case_owner_safe": true
+    },
+    "claim_triggers": {
+      "assign_case_on_ledger_events": {
+        "present": true,
+        "enabled": true,
+        "calls_function": true
+      },
+      "assign_case_on_ledger_tokens": {
+        "present": true,
+        "enabled": true,
+        "calls_function": true
+      },
+      "assign_case_on_ledger_uploads": {
+        "present": true,
+        "enabled": true,
+        "calls_function": true
+      },
+      "assign_case_on_mortgage_releases": {
+        "present": true,
+        "enabled": true,
+        "calls_function": true
+      },
+      "assign_case_on_mortgage_draws": {
+        "present": true,
+        "enabled": true,
+        "calls_function": true
+      },
+      "assign_case_on_signature_requests": {
+        "present": true,
+        "enabled": true,
+        "calls_function": true
+      }
+    },
+    "other_callers": {
+      "trigger_count": 6,
+      "total": 0
+    },
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 4e8aa79f-e123-4f39-85e8-b669d4072ee8, after SQL 87 was applied; node scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 72cc069f (tarball sha256 4d8a553e...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, not superuser). The earlier read-only inspect before SQL 87 (SSM command 4b86eb75-5d78-483c-8899-50a7971e9d42) gave the same live_definition_sha256: SQL 87 does not change the SQL 88 fingerprint. tg_claim_id_assign_case is migration 20260826125804's body (case_original, definition_sha256 b03ce50d...), owned by checksops_admin, SECURITY DEFINER, proacl EXECUTE for PUBLIC, checksops_admin and checksops (SQL 88 revokes PUBLIC and checksops); resolve_check_case is SQL 87's (tenant_scoped); tg_check_intake_assign_case and tg_loss_draft_assign_case case_original; all four owned by checksops_admin and SECURITY DEFINER. case_owner.case_owner_safe true; other_callers.total 0 (trigger_count 6: the six claim_triggers present, enabled and calling it); cross_tenant_links total 0 in all 11 categories (counts only, informational). precondition_failures was []; apply_preconditions_met was false at inspect time because no pre-state was recorded yet. This reviewed change (\"SQL 88 production pin: pre-state recorded and execute-authorized after staging acceptance\") copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -43,12 +138,12 @@
     "function_acl": {
       "tg_claim_id_assign_case": "{checksops_admin=X/checksops_admin}"
     },
-    "note": "After the unchanged SQL 88 file run as checksops_admin: tg_claim_id_assign_case is the reviewed definition (links the freedom_crm case for NEW.claim_id only when the case is the row's tenant's, for the tables with a tenant_id, and the claim belongs to the case's tenant by PR #991's / SQL 87's rule; never raises), owned by checksops_admin, SECURITY DEFINER with search_path=public, and EXECUTE for its owner only (PUBLIC, anon, authenticated, service_role and checksops revoked); resolve_check_case, tg_check_intake_assign_case and tg_loss_draft_assign_case are unchanged, SECURITY DEFINER and owned by the same role; the six triggers are unchanged. No row changes: existing cross-tenant links (cross_tenant_links) stay as they are and need their own reviewed change. intended_replacement_sha256 equals the staging pin's. function_owner is the expected production login (as for SQL 72 to 87); the first inspect must confirm it."
+    "note": "After the unchanged SQL 88 file run as checksops_admin: tg_claim_id_assign_case is the reviewed definition (links the freedom_crm case for NEW.claim_id only when the case is the row's tenant's, for the tables with a tenant_id, and the claim belongs to the case's tenant by PR #991's / SQL 87's rule; never raises), owned by checksops_admin, SECURITY DEFINER with search_path=public, and EXECUTE for its owner only (PUBLIC, anon, authenticated, service_role and checksops revoked); resolve_check_case, tg_check_intake_assign_case and tg_loss_draft_assign_case are unchanged, SECURITY DEFINER and owned by the same role; the six triggers are unchanged. No row changes: existing cross-tenant links (cross_tenant_links) stay as they are and need their own reviewed change. intended_replacement_sha256 equals the staging pin's. function_owner is the expected production login (as for SQL 72 to 87); the production inspect of 2026-10-16 confirmed it."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql88-claim-id-assign-case-tenant-scope here in the reviewed change that sets execute true. Until then evaluate and apply refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null).",
-    "production_differs": "Unknown until the first inspect of each environment: both should carry migration 20260826125804's tg_claim_id_assign_case (case_original), but owners, ACLs, the presence of anon / service_role and the cross-tenant link counts may differ. The staging and production pre-state hashes are recorded separately (the counts are not part of them). The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) run in both."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38927892056",
+    "basis": "Guarded staging SQL executor apply of sql88-claim-id-assign-case-tenant-scope, run #91 (38927892056) on main 13763c2c9, executor package CodeSha256 1tpvDpcA+wdCwitVyuOtZrFaBFu3d5YIGnNpkIlHYFQ= (deploy run #89, 38926313149): staging 57ba25f2ea69adb1a6de030cb42034d4dd1e1c0741a48a96e79afe6d90aae387 -> 15fbe8f5f4598ee65b24599fa7396e4e03e75daa163f5cedcc8227aa560b1d2e, result applied; read-live run #92 (38928065480) already_applied true, precondition_failures [], tg_claim_id_assign_case intended, acl_entries [] (owner-only EXECUTE), case_owner_safe true.",
+    "production_differs": "The pre-states differ: staging (pin AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE, read-live run 88) is 57ba25f2ea69adb1a6de030cb42034d4dd1e1c0741a48a96e79afe6d90aae387 and production (production_inspect, 2026-10-16) is ef7a3e027b63761b2b35a3fdad62d5eacf18f292bc77886f820eb61f70584d1b. Staging had 5 existing cross-tenant links (check_cases_claim 1, homeowner_ledger_events_case 4; the owner chose to continue), production 0; the counts are not part of either fingerprint and the apply changes no rows. Each environment's pre-state is recorded separately. The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) run in both."
   }
 }

@@ -1,8 +1,8 @@
 {
   "id": "sql89-check-intake-column-update-production-apply",
   "migration": "sql89",
-  "authorization": "Owner approved 2026-10-16 (\"approve the SQL 89 production unlock after the pin PR\"; \"approve the SQL 89 production apply after unlock\"): production apply of SQL 89 after the staging acceptance below (production c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4 -> 2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-16; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 89 production pin (c22a75fa -> 2a1d45f9), the read-only production inspect and the execute change on 2026-10-16 (\"approve the SQL 89 production unlock after the pin PR\"; \"approve the SQL 89 production apply after unlock\"), and approved the one apply run recorded in applied (workstream prod-sql89-check-intake-column-update-20261016) on 2026-10-16 with \"approve the SQL 89 production apply after unlock\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -187,7 +187,7 @@
       "table_acl_as_inspected",
       "updatable_columns_as_inspected"
     ],
-    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 0435c387-8f9b-405d-9463-f1cc81124d36, node scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 4701eb23 (tarball sha256 aefd2eb1...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, not superuser, no bypassrls). public.check_intake_items is owned by checksops_admin with ACL {checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}: checksops holds table-level UPDATE granted by checksops_admin and no column UPDATE entries, so all 73 columns are updatable (updatable_columns_sha256 9d033c17..., the same 73 columns the earlier inspect of 2026-10-16, SSM f3715bb0-5fd9-43a8-83e9-86350ef5bab7 on main 358ef188, reported). checksops is a member of authenticated, whose only member is checksops (LOGIN); authenticated and PUBLIC hold no UPDATE on the table and no other role gives checksops UPDATE; no unsafe function UPDATEs the table; SQL 70's SECURITY DEFINER aws_ingest_shared_check(jsonb) is present. precondition_failures at inspect time were exactly table_owner_as_inspected, table_acl_as_inspected and updatable_columns_as_inspected, because nothing was recorded here yet (apply_preconditions_met false); with table_owner, table_acl, updatable_columns and updatable_columns_sha256 recorded, the same state has no precondition failures. This reviewed change copies live_definition_sha256 into expected_live_definition_sha256. The production pre-state (c22a75fa...) is not staging's (6810985b..., read-live run 82). That change did not authorize execution; the later reviewed change of 2026-10-16 (\"SQL 87/89 production pins: execute-authorized after staging acceptance\") set authorization, execute true and staging_acceptance, keeping this recorded pre-state. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 0435c387-8f9b-405d-9463-f1cc81124d36, node scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 4701eb23 (tarball sha256 aefd2eb1...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, not superuser, no bypassrls). public.check_intake_items is owned by checksops_admin with ACL {checksops_admin=arwdDxtm/checksops_admin,checksops=arwd/checksops_admin}: checksops holds table-level UPDATE granted by checksops_admin and no column UPDATE entries, so all 73 columns are updatable (updatable_columns_sha256 9d033c17..., the same 73 columns the earlier inspect of 2026-10-16, SSM f3715bb0-5fd9-43a8-83e9-86350ef5bab7 on main 358ef188, reported). checksops is a member of authenticated, whose only member is checksops (LOGIN); authenticated and PUBLIC hold no UPDATE on the table and no other role gives checksops UPDATE; no unsafe function UPDATEs the table; SQL 70's SECURITY DEFINER aws_ingest_shared_check(jsonb) is present. precondition_failures at inspect time were exactly table_owner_as_inspected, table_acl_as_inspected and updatable_columns_as_inspected, because nothing was recorded here yet (apply_preconditions_met false); with table_owner, table_acl, updatable_columns and updatable_columns_sha256 recorded, the same state has no precondition failures. This reviewed change copies live_definition_sha256 into expected_live_definition_sha256. The production pre-state (c22a75fa...) is not staging's (6810985b..., read-live run 82). That change did not authorize execution; the later reviewed change of 2026-10-16 (\"SQL 87/89 production pins: execute-authorized after staging acceptance\") set authorization, execute true and staging_acceptance, keeping this recorded pre-state. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-16 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "live_definition_sha256": "2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8",
@@ -206,5 +206,102 @@
     "SQL 89 makes SQL 71's production state (amount updatable, no table-level UPDATE) true: today production's table-level UPDATE already lets checksops UPDATE amount, so SQL 71 is not applied to production on its own.",
     "Staging: the staging executor pin (migration choice sql89-check-intake-column-update) records the staging pre-state 6810985b… from read-live run 82. Staging apply run 85 rolled back (UNRELATED_MUTATION, intended_state and updatable_columns_exact) because the file then revoked only checksops' own UPDATE while checksops, a member of authenticated, kept UPDATE granted to authenticated (e.g. detected_claim_number). The file now also revokes UPDATE from authenticated and PUBLIC; the fingerprint is unchanged, so the staging pre-state stands. That fix (#1008) was applied to staging by apply run 95 (38929944170), recorded in staging_acceptance.",
     "Production: --inspect reports update_grant_sources, update_provenance, grantee_member_of and authenticated_members (role names and can_login only); the production inspect was re-run with this tool version (SSM 0435c387-8f9b-405d-9463-f1cc81124d36, main 4701eb23) and its pre-state is recorded in production_inspect."
-  ]
+  ],
+  "applied": {
+    "date": "2026-10-16",
+    "started_at": "2026-10-16T16:59:30Z",
+    "finished_at": "2026-10-16T16:59:42Z",
+    "result": "applied",
+    "source_commit": "72cc069fa1fef0195056bfe4e2f6d7d85a6283b8",
+    "source_tarball": {
+      "file": "source-72cc069fa1fef0195056bfe4e2f6d7d85a6283b8.tar.gz",
+      "sha256": "4d8a553ea8989a7be30671334f143d074b1622eecb7d176c98e166e5a2fc29df"
+    },
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql89-check-intake-column-update-20261016",
+    "one_use_id": "sql89-prod-0173e55c-b155-44c8-b9c4-5c221c5f1053",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve the SQL 89 production apply after unlock",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql89; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77) ran every step ok: pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply, post-apply-inspect.",
+    "steps": [
+      {
+        "step": "pin",
+        "ok": true
+      },
+      {
+        "step": "source",
+        "ok": true
+      },
+      {
+        "step": "inspect",
+        "ok": true
+      },
+      {
+        "step": "contracts",
+        "ok": true
+      },
+      {
+        "step": "manifest",
+        "ok": true
+      },
+      {
+        "step": "source-recheck-before-preflight",
+        "ok": true
+      },
+      {
+        "step": "preflight",
+        "ok": true
+      },
+      {
+        "step": "evaluate",
+        "ok": true
+      },
+      {
+        "step": "source-recheck-before-apply",
+        "ok": true
+      },
+      {
+        "step": "apply",
+        "ok": true
+      },
+      {
+        "step": "post-apply-inspect",
+        "ok": true
+      }
+    ],
+    "receipt": {
+      "result": "applied",
+      "before_hash": "c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4",
+      "after_hash": "2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8"
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "c22a75fa2535712f1ef9b2210a8c3f6bd8576b5b255a9a01c6e352e7369cc8c4",
+      "live_matches_expected": true,
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "table_level_update": true,
+      "updatable_column_count": 73
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "2a1d45f9250083a605e9784aba628f6f87f52840010487974b29a94097a7e2f8",
+      "already_applied": true,
+      "table_level_update": false,
+      "updatable_column_count": 43,
+      "columns_losing_update_count": 0,
+      "precondition_failures": [
+        "table_acl_as_inspected",
+        "updatable_columns_as_inspected"
+      ],
+      "precondition_failures_note": "Expected after the change: those checks compare the live table ACL and updatable columns with the recorded pre-apply production_inspect, which the apply replaced."
+    }
+  },
+  "production_evidence": {
+    "2026-10-16 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql89-check-intake-column-update-20261016, main 72cc069fa (tarball 4d8a553e…), owner-approved run, SSM c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77, 2026-10-16T16:59:30Z–16:59:42Z: every step ok; pre-apply inspect live c22a75fa… matched, preconditions met, table-level UPDATE, 73 updatable columns; c22a75fa… -> 2a1d45f9…, result applied; post-apply inspect already_applied true, no table-level UPDATE, 43 updatable columns, 0 columns losing update. execute is false so the pin is no longer a standing authorization."
+  }
 }

@@ -4,10 +4,13 @@
 `f046c76c…`, authored in `af84133e4`). Owner approval to start the work: 2026-10-16
 ("start the SQL 87 resolve_check_case fix"; Option B, an internal helper).
 
-**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 78); not
-applied to production. The production pin is execute-authorized (step 6) and waits for the
-owner's review and merge, then the one-shot run (step 7). Both pre-states are recorded,
-from read-only inspects only.
+**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply run 78) and
+to production (2026-10-16T16:55Z, guarded one-shot, SSM `1b57f335-6dd0-454a-8fd6-2b8aebfac1da`,
+main `72cc069fa`, one_use_id `sql87-prod-794cf181-8533-462c-b080-3d081f83a8ea`):
+`9f264af1…` -> `794dcd33…`, post-apply inspect `already_applied` true. A first attempt
+(SSM `9e8191db-…`) stopped at the source step (`STALE_PACKAGE`, the `.sha256` sidecar was not
+downloaded) before anything ran. The production pin records the apply and is `execute: false`
+again, so a re-apply needs a new reviewed change.
 
 ## The bug
 
@@ -84,7 +87,7 @@ and falls back to the claim-number case, exactly as #991's route answers
 
 | | staging (`AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE`) | production (`ops/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.json`) |
 |---|---|---|
-| `expected_live_definition_sha256` | `8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a` (read-live) | `9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f` (`--inspect` of 2026-10-16, SSM `4b86eb75-5d78-483c-8899-50a7971e9d42` and `0435c387-8f9b-405d-9463-f1cc81124d36`) |
+| `expected_live_definition_sha256` | `8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a` (read-live) | `9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f` (`--inspect` of 2026-10-16, SSM `4b86eb75-5d78-483c-8899-50a7971e9d42`) |
 | `intended_replacement_sha256` | `794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30` | same |
 | authorization / execute | n/a | owner approved 2026-10-16 / `true` |
 

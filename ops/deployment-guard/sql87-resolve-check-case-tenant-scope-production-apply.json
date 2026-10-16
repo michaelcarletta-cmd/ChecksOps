@@ -1,8 +1,8 @@
 {
   "id": "sql87-resolve-check-case-tenant-scope-production-apply",
   "migration": "sql87",
-  "authorization": "Owner approved 2026-10-16 (\"approve the SQL 87 production unlock and apply\"; \"approve the unlock PR merge after the pin PR\"): production apply of SQL 87 after the staging acceptance below (production 9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f -> 794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-16; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 87 production pin (9f264af1 -> 794dcd33), the read-only production inspect and the execute change on 2026-10-16 (\"approve the SQL 87 production unlock and apply\"; \"approve the unlock PR merge after the pin PR\"), and approved the one apply run recorded in applied (workstream prod-sql87-resolve-check-case-20261016) on 2026-10-16 with \"approve the SQL 87 production unlock and apply\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -26,8 +26,7 @@
     "date": "2026-10-16",
     "ssm_command_id": "4b86eb75-5d78-483c-8899-50a7971e9d42",
     "ssm_command_ids": [
-      "4b86eb75-5d78-483c-8899-50a7971e9d42",
-      "0435c387-8f9b-405d-9463-f1cc81124d36"
+      "4b86eb75-5d78-483c-8899-50a7971e9d42"
     ],
     "source_commit": "4701eb23a52de84b367993b31d7d7c7501b4873a",
     "source_tarball_sha256": "aefd2eb1db2d6692a2e51eb97a51504988eb60d44dea63f157c4272176cec77f",
@@ -69,7 +68,7 @@
     },
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM commands 4b86eb75-5d78-483c-8899-50a7971e9d42 and 0435c387-8f9b-405d-9463-f1cc81124d36, node scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 4701eb23 (tarball sha256 aefd2eb1...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, not superuser, no bypassrls). resolve_check_case, tg_check_intake_assign_case and tg_loss_draft_assign_case are migration 20260826125804's bodies (function_states case_original; resolve_check_case definition_sha256 461d583b...), all three owned by checksops_admin; resolve_check_case proacl gives EXECUTE to PUBLIC, checksops_admin and checksops (SQL 87 revokes PUBLIC and checksops). case_owner.case_owner_safe true with api_roles_member_of_owner []; other_callers.total 0. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. The production pre-state (9f264af1...) is not staging's (8817a4b0..., the staging pin); each is recorded separately. That change did not authorize execution; the later reviewed change of 2026-10-16 (\"SQL 87/89 production pins: execute-authorized after staging acceptance\") set authorization, execute true and staging_acceptance, keeping this recorded pre-state. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-16 (SSM command 4b86eb75-5d78-483c-8899-50a7971e9d42, node scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 4701eb23 (tarball sha256 aefd2eb1...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, not superuser, no bypassrls). resolve_check_case, tg_check_intake_assign_case and tg_loss_draft_assign_case are migration 20260826125804's bodies (function_states case_original; resolve_check_case definition_sha256 461d583b...), all three owned by checksops_admin; resolve_check_case proacl gives EXECUTE to PUBLIC, checksops_admin and checksops (SQL 87 revokes PUBLIC and checksops). case_owner.case_owner_safe true with api_roles_member_of_owner []; other_callers.total 0. precondition_failures was [] and apply_preconditions_met false at inspect time, because no pre-state was recorded yet; this reviewed change copies live_definition_sha256 into expected_live_definition_sha256. The production pre-state (9f264af1...) is not staging's (8817a4b0..., the staging pin); each is recorded separately. That change did not authorize execution; the later reviewed change of 2026-10-16 (\"SQL 87/89 production pins: execute-authorized after staging acceptance\") set authorization, execute true and staging_acceptance, keeping this recorded pre-state. A fresh --inspect immediately before apply must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-16 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "function_definition_sha256": {
@@ -86,5 +85,95 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38910474178",
     "basis": "Guarded staging SQL executor apply of sql87-resolve-check-case-tenant-scope, run #78 (38910474178) on main e043cde44, executor package CodeSha256 2SK4JxaCw/NXe4OwcsvyloYPZLU0lCPrgyPdX4UN480= (deploy run #76, 38909978264): staging 8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a -> 794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30, result applied; read-live run #79 (38910633201) already_applied true, precondition_failures [], resolve_check_case intended, acl_entries [] (owner-only EXECUTE), case_owner_safe true, other_callers total 0.",
     "production_differs": "The pre-states differ: staging (pin AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE) is 8817a4b0778237649e37a39791320edaaee570558f72171875cf550d7386b00a and production (production_inspect, 2026-10-16) is 9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f: both carry migration 20260826125804's resolve_check_case and trigger functions (case_original), but production's resolve_check_case ACL also grants checksops EXECUTE explicitly (PUBLIC EXECUTE in both). Each environment's pre-state is recorded separately. The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) run in both."
+  },
+  "applied": {
+    "date": "2026-10-16",
+    "started_at": "2026-10-16T16:55:42Z",
+    "finished_at": "2026-10-16T16:55:59Z",
+    "result": "applied",
+    "source_commit": "72cc069fa1fef0195056bfe4e2f6d7d85a6283b8",
+    "source_tarball": {
+      "file": "source-72cc069fa1fef0195056bfe4e2f6d7d85a6283b8.tar.gz",
+      "sha256": "4d8a553ea8989a7be30671334f143d074b1622eecb7d176c98e166e5a2fc29df"
+    },
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql87-resolve-check-case-20261016",
+    "one_use_id": "sql87-prod-794cf181-8533-462c-b080-3d081f83a8ea",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve the SQL 87 production unlock and apply",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql87; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "1b57f335-6dd0-454a-8fd6-2b8aebfac1da",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 1b57f335-6dd0-454a-8fd6-2b8aebfac1da) ran every step ok: pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply, post-apply-inspect.",
+    "steps": [
+      {
+        "step": "pin",
+        "ok": true
+      },
+      {
+        "step": "source",
+        "ok": true
+      },
+      {
+        "step": "inspect",
+        "ok": true
+      },
+      {
+        "step": "contracts",
+        "ok": true
+      },
+      {
+        "step": "manifest",
+        "ok": true
+      },
+      {
+        "step": "source-recheck-before-preflight",
+        "ok": true
+      },
+      {
+        "step": "preflight",
+        "ok": true
+      },
+      {
+        "step": "evaluate",
+        "ok": true
+      },
+      {
+        "step": "source-recheck-before-apply",
+        "ok": true
+      },
+      {
+        "step": "apply",
+        "ok": true
+      },
+      {
+        "step": "post-apply-inspect",
+        "ok": true
+      }
+    ],
+    "receipt": {
+      "result": "applied",
+      "before_hash": "9f264af15a4e912d6b0aef85afbb8f17bea7f322230ddf4e8616b4fb4c19a68f",
+      "after_hash": "794dcd33b4cd61d8fc607f8e4f84df0daaf8a655afad2c7794ecf084c3a52a30"
+    },
+    "earlier_ssm_command_id": "9e8191db-9c9b-4e20-a1e0-b0abed6e6837",
+    "earlier_ssm_note": "A first one-shot attempt stopped at its source step with STALE_PACKAGE because the tarball's .sha256 sidecar had not been downloaded next to it; nothing ran (no inspect, contracts, receipt, lease or apply). The successful run is SSM 1b57f335-6dd0-454a-8fd6-2b8aebfac1da.",
+    "later_inspect": {
+      "ssm_command_id": "4e8aa79f-e123-4f39-85e8-b669d4072ee8",
+      "read_only": true,
+      "source_commit": "72cc069fa1fef0195056bfe4e2f6d7d85a6283b8",
+      "source_tarball_sha256": "4d8a553ea8989a7be30671334f143d074b1622eecb7d176c98e166e5a2fc29df",
+      "already_applied": true,
+      "resolve_check_case": "intended",
+      "proacl": "{checksops_admin=X/checksops_admin}",
+      "case_owner_safe": true,
+      "other_callers_total": 0,
+      "precondition_failures": [],
+      "note": "A later read-only --inspect (the same SSM command that ran the SQL 88 production inspect recorded in the SQL 88 pin) confirmed the post-state: already_applied true, resolve_check_case the intended definition with EXECUTE for its owner only."
+    }
+  },
+  "production_evidence": {
+    "2026-10-16 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql87-resolve-check-case-20261016, main 72cc069fa (tarball 4d8a553e…), owner-approved run, SSM 1b57f335-6dd0-454a-8fd6-2b8aebfac1da, 2026-10-16T16:55:42Z–16:55:59Z: every step ok; 9f264af1… -> 794dcd33…, result applied. Earlier attempt SSM 9e8191db-9c9b-4e20-a1e0-b0abed6e6837 stopped at source (STALE_PACKAGE, missing .sha256 sidecar); nothing ran. Later read-only inspect SSM 4e8aa79f-e123-4f39-85e8-b669d4072ee8: already_applied true, ACL {checksops_admin=X/checksops_admin}, case_owner_safe true, other_callers 0, precondition_failures []. execute is false so the pin is no longer a standing authorization."
   }
 }
