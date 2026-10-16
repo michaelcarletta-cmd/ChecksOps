@@ -52,6 +52,8 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/79_member_stakeholder_writes.sql', 'sql/79_member_stakeholder_writes.sql'],
   ['aws/workflows/sql/80_checkalt_member_auto_deposit.sql', 'sql/80_checkalt_member_auto_deposit.sql'],
   ['aws/workflows/sql/81_checkalt_production_register.sql', 'sql/81_checkalt_production_register.sql'],
+  ['aws/workflows/sql/82_homeowner_ledger_view.sql', 'sql/82_homeowner_ledger_view.sql'],
+  ['aws/workflows/sql/83_homeowner_signing_capabilities.sql', 'sql/83_homeowner_signing_capabilities.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

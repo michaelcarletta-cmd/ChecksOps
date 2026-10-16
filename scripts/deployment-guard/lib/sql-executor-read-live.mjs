@@ -10,7 +10,7 @@
  *      invoke script refuses any payload action other than the bound one;
  *   2. the authorization package carries READ_LIVE_EXPECTED_SENTINEL as its
  *      expected live definition, which no reviewed pin can equal, so the
- *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79, 80, 81) refuse apply with it
+ *      read-live-selectable pins (ledger, 71, 72, 76, 77, 78, 79, 80, 81, 82, 83) refuse apply with it
  *      before connecting.
  *
  * Failures print only an error code and a fixed message: executor and driver
@@ -89,6 +89,29 @@ const SHA256_KEYS = Object.freeze(['default_acl_sha256', 'acl_sha256', 'function
 // Label maps: values must be short lowercase labels; keys are pinned object names.
 const LABEL_MAP_KEYS = Object.freeze(['consent_state', 'member_policy_states', 'privilege_state', 'function_states']);
 
+// SQL 82/83 report: flags, counts, hashes and short catalog text (types, signatures,
+// grantee roles, status labels). The executor never puts owner names, definitions or
+// row data in it; anything else that slips in reads 'unrecognized'.
+const REPORT_KEY_RE = /^[a-z0-9_]{1,64}$/;
+const REPORT_TEXT_RE = /^[A-Za-z0-9_ ,.()[\]:=-]{0,200}$/;
+const FAILURE_RE = /^[a-z0-9_:]{1,96}$/;
+
+function reportOnly(value, depth = 0) {
+  if (value === null || typeof value === 'boolean') return value;
+  if (Number.isInteger(value) && value >= 0) return value;
+  if (typeof value === 'string') return REPORT_TEXT_RE.test(value) ? value : 'unrecognized';
+  if (depth >= 6) return 'unrecognized';
+  if (Array.isArray(value)) return value.slice(0, 100).map((inner) => reportOnly(inner, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, inner] of Object.entries(value)) {
+      if (REPORT_KEY_RE.test(key)) out[key] = reportOnly(inner, depth + 1);
+    }
+    return out;
+  }
+  return 'unrecognized';
+}
+
 function labelsOnly(value) {
   if (typeof value === 'string') return LABEL_RE.test(value) ? value : 'unrecognized';
   if (!value || typeof value !== 'object' || Array.isArray(value)) return 'unrecognized';
@@ -148,6 +171,13 @@ export function readLiveSummary(invokeResult, { migration, pin } = {}) {
   }
   for (const key of LABEL_MAP_KEYS) {
     if (receipt[key] && typeof receipt[key] === 'object') summary[key] = labelsOnly(receipt[key]);
+  }
+  if (Array.isArray(receipt.precondition_failures)) {
+    summary.precondition_failures = receipt.precondition_failures.slice(0, 100)
+      .map((name) => (FAILURE_RE.test(String(name)) ? String(name) : 'unrecognized'));
+  }
+  if (receipt.homeowner_inspect && typeof receipt.homeowner_inspect === 'object') {
+    summary.homeowner_inspect = reportOnly(receipt.homeowner_inspect);
   }
   if (Array.isArray(receipt.drifted_preserved_functions)) {
     summary.drifted_preserved_function_count = receipt.drifted_preserved_functions.length;
