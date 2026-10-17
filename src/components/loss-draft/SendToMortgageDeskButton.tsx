@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { Headset, Loader2 } from "lucide-react";
+import { useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
 
 interface Props {
   checkIntakeItemId: string;
@@ -69,6 +70,7 @@ export function SendToMortgageDeskButton({
   });
   const request = requests?.[requests.length - 1] as any;
   const firstRequest = requests?.[0] as any;
+  const { data: returnAlert } = useMortgageDeskReturnAlert(checkIntakeItemId);
 
 
   // Prefill context from claim + check when the dialog opens
@@ -270,6 +272,14 @@ export function SendToMortgageDeskButton({
 
   return (
     <>
+      {isCompleted && returnAlert?.actionRequired && (
+        <Badge
+          variant="outline"
+          className="h-7 gap-1 border-amber-400/40 text-amber-200 bg-amber-500/10"
+        >
+          Returned from Mortgage Desk · Action Required
+        </Badge>
+      )}
       <Button
         size="sm"
         variant="outline"

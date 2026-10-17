@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Send, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { displayCheckMessageBody } from "@/lib/mortgageDeskReturn";
 
 interface Props {
   checkId: string;
@@ -266,7 +267,7 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
                       </button>
                     )}
                   </div>
-                  <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                  <p className="whitespace-pre-wrap break-words">{displayCheckMessageBody(m.body)}</p>
                 </div>
               </div>
             );
