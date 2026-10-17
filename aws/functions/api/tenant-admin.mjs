@@ -22,6 +22,7 @@ import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
+import { bindProductionCognitoLock } from './identity-env.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -167,7 +168,7 @@ const deleteCreatedCognitoUser = async (adminCognito, email, client, cognitoSub)
 };
 
 export const runTenantInviteUser = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
@@ -302,6 +303,28 @@ export const runTenantInviteUser = async ({
     return failInvite(403, 'platform_owner_not_invitable', 'The platform owner cannot be added to a company');
   }
 
+  // Production /identity/me resolves via identity_production_cognito_locks
+  // (live since before this release). Login must not write that table, so the
+  // invite binds it here with the server-resolved Cognito sub + application
+  // user only (never email, client user id or tenant_id). Staging is a no-op.
+  let lockResult;
+  try {
+    lockResult = await bindProductionCognitoLock(client, {
+      cognitoSub: String(cognitoSub),
+      applicationUserId: appUserId,
+      identityScope,
+    });
+  } catch (error) {
+    return failInvite(500, 'identity_lock_failed', error?.message || error);
+  }
+  if (!lockResult.ok) {
+    return failInvite(
+      lockResult.error === 'identity_lock_conflict' ? 409 : 500,
+      lockResult.error,
+      lockResult.message,
+    );
+  }
+
   try {
     await client.query(
       `INSERT INTO public.tenant_users (id, tenant_id, user_id, created_at)
@@ -365,6 +388,7 @@ export const runTenantInviteUser = async ({
 export const handleTenantInviteUser = (event, deps = {}) => withIdentity(event, (ctx) => (
   runTenantInviteUser({
     ...ctx,
+    identityScope: deps.identityScope,
     send: deps.sendViaSesOrSink,
     cognitoJson: deps.cognitoJson,
   })
@@ -761,6 +785,25 @@ export const runHireMortgageAgent = async ({
         spoofFieldsIgnored: spoof,
       };
     }
+  }
+
+  // Live production behaviour: an (re)hired agent's compensation account is
+  // active. A savepoint keeps the hire going if SQL 47 is not applied.
+  try {
+    await client.query('SAVEPOINT hire_mortgage_agent_account');
+    await client.query(
+      `INSERT INTO public.mortgage_agent_accounts (application_user_id, status)
+       VALUES ($1::uuid, 'active')
+       ON CONFLICT (application_user_id) DO UPDATE
+         SET status = 'active',
+             deactivated_at = NULL,
+             deactivated_by = NULL,
+             updated_at = now()`,
+      [appUserId],
+    );
+    await client.query('RELEASE SAVEPOINT hire_mortgage_agent_account');
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT hire_mortgage_agent_account'); } catch { /* request rolls back */ }
   }
 
   const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;

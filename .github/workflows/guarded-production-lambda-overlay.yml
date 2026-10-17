@@ -61,6 +61,7 @@ on:
           - mortgage-library-doc-types.mjs
           - tenant-library-rules.mjs
           - tenant-library.mjs
+          - write-signature.mjs
           - signature-library-source.mjs
           - platform-announcements.mjs
           - mortgage-library-docs.mjs
@@ -69,7 +70,6 @@ on:
           - storage.mjs
           - storage-write.mjs
           - email-branding.mjs
-          - write-signature.mjs
           - esign.mjs
           - endorsement-composite.mjs
           - check-endorsement.mjs
