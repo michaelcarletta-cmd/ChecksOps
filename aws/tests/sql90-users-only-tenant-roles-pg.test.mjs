@@ -181,13 +181,30 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
 
     // Refuses to run without its prerequisites, and changes nothing.
     await client.query('BEGIN');
-    await client.query('DROP FUNCTION public.aws_can_access_tax_profiles(uuid) CASCADE');
+    await client.query('DROP FUNCTION public.aws_can_write_same_tenant_user(uuid) CASCADE');
     await assert.rejects(client.query(fs.readFileSync(SQL_90, 'utf8')), (error) => error.code === '55000' && /sql90_prerequisite_missing/.test(error.message));
+    await client.query('ROLLBACK');
+    // Production has no aws_can_access_tax_profiles (2026-10-17): SQL 90 creates it.
+    await client.query('BEGIN');
+    await client.query('DROP FUNCTION public.aws_can_access_tax_profiles(uuid) CASCADE');
+    await client.query(fs.readFileSync(SQL_90, 'utf8'));
+    assert.equal((await client.query("SELECT to_regprocedure('public.aws_can_access_tax_profiles(uuid)') IS NOT NULL AS present")).rows[0].present, true);
     await client.query('ROLLBACK');
 
     // Apply twice: idempotent.
     await client.query(fs.readFileSync(SQL_90, 'utf8'));
     await client.query(fs.readFileSync(SQL_90, 'utf8'));
+    // The replaced SQL 35 / SQL 29 helpers get the SQL 90 helper ACL even where PUBLIC had EXECUTE (production).
+    let replacedHelpers = 0;
+    for (const fnName of ['public.aws_is_tenant_manager_admin()', 'public.aws_can_manage_mortgage_library(uuid)']) {
+      // Replaced only when present (SQL 29's helper is not in this fixture).
+      if (!(await client.query('SELECT to_regprocedure($1) IS NOT NULL AS p', [fnName])).rows[0].p) continue;
+      replacedHelpers += 1;
+      const acl = (await client.query(`SELECT has_function_privilege('checksops', $1, 'EXECUTE') AS c, has_function_privilege('authenticated', $1, 'EXECUTE') AS a,
+        EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid = to_regprocedure($1))) x WHERE x.grantee = 0) AS public_entry`, [fnName])).rows[0];
+      assert.deepEqual(acl, { c: true, a: true, public_entry: false }, fnName);
+    }
+    assert.ok(replacedHelpers >= 1, 'at least the SQL 35 helper is in the fixture');
 
     // Every member (stored role viewer included) has every tenant right.
     for (const user of MEMBERS) {
