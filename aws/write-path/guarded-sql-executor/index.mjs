@@ -120,6 +120,8 @@ import {
   isSql89CheckIntakeColumnUpdate,
   isSql29MortgageOpsLibraryParity,
   isSql30TenantDocumentsDocType,
+  RELEASE_2026_10_17_PENDING_SQL_PINS,
+  releaseSqlMigrationKey,
   librarySqlExecutableText,
   librarySharedPostconditionFailures,
   librarySharedPreconditionFailures,
@@ -142,6 +144,16 @@ import {
   STAKEHOLDER_GRANTEES,
   stakeholderGrantStateText,
 } from './lib/sql-executor-auth.mjs';
+import {
+  readReleaseSqlState,
+  readReleaseUnrelatedSnapshot,
+  releaseChangedCategories,
+  releaseSharedPostconditionFailures,
+  releaseSharedPreconditionFailures,
+  releaseSpec,
+  releaseSqlExecutableText,
+  releaseSqlReport,
+} from './lib/release-sql-state.mjs';
 import {
   AUTHORIZED_SYNTHETIC_FIXTURE,
   EMPTY_FIXTURE_SHA256,
@@ -197,6 +209,9 @@ const SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/88_cla
 const SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE = path.join(ROOT, 'sql/89_check_intake_items_column_update.sql');
 const SQL29_MORTGAGE_OPS_LIBRARY_PARITY_FILE = path.join(ROOT, 'sql/29_mortgage_ops_library_parity.sql');
 const SQL30_TENANT_DOCUMENTS_DOC_TYPE_FILE = path.join(ROOT, 'sql/30_tenant_documents_mortgage_doc_type.sql');
+// SQL 90-97: packed as sql/<basename> (sql-executor-ensure.mjs EXECUTOR_PACK_MEMBERS).
+const RELEASE_SQL_FILES = Object.freeze(Object.fromEntries(Object.entries(RELEASE_2026_10_17_PENDING_SQL_PINS)
+  .map(([key, pin]) => [key, path.join(ROOT, 'sql', path.basename(pin.filename))])));
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
 const SQL40_FILE = path.join(ROOT, 'sql/40_collection_v2_synthetic_uat_cleanup.sql');
 const SQL53_FORBIDDEN_MARKERS = [
@@ -2109,6 +2124,158 @@ async function handleLibrarySqlMigration({ key, event, authorization, identity, 
         result: 'applied',
         executor_identity: identity,
         library_inspect: librarySqlReport(after.details),
+      },
+    });
+  } catch (error) {
+    await rollback();
+    return fail(CODES.UNRELATED_MUTATION, String(error?.message || error).slice(0, 400));
+  } finally {
+    await rollback();
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
+// --- SQL 90-97: release 2026-10-17 migrations -----------------------------------
+// One engine (lib/release-sql-state.mjs, specs in lib/release-sql-specs.mjs), shared with the
+// production tools: the state reader, code-derived fingerprints, predecessor rules, pre/post
+// conditions and the unrelated-catalog snapshot. The files carry no BEGIN/COMMIT; the
+// executor runs each inside its own transaction, verifies, and commits or rolls back.
+
+const RELEASE_SHA256_RE = /^[0-9a-f]{64}$/;
+
+async function handleReleaseSqlMigration({ key, event, authorization, identity, connect, sqlFile, pin }) {
+  const label = releaseSpec(key).label;
+  const embedded = readEmbeddedSql(sqlFile, pin.source_sha256);
+  if (!embedded.ok) return embedded;
+  const text = embedded.details.text;
+  const executable = releaseSqlExecutableText(key, text);
+  if (!executable) {
+    return fail(CODES.UNRELATED_MUTATION, `embedded ${label} is not the reviewed file`);
+  }
+  const readOnly = event.action === 'inspect' || event.action === 'verify_data' || event.action === 'authorize';
+  if (!readOnly && event.action !== 'apply') {
+    return fail(CODES.INVALID_MANIFEST, `unsupported ${label} executor action ${event.action}`);
+  }
+  if (event.action === 'apply') {
+    if (!RELEASE_SHA256_RE.test(String(pin.expected_live_definition_sha256 || ''))) {
+      return fail(CODES.SQL_COLLISION, `${label} pin has no reviewed pre-apply live definition hash; run read-live and record it in a reviewed pin change`);
+    }
+    if (!(
+      event.filename === pin.filename
+      && event.migration_id === pin.migration_id
+      && event.source_sha256 === pin.source_sha256
+      && event.intended_replacement_sha256 === pin.intended_replacement_sha256
+      && event.expected_live_definition_sha256 === pin.expected_live_definition_sha256
+      && event.commit === pin.commit
+    )) {
+      return fail(CODES.SQL_COLLISION, `${label} apply is bound to the exact allowlisted pin`);
+    }
+  }
+
+  let client;
+  let inTx = false;
+  const rollback = async () => {
+    if (inTx) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    inTx = false;
+  };
+  try {
+    client = await connect();
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      inTx = true;
+      const state = await readReleaseSqlState(client, key);
+      if (!state.ok) return state;
+      const s = state.details;
+      const live = s.live_definition_sha256;
+      const failures = releaseSharedPreconditionFailures(key, s, text);
+      return ok({
+        authorization: authorization.details,
+        receipt: {
+          workstream: event.workstream_id,
+          commit: event.commit,
+          sql_file: event.filename,
+          before_hash: live,
+          after_hash: live,
+          result: event.action,
+          executor_identity: identity,
+          live_definition_sha256: live,
+          pin_executable: RELEASE_SHA256_RE.test(String(pin.expected_live_definition_sha256 || '')),
+          already_applied: live === pin.intended_replacement_sha256,
+          precondition_failures: failures,
+          apply_preconditions_met: failures.length === 0
+            && live !== pin.intended_replacement_sha256
+            && live === pin.expected_live_definition_sha256,
+          release_sql_inspect: releaseSqlReport(key, s, text),
+        },
+      });
+    }
+
+    await client.query('BEGIN');
+    inTx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${key}_release_sql`]);
+    if (isConsumed(event.one_use_id)) {
+      await rollback();
+      return fail(CODES.SQL_COLLISION, 'one_use_id has already been consumed; replay is forbidden', { one_use_id: event.one_use_id });
+    }
+    const before = await readReleaseSqlState(client, key);
+    if (!before.ok) {
+      await rollback();
+      return before;
+    }
+    const b = before.details;
+    const liveBefore = b.live_definition_sha256;
+    if (liveBefore === pin.intended_replacement_sha256) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `${label} is already in place; refuse re-apply`);
+    }
+    if (liveBefore !== event.expected_live_definition_sha256) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, 'expected live definition changed immediately before apply');
+    }
+    const preFailures = releaseSharedPreconditionFailures(key, b, text);
+    if (preFailures.length) {
+      await rollback();
+      return fail(CODES.DEPLOYMENT_COLLISION, `${label} pre-apply conditions are not met`, { failed: preFailures });
+    }
+    const snapshotBefore = await readReleaseUnrelatedSnapshot(client, key);
+
+    await client.query("SELECT set_config('search_path', 'pg_catalog', true)");
+    await client.query(executable);
+
+    const after = await readReleaseSqlState(client, key);
+    if (!after.ok) {
+      await rollback();
+      return after;
+    }
+    const snapshotAfter = await readReleaseUnrelatedSnapshot(client, key);
+    const postFailures = releaseSharedPostconditionFailures(key, b, after.details, pin);
+    const changed = releaseChangedCategories(snapshotBefore, snapshotAfter);
+    if (postFailures.length || changed.length) {
+      await rollback();
+      return fail(CODES.UNRELATED_MUTATION, `${label} did not leave exactly the reviewed state`, {
+        failed: postFailures,
+        unrelated_changed: changed,
+      });
+    }
+
+    await client.query('COMMIT');
+    inTx = false;
+    consumeOneUse(event.one_use_id);
+    return ok({
+      receipt: {
+        workstream: event.workstream_id,
+        commit: event.commit,
+        sql_file: event.filename,
+        before_hash: liveBefore,
+        after_hash: after.details.live_definition_sha256,
+        result: 'applied',
+        executor_identity: identity,
+        release_sql_inspect: releaseSqlReport(key, after.details, text),
       },
     });
   } catch (error) {
@@ -6568,6 +6735,9 @@ export function createHandler({
   sql29Pin = AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
   sqlFile30 = SQL30_TENANT_DOCUMENTS_DOC_TYPE_FILE,
   sql30Pin = AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
+  // SQL 90-97 by key (sql90 ... sql97): files and pins, for tests.
+  releaseSqlFiles = RELEASE_SQL_FILES,
+  releaseSqlPins = RELEASE_2026_10_17_PENDING_SQL_PINS,
   sqlFile39 = SQL39_FILE,
   sqlFile40 = SQL40_FILE,
   expectedSql43Hash = AUTHORIZED_SQL44.expected_sql43_definition_sha256,
@@ -6685,6 +6855,13 @@ export function createHandler({
 
     if (isSql30TenantDocumentsDocType(event)) {
       return handleLibrarySqlMigration({ key: 'sql30', event, authorization, identity, connect, sqlFile: sqlFile30, pin: sql30Pin });
+    }
+
+    const releaseKey = releaseSqlMigrationKey(event);
+    if (releaseKey) {
+      const sqlFile = releaseSqlFiles[releaseKey] || RELEASE_SQL_FILES[releaseKey];
+      const pin = releaseSqlPins[releaseKey] || RELEASE_2026_10_17_PENDING_SQL_PINS[releaseKey];
+      return handleReleaseSqlMigration({ key: releaseKey, event, authorization, identity, connect, sqlFile, pin });
     }
 
     if (isLedger20261007193200(event)) {

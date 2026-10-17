@@ -42,6 +42,7 @@ import { evaluateSql86ProductionApply } from '../../scripts/deployment-guard/lib
 import { evaluateSql87ProductionApply } from '../../scripts/deployment-guard/lib/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 import { evaluateSql88ProductionApply } from '../../scripts/deployment-guard/lib/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 import { evaluateSql89ProductionApply } from '../../scripts/deployment-guard/lib/sql89-check-intake-column-update-production-apply.mjs';
+import { RELEASE_PRODUCTION, evaluateReleaseProductionApply } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
 import { main as oneShotMain } from '../../scripts/deployment-guard/production-sql-one-shot.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -63,6 +64,8 @@ const EVALUATORS = Object.freeze({
   sql87: evaluateSql87ProductionApply,
   sql88: evaluateSql88ProductionApply,
   sql89: evaluateSql89ProductionApply,
+  // SQL 90-97 share the release evaluator.
+  ...Object.fromEntries(Object.keys(RELEASE_PRODUCTION).map((key) => [key, (input, opts) => evaluateReleaseProductionApply(key, input, opts)])),
 });
 const realPin = (key) => JSON.parse(fs.readFileSync(path.join(ROOT, ONE_SHOT_TOOLS[key].pin_rel), 'utf8'));
 // A pin whose staging acceptance is still pending (SQL 71 today) gets a placeholder

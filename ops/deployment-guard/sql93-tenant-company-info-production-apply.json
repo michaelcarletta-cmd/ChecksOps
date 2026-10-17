@@ -14,7 +14,7 @@
     "public.aws_tenants_member_column_guard()"
   ],
   "expected_live_definition_sha256": null,
-  "intended_replacement_sha256": null,
+  "intended_replacement_sha256": "1032695c682d08934f5d4213e866df30100bd7ad855fb84cd4a4fbb9dc7aae58",
   "authorization_phrase": "APPLY_TENANT_COMPANY_INFO",
   "predecessors": [
     "sql90"
@@ -25,10 +25,19 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "tooling": {
-    "status": "missing",
-    "production_tool": null,
-    "staging_executor_handler": null,
-    "note": "Pending: no guarded tooling exists for SQL 93 yet. Needed before this pin can be execute-authorized: a production-apply tool with --inspect (scripts/deployment-guard/sql93-tenant-company-info-production-apply.mjs and its lib), a guarded staging SQL executor handler and workflow choice (sql93-tenant-company-info), a code-derived intended-state fingerprint in scripts/deployment-guard/lib/sql-executor-auth.mjs (intended_replacement_sha256 is null until then), the production one-shot entry, a runbook and PostgreSQL 16 tests, as SQL 87-89 have."
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql93-tenant-company-info-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql93-tenant-company-info",
+    "one_shot_migration": "sql93",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-90-97-apply.md",
+    "tests": [
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 93: sql93-tenant-company-info-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql93-tenant-company-info); production-sql-one-shot.mjs --migration sql93. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
     "status": "pending",
@@ -43,8 +52,8 @@
     "note": "Pending: no read-only production inspect has been run for SQL 93 (and no inspect tool exists yet). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
-    "fingerprint": null,
-    "note": "Tenant company information and letterhead columns on public.tenants plus the aws_tenants_member_column_guard BEFORE UPDATE trigger (business_address, business_phone and email_reply_to are not member-writable). The fingerprint is defined by the SQL 93 tooling (pending)."
+    "fingerprint": "1032695c682d08934f5d4213e866df30100bd7ad855fb84cd4a4fbb9dc7aae58",
+    "note": "Tenant company information and letterhead columns on public.tenants plus the aws_tenants_member_column_guard BEFORE UPDATE trigger (business_address, business_phone and email_reply_to are not member-writable). The fingerprint is releaseIntendedHash('sql93', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 1032695c682d08934f5d4213e866df30100bd7ad855fb84cd4a4fbb9dc7aae58."
   },
   "staging_acceptance": {
     "ok": false,

@@ -12,7 +12,7 @@
   "source_sha256": "0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137",
   "function_identities": [],
   "expected_live_definition_sha256": null,
-  "intended_replacement_sha256": null,
+  "intended_replacement_sha256": "a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2",
   "authorization_phrase": "APPLY_REMOVE_FREEDOM_CLAIMS_BRIDGE",
   "predecessors": [],
   "order_note": "After app-services.mjs and the ingest-shared-check.mjs 410 stub are live (plan step 8): it drops SQL 70's aws_ingest_shared_check. The SQL 89 precondition sql70_ingest_function_security_definer is skipped once SQL 89 is already_applied.",
@@ -21,10 +21,19 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "tooling": {
-    "status": "missing",
-    "production_tool": null,
-    "staging_executor_handler": null,
-    "note": "Pending: no guarded tooling exists for SQL 95 yet. Needed before this pin can be execute-authorized: a production-apply tool with --inspect (scripts/deployment-guard/sql95-remove-freedom-claims-bridge-production-apply.mjs and its lib), a guarded staging SQL executor handler and workflow choice (sql95-remove-freedom-claims-bridge), a code-derived intended-state fingerprint in scripts/deployment-guard/lib/sql-executor-auth.mjs (intended_replacement_sha256 is null until then), the production one-shot entry, a runbook and PostgreSQL 16 tests, as SQL 87-89 have."
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql95-remove-freedom-claims-bridge-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql95-remove-freedom-claims-bridge",
+    "one_shot_migration": "sql95",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-90-97-apply.md",
+    "tests": [
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 95: sql95-remove-freedom-claims-bridge-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql95-remove-freedom-claims-bridge); production-sql-one-shot.mjs --migration sql95. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
     "status": "pending",
@@ -39,8 +48,8 @@
     "note": "Pending: no read-only production inspect has been run for SQL 95 (and no inspect tool exists yet). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
-    "fingerprint": null,
-    "note": "Drops trg_notify_freedom_status_change, notify_freedom_status_change(), list_checks_by_freedom_claim(text, uuid), aws_ingest_shared_check(jsonb), vault_create_bridge_secret(text) and vault_update_bridge_secret(text). The fingerprint is defined by the SQL 95 tooling (pending)."
+    "fingerprint": "a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2",
+    "note": "Drops trg_notify_freedom_status_change, notify_freedom_status_change(), list_checks_by_freedom_claim(text, uuid), aws_ingest_shared_check(jsonb), vault_create_bridge_secret(text) and vault_update_bridge_secret(text). The fingerprint is releaseIntendedHash('sql95', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2."
   },
   "staging_acceptance": {
     "ok": false,
