@@ -85,6 +85,28 @@ export const APP_ROLE_WORDS = Object.freeze([
   'contractor', 'client', 'homeowner', 'vendor', 'subcontractor', 'sales_rep', 'assistant', 'operator',
   'platform_owner',
 ]);
+/**
+ * Status values a policy expression may compare with and still be printed (policy text only;
+ * function text keeps the role / schema allowlist). Fixed and taken from repository sources,
+ * so a live agent policy on these tables can be copied back into the repo.
+ */
+/** mortgage_handling_requests.status: the CHECK in
+ *  supabase/migrations/20260715110727_2bb7c7e2-f94a-476f-87fa-db5f47ccc030.sql
+ *  (status IN ('requested','in_progress','completed','cancelled')); the same set is used by
+ *  aws/functions/api/workflow-rpc.mjs executeUpdateMortgageStatus (in_progress, completed,
+ *  cancelled), src/pages/mortgage-ops/MortgageOpsQueue.tsx (requested, in_progress, completed)
+ *  and aws/rls/sql/29_mortgage_ops_library_parity.sql (requested, in_progress). */
+export const MORTGAGE_HANDLING_REQUEST_STATUS_WORDS = Object.freeze(['requested', 'in_progress', 'completed', 'cancelled']);
+/** mortgage_agent_accounts.status: the CHECK in
+ *  aws/tests/fixtures/mortgage-agent-compensation/47_mortgage_agent_compensation.sql
+ *  (status IN ('active', 'inactive')) and aws/functions/api/mortgage-agent-compensation.mjs. */
+export const MORTGAGE_AGENT_ACCOUNT_STATUS_WORDS = Object.freeze(['active', 'inactive']);
+/** check_intake_items status / stage values used in repository policies: none (no repository
+ *  policy on check_intake_items compares status or stage with a literal). */
+export const CHECK_INTAKE_POLICY_STATUS_WORDS = Object.freeze([]);
+export const POLICY_STATUS_WORDS = Object.freeze([
+  ...MORTGAGE_HANDLING_REQUEST_STATUS_WORDS, ...MORTGAGE_AGENT_ACCOUNT_STATUS_WORDS, ...CHECK_INTAKE_POLICY_STATUS_WORDS,
+]);
 /** Schema names that appear as literals in a rendered SET search_path. */
 const SCHEMA_WORDS = Object.freeze(['public', 'auth', 'pg_catalog', 'pg_temp', 'extensions']);
 const MAX_NUMERIC_DIGITS = 4;
@@ -172,8 +194,8 @@ export function sqlLiterals(text) {
  * string, a string literal other than a role name (live roles, the app_role labels,
  * APP_ROLE_WORDS), a schema name or '', or a number longer than MAX_NUMERIC_DIGITS digits.
  */
-export function literalAllowlistReason(text, allowedWords = [], knownIdentifiers = []) {
-  const allowed = new Set([...allowedWords, ...APP_ROLE_WORDS, ...SCHEMA_WORDS, '']);
+export function literalAllowlistReason(text, allowedWords = [], knownIdentifiers = [], extraLiteralWords = []) {
+  const allowed = new Set([...allowedWords, ...APP_ROLE_WORDS, ...SCHEMA_WORDS, ...extraLiteralWords, '']);
   const known = new Set([...allowedWords, ...SCHEMA_WORDS, ...DESK_TABLES, ...OWNERSHIP_TABLES, ...knownIdentifiers]);
   const lit = sqlLiterals(text);
   if (lit.comments) return 'comment_present';
@@ -422,15 +444,15 @@ const asArray = (v) => (Array.isArray(v) ? v : (v == null ? [] : String(v).repla
 
 /**
  * A policy USING / WITH CHECK expression: printed only when it has no id-, email- or
- * long-number-shaped content and passes the same literal allowlist as function text;
- * otherwise only its sha256 (an id-shaped reason is kept, every other is
- * 'literal_beyond_role_names').
+ * long-number-shaped content and passes the same literal allowlist as function text, with
+ * the fixed POLICY_STATUS_WORDS also allowed as string literals; otherwise only its sha256
+ * (an id-shaped reason is kept, every other is 'literal_beyond_role_names').
  */
 export function expressionReport(text, allowedWords = [], knownIdentifiers = []) {
   if (text == null) return { text: null, sha256: null };
   const shaped = identifierShapedContent(text);
   if (shaped) return { text: null, sha256: sha256(text), text_withheld: shaped };
-  if (literalAllowlistReason(text, allowedWords, knownIdentifiers)) return { text: null, sha256: sha256(text), text_withheld: 'literal_beyond_role_names' };
+  if (literalAllowlistReason(text, allowedWords, knownIdentifiers, POLICY_STATUS_WORDS)) return { text: null, sha256: sha256(text), text_withheld: 'literal_beyond_role_names' };
   return { text, sha256: sha256(text) };
 }
 

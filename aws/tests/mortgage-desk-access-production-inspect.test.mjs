@@ -27,7 +27,10 @@ import { main } from '../../scripts/deployment-guard/mortgage-desk-access-produc
 import {
   CONFIG_REL,
   INSPECT_STATEMENTS,
+  MORTGAGE_AGENT_ACCOUNT_STATUS_WORDS,
+  MORTGAGE_HANDLING_REQUEST_STATUS_WORDS,
   NAMED_FUNCTIONS,
+  POLICY_STATUS_WORDS,
   buildRepoIndex,
   definitionTextSafety,
   expressionReport,
@@ -223,7 +226,14 @@ test('policy text is printed only when every literal is a role or schema name an
     "((auth.jwt() ->> 'email'::text) = 'jane.doe@corp'::text)",
     "(external_id = '01ARZ3NDEKTSV4RRFFQ69G5FAV'::text)",
     "(tenant_slug = 'acme-roofing'::text)",
+    // 'accepted' is not a status any repository source gives mortgage_handling_requests.
     "(status = ANY (ARRAY['requested'::text, 'accepted'::text]))",
+    "(status = 'jane'::text)",
+    "(public.aws_is_active_mortgage_agent() AND (status = 'requested'::text) AND (mortgage_company = 'Rocket Mortgage'::text))",
+    "((status = 'in_progress'::text) AND (tenant_slug = 'acme-roofing'::text))",
+    "(status = 'Requested'::text)",
+    // Status words are policy-literal words only, never quoted identifiers.
+    '("requested" IS NOT NULL)',
     "(current_setting('request.jwt.claims'::text, true) IS NOT NULL)",
     "(note = E'Jane\\nDoe'::text)",
     '(note = $x$Jane Doe$x$)',
@@ -253,6 +263,10 @@ test('policy text is printed only when every literal is a role or schema name an
     ['(length(body) <= 4000)', []],
     ['("check_id" IS NOT NULL)', [], ['check_id']],
     ['true', []],
+    // The fixed repository status words.
+    ["(public.aws_is_active_mortgage_agent() AND (status = ANY (ARRAY['requested'::text, 'in_progress'::text])))", []],
+    ["((status = ANY (ARRAY['completed'::text, 'cancelled'::text])) AND (assigned_employee_id = auth.uid()))", []],
+    ["(EXISTS ( SELECT 1 FROM public.mortgage_agent_accounts a WHERE ((a.status = 'active'::text) AND (a.status <> 'inactive'::text))))", []],
   ];
   for (const [text, words, known = []] of printed) {
     const report = expressionReport(text, words, known);
@@ -260,6 +274,22 @@ test('policy text is printed only when every literal is a role or schema name an
     assert.match(report.sha256, /^[0-9a-f]{64}$/);
   }
   assert.deepEqual(expressionReport(null), { text: null, sha256: null });
+});
+
+test('the policy status words are fixed, come from the repository CHECK constraints, and do not apply to function text', () => {
+  assert.deepEqual([...POLICY_STATUS_WORDS], ['requested', 'in_progress', 'completed', 'cancelled', 'active', 'inactive']);
+  const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+  assert.match(read('supabase/migrations/20260715110727_2bb7c7e2-f94a-476f-87fa-db5f47ccc030.sql'),
+    /CHECK \(status IN \('requested','in_progress','completed','cancelled'\)\)/);
+  assert.deepEqual([...MORTGAGE_HANDLING_REQUEST_STATUS_WORDS], ['requested', 'in_progress', 'completed', 'cancelled']);
+  assert.match(read('aws/tests/fixtures/mortgage-agent-compensation/47_mortgage_agent_compensation.sql'),
+    /CREATE TABLE IF NOT EXISTS public\.mortgage_agent_accounts[\s\S]*?CHECK \(status IN \('active', 'inactive'\)\)/);
+  assert.deepEqual([...MORTGAGE_AGENT_ACCOUNT_STATUS_WORDS], ['active', 'inactive']);
+  assert.ok(Object.isFrozen(POLICY_STATUS_WORDS));
+  // Function text keeps the role / schema allowlist only.
+  const body = "SELECT status = 'requested'";
+  const def = `CREATE OR REPLACE FUNCTION public.f()\n RETURNS boolean\n LANGUAGE sql\nAS $function$${body}$function$\n`;
+  assert.equal(definitionTextSafety(def, body, []).reason, 'literal_beyond_role_names');
 });
 
 test('definition text is safe only with role and schema name literals and short numbers', () => {
@@ -397,7 +427,9 @@ $$;`,
   policyBlock('12_final_select_policies.sql', 'aws_select_mortgage_handling_requests'),
   policyBlock('24_complete_write_policies.sql', 'aws_write_mortgage_handling_requests'),
   `CREATE POLICY prod_agent_read_mortgage_handling_requests ON public.mortgage_handling_requests FOR SELECT TO authenticated
-    USING (public.aws_is_active_mortgage_agent() AND status = ANY (ARRAY['requested', 'accepted']));`,
+    USING (public.aws_is_active_mortgage_agent() AND status = ANY (ARRAY['requested', 'in_progress']));`,
+  `CREATE POLICY prod_agent_accepted_check_messages ON public.check_messages FOR SELECT TO authenticated
+    USING (public.aws_is_active_mortgage_agent() AND body <> 'accepted' AND body <> 'jane');`,
   `CREATE POLICY prod_agent_update_mortgage_handling_requests ON public.mortgage_handling_requests FOR UPDATE TO authenticated
     USING (assigned_employee_id = auth.uid()) WITH CHECK (assigned_employee_id = auth.uid() OR tenant_id = '${LEAK_UUID}'::uuid);`,
   'CREATE POLICY aws_select_check_messages ON public.check_messages FOR SELECT TO authenticated USING (true);',
@@ -468,7 +500,7 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
 
     // No row data, ids, emails or the drifted literal anywhere in the output.
     for (const leak of [TENANT, CHECK, REQ, AGENT, LEAK_UUID, 'agent@example.com', 'private note', 'Ledger Bank',
-      COMMENT_PII, 'Jane Doe', '555-867-5309', 'Acme Roofing', QUOTED_PII, POLICY_PII, "'requested'", "'accepted'"]) {
+      COMMENT_PII, 'Jane Doe', '555-867-5309', 'Acme Roofing', QUOTED_PII, POLICY_PII, "'accepted'", "'jane'"]) {
       assert.ok(!text.includes(leak), `leaked ${leak}`);
     }
 
@@ -493,12 +525,16 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
     assert.equal(pol.aws_write_mortgage_handling_requests.command, 'ALL');
     assert.equal(pol.aws_write_mortgage_handling_requests.with_check.text, 'public.aws_can_write_tenant(tenant_id)');
     assert.equal(pol.prod_agent_read_mortgage_handling_requests.created_in_repo, false);
-    // Its status literals ('requested', 'accepted') are not role names: only the hash is printed.
-    assert.equal(pol.prod_agent_read_mortgage_handling_requests.using.text, null);
-    assert.equal(pol.prod_agent_read_mortgage_handling_requests.using.text_withheld, 'literal_beyond_role_names');
+    // Only repository status words besides the helper call: the exact text is printed.
+    assert.equal(pol.prod_agent_read_mortgage_handling_requests.using.text,
+      "(public.aws_is_active_mortgage_agent() AND (status = ANY (ARRAY['requested'::text, 'in_progress'::text])))");
+    assert.equal(pol.prod_agent_read_mortgage_handling_requests.using.text_withheld, undefined);
     assert.match(pol.prod_agent_read_mortgage_handling_requests.using.sha256, /^[0-9a-f]{64}$/);
     assert.deepEqual(pol.prod_agent_read_mortgage_handling_requests.depends_on_functions, ['public.aws_is_active_mortgage_agent']);
     const cmPol = Object.fromEntries(report.tables.check_messages.policies.map((p) => [p.policy, p]));
+    // A word outside the fixed status list ('accepted', 'jane') is still withheld.
+    assert.equal(cmPol.prod_agent_accepted_check_messages.using.text, null);
+    assert.equal(cmPol.prod_agent_accepted_check_messages.using.text_withheld, 'literal_beyond_role_names');
     assert.equal(cmPol.prod_desk_exception_check_messages.using.text, null);
     assert.equal(cmPol.prod_desk_exception_check_messages.using.text_withheld, 'literal_beyond_role_names');
     assert.equal(cmPol.prod_desk_admin_check_messages.using.text, "(CURRENT_USER = 'checksops'::name)");

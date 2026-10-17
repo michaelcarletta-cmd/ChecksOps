@@ -43,7 +43,10 @@ run-to-run comparison.
   (`quoted_identifier_beyond_known_names`), no nested dollar-quoted or `E''` string, no
   number longer than 4 digits, and nothing shaped like a UUID, email or long number anywhere.
   Otherwise the report says `definition_withheld: "differs from repo (<reason>)"`.
-- Policy expressions (`using` / `with_check`) go through the same allowlist. If one has a
+- Policy expressions (`using` / `with_check`) go through the same allowlist, plus a fixed list
+  of repository status words (`POLICY_STATUS_WORDS`: `mortgage_handling_requests.status`
+  `requested`, `in_progress`, `completed`, `cancelled`; `mortgage_agent_accounts.status`
+  `active`, `inactive`), so a live agent policy can be copied into the repo. If one has a
   UUID-, email- or long-number-shaped literal, `text_withheld` names that; if it has any
   other literal beyond role and schema names (a company name, SSN, phone, ULID, tenant slug,
   status value ...), an unknown quoted identifier or a number over 4 digits, `text_withheld`
