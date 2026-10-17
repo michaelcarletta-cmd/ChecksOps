@@ -157,6 +157,18 @@ are an earlier main version or lack later main changes, so the release loses not
    (`production-lambda-reconciliation-2026-10-08.json` `repo_sha256`, and the test that forbids the
    `check-deposited.mjs` import), which this change does not do.
 
+**Owner decisions (2026-10-17, "I agree with 1 to 5"):**
+
+- Item 1, `moov-functions.mjs`: accept the switch. Production moves to the release's platform-owner-only
+  `platformBank` / `platformTreasury` handlers when this member is overlaid. `platform-finance.mjs` is not ported.
+- Item 2, `webhook-apply.mjs`: accept the release path (`webhooks.mjs` -> `tenant-collection-v2-settlement.mjs`).
+  The live `applyBillingProviderEvent` call is not ported. The staging acceptance test must show that one provider
+  transfer completion records exactly one maintenance payment before production.
+- Item 3, `ocr-descriptive-persist.mjs`: keep it out of the overlay plan; production keeps its live bytes.
+- Item 5, `ocr.mjs`: keep it out of the overlay plan; production keeps its live S14 bytes.
+- Item 4 (full ZIP rebuild): no full rebuild until a separate, reviewed reconciliation brings the live-only files
+  listed above into main. Moov onboarding production (which needs the rebuild) stays behind its flag until then.
+
 The original inventory follows.
 
 Values were computed on the branch tree with `node scripts/validate-release-locks.mjs` (locks) and
