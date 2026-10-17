@@ -110,7 +110,8 @@ test("only representative_verification requires a representative", () => {
 const upload = readFileSync("supabase/functions/moov-account-file-upload/index.ts", "utf8");
 const list = readFileSync("supabase/functions/moov-account-files/index.ts", "utf8");
 const client = readFileSync("src/lib/payments/verificationFiles.ts", "utf8");
-const panel = readFileSync("src/components/payments/VerificationDocumentsPanel.tsx", "utf8");
+const panel = readFileSync("src/components/settings/compliance/DocumentsSection.tsx", "utf8");
+const onboarding = readFileSync("src/lib/payments/moovOnboarding.ts", "utf8");
 
 test("cross-tenant denial: both functions gate on requireMoovCaller", () => {
   assert.ok(upload.includes("requireMoovCaller"));
@@ -127,7 +128,7 @@ test("representative mapping is verified against the provider", () => {
 });
 
 test("provider credentials never appear in frontend code", () => {
-  for (const src of [client, panel]) {
+  for (const src of [client, panel, onboarding]) {
     assert.ok(!/MOOV_SECRET_KEY|MOOV_PUBLIC_KEY|moovToken|api\.moov\.io/.test(src));
   }
 });

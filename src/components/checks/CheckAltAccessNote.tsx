@@ -33,7 +33,7 @@ export function CheckAltAccessNote({
   }
   return (
     <p className={className}>
-      Only owners, admins, managers and operators of this organization can {action}.
+      Only members of this organization can {action}.
     </p>
   );
 }

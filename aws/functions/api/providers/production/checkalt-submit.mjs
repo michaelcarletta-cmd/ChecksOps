@@ -484,6 +484,7 @@ export async function handleProductionCheckAltSubmit({
   const authz = await authorizeCheckAltProduction({
     client,
     mapping,
+    claims,
     memberships,
     check,
     requireStepUp: true,

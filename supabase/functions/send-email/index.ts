@@ -297,7 +297,7 @@ Deno.serve(async (req) => {
     //   1. explicit tenantId in body
     //   2. checkId → check_intake_items.tenant_id
     //   3. claimId → claims.tenant_id
-    // Falls back to the Freedom Claims default sender.
+    // Falls back to the ChecksOps default sender.
     let resolvedTenantId: string | null = tenantId ?? null;
     if (!resolvedTenantId && checkId) {
       const { data: ck } = await supabaseAdmin
@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
     let tenantFromName: string | null = null;
     let tenantFromAddress: string | null = null;
     let tenantReplyTo: string | null = null;
-    let tenantDisplayName = 'Freedom Claims';
+    let tenantDisplayName = 'ChecksOps';
     if (resolvedTenantId) {
       const { data: tenant } = await supabaseAdmin
         .from('tenants')
@@ -338,7 +338,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const DEFAULT_FROM = 'Freedom Claims <claims@freedomclaims.work>';
+    const DEFAULT_FROM = `ChecksOps <${Deno.env.get('FROM_EMAIL') || 'noreply@checksops.com'}>`;
     const fromAddress = tenantFromAddress
       ? `${tenantFromName || tenantDisplayName} <${tenantFromAddress}>`
       : DEFAULT_FROM;
@@ -369,31 +369,15 @@ Deno.serve(async (req) => {
       ccList.push(cc.trim());
     }
 
-    // Resolve Reply-To: tenant override > claim inbox > none
-    let replyToAddress: string | undefined = tenantReplyTo || undefined;
-    if (!replyToAddress && claimId) {
-      const { data: claimForReply } = await supabaseAdmin
-        .from('claims')
-        .select('claim_email_id, policy_number')
-        .eq('id', claimId)
-        .single();
-
-      if (claimForReply) {
-        const emailId = claimForReply.claim_email_id ||
-          (claimForReply.policy_number
-            ? claimForReply.policy_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-            : null);
-        if (emailId) {
-          replyToAddress = `claim-${emailId}@freedomclaims.work`;
-        }
-      }
-    }
+    // Reply-To: tenant override, otherwise none. (The per-claim inbox reply-to
+    // lived on the retired Freedom Claims domain and was removed with it.)
+    const replyToAddress: string | undefined = tenantReplyTo || undefined;
 
     console.log(`Sending email via Resend from "${fromAddress}" (tenant=${resolvedTenantId ?? 'default'}) to ${toEmails.join(', ')}${ccList.length > 0 ? ` (CC: ${ccList.join(', ')})` : ''}${replyToAddress ? ` (Reply-To: ${replyToAddress})` : ''} with ${emailAttachments.length} attachments`);
 
     // Send via Resend — with unverified-domain fallback.
     // If the tenant's sending domain isn't verified in Resend yet, fall back
-    // to the default Freedom sender and use the tenant's address as Reply-To
+    // to the default sender and use the tenant's address as Reply-To
     // so replies still route to the tenant.
     let emailResponse: any;
     let usedFallback = false;

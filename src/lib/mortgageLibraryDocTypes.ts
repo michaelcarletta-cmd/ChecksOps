@@ -34,3 +34,23 @@ export const mortgageLibraryDocTypeForLabel = (label: string | null | undefined)
   const found = MORTGAGE_LIBRARY_DOC_KINDS.find((kind) => kind.label === label);
   return found?.docType ?? null;
 };
+
+/** Non-mortgage Document Library categories (SQL 94: library:<category>:<slug>). */
+export const LIBRARY_FREE_SLUG_CATEGORIES = ["template", "shingle", "siding", "catalog", "letterhead"] as const;
+export type LibraryFreeSlugCategory = (typeof LIBRARY_FREE_SLUG_CATEGORIES)[number];
+export const LIBRARY_SLUG_MAX = 60;
+
+/**
+ * Slug for a library display name: lowercase letters and digits in words
+ * joined by single hyphens, at most 60 characters, never a leading or trailing
+ * hyphen. Same rule as the server (mortgage-library-doc-types.mjs) and SQL 94.
+ */
+export const librarySlugFor = (label: string | null | undefined, fallback: string): string => {
+  const slug = String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, LIBRARY_SLUG_MAX)
+    .replace(/^-+|-+$/g, "");
+  if (slug) return slug;
+  return String(fallback || "").toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, LIBRARY_SLUG_MAX) || "doc";
+};

@@ -113,10 +113,12 @@ test('a missing identity or a tenant the caller cannot write is refused', async 
   assert.equal(inserted(readOnly, 'signature_requests'), false);
 });
 
-test('the platform owner may prepare requests without a tenant role', async () => {
-  const client = fakeClient({ role: 'viewer', platformOwner: true });
-  assert.equal((await createRequest(client)).error, undefined);
-  assert.equal(inserted(client, 'signature_requests'), true);
+test('the platform owner without membership of the owning tenant may not prepare requests', async () => {
+  // Owner policy: members only; the platform owner does not act on tenant signatures.
+  const client = fakeClient({ role: null, platformOwner: true });
+  assert.equal((await createRequest(client)).error, 'not_authorized');
+  assert.equal(inserted(client, 'signature_requests'), false);
+  assert.equal(client.seen.some(({ text }) => /is_platform_owner/.test(text)), false);
 });
 
 test('signers join only draft requests', async () => {

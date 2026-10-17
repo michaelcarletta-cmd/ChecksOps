@@ -33,32 +33,68 @@ export async function membershipsOf(client, userId) {
   }));
 }
 
-export async function isPlatformAdmin(client, userId) {
-  const row = (await client.query(
-    `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
-    [userId],
-  )).rows[0];
-  return Boolean(row);
+/**
+ * Platform owner by identity (public.is_platform_owner(): the checksopsadmin
+ * email). A global user_roles admin is not the platform owner.
+ */
+/**
+ * Deprecated compatibility export (release 2026-10-17) for live
+ * checkalt-functions.mjs / db.mjs from before users-only. It delegates to
+ * public.is_platform_owner(); user_roles admin is never read. `userId` is
+ * ignored. Remove once those files are overlaid.
+ */
+export async function isPlatformAdmin(client) {
+  return isPlatformOwner(client);
 }
 
-export async function resolveTenant(client, { userId, body, memberships, requireAdmin = false }) {
+export async function isPlatformOwner(client) {
+  try {
+    const row = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    return row?.is_owner === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Owner policy: every member of a tenant is a user with the same rights;
+ * partners, other tenants and global user_roles admin/staff get nothing.
+ *
+ * - A supplied tenant_id must be one of the caller's own memberships.
+ * - With no tenant_id, the caller's OWN first membership is used (SPA callers
+ *   such as moov-disburse, the platform bank/treasury panels and
+ *   moov-recipient-disconnect rely on it); it never picks anyone else's tenant.
+ * - requireAdmin means "member of the resolved tenant": there is no
+ *   owner/admin tier, and the membership rule above already enforces it.
+ * - allowPlatformOwner (platform-level handlers only: platform bank,
+ *   platform treasury, Check Alt UAT setup) lets the platform owner name a
+ *   tenant it does not belong to, or proceed with no tenant at all.
+ */
+export async function resolveTenant(client, {
+  body,
+  memberships,
+  allowPlatformOwner = false,
+}) {
   const claimed = body?.tenant_id || body?.tenantId || null;
   if (claimed && !UUID_RE.test(String(claimed))) return fail('invalid_uuid', 400, { field: 'tenant_id' });
-  const admin = await isPlatformAdmin(client, userId);
-  if (requireAdmin && !admin) {
-    const role = claimed ? memberships.find((m) => m.tenant_id === claimed)?.role : memberships[0]?.role;
-    if (!['owner', 'admin'].includes(String(role || ''))) {
-      return fail('Administrator access required', 403);
-    }
-  }
+  // membershipsOf() returns only the caller's own tenant_users rows.
+  const own = (memberships || []).filter((m) => m?.tenant_id);
   if (claimed) {
-    if (!admin && !memberships.some((m) => m.tenant_id === claimed)) {
-      return fail('Forbidden', 403, { error: 'cross_tenant_denied' });
+    if (own.some((m) => m.tenant_id === claimed)) {
+      return { tenantId: claimed, isPlatformOwner: allowPlatformOwner ? await isPlatformOwner(client) : false };
     }
-    return { tenantId: claimed, isAdmin: admin };
+    if (allowPlatformOwner && await isPlatformOwner(client)) {
+      return { tenantId: claimed, isPlatformOwner: true };
+    }
+    return fail('Forbidden', 403, { error: 'cross_tenant_denied' });
   }
-  if (!memberships.length && !admin) return fail('Forbidden', 403);
-  return { tenantId: memberships[0]?.tenant_id || null, isAdmin: admin };
+  if (own.length) {
+    return { tenantId: own[0].tenant_id, isPlatformOwner: allowPlatformOwner ? await isPlatformOwner(client) : false };
+  }
+  if (allowPlatformOwner && await isPlatformOwner(client)) {
+    return { tenantId: null, isPlatformOwner: true };
+  }
+  return fail('Forbidden', 403);
 }
 
 export async function loadTenantMoovEnv(client, tenantId) {
@@ -101,7 +137,9 @@ export async function requireParityEnabled(provider) {
   return null;
 }
 
-export async function moovParityContext({ client, mapping, body, requireAdmin = false, loadSandbox = loadSandboxCredentials }) {
+export async function moovParityContext({
+  client, mapping, body, requireAdmin = false, allowPlatformOwner = false, loadSandbox = loadSandboxCredentials,
+}) {
   const gated = await requireParityEnabled('moov');
   if (gated) return gated;
   const memberships = await membershipsOf(client, mapping.application_user_id);
@@ -110,12 +148,20 @@ export async function moovParityContext({ client, mapping, body, requireAdmin = 
     body,
     memberships,
     requireAdmin,
+    allowPlatformOwner,
   });
   if (tenant.error) return tenant;
-  if (!tenant.tenantId) return fail('tenant_id is required', 400);
-  const tenantEnv = await loadTenantMoovEnv(client, tenant.tenantId);
-  if (tenantEnv?.error) return fail(tenantEnv.error, tenantEnv.statusCode);
-  const environment = effectiveMoovEnvironment(tenantEnv);
+  // Platform-owner-only handlers (platform bank, platform treasury) act on the
+  // platform's own Moov account, not a tenant's: the platform owner needs no
+  // tenant. Everyone else must resolve one.
+  const platformOnly = allowPlatformOwner && tenant.isPlatformOwner === true && !tenant.tenantId;
+  if (!tenant.tenantId && !platformOnly) return fail('tenant_id is required', 400);
+  let environment = 'sandbox';
+  if (tenant.tenantId) {
+    const tenantEnv = await loadTenantMoovEnv(client, tenant.tenantId);
+    if (tenantEnv?.error) return fail(tenantEnv.error, tenantEnv.statusCode);
+    environment = effectiveMoovEnvironment(tenantEnv);
+  }
   bindMoovEnvironment(environment);
   const loader = typeof loadSandbox === 'function' ? loadSandbox : loadSandboxCredentials;
   const loaded = await loader();
@@ -147,7 +193,7 @@ export async function moovParityContext({ client, mapping, body, requireAdmin = 
   }
   return {
     tenantId: tenant.tenantId,
-    isAdmin: tenant.isAdmin,
+    isPlatformOwner: tenant.isPlatformOwner === true,
     environment: 'sandbox',
     userId: mapping.application_user_id,
     memberships,
@@ -161,6 +207,7 @@ export async function moovProductionReadContext({
   mapping,
   body,
   requireAdmin = false,
+  allowPlatformOwner = false,
   loadProviderSecrets = null,
 } = {}) {
   if (!executionAllowed('moov') || !providerLiveReadsEnabled()) {
@@ -176,6 +223,7 @@ export async function moovProductionReadContext({
     body,
     memberships,
     requireAdmin,
+    allowPlatformOwner,
   });
   if (tenant.error) return tenant;
   if (!tenant.tenantId) return fail('tenant_id is required', 400);
@@ -219,7 +267,7 @@ export async function moovProductionReadContext({
 
   return {
     tenantId: tenant.tenantId,
-    isAdmin: tenant.isAdmin,
+    isPlatformOwner: tenant.isPlatformOwner === true,
     environment: 'production',
     userId: mapping.application_user_id,
     memberships,
@@ -228,7 +276,9 @@ export async function moovProductionReadContext({
   };
 }
 
-export async function checkAltParityContext({ client, mapping, body, requireAdmin = false, loadSandbox = loadSandboxCredentials }) {
+export async function checkAltParityContext({
+  client, mapping, body, requireAdmin = false, allowPlatformOwner = false, loadSandbox = loadSandboxCredentials,
+}) {
   const gated = await requireParityEnabled('checkalt');
   if (gated) return gated;
   const memberships = await membershipsOf(client, mapping.application_user_id);
@@ -237,8 +287,12 @@ export async function checkAltParityContext({ client, mapping, body, requireAdmi
     body,
     memberships,
     requireAdmin,
+    allowPlatformOwner,
   });
-  if (tenant.error && body?.tenant_id) return tenant;
+  // A supplied tenant_id that is not the caller's own is refused here. Without
+  // one, the caller's own first membership (or none) is used and each Check Alt
+  // handler checks membership of the tenant it acts on.
+  if (tenant.error && (body?.tenant_id || body?.tenantId)) return tenant;
   const loader = typeof loadSandbox === 'function' ? loadSandbox : loadSandboxCredentials;
   const loaded = await loader();
   if (!loaded.checkalt) {
@@ -248,7 +302,7 @@ export async function checkAltParityContext({ client, mapping, body, requireAdmi
   }
   return {
     tenantId: tenant.tenantId || memberships[0]?.tenant_id || null,
-    isAdmin: tenant.isAdmin || await isPlatformAdmin(client, mapping.application_user_id),
+    isPlatformOwner: tenant.isPlatformOwner === true || await isPlatformOwner(client),
     userId: mapping.application_user_id,
     memberships,
     uat: loaded.checkalt,

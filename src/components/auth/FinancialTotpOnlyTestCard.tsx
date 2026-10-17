@@ -88,7 +88,7 @@ export function FinancialTotpOnlyTestCard() {
           description:
             stopError === "existing_check_required"
               ? "Enter an existing check UUID. Tenant and amount are taken from that check on the server."
-              : "Owner, admin, or manager is required. This control is not a deposit path.",
+              : "Membership of a company is required. This control is not a deposit path.",
           variant: "destructive",
         });
         return;

@@ -409,7 +409,12 @@ export function sql89SharedPreconditionFailures(state) {
       && state.grantee_update_grantors.every((grantor) => grantor === login)],
     ['login_can_grant', state?.login_can_grant === true],
     ['update_functions_safe', Array.isArray(state?.unsafe_update_functions) && state.unsafe_update_functions.length === 0],
-    ['sql70_ingest_function_security_definer', state?.ingest_function_present === true && state?.ingest_function_security_definer === true],
+    // SQL 95 drops SQL 70's ingest with the retired Freedom Claims bridge. SQL 89
+    // needs it only to run: once SQL 89 is applied (already_applied, the intended
+    // column state), the check is skipped so a later read-live of SQL 89 does not
+    // report a collision for a function SQL 95 removed on purpose.
+    ['sql70_ingest_function_security_definer', state?.already_applied === true
+      || (state?.ingest_function_present === true && state?.ingest_function_security_definer === true)],
     // SQL 89 names authenticated; the REVOKE fails without the role.
     ['authenticated_role_present', state?.authenticated_role_present === true],
     // Every other LOGIN role that uses authenticated's privileges would lose UPDATE with it.
@@ -1810,6 +1815,787 @@ export const AUTHORIZED_SQL40 = Object.freeze({
   table: 'public.tenant_maintenance_payments',
 });
 
+// --- SQL 29 / SQL 30: Mortgage Ops library parity and the doc_type CHECK ---------
+// Shared by the staging guarded executor and the production tools
+// (scripts/deployment-guard/sql29-...-production-apply.mjs, sql30-...). The files are
+// unchanged operator packages (aws/rls/sql/29_mortgage_ops_library_parity.sql,
+// aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql; release lock mortgage-ops).
+//
+// Fingerprints are code-derived state texts (like SQL 89's columnUpdateStateText), so
+// the post-state hash is known before any run and holds in both environments (owner
+// names are not part of it: an ACL entry of the object owner reads "owner").
+//   SQL 29: each of the five functions (absent, or sha256(prosrc), SECURITY DEFINER,
+//           proconfig, owner-normalized ACL), the two policies on
+//           mortgage_request_library_documents (cmd, permissive, roles, whether the
+//           expression calls the reviewed helpers), the names of any other policy on
+//           that table, and SELECT/INSERT/UPDATE/DELETE of PUBLIC, authenticated and
+//           checksops on it.
+//   SQL 30: tenant_documents.doc_type (type, nullability) and the
+//           tenant_documents_doc_type_check constraint (present, validated, IN-list or
+//           not, its sorted literals).
+// Inspect also reports aggregate COUNT(*)s of the library rows (by category prefix, by
+// stored-path form, shared_with_homeowners, mortgage_request_library_documents): counts
+// only, never ids, names or paths; informational, never hashed or a precondition (except
+// SQL 30's: rows the new CHECK would refuse, which the file itself refuses on).
+
+const libHash = (text) => createHash('sha256').update(String(text), 'utf8').digest('hex');
+const libFailed = (checks) => checks.filter(([, passed]) => !passed).map(([name]) => name);
+const libSame = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+export const SQL29_TABLE = 'public.mortgage_request_library_documents';
+export const SQL29_POLICIES = Object.freeze([
+  Object.freeze({
+    name: 'aws_select_mortgage_request_library_documents',
+    cmd: 'SELECT',
+    roles: Object.freeze(['authenticated']),
+    calls: Object.freeze(['aws_is_cross_tenant_reader', 'aws_can_access_tenant', 'aws_mortgage_agent_can_read_library_document']),
+  }),
+  Object.freeze({
+    name: 'aws_write_mortgage_request_library_documents',
+    cmd: 'INSERT',
+    roles: Object.freeze(['authenticated']),
+    calls: Object.freeze(['aws_can_insert_mortgage_library_document']),
+  }),
+]);
+// Lovable / Supabase policies the file drops.
+export const SQL29_DROPPED_POLICIES = Object.freeze(['read shared library docs', 'manage shared library docs', 'delete shared library docs']);
+const SQL29_API_EXECUTE = Object.freeze(['authenticated EXECUTE', 'checksops EXECUTE', 'owner EXECUTE']);
+export const SQL29_FUNCTIONS = Object.freeze([
+  Object.freeze({ name: 'aws_mortgage_agent_can_read_library_document', identity: 'public.aws_mortgage_agent_can_read_library_document(uuid)', result: 'boolean', config: Object.freeze(['row_security=off', 'search_path=public']), acl: SQL29_API_EXECUTE }),
+  Object.freeze({ name: 'aws_mortgage_agent_can_read_library_path', identity: 'public.aws_mortgage_agent_can_read_library_path(text[], text, uuid)', result: 'boolean', config: Object.freeze(['row_security=off', 'search_path=public']), acl: SQL29_API_EXECUTE }),
+  Object.freeze({ name: 'aws_can_manage_mortgage_library', identity: 'public.aws_can_manage_mortgage_library(uuid)', result: 'boolean', config: Object.freeze(['row_security=off', 'search_path=public']), acl: SQL29_API_EXECUTE }),
+  Object.freeze({ name: 'aws_can_insert_mortgage_library_document', identity: 'public.aws_can_insert_mortgage_library_document(uuid, uuid, uuid, text)', result: 'boolean', config: Object.freeze(['row_security=off', 'search_path=public']), acl: SQL29_API_EXECUTE }),
+  // The trigger function: REVOKE ALL FROM PUBLIC, no grant.
+  Object.freeze({ name: 'share_library_docs_to_mortgage_request', identity: 'public.share_library_docs_to_mortgage_request()', result: 'trigger', config: Object.freeze(['search_path=public']), acl: Object.freeze(['owner EXECUTE']) }),
+]);
+export const SQL29_FUNCTION_IDENTITIES = Object.freeze(SQL29_FUNCTIONS.map((fn) => fn.identity));
+const SQL29_DML = Object.freeze(['SELECT', 'INSERT', 'UPDATE', 'DELETE']);
+const SQL29_GRANTEES = Object.freeze(['PUBLIC', 'authenticated', 'checksops']);
+export const SQL29_INTENDED_TABLE_ACL = Object.freeze(['authenticated INSERT', 'authenticated SELECT', 'checksops INSERT', 'checksops SELECT']);
+export const SQL29_PREREQUISITES = Object.freeze([
+  'public.mortgage_request_library_documents',
+  'public.mortgage_handling_requests',
+  'public.tenant_documents',
+  'public.tenant_users',
+  'type public.app_role',
+  'public.has_role(uuid, public.app_role)',
+  'public.aws_is_authenticated()',
+  'public.aws_is_cross_tenant_reader()',
+  'public.aws_can_access_tenant(uuid)',
+  'public.aws_can_write_tenant(uuid)',
+  'auth.uid()',
+  'role checksops',
+  'role authenticated',
+]);
+// SQL 90 (users only) replaces aws_can_manage_mortgage_library with the membership rule;
+// SQL 29 re-applied after it would bring back the owner/admin tier. aws_is_tenant_member
+// is SQL 90's marker.
+export const SQL29_SQL90_MARKER = 'public.aws_is_tenant_member(uuid)';
+
+export const SQL30_TABLE = 'public.tenant_documents';
+export const SQL30_CONSTRAINT = 'tenant_documents_doc_type_check';
+export const SQL30_PREDECESSOR_3 = Object.freeze(['insurance', 'license', 'w9']);
+export const SQL30_PREDECESSOR_6 = Object.freeze(['insurance', 'license', 'privacy_policy', 'saas_agreement', 'terms_of_service', 'w9']);
+export const SQL30_TARGET_VALUES = Object.freeze([
+  'insurance',
+  'library:mortgage:adjuster-tpa-letter',
+  'library:mortgage:certificate-of-insurance',
+  'library:mortgage:contractor-license',
+  'library:mortgage:general-liability-insurance',
+  'library:mortgage:signed-contract',
+  'library:mortgage:w-9',
+  'library:mortgage:workers-comp-insurance',
+  'license',
+  'privacy_policy',
+  'saas_agreement',
+  'terms_of_service',
+  'w9',
+]);
+
+/** Each CREATE OR REPLACE FUNCTION body ($$...$$) of SQL 29, by function name: what pg_proc.prosrc holds after the apply. */
+export function sql29FunctionBodies(text) {
+  const bodies = {};
+  for (const match of String(text || '').matchAll(/CREATE OR REPLACE FUNCTION public\.([a-z0-9_]+)\([\s\S]*?\bAS \$\$([\s\S]*?)\$\$;/g)) {
+    bodies[match[1]] = match[2];
+  }
+  return bodies;
+}
+
+const sql29FunctionLine = (fn, row) => (row?.exists
+  ? `function ${fn.identity}: prosrc=${row.prosrc_sha256} secdef=${row.security_definer === true} config=${(row.config || []).join(',')} acl=${(row.acl || []).join(';')}`
+  : `function ${fn.identity}: absent`);
+const sql29PolicyLine = (policy, row) => (row
+  ? `policy ${policy.name}: cmd=${row.cmd} permissive=${row.permissive === true} roles=${(row.roles || []).join(',')} calls_reviewed_helpers=${row.calls_reviewed_helpers === true}`
+  : `policy ${policy.name}: absent`);
+
+/** SQL 29's canonical state text (what the fingerprint hashes). */
+export function sql29StateText(state = {}) {
+  return [
+    'sql29 mortgage ops library parity v1',
+    ...SQL29_FUNCTIONS.map((fn) => sql29FunctionLine(fn, state.functions?.[fn.identity])),
+    ...SQL29_POLICIES.map((policy) => sql29PolicyLine(policy, state.policies?.[policy.name])),
+    `other_policies=${[...(state.other_policies || [])].sort().join(',')}`,
+    `table_acl=${[...(state.table_acl || [])].sort().join(';')}`,
+  ].join('\n');
+}
+
+/** The SQL 29 state the reviewed file leaves (code-derived from the file's bytes). */
+export function sql29IntendedState(text) {
+  const bodies = sql29FunctionBodies(text);
+  const functions = {};
+  for (const fn of SQL29_FUNCTIONS) {
+    functions[fn.identity] = {
+      exists: typeof bodies[fn.name] === 'string',
+      prosrc_sha256: typeof bodies[fn.name] === 'string' ? libHash(bodies[fn.name]) : null,
+      security_definer: true,
+      config: [...fn.config],
+      acl: [...fn.acl],
+    };
+  }
+  const policies = Object.fromEntries(SQL29_POLICIES.map((policy) => [policy.name, {
+    cmd: policy.cmd, permissive: true, roles: [...policy.roles], calls_reviewed_helpers: true,
+  }]));
+  return { functions, policies, other_policies: [], table_acl: [...SQL29_INTENDED_TABLE_ACL] };
+}
+
+/** SQL 30's canonical state text. */
+export function sql30StateText(state = {}) {
+  const check = state.check || {};
+  return [
+    'sql30 tenant_documents doc_type check v1',
+    `table=${state.table_present === true ? 'present' : 'absent'} doc_type=${state.doc_type_udt ?? 'absent'}/${state.doc_type_nullable ?? 'absent'}`,
+    check.present
+      ? `check=present validated=${check.validated === true} form=${check.form} values=${[...(check.values || [])].join(',')}`
+      : 'check=absent',
+  ].join('\n');
+}
+
+export const SQL30_INTENDED_STATE = Object.freeze({
+  table_present: true,
+  doc_type_udt: 'text',
+  doc_type_nullable: 'NO',
+  check: Object.freeze({ present: true, validated: true, form: 'in_list', values: SQL30_TARGET_VALUES }),
+});
+
+/** The file's statements with comments removed and whitespace collapsed. */
+const libStatementText = (text) => String(text || '').replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * SQL 30 carries its own BEGIN; ... COMMIT;. The guarded tools run it inside their own
+ * transaction (to verify before COMMIT and roll back otherwise), so they execute the
+ * bytes between that BEGIN and COMMIT. Refuses anything but exactly one leading BEGIN;
+ * and one trailing COMMIT; around the reviewed SET LOCALs and DO block.
+ */
+export function sql30ExecutableText(text) {
+  const source = String(text || '');
+  const flat = libStatementText(source);
+  if (!/^BEGIN; SET LOCAL lock_timeout = '3s'; SET LOCAL statement_timeout = '15s'; DO \$apply\$ [\s\S]* \$apply\$; COMMIT;$/.test(flat)) return null;
+  if ((source.match(/^BEGIN;$/gm) || []).length !== 1 || (source.match(/^COMMIT;$/gm) || []).length !== 1) return null;
+  const begin = source.search(/^BEGIN;$/m);
+  const commit = source.search(/^COMMIT;$/m);
+  if (begin < 0 || commit < begin) return null;
+  return source.slice(begin + 'BEGIN;'.length, commit);
+}
+
+export const AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY = Object.freeze({
+  key: 'sql29',
+  filename: 'aws/rls/sql/29_mortgage_ops_library_parity.sql',
+  migration_id: '29_mortgage_ops_library_parity',
+  // The commit that last authored the file bytes (release lock mortgage-ops records the same sha256).
+  commit: '48c16079dbad30368bc916484144e370f3441f26',
+  source_sha256: 'e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be',
+  // Pending: no staging read-live has been recorded; apply refuses until a reviewed pin change records it.
+  expected_live_definition_sha256: null,
+  // sha256(sql29StateText(sql29IntendedState(file bytes))); re-derived by the tests.
+  intended_replacement_sha256: '1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79',
+  function_identities: SQL29_FUNCTION_IDENTITIES,
+});
+
+export const AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE = Object.freeze({
+  key: 'sql30',
+  filename: 'aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql',
+  migration_id: '30_tenant_documents_mortgage_doc_type',
+  commit: '0d2f1b021829f0a2f52856d59cbe95b0ff2674c1',
+  source_sha256: 'd30c7cafb232387e174eb5a3938af9e0942a006fa8b775c2d6eac490d84c7d5a',
+  expected_live_definition_sha256: null,
+  // sha256(sql30StateText(SQL30_INTENDED_STATE)); re-derived by the tests.
+  intended_replacement_sha256: 'e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556',
+  constraint: `${SQL30_TABLE}.${SQL30_CONSTRAINT}`,
+});
+
+export const LIBRARY_SQL_PINS = Object.freeze({
+  sql29: AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
+  sql30: AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
+});
+
+// Release 2026-10-17 pending staging pins: SQL 90-97 (aws/workflows/sql/9x_*.sql). Recorded so the
+// reviewed bytes are pinned; no guarded staging executor handler, workflow choice or production
+// tool exists for them yet, so nothing can apply them. expected_live_definition_sha256 stays null
+// until a staging read-live is recorded, and intended_replacement_sha256 stays null until each
+// migration's tooling defines its code-derived intended-state fingerprint. They are deliberately
+// not in github-staging-sql-executor.mjs MIGRATIONS or the workflow choices until then.
+export const AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES = Object.freeze({
+  key: 'sql90',
+  filename: 'aws/workflows/sql/90_users_only_tenant_roles.sql',
+  migration_id: '90_users_only_tenant_roles',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
+  source_sha256: '1ee9c1d12b3ad71a58ecec30ee223f8ab660be74d162d9ada9482c5640c26d86',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_is_tenant_member(uuid)', 'public.aws_can_write_tenant(uuid)', 'public.aws_can_write_check(uuid)', 'public.aws_can_write_claim(uuid)', 'public.aws_tenant_has_no_members(uuid)', 'public.aws_is_platform_owner_user(uuid)', 'public.aws_has_any_tenant_membership()', 'public.aws_can_write_same_tenant_user(uuid)', 'public.aws_can_access_tax_profiles(uuid)', 'public.aws_first_invite_allowed(uuid)', 'public.aws_invite_create_user_identity(uuid, text, text, text)', 'public.aws_create_deposit_batch_for_item(uuid, text)', 'public.aws_is_tenant_manager_admin()', 'public.aws_can_manage_mortgage_library(uuid)', 'public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)']),
+});
+export const AUTHORIZED_SQL91_MOOV_ONBOARDING = Object.freeze({
+  key: 'sql91',
+  filename: 'aws/workflows/sql/91_moov_onboarding.sql',
+  migration_id: '91_moov_onboarding',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
+  source_sha256: '199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_moov_onboarding_active()', 'public.aws_can_submit_moov_onboarding(uuid)', 'public.aws_moov_onboarding_writer(uuid)', 'public.aws_moov_webhook_apply_active()']),
+});
+export const AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT = Object.freeze({
+  key: 'sql92',
+  filename: 'aws/workflows/sql/92_signature_request_check_files_link_grant.sql',
+  migration_id: '92_signature_request_check_files_link_grant',
+  // The commit that last authored the file bytes on the release branch.
+  commit: '214621e7b57b201515dfad2ff32117390d6e33a1',
+  source_sha256: 'ceef6482271f5572db20f5a6db3b4bbcf77e29ada2290f03f53af7fb6e725e17',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze([]),
+});
+export const AUTHORIZED_SQL93_TENANT_COMPANY_INFO = Object.freeze({
+  key: 'sql93',
+  filename: 'aws/workflows/sql/93_tenant_company_info.sql',
+  migration_id: '93_tenant_company_info',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'd1ed17dcf7c5e533a91b240580aa4464ad64627a',
+  source_sha256: 'd90ec7f9ef14ca60b805e94337021259c8f9ce9ec80ed9781a47c64dbd6f8cfa',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_tenants_member_column_guard()']),
+});
+export const AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE = Object.freeze({
+  key: 'sql94',
+  filename: 'aws/workflows/sql/94_document_library_restore.sql',
+  migration_id: '94_document_library_restore',
+  // The commit that last authored the file bytes on the release branch.
+  commit: '0625354916088d999d8fd27e635dff2f78b72d21',
+  source_sha256: 'ef865f65c8ccdfda51e1b6f65a828f9d6bed16bdbd1879a1a85cf4ba30a990a2',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_tenant_document_doc_type_ok(text)', 'public.aws_homeowner_share_member(uuid)', 'public.aws_homeowner_shared_documents_guard()', 'public.aws_public_homeowner_shared_documents(text)', 'public.aws_public_homeowner_shared_document(text, uuid)']),
+});
+export const AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE = Object.freeze({
+  key: 'sql95',
+  filename: 'aws/workflows/sql/95_remove_freedom_claims_bridge.sql',
+  migration_id: '95_remove_freedom_claims_bridge',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'f50bf7d0d687b188b427263fbb79a8b8360acfc1',
+  source_sha256: '0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze([]),
+});
+export const AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING = Object.freeze({
+  key: 'sql96',
+  filename: 'aws/workflows/sql/96_platform_owner_tenant_pricing.sql',
+  migration_id: '96_platform_owner_tenant_pricing',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'c952d1ceb846dda394b460568e426d8b55f899ff',
+  source_sha256: '18109fed72bf8446dbe0c9560507ae6ed1fed1eb49f972142e78112479e257b6',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_tenant_pricing_columns()', 'public.aws_tenant_pricing_audit_row()', 'public.aws_tenants_member_column_guard()', 'public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)']),
+});
+export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze({
+  key: 'sql97',
+  filename: 'aws/workflows/sql/97_financial_stepup_log_server_writer.sql',
+  migration_id: '97_financial_stepup_log_server_writer',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
+  source_sha256: 'e3c8fd413f1d60030dd65192bb8696387229a4fd33fc2ae234cd61e52fbb79db',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_financial_stepup_log_writer_guard()']),
+});
+
+export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
+  sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
+  sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
+  sql92: AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT,
+  sql93: AUTHORIZED_SQL93_TENANT_COMPANY_INFO,
+  sql94: AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE,
+  sql95: AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE,
+  sql96: AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING,
+  sql97: AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER,
+});
+
+export function isSql29MortgageOpsLibraryParity(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY);
+}
+
+export function isSql30TenantDocumentsDocType(input = {}) {
+  return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
+}
+
+/** The reviewed bytes as the guarded tools execute them, or null. */
+export function librarySqlExecutableText(key, text) {
+  if (key === 'sql29') {
+    // No transaction control of its own; every function body is present.
+    const flat = libStatementText(text);
+    if (/\b(BEGIN|COMMIT|ROLLBACK)\s*;/i.test(flat.replace(/\$\$[\s\S]*?\$\$/g, ''))) return null;
+    const bodies = sql29FunctionBodies(text);
+    return SQL29_FUNCTIONS.every((fn) => typeof bodies[fn.name] === 'string') ? String(text) : null;
+  }
+  if (key === 'sql30') return sql30ExecutableText(text);
+  return null;
+}
+
+// Catalog reads. Names are qualified through pg_namespace / pg_catalog.
+const LIB_ACL_SQL = (column, owner, kind) => `
+SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC' WHEN a.grantee = ${owner} THEN 'owner' ELSE pg_catalog.pg_get_userbyid(a.grantee) END AS grantee,
+  a.privilege_type, a.is_grantable
+FROM pg_catalog.aclexplode(COALESCE(${column}, pg_catalog.acldefault('${kind}', ${owner}))) a`;
+const LIBRARY_READS = Object.freeze({
+  login: 'SELECT current_user::text AS current_user, session_user::text AS session_user',
+  relation: `SELECT c.oid, pg_catalog.pg_get_userbyid(c.relowner) AS owner, c.relrowsecurity AS rls, c.relforcerowsecurity AS rls_forced
+FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass($1)`,
+  relationAcl: `SELECT x.grantee, x.privilege_type, x.is_grantable FROM pg_catalog.pg_class c
+CROSS JOIN LATERAL (${LIB_ACL_SQL('c.relacl', 'c.relowner', 'r')}) x
+WHERE c.oid = pg_catalog.to_regclass($1) ORDER BY 1, 2`,
+  function: `SELECT p.oid, pg_catalog.pg_get_userbyid(p.proowner) AS owner, p.prosecdef AS security_definer,
+  pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p.prosrc, 'UTF8')), 'hex') AS prosrc_sha256,
+  COALESCE(p.proconfig, ARRAY[]::text[]) AS config, pg_catalog.pg_get_function_result(p.oid) AS result,
+  pg_catalog.pg_get_function_arguments(p.oid) AS arguments
+FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure($1)`,
+  functionAcl: `SELECT x.grantee, x.privilege_type, x.is_grantable FROM pg_catalog.pg_proc p
+CROSS JOIN LATERAL (${LIB_ACL_SQL('p.proacl', 'p.proowner', 'f')}) x
+WHERE p.oid = pg_catalog.to_regprocedure($1) ORDER BY 1, 2`,
+  policies: `SELECT pol.polname AS name,
+  CASE pol.polcmd WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT' WHEN 'w' THEN 'UPDATE' WHEN 'd' THEN 'DELETE' ELSE 'ALL' END AS cmd,
+  pol.polpermissive AS permissive,
+  ARRAY(SELECT CASE WHEN r = 0 THEN 'public' ELSE pg_catalog.pg_get_userbyid(r)::text END FROM unnest(pol.polroles) r ORDER BY 1)::text[] AS roles,
+  COALESCE(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), '') AS qual,
+  COALESCE(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), '') AS with_check
+FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass($1) ORDER BY 1`,
+  shareTriggers: `SELECT t.tgname AS name, t.tgenabled::text AS enabled
+FROM pg_catalog.pg_trigger t
+WHERE t.tgrelid = pg_catalog.to_regclass('public.mortgage_handling_requests') AND NOT t.tgisinternal
+  AND t.tgfoid = pg_catalog.to_regprocedure('public.share_library_docs_to_mortgage_request()')
+ORDER BY 1`,
+  regclass: 'SELECT pg_catalog.to_regclass($1) IS NOT NULL AS present',
+  regprocedure: 'SELECT pg_catalog.to_regprocedure($1) IS NOT NULL AS present',
+  regtype: 'SELECT pg_catalog.to_regtype($1) IS NOT NULL AS present',
+  role: 'SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = $1) AS present',
+  docTypeColumn: `SELECT c.udt_name, c.is_nullable FROM information_schema.columns c
+WHERE c.table_schema = 'public' AND c.table_name = 'tenant_documents' AND c.column_name = 'doc_type'`,
+  checkConstraint: `SELECT pg_catalog.pg_get_constraintdef(con.oid) AS def, con.convalidated AS validated
+FROM pg_catalog.pg_constraint con
+WHERE con.conrelid = pg_catalog.to_regclass('public.tenant_documents') AND con.conname = '${SQL30_CONSTRAINT}' AND con.contype = 'c'`,
+  columnPresent: `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attname = $2 AND a.attnum > 0 AND NOT a.attisdropped) AS present`,
+});
+
+const libAclLine = (row) => `${row.grantee} ${row.privilege_type}${row.is_grantable === true ? ' with grant option' : ''}`;
+
+const prerequisitePresent = async (q, name) => {
+  if (name.startsWith('role ')) return (await q(LIBRARY_READS.role, [name.slice(5)]))[0]?.present === true;
+  if (name.startsWith('type ')) return (await q(LIBRARY_READS.regtype, [name.slice(5)]))[0]?.present === true;
+  if (name.includes('(')) return (await q(LIBRARY_READS.regprocedure, [name]))[0]?.present === true;
+  return (await q(LIBRARY_READS.regclass, [name]))[0]?.present === true;
+};
+
+/** The SQL 30 CHECK's form and literals (the same parse SQL 30's DO block makes). */
+export function sql30CheckShape(def) {
+  if (typeof def !== 'string' || !def) return { form: 'absent', values: [], shape: 'absent' };
+  const values = [...def.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+  const inList = /doc_type/i.test(def) && !/like/i.test(def) && !/~/.test(def) && (/IN\s*\(/i.test(def) || /= ANY/i.test(def));
+  const form = inList ? 'in_list' : 'other';
+  let shape = 'other';
+  if (inList && libSame(values, [...SQL30_PREDECESSOR_3])) shape = 'predecessor_3';
+  else if (inList && libSame(values, [...SQL30_PREDECESSOR_6])) shape = 'predecessor_6';
+  else if (inList && libSame(values, [...SQL30_TARGET_VALUES])) shape = 'sql30';
+  else if (/aws_tenant_document_doc_type_ok\(doc_type\)/.test(def)) shape = 'sql94';
+  return { form, values, shape };
+}
+
+/** One aggregate COUNT(*) in its own savepoint; null (with a reason code) when unreadable. */
+async function libraryGuardedRows(client, name, sql) {
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    const rows = (await client.query(sql))?.rows || [];
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return { readable: true, rows };
+  } catch (error) {
+    await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    return { readable: false, reason: String(error?.code || 'unreadable').slice(0, 16) };
+  }
+}
+
+const LIBRARY_CATEGORY_KEYS = Object.freeze(['legacy', 'mortgage', 'template', 'shingle', 'siding', 'catalog', 'letterhead', 'library_other', 'other']);
+const PATH_FORM_KEYS = Object.freeze(['aws_library', 'url', 'bucket_prefixed', 'other_tenant_library', 'other']);
+const fixedCounts = (rows, keys) => {
+  const out = Object.fromEntries(keys.map((key) => [key, 0]));
+  for (const row of rows) {
+    const key = keys.includes(row.k) ? row.k : keys[keys.length - 1];
+    out[key] += Number(row.n) || 0;
+  }
+  return out;
+};
+
+/** Library row counts for the inspect: aggregate COUNT(*) only (no ids, names or paths). */
+export async function readLibraryRowCounts(client, tablePresent) {
+  const legacy = `ARRAY[${SQL30_PREDECESSOR_6.map((v) => `'${v}'`).join(', ')}]::text[]`;
+  const target = `ARRAY[${SQL30_TARGET_VALUES.map((v) => `'${v}'`).join(', ')}]::text[]`;
+  const out = {};
+  const unreadable = [];
+  if (tablePresent.tenant_documents) {
+    const byCategory = await libraryGuardedRows(client, 'lib_count_category', `
+SELECT CASE
+  WHEN doc_type = ANY (${legacy}) THEN 'legacy'
+  WHEN doc_type LIKE 'library:%' THEN CASE WHEN split_part(doc_type, ':', 2) IN ('mortgage', 'template', 'shingle', 'siding', 'catalog', 'letterhead')
+    THEN split_part(doc_type, ':', 2) ELSE 'library_other' END
+  ELSE 'other' END AS k, count(*)::int AS n
+FROM public.tenant_documents GROUP BY 1`);
+    out.tenant_documents_by_category = byCategory.readable ? fixedCounts(byCategory.rows, LIBRARY_CATEGORY_KEYS) : null;
+    if (!byCategory.readable) unreadable.push(`tenant_documents_by_category:${byCategory.reason}`);
+    const byPath = await libraryGuardedRows(client, 'lib_count_path', `
+SELECT CASE
+  WHEN lower(COALESCE(file_path, '')) LIKE lower(tenant_id::text) || '/library/%' THEN 'aws_library'
+  WHEN COALESCE(file_path, '') ~* '^https?://' THEN 'url'
+  WHEN COALESCE(file_path, '') LIKE 'tenant-documents/%' THEN 'bucket_prefixed'
+  WHEN COALESCE(file_path, '') LIKE '%/library/%' THEN 'other_tenant_library'
+  ELSE 'other' END AS k, count(*)::int AS n
+FROM public.tenant_documents GROUP BY 1`);
+    out.tenant_documents_by_path_form = byPath.readable ? fixedCounts(byPath.rows, PATH_FORM_KEYS) : null;
+    if (!byPath.readable) unreadable.push(`tenant_documents_by_path_form:${byPath.reason}`);
+    const violating = await libraryGuardedRows(client, 'lib_count_sql30', `
+SELECT count(*)::int AS n FROM public.tenant_documents WHERE doc_type IS NULL OR doc_type <> ALL (${target})`);
+    out.rows_outside_sql30_values = violating.readable ? Number(violating.rows[0]?.n) || 0 : null;
+    if (!violating.readable) unreadable.push(`rows_outside_sql30_values:${violating.reason}`);
+    if (tablePresent.shared_with_homeowners) {
+      const shared = await libraryGuardedRows(client, 'lib_count_shared', 'SELECT count(*)::int AS n FROM public.tenant_documents WHERE shared_with_homeowners IS TRUE');
+      out.shared_with_homeowners_true = shared.readable ? Number(shared.rows[0]?.n) || 0 : null;
+      if (!shared.readable) unreadable.push(`shared_with_homeowners_true:${shared.reason}`);
+    } else {
+      out.shared_with_homeowners_true = null;
+      unreadable.push('shared_with_homeowners_true:column_missing');
+    }
+  } else {
+    unreadable.push('tenant_documents:table_missing');
+  }
+  if (tablePresent.mortgage_request_library_documents) {
+    const attached = await libraryGuardedRows(client, 'lib_count_attached', 'SELECT count(*)::int AS n FROM public.mortgage_request_library_documents');
+    out.mortgage_request_library_documents = attached.readable ? Number(attached.rows[0]?.n) || 0 : null;
+    if (!attached.readable) unreadable.push(`mortgage_request_library_documents:${attached.reason}`);
+  } else {
+    out.mortgage_request_library_documents = null;
+    unreadable.push('mortgage_request_library_documents:table_missing');
+  }
+  return { ...out, readable: unreadable.length === 0, unreadable };
+}
+
+/**
+ * The SQL 29 and SQL 30 state (catalog, plus the aggregate row counts when `counts`).
+ * Read-only; both migrations' fingerprints come from the same read.
+ */
+export async function readLibrarySqlState(client, { counts = true } = {}) {
+  const q = async (sql, params = []) => ((await client.query(sql, params))?.rows || []);
+  const login = (await q(LIBRARY_READS.login))[0] || {};
+  const prerequisites = {};
+  for (const name of SQL29_PREREQUISITES) prerequisites[name] = await prerequisitePresent(q, name);
+  const sql90Applied = (await q(LIBRARY_READS.regprocedure, [SQL29_SQL90_MARKER]))[0]?.present === true;
+
+  // SQL 29
+  const table = (await q(LIBRARY_READS.relation, [SQL29_TABLE]))[0] || null;
+  const tableAclRows = table ? await q(LIBRARY_READS.relationAcl, [SQL29_TABLE]) : [];
+  const tableAclAll = tableAclRows.map(libAclLine).sort();
+  const tableAcl = tableAclRows
+    .filter((row) => SQL29_GRANTEES.includes(row.grantee) && SQL29_DML.includes(row.privilege_type))
+    .map(libAclLine).sort();
+  const functions = {};
+  for (const fn of SQL29_FUNCTIONS) {
+    const row = (await q(LIBRARY_READS.function, [fn.identity]))[0];
+    if (!row) {
+      functions[fn.identity] = { exists: false };
+      continue;
+    }
+    const acl = (await q(LIBRARY_READS.functionAcl, [fn.identity])).map(libAclLine).sort();
+    functions[fn.identity] = {
+      exists: true,
+      owner: row.owner,
+      owner_is_login: row.owner === login.current_user,
+      security_definer: row.security_definer === true,
+      prosrc_sha256: row.prosrc_sha256,
+      config: [...(row.config || [])].map(String).sort(),
+      result: row.result,
+      acl,
+    };
+  }
+  const policyRows = table ? await q(LIBRARY_READS.policies, [SQL29_TABLE]) : [];
+  const policies = {};
+  for (const policy of SQL29_POLICIES) {
+    const row = policyRows.find((r) => r.name === policy.name);
+    if (!row) continue;
+    const expr = policy.cmd === 'INSERT' ? row.with_check : row.qual;
+    policies[policy.name] = {
+      cmd: row.cmd,
+      permissive: row.permissive === true,
+      roles: [...(row.roles || [])].map(String).sort(),
+      calls_reviewed_helpers: policy.calls.every((name) => String(expr).includes(name)),
+    };
+  }
+  const managed = new Set(SQL29_POLICIES.map((p) => p.name));
+  const otherPolicies = policyRows.map((r) => r.name).filter((name) => !managed.has(name)).sort();
+  const shareTriggers = (await q(LIBRARY_READS.shareTriggers)).map((r) => ({ name: r.name, enabled: r.enabled !== 'D' }));
+  const sql29 = {
+    table_present: Boolean(table),
+    table_owner: table?.owner ?? null,
+    table_owner_is_login: Boolean(table) && table.owner === login.current_user,
+    rls_enabled: table?.rls === true,
+    rls_forced: table?.rls_forced === true,
+    table_acl: tableAcl,
+    table_acl_entries: tableAclAll,
+    functions,
+    policies,
+    other_policies: otherPolicies,
+    share_triggers: shareTriggers,
+  };
+  sql29.live_definition_sha256 = libHash(sql29StateText(sql29));
+
+  // SQL 30
+  const tdTable = (await q(LIBRARY_READS.relation, [SQL30_TABLE]))[0] || null;
+  const column = (await q(LIBRARY_READS.docTypeColumn))[0] || null;
+  const check = tdTable ? (await q(LIBRARY_READS.checkConstraint))[0] || null : null;
+  const shape = sql30CheckShape(check?.def);
+  const sql30 = {
+    table_present: Boolean(tdTable),
+    table_owner: tdTable?.owner ?? null,
+    table_owner_is_login: Boolean(tdTable) && tdTable.owner === login.current_user,
+    doc_type_udt: column?.udt_name ?? null,
+    doc_type_nullable: column?.is_nullable ?? null,
+    check: check
+      ? { present: true, validated: check.validated === true, form: shape.form, values: shape.values, shape: shape.shape, definition_sha256: libHash(check.def) }
+      : { present: false, shape: 'absent', definition_sha256: null },
+  };
+  sql30.live_definition_sha256 = libHash(sql30StateText(sql30));
+
+  const state = {
+    current_user: login.current_user ?? null,
+    session_user: login.session_user ?? null,
+    prerequisites,
+    prerequisites_missing: Object.entries(prerequisites).filter(([, v]) => !v).map(([k]) => k),
+    sql90_applied: sql90Applied,
+    sql29,
+    sql30,
+  };
+  if (counts) {
+    const sharedColumn = tdTable ? (await q(LIBRARY_READS.columnPresent, [SQL30_TABLE, 'shared_with_homeowners']))[0]?.present === true : false;
+    state.counts = await readLibraryRowCounts(client, {
+      tenant_documents: Boolean(tdTable),
+      shared_with_homeowners: sharedColumn,
+      mortgage_request_library_documents: Boolean(table),
+    });
+  }
+  return ok(state);
+}
+
+/** The pin's live fingerprint in a library state. */
+export const librarySqlLiveHash = (key, state) => state?.[key]?.live_definition_sha256 ?? null;
+
+const SQL29_API_ACL_LINES = new Set(['owner EXECUTE', 'PUBLIC EXECUTE', 'authenticated EXECUTE', 'checksops EXECUTE']);
+const SQL29_TRIGGER_ACL_LINES = new Set(['owner EXECUTE', 'PUBLIC EXECUTE']);
+
+/** Rules both environments apply before SQL 29 / SQL 30 run. */
+export function librarySharedPreconditionFailures(key, state) {
+  if (key === 'sql29') {
+    const s = state?.sql29 || {};
+    const fnRows = SQL29_FUNCTIONS.map((fn) => [fn, s.functions?.[fn.identity] || { exists: false }]);
+    return libFailed([
+      ['prerequisites_present', Array.isArray(state?.prerequisites_missing) && state.prerequisites_missing.length === 0],
+      // SQL 29 after SQL 90 would bring back the owner/admin tier on aws_can_manage_mortgage_library.
+      ['sql90_not_applied', state?.sql90_applied === false],
+      ['table_owned_by_login', s.table_owner_is_login === true],
+      ['rls_enabled', s.rls_enabled === true],
+      ['functions_owned_by_login', fnRows.every(([, row]) => !row.exists || row.owner_is_login === true)],
+      ['function_results_match', fnRows.every(([fn, row]) => !row.exists || row.result === fn.result)],
+      // Grants the file does not revoke would survive it.
+      ['function_acl_replaceable', fnRows.every(([fn, row]) => !row.exists || (row.acl || []).every((line) => (
+        fn.result === 'trigger' ? SQL29_TRIGGER_ACL_LINES : SQL29_API_ACL_LINES).has(line)))],
+      ['table_acl_replaceable', (s.table_acl_entries || []).every((line) => {
+        const grantee = line.split(' ')[0];
+        return grantee === 'owner' || SQL29_GRANTEES.includes(grantee);
+      }) && (s.table_acl_entries || []).every((line) => !/with grant option/.test(line) || line.startsWith('owner '))],
+      // Only the reviewed policies and the three the file drops.
+      ['no_unmanaged_policies', (s.other_policies || []).every((name) => SQL29_DROPPED_POLICIES.includes(name))],
+    ]);
+  }
+  if (key === 'sql30') {
+    const s = state?.sql30 || {};
+    const shape = s.check?.shape;
+    return libFailed([
+      ['table_present', s.table_present === true],
+      ['doc_type_text_not_null', s.doc_type_udt === 'text' && s.doc_type_nullable === 'NO'],
+      ['table_owned_by_login', s.table_owner_is_login === true],
+      ['check_is_supported_predecessor', shape === 'predecessor_3' || shape === 'predecessor_6'],
+      // SQL 30's own sql30_abort for rows the new CHECK refuses.
+      ['no_rows_outside_sql30_values', state?.counts?.rows_outside_sql30_values === 0],
+    ]);
+  }
+  return ['unknown_migration'];
+}
+
+/** Rules both environments apply after SQL 29 / SQL 30 ran, inside the transaction. */
+export function librarySharedPostconditionFailures(key, before, after, pin) {
+  if (key === 'sql29') {
+    const s = after?.sql29 || {};
+    return libFailed([
+      ['intended_state', s.live_definition_sha256 === pin?.intended_replacement_sha256],
+      ['functions_owned_by_login', SQL29_FUNCTIONS.every((fn) => s.functions?.[fn.identity]?.owner_is_login === true)],
+      ['table_owner_unchanged', after?.sql29?.table_owner === before?.sql29?.table_owner],
+      ['rls_enabled', s.rls_enabled === true],
+      // Privileges the file does not name (REFERENCES, TRIGGER, TRUNCATE, ...) are unchanged.
+      ['other_table_privileges_unchanged', libSame(
+        (s.table_acl_entries || []).filter((line) => !SQL29_DML.includes(line.split(' ')[1]) || !SQL29_GRANTEES.includes(line.split(' ')[0])),
+        (before?.sql29?.table_acl_entries || []).filter((line) => !SQL29_DML.includes(line.split(' ')[1]) || !SQL29_GRANTEES.includes(line.split(' ')[0])),
+      )],
+      ['share_triggers_unchanged', libSame(s.share_triggers, before?.sql29?.share_triggers)],
+      ['sql30_unchanged', after?.sql30?.live_definition_sha256 === before?.sql30?.live_definition_sha256],
+    ]);
+  }
+  if (key === 'sql30') {
+    return libFailed([
+      ['intended_state', after?.sql30?.live_definition_sha256 === pin?.intended_replacement_sha256],
+      ['table_owner_unchanged', after?.sql30?.table_owner === before?.sql30?.table_owner],
+      ['sql29_unchanged', after?.sql29?.live_definition_sha256 === before?.sql29?.live_definition_sha256],
+    ]);
+  }
+  return ['unknown_migration'];
+}
+
+/** Objects each migration may change (everything else in public and auth must not). */
+export const LIBRARY_UNRELATED_SCOPE = Object.freeze({
+  sql29: Object.freeze({
+    functions: SQL29_FUNCTION_IDENTITIES,
+    policy_relations: Object.freeze([SQL29_TABLE]),
+    acl_relations: Object.freeze([SQL29_TABLE]),
+    constraints: Object.freeze([]),
+  }),
+  sql30: Object.freeze({
+    functions: Object.freeze([]),
+    policy_relations: Object.freeze([]),
+    acl_relations: Object.freeze([]),
+    constraints: Object.freeze([`${SQL30_TABLE}.${SQL30_CONSTRAINT}`]),
+  }),
+});
+
+const LIBRARY_UNRELATED_SQL = Object.freeze({
+  relations: `SELECT c.oid::regclass::text || ' ' || c.relkind::text || ' ' || pg_catalog.pg_get_userbyid(c.relowner) || ' '
+  || c.relrowsecurity::text || ' ' || c.relforcerowsecurity::text || ' '
+  || CASE WHEN (n.nspname || '.' || c.relname) = ANY ($1::text[]) THEN '<acl ignored>' ELSE COALESCE(c.relacl::text, '') END AS d
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' ORDER BY 1`,
+  columns: `SELECT a.attrelid::regclass::text || ' ' || a.attnum::text || ' ' || a.attname || ' ' || pg_catalog.format_type(a.atttypid, a.atttypmod)
+  || ' ' || a.attnotnull::text || ' ' || COALESCE(a.attacl::text, '') || ' ' || COALESCE(pg_catalog.pg_get_expr(d.adbin, d.adrelid), '') AS d
+FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'f') AND a.attnum > 0 AND NOT a.attisdropped ORDER BY 1`,
+  constraints: `SELECT con.conrelid::regclass::text || ' ' || con.conname || ' ' || con.contype::text || ' ' || pg_catalog.pg_get_constraintdef(con.oid) AS d
+FROM pg_catalog.pg_constraint con JOIN pg_catalog.pg_namespace n ON n.oid = con.connamespace
+LEFT JOIN pg_catalog.pg_class r ON r.oid = con.conrelid
+WHERE n.nspname = 'public' AND NOT ((n.nspname || '.' || COALESCE(r.relname, '') || '.' || con.conname) = ANY ($1::text[])) ORDER BY 1`,
+  policies: `SELECT c.oid::regclass::text || ' ' || pol.polname || ' ' || pol.polcmd::text || ' ' || pol.polpermissive::text || ' ' || pol.polroles::text
+  || ' ' || COALESCE(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), '') || ' ' || COALESCE(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), '') AS d
+FROM pg_catalog.pg_policy pol JOIN pg_catalog.pg_class c ON c.oid = pol.polrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND NOT ((n.nspname || '.' || c.relname) = ANY ($1::text[])) ORDER BY 1`,
+  functions: `SELECT p.oid::regprocedure::text || ' ' || pg_catalog.pg_get_userbyid(p.proowner) || ' ' || md5(p.prosrc) || ' '
+  || p.prosecdef::text || ' ' || COALESCE(p.proconfig::text, '') || ' ' || COALESCE(p.proacl::text, '') AS d
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('public', 'auth') AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) x WHERE pg_catalog.to_regprocedure(x) = p.oid) ORDER BY 1`,
+  triggers: `SELECT t.tgrelid::regclass::text || ' ' || t.tgname || ' ' || t.tgenabled::text || ' ' || pg_catalog.pg_get_triggerdef(t.oid) AS d
+FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND NOT t.tgisinternal ORDER BY 1`,
+  schema: `SELECT n.nspname || ' ' || pg_catalog.pg_get_userbyid(n.nspowner) || ' ' || COALESCE(n.nspacl::text, '') AS d
+FROM pg_catalog.pg_namespace n WHERE n.nspname IN ('public', 'auth') ORDER BY 1`,
+});
+
+/** Hashes, by category, of everything SQL 29 / SQL 30 must not change. */
+export async function readLibraryUnrelatedSnapshot(client, key) {
+  const scope = LIBRARY_UNRELATED_SCOPE[key];
+  const params = {
+    relations: [[...scope.acl_relations]],
+    constraints: [[...scope.constraints]],
+    policies: [[...scope.policy_relations]],
+    functions: [[...scope.functions]],
+  };
+  const categories = {};
+  const counts = {};
+  for (const [name, sql] of Object.entries(LIBRARY_UNRELATED_SQL)) {
+    const rows = (await client.query(sql, params[name] || []))?.rows || [];
+    categories[name] = libHash(rows.map((row) => row.d).join('\n'));
+    counts[name] = rows.length;
+  }
+  return { categories, counts, sha256: libHash(JSON.stringify(categories)) };
+}
+
+export function libraryChangedCategories(before, after) {
+  return Object.keys(before?.categories || {}).filter((name) => before.categories[name] !== after?.categories?.[name]);
+}
+
+/** Readable, non-sensitive report (no owner names, definitions or rows) for read-live and inspect. */
+export function librarySqlReport(state) {
+  const fn = (row) => (row?.exists
+    ? { exists: true, owner_is_login: row.owner_is_login === true, security_definer: row.security_definer === true, result: row.result ?? null, config: [...(row.config || [])], acl: [...(row.acl || [])], prosrc_sha256: row.prosrc_sha256 ?? null }
+    : { exists: false });
+  return {
+    prerequisites_missing: [...(state?.prerequisites_missing || [])],
+    sql90_applied: state?.sql90_applied === true,
+    sql29: {
+      live_definition_sha256: state?.sql29?.live_definition_sha256 ?? null,
+      table_present: state?.sql29?.table_present === true,
+      table_owner_is_login: state?.sql29?.table_owner_is_login === true,
+      rls_enabled: state?.sql29?.rls_enabled === true,
+      table_acl: [...(state?.sql29?.table_acl || [])],
+      // Keyed by function name (identities carry characters the read-live report drops).
+      functions: Object.fromEntries(SQL29_FUNCTIONS.map((f) => [f.name, fn(state?.sql29?.functions?.[f.identity])])),
+      functions_present: SQL29_FUNCTIONS.filter((f) => state?.sql29?.functions?.[f.identity]?.exists === true).length,
+      policies_present: SQL29_POLICIES.filter((p) => state?.sql29?.policies?.[p.name]).map((p) => p.name),
+      other_policies: [...(state?.sql29?.other_policies || [])],
+      share_triggers: (state?.sql29?.share_triggers || []).map((t) => ({ name: t.name, enabled: t.enabled === true })),
+    },
+    sql30: {
+      live_definition_sha256: state?.sql30?.live_definition_sha256 ?? null,
+      table_present: state?.sql30?.table_present === true,
+      doc_type: `${state?.sql30?.doc_type_udt ?? 'absent'}/${state?.sql30?.doc_type_nullable ?? 'absent'}`,
+      check_shape: state?.sql30?.check?.shape ?? 'absent',
+      check_validated: state?.sql30?.check?.validated === true,
+      check_value_count: Array.isArray(state?.sql30?.check?.values) ? state.sql30.check.values.length : 0,
+      check_definition_sha256: state?.sql30?.check?.definition_sha256 ?? null,
+    },
+    counts: state?.counts ?? null,
+  };
+}
+
 export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL44,
   AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS,
@@ -1833,6 +2619,8 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE,
   AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE,
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
+  AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
+  AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -1955,6 +2743,8 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql87ResolveCheckCaseTenantScope(input)) return AUTHORIZED_SQL87_RESOLVE_CHECK_CASE_TENANT_SCOPE;
   if (isSql88ClaimIdAssignCaseTenantScope(input)) return AUTHORIZED_SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE;
   if (isSql89CheckIntakeColumnUpdate(input)) return AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE;
+  if (isSql29MortgageOpsLibraryParity(input)) return AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY;
+  if (isSql30TenantDocumentsDocType(input)) return AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE;
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;

@@ -58,6 +58,9 @@ jobs:
       - name: Verify publishable-key boundary
         run: bun run check:publish-keys
 
+      - name: Install PDF rasterizer for signature placement tests
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+
       - name: Run AWS API/provider regression suite
         run: bun run test:aws-api
 

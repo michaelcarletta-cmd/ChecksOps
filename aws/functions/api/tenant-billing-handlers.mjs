@@ -86,11 +86,13 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         sameDayRateCents: body.same_day_rate_cents,
         mortgageOpsInitialRateCents: body.mortgage_ops_initial_rate_cents,
         mortgageOpsAdditionalRateCents: body.mortgage_ops_additional_rate_cents,
+        perCheckBillingEnabled: body.per_check_billing_enabled,
+        isFoundingPartner: body.is_founding_partner,
         billingEnabled: body.billing_enabled,
         billingDay: body.billing_day_of_month,
         userId: mapping.application_user_id,
       });
-      if (!saved.ok) return denied(spoof, { statusCode: 400, ...saved });
+      if (!saved.ok) return denied(spoof, { ...saved, statusCode: saved.statusCode || 400 });
       const data = await snapshot(client, tenantId, dest);
       return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, saved: true, ...data };
     }
@@ -230,7 +232,7 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
     if (!(await canAuthorizeTenantBilling(client, mapping.application_user_id, tenantId))) {
       return denied(spoof, {
         error: 'not_authorized',
-        message: 'Only the tenant admin or ChecksOps platform owner can authorize billing.',
+        message: 'Only a member of this company can authorize its billing.',
       });
     }
     if (body.action === 'pause' || body.auto_debit_enabled === false) {

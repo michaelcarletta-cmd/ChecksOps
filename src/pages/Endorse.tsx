@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
 import { displayCase } from "@/lib/displayCase";
+import { SIGNATURE_FONT_FAMILY } from "@/lib/signatureFont";
 
 interface EndorsementData {
   id: string;
@@ -278,7 +279,6 @@ export default function Endorse() {
 
   return (
     <div style={styles.body}>
-      <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&display=swap" rel="stylesheet" />
       <div style={styles.card}>
         <h1 style={styles.h1}>Insurance Check Endorsement</h1>
         <p style={styles.sub}>You have been identified as a payee on the following check.</p>
@@ -475,7 +475,7 @@ export default function Endorse() {
 
 const styles: Record<string, React.CSSProperties> = {
   body: {
-    fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+    fontFamily: "Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
     background: "#0f172a",
     color: "#e2e8f0",
     minHeight: "100vh",
@@ -577,13 +577,13 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#0f172a",
     color: "#e2e8f0",
     fontSize: 24,
-    fontFamily: "'Dancing Script',cursive,'Brush Script MT',cursive",
+    fontFamily: SIGNATURE_FONT_FAMILY,
     boxSizing: "border-box" as const,
   },
   typedPreview: {
     textAlign: "center",
     fontSize: 32,
-    fontFamily: "'Dancing Script',cursive,'Brush Script MT',cursive",
+    fontFamily: SIGNATURE_FONT_FAMILY,
     color: "#e2e8f0",
     padding: 20,
     border: "2px dashed #334155",

@@ -32,7 +32,7 @@ export type BackendModeInput = {
 
 /**
  * ChecksOps' AWS/Cognito adapter is ONLY valid on ChecksOps platform hosts
- * (and localhost for dev). Freedom Claims must never depend on ChecksOps AWS
+ * (and localhost for dev). Other hosts must never depend on ChecksOps AWS
  * routing (`/prep`) for tenant branding assets like logos.
  */
 export function shouldUseAwsChecksOpsBackendFor(input: BackendModeInput): boolean {

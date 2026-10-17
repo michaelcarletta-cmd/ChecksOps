@@ -365,7 +365,7 @@ export function OrganizationSettings() {
                   <div className="space-y-2">
                     <Label>Organization Name</Label>
                     <Input
-                      placeholder="e.g., Freedom Claims"
+                      placeholder="e.g., Acme Adjusting"
                       value={newOrgName}
                       onChange={(e) => {
                         setNewOrgName(e.target.value);
@@ -378,7 +378,7 @@ export function OrganizationSettings() {
                   <div className="space-y-2">
                     <Label>Slug (URL-friendly identifier)</Label>
                     <Input
-                      placeholder="e.g., freedom-claims"
+                      placeholder="e.g., acme-adjusting"
                       value={newOrgSlug}
                       onChange={(e) => setNewOrgSlug(e.target.value)}
                     />
@@ -386,7 +386,7 @@ export function OrganizationSettings() {
                   <div className="space-y-2">
                     <Label>Domain (optional)</Label>
                     <Input
-                      placeholder="e.g., freedomclaims.com"
+                      placeholder="e.g., acmeadjusting.com"
                       value={newOrgDomain}
                       onChange={(e) => setNewOrgDomain(e.target.value)}
                     />
@@ -653,7 +653,7 @@ export function OrganizationSettings() {
             <div className="space-y-2">
               <Label>Organization Name</Label>
               <Input
-                placeholder="e.g., Freedom Claims"
+                placeholder="e.g., Acme Adjusting"
                 value={editOrgName}
                 onChange={(e) => setEditOrgName(e.target.value)}
               />
@@ -661,7 +661,7 @@ export function OrganizationSettings() {
             <div className="space-y-2">
               <Label>Slug (URL-friendly identifier)</Label>
               <Input
-                placeholder="e.g., freedom-claims"
+                placeholder="e.g., acme-adjusting"
                 value={editOrgSlug}
                 onChange={(e) => setEditOrgSlug(e.target.value)}
               />
@@ -669,7 +669,7 @@ export function OrganizationSettings() {
             <div className="space-y-2">
               <Label>Domain (optional)</Label>
               <Input
-                placeholder="e.g., freedomclaims.com"
+                placeholder="e.g., acmeadjusting.com"
                 value={editOrgDomain}
                 onChange={(e) => setEditOrgDomain(e.target.value)}
               />

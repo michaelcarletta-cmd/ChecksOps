@@ -30,13 +30,15 @@ function fakeClient({ platformOwner = false } = {}) {
 
 const auth = (bucket, path, opts) => authorizeStorageWritePath(fakeClient(opts), bucket, path, USER);
 
-test('tenant-logos: only {own tenant}/{file}; platform owners may write any tenant', async () => {
+test('tenant-logos: only {own tenant}/{file}; the platform owner does not write tenant branding', async () => {
   assert.equal((await auth('tenant-logos', `${OWN}/logo-1.png`)).ok, true);
   assert.equal((await auth('tenant-logos', `${OWN}/1.png`)).ok, true);
   for (const path of [`${OTHER}/logo-1.png`, 'logo.png', `${OWN}/nested/logo.png`, `x/${OWN}/logo.png`]) {
     assert.equal((await auth('tenant-logos', path)).ok, false, path);
   }
-  assert.equal((await auth('tenant-logos', `${OTHER}/logo-1.png`, { platformOwner: true })).ok, true);
+  const owner = await auth('tenant-logos', `${OTHER}/logo-1.png`, { platformOwner: true });
+  assert.equal(owner.ok, false);
+  assert.equal(owner.statusCode, 403);
 });
 
 test('company-branding: members may only add new timestamped letterheads (create-only)', async () => {

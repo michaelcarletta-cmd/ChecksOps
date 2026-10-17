@@ -258,3 +258,27 @@ test('missing or invalid API-origin configuration fails closed to the platform l
     });
   }
 });
+
+test('malformed percent-escapes in a legacy Supabase logo URL never throw', async () => {
+  const malformed = [
+    'https://xyzcompany.supabase.co/storage/v1/object/public/tenant-logos/acme/logo%E0%A4%A.png',
+    'https://xyzcompany.supabase.co/storage/v1/object/public/tenant-logos/acme/%zz-logo.png',
+    'https://xyzcompany.supabase.co/storage/v1/object/sign/tenant-logos/acme/logo%.png?token=x',
+  ];
+  for (const value of malformed) {
+    assert.doesNotThrow(() => publicTenantLogoUrl(value, STAGING_API));
+    assert.equal(publicTenantLogoUrl(value, STAGING_API), null);
+  }
+  // Well-formed legacy URLs still rewrite as before.
+  assert.equal(
+    publicTenantLogoUrl(SUPABASE_LOGO, STAGING_API),
+    `${STAGING_API}/storage/public?bucket=tenant-logos&path=${encodeURIComponent('acme/logo.png')}`,
+  );
+
+  await withEnv({ CHECKSOPS_ENV: 'staging', CHECKSOPS_API_URL: STAGING_API }, async () => {
+    const branding = await resolveEmailBranding(tenantClient(malformed[0]), {
+      tenantId: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+    });
+    assert.match(branding.logoUrl, /checksops-logo\.png/);
+  });
+});

@@ -113,7 +113,7 @@ function copyText(value: string) {
 
 export function EmailSenderSettings({ showSendingDomain = true }: { showSendingDomain?: boolean } = {}) {
   const { tenantId } = useTenantFilter();
-  const { user, userRole } = useAuth();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const aws = isAwsStaging();
 
@@ -162,10 +162,11 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
   });
 
   const settings = payload?.settings || null;
-  const platformAdmin = userRole === "admin";
+  // Owner policy: every member of the tenant is a user with the same rights;
+  // platform roles give no shortcut.
   const canConfigure = aws
     ? Boolean(payload?.settings?.canConfigure)
-    : platformAdmin || membership?.role === "admin";
+    : Boolean(membership);
 
   const [fromName, setFromName] = useState("");
   const [replyTo, setReplyTo] = useState("");

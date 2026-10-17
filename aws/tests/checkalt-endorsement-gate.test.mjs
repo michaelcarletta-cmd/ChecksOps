@@ -69,7 +69,7 @@ const jwtEvent = (body) => ({
     stage: 'staging',
     http: { method: 'POST', path: '/functions/v1/checkalt-submit-deposit' },
     authorizer: {
-      jwt: { claims: { sub: COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id' } },
+      jwt: { claims: { sub: COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id', origin_jti: 'origin-jti-login-1' } },
     },
   },
 });
@@ -144,7 +144,12 @@ const createStore = ({ payees, endorsements, checkOverrides = {}, deposits = [] 
       action_key: 'deposit.submit',
       factor_type: 'totp',
       succeeded: true,
-      metadata: { check_id: CHECK_ID, amount_cents: 1234 },
+      metadata: {
+        check_id: CHECK_ID,
+        amount_cents: 1234,
+        login_session: `${COGNITO_SUB}:jti:origin-jti-login-1`,
+        source: 'app_financial_totp',
+      },
       created_at: new Date().toISOString(),
     }],
     memberships: [{ tenant_id: FREEDOM_TENANT, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' }],

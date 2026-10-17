@@ -10,7 +10,6 @@
  */
 import { randomUUID } from 'node:crypto';
 import { parseBody, withIdentityWrite } from './data.mjs';
-import { USER_ROLES_SQL } from './identity.mjs';
 import { COLLECTION_CONTRACT_ID } from './tenant-collection-v2.mjs';
 import { applyBillingProviderEvent } from './tenant-collection-v2-settlement.mjs';
 
@@ -153,16 +152,14 @@ export const refuseForbiddenOrCallerIds = (body = {}) => {
   return null;
 };
 
-export const assertUatAdmin = async (client, mapping) => {
-  const roles = (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows
-    .map((row) => String(row.role || '').toLowerCase());
+// The staging UAT collection harness is a platform tool: the platform owner
+// only. Global user_roles admin/staff (and role-name tiers) give no access.
+export const assertUatAdmin = async (client) => {
   const owners = (await client.query(
     `SELECT public.is_master_owner() AS is_master, public.is_platform_owner() AS is_platform`,
   )).rows[0] || {};
   const authorized = owners.is_master === true
-    || owners.is_platform === true
-    || roles.includes('admin')
-    || roles.includes('operator');
+    || owners.is_platform === true;
   if (!authorized) {
     return denied('admin_required', { statusCode: 403 });
   }
@@ -432,7 +429,7 @@ export const runCollectionV2Uat = async ({
     return denied('unknown_uat_action', { statusCode: 400, action });
   }
 
-  const adminGate = await assertUatAdmin(client, mapping);
+  const adminGate = await assertUatAdmin(client);
   if (adminGate) return adminGate;
 
   if (action === 'create') {

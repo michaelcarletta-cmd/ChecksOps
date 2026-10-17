@@ -3,20 +3,11 @@ import assert from "node:assert/strict";
 
 import { shouldUseAwsChecksOpsBackendFor } from "../src/lib/backendMode.ts";
 
-test("Freedom Claims hosts never use ChecksOps AWS backend", () => {
+test("non-ChecksOps hosts never use ChecksOps AWS backend", () => {
   const authProvider = "cognito";
-  assert.equal(
-    shouldUseAwsChecksOpsBackendFor({ hostname: "freedomclaims.work", authProvider }),
-    false,
-  );
-  assert.equal(
-    shouldUseAwsChecksOpsBackendFor({ hostname: "www.freedomclaims.work", authProvider }),
-    false,
-  );
-  assert.equal(
-    shouldUseAwsChecksOpsBackendFor({ hostname: "freedomclaims.lovable.app", authProvider }),
-    false,
-  );
+  for (const hostname of ["example.com", "www.example.com", "some-app.lovable.app"]) {
+    assert.equal(shouldUseAwsChecksOpsBackendFor({ hostname, authProvider }), false, hostname);
+  }
 });
 
 test("ChecksOps platform hosts use AWS backend when authProvider=cognito", () => {

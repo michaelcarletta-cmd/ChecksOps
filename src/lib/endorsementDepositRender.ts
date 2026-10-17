@@ -11,6 +11,7 @@ import { clampEndorsementOverride } from "./endorsementLayout.ts";
 import type { EndorsementOverride } from "./endorsementLayout.ts";
 import { fitEndorsementLayout } from "./endorsementFit.ts";
 import { normalizeBlobToCheckAltCanvas } from "./checkaltImageCompliance.ts";
+import { SIGNATURE_FONT_FAMILY, ensureSignatureFontLoaded } from "./signatureFont.ts";
 
 export const ENDORSEMENT_RENDERER_VERSION = "canvas-v2";
 
@@ -251,13 +252,13 @@ async function drawEndorsementBlock(
           subCy += sigHeight + rowGap;
         } catch {
           // Fall back to typed name if image fails to load
-          ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+          ctx.font = `italic 500 ${fontSize}px ${SIGNATURE_FONT_FAMILY}`;
           ctx.fillText(sig.payee_name, colCenterX, subCy);
           subCy += fontSize + rowGap;
         }
       } else {
         const typed = url.startsWith("typed:") ? url.slice(6) : sig.payee_name;
-        ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+        ctx.font = `italic 500 ${fontSize}px ${SIGNATURE_FONT_FAMILY}`;
         ctx.fillText(typed, colCenterX, subCy);
         subCy += fontSize + rowGap;
       }
@@ -289,11 +290,11 @@ async function drawEndorsementBlock(
         );
 
       } catch {
-        ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+        ctx.font = `italic 500 ${fontSize}px ${SIGNATURE_FONT_FAMILY}`;
         ctx.fillText(input.companyName, centerX, cy);
       }
     } else {
-      ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+      ctx.font = `italic 500 ${fontSize}px ${SIGNATURE_FONT_FAMILY}`;
       ctx.fillText(input.companyName, centerX, cy);
     }
   }
@@ -426,6 +427,8 @@ export async function renderDepositImage(
   ctx.rotate(((override.rotationDeg || 0) * Math.PI) / 180);
   ctx.translate(-blockWidth / 2, -blockHeight / 2);
 
+  // Typed signatures are rasterized here; load the script font first.
+  await ensureSignatureFontLoaded(`italic 500 ${preset.fontSize}px "Dancing Script"`);
   await drawEndorsementBlock(
     ctx,
     input,

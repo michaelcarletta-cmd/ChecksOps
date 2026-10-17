@@ -1,5 +1,5 @@
 import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
-import { TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from './identity.mjs';
+import { TENANT_MEMBERSHIP_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled, workflowFlagSnapshot } from './workflow-flags.mjs';
 import { writesEnabled, checkWorkflowWritesEnabled, storageWritesEnabled } from './write-allowlist.mjs';
 import { flagSnapshot } from './provider-flags.mjs';
@@ -12,6 +12,7 @@ import {
   isTerminalFinancial,
   mapReviewPath,
   TRANSITIONS,
+  TENANT_MEMBER_SQL,
 } from './workflow-transitions.mjs';
 import {
   evaluateEndorsementEligibility,
@@ -22,7 +23,6 @@ import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.m
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TRANSITION_ROLES = new Set(['staff', 'admin', 'owner', 'manager']);
 
 const isUuid = (value) => UUID_RE.test(String(value || ''));
 
@@ -257,16 +257,13 @@ const deriveTenantId = (memberships, claimed) => {
   return { tenantId: memberships[0].tenant_id, usedClaimedMembership: false };
 };
 
-const rolesOf = async (client, userId, tenantId) => {
-  const platform = (await client.query(USER_ROLES_SQL, [userId])).rows.map((row) => String(row.role || '').toLowerCase());
-  const tenant = (await client.query(
-    'SELECT role FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid',
-    [userId, tenantId],
-  )).rows.map((row) => String(row.role || '').toLowerCase());
-  return [...new Set([...platform, ...tenant])];
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Only the caller's own tenant_users row for the check's tenant counts (the role
+// column is ignored). Platform user_roles (admin/staff) are not read.
+const isTenantMember = async (client, userId, tenantId) => {
+  if (!isUuid(tenantId)) return false;
+  return (await client.query(TENANT_MEMBER_SQL, [userId, tenantId])).rows.length > 0;
 };
-
-const canTransition = (roles) => roles.some((role) => TRANSITION_ROLES.has(role) || role === 'member');
 
 const lookupWorkflowCheck = async (client, checkId) => {
   if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'check_id' };
@@ -279,11 +276,6 @@ const lookupWorkflowCheck = async (client, checkId) => {
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
   return { check: rows[0] };
-};
-
-const platformRolesOf = async (client, userId) => {
-  const rows = (await client.query(USER_ROLES_SQL, [userId])).rows;
-  return new Set(rows.map((row) => String(row.role || '').toLowerCase()).filter(Boolean));
 };
 
 const descriptiveFromBody = (body = {}) => {
@@ -489,16 +481,11 @@ export const handleCheckTransition = async (event, deps = {}) => {
     if (!decided.ok) {
       return denied(spoof, decided);
     }
-    const roles = await rolesOf(client, mapping.application_user_id, looked.check.tenant_id);
-    const roleAllowed = looked.check.claim_id
-      ? decided.spec.requiredRole === 'tenant_member'
-        ? canTransition(roles)
-        : decided.spec.requiredRole === 'staff_or_tenant_admin'
-          ? roles.some((role) => TRANSITION_ROLES.has(role))
-          : false
-      : canTransition(roles);
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    const roleAllowed = decided.spec.requiredRole === 'tenant_member'
+      && await isTenantMember(client, mapping.application_user_id, looked.check.tenant_id);
     if (!roleAllowed) {
-      return denied(spoof, { error: 'insufficient_role', message: 'Transition requires a tenant membership role' });
+      return denied(spoof, { error: 'insufficient_role', message: 'Transition requires a member of this check\'s company' });
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
     if (notes.error) return denied(spoof, { statusCode: 400, ...notes });
@@ -595,10 +582,6 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (body.sql || body.query || body.rawSql) {
       return denied(spoof, { error: 'generic_sql_denied' });
     }
-    const roles = await platformRolesOf(client, mapping.application_user_id);
-    if (!roles.has('admin')) {
-      return denied(spoof, { error: 'not_authorized', message: 'Only admins can delete checks' });
-    }
     const checkId = body.check_id || body.checkId || body.id
       || String(event?.rawPath || '').split('/').filter(Boolean).pop();
     const reason = clip(body.reason || body.p_reason || body.delete_reason, 2000);
@@ -611,6 +594,10 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     const looked = await lookupWorkflowCheck(client, checkId);
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
+    }
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    if (!(await isTenantMember(client, mapping.application_user_id, looked.check.tenant_id))) {
+      return denied(spoof, { error: 'not_authorized', message: 'Only a member of this check\'s company can delete it' });
     }
     if (isPartnerLinked(looked.check)) {
       return denied(spoof, {
@@ -982,8 +969,7 @@ export const handleEndorsementRenderReset = async (event, deps = {}) => {
     if (String(before.check_number || '') !== '9562') {
       return denied(spoof, { statusCode: 403, error: 'reset_scope_denied', message: 'Reset operator is restricted to McGurrin #9562' });
     }
-    const roles = await rolesOf(client, mapping.application_user_id, before.tenant_id);
-    if (!canTransition(roles)) {
+    if (!(await isTenantMember(client, mapping.application_user_id, before.tenant_id))) {
       return denied(spoof, { error: 'insufficient_role', message: 'Reset requires a tenant membership role' });
     }
     if (!before.back_image_original_path || looksGeneratedBack(before.back_image_original_path)) {

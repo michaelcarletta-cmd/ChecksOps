@@ -189,7 +189,15 @@ export const publicTenantLogoUrl = (value, apiBase = publicApiBaseUrl()) => {
   const base = String(apiBase || '').replace(/\/$/, '');
   const supabase = raw.match(SUPABASE_BRANDING);
   if (supabase && BRANDING_BUCKETS.has(supabase[1]) && base) {
-    const path = decodeURIComponent(supabase[2]);
+    // Legacy Supabase paths can carry malformed percent-escapes; decodeURIComponent
+    // throws URIError on those. Skip the tenant logo (caller falls back to the
+    // platform logo) instead of failing email branding.
+    let path;
+    try {
+      path = decodeURIComponent(supabase[2]);
+    } catch {
+      return null;
+    }
     const url = `${base}/storage/public?bucket=${encodeURIComponent(supabase[1])}&path=${encodeURIComponent(path)}`;
     return isSafeHttpUrl(url) ? url : null;
   }
@@ -431,6 +439,55 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
     requestedCustomFrom,
     customFromReason: customFromBlocked ? (customFromReason || 'domain_not_verified') : null,
   };
+};
+
+const DOCUMENT_BRANDING_FIELDS = ['company_address', 'company_phone', 'company_email', 'letterhead_url'];
+
+/**
+ * Company address/phone/email and document letterhead for a document or email
+ * rendered for `tenantId`. The tenant's own values (tenants columns, SQL 93)
+ * win. The platform's company_branding row (`platformRow`) is a fallback only
+ * for the platform's own documents: no tenant, or the system tenant. Any
+ * other tenant never inherits the platform's details; an unset field is null.
+ * Never throws: before SQL 93 the tenant columns are missing and a tenant's
+ * fields read as unset.
+ */
+export const resolveTenantDocumentBranding = async (client, { tenantId = null, platformRow = {} } = {}) => {
+  const platform = Object.fromEntries(
+    DOCUMENT_BRANDING_FIELDS.map((field) => [field, firstNonEmpty(platformRow?.[field])]),
+  );
+  if (!tenantId) return { ...platform, source: 'platform' };
+
+  let tenant = null;
+  if (client?.query) {
+    try {
+      tenant = (await brandingQuery(client, 'document_branding_tenant',
+        `SELECT is_system_tenant, company_address, company_phone, company_email, letterhead_url
+         FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
+        [tenantId],
+      )).rows[0] || null;
+    } catch {
+      try {
+        tenant = (await brandingQuery(client, 'document_branding_tenant_deployed',
+          'SELECT is_system_tenant FROM public.tenants WHERE id = $1::uuid LIMIT 1',
+          [tenantId],
+        )).rows[0] || null;
+      } catch {
+        tenant = null;
+      }
+    }
+  }
+
+  const own = Object.fromEntries(
+    DOCUMENT_BRANDING_FIELDS.map((field) => [field, firstNonEmpty(tenant?.[field])]),
+  );
+  if (tenant?.is_system_tenant === true) {
+    return {
+      ...Object.fromEntries(DOCUMENT_BRANDING_FIELDS.map((field) => [field, own[field] ?? platform[field]])),
+      source: 'platform',
+    };
+  }
+  return { ...own, source: 'tenant' };
 };
 
 export const brandingForTemplate = (branding = {}) => ({

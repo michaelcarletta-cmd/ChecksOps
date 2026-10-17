@@ -351,21 +351,12 @@ export const handleMfaVerify = async (event, deps = {}) => {
 };
 
 /**
- * Wallet funding step-up is bound to the tenant and the current login, not to
- * an amount: one code per login covers every funding request in that login.
+ * The login a financial step-up is recorded against (moov-fund-authz.mjs
+ * loginSessionBinding: sub + origin_jti, or auth_time). Shared by wallet
+ * funding and Check Alt: both ask for two-factor once per login.
  */
-const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
-  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
-  const { isUuid, membershipForTenant } = await import('./financial-ownership.mjs');
-  const { WALLET_FUND_TOTP_ACTION, loginSessionBinding } = await import('./providers/production/moov-fund-authz.mjs');
-  const tenantId = String(body.tenant_id || body.tenantId || '').trim();
-  if (!isUuid(tenantId)) {
-    return { ok: false, statusCode: 400, error: 'tenant_id is required', spoofFieldsIgnored: spoof, ...financialGate() };
-  }
-  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
-  if (!membershipForTenant(memberships, tenantId)) {
-    return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof, ...financialGate() };
-  }
+const resolveLoginSessionBinding = async ({ claims, spoof }) => {
+  const { loginSessionBinding } = await import('./providers/production/moov-fund-authz.mjs');
   const loginSession = loginSessionBinding(claims);
   if (!loginSession) {
     return {
@@ -377,7 +368,30 @@ const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, s
       ...financialGate(),
     };
   }
-  return { ok: true, kind: 'login_session', tenantId, loginSession, actionKey: WALLET_FUND_TOTP_ACTION };
+  return { ok: true, loginSession };
+};
+
+/**
+ * Wallet funding step-up is bound to the tenant and the current login, not to
+ * an amount: one code per login covers every funding request in that login.
+ * A teammate 2FA reset (team.reset_totp) uses the same tenant + login binding;
+ * admin-reset-totp also requires it to be recent.
+ */
+const resolveWalletFundStepUpBinding = async ({ client, mapping, claims, body, spoof }, boundActionKey = null) => {
+  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
+  const { isUuid, membershipForTenant } = await import('./financial-ownership.mjs');
+  const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
+  const tenantId = String(body.tenant_id || body.tenantId || '').trim();
+  if (!isUuid(tenantId)) {
+    return { ok: false, statusCode: 400, error: 'tenant_id is required', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+  if (!membershipForTenant(memberships, tenantId)) {
+    return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof, ...financialGate() };
+  }
+  const session = await resolveLoginSessionBinding({ claims, spoof });
+  if (!session.ok) return session;
+  return { ok: true, kind: 'login_session', tenantId, loginSession: session.loginSession, actionKey: boundActionKey || WALLET_FUND_TOTP_ACTION };
 };
 
 export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, body, spoof }) => {
@@ -392,6 +406,10 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
   const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
   if (actionKey === WALLET_FUND_TOTP_ACTION) {
     return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof });
+  }
+  const { TEAM_RESET_TOTP_ACTION } = await import('./admin-reset-totp.mjs');
+  if (actionKey === TEAM_RESET_TOTP_ACTION) {
+    return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof }, TEAM_RESET_TOTP_ACTION);
   }
   // If an older checkalt-authz.mjs is live (deploy order or rollback), keep
   // deposit.submit working rather than failing every check-bound step-up.
@@ -458,10 +476,34 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
       ...financialGate(),
     };
   }
-  return { ok: true, check, amountCents, actionKey };
+  // Check Alt two-factor is once per login, like wallet funding: the step-up
+  // is recorded against this login and the check's tenant. The check and its
+  // server-side amount are kept in the log only as an audit trail.
+  const session = await resolveLoginSessionBinding({ claims, spoof });
+  if (!session.ok) return session;
+  return { ok: true, check, amountCents, actionKey, loginSession: session.loginSession };
 };
 
+/**
+ * Marks this transaction as the server's step-up writer (SQL 97): a
+ * financial_stepup_log row with source app_financial_totp is refused unless
+ * this transaction-local setting is present. Set right before each insert.
+ */
+export const STEPUP_WRITER_SQL = "SELECT set_config('app.stepup_writer', '1', true)";
+
+/** Clears the writer flag right after the server's step-up insert. */
+export const STEPUP_WRITER_RESET_SQL = "SELECT set_config('app.stepup_writer', '0', true)";
+
 export const insertAppStepUpLog = async (client, mapping, bound) => {
+  await client.query(STEPUP_WRITER_SQL);
+  try {
+    return await insertAppStepUpLogRow(client, mapping, bound);
+  } finally {
+    await client.query(STEPUP_WRITER_RESET_SQL).catch(() => {});
+  }
+};
+
+const insertAppStepUpLogRow = async (client, mapping, bound) => {
   if (bound.kind === 'login_session') {
     const row = (await client.query(
       `INSERT INTO public.financial_stepup_log
@@ -502,6 +544,7 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
       JSON.stringify({
         check_id: bound.check.id,
         amount_cents: bound.amountCents,
+        login_session: bound.loginSession,
         operation: bound.actionKey,
         source: 'app_financial_totp',
       }),

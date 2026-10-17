@@ -16,7 +16,7 @@ import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, 
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 
@@ -65,7 +65,6 @@ export function StakeholderAccountSettings() {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isAdmin } = usePermissions();
   const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -110,21 +109,8 @@ export function StakeholderAccountSettings() {
     },
   });
 
-  const { data: tenantRole } = useQuery({
-    queryKey: ["tenant-user-role", tenant?.id, user?.id],
-    enabled: !!tenant?.id && !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("role")
-        .eq("tenant_id", tenant!.id)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return (data?.role ?? null) as string | null;
-    },
-  });
-  const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
+  // Owner policy: every member of the tenant is a user with the same rights.
+  const { isMember: canManageTenant } = useCurrentTenantMembership();
 
   // One shared limit across vendors, sales reps and subcontractors.
   const CAPPED_TYPES = ["sales_rep", "subcontractor", "vendor"];
@@ -286,20 +272,6 @@ export function StakeholderAccountSettings() {
     onError: (e: any) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
   });
 
-  const adminOverride = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("stakeholder_accounts")
-        .update({ verification_status: "admin_override", verified_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Account marked as verified (admin override)" });
-      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
-    },
-    onError: (e: any) => toast({ title: "Override failed", description: e.message, variant: "destructive" }),
-  });
 
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
@@ -521,18 +493,6 @@ export function StakeholderAccountSettings() {
                       disabled={resendVerification.isPending}
                     >
                       <MailCheck className="h-3 w-3 mr-1" /> Resend
-                    </Button>
-                  )}
-                  {isAdmin && vStatus !== "verified" && vStatus !== "admin_override" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                      onClick={() => adminOverride.mutate(acct.id)}
-                      disabled={adminOverride.isPending}
-                      title="Admin override: mark as verified without a bank login"
-                    >
-                      <ShieldAlert className="h-3 w-3 mr-1" /> Override
                     </Button>
                   )}
                   {["verified", "admin_override"].includes(vStatus) && (

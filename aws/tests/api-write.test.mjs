@@ -40,7 +40,14 @@ const mappingFor = (sub = COGNITO_SUB) => ({
   status: 'active',
 });
 
-const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) => {
+const mockClient = ({
+  rows = [],
+  mapping = mappingFor(),
+  throwOn = null,
+  deposited_at = null,
+  payee_line = 'Original Payee Line',
+  confirmedDeposit = false,
+} = {}) => {
   const queries = [];
   return {
     queries,
@@ -52,15 +59,16 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
         error.code = '40001';
         throw error;
       }
-      if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
+      if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE'
+        || /^SAVEPOINT /i.test(sql) || /^ROLLBACK TO SAVEPOINT /i.test(sql) || /^RELEASE SAVEPOINT /i.test(sql)) {
         return { rows: [] };
       }
-      if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (String(sql).startsWith('SELECT set_config')) return { rows: [{ set_config: params?.[1] || '1' }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
       if (/SELECT id, tenant_id(?:, deposited_at, payee_line, claim_id)?\s+FROM public\.check_intake_items/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a', deposited_at: null, payee_line: null, claim_id: null }] };
+        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a', deposited_at, payee_line, claim_id: null }] };
       }
       if (/review_save_detected_claim_number/.test(sql)) {
         return {
@@ -85,6 +93,17 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
             amount: 18893.07,
           }],
         };
+      }
+      if (/SELECT deposited_at, payee_line/.test(sql)) {
+        return {
+          rows: [{
+            deposited_at,
+            payee_line,
+          }],
+        };
+      }
+      if (/FROM public.aws_financial_operations/.test(sql)) {
+        return { rows: confirmedDeposit ? [{ ok: 1 }] : [] };
       }
       if (/FROM public.check_payees p/.test(sql)) {
         return {
@@ -112,6 +131,7 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
             id: params[0],
             check_intake_item_id: CHECK_ID,
             tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            payee_line,
           }],
         };
       }
@@ -172,29 +192,35 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(ok.values.user_id, undefined);
   assert.equal(ok.ignored.includes('user_id'), true);
   assert.equal(CLIENT_IDENTITY_KEYS.has('tenant_id'), true);
-  assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('insert'), true);
-  assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('update'), false);
+  // Step-up rows are written only by the server (insertAppStepUpLog), never via /data/write.
+  assert.equal(WRITE_ALLOWLIST.financial_stepup_log, undefined);
   const stepup = pickAllowlistedValues('financial_stepup_log', {
     user_id: SPOOF_ID,
     tenant_id: APP_ID,
-    action_key: 'disburse',
+    action_key: 'wallet.fund',
     factor_type: 'totp',
     succeeded: true,
-    amount: 12,
+    metadata: { source: 'app_financial_totp', login_session: 'forged' },
   });
-  assert.equal(stepup.error, 'column_not_allowlisted');
-  assert.deepEqual(stepup.columns, ['amount']);
-  const stepupOk = pickAllowlistedValues('financial_stepup_log', {
-    user_id: SPOOF_ID,
-    tenant_id: APP_ID,
-    action_key: 'disburse',
-    factor_type: 'totp',
-    succeeded: true,
-  });
-  assert.equal(stepupOk.error, undefined);
-  assert.equal(stepupOk.values.user_id, undefined);
-  assert.equal(stepupOk.values.action_key, 'disburse');
-  assert.equal(stepupOk.values.tenant_id, APP_ID);
+  assert.equal(stepup.error, 'table_not_allowlisted');
+});
+
+test('POST /data/write cannot insert a financial_stepup_log row (no forged step-up)', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'financial_stepup_log',
+    op: 'insert',
+    values: {
+      tenant_id: APP_ID,
+      action_key: 'wallet.fund',
+      factor_type: 'totp',
+      succeeded: true,
+      metadata: { source: 'app_financial_totp', login_session: 'forged' },
+    },
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'table_not_allowlisted');
+  assert.equal(client.queries.some((q) => /financial_stepup_log/.test(String(q.sql))), false);
 });
 
 test('check_intake_items allowlist permits endorsement render pointers and override metadata', () => {
@@ -700,6 +726,108 @@ test('Tranche 3 check_files insert requires a check-scoped path and mapped uploa
     },
   }), depsFor(client));
   assert.equal(crossed.statusCode, 403);
+});
+
+test('S14 pre-deposit payee_line correction is allowed', async () => {
+  const client = mockClient({
+    rows: [{ id: CHECK_ID, payee_line: 'Corrected Payee Line' }],
+    payee_line: 'Original Payee Line',
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { payee_line: 'Corrected Payee Line' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    single: true,
+  }), depsFor(client));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const update = client.queries.find((q) => String(q.sql).startsWith('UPDATE public.check_intake_items'));
+  assert.ok(update);
+  assert.equal(update.params.includes('Corrected Payee Line'), true);
+});
+
+test('S14 confirmed provider deposit locks payee_line writes', async () => {
+  const client = mockClient({
+    payee_line: 'Corrected Payee Line',
+    confirmedDeposit: true,
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { payee_line: 'Anything Else' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    single: true,
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'payee_line_locked');
+  assert.equal(result.reason, 'confirmed_provider_deposit');
+  assert.equal(client.queries.some((q) => String(q.sql).startsWith('UPDATE public.check_intake_items')), false);
+});
+
+test('S14 deposited_at locks payee_line writes', async () => {
+  const client = mockClient({
+    payee_line: 'Corrected Payee Line',
+    deposited_at: '2026-09-25T00:00:00Z',
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { payee_line: 'Anything Else' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    single: true,
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'payee_line_locked');
+});
+
+test('S14 same-value post-deposit payee_line is a no-op', async () => {
+  const client = mockClient({
+    rows: [{ id: CHECK_ID, payee_line: 'Corrected Payee Line' }],
+    payee_line: 'Corrected Payee Line',
+    confirmedDeposit: true,
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { payee_line: 'Corrected Payee Line' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    single: true,
+  }), depsFor(client));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(client.queries.some((q) => String(q.sql).startsWith('UPDATE public.check_intake_items')), false);
+});
+
+test('S14 claim_checks payee_line cannot bypass the deposit lock', async () => {
+  const client = mockClient({
+    rows: [{ id: '44444444-4444-4444-8444-444444444444', payee_line: 'Corrected Payee Line', check_intake_item_id: CHECK_ID }],
+    payee_line: 'Corrected Payee Line',
+    confirmedDeposit: true,
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claim_checks',
+    op: 'update',
+    values: { payee_line: 'Mirror Bypass' },
+    filters: [{ column: 'id', op: 'eq', value: '44444444-4444-4444-8444-444444444444' }],
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'payee_line_locked');
+  assert.equal(client.queries.some((q) => String(q.sql).includes('UPDATE public.claim_checks')), false);
+});
+
+test('S14 deposit-state lookup failure fails closed', async () => {
+  const client = mockClient({
+    payee_line: 'Corrected Payee Line',
+    throwOn: 'aws_financial_operations',
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { payee_line: 'Anything Else' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    single: true,
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'payee_line_locked');
 });
 
 test('Tranche 3 intake image path must be scoped to the same check', async () => {

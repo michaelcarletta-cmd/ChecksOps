@@ -36,7 +36,6 @@ import {
   handleSendPortalInvite,
   handleGetCheckImageUrls,
   handlePublicContractorDirectory,
-  handleLookupPartnerCodePublic,
   handleHomeownerUploadCheck,
 } from './homeowner.mjs';
 import {
@@ -75,7 +74,6 @@ import {
   handleTenantSesIdentityDelete,
   handleTenantEmailPreview,
 } from './tenant-email-domain-handlers.mjs';
-import { handleIngestSharedCheck } from './ingest-shared-check.mjs';
 import { handleSendSignatureRequest } from './esign.mjs';
 import { handleCheckEndorsement } from './check-endorsement.mjs';
 import { handleCheckReconciliation } from './check-reconciliation.mjs';
@@ -86,13 +84,21 @@ import { handleCheckAltDepositPreflight } from './providers/production/checkalt-
 import { handleTaxProfiles } from './tax-profiles.mjs';
 import {
   handleSaveTenantBillingAccount,
-  handleSaveTenantCompanyBranding,
 } from './tenant-settings-handlers.mjs';
 import {
   handleTenantBillingAdmin,
   handleTenantBillingAuthorize,
 } from './tenant-billing-handlers.mjs';
 import { handleMortgageAgentCompensation } from './mortgage-agent-compensation.mjs';
+import {
+  handleClaimLibraryDocuments,
+  handleHomeownerRevokeLibraryDocument,
+  handleHomeownerShareLibraryDocument,
+  handleHomeownerSharedDocumentUrl,
+  handleTenantLibraryDocumentCreate,
+} from './tenant-library.mjs';
+import { handleSignatureLibraryDocumentCopy } from './signature-library-source.mjs';
+import { handlePlatformAnnouncements } from './platform-announcements.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -134,7 +140,13 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-ledger-send',
   'homeowner-ledger-attach-upload',
   'homeowner-upload-check',
-  'ingest-shared-check',
+  // Document Library (SQL 94): library rows, per-claim homeowner sharing, e-sign source
+  'tenant-library-document-create',
+  'claim-library-documents',
+  'homeowner-share-library-document',
+  'homeowner-share-library-document-revoke',
+  'homeowner-shared-document-url',
+  'signature-library-document-copy',
   'send-signature-request',
   'check-endorsement',
   'check-reconciliation',
@@ -169,9 +181,10 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-company-branding-save',
   'tenant-billing-admin',
   'tenant-billing-authorize',
+  // Platform owner
+  'platform-announcements',
   // Public directory
   'public-contractor-directory',
-  'lookup-partner-code-public',
   'contractor-directory-search',
 ]);
 
@@ -269,8 +282,18 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerLedgerSend(event);
     case 'homeowner-ledger-attach-upload':
       return handleHomeownerLedgerAttachUpload(event);
-    case 'ingest-shared-check':
-      return handleIngestSharedCheck(event);
+    case 'tenant-library-document-create':
+      return handleTenantLibraryDocumentCreate(event);
+    case 'claim-library-documents':
+      return handleClaimLibraryDocuments(event);
+    case 'homeowner-share-library-document':
+      return handleHomeownerShareLibraryDocument(event);
+    case 'homeowner-share-library-document-revoke':
+      return handleHomeownerRevokeLibraryDocument(event);
+    case 'homeowner-shared-document-url':
+      return handleHomeownerSharedDocumentUrl(event);
+    case 'signature-library-document-copy':
+      return handleSignatureLibraryDocumentCopy(event);
     case 'send-signature-request':
       return handleSendSignatureRequest(event);
     case 'check-endorsement':
@@ -332,16 +355,24 @@ export const handleAppServiceRequest = async (event, path, method) => {
     case 'save-tenant-billing-account':
       return handleSaveTenantBillingAccount(event);
     case 'tenant-company-branding-save':
-      return handleSaveTenantCompanyBranding(event);
+      // Retired 2026-10-17: the SPA saves tenant branding through /data/write
+      // (write-app-metadata executeTenantsNarrow). Nothing is written here.
+      return {
+        ok: false,
+        statusCode: 410,
+        error: 'route_retired',
+        message: 'tenant-company-branding-save is retired. Save branding from Settings > Branding.',
+        spoofFieldsIgnored: ignoredSpoof(event, parseBody(event)),
+      };
     case 'tenant-billing-admin':
       return handleTenantBillingAdmin(event);
     case 'tenant-billing-authorize':
       return handleTenantBillingAuthorize(event);
+    case 'platform-announcements':
+      return handlePlatformAnnouncements(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);
-    case 'lookup-partner-code-public':
-      return handleLookupPartnerCodePublic(event);
     default: {
       const spoof = ignoredSpoof(event, parseBody(event));
       return notYet(name, spoof);

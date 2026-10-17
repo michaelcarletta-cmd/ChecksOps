@@ -89,6 +89,7 @@ const wrap = (handler, name) => async (event, deps = {}) => {
         mapping,
         body,
         requireAdmin: handler.requireAdmin === true,
+        allowPlatformOwner: handler.platformOwnerOnly === true,
         loadProviderSecrets: deps.loadProviderSecrets,
       })
       : await moovParityContext({
@@ -96,6 +97,7 @@ const wrap = (handler, name) => async (event, deps = {}) => {
         mapping,
         body,
         requireAdmin: handler.requireAdmin === true,
+        allowPlatformOwner: handler.platformOwnerOnly === true,
         loadSandbox: loader,
       });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };

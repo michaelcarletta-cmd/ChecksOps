@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,11 +10,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
-  FileSignature, Image as ImageIcon, Headset, Eye, Landmark,
+  FileSignature, Image as ImageIcon, Headset, Landmark,
 } from "lucide-react";
 import {
   MORTGAGE_LIBRARY_DOC_KINDS,
   isApprovedMortgageLibraryDocType,
+  librarySlugFor,
   mortgageLibraryDocTypeForLabel,
 } from "@/lib/mortgageLibraryDocTypes";
 
@@ -88,12 +88,37 @@ interface LibraryRow {
   file_size: number | null;
   notes: string | null;
   auto_share_mortgage_ops: boolean | null;
-  shared_with_homeowners: boolean | null;
   created_at: string;
 }
 
 const BUCKET = "tenant-documents";
 const PREFIX = "library:";
+const MAX_BYTES = 25 * 1024 * 1024;
+// Same list the server enforces (aws/functions/api/tenant-library-rules.mjs).
+const LIBRARY_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+]);
+
+/** The API answers ok:false in the body; treat that and a transport error alike. */
+const invokeError = async (error: unknown, data: unknown): Promise<string | null> => {
+  const body = data as { ok?: boolean; error?: string; message?: string } | null;
+  if (!error && body?.ok !== false) return null;
+  if (body?.message || body?.error) return String(body.message || body.error);
+  const context = (error as { context?: { text?: () => Promise<string> } })?.context;
+  if (context?.text) {
+    const text = await context.text().catch(() => "");
+    if (text) return text;
+  }
+  return (error as Error)?.message || "Request failed";
+};
 
 export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
   const [rows, setRows] = useState<LibraryRow[]>([]);
@@ -126,7 +151,9 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
         <CardDescription>
           Mortgage packet docs (W-9, license, insurance), templates, color catalogs, and letterhead
           your team reuses across claims. Mortgage docs auto-attach to every check you send to the
-          ChecksOps Mortgage Desk, so they never have to ask you for them.
+          ChecksOps Mortgage Desk, so they never have to ask you for them. To give a homeowner a
+          document, share it from that claim&apos;s check files; templates can also be sent for
+          signature from Signature Requests.
         </CardDescription>
 
       </CardHeader>
@@ -187,7 +214,6 @@ function UploadBar({
   defaultAutoShare?: boolean;
   onDone: () => void;
 }) {
-  const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -195,8 +221,13 @@ function UploadBar({
   const [autoShare, setAutoShare] = useState(!!defaultAutoShare);
 
   const handleUpload = async (file: File) => {
-    if (file.size > 25 * 1024 * 1024) {
+    if (file.size < 1 || file.size > MAX_BYTES) {
       toast({ title: "File too large", description: "Maximum 25MB.", variant: "destructive" });
+      return;
+    }
+    const contentType = (file.type || "").toLowerCase() === "image/jpg" ? "image/jpeg" : (file.type || "").toLowerCase();
+    if (!LIBRARY_TYPES.has(contentType)) {
+      toast({ title: "Unsupported file type", description: "Upload a PDF, Word document or image.", variant: "destructive" });
       return;
     }
     const label = displayName || (kinds && kind ? kind : "") || file.name;
@@ -213,37 +244,37 @@ function UploadBar({
       }
       docType = canonical;
     } else {
-      const slug = label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 60) || crypto.randomUUID().slice(0, 8);
+      const slug = librarySlugFor(label, crypto.randomUUID().slice(0, 8));
       docType = `${PREFIX}${category}:${slug}`;
     }
 
     setUploading(true);
+    let uploadedPath: string | null = null;
     try {
-      const ext = file.name.split(".").pop() || "bin";
+      const ext = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10) || "bin";
       const path = `${tenantId}/library/${category}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
-        .upload(path, file, { upsert: false, contentType: file.type });
+        .upload(path, file, { upsert: false, contentType });
       if (upErr) throw upErr;
+      uploadedPath = path;
 
       // Only Mortgage docs can auto-share with the Mortgage Desk; templates,
-      // catalogs and letterhead stay internal to the tenant.
+      // catalogs and letterhead stay internal to the tenant. The server reads the
+      // stored object's size and type, and deletes the object if the row fails.
       const shareWithOps = category === "mortgage" && autoShare;
-      const { error: insErr } = await supabase.from("tenant_documents" as any).insert({
-        tenant_id: tenantId,
-        doc_type: docType,
-        file_path: path,
-        file_name: label,
-        mime_type: file.type,
-        file_size: file.size,
-        auto_share_mortgage_ops: shareWithOps,
-        uploaded_by: user?.id ?? null,
+      const { data: created, error: insErr } = await supabase.functions.invoke("tenant-library-document-create", {
+        body: {
+          tenant_id: tenantId,
+          doc_type: docType,
+          file_path: path,
+          file_name: label,
+          auto_share_mortgage_ops: shareWithOps,
+        },
       });
-      if (insErr) throw insErr;
+      const insertMessage = await invokeError(insErr, created);
+      if (insertMessage) throw new Error(insertMessage);
+      uploadedPath = null;
       toast({
         title: "Added to library",
         description: shareWithOps ? "Will auto-attach to Mortgage Desk requests." : undefined,
@@ -251,6 +282,10 @@ function UploadBar({
       setDisplayName("");
       onDone();
     } catch (e: any) {
+      // Never leave an uploaded object without its row (the server also cleans up).
+      if (uploadedPath) {
+        await supabase.storage.from(BUCKET).remove([uploadedPath]).catch(() => undefined);
+      }
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
     } finally {
       setUploading(false);
@@ -316,7 +351,6 @@ function UploadBar({
 
 function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void }) {
   const [autoShare, setAutoShare] = useState(!!row.auto_share_mortgage_ops);
-  const [sharedHomeowner, setSharedHomeowner] = useState(!!row.shared_with_homeowners);
   const [saving, setSaving] = useState(false);
 
   const open = async () => {
@@ -381,28 +415,6 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
     onChange();
   };
 
-  const toggleSharedHomeowner = async (next: boolean) => {
-    setSharedHomeowner(next);
-    setSaving(true);
-    const { error } = await supabase
-      .from("tenant_documents" as any)
-      .update({ shared_with_homeowners: next } as any)
-      .eq("id", row.id);
-    setSaving(false);
-    if (error) {
-      setSharedHomeowner(!next);
-      toast({ title: "Could not update", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({
-      title: next ? "Shared with Clients" : "Unshared with Clients",
-      description: next
-        ? "This document will now appear in the Homeowner Ledger Resource Center."
-        : undefined,
-    });
-    onChange();
-  };
-
   const remove = async () => {
     if (!confirm(`Delete "${row.file_name}"?`)) return;
     await supabase.storage.from(BUCKET).remove([row.file_path]);
@@ -444,18 +456,6 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
           </span>
         </label>
       )}
-      <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none mr-1">
-        <Checkbox
-          checked={sharedHomeowner}
-          disabled={saving}
-          onCheckedChange={(v) => toggleSharedHomeowner(v === true)}
-          aria-label="Share with Clients"
-        />
-        <span className="flex items-center gap-1">
-          <Eye className="h-3 w-3" />
-          Share with Clients
-        </span>
-      </label>
       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={open} title="Open">
         <Download className="h-3.5 w-3.5" />
       </Button>

@@ -1,6 +1,5 @@
-import { isPlatformAdmin } from './caller.mjs';
 
-const SENSITIVE = /accountnumber|routingnumber|ssn|taxid|password|secret|token|accesstoken|cardnumber|cvv/i;
+const SENSITIVE = /accountnumber|routingnumber|ssn|taxid|governmentid|birthdate|^dob$|^ein$|password|secret|token|accesstoken|cardnumber|cvv/i;
 
 export const sanitize = (value) => {
   if (Array.isArray(value)) return value.map(sanitize);
@@ -46,13 +45,12 @@ export const logPaymentEvent = async (client, row) => {
   } catch { /* event log must not fail the provider call */ }
 };
 
-export const membershipRole = (memberships, tenantId) =>
-  String(memberships.find((m) => m.tenant_id === tenantId)?.role ?? '');
-
-export const canSendPayments = async (client, userId, tenantId, memberships) => {
-  if (await isPlatformAdmin(client, userId)) return true;
-  return ['owner', 'admin', 'manager'].includes(membershipRole(memberships, tenantId));
-};
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Any membership of the tenant may send payments; global user_roles admin/staff
+// give no shortcut.
+export const canSendPayments = async (client, userId, tenantId, memberships) => (
+  (memberships || []).some((m) => m.tenant_id === tenantId)
+);
 
 export const loadConnectedMethod = async (client, { tenantId, providerAccountId, externalRecipientId = null }) => {
   if (externalRecipientId) {

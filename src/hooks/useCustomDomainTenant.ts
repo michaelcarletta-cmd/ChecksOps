@@ -6,16 +6,13 @@ import { isCheckOpsHost } from "@/lib/checkopsHost";
  * Checks if the current hostname matches a tenant's custom_domain.
  * Returns the tenant slug if matched, null otherwise.
  *
- * Known app domains (freedomclaims.work, freedomclaims.lovable.app, localhost, preview domains)
+ * Known app domains (localhost, Lovable preview domains)
  * and the CheckOps platform hosts (checkops.com, etc.) are skipped — they are handled by
  * the normal router, not the tenant custom-domain shortcut.
  */
 
 const KNOWN_APP_DOMAINS = [
   "localhost",
-  "freedomclaims.work",
-  "www.freedomclaims.work",
-  "freedomclaims.lovable.app",
 ];
 
 function isKnownAppDomain(hostname: string): boolean {

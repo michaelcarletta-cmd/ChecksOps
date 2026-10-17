@@ -79,7 +79,7 @@ const jwtEvent = (pathName, method, body) => ({
     stage: 'staging',
     http: { method, path: pathName },
     authorizer: {
-      jwt: { claims: { sub: COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id' } },
+      jwt: { claims: { sub: COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id', origin_jti: 'origin-jti-login-1' } },
     },
   },
 });
@@ -142,7 +142,12 @@ const submitWithFiles = async (files, body = {}) => {
       action_key: 'deposit.submit',
       factor_type: 'totp',
       succeeded: true,
-      metadata: { check_id: CHECK_ID, amount_cents: 450 },
+      metadata: {
+        check_id: CHECK_ID,
+        amount_cents: 450,
+        login_session: `${COGNITO_SUB}:jti:origin-jti-login-1`,
+        source: 'app_financial_totp',
+      },
       created_at: new Date().toISOString(),
     }],
   };

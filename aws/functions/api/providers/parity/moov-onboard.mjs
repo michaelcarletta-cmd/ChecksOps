@@ -1115,6 +1115,14 @@ export const sweepConfig = {
         environment,
       });
     }
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    // Only the caller's own membership of ctx.tenantId counts (any role value).
+    const member = (ctx.memberships || []).some((m) => String(m?.tenant_id) === String(ctx.tenantId));
+    if (!member) {
+      return fail('Only a member of this organization can change sweeps', 403, {
+        error: 'not_a_member',
+      });
+    }
     if (action === 'create') {
       const wallet = await syncWallet(client, {
         tenantId: ctx.tenantId, accountId, environment, fetchImpl,
@@ -1200,8 +1208,12 @@ export const invoice = {
 
 export const platformBank = {
   requireAdmin: true,
+  // Platform-level: the platform owner (is_platform_owner(), by identity)
+  // only. Tenant members and global user_roles admins are refused.
+  platformOwnerOnly: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
-    if (!ctx.isAdmin) return fail('Platform owner access required', 403);
+    const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
     const action = body.action || 'list';
@@ -1212,44 +1224,46 @@ export const platformBank = {
       return jsonResult({ success: true, banks, liveProviderCalled: true });
     }
     if (action === 'add') {
-      return bankAccountAdd.run({
-        client, mapping: { application_user_id: ctx.userId }, body, ctx: { ...ctx, tenantId: ctx.tenantId }, fetchImpl,
-      });
+      // The platform bank is the platform's own Moov account. Adding a bank
+      // here would go through bankAccountAdd, which targets a tenant's payment
+      // account: refused, whether or not a tenant_id is supplied. Tenant banks
+      // are added by the tenant's members.
+      if (body?.tenant_id || body?.tenantId) {
+        return fail('Platform bank actions never target a tenant account', 403, { error: 'tenant_target_refused' });
+      }
+      return fail('Adding the platform settlement bank is not available here', 409, { error: 'platform_bank_add_unavailable' });
     }
     return fail('Unknown platform-bank action', 400);
   },
 };
 
+/**
+ * Retired (owner decision 2026-10-17): ChecksOps fees are collected by Tenant
+ * Management billing (tenant-billing-admin pulls what the tenant owes from the
+ * tenant's account). A Moov recurring fee schedule would charge the tenant a
+ * second time, so creating or changing one is refused for everyone, the
+ * platform owner included. moov-fee-schedule-cancel stays (platform owner
+ * only) so an existing schedule can be stopped.
+ */
 export const feeScheduleUpsert = {
   requireAdmin: true,
-  run: async ({ client, body, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const facilitatorId = await facilitatorAccountId(account.provider_account_id, fetchImpl);
-    const created = await moovFetch(`/accounts/${facilitatorId}/transfers/schedules`, {
-      method: 'POST', scopes: scopes.transfersWrite(facilitatorId), fetchImpl,
-      body: {
-        description: body.name || 'ChecksOps platform fees',
-        amount: { currency: 'USD', value: Number(body.amount_cents) || 0 },
-        recurrence: { cadence: body.cadence || 'monthly', dayOfMonth: body.day_of_month || 1 },
-      },
-    }).catch((e) => ({ error: e.message, status: e.status }));
-    await client.query(
-      `INSERT INTO public.payment_fee_schedules (tenant_id, provider, environment, name, fee_code, amount_cents, cadence, provider_metadata)
-       VALUES ($1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6::jsonb)
-       ON CONFLICT (tenant_id, fee_code) DO UPDATE SET amount_cents = EXCLUDED.amount_cents, provider_metadata = EXCLUDED.provider_metadata`,
-      [
-        ctx.tenantId, body.name || 'ChecksOps platform fees', body.fee_code || 'platform_fees',
-        Number(body.amount_cents) || 0, body.cadence || 'monthly', JSON.stringify(sanitize(created)),
-      ],
-    ).catch(() => {});
-    return jsonResult({ success: true, schedule: created, liveProviderCalled: !created?.error });
-  },
+  platformOwnerOnly: true,
+  run: async () => fail('Recurring Moov fee schedules are retired; fees are billed from Tenant Management.', 410, {
+    error: 'fee_schedule_retired',
+    liveProviderCalled: false,
+  }),
 };
 
 export const feeScheduleCancel = {
   requireAdmin: true,
+  platformOwnerOnly: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
+    // Owner decision (2026-10-17): ChecksOps' fees for a tenant are set by
+    // the platform owner only (by email); tenant members never set them.
+    if (ctx.isPlatformOwner !== true) {
+      return fail('Platform owner access required', 403, { error: 'platform_owner_required' });
+    }
+    if (!ctx.tenantId) return fail('tenant_id is required', 400, { error: 'invalid_uuid', field: 'tenant_id' });
     const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
     const facilitatorId = account?.provider_account_id
       ? await facilitatorAccountId(account.provider_account_id, fetchImpl)
@@ -1290,7 +1304,11 @@ export const bulkImportPreview = {
 
 export const platformTreasury = {
   requireAdmin: true,
-  run: async ({ ctx, fetchImpl }) => {
+  // Platform-level: the platform owner only (see platformBank).
+  platformOwnerOnly: true,
+  run: async ({ client, ctx, fetchImpl }) => {
+    const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
     const wallets = await moovFetch(`/accounts/${platformId}/wallets`, {

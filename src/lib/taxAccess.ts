@@ -1,21 +1,15 @@
 /**
  * Server-matching Tax & 1099 UI gate.
- * Ordinary tenant members must not see the tax area.
+ * Owner policy: every member of the tenant is a user with the same rights, so
+ * any member of the current tenant sees the tax area. Platform owner/admin/staff
+ * roles do not open it; only the user's own membership counts.
  * Hidden tabs are not authorization — the API also enforces this.
  */
 
-export const PERMITTED_TENANT_TAX_ROLES = new Set(["owner", "admin"]);
-
 export function canAccessTaxUi({
-  isPlatformOwner = false,
-  platformRole = null,
-  tenantRole = null,
+  isTenantMember = false,
 }: {
-  isPlatformOwner?: boolean;
-  platformRole?: string | null;
-  tenantRole?: string | null;
+  isTenantMember?: boolean;
 } = {}): boolean {
-  if (isPlatformOwner === true) return true;
-  if (String(platformRole || "").toLowerCase() === "admin") return true;
-  return PERMITTED_TENANT_TAX_ROLES.has(String(tenantRole || "").toLowerCase());
+  return isTenantMember === true;
 }

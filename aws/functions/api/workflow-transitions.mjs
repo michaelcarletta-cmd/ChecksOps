@@ -10,6 +10,15 @@ export const INTERNAL_CREATE_STAGE = 'review';
 export const READY_STATUS = 'approved_for_deposit';
 export const READY_STAGE = 'ready_for_deposit';
 
+/**
+ * Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+ * Any tenant_users row of the caller for the check's tenant counts; the role
+ * column is ignored. Platform admin/staff roles give no shortcut into a tenant.
+ */
+export const TENANT_MEMBER_SQL = `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+     LIMIT 1`;
+
 /** Destinations that would execute deposit / provider / money movement. */
 export const PROVIDER_OR_FINANCIAL_ACTIONS = new Set([
   'mark_deposited',
@@ -40,7 +49,7 @@ export const TRANSITIONS = {
     fromStatus: ['uploaded', 'needs_review', 'ocr_complete', 'manual_review_required'],
     toStatus: 'endorsements_in_progress',
     toStage: 'endorsing',
-    requiredRole: 'staff_or_tenant_admin',
+    requiredRole: 'tenant_member',
     financialAuthorization: false,
     providerExecution: false,
     requiredRecords: [],
@@ -59,7 +68,7 @@ export const TRANSITIONS = {
     ],
     toStatus: 'loss_draft_required',
     toStage: 'loss_draft',
-    requiredRole: 'staff_or_tenant_admin',
+    requiredRole: 'tenant_member',
     financialAuthorization: false,
     providerExecution: false,
     requiredRecords: [],
@@ -77,7 +86,7 @@ export const TRANSITIONS = {
     ],
     toStatus: READY_STATUS,
     toStage: READY_STAGE,
-    requiredRole: 'staff_or_tenant_admin',
+    requiredRole: 'tenant_member',
     financialAuthorization: false,
     providerExecution: false,
     requiredRecords: ['endorsement_complete'],
@@ -96,7 +105,7 @@ export const TRANSITIONS = {
     ],
     toStatus: 'needs_review',
     toStage: 'review',
-    requiredRole: 'staff_or_tenant_admin',
+    requiredRole: 'tenant_member',
     financialAuthorization: false,
     providerExecution: false,
     requiredRecords: [],

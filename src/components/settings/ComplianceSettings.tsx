@@ -1,299 +1,398 @@
-import { useState, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/contexts/TenantContext";
-import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Loader2, Save, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { format } from "date-fns";
-import { formatPhoneNumber } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  FileText,
+  FlaskConical,
+  Landmark,
+  Loader2,
+  Lock,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
-import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
-import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
-import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
+import { BusinessSection } from "./compliance/BusinessSection";
+import { RepresentativesSection } from "./compliance/RepresentativesSection";
+import { DocumentsSection } from "./compliance/DocumentsSection";
+import { BankSection } from "./compliance/BankSection";
 import { UnderwritingQuestionnairePanel } from "@/components/payments/UnderwritingQuestionnairePanel";
+import { moovOnboardingQueryKey, useMoovOnboarding, useOnboardingApi } from "@/hooks/useMoovOnboarding";
+import {
+  OnboardingApiError,
+  businessFormFrom,
+  buildSavePayload,
+  clearSecrets,
+  describeSyncStatus,
+  normalizeOnboardingState,
+  representativeFormFrom,
+  resolveComplianceAccess,
+  safeErrorMessage,
+  validateOnboardingForm,
+  type BusinessForm,
+  type OnboardingState,
+  type RepresentativeForm,
+  type SaveResult,
+  type SyncTone, isOnboardingUnavailableCode } from "@/lib/payments/moovOnboarding";
 
-import { useProviderProfile } from "@/hooks/useProviderProfile";
+const SYNC_CLASS: Record<SyncTone, string> = {
+  idle: "border-muted-foreground/30 text-muted-foreground",
+  working: "border-sky-500/40 text-sky-500",
+  ok: "border-emerald-500/40 text-emerald-500",
+  warn: "border-amber-500/40 text-amber-500",
+  error: "border-destructive/40 text-destructive",
+};
 
-
-
-
-
-
-
-
-type AddressParts = { street: string; city: string; state: string; zip: string };
-
-function parseAddress(combined: string): AddressParts {
-  const empty = { street: "", city: "", state: "", zip: "" };
-  if (!combined) return empty;
-  const parts = combined.split(",").map((p) => p.trim());
-  if (parts.length >= 3) {
-    const stateZip = parts[parts.length - 1].split(/\s+/);
-    const zip = stateZip.length > 1 ? stateZip[stateZip.length - 1] : "";
-    const state = stateZip.length > 1 ? stateZip.slice(0, -1).join(" ") : stateZip[0] ?? "";
-    const city = parts[parts.length - 2] ?? "";
-    const street = parts.slice(0, parts.length - 2).join(", ");
-    return { street, city, state, zip };
-  }
-  return { ...empty, street: combined };
-}
-
-function joinAddress(a: AddressParts): string {
-  const tail = [a.state, a.zip].filter(Boolean).join(" ").trim();
-  return [a.street, a.city, tail].filter(Boolean).join(", ");
-}
-
-export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: string } = {}) {
+/**
+ * Compliance & Docs: the single tenant onboarding flow.
+ *
+ * Driven by `moov-onboarding-get`. Everything the tenant enters is saved in
+ * ChecksOps and sent to Moov by `moov-onboarding-save`; documents go
+ * upload-url -> PUT -> finalize. The server's `can_submit` decides who may
+ * edit (any member of the tenant, and the platform owner); when it is false
+ * the flow is status-only.
+ *
+ * `adminView` is Tenant Management: read-only by default, with an explicit
+ * "Edit on behalf of tenant" toggle for the platform owner.
+ */
+export function ComplianceSettings({
+  tenantId: tenantIdOverride,
+  adminView = false,
+}: { tenantId?: string; adminView?: boolean } = {}) {
   const { tenant: ctxTenant } = useTenant();
-  // Platform admins render this inside tenant management for a specific org.
-  const tenant = (tenantIdOverride ? { id: tenantIdOverride } : ctxTenant) as { id: string } | null;
-  const { user } = useAuth();
+  const tenantId = tenantIdOverride ?? (ctxTenant as { id?: string } | null)?.id ?? null;
   const { toast } = useToast();
   const qc = useQueryClient();
+  const api = useOnboardingApi();
+  const { data, isLoading, error, refetch, isFetching, dataUpdatedAt } = useMoovOnboarding(tenantId);
 
-  const { data: t, isLoading } = useQuery({
-    queryKey: ["compliance-tenant", tenant?.id],
-    enabled: !!tenant?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenants")
-        .select("id, name, legal_business_name, ein, business_address, business_phone, beneficial_owner_name, beneficial_owner_dob, beneficial_owner_id_url, kyc_completed_at, kyc_completed_by")
-        .eq("id", tenant!.id)
-        .single();
-      if (error) throw error;
-      return data as any;
-    },
-  });
+  const [editOnBehalf, setEditOnBehalf] = useState(false);
+  const [business, setBusiness] = useState<BusinessForm>(() => businessFormFrom(null));
+  const [reps, setReps] = useState<RepresentativeForm[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [lastSave, setLastSave] = useState<(SaveResult & { at: number }) | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [tosBusy, setTosBusy] = useState(false);
 
-  const [form, setForm] = useState({
-    legal_business_name: "",
-    ein: "",
-    street: "",
-    city: "",
-    state: "",
-    zip: "",
-    business_phone: "",
-    beneficial_owner_name: "",
-    beneficial_owner_dob: "",
-    beneficial_owner_id_url: "",
-  });
-
-  const { data: providerProfile } = useProviderProfile(tenant?.id);
-
+  // Prefill from the server unless the user has unsaved edits.
   useEffect(() => {
-    if (t) {
-      const addr = parseAddress(t.business_address ?? "");
-      const biz = providerProfile?.business;
-      const controller =
-        providerProfile?.representatives.find((r) => r.isController) ??
-        providerProfile?.representatives[0];
-      setForm({
-        legal_business_name: t.legal_business_name ?? biz?.legalBusinessName ?? "",
-        ein: t.ein ?? "",
-        street: addr.street || (biz?.address.addressLine1 ?? ""),
-        city: addr.city || (biz?.address.city ?? ""),
-        state: addr.state || (biz?.address.stateOrProvince ?? ""),
-        zip: addr.zip || (biz?.address.postalCode ?? ""),
-        business_phone: t.business_phone
-          ? formatPhoneNumber(t.business_phone)
-          : biz?.phone
-          ? formatPhoneNumber(biz.phone)
-          : "",
-        beneficial_owner_name:
-          t.beneficial_owner_name ??
-          (controller ? `${controller.firstName} ${controller.lastName}`.trim() : ""),
-        beneficial_owner_dob: t.beneficial_owner_dob ?? "",
-        beneficial_owner_id_url: t.beneficial_owner_id_url ?? "",
-      });
-    }
-  }, [t, providerProfile]);
+    if (!data || dirty) return;
+    setBusiness(businessFormFrom(data.business));
+    setReps(data.representatives.map(representativeFormFrom));
+  }, [data, dirty]);
 
+  // Once the server reports Moov delivery finished, drop the one-shot save result.
+  useEffect(() => {
+    if (!lastSave || !data || saving) return;
+    if (dataUpdatedAt > lastSave.at && !data.sync.pending) setLastSave(null);
+  }, [data, dataUpdatedAt, lastSave, saving]);
 
-  const saveKyc = useMutation({
-    mutationFn: async () => {
-      const business_address = joinAddress({ street: form.street, city: form.city, state: form.state, zip: form.zip });
-      if (!form.legal_business_name.trim() || !form.ein.trim() || !form.street.trim() || !form.city.trim() || !form.state.trim() || !form.zip.trim() || !form.business_phone.trim() || !form.beneficial_owner_name.trim() || !form.beneficial_owner_dob) {
-        throw new Error("All KYC fields are required (ID document optional)");
-      }
-      const payload: any = {
-        legal_business_name: form.legal_business_name,
-        ein: form.ein,
-        business_address,
-        business_phone: form.business_phone,
-        beneficial_owner_name: form.beneficial_owner_name,
-        beneficial_owner_dob: form.beneficial_owner_dob || null,
-        beneficial_owner_id_url: form.beneficial_owner_id_url || null,
-        kyc_completed_at: new Date().toISOString(),
-        kyc_completed_by: user?.id,
-      };
-      const { error } = await supabase.from("tenants").update(payload).eq("id", tenant!.id);
-      if (error) throw error;
-      await supabase.from("glba_security_events").insert({
-        tenant_id: tenant!.id,
-        event_type: "kyc.completed",
-        actor_user_id: user?.id,
-        metadata: { legal_business_name: form.legal_business_name, ein_last_4: form.ein.slice(-4) },
-      } as any);
-    },
-    onSuccess: () => {
-      toast({ title: "KYC saved", description: "Your business identity has been recorded." });
-      qc.invalidateQueries({ queryKey: ["compliance-tenant", tenant?.id] });
-    },
-    onError: (e: any) => toast({ title: "Could not save", description: e.message, variant: "destructive" }),
-  });
+  const access = resolveComplianceAccess({ canSubmit: data?.can_submit, adminView, editOnBehalf });
+  const readOnly = access.readOnly;
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  const onBusinessChange = (next: BusinessForm) => { setBusiness(next); setDirty(true); };
+  const onRepsChange = (next: RepresentativeForm[]) => { setReps(next); setDirty(true); };
+
+  async function reload() {
+    await refetch();
   }
 
-  const providerVerified = !!providerProfile?.verified;
-  const kycDone = !!t?.kyc_completed_at || providerVerified;
+  async function handleSave() {
+    if (!tenantId || readOnly) return;
+    const problems = validateOnboardingForm(business, reps);
+    setErrors(problems);
+    if (problems.length) return;
+
+    // SSN/EIN exist only in this request body from here on: form state is
+    // cleared before the request is awaited and they are never cached.
+    const payload = buildSavePayload(tenantId, business, reps);
+    const cleared = clearSecrets(business, reps);
+    setBusiness(cleared.business);
+    setReps(cleared.representatives);
+
+    setSaving(true);
+    setLastSave(null);
+    try {
+      const res = await api.save(payload);
+      // Strictly after the save returned; refetches older than this never clear it.
+      setLastSave({ ...res, at: Date.now() + 1 });
+      if (res.business || res.representatives) {
+        const prev = qc.getQueryData<OnboardingState>(moovOnboardingQueryKey(tenantId));
+        qc.setQueryData(
+          moovOnboardingQueryKey(tenantId),
+          normalizeOnboardingState({
+            ...prev,
+            ...res,
+            sync: res.sync ?? { pending: res.pending, last_error_code: res.error_code },
+            can_submit: res.can_submit ?? prev?.can_submit,
+          }),
+        );
+      }
+      setDirty(false);
+      const status = describeSyncStatus({ saving: false, lastSave: res });
+      const resubmit = (res.representatives ?? []).some((r) => r.ssn_resubmit_required);
+      toast({
+        title: status.label,
+        description: resubmit
+          ? "Moov needs an SSN re-entered for one representative."
+          : res.moov_synced
+          ? "Your details are saved in ChecksOps and with Moov."
+          : "Your details are saved in ChecksOps. Delivery to Moov will be retried.",
+        variant: res.saved ? undefined : "destructive",
+      });
+      void refetch();
+    } catch (e) {
+      const code = e instanceof OnboardingApiError && e.code ? ` (${e.code})` : "";
+      toast({
+        title: "Could not save",
+        description: `${safeErrorMessage(e)}${code} Re-enter any SSN or EIN you changed before trying again.`,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAcceptTerms() {
+    if (!tenantId || readOnly) return;
+    setTosBusy(true);
+    try {
+      await api.acceptTerms(tenantId);
+      await api.sync(tenantId).catch(() => null);
+      toast({ title: "Terms accepted", description: "Acceptance recorded with Moov." });
+      await reload();
+    } catch (e) {
+      toast({ title: "Couldn't record terms acceptance", description: safeErrorMessage(e), variant: "destructive" });
+    } finally {
+      setTosBusy(false);
+    }
+  }
+
+  const hero = (
+    <SettingsHero
+      title="Compliance & Identity"
+      description="Complete onboarding here. Everything you enter or upload is saved in ChecksOps and sent to Moov."
+      badge="Trust & Safety"
+      icon={<ShieldCheck className="h-4 w-4 text-primary" />}
+    />
+  );
+
+  if (!tenantId) {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto">
+        {hero}
+        <p className="text-sm text-muted-foreground">Select an organization to manage compliance.</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="sr-only">Loading compliance details…</span>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    const status = error instanceof OnboardingApiError ? error.status : null;
+    const code = error instanceof OnboardingApiError ? error.code : null;
+    if (isOnboardingUnavailableCode(code)) {
+      // Production onboarding is switched off on this deployment: not an error.
+      return (
+        <div className="space-y-6 max-w-7xl mx-auto">
+          {hero}
+          <div role="status" className="rounded-md border border-border/60 bg-muted/30 p-4 space-y-1">
+            <p className="text-sm font-medium">Payment account setup is not available yet</p>
+            <p className="text-xs text-muted-foreground">ChecksOps will turn on Compliance &amp; Docs for your organization soon. Nothing needs to be done now.</p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto">
+        {hero}
+        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-4 space-y-2">
+          <p className="text-sm font-medium text-destructive">
+            {status === 403 ? "You don't have access to this organization's compliance record." : "Couldn't load compliance details."}
+          </p>
+          {status !== 403 && <p className="text-xs text-muted-foreground">{safeErrorMessage(error, "Please try again.")}</p>}
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => refetch()}>
+            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const sync = describeSyncStatus({ saving, lastSave, sync: data.sync, accountConnected: data.account.connected });
+  const isSandbox = data.environment === "sandbox";
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <SettingsHero
-        title="Compliance & Identity"
-        description="Manage your KYC and vetting documents. All identity records sync directly with Moov for financial compliance."
-        badge="Trust & Safety"
-        icon={<ShieldCheck className="h-4 w-4 text-primary" />}
-      />
+      {hero}
 
       <SectionCard
         title="Compliance Status"
         accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
         icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />}
-        description="KYC and vetting document posture for this tenant."
+        description="Onboarding status with Moov for this organization."
       >
-        <StatusPill label="KYC (Know Your Customer)" done={kycDone} />
-      </SectionCard>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill label={`Moov account: ${data.account.connected ? data.account.status ?? "connected" : "not created yet"}`} done={data.account.connected} />
+            <StatusPill label={data.account.tos_accepted ? "Terms accepted" : "Terms not accepted"} done={data.account.tos_accepted} />
+            {isSandbox && (
+              <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-500 gap-1">
+                <FlaskConical className="h-3 w-3" /> Test mode
+              </Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2" aria-live="polite" role="status">
+            <span className="text-xs text-muted-foreground">Sync:</span>
+            <Badge variant="outline" className={`text-[11px] ${SYNC_CLASS[sync.tone]}`} data-testid="sync-status">
+              {sync.tone === "working" && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              {sync.label}
+            </Badge>
+            <Button size="sm" variant="ghost" className="h-7 text-[11px] px-2" onClick={() => reload()} disabled={isFetching}>
+              <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? "animate-spin" : ""}`} /> Refresh
+            </Button>
+          </div>
 
-      <SectionCard
-        title="Know Your Customer (KYC)"
-        accent="bg-gradient-to-r from-primary/60 to-primary/10"
-        icon={<ShieldCheck className="h-4 w-4 text-primary" />}
-        description={
-          providerVerified
-            ? "Your business identity is already verified with our payment provider. Nothing further is required — these details are shown for your records."
-            : `Required under our AML program before originating ACH payments. Last completed: ${t?.kyc_completed_at ? format(new Date(t.kyc_completed_at), "PPp") : "Never"}`
-        }
-      >
-        <div className="space-y-4">
-          {providerVerified && (
-            <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-              <div className="text-xs">
-                <p className="font-medium text-emerald-500">Identity verified — no re-entry needed</p>
-                <p className="text-muted-foreground mt-0.5">
-                  {providerProfile?.business?.legalBusinessName || t?.legal_business_name || "Your business"}
-                  {providerProfile?.business?.taxIdProvided ? " • EIN on file" : ""}
-                  {providerProfile?.representatives.length
-                    ? ` • Controller: ${providerProfile.representatives
-                        .filter((r) => r.isController)
-                        .map((r) => `${r.firstName} ${r.lastName}`.trim())
-                        .join(", ") || "on file"}`
-                    : ""}
-                  . Edit below only if something changed.
-                </p>
-              </div>
+          {access.showEditOnBehalfToggle && (
+            <div className="flex items-center gap-2 rounded-md border border-border p-2.5">
+              <Switch id="edit-on-behalf" checked={editOnBehalf} onCheckedChange={setEditOnBehalf} />
+              <Label htmlFor="edit-on-behalf" className="text-xs">Edit on behalf of tenant</Label>
             </div>
           )}
 
-
-
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Legal business name" value={form.legal_business_name} onChange={(v) => setForm({ ...form, legal_business_name: v })} />
-            <Field label="EIN" value={form.ein} onChange={(v) => setForm({ ...form, ein: v })} placeholder="00-0000000" />
-          </div>
-
-          <div className="space-y-3">
-            <Label className="text-[11px] text-muted-foreground tracking-wide">Business address</Label>
-            <div className="grid gap-3">
-              <Field label="Street" value={form.street} onChange={(v) => setForm({ ...form, street: v })} placeholder="123 Main St" />
-              <div className="grid sm:grid-cols-3 gap-3">
-                <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
-                <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v.toUpperCase().slice(0, 2) })} placeholder="NJ" />
-                <Field label="ZIP" value={form.zip} onChange={(v) => setForm({ ...form, zip: v.replace(/[^0-9-]/g, "").slice(0, 10) })} placeholder="07001" />
-              </div>
+          {readOnly && (
+            <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-2.5 text-[11px] text-muted-foreground">
+              <Lock className="h-3.5 w-3.5 mt-px shrink-0" />
+              {data.can_submit
+                ? "Read-only. Turn on “Edit on behalf of tenant” to make changes."
+                : "Read-only. Your account can't submit onboarding details for this organization."}
             </div>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Field
-              label="Business phone"
-              value={form.business_phone}
-              onChange={(v) => setForm({ ...form, business_phone: formatPhoneNumber(v) })}
-              placeholder="123-456-7890"
-            />
-          </div>
-
-          <Separator />
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Beneficial owner full name" value={form.beneficial_owner_name} onChange={(v) => setForm({ ...form, beneficial_owner_name: v })} />
-            <Field label="Beneficial owner DOB" type="date" value={form.beneficial_owner_dob} onChange={(v) => setForm({ ...form, beneficial_owner_dob: v })} />
-            <Field label="ID document URL (optional)" value={form.beneficial_owner_id_url} onChange={(v) => setForm({ ...form, beneficial_owner_id_url: v })} className="sm:col-span-2" placeholder="Upload separately and paste the URL" />
-          </div>
-          <Button onClick={() => saveKyc.mutate()} disabled={saveKyc.isPending} size="sm">
-            {saveKyc.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-            Save KYC
-          </Button>
+          )}
         </div>
       </SectionCard>
 
-      {!tenantIdOverride && (
-        <SectionCard
-          title="Payment Account Setup"
-          accent="bg-gradient-to-r from-primary/60 to-primary/10"
-          icon={<ShieldCheck className="h-4 w-4 text-primary" />}
-          description="Create and verify your payment account before sending or receiving funds."
-        >
-          <div className="space-y-4">
-            <PaymentAccountPanel />
-            <PaymentReadinessPanel />
-            <UnderwritingQuestionnairePanel tenantId={tenant?.id} />
-
-          </div>
-
-        </SectionCard>
-      )}
-
-
       <SectionCard
-        title="Payment Provider Verification"
-        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-        icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
-        description="Upload every onboarding document here — identity and business verification plus W-9, license, insurance and signed agreements. Documents stream to the payment provider and stay visible to tenant management."
+        title="Business"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<ShieldCheck className="h-4 w-4 text-primary" />}
+        description="Legal identity of the business as Moov will verify it."
       >
-        <VerificationDocumentsPanel tenantId={tenant?.id} />
+        <BusinessSection
+          form={business}
+          onChange={onBusinessChange}
+          einMasked={data.business.ein_masked}
+          readOnly={readOnly}
+          canRevealEin={access.canRevealEin}
+          onRevealEin={() => api.revealEin(tenantId)}
+        />
       </SectionCard>
 
+      <SectionCard
+        title="Representatives"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Users className="h-4 w-4 text-primary" />}
+        description="The controller and every owner of 25% or more."
+      >
+        <RepresentativesSection representatives={reps} onChange={onRepsChange} readOnly={readOnly} />
+      </SectionCard>
 
+      {!readOnly && (
+        <div className="space-y-2">
+          {errors.length > 0 && (
+            <ul role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-[11px] text-destructive space-y-0.5">
+              {errors.map((e) => <li key={e}>• {e}</li>)}
+            </ul>
+          )}
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+            Save and send to Moov
+          </Button>
+        </div>
+      )}
+
+      <SectionCard
+        title="Documents"
+        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        icon={<FileText className="h-4 w-4 text-sky-500" />}
+        description="Identity, business and vetting documents. Stored in ChecksOps and sent to Moov."
+      >
+        <DocumentsSection tenantId={tenantId} documents={data.documents} readOnly={readOnly} api={api} onChanged={reload} />
+      </SectionCard>
+
+      <SectionCard
+        title="Terms of Service"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<ClipboardList className="h-4 w-4 text-primary" />}
+        description="Moov's platform agreement must be accepted before money can move."
+      >
+        {data.account.tos_accepted ? (
+          <StatusPill label="Platform terms accepted" done />
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground">
+              By accepting, the account holder agrees to Moov's{" "}
+              <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">platform agreement</a>{" "}
+              and{" "}
+              <a href="https://moov.io/legal/privacy-policy/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">privacy policy</a>.
+            </p>
+            {readOnly || !access.canAcceptTerms ? (
+              <StatusPill label="Not accepted yet" done={false} />
+            ) : (
+              <Button size="sm" className="h-8 text-xs" onClick={handleAcceptTerms} disabled={tosBusy || !data.account.connected}>
+                {tosBusy ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Recording acceptance…</> : "Accept terms"}
+              </Button>
+            )}
+            {!data.account.connected && access.canAcceptTerms && (
+              <p className="text-[11px] text-muted-foreground">Save and send your business details first.</p>
+            )}
+          </div>
+        )}
+      </SectionCard>
+
+      <UnderwritingQuestionnairePanel tenantId={tenantId} readOnly={readOnly} />
+
+      <SectionCard
+        title="Payment Account Setup"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Landmark className="h-4 w-4 text-primary" />}
+        description="Settlement bank account, verified with micro-deposits."
+      >
+        <BankSection
+          tenantId={tenantId}
+          banks={data.banks}
+          environment={data.environment}
+          readOnly={readOnly}
+          accountConnected={data.account.connected}
+          onChanged={reload}
+        />
+      </SectionCard>
     </div>
-
-
   );
 }
 
 function StatusPill({ label, done }: { label: string; done: boolean }) {
   return (
-    <div className={`flex items-center gap-2 p-3 rounded-md border ${done ? "bg-emerald-500/5 border-emerald-500/30" : "bg-amber-500/5 border-amber-500/30"}`}>
-      {done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <AlertTriangle className="h-4 w-4 text-amber-500" />}
+    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border ${done ? "bg-emerald-500/5 border-emerald-500/30" : "bg-amber-500/5 border-amber-500/30"}`}>
+      {done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden /> : <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden />}
       <span className="text-xs font-medium">{label}</span>
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, type = "text", placeholder, className = "" }: any) {
-  return (
-    <div className={`space-y-1 ${className}`}>
-      <Label className="text-[11px] text-muted-foreground tracking-wide">{label}</Label>
-      <Input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="h-9" />
     </div>
   );
 }

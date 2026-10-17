@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
-import { useAuth } from "@/hooks/useAuth";
 import { useCheckAltAccess } from "@/hooks/useCanMoveChecks";
-import { isPlatformOwner } from "@/lib/masterMerchant";
 import { canSaveCheckAltAutoDeposit, checkAltAccessState } from "@/lib/checkAltOperatorAccess";
 import { CheckAltAccessNote } from "@/components/checks/CheckAltAccessNote";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -26,19 +24,17 @@ import {
  * Overrides the global checkalt_config defaults for this tenant only.
  * Reads tenant_id, auto_approve_enabled, auto_approve_max_cents, and derived registered.
  * Writes only auto_approve_enabled and auto_approve_max_cents.
- * Viewers and non-members see the settings read-only, without Save
+ * Non-members see the settings read-only, without Save
  * (the server refuses their save; this is UX only).
  */
 export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: string | null } = {}) {
   const { tenant } = useTenant();
   const tenantId = tenantIdProp ?? tenant?.id ?? null;
   const qc = useQueryClient();
-  const { user } = useAuth();
   const access = useCheckAltAccess();
   const canEdit = canSaveCheckAltAutoDeposit({
     memberships: access.memberships,
     tenantId,
-    isPlatformOwner: isPlatformOwner(user?.email, user?.id),
   });
   const accessState = checkAltAccessState({
     isLoading: access.isLoading,

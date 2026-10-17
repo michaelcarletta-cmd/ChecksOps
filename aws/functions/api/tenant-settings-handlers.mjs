@@ -3,7 +3,6 @@
  * Billing save records ACH consent only — it never starts a collection.
  */
 import { ignoredSpoof, parseBody, withIdentity } from './data.mjs';
-import { isSafeHexColor, isSafeHttpUrl, safeHttpUrl } from './email-branding.mjs';
 import { resolveTenantAccess } from './tenant-email-domain.mjs';
 
 export const BILLING_ACH_CONSENT_VERSION = '2026-01-ach-debit-v1';
@@ -27,20 +26,9 @@ const denied = (spoof, extra = {}) => ({
   ...extra,
 });
 
-const clip = (value, max) => {
-  if (value === undefined || value === null) return null;
-  const text = String(value).trim();
-  if (text.length > max) return { error: 'invalid_field', field: 'length' };
-  return text.length ? text : null;
-};
-
-const canManageTenantSettings = (access) => Boolean(
-  access?.canConfigure
-  || access?.platformAdmin
-  || access?.tenantAdmin
-  || access?.role === 'owner'
-  || access?.role === 'admin',
-);
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// resolveTenantAccess sets canConfigure for any member of the tenant.
+const canManageTenantSettings = (access) => Boolean(access?.canConfigure);
 
 const requireTenant = async (client, mapping, body, spoof) => {
   const tenantId = body.tenantId || body.tenant_id;
@@ -321,148 +309,10 @@ export const runSaveTenantBillingAccount = async ({ client, mapping, body, spoof
   return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, ...saved };
 };
 
-const brandingUrl = (value) => {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const text = String(value).trim();
-  if (!text) return null;
-  if (text.startsWith('/') || !text.includes('://')) {
-    if (text.length > 512) return { error: 'invalid_field', field: 'logo_url' };
-    return text;
-  }
-  if (!isSafeHttpUrl(text)) return { error: 'invalid_field', field: 'logo_url' };
-  return safeHttpUrl(text, null);
-};
-
-const brandingColor = (value, field) => {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const text = String(value).trim();
-  if (!isSafeHexColor(text)) return { error: 'invalid_field', field };
-  return text.length === 4
-    ? `#${text[1]}${text[1]}${text[2]}${text[2]}${text[3]}${text[3]}`.toLowerCase()
-    : text.toLowerCase();
-};
-
-export const TENANT_BRANDING_COLUMNS = Object.freeze([
-  'name',
-  'business_address',
-  'business_phone',
-  'email_reply_to',
-  'logo_url',
-  'invoice_letterhead_url',
-  'invoice_footer_note',
-  'invoice_default_terms',
-  'invoice_accent_color',
-  'invoice_theme',
-  'primary_color',
-  'secondary_color',
-]);
-
-export const applyTenantCompanyBranding = async (client, tenantId, values) => {
-  const out = {};
-  const assign = (column, value) => {
-    if (value && value.error) return value;
-    if (value !== undefined) out[column] = value;
-    return null;
-  };
-  if ('company_name' in values || 'name' in values) {
-    const text = clip(values.company_name ?? values.name, 200);
-    const err = assign('name', text);
-    if (err) return err;
-  }
-  if ('company_address' in values || 'business_address' in values || 'address' in values) {
-    const text = clip(values.company_address ?? values.business_address ?? values.address, 500);
-    const err = assign('business_address', text);
-    if (err) return err;
-  }
-  if ('company_phone' in values || 'business_phone' in values || 'phone' in values) {
-    const text = clip(values.company_phone ?? values.business_phone ?? values.phone, 40);
-    const err = assign('business_phone', text);
-    if (err) return err;
-  }
-  if ('company_email' in values || 'email_reply_to' in values || 'email' in values) {
-    const text = clip(values.company_email ?? values.email_reply_to ?? values.email, 200);
-    const err = assign('email_reply_to', text);
-    if (err) return err;
-  }
-  if ('logo_url' in values) {
-    const err = assign('logo_url', brandingUrl(values.logo_url));
-    if (err) return err;
-  }
-  if ('invoice_letterhead_url' in values || 'letterhead_url' in values) {
-    const err = assign(
-      'invoice_letterhead_url',
-      brandingUrl(values.invoice_letterhead_url ?? values.letterhead_url),
-    );
-    if (err) return err;
-  }
-  if ('invoice_footer_note' in values) {
-    const text = clip(values.invoice_footer_note, 2000);
-    const err = assign('invoice_footer_note', text);
-    if (err) return err;
-  }
-  if ('invoice_default_terms' in values) {
-    const text = clip(values.invoice_default_terms, 4000);
-    const err = assign('invoice_default_terms', text);
-    if (err) return err;
-  }
-  if ('invoice_accent_color' in values) {
-    const err = assign('invoice_accent_color', brandingColor(values.invoice_accent_color, 'invoice_accent_color'));
-    if (err) return err;
-  }
-  if ('invoice_theme' in values) {
-    const theme = String(values.invoice_theme || '').toLowerCase();
-    if (theme !== 'light' && theme !== 'dark') return { error: 'invalid_field', field: 'invoice_theme' };
-    out.invoice_theme = theme;
-  }
-  if ('primary_color' in values) {
-    const err = assign('primary_color', brandingColor(values.primary_color, 'primary_color'));
-    if (err) return err;
-  }
-  if ('secondary_color' in values) {
-    const err = assign('secondary_color', brandingColor(values.secondary_color, 'secondary_color'));
-    if (err) return err;
-  }
-  if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
-
-  const sets = [];
-  const params = [];
-  for (const [column, value] of Object.entries(out)) {
-    params.push(value);
-    sets.push(`${column} = $${params.length}`);
-  }
-  params.push(tenantId);
-  const rows = (await client.query(
-    `UPDATE public.tenants SET ${sets.join(', ')} WHERE id = $${params.length}::uuid
-     RETURNING id, name, business_address, business_phone, email_reply_to, logo_url,
-               invoice_letterhead_url, invoice_footer_note, invoice_default_terms,
-               invoice_accent_color, invoice_theme, primary_color, secondary_color`,
-    params,
-  )).rows;
-  if (!rows.length) return { error: 'rls_denied', message: 'tenant not writable' };
-  return { ok: true, tenant: rows[0], saved: Object.keys(out) };
-};
-
-export const runSaveTenantCompanyBranding = async ({ client, mapping, body, spoof }) => {
-  const resolved = await requireTenant(client, mapping, body, spoof);
-  if (resolved.error) return resolved.error;
-  if (!canManageTenantSettings(resolved.access)) {
-    return denied(spoof, { message: 'Only tenant administrators can change company branding.' });
-  }
-  const saved = await applyTenantCompanyBranding(client, resolved.tenantId, body);
-  if (saved?.error) {
-    return denied(spoof, { statusCode: 400, ...saved });
-  }
-  return {
-    ok: true,
-    statusCode: 200,
-    saved: true,
-    tenant: saved.tenant,
-    updatedFields: saved.saved,
-    spoofFieldsIgnored: spoof,
-  };
-};
+// The legacy tenant-company-branding-save route (applyTenantCompanyBranding,
+// runSaveTenantCompanyBranding) was retired on 2026-10-17: the SPA saves
+// branding through write-app-metadata executeTenantsNarrow, and app-services
+// answers the old route with 410 Gone.
 
 const withSettingsWrite = (fn) => (event, deps = {}) => withIdentity(event, fn, {
   write: true,
@@ -471,4 +321,17 @@ const withSettingsWrite = (fn) => (event, deps = {}) => withIdentity(event, fn, 
 });
 
 export const handleSaveTenantBillingAccount = withSettingsWrite(runSaveTenantBillingAccount);
-export const handleSaveTenantCompanyBranding = withSettingsWrite(runSaveTenantCompanyBranding);
+
+/**
+ * Deprecated compatibility export (release 2026-10-17): the retired
+ * tenant-company-branding-save route. A live app-services.mjs from before this
+ * release still imports it; it answers 410 and writes nothing. The new
+ * app-services.mjs answers the route itself. Remove in a later release.
+ */
+export const handleSaveTenantCompanyBranding = async (event) => ({
+  ok: false,
+  statusCode: 410,
+  error: 'route_retired',
+  message: 'tenant-company-branding-save is retired. Save branding from Settings > Branding.',
+  spoofFieldsIgnored: ignoredSpoof(event, parseBody(event)),
+});

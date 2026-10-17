@@ -407,31 +407,44 @@ test('SES success activates custom From; DKIM failure does not', async () => {
   assert.ok(row.last_checked_at);
 });
 
-test('authorization: member cannot configure, cross-tenant denied, platform owner can', async () => {
-  resetDomainRateLimits();
-  const memberClient = memoryClient({ membershipRole: 'member' });
+test('authorization: any member configures; cross-tenant and platform admin without membership are denied', async () => {
   const sesv2 = mockSes();
-  const memberStart = await runStartDomainVerification({
-    client: memberClient, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
-  });
-  assert.equal(memberStart.statusCode, 403);
-  const memberGet = await runGetEmailBranding({
-    client: memberClient, mapping, body: { tenantId: TENANT }, spoof,
-  });
-  assert.equal(memberGet.ok, true);
-  assert.equal(memberGet.settings.canConfigure, false);
-
   const stranger = memoryClient({ membershipRole: null, systemRole: null, master: false });
   const cross = await runGetEmailBranding({
     client: stranger, mapping, body: { tenantId: TENANT }, spoof,
   });
   assert.equal(cross.statusCode, 403);
 
-  const platform = memoryClient({ membershipRole: null, systemRole: 'admin', master: false });
-  const ownerStart = await runStartDomainVerification({
-    client: platform, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
-  });
-  assert.equal(ownerStart.ok, true);
+  // Owner policy: no platform admin/staff or master-owner shortcut into a tenant.
+  for (const opts of [
+    { membershipRole: null, systemRole: 'admin', master: false },
+    { membershipRole: null, systemRole: 'staff', master: false },
+    { membershipRole: null, systemRole: 'admin', master: true },
+  ]) {
+    resetDomainRateLimits();
+    const platform = memoryClient(opts);
+    const platformStart = await runStartDomainVerification({
+      client: platform, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
+    });
+    assert.equal(platformStart.statusCode, 403, JSON.stringify(opts));
+    const platformGet = await runGetEmailBranding({
+      client: platform, mapping, body: { tenantId: TENANT }, spoof,
+    });
+    assert.equal(platformGet.statusCode, 403, JSON.stringify(opts));
+  }
+
+  // Owner policy: every member of the tenant is a user with the same rights,
+  // whatever role value is stored.
+  for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer', 'member']) {
+    resetDomainRateLimits();
+    const client = memoryClient({ membershipRole: role });
+    const started = await runStartDomainVerification({
+      client, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
+    });
+    assert.equal(started.ok, true, role);
+    const got = await runGetEmailBranding({ client, mapping, body: { tenantId: TENANT }, spoof });
+    assert.equal(got.settings.canConfigure, true, role);
+  }
 });
 
 test('frontend cannot set verified status on save', async () => {

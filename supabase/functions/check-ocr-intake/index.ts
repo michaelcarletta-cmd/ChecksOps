@@ -803,7 +803,7 @@ Deno.serve(async (req) => {
 
     // ---- Tenant OpenAI key resolution (Pure BYOK) ----
     // White-label tenants must bring their own OpenAI key (billed to their OpenAI account).
-    // Freedom Claims (system tenant) continues to use the platform OPENAI_API_KEY.
+    // The system tenant continues to use the platform OPENAI_API_KEY.
     stage = "tenant_key";
     const tenantId = (check as Record<string, unknown>).tenant_id as string | null;
     const keyResult = await resolveTenantOpenAIKey(supabase, tenantId);

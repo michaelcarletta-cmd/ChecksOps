@@ -238,26 +238,28 @@ export async function actorIsPlatformOwner(client) {
   return row?.ok === true;
 }
 
+// Owner policy: any member of the tenant may authorize its billing (the role
+// column is ignored). The platform owner does not authorize a tenant's debits.
 export async function canAuthorizeTenantBilling(client, userId, tenantId) {
-  if (await actorIsPlatformOwner(client)) return true;
   const row = (await client.query(
-    `SELECT role FROM public.tenant_users
+    `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
      LIMIT 1`,
     [userId, tenantId],
   )).rows[0];
-  return String(row?.role || '') === 'admin';
+  return Boolean(row);
 }
 
 export async function canViewTenantBilling(client, userId, tenantId) {
   if (await actorIsPlatformOwner(client)) return true;
+  // Members read their own tenant's rates; the role value is ignored.
   const row = (await client.query(
-    `SELECT role FROM public.tenant_users
+    `SELECT 1 AS member FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
      LIMIT 1`,
     [userId, tenantId],
   )).rows[0];
-  return Boolean(row?.role);
+  return Boolean(row);
 }
 
 const capabilityEntries = (capabilities) => {
@@ -1607,46 +1609,80 @@ export async function applyBillingProviderEvent(client, {
   return { applied: true, occurrence: saved, previous: existing.status, collection_leg: collectionLeg };
 }
 
+/** Per-tenant pricing columns the platform owner sets (SQL 96 aws_tenant_pricing_columns()). */
+export const TENANT_PRICING_COLUMNS = Object.freeze([
+  'monthly_rate_cents', 'referral_discount_cents', 'is_founding_partner',
+  'per_check_billing_enabled', 'per_check_rate_cents',
+  'next_day_rate_cents', 'same_day_rate_cents',
+  'mortgage_ops_initial_rate_cents', 'mortgage_ops_additional_rate_cents',
+]);
+
+export const SET_TENANT_PRICING_SQL = 'SELECT public.aws_platform_owner_set_tenant_pricing($1::uuid, $2::jsonb) AS result';
+
+/** Maps a refusal from aws_platform_owner_set_tenant_pricing (SQL 96). */
+export const tenantPricingError = (error) => {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  if (code === '42883') {
+    return fail('pricing_setter_missing', {
+      statusCode: 503,
+      message: 'Pricing cannot be saved until SQL 96 (aws_platform_owner_set_tenant_pricing) is applied.',
+    });
+  }
+  if (code === '42501') return fail('platform_owner_required', { statusCode: 403 });
+  if (code === 'P0002') return fail('tenant_not_found', { statusCode: 404 });
+  if (code === '22023') {
+    const reason = message.split(':')[0].trim() || 'invalid_value';
+    return fail(reason, { statusCode: 400, field: error?.detail || null });
+  }
+  throw error;
+};
+
+/**
+ * Platform owner only (tenant-billing-admin checks is_platform_owner() before
+ * calling). Pricing goes through the SQL 96 DEFINER setter, which refuses
+ * anyone else, refuses every non-pricing column and audits each change; a
+ * direct UPDATE of tenants by the platform owner matches no row (SQL 90).
+ */
 export async function saveBillingSettings(client, {
   tenantId, monthlyRateCents, referralDiscountCents, billingEnabled, billingDay, userId,
   perCheckRateCents, nextDayRateCents, sameDayRateCents,
   mortgageOpsInitialRateCents, mortgageOpsAdditionalRateCents,
+  perCheckBillingEnabled, isFoundingPartner,
 }) {
-  const sets = [];
-  const params = [];
-  let i = 1;
+  const pricing = {};
   const applyRate = (value, field, column) => {
     if (value === undefined) return true;
     const parsed = parseRateCents(value, field);
     if (!parsed.ok) return parsed;
-    sets.push(`${column} = $${i++}`);
-    params.push(parsed.cents);
+    if (parsed.cents !== undefined) pricing[column] = parsed.cents;
     return true;
   };
-  const monthly = applyRate(monthlyRateCents, 'monthly_rate', 'monthly_rate_cents');
-  if (monthly !== true) return monthly;
-  const discount = applyRate(referralDiscountCents, 'referral_discount', 'referral_discount_cents');
-  if (discount !== true) return discount;
-  const checkRate = applyRate(perCheckRateCents, 'per_check_rate', 'per_check_rate_cents');
-  if (checkRate !== true) return checkRate;
-  const nextDay = applyRate(nextDayRateCents, 'next_day_rate', 'next_day_rate_cents');
-  if (nextDay !== true) return nextDay;
-  const sameDay = applyRate(sameDayRateCents, 'same_day_rate', 'same_day_rate_cents');
-  if (sameDay !== true) return sameDay;
-  const mortgageInitial = applyRate(
-    mortgageOpsInitialRateCents, 'mortgage_ops_initial_rate', 'mortgage_ops_initial_rate_cents',
-  );
-  if (mortgageInitial !== true) return mortgageInitial;
-  const mortgageAdditional = applyRate(
-    mortgageOpsAdditionalRateCents, 'mortgage_ops_additional_rate', 'mortgage_ops_additional_rate_cents',
-  );
-  if (mortgageAdditional !== true) return mortgageAdditional;
-  if (sets.length) {
-    params.push(tenantId);
-    await client.query(
-      `UPDATE public.tenants SET ${sets.join(', ')} WHERE id = $${i}::uuid`,
-      params,
-    );
+  const applyFlag = (value, field, column) => {
+    if (value === undefined || value === null) return true;
+    if (typeof value !== 'boolean') return fail(`invalid_${field}`);
+    pricing[column] = value;
+    return true;
+  };
+  for (const result of [
+    applyRate(monthlyRateCents, 'monthly_rate', 'monthly_rate_cents'),
+    applyRate(referralDiscountCents, 'referral_discount', 'referral_discount_cents'),
+    applyRate(perCheckRateCents, 'per_check_rate', 'per_check_rate_cents'),
+    applyRate(nextDayRateCents, 'next_day_rate', 'next_day_rate_cents'),
+    applyRate(sameDayRateCents, 'same_day_rate', 'same_day_rate_cents'),
+    applyRate(mortgageOpsInitialRateCents, 'mortgage_ops_initial_rate', 'mortgage_ops_initial_rate_cents'),
+    applyRate(mortgageOpsAdditionalRateCents, 'mortgage_ops_additional_rate', 'mortgage_ops_additional_rate_cents'),
+    applyFlag(perCheckBillingEnabled, 'per_check_billing_enabled', 'per_check_billing_enabled'),
+    applyFlag(isFoundingPartner, 'is_founding_partner', 'is_founding_partner'),
+  ]) {
+    if (result !== true) return result;
+  }
+  if (Object.keys(pricing).length) {
+    try {
+      await client.query(SET_TENANT_PRICING_SQL, [tenantId, JSON.stringify(pricing)]);
+    } catch (error) {
+      return tenantPricingError(error);
+    }
   }
 
   const day = billingDay === undefined ? null : Math.min(28, Math.max(1, Number(billingDay) || 1));

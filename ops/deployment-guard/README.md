@@ -55,6 +55,9 @@ node scripts/deployment-guard/spa-upload.mjs --environment production
 node scripts/deployment-guard/sql-apply.mjs --input path/to/sql.json
 node scripts/deployment-guard/sql53-production-apply.mjs --input path/to/sql53-production-apply.json
 node scripts/deployment-guard/github-sql53-production-apply.mjs
+# Production SQL 29 / SQL 30 (Mortgage Ops library; ops/production-sql-29-30-apply.md)
+node scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs --inspect
+node scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs --inspect
 # Production SQL 71 and 77-89 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
+import { isStepUpRequiredError } from "@/lib/financialStepUp";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -473,11 +474,17 @@ export function PendingApprovalDeposits() {
         apiBaseUrl: awsApiBaseUrl(),
         functionName: "checkalt-approve-deposit",
       });
-      const { data, error } = await invokeAwsCheckAltProviderFunction(
+      const send = () => invokeAwsCheckAltProviderFunction(
         "checkalt-approve-deposit",
         { body: args },
         { apiBaseUrl: awsApiBaseUrl() },
       );
+      let { data, error } = await send();
+      // Two-factor is once per login and the server decides; ask again only when it says so.
+      if (error && args.action === "approve" && isStepUpRequiredError(error)) {
+        await guardFinancial("deposit.approve", { checkId: args.check_intake_item_id, force: true });
+        ({ data, error } = await send());
+      }
       if (error) throw new Error(checkAltProviderUserMessage(error));
       if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
       return data;

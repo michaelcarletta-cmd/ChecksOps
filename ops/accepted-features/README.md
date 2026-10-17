@@ -55,6 +55,12 @@ SHA only. Intended invariants:
 
 Acceptance does not enable merge or deploy blocking.
 
+Release 2026-10-17 records inventory-only invariants for `delete-check` (any member of
+the check's tenant may delete; `tenant_members_only` in the delete-check contract),
+`signature-requests` (`requireSignatureRequestActor`, library copy) and `mortgage-ops`
+(SQL 94 document library). Branding's accepted contract is unchanged; its row notes the
+tenant company information move (SQL 93) and the retired `tenant-company-branding-save`.
+
 ## Forward-safe protection
 
 Accepted features are protected by their required source paths, semantic invariants,

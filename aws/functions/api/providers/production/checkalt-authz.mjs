@@ -1,12 +1,19 @@
-import { FINANCIAL_ROLES } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { formatCheckAltUserAmount } from '../amounts.mjs';
 import { productionCheckAltExecutionAllowed } from './checkalt-holds.mjs';
+import { loginSessionBinding } from './moov-fund-authz.mjs';
 
 export const CHECKALT_TOTP_ACTION = 'deposit.submit';
 export const CHECKALT_APPROVE_ACTION = 'deposit.approve';
-/** Check-bound financial TOTP actions: tenant, check and amount are server-derived. */
+/**
+ * Check Alt financial TOTP actions. Two-factor is once per login, the same as
+ * Moov wallet fund and send: one successful step-up for any of these actions,
+ * recorded with the caller's login (loginSessionBinding), authorizes every
+ * Check Alt action for the check's tenant until the user signs out. The
+ * step-up request still names a check, only so the tenant is taken from the
+ * server-side check and the check and amount are kept in the audit log.
+ */
 export const FINANCIAL_CHECKALT_STEPUP_ACTIONS = Object.freeze([
   CHECKALT_TOTP_ACTION,
   CHECKALT_APPROVE_ACTION,
@@ -18,7 +25,6 @@ export const FINANCIAL_CHECKALT_STEPUP_ACTIONS = Object.freeze([
  * it keeps linking until that member is overlaid with the 410 refusal.
  */
 export const CHECKALT_DUAL_CONTROL_ACTION = 'checkalt.dual_control';
-export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
 
 export const denyCheckAltAuthz = (error, extra = {}) => ({
   ok: false,
@@ -35,27 +41,6 @@ export const serverAmountCentsFromCheck = (check) => {
   const formatted = formatCheckAltUserAmount(check?.amount);
   if (formatted?.error || !Number.isInteger(formatted?.userAmount)) return null;
   return formatted.userAmount;
-};
-
-export const loggedAmountCents = (metadata) => {
-  const raw = metadata?.amount_cents;
-  if (raw === undefined || raw === null || raw === '') return null;
-  const cents = Number(raw);
-  return Number.isInteger(cents) ? cents : null;
-};
-
-export const stepUpMatchesCheck = (row, {
-  tenantId,
-  checkId,
-  amountCents,
-  actionKey,
-} = {}) => {
-  if (!row || !tenantId || !checkId || !Number.isInteger(Number(amountCents))) return false;
-  if (String(row.tenant_id) !== String(tenantId)) return false;
-  if (actionKey && String(row.action_key) !== String(actionKey)) return false;
-  if (row.succeeded !== true) return false;
-  if (String(row.metadata?.check_id || '') !== String(checkId)) return false;
-  return loggedAmountCents(row.metadata) === Number(amountCents);
 };
 
 /**
@@ -87,60 +72,48 @@ export async function loadCheckAltTenantRoles(client, userId, tenantId) {
   )).rows.map((row) => String(row.role || '').toLowerCase());
 }
 
-export async function loadRecentStepUp(client, {
-  userId,
-  tenantId,
-  actionKey,
-  checkId,
-  amountCents,
-  sinceMs,
-} = {}) {
-  if (!userId || !tenantId || !actionKey || !checkId || !Number.isInteger(Number(amountCents))) {
-    return [];
-  }
-  const rows = (await client.query(
+/**
+ * The caller's own Check Alt step-up for this tenant in this login, or null.
+ * Bound to user, tenant and login session (sub + origin_jti or auth_time), not
+ * to a check, an amount or a time window: a new login, another user, another
+ * tenant or another session needs a new code.
+ */
+export async function loadSessionCheckAltStepUp(client, { userId, tenantId, loginSession } = {}) {
+  if (!userId || !tenantId || !loginSession) return null;
+  return (await client.query(
     `SELECT id, user_id, tenant_id, action_key, factor_type, succeeded, metadata, created_at
      FROM public.financial_stepup_log
      WHERE user_id = $1::uuid
        AND tenant_id = $2::uuid
-       AND action_key = $3
+       AND action_key = ANY($3::text[])
        AND succeeded IS TRUE
-       AND created_at >= $4::timestamptz
-       AND (metadata->>'check_id') = $5
-       AND COALESCE((metadata->>'amount_cents')::bigint, -1) = $6::bigint
+       AND factor_type = 'totp'
+       -- Only rows the server wrote after a verified app TOTP (insertAppStepUpLog).
+       AND (metadata->>'source') = 'app_financial_totp'
+       AND (metadata->>'login_session') = $4
      ORDER BY created_at DESC
-     LIMIT 5`,
-    [userId, tenantId, actionKey, new Date(Date.now() - sinceMs).toISOString(), String(checkId), Number(amountCents)],
-  )).rows;
-  return rows.filter((row) => stepUpMatchesCheck(row, {
-    tenantId,
-    checkId,
-    amountCents: Number(amountCents),
-    actionKey,
-  }));
+     LIMIT 1`,
+    [userId, tenantId, [...FINANCIAL_CHECKALT_STEPUP_ACTIONS], loginSession],
+  )).rows[0] || null;
 }
 
 /**
- * Roles that may submit, approve, reject and refresh Check Alt deposits for a
- * tenant they belong to. Viewers (for example partners added to a tenant to
- * see shared checks) may not. `roles` holds only the caller's tenant_users
- * role for the check's tenant (loadCheckAltTenantRoles); platform user_roles
- * are not consulted, and unknown roles fail closed.
+ * Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+ * `roles` holds one entry per tenant_users row of the caller for the check's
+ * tenant (loadCheckAltTenantRoles); any row allows, whatever the role value.
+ * Platform user_roles are not consulted. Partners (members of another tenant
+ * the check is shared with) have no row for the check's tenant and are refused.
  */
-export const CHECKALT_OPERATOR_ROLES = Object.freeze(['owner', 'admin', 'manager', 'operator']);
-
-export const roleAllowsCheckAlt = (roles = []) =>
-  roles.some((role) => CHECKALT_OPERATOR_ROLES.includes(String(role || '').toLowerCase()));
+export const roleAllowsCheckAlt = (roles = []) => Array.isArray(roles) && roles.length > 0;
 
 /**
  * Server-side CheckAlt production authorization.
  * Does not flip evaluateFinancialAuthorization().canExecuteProduction.
  *
- * Product policy: a member of the check's tenant (verified server-side from
- * tenant_users, never from the browser) whose role is owner, admin, manager or
- * operator may submit, approve and refresh Check Alt deposits. Viewers and
- * members of other tenants (including partner tenants a check is shared with)
- * may not. Money actions still need the caller's own step-up: there is no
+ * Product policy: any member of the check's tenant (verified server-side from
+ * tenant_users, never from the browser; the role column is ignored) may
+ * submit, approve and refresh Check Alt deposits. Members of other tenants
+ * (including partner tenants a check is shared with) may not. Money actions still need the caller's own step-up: there is no
  * second-person (dual-control) alternative.
  */
 export const evaluateCheckAltProductionAuthorization = ({
@@ -161,7 +134,6 @@ export const evaluateCheckAltProductionAuthorization = ({
     stepUpOk,
     flagsOk,
     financialPermissionActivated: financialPermissionsActivated(),
-    financialRoles: [...FINANCIAL_ROLES],
     canExecuteProductionCheckAlt: canExecute,
     canExecuteProduction: false,
     message: !identityOk
@@ -169,9 +141,9 @@ export const evaluateCheckAltProductionAuthorization = ({
       : !membershipOk
         ? 'Tenant membership of the check is required.'
         : !roleOk
-          ? 'Viewers cannot submit, approve or refresh Check Alt deposits. Owner/admin/manager/operator required.'
+          ? 'Membership of the check tenant is required.'
           : !stepUpOk
-            ? 'Your own Cognito TOTP step-up is required, bound to this check and amount.'
+            ? 'Your own Cognito TOTP step-up is required once per login.'
             : !flagsOk
               ? 'Production CheckAlt holds remain on.'
               : 'CheckAlt production authorization satisfied. Holds must still be lifted by a human.',
@@ -181,10 +153,10 @@ export const evaluateCheckAltProductionAuthorization = ({
 export async function authorizeCheckAltProduction({
   client,
   mapping,
+  claims,
   memberships,
   check,
   requireStepUp = true,
-  actionKey = CHECKALT_TOTP_ACTION,
 } = {}) {
   const userId = mapping?.application_user_id;
   if (!userId) return denyCheckAltAuthz('identity_required', { statusCode: 401 });
@@ -201,23 +173,19 @@ export async function authorizeCheckAltProduction({
       message: 'Server-derived check amount is required for financial step-up. Browser amount is ignored.',
     });
   }
-  // Only the caller's tenant_users role for the check's tenant decides. A
-  // platform user_roles admin/staff never lets a tenant viewer act.
+  // Only the caller's tenant_users membership of the check's tenant decides. A
+  // platform user_roles admin/staff never lets a non-member act.
   const roles = await loadCheckAltTenantRoles(client, userId, check.tenant_id);
-  // Only the caller's own step-up for this action, check and amount counts.
-  // A second person's approval never substitutes for it.
+  // Only the caller's own Check Alt step-up for this tenant, entered in this
+  // login, counts. A second person's approval never substitutes for it.
   let totpOk = false;
   let totpRow = null;
   if (requireStepUp) {
-    const totpRows = await loadRecentStepUp(client, {
+    totpRow = await loadSessionCheckAltStepUp(client, {
       userId,
       tenantId: check.tenant_id,
-      actionKey,
-      checkId: check.id,
-      amountCents,
-      sinceMs: TOTP_STEPUP_TTL_MS,
+      loginSession: loginSessionBinding(claims),
     });
-    totpRow = totpRows[0] || null;
     totpOk = Boolean(totpRow);
   }
   const evaluation = evaluateCheckAltProductionAuthorization({

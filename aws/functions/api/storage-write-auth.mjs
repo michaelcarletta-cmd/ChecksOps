@@ -14,6 +14,7 @@ import {
   s3KeyFor,
 } from './storage-paths.mjs';
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
+import { libraryObjectPath } from './tenant-library-rules.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -135,12 +136,13 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
 
   if (bucket === 'tenant-documents') {
     const tenantId = matchTenantDocumentPath(rel);
-    if (!tenantId) {
+    // Exactly {tenantId}/library/{category}/{file}: one known category folder, one file name.
+    if (!tenantId || !libraryObjectPath(rel, { tenantId })) {
       return {
         ok: false,
         statusCode: 403,
         error: 'path_not_allowlisted',
-        message: 'tenant-documents uploads must use {tenantId}/library/...',
+        message: 'tenant-documents uploads must use {tenantId}/library/{category}/{file}',
       };
     }
     if (!(await canManageTenantDocumentLibrary(client, userId, tenantId))) {
@@ -148,7 +150,9 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
         ok: false,
         statusCode: 403,
         error: 'rls_denied',
-        message: 'Tenant owner or admin required to write library documents',
+        // Owner policy: any member of the tenant writes its library; the platform
+        // owner and platform roles do not.
+        message: 'Membership of this company is required to write library documents',
       };
     }
     return { ok: true, rel, tenantId, key: s3KeyFor(bucket, rel), strategy: 'tenant' };
@@ -194,7 +198,9 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     if (!isBrandingUploadPath(rel) || !tenantId) {
       return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'tenant-logos uploads must use {tenantId}/{file}' };
     }
-    if (!(await hasTenantMembership(client, userId, tenantId)) && !(await isPlatformOwner(client))) {
+    // Tenant branding is the tenant's own: members only. The platform owner
+    // does not edit tenant branding.
+    if (!(await hasTenantMembership(client, userId, tenantId))) {
       return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not a member of this tenant' };
     }
     return { ok: true, rel, tenantId: tenantId.toLowerCase(), key: s3KeyFor(bucket, rel), strategy: 'branding' };

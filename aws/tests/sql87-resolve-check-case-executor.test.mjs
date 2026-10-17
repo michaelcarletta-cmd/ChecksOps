@@ -253,11 +253,11 @@ test('apply refuses before connecting: a pin with no pre-state, the read-live se
   }
 });
 
-test('the AWS API never calls the SQL function: the SPA rpc goes to the workflow-rpc route, which is unchanged (37cab8d6)', () => {
+test('the AWS API never calls the SQL function: the SPA rpc goes to the workflow-rpc route, at its planned bytes', () => {
   const rpc = fs.readFileSync(path.join(ROOT, 'aws/functions/api/workflow-rpc.mjs'), 'utf8');
-  assert.equal(sha(rpc), '37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907');
+  // 37cab8d6 when SQL 87 was planned; release 2026-10-17 plans the branch bytes (members-only gates).
   const plan = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
-  assert.ok(JSON.stringify(plan).includes('37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907'));
+  assert.equal(sha(rpc), plan.members['workflow-rpc.mjs'].accepted_sha256);
   assert.match(rpc, /export const SAFE_WRITE_RPCS = new Set\(\[[^\]]*'resolve_check_case'/);
   assert.match(rpc, /case 'resolve_check_case':\n\s+return executeResolveCheckCase\(/);
   const data = fs.readFileSync(path.join(ROOT, 'aws/functions/api/data.mjs'), 'utf8');
@@ -597,7 +597,7 @@ test('PostgreSQL 16: behavioural mutants of SQL 87 are caught by the trigger sce
   }
 });
 
-test('PostgreSQL 16: the live server route (workflow-rpc.mjs 37cab8d6) is unchanged by SQL 87: acting roles resolve, viewer, partner, another tenant and a non-member are refused', { timeout: 240000 }, async (t) => {
+test('PostgreSQL 16: the server route is unchanged by SQL 87: any member of the tenant resolves (owner policy: stored role ignored); another tenant and a non-member are refused', { timeout: 240000 }, async (t) => {
   const pg = await loadPg(t);
   if (!pg) return;
   const { executeSafeWriteRpc } = await import('../functions/api/workflow-rpc.mjs');
@@ -622,7 +622,9 @@ test('PostgreSQL 16: the live server route (workflow-rpc.mjs 37cab8d6) is unchan
       await assert.rejects(api.query('SELECT public.resolve_check_case($1::uuid)', [TENANT_A]), (error) => error.code === '42501');
       const call = (user, args) => executeSafeWriteRpc({ client: api, mapping: { application_user_id: user }, name: 'resolve_check_case', args });
       let ownCase = null;
-      for (const role of ['owner', 'admin', 'manager', 'operator', 'Operator']) {
+      // Owner policy: every member is a user with the same rights, whatever role is
+      // stored ('viewer' and 'partner' rows of tenant A are members of tenant A).
+      for (const role of ['owner', 'admin', 'manager', 'operator', 'Operator', 'viewer', 'partner']) {
         const result = await call(users[role], { _tenant_id: TENANT_A, _claim_id: CLAIM_A });
         assert.match(String(result.data), UUID_RE, `${role}: ${JSON.stringify(result)}`);
         ownCase ||= result.data;
@@ -630,9 +632,6 @@ test('PostgreSQL 16: the live server route (workflow-rpc.mjs 37cab8d6) is unchan
       }
       const row = (await owner.query('SELECT tenant_id, insured_name FROM public.check_cases WHERE id = $1', [ownCase])).rows[0];
       assert.deepEqual(row, { tenant_id: TENANT_A, insured_name: 'Alma Own' });
-      for (const role of ['viewer', 'partner']) {
-        assert.equal((await call(users[role], { _tenant_id: TENANT_A, _claim_id: CLAIM_A })).error, 'not_authorized', role);
-      }
       assert.equal((await call(users.nobody, { _tenant_id: TENANT_A, _claim_id: CLAIM_A })).error, 'not_authorized', 'non-member');
       assert.equal((await call(users.b_operator, { _tenant_id: TENANT_A, _claim_id: CLAIM_A })).error, 'not_authorized', 'another tenant');
       assert.equal((await call(users.operator, { _tenant_id: TENANT_B, _claim_id: CLAIM_B })).error, 'not_authorized', "another tenant's check case");

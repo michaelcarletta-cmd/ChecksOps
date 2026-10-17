@@ -1,11 +1,11 @@
-import { supabase } from "@/integrations/supabase/client";
-
 /**
- * Frontend access to verification-document metadata.
+ * Verification-document purposes and upload limits for the Compliance & Docs
+ * onboarding flow.
  *
- * All provider authentication happens server-side in the edge functions —
- * nothing in this file knows or holds provider credentials, and document
- * contents are never retrievable from the client.
+ * All provider authentication happens server side. Nothing in this file knows
+ * or holds provider credentials. Uploads go browser -> presigned storage URL ->
+ * server finalize (see moovOnboarding.ts); the browser never reads document
+ * contents back except through a short-lived presigned view link.
  */
 
 export const FILE_PURPOSE_OPTIONS = [
@@ -28,107 +28,34 @@ export const PURPOSE_LABEL: Record<string, string> = Object.fromEntries(
   FILE_PURPOSE_OPTIONS.map((o) => [o.value, o.label]),
 );
 
+/** Vetting documents every tenant is expected to have on file. */
+export const VETTING_PURPOSES: VerificationPurpose[] = [
+  "w9",
+  "bank_statement",
+  "license",
+  "insurance",
+  "saas_agreement",
+  "terms_of_service",
+  "privacy_policy",
+];
+
 export const ACCEPTED_EXTENSIONS = ".pdf,.jpg,.jpeg,.png,.csv";
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
-export interface VerificationFile {
-  id: string;
-  file_name: string;
-  file_purpose: string;
-  mime_type: string | null;
-  file_size_bytes: number | null;
-  requirement_id: string | null;
-  provider_file_id: string;
-  provider_representative_id: string | null;
-  review_status: "pending" | "approved" | "rejected" | string;
-  review_reason: string | null;
-  created_at: string;
-  last_synced_at: string | null;
-  storage_path?: string | null;
+/** Canonical content type per accepted extension. */
+export const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+  pdf: "application/pdf",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  csv: "text/csv",
+};
+
+export function fileExtension(name: string): string {
+  const idx = name.lastIndexOf(".");
+  return idx >= 0 ? name.slice(idx + 1).toLowerCase() : "";
 }
 
-export async function getVerificationFileUrl(
-  tenantId: string,
-  fileId: string,
-): Promise<string> {
-  const { data, error } = await supabase.functions.invoke("moov-account-file-view", {
-    body: { tenant_id: tenantId, file_id: fileId },
-  });
-  return (unwrap(error, data) as { url: string }).url;
-}
-
-export interface VerificationFilesResponse {
-  account_connected: boolean;
-  requirements: string[];
-  representatives: Array<{ id: string; name: string }>;
-  files: VerificationFile[];
-  sync_error: string | null;
-}
-
-function unwrap(error: any, data: any) {
-  if (error) throw new Error(error.message ?? "Request failed");
-  if (data?.error) throw new Error(data.error);
-  return data;
-}
-
-export async function listVerificationFiles(
-  tenantId: string,
-  sync = true,
-): Promise<VerificationFilesResponse> {
-  const { data, error } = await supabase.functions.invoke("moov-account-files", {
-    body: { tenant_id: tenantId, sync },
-  });
-  return unwrap(error, data) as VerificationFilesResponse;
-}
-
-export interface UploadArgs {
-  tenantId: string;
-  file: File;
-  purpose: VerificationPurpose;
-  representativeId?: string | null;
-  requirementId?: string | null;
-  onProgress?: (percent: number) => void;
-}
-
-/**
- * Uploads via XHR so we can report real progress. The Authorization header
- * carries the user's own session — never a provider credential.
- */
-export async function uploadVerificationFile(args: UploadArgs): Promise<VerificationFile> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token;
-  if (!token) throw new Error("You need to be signed in.");
-
-  const form = new FormData();
-  form.append("tenant_id", args.tenantId);
-  form.append("file_purpose", args.purpose);
-  form.append("file", args.file, args.file.name);
-  if (args.representativeId) form.append("representative_id", args.representativeId);
-  if (args.requirementId) form.append("requirement_id", args.requirementId);
-
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/moov-account-file-upload`;
-
-  return new Promise<VerificationFile>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.setRequestHeader("apikey", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) args.onProgress?.(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onerror = () => reject(new Error("Network error while uploading."));
-    xhr.onload = () => {
-      let body: any = null;
-      try {
-        body = JSON.parse(xhr.responseText || "{}");
-      } catch { /* non-JSON */ }
-      if (xhr.status >= 200 && xhr.status < 300 && body?.file) {
-        args.onProgress?.(100);
-        resolve(body.file as VerificationFile);
-      } else {
-        reject(new Error(body?.error ?? "Upload failed."));
-      }
-    };
-    xhr.send(form);
-  });
+export function isVerificationPurpose(v: string): v is VerificationPurpose {
+  return FILE_PURPOSE_OPTIONS.some((o) => o.value === v);
 }

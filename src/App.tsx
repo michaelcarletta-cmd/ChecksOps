@@ -15,12 +15,7 @@ import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 import { AwsStagingBanner } from "./components/AwsStagingBanner";
 
 
-import { bootstrapEmbedContext } from "./lib/embedContext";
 import { isPublicTokenRoute } from "./lib/publicTokenRoutes";
-
-// Capture Freedom CRM embed params (?embed=1&partner=...&freedom_claim_id=...)
-// on first script execution, before any route or upload component reads them.
-bootstrapEmbedContext();
 
 // ChecksOps-only route tree
 const Sign = lazy(() => import("./pages/Sign"));

@@ -4,9 +4,9 @@
  * Does not call DocuSign/HelloSign/Lovable. Does not move money.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { IS_PLATFORM_OWNER_SQL, withIdentityWrite } from './data.mjs';
+import { withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
-import { resolveEmailBranding } from './email-branding.mjs';
+import { resolveEmailBranding, resolveTenantDocumentBranding } from './email-branding.mjs';
 import { escapeHtml, renderChecksOpsEmail } from './email-layout.mjs';
 import { normalizePath } from './storage-paths.mjs';
 import { authorizeSignatureDocumentPath, resolveSignatureRequestIds } from './write-signature.mjs';
@@ -177,13 +177,12 @@ const resolveRequestTenantId = async (client, request) => {
 
 export const SIGNATURE_ACTOR_SQL = `SELECT 1 FROM public.tenant_users
      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
      LIMIT 1`;
 
 /**
- * Signature Request writers: a tenant_users member of the owning tenant whose
- * role is owner, admin, manager or operator (viewers and partner tenants do
- * not act), or the platform owner. aws_can_write_tenant stays as the existing
+ * Signature Request writers: any tenant_users member of the owning tenant
+ * (the role column is ignored; partner tenants, other tenants and the
+ * platform owner do not act). aws_can_write_tenant stays as the existing
  * live gate. Fails closed when the owning tenant cannot be resolved.
  */
 export const requireSignatureActor = async (client, { mapping, tenantId, spoof }) => {
@@ -199,9 +198,17 @@ export const requireSignatureActor = async (client, { mapping, tenantId, spoof }
     const actor = (await client.query(SIGNATURE_ACTOR_SQL, [userId, tenantId])).rows[0];
     if (actor) return { ok: true };
   }
-  const owner = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
-  if (owner?.is_owner === true) return { ok: true, platformOwner: true };
   return forbidden;
+};
+
+/**
+ * The same tenant-member gate for an existing request (send, delete, retry
+ * PDF): its owning tenant is resolved server-side from the claim or check.
+ */
+export const requireSignatureRequestActor = async (client, { mapping, request, spoof }) => {
+  const claims = await loadClaimsContext(client, request);
+  const tenantId = await resolveRequestTenantId(client, { ...request, claims });
+  return requireSignatureActor(client, { mapping, tenantId, spoof });
 };
 
 /**
@@ -349,6 +356,19 @@ export const createSignatureRequestRows = async ({ client, mapping, body, spoof 
   return { ok: true, requestId, request: inserted, checkFileLinked, spoofFieldsIgnored: spoof };
 };
 
+/**
+ * A completed or signed request (or one whose signers have all signed) must
+ * never be re-sent: Resend would re-mint signer tokens and re-email links for
+ * a document that is already signed.
+ */
+export const signatureRequestAlreadyComplete = (request, signers = []) => {
+  const status = String(request?.status || '').toLowerCase();
+  if (status === 'completed' || status === 'signed') return true;
+  return Array.isArray(signers)
+    && signers.length > 0
+    && signers.every((signer) => String(signer?.status || '').toLowerCase() === 'signed');
+};
+
 export const runSendSignatureRequest = async ({
   client, mapping, body, spoof, send,
 }) => {
@@ -385,6 +405,10 @@ export const runSendSignatureRequest = async ({
   const tenantId = await resolveRequestTenantId(client, request);
   const actor = await requireSignatureActor(client, { mapping, tenantId, spoof });
   if (actor.ok === false) return actor;
+  // Before any token is minted or email sent.
+  if (signatureRequestAlreadyComplete(request, signers)) {
+    return { ok: false, statusCode: 409, error: 'already_signed', requestId, spoofFieldsIgnored: spoof };
+  }
 
   const resolved = await resolveEmailBranding(client, {
     tenantId,
@@ -393,7 +417,15 @@ export const runSendSignatureRequest = async ({
   branding.company_name = resolved.companyName;
   branding.companyName = resolved.companyName;
   branding.companySubtitle = resolved.companySubtitle;
-  branding.company_email = resolved.replyTo;
+  // Tenant's own company info/letterhead; platform company_branding only for
+  // the platform's own requests.
+  const documentBranding = await resolveTenantDocumentBranding(client, { tenantId, platformRow: brandingRow });
+  branding.company_phone = documentBranding.company_phone;
+  branding.company_address = documentBranding.company_address;
+  branding.letterhead_url = documentBranding.letterhead_url;
+  // {company.email}: a tenant's own contact email, else the reply-to as before.
+  branding.company_email = (documentBranding.source === 'tenant' ? documentBranding.company_email : null)
+    || resolved.replyTo;
   branding.replyTo = resolved.replyTo;
   branding.primaryColor = resolved.primaryColor;
   branding.logoUrl = resolved.logoUrl;
@@ -564,6 +596,119 @@ export const runSendSignatureRequest = async ({
   };
 };
 
+/**
+ * A request may be deleted only while nobody can have a link to it: a draft,
+ * or a request whose every email failed, with no sent_at, no final PDF, no
+ * manual-bypass links, and no signer who viewed or signed.
+ */
+export const signatureRequestDeletable = (request, signers = []) => {
+  if (!request) return false;
+  const status = String(request.status || '').toLowerCase();
+  if (status !== 'draft' && status !== 'failed') return false;
+  if (request.sent_at || request.final_pdf_path) return false;
+  if (String(request.delivery_mode || '').toLowerCase() === 'manual_bypass') return false;
+  return (Array.isArray(signers) ? signers : []).every((signer) => (
+    String(signer?.status || '').toLowerCase() !== 'signed'
+    && !signer?.signed_at
+    && !signer?.viewed_at
+    && String(signer?.delivery_status || '').toLowerCase() !== 'sent'
+  ));
+};
+
+/**
+ * Delete an unsent signature request (send-signature-request, action "delete").
+ * Same tenant-member gate as send. Deletes the row only; signers, fields and
+ * values cascade, check_files.signature_request_id is set null by its FK. The
+ * source document is left in storage because it may be a shared check file.
+ */
+export const runDeleteSignatureRequest = async ({ client, mapping, body, spoof }) => {
+  const requestId = optionalUuid(body.requestId ?? body.request_id);
+  if (!requestId) {
+    return { ok: false, statusCode: 400, error: 'missing_request_id', spoofFieldsIgnored: spoof };
+  }
+  const request = (await client.query(
+    `SELECT id, claim_id, check_intake_item_id, status, sent_at, final_pdf_path, delivery_mode
+     FROM public.signature_requests WHERE id = $1::uuid LIMIT 1`,
+    [requestId],
+  )).rows[0];
+  if (!request) {
+    return { ok: false, statusCode: 404, error: 'Request not found', spoofFieldsIgnored: spoof };
+  }
+  request.claims = await loadClaimsContext(client, request);
+  const tenantId = await resolveRequestTenantId(client, request);
+  const actor = await requireSignatureActor(client, { mapping, tenantId, spoof });
+  if (actor.ok === false) return actor;
+  // aws_write_signature_requests admits a row only through its check
+  // (aws_can_write_check(check_intake_item_id)): a claim-only request cannot
+  // be deleted under RLS, so say so instead of reporting a silent no-op.
+  if (!request.check_intake_item_id) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'delete_not_supported_for_claim_only',
+      message: 'Signature requests that are not attached to a check cannot be deleted yet',
+      requestId,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  // Lock the request and its signers so a concurrent send, view or signature
+  // cannot slip between the check and the DELETE.
+  const locked = (await client.query(
+    `SELECT id, claim_id, check_intake_item_id, status, sent_at, final_pdf_path, delivery_mode
+     FROM public.signature_requests WHERE id = $1::uuid FOR UPDATE`,
+    [requestId],
+  )).rows[0];
+  if (!locked) {
+    return { ok: false, statusCode: 409, error: 'not_deletable', requestId, spoofFieldsIgnored: spoof };
+  }
+  Object.assign(request, locked);
+  const signers = (await client.query(
+    `SELECT id, status, signed_at, viewed_at, delivery_status
+     FROM public.signature_signers WHERE signature_request_id = $1::uuid
+     FOR UPDATE`,
+    [requestId],
+  )).rows;
+  if (!signatureRequestDeletable(request, signers)) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'not_deletable',
+      message: 'Only draft or unsent signature requests can be deleted',
+      requestId,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  const deleted = await client.query(
+    `DELETE FROM public.signature_requests
+     WHERE id = $1::uuid
+       AND status IN ('draft', 'failed')
+       AND sent_at IS NULL
+       AND final_pdf_path IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM public.signature_signers s
+          WHERE s.signature_request_id = signature_requests.id
+            AND (lower(COALESCE(s.status, '')) = 'signed'
+                 OR s.signed_at IS NOT NULL
+                 OR s.viewed_at IS NOT NULL
+                 OR lower(COALESCE(s.delivery_status, '')) = 'sent'))`,
+    [requestId],
+  );
+  if (Number(deleted?.rowCount || 0) !== 1) {
+    return { ok: false, statusCode: 409, error: 'not_deletable', requestId, spoofFieldsIgnored: spoof };
+  }
+  await logEvent(client, {
+    request_id: null, signer_id: null, claim_id: request.claim_id || null,
+    stage: 'request_deleted', status: 'ok',
+    message: 'Unsent signature request deleted',
+    payload: { requestId, application_user_id: mapping?.application_user_id || null },
+  });
+  return { ok: true, statusCode: 200, requestId, deleted: true, spoofFieldsIgnored: spoof };
+};
+
 export const handleSendSignatureRequest = (event, deps = {}) => withIdentityWrite(event, (ctx) => (
-  runSendSignatureRequest({ ...ctx, send: deps.sendViaSesOrSink })
+  String(ctx.body?.action || '') === 'delete'
+    ? runDeleteSignatureRequest(ctx)
+    : runSendSignatureRequest({ ...ctx, send: deps.sendViaSesOrSink })
 ), deps);

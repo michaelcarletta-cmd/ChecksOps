@@ -22,7 +22,7 @@
     }
   },
   "invariants": [
-    "admin_only",
+    "tenant_members_only",
     "reason_min_3_trimmed",
     "claim_linkage_not_blocker",
     "partner_shared_blocked",

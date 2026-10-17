@@ -1252,7 +1252,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   </div>
                   {sigRequests.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
-                      No signature requests yet. Upload a PDF above with "Requires homeowner signature" on to email it to the homeowner for e-signature — the same flow as Freedom CRM.
+                      No signature requests yet. Upload a PDF above with "Requires homeowner signature" on to email it to the homeowner for e-signature.
                     </p>
                   ) : (
                     <ul className="text-sm divide-y divide-border">

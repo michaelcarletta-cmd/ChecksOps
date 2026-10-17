@@ -234,7 +234,8 @@ test('apply issues a production receipt bound to this run, the live fingerprint 
 
 test('apply refuses out of plan order and when imported names would not link', async () => {
   await assert.rejects(
-    run(applyEnv('workflow-rpc.mjs'), applyDeps('workflow-rpc.mjs', { pending: ['workflow.mjs'] }).deps),
+    // (A later member without a SQL hold: workflow-rpc.mjs now waits for SQL 90 first.)
+    run(applyEnv('providers/parity/checkalt-functions.mjs'), applyDeps('providers/parity/checkalt-functions.mjs', { pending: ['workflow.mjs'] }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes('workflow.mjs'),
   );
   // workflow.mjs imports withIdentity from data.mjs; a live data.mjs without it must block the write.
@@ -453,27 +454,35 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   const SQL89 = 'aws/workflows/sql/89_check_intake_items_column_update.sql';
   const MANIFEST_901 = 'aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json';
 
-  // Planned as REPLACE of the 2026-10-11 production bytes, at main's bytes.
+  const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const SQL93 = 'aws/workflows/sql/93_tenant_company_info.sql';
+
+  // #901 planned both as REPLACE of the 2026-10-11 production bytes; that manifest stays as evidence.
+  const manifest901 = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_901), 'utf8'));
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_RELEASE), 'utf8'));
   for (const [member, accepted, live] of [
     [ALLOWLIST, '9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7', '0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0'],
     [WORKFLOW_WRITES, '1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d', 'd9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76'],
   ]) {
+    assert.equal(manifest901.members[member].accepted_sha256, accepted, member);
+    assert.equal(manifest901.members[member].live_sha256, live, member);
+    // Release 2026-10-17 supersedes the unapplied #901 bytes: same live bytes, the branch's accepted bytes.
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
-    assert.equal(row.accepted_sha256, accepted, member);
-    assert.equal(sha(`aws/functions/api/${member}`), accepted, member);
+    assert.equal(row.manifest, MANIFEST_RELEASE, member);
+    assert.equal(release.members[member].supersedes_unapplied_manifest, MANIFEST_901, member);
     assert.equal(row.expected_live_sha256, live, member);
-    assert.equal(row.manifest, MANIFEST_901, member);
+    assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
-  assert.equal(PLAN.members[ALLOWLIST].sql_before, null);
+  assert.equal(PLAN.members[ALLOWLIST].sql_before, SQL93);
   assert.equal(PLAN.members[WORKFLOW_WRITES].sql_before, SQL89);
 
   // The allowlist goes first (the new workflow writer imports REVIEW_* from it);
   // the Moov send module and providers.mjs stay last.
   assert.ok(localImports(fs.readFileSync(path.join(API, WORKFLOW_WRITES), 'utf8'), WORKFLOW_WRITES).includes(ALLOWLIST));
-  assert.equal(PLAN.order.indexOf(WORKFLOW_WRITES), PLAN.order.indexOf(ALLOWLIST) + 1);
-  assert.deepEqual(PLAN.order.slice(-4), [ALLOWLIST, WORKFLOW_WRITES, 'providers/production/moov-send.mjs', 'providers.mjs']);
+  assert.ok(PLAN.order.indexOf(WORKFLOW_WRITES) > PLAN.order.indexOf(ALLOWLIST));
+  assert.deepEqual(PLAN.order.slice(-2), ['providers/production/moov-send.mjs', 'providers.mjs']);
 
   // SQL prerequisites: SQL 89, 71 and 52 recorded live from the SQL 89 apply; SQL 77-79 recorded applied.
   // SQL 89 applied in production (2026-10-16 one-shot); it produced SQL 71's and SQL 52's state.
@@ -494,11 +503,18 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     assert.equal(applied.applied?.result, 'applied', record);
   }
 
-  // write-allowlist.mjs applies while write-check-workflow.mjs is still on its live bytes.
+  // write-allowlist.mjs is held for SQL 93 (release 2026-10-17) ...
+  await assert.rejects(
+    run(applyEnv(ALLOWLIST), applyDeps(ALLOWLIST).deps),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL93,
+  );
+  // ... and, once SQL 93 is recorded live, applies while write-check-workflow.mjs is still on its live bytes.
+  const with93 = structuredClone(PLAN);
+  with93.sql_prerequisites[SQL93] = { verified_live: true, evidence: 'test' };
   const { deps, calls } = applyDeps(ALLOWLIST);
   const live = await deps.inspectLive();
   assert.equal(live.memberHashes[WORKFLOW_WRITES], PLAN.members[WORKFLOW_WRITES].expected_live_sha256);
-  const allowlist = await run(applyEnv(ALLOWLIST), deps);
+  const allowlist = await run(applyEnv(ALLOWLIST), { ...deps, plan: with93 });
   assert.equal(allowlist.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [ALLOWLIST], add: [] });
 
@@ -540,4 +556,38 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     const ahead = await run(applyEnv(member), applyDeps(member, { pending: [WORKFLOW_WRITES] }).deps);
     assert.equal(ahead.mutation, false, member);
   }
+});
+
+test('linkProblems refuses a member whose new bytes drop a name a live file imports (static or dynamic)', async () => {
+  const { linkProblems, namedImports } = await import('../../scripts/deployment-guard/github-production-lambda-overlay.mjs');
+  const live = {
+    'app-services.mjs': "import { handleA, handleB } from './x.mjs';\nexport const route = 1;\n",
+    'providers/caller-user.mjs': "export const go = async () => { const { isPlatformAdmin } = await import('../x.mjs'); return isPlatformAdmin; };\n",
+    'x.mjs': 'export const handleA = 1; export const handleB = 2; export const isPlatformAdmin = 3;\n',
+  };
+  // The new x.mjs keeps every name: links.
+  assert.deepEqual(linkProblems('x.mjs', 'export const handleA = 1; export const handleB = 2; export async function isPlatformAdmin() {}\n', live), []);
+  // Dropping a statically imported name is refused.
+  const dropStatic = linkProblems('x.mjs', 'export const handleA = 1; export const isPlatformAdmin = 3;\n', live);
+  assert.deepEqual(dropStatic, ['app-services.mjs imports handleB from x.mjs, which the new bytes drop']);
+  // Dropping a name a live file takes through a destructured dynamic import is refused too.
+  const dropDynamic = linkProblems('x.mjs', 'export const handleA = 1; export const handleB = 2;\n', live);
+  assert.deepEqual(dropDynamic, ['providers/caller-user.mjs imports isPlatformAdmin from x.mjs, which the new bytes drop']);
+  // The new member's own dynamic imports must exist in the live modules.
+  const forward = linkProblems('y.mjs', "export const f = async () => { const { missingName } = await import('./x.mjs'); };\n", live);
+  assert.deepEqual(forward, ['x.mjs does not export missingName']);
+  assert.deepEqual(namedImports("const { a, b: c } = await import('./z.mjs');", 'dir/m.mjs'), [{ module: 'dir/z.mjs', names: ['a', 'b'] }]);
+});
+
+test('namedImports fails closed on a binding it cannot read', async () => {
+  const { namedImports } = await import('../../scripts/deployment-guard/github-production-lambda-overlay.mjs');
+  for (const src of [
+    "const { a = 1 } = await import('./x.mjs');",
+    "const { a: { b } } = await import('./x.mjs');",
+    "const { ...rest } = await import('./x.mjs');",
+    "import { a /* b */ } from './x.mjs';",
+  ]) {
+    assert.throws(() => namedImports(src, 'm.mjs'), (error) => error.code === CODES.DEPLOYMENT_COLLISION && /cannot verify imported names/.test(error.message), src);
+  }
+  assert.deepEqual(namedImports("import { a, b as c } from './x.mjs';", 'm.mjs'), [{ module: 'x.mjs', names: ['a', 'b'] }]);
 });

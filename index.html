@@ -4,15 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self' https://freedomclaims.work https://freedomclaims.lovable.app https://*.lovable.app" />
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'" />
     <meta name="theme-color" content="#0f172a" />
     <link rel="apple-touch-icon" href="/pwa-192.png" />
     <title>ChecksOps</title>
     <meta name="description" content="Insurance check endorsement and deposit workflow management.">
-    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
-    <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin />
-    <link href="https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&f[]=manrope@200,300,400,500,600,700,800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <noscript><link href="https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&f[]=manrope@200,300,400,500,600,700,800&display=swap" rel="stylesheet" /></noscript>
+    <link rel="preload" href="/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <meta name="author" content="Freedom Adjustment" />
 
     
@@ -55,7 +52,7 @@
 
   <body>
     <div id="root">
-      <div id="initial-loader" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;font-size:14px;letter-spacing:0.05em">Loading…</div>
+      <div id="initial-loader" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#e2e8f0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:14px;letter-spacing:0.05em">Loading…</div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

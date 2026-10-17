@@ -12,6 +12,7 @@ import {
   normalizeClaimNumber,
   normalizeDescriptiveText,
 } from './ocr-descriptive-text.mjs';
+import { resolveWritablePayeeLine } from './check-deposited.mjs';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -102,7 +103,12 @@ export const persistOcrDescriptiveHandoff = async ({
 
   const issueDate = normalizeIssueDate(parsed.issue_date);
   const carrierName = normalizeDescriptiveText(parsed.carrier_name);
-  const payeeLine = normalizeDescriptiveText(parsed.payee_line);
+  const resolvedPayee = await resolveWritablePayeeLine(
+    client,
+    checkId,
+    normalizeDescriptiveText(parsed.payee_line),
+  );
+  const payeeLine = resolvedPayee.value;
   const candidates = collectOcrPayeeCandidates(parsed);
   let issueDatePersisted = false;
   let inserted = 0;
@@ -142,10 +148,17 @@ export const persistOcrDescriptiveHandoff = async ({
   }
 
   if (carrierName || payeeLine) {
+    // S14: a deposit can land between resolveWritablePayeeLine and this
+    // UPDATE. Re-check deposited_at (the check-deposited.mjs column) in the
+    // UPDATE itself so the payee_line lock holds atomically; carrier_name
+    // stays writable.
     await client.query(
       `UPDATE public.check_intake_items
        SET carrier_name = COALESCE($2, carrier_name),
-           payee_line = COALESCE($3, payee_line),
+           payee_line = CASE
+             WHEN $3::text IS NOT NULL AND deposited_at IS NULL THEN $3::text
+             ELSE payee_line
+           END,
            updated_at = now()
        WHERE id = $1::uuid`,
       [checkId, carrierName, payeeLine],

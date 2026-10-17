@@ -3,13 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import {
-  CHECKALT_OPERATOR_ROLES as SERVER_CHECKALT_OPERATOR_ROLES,
-  roleAllowsCheckAlt,
-} from '../functions/api/providers/production/checkalt-authz.mjs';
+import { roleAllowsCheckAlt } from '../functions/api/providers/production/checkalt-authz.mjs';
 import { CHECKALT_TENANT_MEMBER_SQL } from '../functions/api/workflow-rpc.mjs';
 import {
-  CHECKALT_OPERATOR_ROLES,
   canOperateCheckAlt,
   canOperateCheckAltForTenant,
   canOperateCheckAltInAnyTenant,
@@ -30,62 +26,54 @@ const TENANT_A = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const TENANT_B = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const TENANT_C = '11111111-1111-4111-8111-111111111111';
 
-test('SPA Check Alt operator roles mirror the server list exactly', () => {
-  assert.deepEqual([...CHECKALT_OPERATOR_ROLES], [...SERVER_CHECKALT_OPERATOR_ROLES]);
-  const sqlRoles = CHECKALT_TENANT_MEMBER_SQL.match(/IN \(([^)]*)\)/)[1]
-    .split(',').map((r) => r.trim().replace(/'/g, ''));
-  assert.deepEqual(sqlRoles, [...CHECKALT_OPERATOR_ROLES]);
-  assert.throws(() => { CHECKALT_OPERATOR_ROLES.push('viewer'); });
+test('Owner policy: Check Alt membership gate on the SPA, the server and the Auto-Deposit SQL ignore the role', () => {
+  assert.doesNotMatch(CHECKALT_TENANT_MEMBER_SQL, /role/);
+  assert.match(CHECKALT_TENANT_MEMBER_SQL, /WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid/);
+  const spa = sourceOf('src/lib/checkAltOperatorAccess.ts');
+  assert.doesNotMatch(spa, /CHECKALT_OPERATOR_ROLES|"operator"|"viewer"/);
 });
 
-test('canOperateCheckAlt: tenant members with an operator role only, same as the server', () => {
-  for (const role of ['owner', 'admin', 'manager', 'operator', 'Owner', 'ADMIN']) {
-    assert.equal(canOperateCheckAlt({ isTenantMember: true, tenantRole: role }), true, role);
-    assert.equal(roleAllowsCheckAlt([role]), true, role);
+test('canOperateCheckAlt: any member of the tenant, whatever its stored role, same as the server', () => {
+  for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer', 'Viewer', 'member', '', null, undefined]) {
+    assert.equal(canOperateCheckAlt({ isTenantMember: true, tenantRole: role }), true, String(role));
+    assert.equal(roleAllowsCheckAlt([role]), true, String(role));
   }
-  // No trimming, exactly like the server's roleAllowsCheckAlt.
-  for (const role of ['viewer', 'Viewer', 'client', 'contractor', 'staff', ' ADMIN ', 'admin ', '', null, undefined]) {
-    assert.equal(canOperateCheckAlt({ isTenantMember: true, tenantRole: role }), false, String(role));
-    assert.equal(roleAllowsCheckAlt([role]), false, String(role));
-  }
-  // Not a member of the tenant (e.g. a partner the check is shared with).
+  // No membership row of the tenant (e.g. a partner the check is shared with).
+  assert.equal(roleAllowsCheckAlt([]), false);
   assert.equal(canOperateCheckAlt({ isTenantMember: false, tenantRole: 'admin' }), false);
   assert.equal(canOperateCheckAlt(), false);
 });
 
-test('per-row rule: the role in that row\'s tenant decides; Poll Now needs any operator tenant', () => {
+test('per-row rule: membership of that row\'s tenant decides; Poll Now needs any membership', () => {
   const memberships = [
     { tenant_id: TENANT_A, role: 'operator' },
     { tenant_id: TENANT_B, role: 'viewer' },
   ];
   assert.equal(canOperateCheckAltForTenant(memberships, TENANT_A), true);
-  assert.equal(canOperateCheckAltForTenant(memberships, TENANT_B), false);
+  assert.equal(canOperateCheckAltForTenant(memberships, TENANT_B), true);
   assert.equal(canOperateCheckAltForTenant(memberships, TENANT_C), false);
   assert.equal(canOperateCheckAltForTenant(memberships, null), false);
   assert.equal(canOperateCheckAltForTenant(memberships, undefined), false);
   assert.equal(canOperateCheckAltForTenant([], TENANT_A), false);
   assert.equal(canOperateCheckAltForTenant(undefined, TENANT_A), false);
-  // Any matching membership row with an allowed role counts, as on the server.
-  assert.equal(canOperateCheckAltForTenant(
-    [{ tenant_id: TENANT_B, role: 'viewer' }, { tenant_id: TENANT_B, role: 'Manager' }],
-    TENANT_B,
-  ), true);
-  assert.equal(canOperateCheckAltForTenant([{ tenant_id: TENANT_A, role: null }], TENANT_A), false);
+  assert.equal(canOperateCheckAltForTenant([{ tenant_id: TENANT_A, role: null }], TENANT_A), true);
 
   assert.equal(canOperateCheckAltInAnyTenant(memberships), true);
-  assert.equal(canOperateCheckAltInAnyTenant([{ tenant_id: TENANT_B, role: 'viewer' }]), false);
+  assert.equal(canOperateCheckAltInAnyTenant([{ tenant_id: TENANT_B, role: 'viewer' }]), true);
   assert.equal(canOperateCheckAltInAnyTenant([]), false);
   assert.equal(canOperateCheckAltInAnyTenant(null), false);
 });
 
-test('canSaveCheckAltAutoDeposit: operator roles in that tenant or the platform owner (SQL 80)', () => {
+test('canSaveCheckAltAutoDeposit: any member of that tenant; not the platform owner (SQL 90)', () => {
   const memberships = [{ tenant_id: TENANT_A, role: 'operator' }, { tenant_id: TENANT_B, role: 'viewer' }];
   assert.equal(canSaveCheckAltAutoDeposit({ memberships, tenantId: TENANT_A }), true);
-  assert.equal(canSaveCheckAltAutoDeposit({ memberships, tenantId: TENANT_B }), false);
+  assert.equal(canSaveCheckAltAutoDeposit({ memberships, tenantId: TENANT_B }), true);
   assert.equal(canSaveCheckAltAutoDeposit({ memberships, tenantId: TENANT_C }), false);
-  assert.equal(canSaveCheckAltAutoDeposit({ memberships: [], tenantId: TENANT_C, isPlatformOwner: true }), true);
+  // The platform owner without a membership is refused, as SQL 90's RPC refuses it.
+  assert.equal(canSaveCheckAltAutoDeposit({ memberships: [], tenantId: TENANT_C, isPlatformOwner: true }), false);
   assert.equal(canSaveCheckAltAutoDeposit(), false);
-  assert.match(sourceOf('aws/workflows/sql/80_checkalt_member_auto_deposit.sql'), /public\.is_platform_owner\(\)/);
+  assert.match(sourceOf('aws/workflows/sql/90_users_only_tenant_roles.sql'), /the platform owner may not \(SQL 90/);
+  assert.doesNotMatch(sourceOf('src/components/billing/TenantAutoApproveCard.tsx'), /isPlatformOwner:/);
 });
 
 test('access state: hidden by default; role message only after memberships loaded', () => {
@@ -97,9 +85,9 @@ test('access state: hidden by default; role message only after memberships loade
   assert.match(note, /if \(state === "allowed"\) return null;/);
   assert.match(note, /state === "loading"[^\n]*Checking your access/);
   assert.match(note, /Couldn't check your access/);
-  assert.match(note, /Only owners, admins, managers and operators of this organization can \{action\}\./);
-  // The role message is only reached after the loading and error branches.
-  assert.ok(note.indexOf('Only owners') > note.indexOf('state === "error"'));
+  assert.match(note, /Only members of this organization can \{action\}\./);
+  // The membership message is only reached after the loading and error branches.
+  assert.ok(note.indexOf('Only members') > note.indexOf('state === "error"'));
 });
 
 test('identity/me memberships: every tenant with its role; failures throw, no session is empty', async () => {

@@ -21,6 +21,7 @@ import {
   stepUpAwsTotp,
   verifyAwsTotp,
 } from "@/lib/awsMfa";
+import { isCheckBoundAction } from "@/lib/financialStepUp";
 import { TOTP_BOUNDARY_MESSAGE, normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
 import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
@@ -168,14 +169,19 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             checkId: request?.checkId,
           });
           if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
-          if (request?.actionKey === "wallet.fund") {
+          if (
+            request?.actionKey === "wallet.fund" ||
+            request?.actionKey === "team.reset_totp" ||
+            isCheckBoundAction(request?.actionKey)
+          ) {
             // Setup checks the code without using it up, so the same code also
-            // records this login's funding confirmation on the server.
+            // records this login's funding, Check Alt or teammate-reset
+            // confirmation on the server.
             const stepped = await stepUpAwsTotp({
               code: normalized.code,
               actionKey: request.actionKey,
               tenantId: request.tenantId,
-              checkId: null,
+              checkId: request.actionKey === "wallet.fund" ? null : request.checkId,
             });
             if (!stepped) throw new Error(TOTP_BOUNDARY_MESSAGE);
           }
@@ -191,9 +197,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         await onFactorsChanged();
         toast({
           title: "Verified",
-          description: request?.actionKey === "wallet.fund"
+          description: request?.actionKey === "wallet.fund" || isCheckBoundAction(request?.actionKey)
             ? "Two-factor confirmed until you sign out."
-            : "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
+            : "Two-factor confirmed for this session. Production CheckAlt still requires membership of the check's company server-side.",
         });
         onResolved(true);
         return;
@@ -212,13 +218,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
 
       const { data: userData } = await supabase.auth.getUser();
       if (userData.user) {
-        await supabase.from("financial_stepup_log").insert({
-          user_id: userData.user.id,
-          tenant_id: request?.tenantId ?? null,
-          action_key: request?.actionKey ?? "unknown",
-          factor_type: "totp",
-          succeeded: true,
-        });
+        // Step-ups are recorded only by the server after it verifies the code
+        // (auth-financial-totp insertAppStepUpLog). The browser never writes
+        // financial_stepup_log: that table is not in the write allowlist.
         if (mode === "enroll") {
           await supabase
             .from("profiles")
@@ -256,11 +258,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           </DialogTitle>
           <DialogDescription>
             {request?.description
-              ?? (request?.actionKey === "deposit.submit"
-                ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
-                : request?.actionKey === "deposit.approve"
-                  ? "Enter the current 6-digit code from your authenticator app to authorize this approval."
-                  : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
+              ?? (isCheckBoundAction(request?.actionKey)
+                ? "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out."
+                : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
           </DialogDescription>
         </DialogHeader>
 

@@ -128,10 +128,11 @@ export function mergeEndorsementSummaryRows(
 }
 
 /**
- * For checks mirrored from a partner app (e.g. FreedomClaims), the local `status`
- * column stays at `uploaded` because ChecksOps has not processed them internally.
- * The partner's authoritative workflow state is mirrored into `partner_status`
- * by the receive-check-status edge function.
+ * Legacy checks mirrored from the retired partner CRM bridge
+ * (`external_origin.source_app = 'freedom_crm'`). Their local `status` column
+ * stays at `uploaded` because ChecksOps never processed them internally; the
+ * partner's last workflow state remains in `partner_status`. The bridge that
+ * wrote these rows has been removed, but existing rows may still be present.
  */
 export const isMirroredCheck = (c: CheckItem) =>
   !!c.external_origin && typeof c.external_origin === "object" &&

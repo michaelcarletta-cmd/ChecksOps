@@ -669,6 +669,8 @@ export const WRITE_ALLOWLIST = {
     columns: new Set([
       'name', 'slug', 'logo_url', 'invoice_letterhead_url', 'primary_color',
       'invoice_footer_note', 'invoice_default_terms',
+      // Tenant's own Company Information + document letterhead (SQL 93).
+      'company_address', 'company_phone', 'company_email', 'letterhead_url',
     ]),
     identityColumn: null,
     requiredForWrite: { update: [], insert: ['name', 'slug'] },
@@ -836,20 +838,6 @@ export const WRITE_ALLOWLIST = {
       file: 'MortgageOpsRequestDetail / SignatureRequests',
       op: 'insert',
       reason: 'Attach the homeowner signer to an existing request. Token minting stays in send-signature-request.',
-    },
-  },
-  financial_stepup_log: {
-    tranche: 7,
-    ops: new Set(['insert']),
-    columns: new Set(['tenant_id', 'action_key', 'factor_type', 'succeeded', 'metadata']),
-    identityColumn: 'user_id',
-    requiredForWrite: { insert: ['action_key'] },
-    filterColumns: new Set([]),
-    clientIgnored: new Set(['id', 'created_at', 'updated_at']),
-    frontend: {
-      file: 'StepUpDialog',
-      op: 'insert',
-      reason: 'Append-only TOTP step-up audit. user_id is server-derived. Not a money-movement table.',
     },
   },
 };

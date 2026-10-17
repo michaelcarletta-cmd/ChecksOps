@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
+import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -28,7 +28,6 @@ import { SectionCard } from "@/components/settings/SectionCard";
 
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
-import { useRef } from "react";
 
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { CheckAltTenantAccountCard } from "@/components/settings/CheckAltTenantAccountCard";
@@ -41,6 +40,7 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 
 import { TenantProvider } from "@/contexts/TenantContext";
 import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
+import { saveTenantPricing, type TenantPricingPatch } from "@/lib/tenantPricing";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
@@ -71,6 +71,10 @@ type Tenant = {
   monthly_rate_cents?: number | null;
   referral_code?: string | null;
   referral_discount_cents?: number | null;
+  next_day_rate_cents?: number | null;
+  same_day_rate_cents?: number | null;
+  mortgage_ops_initial_rate_cents?: number | null;
+  mortgage_ops_additional_rate_cents?: number | null;
   kyc_status?: string | null;
   kyc_notes?: string | null;
   internal_notes?: string | null;
@@ -86,8 +90,6 @@ type TenantUserRow = {
   full_name?: string;
 };
 
-
-const TENANT_ROLES = ["admin", "operator", "viewer"];
 
 export default function AdminTenants() {
   const navigate = useNavigate();
@@ -383,11 +385,12 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <CompanyTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
           <TabsContent value="branding" className="mt-6 space-y-6">
-            <BrandingTab tenant={tenant} onUpdated={onUpdated} />
+            <BrandingTab tenant={tenant} />
             <EmailSenderSettings />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
-            <ComplianceSettings tenantId={tenant.id} />
+            {/* Read-only by default; the platform owner opts in with "Edit on behalf of tenant". */}
+            <ComplianceSettings tenantId={tenant.id} adminView />
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <TenantMoovIdentityCard tenantId={tenant.id} tenantName={tenant.name} />
@@ -525,109 +528,49 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   );
 }
 
-function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
-  const [logoUrl, setLogoUrl] = useState(tenant.logo_url || "");
-  const [primary, setPrimary] = useState(tenant.primary_color || "#3B82F6");
-  const [secondary, setSecondary] = useState(tenant.secondary_color || "#1E293B");
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { saving, save } = useTenantSave(tenant, onUpdated);
-
-  const handleLogoUpload = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please upload an image file.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Logo must be under 2MB.", variant: "destructive" });
-      return;
-    }
-    setUploading(true);
-    try {
-      const ext = file.name.split(".").pop() || "png";
-      const path = `${tenant.id}/${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("tenant-logos").upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
-      setLogoUrl(urlData.publicUrl);
-      toast({ title: "Logo uploaded", description: "Click Save Branding to apply." });
-    } catch (e: any) {
-      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
+/**
+ * Owner policy: a tenant's branding (logo, colors, email branding and sender)
+ * is edited only by members of that tenant, in their own settings. The
+ * platform owner sees it here read-only; there is no upload or save.
+ */
+function BrandingTab({ tenant }: { tenant: Tenant }) {
+  const logoUrl = tenant.logo_url || "";
+  const primary = tenant.primary_color || "#3B82F6";
+  const secondary = tenant.secondary_color || "#1E293B";
 
   return (
     <SectionCard
       title="Branding"
       icon={<Palette className="h-4 w-4 text-pink-500" />}
       accent="bg-gradient-to-r from-pink-500 to-pink-500/30"
-      description="Logo and color theme used on the tenant's portal and emails."
+      description="Read-only. The company edits its own logo, colors and email branding in its settings."
     >
-
         <div className="space-y-2">
           <Label>Logo</Label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleLogoUpload(file);
-            }}
-          />
           {logoUrl ? (
             <div className="flex items-center gap-3 rounded border border-border bg-muted/30 p-2">
               <img src={logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                  {uploading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Upload className="w-3 h-3 mr-1" />} Replace
-                </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLogoUrl("")}>
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded border-2 border-dashed border-border bg-muted/30 p-6 hover:bg-muted/50 transition-colors"
-            >
-              {uploading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <Upload className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Click to upload logo (PNG, JPG, SVG — max 2MB)</span>
-                </>
-              )}
-            </button>
+            <p className="text-xs text-muted-foreground">No logo set.</p>
           )}
-          <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="...or paste a URL" className="text-xs" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Primary Color</Label>
-            <div className="flex gap-2">
-              <Input type="color" value={primary} onChange={(e) => setPrimary(e.target.value)} className="w-16 p-1 h-10" />
-              <Input value={primary} onChange={(e) => setPrimary(e.target.value)} />
+            <div className="flex items-center gap-2">
+              <span className="h-6 w-6 rounded border border-border" style={{ backgroundColor: primary }} />
+              <Input value={primary} readOnly disabled />
             </div>
           </div>
           <div className="space-y-2">
             <Label>Secondary Color</Label>
-            <div className="flex gap-2">
-              <Input type="color" value={secondary} onChange={(e) => setSecondary(e.target.value)} className="w-16 p-1 h-10" />
-              <Input value={secondary} onChange={(e) => setSecondary(e.target.value)} />
+            <div className="flex items-center gap-2">
+              <span className="h-6 w-6 rounded border border-border" style={{ backgroundColor: secondary }} />
+              <Input value={secondary} readOnly disabled />
             </div>
           </div>
         </div>
-        <Button onClick={() => save({ logo_url: logoUrl || null, primary_color: primary, secondary_color: secondary })} disabled={saving || uploading}>
-          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Branding
-        </Button>
     </SectionCard>
 
   );
@@ -641,7 +584,6 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
 
   const load = async () => {
@@ -674,7 +616,6 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
       body: {
         tenant_id: tenant.id,
         email: inviteEmail.trim().toLowerCase(),
-        role: inviteRole,
         full_name: inviteName.trim() || null,
       },
     });
@@ -707,13 +648,6 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
     toast({ title: "Reset link resent", description: `Sent to ${email}` });
   };
 
-  const updateRole = async (id: string, role: string) => {
-    const { error } = await supabase.from("tenant_users").update({ role: role as any }).eq("id", id);
-    if (error) { toast({ title: "Update failed", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "Role updated" });
-    load();
-  };
-
   const remove = async (id: string) => {
     if (!confirm("Remove this user from the tenant? Their account is not deleted.")) return;
     const { error } = await supabase.from("tenant_users").delete().eq("id", id);
@@ -735,10 +669,6 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
         </div>
         <div className="flex gap-2">
           <Input placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
-          <Select value={inviteRole} onValueChange={setInviteRole}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>{TENANT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-          </Select>
           <Button onClick={invite} disabled={inviting}>
             {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />} Invite
           </Button>
@@ -763,10 +693,6 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
                     <p className="font-medium truncate">{u.full_name || u.email || u.user_id}</p>
                     {u.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
                   </div>
-                  <Select value={u.role} onValueChange={(v) => updateRole(u.id, v)}>
-                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent>{TENANT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                  </Select>
                   {u.email && (
                     <Button variant="outline" size="sm" onClick={() => resendInvite(u.email!)} title="Resend reset email">
                       <Mail className="w-4 h-4" />
@@ -788,14 +714,57 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
 function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
   const [enabled, setEnabled] = useState(tenant.per_check_billing_enabled || false);
   const [rate, setRate] = useState(tenant.per_check_rate_cents || 0);
-  const { saving, save } = useTenantSave(tenant, onUpdated);
+  const [nextDay, setNextDay] = useState<number | "">(tenant.next_day_rate_cents ?? "");
+  const [sameDay, setSameDay] = useState<number | "">(tenant.same_day_rate_cents ?? "");
+  const [mortgageInitial, setMortgageInitial] = useState<number | "">(tenant.mortgage_ops_initial_rate_cents ?? "");
+  const [mortgageAdditional, setMortgageAdditional] = useState<number | "">(tenant.mortgage_ops_additional_rate_cents ?? "");
+  const [saving, setSaving] = useState(false);
+
+  // Pricing is the platform owner's (tenant-billing-admin, SQL 96); it never
+  // goes through the generic tenants update.
+  const save = async () => {
+    const patch: TenantPricingPatch = { per_check_billing_enabled: enabled, per_check_rate_cents: rate };
+    if (nextDay !== "") patch.next_day_rate_cents = nextDay;
+    if (sameDay !== "") patch.same_day_rate_cents = sameDay;
+    if (mortgageInitial !== "") patch.mortgage_ops_initial_rate_cents = mortgageInitial;
+    if (mortgageAdditional !== "") patch.mortgage_ops_additional_rate_cents = mortgageAdditional;
+    setSaving(true);
+    try {
+      await saveTenantPricing(tenant.id, patch);
+      toast({ title: "Saved" });
+      onUpdated({ ...tenant, ...patch });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message ?? "Pricing was not saved", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const centsInput = (
+    id: string,
+    label: string,
+    value: number | "",
+    setValue: (v: number | "") => void,
+  ) => (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs">{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        min={0}
+        value={value}
+        placeholder="Default"
+        onChange={(e) => setValue(e.target.value === "" ? "" : Math.max(0, parseInt(e.target.value) || 0))}
+      />
+    </div>
+  );
 
   return (
     <SectionCard
       title="Per-Check Billing"
       icon={<Receipt className="h-4 w-4 text-amber-500" />}
       accent="bg-gradient-to-r from-amber-500 to-amber-500/30"
-      description="Configure how much this tenant is billed per check processed."
+      description="Configure what this tenant is billed. Only the ChecksOps platform owner can change these; every change is audited."
     >
 
         <div className="flex items-center justify-between">
@@ -805,14 +774,14 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} />
         </div>
-        
+
         <div className="space-y-2">
           <Label>Standard Check Rate (cents)</Label>
           <div className="flex items-center gap-2">
-            <Input 
-              type="number" 
-              value={rate} 
-              onChange={(e) => setRate(parseInt(e.target.value) || 0)} 
+            <Input
+              type="number"
+              value={rate}
+              onChange={(e) => setRate(parseInt(e.target.value) || 0)}
               disabled={!enabled}
               className="max-w-[200px]"
             />
@@ -825,25 +794,25 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         <Separator />
 
         <div className="space-y-4">
-          <h3 className="text-sm font-medium">Moov Usage Fees</h3>
-          <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Moov.</p>
+          <h3 className="text-sm font-medium">Deposit speed rates (cents)</h3>
+          <p className="text-xs text-muted-foreground">Leave empty to use the default rate.</p>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Next Day Credit</Label>
-              <Input value="$0.75" disabled className="bg-muted/50" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Same Day Credit</Label>
-              <Input value="$1.00" disabled className="bg-muted/50" />
-            </div>
+            {centsInput("next-day-rate", "Next Day Credit", nextDay, setNextDay)}
+            {centsInput("same-day-rate", "Same Day Credit", sameDay, setSameDay)}
           </div>
-
         </div>
 
-        <Button 
-          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rate })} 
-          disabled={saving}
-        >
+        <Separator />
+
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium">MortgageOps rates (cents)</h3>
+          <div className="grid grid-cols-2 gap-4">
+            {centsInput("mortgage-initial-rate", "Initial request", mortgageInitial, setMortgageInitial)}
+            {centsInput("mortgage-additional-rate", "Each additional request", mortgageAdditional, setMortgageAdditional)}
+          </div>
+        </div>
+
+        <Button onClick={save} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
         </Button>
     </SectionCard>
@@ -1419,8 +1388,26 @@ function TenantManagementTable({
   const toggleActive = (t: Tenant, active: boolean) =>
     updateTenant(t.id, { subscription_status: active ? "active" : "inactive" });
 
+  // Pricing (rate, referral discount, founding-partner price) is the platform
+  // owner's and goes through tenant-billing-admin (SQL 96), never the generic
+  // tenants update.
+  const updatePricing = async (id: string, patch: TenantPricingPatch) => {
+    setBusyId(id);
+    try {
+      await saveTenantPricing(id, patch);
+      toast({ title: "Saved" });
+      onChanged();
+      return true;
+    } catch (e: any) {
+      toast({ title: "Update failed", description: e?.message ?? "Pricing was not saved", variant: "destructive" });
+      return false;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const toggleFoundingPartner = (t: Tenant, on: boolean) =>
-    updateTenant(t.id, on
+    updatePricing(t.id, on
       ? { is_founding_partner: true, monthly_rate_cents: 7500 }
       : { is_founding_partner: false });
 
@@ -1534,7 +1521,7 @@ function TenantManagementTable({
       cell: (t) => (
         <InlineMoneyEditor
           valueCents={t.monthly_rate_cents ?? null}
-          onSave={(cents) => updateTenant(t.id, { monthly_rate_cents: cents })}
+          onSave={(cents) => updatePricing(t.id, { monthly_rate_cents: cents ?? 0 })}
         />
       ),
     },
@@ -1552,7 +1539,12 @@ function TenantManagementTable({
       mobileLabel: "Referral discount",
       headerClassName: "w-[8%] min-w-[70px]",
       className: "text-[11px]",
-      cell: (t) => fmtMoney(t.referral_discount_cents),
+      cell: (t) => (
+        <InlineMoneyEditor
+          valueCents={t.referral_discount_cents ?? null}
+          onSave={(cents) => updatePricing(t.id, { referral_discount_cents: cents ?? 0 })}
+        />
+      ),
     },
     {
       id: "kyc",

@@ -11,6 +11,8 @@ import {
   ImageDown,
   CheckCircle2,
   RefreshCw,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -30,9 +32,10 @@ import {
   SignatureAsset,
 } from "@/lib/endorsementDepositRender";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
-import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
+import { assertCleanBackOriginalPath, depositImagePersistPatch } from "@/lib/checkImageInvariants";
 import { logAudit } from "@/hooks/useAuditLog";
 import { displayCase } from "@/lib/displayCase";
+import { SIGNATURE_FONT_FAMILY } from "@/lib/signatureFont";
 
 interface SignedEndorsementAsset extends SignatureAsset {
   payee_type: string;
@@ -116,6 +119,15 @@ export function EndorsementAdjuster({
     mimeType: string;
     bytes: number;
   } | null>(null);
+
+  // Source viewer zoom (Cursor 7874a3114). The overlay is laid out from the
+  // measured wrapRef width, so re-render once the zoomed width is laid out.
+  const [viewerZoom, setViewerZoom] = useState(1);
+  const [, setViewerLayoutTick] = useState(0);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setViewerLayoutTick((tick) => tick + 1));
+    return () => cancelAnimationFrame(frame);
+  }, [viewerZoom]);
 
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
   const [endorsementsLoading, setEndorsementsLoading] = useState(true);
@@ -527,20 +539,21 @@ export function EndorsementAdjuster({
         });
       if (uploadErr) throw uploadErr;
 
+      const persist = depositImagePersistPatch(depositPath, originalImagePath, {
+        request_id: requestId,
+        renderer_version: ENDORSEMENT_RENDERER_VERSION,
+        mime_type: result.mimeType,
+        width: result.width,
+        height: result.height,
+        bytes: result.bytes,
+        override: savedOverrideRef.current,
+      });
       const { error: updateErr } = await supabase
         .from("check_intake_items")
         .update({
-          back_image_deposit_path: depositPath,
+          back_image_deposit_path: persist.back_image_deposit_path,
+          endorsement_render_meta: persist.endorsement_render_meta as any,
           endorsement_render_status: "completed",
-          endorsement_render_meta: {
-            request_id: requestId,
-            renderer_version: ENDORSEMENT_RENDERER_VERSION,
-            mime_type: result.mimeType,
-            width: result.width,
-            height: result.height,
-            bytes: result.bytes,
-            override: savedOverrideRef.current,
-          } as any,
           updated_at: new Date().toISOString(),
         })
         .eq("id", checkId);
@@ -815,10 +828,45 @@ export function EndorsementAdjuster({
       )}
 
       {/* Preview */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="mr-auto text-[10px] text-muted-foreground">
+          Scroll to inspect details. Zoom keeps the aspect ratio.
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setViewerZoom((z) => Math.max(1, Math.round((z - 0.25) * 100) / 100))}
+          disabled={viewerZoom <= 1}
+          title="Zoom out"
+        >
+          <ZoomOut className="h-3 w-3 mr-1" />
+          {Math.round(viewerZoom * 100)}%
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setViewerZoom((z) => Math.min(2.5, Math.round((z + 0.25) * 100) / 100))}
+          disabled={viewerZoom >= 2.5}
+          title="Zoom in"
+        >
+          <ZoomIn className="h-3 w-3 mr-1" />
+          Zoom
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setViewerZoom(1)}
+          disabled={viewerZoom === 1}
+          title="Reset zoom"
+        >
+          Reset
+        </Button>
+      </div>
+      <div className="overflow-auto rounded border bg-white" style={{ maxHeight: "72vh" }}>
       <div
         ref={wrapRef}
-        className="relative mx-auto overflow-hidden rounded border bg-white"
-        style={{ width: "100%", maxWidth: 900, touchAction: "none" }}
+        className="relative mx-auto overflow-hidden bg-white"
+        style={{ width: `${Math.round(viewerZoom * 100)}%`, minWidth: "100%", touchAction: "none" }}
       >
         <img
           src={originalImageUrl}
@@ -895,7 +943,7 @@ export function EndorsementAdjuster({
                       style={{
                         fontSize: byLineFontPx,
                         fontStyle: "italic",
-                        fontFamily: '"Brush Script MT", cursive',
+                        fontFamily: SIGNATURE_FONT_FAMILY,
                         marginBottom: rowGap * displayScale,
                       }}
                     >
@@ -919,7 +967,7 @@ export function EndorsementAdjuster({
                   style={{
                     fontSize: byLineFontPx,
                     fontStyle: "italic",
-                    fontFamily: '"Brush Script MT", cursive',
+                    fontFamily: SIGNATURE_FONT_FAMILY,
                   }}
                 >
                   {companyName}
@@ -954,6 +1002,7 @@ export function EndorsementAdjuster({
             }}
           />
         </div>
+      </div>
       </div>
 
       {/* Controls */}

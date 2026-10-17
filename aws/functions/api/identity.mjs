@@ -9,7 +9,7 @@ import {
   refuseSubAsApplicationId,
   verifyCognitoIdToken,
 } from './cognito.mjs';
-import { isPrivilegedRoleList, privilegedAuthPolicy } from './privileged-auth.mjs';
+import { isPrivilegedIdentity, privilegedAuthPolicy } from './privileged-auth.mjs';
 import {
   LOOKUP_MAPPING_SQL,
   LOOKUP_PRODUCTION_IDENTITY_SQL,
@@ -105,6 +105,19 @@ export const resolveIdentitySession = async ({
     const tenants = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
     const roles = (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows.map((row) => row.role);
     const masterOwner = (await client.query('SELECT public.is_master_owner() AS is_master_owner')).rows[0]?.is_master_owner === true;
+    let mortgageAgentStatus = null;
+    if (roles.includes('mortgage_agent')) {
+      try {
+        const account = (await client.query(
+          `SELECT status FROM public.mortgage_agent_accounts
+           WHERE application_user_id = $1::uuid`,
+          [mapping.application_user_id],
+        )).rows[0];
+        mortgageAgentStatus = account?.status || 'active';
+      } catch {
+        mortgageAgentStatus = 'active';
+      }
+    }
 
     await client.query('ROLLBACK');
 
@@ -126,7 +139,8 @@ export const resolveIdentitySession = async ({
       } : null,
       tenants,
       roles,
-      privileged: isPrivilegedRoleList(roles) || masterOwner,
+      mortgageAgentStatus,
+      privileged: isPrivilegedIdentity({ tenants, isPlatformOwner: masterOwner }),
       privilegedAuth: privilegedAuthPolicy(),
       authorizationSource: 'user_roles_and_tenant_users',
       cognitoGroupsUsed: false,

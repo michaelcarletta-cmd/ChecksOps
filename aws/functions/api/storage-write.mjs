@@ -15,6 +15,7 @@ import {
   s3KeyFor,
 } from './storage-paths.mjs';
 import { authorizeStorageWritePath } from './storage-write-auth.mjs';
+import { LIBRARY_BUCKET, isLibraryContentType, isLibrarySize } from './tenant-library-rules.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
 import { stampOfficialRearFingerprintIfNeeded } from './providers/production/checkalt-eligibility.mjs';
 
@@ -107,6 +108,16 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
       };
     }
 
+    // Document Library: documents and images only, 25 MB at most, and the size is
+    // signed into the PUT (S3 refuses a body of any other length).
+    const library = bucket === LIBRARY_BUCKET;
+    if (library && !isLibraryContentType(contentType)) {
+      return { ok: false, statusCode: 400, error: 'invalid_field', field: 'contentType', spoofFieldsIgnored: spoof };
+    }
+    if (library && !isLibrarySize(contentLength)) {
+      return { ok: false, statusCode: 400, error: 'invalid_field', field: 'contentLength', message: 'Library uploads need a contentLength of 1 byte to 25 MB', spoofFieldsIgnored: spoof };
+    }
+
     const upsert = body.upsert === true || body.upsert === 'true';
     const exists = await objectExists(deps, auth.key);
     if (exists && auth.createOnly) {
@@ -150,6 +161,7 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
       Bucket: filesBucket(),
       Key: auth.key,
       ContentType: contentType,
+      ...(library ? { ContentLength: contentLength } : {}),
     });
     const uploadUrl = await sign(s3, command, { expiresIn: 60 });
     return {

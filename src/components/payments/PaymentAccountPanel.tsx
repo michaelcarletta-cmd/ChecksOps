@@ -1,21 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { 
-  Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, 
-  Loader2, Link2, Landmark, X 
-} from "lucide-react";
+import { Banknote, CreditCard, ShieldCheck, RefreshCw, Loader2 } from "lucide-react";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { MoovBankLink } from "./MoovBankLink";
-import { MicroDepositVerification } from "./MicroDepositVerification";
-import { PaymentOnboardingDialog } from "./PaymentOnboardingDialog";
 import { displayCase } from "@/lib/displayCase";
+import { safeErrorMessage } from "@/lib/payments/moovOnboarding";
 
 import {
   BANK_STATUS_LABEL,
@@ -34,36 +29,18 @@ const STATUS_CLASS: Record<AccountOnboardingStatus, string> = {
 };
 
 /**
- * Provider-neutral payment account summary and setup.
+ * Read-only payment account summary (status, capabilities, connected bank).
  *
- * Deliberately never names the underlying rail — the same panel serves every
- * provider, and the action is always "Set Up Payment Account".
+ * Onboarding, bank linking and micro-deposit verification live in exactly one
+ * place now: Settings -> Compliance & Docs (ComplianceSettings). This panel
+ * only reports state and can ask the server to re-sync it.
  */
 export function PaymentAccountPanel() {
   const { account, isLoading, refetch } = usePaymentAccount();
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId } = usePaymentProviderEligibility();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge" | "bank_link">(null);
-  const [showBankLink, setShowBankLink] = useState(false);
-  const [setupWindow, setSetupWindow] = useState<Window | null>(null);
-  const [setupUrl, setSetupUrl] = useState<string | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-
-
-  useEffect(() => {
-    // Monitor the setup window. If it closes, automatically refresh.
-    if (!setupWindow) return;
-    const interval = setInterval(() => {
-      if (setupWindow.closed) {
-        setSetupWindow(null);
-        refresh();
-        clearInterval(interval);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [setupWindow]);
+  const [syncing, setSyncing] = useState(false);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading payment account…</div>;
@@ -72,60 +49,18 @@ export function PaymentAccountPanel() {
   const status = (account?.onboardingStatus ?? "not_started") as AccountOnboardingStatus;
   const caps = account?.capabilities ?? null;
 
-  async function invoke(fn: string, body: Record<string, unknown>) {
-    const { data, error } = await supabase.functions.invoke(fn, { body });
-    if (error) {
-      let message = error.message ?? "Request failed";
-      try {
-        const parsed = await (error as any).context?.json?.();
-        if (parsed?.error) message = parsed.error;
-      } catch { /* keep original */ }
-      throw new Error(message);
-    }
-    if ((data as any)?.error) throw new Error((data as any).error);
-    return data as any;
-  }
-
-  async function handleSetup() {
-    if (!tenantId) return;
-    setBusy("setup");
-    try {
-      if (!account?.externalAccountId) {
-        await invoke("moov-account-create", { tenant_id: tenantId });
-        await qc.invalidateQueries({ queryKey: ["payment-account"] });
-        await refetch();
-      }
-      // Verification details are collected in-app and sent straight to the
-      // provider — the hosted signup page cannot be used for accounts we
-      // already created by API.
-      setShowOnboarding(true);
-    } catch (e: any) {
-      toast({ title: "Couldn't start payment setup", description: e.message, variant: "destructive" });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-
-
-  async function handleBankLink() {
-    // native Moov bank link
-    setShowBankLink(true);
-  }
-
-
-
   async function refresh() {
     if (!tenantId) return;
-    setBusy("sync");
+    setSyncing(true);
     try {
-      await invoke("moov-sync", { tenant_id: tenantId });
+      const { error } = await supabase.functions.invoke("moov-sync", { body: { tenant_id: tenantId } });
+      if (error) throw new Error(error.message);
       await qc.invalidateQueries({ queryKey: ["payment-account"] });
       await refetch();
-    } catch (e: any) {
-      toast({ title: "Couldn't refresh status", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Couldn't refresh status", description: safeErrorMessage(e), variant: "destructive" });
     } finally {
-      setBusy(null);
+      setSyncing(false);
     }
   }
 
@@ -139,8 +74,8 @@ export function PaymentAccountPanel() {
               Connected Payment Account
             </CardTitle>
             <CardDescription className="text-xs mt-1">
-              Your organization's payment account and connected bank. Funds stay in your own bank
-              account until you send a payment.
+              Your organization's payment account and connected bank. Complete onboarding and bank
+              setup in Settings → Compliance &amp; Docs.
             </CardDescription>
           </div>
           <Badge variant="outline" className={`text-[10px] shrink-0 ${STATUS_CLASS[status]}`}>
@@ -169,20 +104,11 @@ export function PaymentAccountPanel() {
           <span className="text-xs text-muted-foreground flex items-center gap-1.5">
             <Banknote className="h-3.5 w-3.5" /> Connected Bank
           </span>
-          <div className="flex flex-col items-end">
-            <span className="text-xs">
-              {account?.bankName
-                ? `${displayCase(account.bankName)}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
-                : BANK_STATUS_LABEL[account?.bankConnectionStatus ?? "not_connected"]}
-            </span>
-            {tenantId && account?.bankConnectionStatus !== "connected" && (
-              <MicroDepositVerification 
-                tenantId={tenantId}
-                verificationStatus={account?.bankConnectionStatus === "pending" ? "pending_micro_deposit" : "not_started"}
-                onVerified={() => refresh()}
-              />
-            )}
-          </div>
+          <span className="text-xs">
+            {account?.bankName
+              ? `${displayCase(account.bankName)}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
+              : BANK_STATUS_LABEL[account?.bankConnectionStatus ?? "not_connected"]}
+          </span>
         </div>
 
         <div className="flex items-center justify-between">
@@ -194,17 +120,7 @@ export function PaymentAccountPanel() {
           </span>
         </div>
 
-        {status === "active" ? (
-          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5">
-            <p className="text-xs font-medium text-emerald-500">Verification complete</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Your business details are on file and verified — you don't need to enter them again.
-              {account?.bankConnectionStatus !== "connected"
-                ? " Next step: connect your settlement bank."
-                : ""}
-            </p>
-          </div>
-        ) : caps?.informationRequired?.length ? (
+        {caps?.informationRequired?.length ? (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
             <p className="text-xs font-medium text-amber-500">Additional information required</p>
             <ul className="mt-1 space-y-0.5">
@@ -215,91 +131,12 @@ export function PaymentAccountPanel() {
           </div>
         ) : null}
 
-
-        {setupUrl ? (
-          <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 space-y-1.5">
-            <p className="text-xs font-medium">Your browser blocked the setup tab</p>
-            <a
-              href={setupUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-primary underline inline-flex items-center gap-1"
-              onClick={() => setSetupUrl(null)}
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> Open payment account setup
-            </a>
-          </div>
-        ) : null}
-
-
-
-        {showBankLink && tenantId ? (
-          <div className="pt-2">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-medium">Connect Bank Account</h4>
-              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setShowBankLink(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <MoovBankLink 
-              tenantId={tenantId}
-              onConnected={() => {
-                setShowBankLink(false);
-                refresh();
-              }}
-              onExit={() => setShowBankLink(false)}
-            />
-          </div>
-        ) : enabled && (
-          <div className="flex flex-col sm:flex-row gap-2 pt-1">
-            <Button
-              size="sm"
-              className="h-8 text-xs flex-1"
-              onClick={handleSetup}
-              disabled={busy !== null || status === "active"}
-            >
-              {busy === "setup"
-                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Opening…</>
-                : status === "additional_information_required" || status === "restricted"
-                ? <><ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Provide Missing Info</>
-                : <><ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Set Up Payment Account</>}
-
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={handleBankLink}
-              disabled={busy !== null || !account?.externalAccountId}
-            >
-              <Landmark className="h-3.5 w-3.5 mr-1.5" />
-              Connect Bank
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={refresh}
-              disabled={busy !== null}
-            >
-              {busy === "sync"
-                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Refreshing…</>
-                : <><RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh status</>}
-            </Button>
-          </div>
-        )}
-
-        {tenantId && (
-          <PaymentOnboardingDialog
-            tenantId={tenantId}
-            open={showOnboarding}
-            onOpenChange={setShowOnboarding}
-            onSubmitted={() => refresh()}
-          />
-        )}
-
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={refresh} disabled={syncing || !tenantId}>
+          {syncing
+            ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Refreshing…</>
+            : <><RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh status</>}
+        </Button>
       </CardContent>
     </Card>
-
   );
 }

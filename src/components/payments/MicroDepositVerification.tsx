@@ -14,6 +14,8 @@ interface Props {
   paymentMethodId?: string;
   verificationStatus: string;
   onVerified?: () => void;
+  /** Provider environment when the caller already knows it (skips the lookup). */
+  environment?: string | null;
 }
 
 /**
@@ -27,7 +29,8 @@ export function MicroDepositVerification({
   tenantId,
   paymentMethodId,
   verificationStatus,
-  onVerified
+  onVerified,
+  environment: environmentProp,
 }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -36,9 +39,9 @@ export function MicroDepositVerification({
   const [needsRestart, setNeedsRestart] = useState(false);
 
   // Provider environment as recorded on the tenant's payment account row.
-  const { data: environment } = useQuery({
+  const { data: environmentLookup } = useQuery({
     queryKey: ["payment-account-environment", tenantId],
-    enabled: !!tenantId,
+    enabled: !!tenantId && environmentProp === undefined,
     queryFn: async () => {
       const { data } = await supabase
         .from("payment_provider_accounts")
@@ -52,11 +55,13 @@ export function MicroDepositVerification({
     },
   });
 
+  const environment = environmentProp === undefined ? environmentLookup : environmentProp;
   const isSandbox = environment === "sandbox";
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["payment-account"] });
     qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+    qc.invalidateQueries({ queryKey: ["moov-onboarding", tenantId] });
   };
 
   const initiate = useMutation({

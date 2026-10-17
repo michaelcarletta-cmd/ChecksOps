@@ -115,7 +115,7 @@ export function EstimateImportPreview({
             </Button>
             {showExtractedText && (
               <Textarea value={editingText} onChange={(e) => setEditingText(e.target.value)}
-                className="text-xs font-mono h-32 resize-y" />
+                className="text-xs font-code h-32 resize-y" />
             )}
           </div>
         )}

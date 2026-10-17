@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Send, Lock } from "lucide-react";
@@ -7,15 +7,16 @@ import { RunPayrollDialog } from "@/components/payroll/RunPayrollDialog";
 import { PayrollHistoryTable } from "@/components/payroll/PayrollHistoryTable";
 
 export function PayrollTab() {
-  const { userRole } = useAuth();
+  // Owner policy: every member of the tenant is a user with the same rights.
+  const { isMember: canAct } = useCurrentTenantMembership();
   const [open, setOpen] = useState(false);
 
-  if (userRole !== "admin") {
+  if (!canAct) {
     return (
       <Card>
         <CardContent className="p-6 flex items-center gap-3 text-sm text-muted-foreground">
           <Lock className="h-4 w-4" />
-          Payroll is admin-only. Contact your account admin to run off-claim payments.
+          Payroll is for members of this organization.
         </CardContent>
       </Card>
     );

@@ -18,6 +18,7 @@ import {
   loadPendingSignaturesForHomeowner,
   runHomeownerLedgerDocumentSignLink,
 } from './homeowner-signing-integration.mjs';
+import { loadSharedDocumentsSafely } from './tenant-library.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -250,7 +251,7 @@ export const sanitizePendingEndorsementsForHomeowner = (
   });
 };
 
-export const assembleHomeownerLedgerView = (doc, spoof, { pendingSignatures = [] } = {}) => {
+export const assembleHomeownerLedgerView = (doc, spoof, { pendingSignatures = [], sharedDocuments = [] } = {}) => {
   const tokenMeta = doc.token && typeof doc.token === 'object' ? doc.token : {};
   const mode = doc.mode || (tokenMeta.claim_id || doc.claim?.id ? 'claim' : 'pre_claim');
   const homeowner = doc.homeowner || {
@@ -271,6 +272,9 @@ export const assembleHomeownerLedgerView = (doc, spoof, { pendingSignatures = []
       Array.isArray(doc.pending_endorsements) ? doc.pending_endorsements : [],
       homeowner,
     ),
+    // Only this claim's shared library documents loaded by the Lambda (SQL 94):
+    // metadata, never a path or URL (homeowner-shared-document-url mints those).
+    shared_documents: Array.isArray(sharedDocuments) ? sharedDocuments : [],
     pending_upload_count: Number(doc.pending_upload_count || 0),
     can_upload: doc.can_upload !== false,
     allow_deductible_payment: false,
@@ -330,8 +334,9 @@ export const handleHomeownerLedgerView = async (event) => {
       return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
     }
     const pendingSignatures = await loadPendingSignaturesSafely(client, token, doc);
+    const sharedDocuments = await loadSharedDocumentsSafely(client, token);
     await client.query('COMMIT');
-    return assembleHomeownerLedgerView(doc, spoof, { pendingSignatures });
+    return assembleHomeownerLedgerView(doc, spoof, { pendingSignatures, sharedDocuments });
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -778,15 +783,7 @@ export const runHomeownerLedgerSend = async ({
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
-  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-  const actor = (await client.query(
-    `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
-     LIMIT 1`,
-    [mapping.application_user_id, tenantId],
-  )).rows[0];
-  if (!actor) return { ok: false, statusCode: 403, error: 'role_not_allowed', spoofFieldsIgnored: spoof };
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act. (the membership above is the whole gate).
 
   // The claim must belong to this tenant (its org, or one of this tenant's checks).
   const claimOwned = !claimId || (await client.query(
@@ -913,15 +910,7 @@ export const runSendFileToHomeowner = async ({
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
-  // Owner policy: owner, admin, manager and operator act; viewers and partners do not.
-  const actor = (await client.query(
-    `SELECT 1 FROM public.tenant_users
-     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-       AND lower(role::text) IN ('owner', 'admin', 'manager', 'operator')
-     LIMIT 1`,
-    [mapping.application_user_id, file.tenant_id],
-  )).rows[0];
-  if (!actor) return { ok: false, statusCode: 403, error: 'role_not_allowed', spoofFieldsIgnored: spoof };
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act. (the membership above is the whole gate).
 
   const claim = (await client.query(
     `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,

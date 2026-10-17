@@ -11,7 +11,10 @@ test('queue Delete next to Share uses AdminDeleteCheckButton, not a direct-table
   const src = read('src/pages/CheckCommandCenter.tsx');
   assert.match(src, /<Share2 className="h-3\.5 w-3\.5" \/>/);
   assert.match(src, /<AdminDeleteCheckButton/);
-  assert.match(src, /canDeleteAnyCheck = isAdmin/);
+  // Owner policy: any member of the check's own tenant (no role tiers), not a global admin role.
+  assert.doesNotMatch(src, /canDeleteAnyCheck = isAdmin/);
+  assert.match(src, /const canDelete = !isShared && canDeleteCheckInTenant\(check\.tenant_id\)/);
+  assert.match(src, /\(row\) => String\(row\.tenant_id\) === String\(checkTenantId\),/);
   assert.doesNotMatch(src, /deleteCheckMutation/);
   assert.doesNotMatch(src, /confirm\("Delete this check\? This cannot be undone\."\)/);
   assert.doesNotMatch(src, /from\("check_intake_items"\)\.delete\(\)/);
@@ -24,7 +27,10 @@ test('Share-adjacent and Admin tools Delete both invoke the accepted admin_delet
   assert.match(button, /supabase\.rpc\("admin_delete_check"/);
   assert.match(button, /p_reason:\s*trimmed/);
   assert.match(button, /const reasonValid = trimmed\.length >= 3/);
-  assert.match(button, /if \(!isAdmin\) return null/);
+  assert.doesNotMatch(button, /usePermissions/);
+  assert.match(button, /if \(!canDelete\) return null/);
+  assert.match(button, /\(row\) => !tenantId \|\| String\(row\.tenant_id\) === String\(tenantId\),/);
+  assert.doesNotMatch(button, /row\.role/);
   assert.equal((ccc.match(/<AdminDeleteCheckButton/g) || []).length >= 3, true);
 });
 

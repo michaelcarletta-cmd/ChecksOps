@@ -25,6 +25,7 @@ import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -43,7 +44,6 @@ import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
 import { TenantBillingAccountPanel } from "@/components/settings/TenantBillingAccountPanel";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
@@ -97,7 +97,6 @@ function MyVerificationStatus() {
 export function WhiteLabelSettings() {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
-  const { isAdmin } = usePermissions();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
@@ -123,10 +122,18 @@ export function WhiteLabelSettings() {
         .eq("tenant_id", tenant!.id)
         .eq("user_id", user!.id)
         .maybeSingle();
-      return (data?.role ?? null) as string | null;
+      // Membership is the row itself; the role value is ignored (a member with
+      // an empty role is still a member).
+      return (data ? (data.role ?? "member") : null) as string | null;
     },
   });
-  const canManageTenant = tenantRole === "owner" || tenantRole === "admin" || isAdmin;
+  // Owner policy: every member of the tenant is a user with the same rights;
+  // platform roles give no shortcut.
+  const canManageTenant = Boolean(tenantRole);
+  // Compliance & Docs is open to every member of the tenant (no role tiers); the
+  // server's can_submit decides editing. The platform owner (by email) keeps access too.
+  const isTenantMember = !!tenantRole;
+  const canViewCompliance = isTenantMember || isPlatformOwner(user?.email);
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;
@@ -177,7 +184,7 @@ export function WhiteLabelSettings() {
             {canManageTenant && <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Account/Stakeholders</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>}
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
-            {canManageTenant && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
+            {canViewCompliance && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
             <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
           </TabsList>
 
@@ -223,7 +230,7 @@ export function WhiteLabelSettings() {
           </TabsContent>
 
 
-          {canManageTenant && (
+          {canViewCompliance && (
             <TabsContent value="compliance" className="space-y-8">
               <ComplianceSettings />
               {tenant && (

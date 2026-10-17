@@ -3,7 +3,7 @@
  *
  * Returns:
  *   { key: string, isSystemTenant: false }   → use tenant's key (bypass gateway)
- *   { key: null,   isSystemTenant: true  }   → Freedom internal; use platform OPENAI_API_KEY
+ *   { key: null,   isSystemTenant: true  }   → system/internal; use platform OPENAI_API_KEY
  *   { key: null,   isSystemTenant: false }   → tenant has not configured a key; caller must error
  */
 
@@ -23,7 +23,7 @@ export async function resolveTenantOpenAIKey(
     return { key: null, isSystemTenant: true, status: "system" };
   }
 
-  // Is this the Freedom system tenant?
+  // Is this the system tenant?
   const { data: tenantRow, error: tErr } = await supabase
     .from("tenants")
     .select("is_system_tenant, slug")
@@ -31,12 +31,12 @@ export async function resolveTenantOpenAIKey(
     .maybeSingle();
 
   if (tErr) {
-    // Fail-open as system to avoid blocking Freedom's own ingestion on transient errors.
+    // Fail-open as system to avoid blocking system-tenant ingestion on transient errors.
     console.warn("[tenantKeyResolver] tenant lookup failed, defaulting to system:", tErr.message);
     return { key: null, isSystemTenant: true, status: "system" };
   }
 
-  const isSystem = !!tenantRow?.is_system_tenant || tenantRow?.slug === "freedom-claims";
+  const isSystem = !!tenantRow?.is_system_tenant;
   if (isSystem) {
     return { key: null, isSystemTenant: true, status: "system" };
   }

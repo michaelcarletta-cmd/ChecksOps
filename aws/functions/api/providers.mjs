@@ -36,6 +36,8 @@ import { handleProviderWebhook } from './providers/webhooks.mjs';
 import { handleProviderEgress } from './providers/egress.mjs';
 import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
 import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
+import { handleMoovOnboarding, isOnboardingFunction } from './providers/onboarding/handlers.mjs';
+import { moovOnboardingProductionEnabled } from './providers/onboarding/flags.mjs';
 import { hasProductionCheckAltHandler, runProductionCheckAltHandler } from './providers/production/checkalt-dispatch.mjs';
 import {
   checkaltStatusReadOnlyMode,
@@ -392,6 +394,16 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
 
   if (checkaltStatusReadOnlyMode() && isCheckAltMutationFunction(name)) {
     return denyCheckAltMutationUnderStatusRead(name);
+  }
+
+  // Moov onboarding (Compliance & Docs + bank setup): one environment-agnostic
+  // handler set. Staging: sandbox execution only. Production: only when
+  // AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED is also true; otherwise these names
+  // fall through to the production_execution_blocked hard block below.
+  if (spec.provider === 'moov' && isOnboardingFunction(name)) {
+    const productionOnboarding = executionAllowed('moov') && moovOnboardingProductionEnabled();
+    const sandboxOnboarding = !executionAllowed('moov') && providerSandboxExecutionEnabled();
+    if (productionOnboarding || sandboxOnboarding) return handleMoovOnboarding(name, event, deps);
   }
 
   // Production WalletOps balance refresh: Moov GETs only, updates only the

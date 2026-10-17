@@ -81,7 +81,12 @@ function mockFetch(routes) {
   return { fetchImpl, calls };
 }
 
-async function runSweep(action, { sweepConfigId, routes, failPatch = false } = {}) {
+const SWEEP_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const OPERATOR_MEMBERSHIPS = [{ tenant_id: SWEEP_TENANT, role: 'operator' }];
+
+async function runSweep(action, {
+  sweepConfigId, routes, failPatch = false, memberships = OPERATOR_MEMBERSHIPS,
+} = {}) {
   resetMoovTokenCache();
   const patchPath = `/accounts/${ACCOUNT}/sweep-configs/${SWEEP_ID}`;
   const { fetchImpl, calls } = mockFetch({
@@ -99,7 +104,7 @@ async function runSweep(action, { sweepConfigId, routes, failPatch = false } = {
   }, () => sweepConfig.run({
     client: mockClient(),
     body: { action, sweep_config_id: sweepConfigId, wallet_type: 'operating' },
-    ctx: { tenantId: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a', environment: 'sandbox' },
+    ctx: { tenantId: SWEEP_TENANT, environment: 'sandbox', memberships },
     fetchImpl,
   }));
   return { result, calls };
@@ -247,5 +252,25 @@ test('10 PR #598 granular capability request sets remain unchanged', () => {
       false,
       `onboard requested ${code}`,
     );
+  }
+});
+
+test('sweep changes: other-tenant members and non-members are refused before any provider call; any member may change', async () => {
+  for (const memberships of [
+    [{ tenant_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', role: 'owner' }],
+    [],
+  ]) {
+    const { result, calls } = await runSweep('disable', { sweepConfigId: SWEEP_ID, memberships });
+    assert.equal(result.statusCode, 403, JSON.stringify(memberships));
+    assert.equal(result.error, 'not_a_member');
+    assert.equal(calls.some((c) => c.method === 'PATCH' || c.method === 'POST'), false);
+  }
+  // Owner policy: every member is a user with the same rights, whatever role is stored.
+  for (const role of ['owner', 'admin', 'manager', 'operator', 'viewer']) {
+    const { result } = await runSweep('disable', {
+      sweepConfigId: SWEEP_ID,
+      memberships: [{ tenant_id: SWEEP_TENANT, role }],
+    });
+    assert.equal(result.ok, true, role);
   }
 });

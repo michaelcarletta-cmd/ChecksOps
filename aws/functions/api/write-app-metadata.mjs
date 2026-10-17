@@ -6,6 +6,7 @@ import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 import { tenantMoovDefaults } from './tenant-moov-defaults.mjs';
 import { matchLossDraftDocumentPath, matchTenantDocumentPath, normalizePath } from './storage-paths.mjs';
+import { isLibraryContentType, isLibrarySize, libraryFolderFor, libraryObjectPath } from './tenant-library-rules.mjs';
 
 /*
  * Stored file paths are read grants: storage.mjs authorizes an object for any
@@ -72,6 +73,8 @@ const buildSet = (values, casts = {}) => {
   return { sets, params, next: i };
 };
 
+// Owner policy: every member of the tenant is a user with the same rights;
+// partners and other tenants do not act. Any tenant_users row counts.
 const memberOfTenant = async (client, userId, tenantId) => {
   const rows = (await client.query(
     `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
@@ -135,10 +138,19 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     if (rawPath?.error || !rawPath) return rawPath?.error || { error: 'missing_required_field', field: 'file_path' };
     const filePath = tenantLibraryPath(rawPath, tenantId);
     if (!filePath) return { error: 'path_not_allowlisted', field: 'file_path', message: 'file_path must be under {tenantId}/library/' };
+    // A library doc_type is stored under its own category folder.
+    const folder = libraryFolderFor(docType);
+    if (folder && !libraryObjectPath(filePath, { tenantId, category: folder })) {
+      return { error: 'path_not_allowlisted', field: 'file_path', message: 'file_path must be {tenantId}/library/{category}/{file} for this doc_type' };
+    }
     const fileName = clip(values.file_name, 255);
     if (fileName?.error) return fileName;
     const mime = clip(values.mime_type, 120);
     if (mime?.error) return mime;
+    if (mime && !isLibraryContentType(mime)) return { error: 'invalid_field', field: 'mime_type' };
+    if (values.file_size != null && !isLibrarySize(values.file_size)) {
+      return { error: 'invalid_field', field: 'file_size', message: 'file_size must be 1 byte to 25 MB' };
+    }
     const notes = clip(values.notes, 2000);
     if (notes?.error) return notes;
     const autoShare = values.auto_share_mortgage_ops === true || values.auto_share_mortgage_ops === 'true';
@@ -167,7 +179,7 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
   const existing = (await client.query(
-    `SELECT id, tenant_id FROM public.tenant_documents WHERE id = $1::uuid`,
+    `SELECT id, tenant_id, doc_type FROM public.tenant_documents WHERE id = $1::uuid`,
     [id],
   )).rows[0];
   if (!existing) return { error: 'rls_denied', message: 'document not writable' };
@@ -187,8 +199,13 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     if (col in values) {
       const text = clip(values[col], max);
       if (text?.error) return text;
-      if (col === 'doc_type' && !isAllowedTenantDocumentDocType(text)) {
+      // A rename keeps the document in its category (its object sits in that folder).
+      if (col === 'doc_type' && (!isAllowedTenantDocumentDocType(text)
+        || libraryFolderFor(text) !== libraryFolderFor(existing.doc_type))) {
         return { error: 'category_not_allowlisted', field: 'doc_type' };
+      }
+      if (col === 'mime_type' && text && !isLibraryContentType(text)) {
+        return { error: 'invalid_field', field: 'mime_type' };
       }
       out[col] = text;
     }
@@ -366,97 +383,46 @@ export const executeSharedCheckMessages = async ({ client, mapping, op, values, 
   return { rows };
 };
 
-const TENANT_ROLES = new Set(['admin', 'operator', 'viewer']);
-
-export const executeTenantUsers = async ({ client, mapping, op, values, filters }) => {
+// tenant_users writes are membership add/remove only. There is no role-change
+// path: authorization ignores tenant_users.role, so nothing may set it here.
+export const executeTenantUsers = async ({ client, mapping, op, filters }) => {
   const id = eqFilter(filters, 'id');
   const tenantId = eqFilter(filters, 'tenant_id');
   const userId = eqFilter(filters, 'user_id');
 
-  const actorIsAdmin = async (tid) => {
-    if (!(await memberOfTenant(client, mapping.application_user_id, tid))) return false;
-    const rows = (await client.query(
-      `SELECT role::text AS role FROM public.tenant_users
-       WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND role = 'admin'
-       UNION ALL
-       SELECT role::text FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff')`,
-      [mapping.application_user_id, tid],
-    )).rows;
-    return rows.length > 0;
-  };
-
-  if (op === 'delete') {
-    let targetTenant = tenantId;
-    let targetUser = userId;
-    if (id) {
-      if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
-      const row = (await client.query(
-        'SELECT id, tenant_id, user_id FROM public.tenant_users WHERE id = $1::uuid',
-        [id],
-      )).rows[0];
-      if (!row) return { error: 'rls_denied', message: 'membership not found' };
-      targetTenant = row.tenant_id;
-      targetUser = row.user_id;
-    }
-    if (!isUuid(targetTenant) || !isUuid(targetUser)) {
-      return { error: 'missing_required_field', field: 'tenant_id|user_id' };
-    }
-    if (!(await actorIsAdmin(targetTenant))) {
-      return { error: 'not_authorized', message: 'Tenant admin required to remove members' };
-    }
-    if (targetUser === mapping.application_user_id) {
-      return { error: 'not_authorized', message: 'Cannot remove own membership via this path' };
-    }
-    const rows = id
-      ? (await client.query(
-        'DELETE FROM public.tenant_users WHERE id = $1::uuid RETURNING *',
-        [id],
-      )).rows
-      : (await client.query(
-        'DELETE FROM public.tenant_users WHERE tenant_id = $1::uuid AND user_id = $2::uuid RETURNING *',
-        [targetTenant, targetUser],
-      )).rows;
-    return { rows };
-  }
-
-  if (op !== 'update') return { error: 'operation_not_allowlisted', op };
-  const role = clip(values.role, 40);
-  if (role?.error || !role) return role?.error || { error: 'missing_required_field', field: 'role' };
-  if (!TENANT_ROLES.has(String(role).toLowerCase())) {
-    return { error: 'invalid_field', field: 'role' };
-  }
+  if (op !== 'delete') return { error: 'operation_not_allowlisted', op };
   let targetTenant = tenantId;
+  let targetUser = userId;
   if (id) {
     if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
     const row = (await client.query(
-      'SELECT id, tenant_id FROM public.tenant_users WHERE id = $1::uuid',
+      'SELECT id, tenant_id, user_id FROM public.tenant_users WHERE id = $1::uuid',
       [id],
     )).rows[0];
     if (!row) return { error: 'rls_denied', message: 'membership not found' };
     targetTenant = row.tenant_id;
-    if (!(await actorIsAdmin(targetTenant))) {
-      return { error: 'not_authorized', message: 'Tenant admin required to change roles' };
-    }
-    const rows = (await client.query(
-      `UPDATE public.tenant_users SET role = $2::tenant_role, updated_at = now()
-       WHERE id = $1::uuid RETURNING *`,
-      [id, String(role).toLowerCase()],
-    )).rows;
-    return { rows };
+    targetUser = row.user_id;
   }
-  if (!isUuid(tenantId) || !isUuid(userId)) {
+  if (!isUuid(targetTenant) || !isUuid(targetUser)) {
     return { error: 'missing_required_field', field: 'tenant_id|user_id' };
   }
-  if (!(await actorIsAdmin(tenantId))) {
-    return { error: 'not_authorized', message: 'Tenant admin required to change roles' };
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+  // Any member may remove a teammate; global user_roles admin/staff give no shortcut.
+  if (!(await memberOfTenant(client, mapping.application_user_id, targetTenant))) {
+    return { error: 'not_authorized', message: 'Only a member of this company can remove its members' };
   }
-  const rows = (await client.query(
-    `UPDATE public.tenant_users SET role = $3::tenant_role, updated_at = now()
-     WHERE tenant_id = $1::uuid AND user_id = $2::uuid
-     RETURNING *`,
-    [tenantId, userId, String(role).toLowerCase()],
-  )).rows;
-  if (!rows.length) return { error: 'rls_denied', message: 'membership not writable' };
+  if (targetUser === mapping.application_user_id) {
+    return { error: 'not_authorized', message: 'Cannot remove own membership via this path' };
+  }
+  const rows = id
+    ? (await client.query(
+      'DELETE FROM public.tenant_users WHERE id = $1::uuid RETURNING *',
+      [id],
+    )).rows
+    : (await client.query(
+      'DELETE FROM public.tenant_users WHERE tenant_id = $1::uuid AND user_id = $2::uuid RETURNING *',
+      [targetTenant, targetUser],
+    )).rows;
   return { rows };
 };
 
@@ -464,12 +430,19 @@ export const executeProfiles = async ({ client, mapping, values, filters }) => {
   const id = eqFilter(filters, 'id') || mapping.application_user_id;
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
   if (id !== mapping.application_user_id) {
-    const roles = (await client.query(
-      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
-      [mapping.application_user_id],
-    )).rows.map((row) => String(row.role || '').toLowerCase());
-    if (!roles.includes('admin')) {
-      return { error: 'not_authorized', message: 'Can only update own profile' };
+    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+    // A teammate is anyone who shares one of the caller's tenants. Global
+    // user_roles admin/staff give no cross-tenant shortcut.
+    const shared = (await client.query(
+      `SELECT 1 FROM public.tenant_users mine
+         JOIN public.tenant_users theirs ON theirs.tenant_id = mine.tenant_id
+        WHERE mine.user_id = $1::uuid
+          AND theirs.user_id = $2::uuid
+        LIMIT 1`,
+      [mapping.application_user_id, id],
+    )).rows;
+    if (!shared.length) {
+      return { error: 'not_authorized', message: 'Can only update own profile or a teammate\'s' };
     }
   }
   const out = {};
@@ -561,22 +534,18 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
   return { rows };
 };
 
-const actorIsPlatformAdmin = async (client, userId) => {
+// Tenant onboarding stays with the platform owner (is_platform_owner(); the
+// SPA uses the same check). A global user_roles admin is not enough.
+const actorIsPlatformAdmin = async (client) => {
   const owner = (await client.query(
-    `SELECT COALESCE(public.is_platform_owner(), false) AS is_owner,
-            COALESCE(public.is_master_owner(), false) AS is_master`,
+    `SELECT COALESCE(public.is_platform_owner(), false) AS is_owner`,
   )).rows[0] || {};
-  if (owner.is_owner === true || owner.is_master === true) return true;
-  const role = (await client.query(
-    `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
-    [userId],
-  )).rows[0];
-  return Boolean(role);
+  return owner.is_owner === true;
 };
 
 export const executeTenantsCreate = async ({ client, mapping, values }) => {
-  if (!(await actorIsPlatformAdmin(client, mapping.application_user_id))) {
-    return { error: 'not_authorized', message: 'Platform admin required to create a tenant' };
+  if (!(await actorIsPlatformAdmin(client))) {
+    return { error: 'not_authorized', message: 'Platform owner required to create a tenant' };
   }
   const name = clip(values.name, 200);
   if (name?.error || !name) return name?.error || { error: 'missing_required_field', field: 'name' };
@@ -601,13 +570,16 @@ export const executeTenantsNarrow = async ({ client, mapping, op, values, filter
   }
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
   if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
-    return { error: 'not_authorized', message: 'Not a member of tenant' };
+    return { error: 'not_authorized', message: 'Only a member of this company can change its settings' };
   }
   const out = {};
   for (const [col, max] of [
     ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
     ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
+    // Tenant's own Company Information + document letterhead (SQL 93).
+    ['company_address', 500], ['company_phone', 40], ['company_email', 200], ['letterhead_url', 512],
   ]) {
     if (col in values) {
       const text = clip(values[col], max);

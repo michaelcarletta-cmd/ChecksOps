@@ -9,6 +9,7 @@ import { sanitize } from './parity/db.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
 import { providerExecutionEnabled } from '../provider-flags.mjs';
+import { applyOnboardingWebhookStatus } from './onboarding/webhook-status.mjs';
 
 const FUNDING_TERMINAL = ['completed', 'failed', 'returned', 'canceled'];
 
@@ -29,7 +30,20 @@ export const eventTypeToStatus = (eventType) => {
 
 const dataOf = (payload) => payload?.data ?? payload;
 
-export async function applyMoovWebhook(client, payload, { mappedTenantId = null } = {}) {
+/**
+ * request.provider_webhook_apply is scoped to this apply only (as in
+ * onboarding/webhook-status.mjs): later steps of the same webhook transaction
+ * must not inherit it, on every path.
+ */
+export async function applyMoovWebhook(client, payload, options = {}) {
+  try {
+    return await applySandboxMoovWebhook(client, payload, options);
+  } finally {
+    await client.query("SELECT set_config('request.provider_webhook_apply', '0', true)").catch(() => {});
+  }
+}
+
+async function applySandboxMoovWebhook(client, payload, { mappedTenantId = null } = {}) {
   const eventType = String(payload?.type ?? payload?.eventType ?? 'unknown');
   const providerAccountId = payload?.accountID ?? payload?.data?.accountID ?? payload?.accountId ?? null;
   const data = dataOf(payload);
@@ -78,6 +92,13 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
           [sandboxAccount.id, eventType],
         );
         mutations.push('payment_provider_accounts');
+      }
+      // Onboarding status (account / capability / verification) on the sandbox rows.
+      const onboarding = await applyOnboardingWebhookStatus(client, {
+        environment: 'sandbox', eventType, providerAccountId, data,
+      });
+      for (const table of onboarding.mutations || []) {
+        if (!mutations.includes(table)) mutations.push(table);
       }
     }
   }

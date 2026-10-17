@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Inter (self-hosted, latin subset, variable weight) is the single UI font.
+   Exceptions: rendered signatures (Dancing Script, imported in main.tsx) and
+   .docx-preview below, which simulates Word's Calibri. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-italic.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
@@ -241,6 +261,11 @@ All colors MUST be HSL.
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-display;
+  }
+
+  /* Real code / raw text keeps a monospace stack (fontFamily.mono is Inter). */
+  pre, code, kbd, samp {
+    @apply font-code;
   }
 
   /* Respect users who prefer reduced motion */
@@ -506,4 +531,9 @@ All colors MUST be HSL.
 .light body,
 html.light body {
   background-image: radial-gradient(circle at top center, hsl(69 32% 60% / 0.18) 0%, transparent 42%);
+}
+
+/* font-mono maps to Inter: digits line up via tabular figures, no second font. */
+.font-mono {
+  font-variant-numeric: tabular-nums slashed-zero;
 }

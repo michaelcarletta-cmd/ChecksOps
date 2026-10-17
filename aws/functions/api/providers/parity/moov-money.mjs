@@ -129,7 +129,10 @@ export const transferCreate = {
     const existing = await existingTransferByKey(client, tenantId, key);
     if (existing) return jsonResult({ success: true, duplicate: true, transfer: existing });
 
-    const platformFee = Math.max(0, Number(body.platform_fee_cents) || 0);
+    // ChecksOps' fee is never taken from the browser: a tenant member cannot
+    // set what ChecksOps charges (owner decision 2026-10-17). No per-tenant
+    // payout fee is configured, so the sandbox draft records 0, as production does.
+    const platformFee = 0;
     let draft;
     try {
       draft = await insertTransferDraft(client, {
@@ -312,7 +315,7 @@ export const disburse = {
       [batchId],
     )).rows[0];
     if (!batch) return fail('Disbursement batch not found.', 404);
-    if (batch.tenant_id !== ctx.tenantId && !ctx.isAdmin) return fail('Forbidden', 403);
+    if (batch.tenant_id !== ctx.tenantId) return fail('Forbidden', 403);
     const tenantId = batch.tenant_id;
     if (!(await canSendPayments(client, mapping.application_user_id, tenantId, ctx.memberships))) {
       return fail('You do not have permission to send payments.', 403);

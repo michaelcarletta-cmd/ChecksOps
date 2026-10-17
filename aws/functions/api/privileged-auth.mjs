@@ -5,15 +5,26 @@
  */
 import { flagTrue } from './ops-readiness.mjs';
 
-export const PRIVILEGED_ROLES = Object.freeze(['admin', 'staff', 'owner', 'manager']);
+// Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
+// Every tenant member can move money, so every member (and the platform owner)
+// is privileged for step-up purposes. Role tiers and platform user_roles
+// admin/staff are not consulted.
+export const isPrivilegedIdentity = ({ tenants = [], isPlatformOwner = false } = {}) => (
+  isPlatformOwner === true || (Array.isArray(tenants) && tenants.length > 0)
+);
 
-export const isPrivilegedRoleList = (roles = []) => roles
-  .map((role) => String(role || '').toLowerCase())
-  .some((role) => PRIVILEGED_ROLES.includes(role));
+/**
+ * Deprecated compatibility export (release 2026-10-17): a live identity.mjs
+ * from before users-only still imports it while the overlay runs one file at
+ * a time. Role names (tenant_users.role or user_roles admin/staff) never make
+ * anyone privileged any more, so it always returns false. Use
+ * isPrivilegedIdentity. Remove once every live identity.mjs is the new one.
+ */
+export const isPrivilegedRoleList = () => false;
 
 export const privilegedAuthPolicy = () => ({
   policy: 'totp_or_webauthn_before_privileged_and_financial',
-  privilegedRoles: [...PRIVILEGED_ROLES],
+  privileged: 'any_tenant_member_or_platform_owner',
   loginFirstFactorsUnchanged: ['EMAIL_OTP', 'PASSWORD', 'WEB_AUTHN'],
   preferredMfaAtLogin: false,
   poolMfaIntended: 'OPTIONAL',
@@ -25,11 +36,12 @@ export const privilegedAuthPolicy = () => ({
 });
 
 export const evaluatePrivilegedEnrollment = ({
-  roles = [],
+  tenants = [],
+  isPlatformOwner = false,
   totpEnrolled = false,
   passkeyCount = 0,
 } = {}) => {
-  const privileged = isPrivilegedRoleList(roles);
+  const privileged = isPrivilegedIdentity({ tenants, isPlatformOwner });
   const satisfied = Boolean(totpEnrolled) || Number(passkeyCount) > 0;
   return {
     privileged,
