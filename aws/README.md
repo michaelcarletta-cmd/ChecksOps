@@ -76,24 +76,76 @@ The manual **Staging DB read-only diagnostic** workflow is restricted to reviewe
 `main` and the protected GitHub `staging` environment. It does not assume an AWS
 role, deploy, or change runtime/configuration/database state.
 
-Authentication reuses an existing authorized staging Cognito session obtained
-through the normal staging EMAIL_OTP/passkey sign-in. An authorized environment
-maintainer must make that session's short-lived **ID token** available as the
-`CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN` staging environment secret through an
-approved secure process (never chat, workflow inputs, source, or logs). This is
-not an existing provisioned secret assumed by the workflow; if it is unavailable,
-stop. Do not create users, reset passwords, bypass MFA, or change Cognito settings
-for this diagnostic. Keep the environment restricted to approved branches and
-reviewers; remove the short-lived secret after use.
+**Current status: blocked on secure authentication setup.** No approved
+non-interactive staging Cognito identity mechanism was found in the repository.
+No pre-existing protected secret or identity is reused. The workflow no longer
+reads `CHECKSOPS_STAGING_DIAGNOSTIC_ID_TOKEN`, and the CLI ignores that environment
+variable and credential arguments. Do not extract a browser token, supply
+credentials in GitHub inputs/comments/chat, or manage a short-lived token secret.
+An environment administrator may remove the obsolete secret if it was created.
 
-After review/merge, select **Actions → Staging DB read-only diagnostic → Run
-workflow → main**, then approve the staging environment job. The script verifies
-the token's signature, expiry, ID-token use, and fixed staging pool/client before
-one `GET` to the fixed staging `/db-readonly-validate` URL. Missing/invalid/expired
-identity, redirects, public-only responses, and unexpected response contracts
-fail closed. Signature verification may read the fixed staging pool's public
-JWKS. No unauthenticated fallback, refresh/login, or other application API calls
-occur.
+Investigation findings:
+
+- `aws/functions/api/auth-cognito.mjs` and
+  `aws/tests/staging-passwordless-only.test.mjs` enforce EMAIL_OTP/passkey login
+  and retire password/master-UAT login. EMAIL_OTP needs mailbox interaction;
+  WebAuthn needs the approved staging browser origin and user presence. Neither
+  is an unattended GitHub runner identity.
+- `aws/identity/expected-mappings.mjs` lists test/probe identities, not an approved
+  credential provisioning mechanism. Historical password smoke scripts and the
+  template's password auth flows do not authorize reactivating password login.
+  Refresh tokens would introduce a reusable bearer credential and are not used.
+- `guarded-staging-lambda-overlay.yml` uses GitHub OIDC for a deployment IAM role.
+  That role is not a Cognito user session; neither it nor DB/provider secrets may
+  be repurposed here. Cognito client-credentials access tokens are not ID tokens
+  and cannot satisfy this diagnostic's existing contract.
+- The diagnostic retains `environment: staging`, reviewed-`main`/exact-SHA checks,
+  and `contents: read` only. Live reviewer/branch settings and secret-name
+  inventory could not be inspected from the agent environment (no GitHub CLI
+  credentials); repository references are not proof of live secret availability.
+
+Smallest secure setup prerequisite (separate owner/security review; **not
+provisioned or authorized by this change**):
+
+1. An environment administrator verifies required staging reviewers and approved
+   branch restrictions, and confirms whether an already-approved short-lived
+   identity issuer exists. Do not inspect or publish secret values.
+2. If none exists, a separately reviewed staging-only identity issuance mechanism
+   is needed. A credential broker using GitHub OIDC is one possible design, not
+   an existing capability: it must validate issuer, dedicated audience, repository,
+   protected `staging` environment, reviewed `main`, exact approved workflow/SHA,
+   and run identity; reject replays and unapproved jobs; and have no production,
+   deployment, DB-write, or provider authority.
+3. The issuer must have an explicitly approved way to obtain a short-lived
+   **Cognito ID token** for the fixed staging pool/client without disabling or
+   bypassing EMAIL_OTP, MFA, or passkeys. GitHub OIDC/STS alone cannot mint that
+   token. If this cannot be provided, remain blocked; adding a password, refresh
+   token, API key, or hand-written bearer secret is not a solution.
+4. A follow-up reviewed workflow integration must obtain that identity only after
+   staging approval, keep credentials in memory (never outputs, logs, caches, or
+   artifacts), verify signature/expiry/ID-token use and fixed pool/client, then
+   make exactly one GET to the existing staging diagnostic endpoint. Do not
+   change the endpoint's authentication/public-smoke contract. No runtime/config
+   deployment or identity/DB change is part of this PR.
+
+Phone-only steps after this PR is reviewed and merged:
+
+1. In GitHub's mobile web UI (Safari on iPhone), open this repository → **Actions**
+   → **Staging DB read-only diagnostic** → **Run workflow**; select **main** and
+   dispatch. There are no credential inputs.
+2. Open the run → **Review deployments** → select **staging** → **Approve and
+   deploy** (GitHub's button label; this job does not deploy). Required reviewers
+   must approve under the existing environment policy.
+3. Read the run's summary. Until the secure setup above is approved and integrated,
+   it reports **authentication setup required** and exits `2` before contacting
+   Cognito or the diagnostic API. This is not DB-health evidence. Stop; do not
+   work around it with token extraction. Successful phone-only DB diagnosis is
+   not yet available.
+
+The read-only diagnostic/verifier remains covered offline: signed, unexpired
+staging ID tokens are required before its fixed GET; redirects, public-only
+responses, and unexpected contracts fail closed. No unauthenticated fallback,
+automated login/refresh, or other application API calls were added.
 
 Logs contain only HTTP status, fixed diagnostic/status classifications, failing
 issue kind/severity, allowlisted table/probe labels, and nonnegative integer
