@@ -52,8 +52,8 @@
 --    else: aws_select_mortgage_handling_requests (with the agent queue term),
 --    aws_select_mortgage_ops_agent_queue, aws_update_mortgage_ops_accept_complete,
 --    aws_insert_mortgage_handling_requests, aws_delete_mortgage_handling_requests.
---    Drops the repository-only aws_write_mortgage_handling_requests (24) and
---    the historical aws_update_mortgage_handling_requests, neither live.
+--    Drops the repository-only aws_write_mortgage_handling_requests (24),
+--    which is not live.
 -- 3) The live grants on public.mortgage_handling_requests:
 --      checksops      SELECT, INSERT, DELETE; UPDATE on the 17 columns below
 --      authenticated  UPDATE (accepted_at, assigned_employee_id, completed_at) only
@@ -171,9 +171,8 @@ $sql100_active_agent$;
 
 -- 2) Policies on public.mortgage_handling_requests -------------------------------
 
--- Repository-only / historical, not live.
+-- Repository-only (24), not live.
 DROP POLICY IF EXISTS aws_write_mortgage_handling_requests ON public.mortgage_handling_requests;
-DROP POLICY IF EXISTS aws_update_mortgage_handling_requests ON public.mortgage_handling_requests;
 
 DROP POLICY IF EXISTS aws_select_mortgage_handling_requests ON public.mortgage_handling_requests;
 CREATE POLICY aws_select_mortgage_handling_requests ON public.mortgage_handling_requests
