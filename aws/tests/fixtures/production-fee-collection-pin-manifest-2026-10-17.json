@@ -3,7 +3,7 @@
   "authorization": "Owner-approved task 2026-10-17 (\"bring claude/fee-collection-fixes up to date with main and review it, ready for a PR\"; update the pins and overlay plan entries the fee work touches, pending pins execute false / verified_live false): the claude/fee-collection-fixes bytes may be planned for production as these accepted_sha256 values, in the plan order. Planning only. Each production apply still needs SQL 98 (and so SQL 96) recorded verified live where the plan says so, the owner's run-time approval for this workstream, a staging acceptance run and the phrase DEPLOY <member> TO PRODUCTION.",
   "deploy_authorized": false,
   "live_lambda": "checksops-production-prep-api",
-  "notes": "Manual tenant fee collection (claude/fee-collection-fixes, merged with main e2ca97bc2). Nothing here is live or verified; no inspect, deploy or AWS call was made for this manifest. live_sha256 provenance: (a) supersedes_unapplied_manifest: no production apply of the release 2026-10-17 accepted bytes is recorded, so live_sha256 stays that manifest's live value (tenant-billing-engine.mjs, tenant-billing-handlers.mjs, providers/catalog.mjs, providers/parity/moov-money.mjs, providers/parity/moov-functions.mjs). (b) live_source: members new to the plan take the file in the 2026-10-11 live production bundle snapshot (f78e16d99). tenant-billing-destination.mjs live equals origin/main. tenant-collection-v2.mjs live lacks only main's obligation_status return field, so the branch bytes are a superset of live (nothing live-only is dropped). isProductionChecksOpsRuntime is defined in tenant-billing-destination.mjs (owner decision 2026-10-17: no provider-secrets lock change) on identity-env.mjs identityEnvFromChecksopsEnv and IDENTITY_ENV_PRODUCTION, which the live identity-env.mjs already exports; identity-env.mjs is therefore not a member. provider-flags.mjs is unchanged from main and not a member: live carries moovTransferPostEnabled and the AWS_MOOV_TRANSFER_POST_ENABLED flagSnapshot field that main does not (release 2026-10-17 deltas item 4). Every live_sha256 must be confirmed by a read-only production inspect before any apply. Owner answers on PR #1017 (2026-10-17): (a) the fee destination is the platform Moov wallet in account 41cb5d67-4911-4bef-aad5-d8ee9c582208, owner-confirmed (tenant-collection-v2.mjs PRODUCTION_FEE_DESTINATION ownerConfirmed true; the wallet payment method id is unchanged and not owner-confirmed); (c) invoice email after a pull: ADD tenant-fee-invoice-email.mjs (imports only names the live email.mjs, email-layout.mjs, email-policy.mjs export, plus email-branding.mjs, planned earlier, and tenant-billing-destination.mjs, planned just before it), ordered before tenant-billing-engine.mjs, which imports it; AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED is unset in production, so production sends nothing until the owner turns it on.",
+  "notes": "Manual tenant fee collection (claude/fee-collection-fixes, merged with main e2ca97bc2). Nothing here is live or verified; no inspect, deploy or AWS call was made for this manifest. live_sha256 provenance: (a) supersedes_unapplied_manifest: no production apply of the release 2026-10-17 accepted bytes is recorded, so live_sha256 stays that manifest's live value (tenant-billing-engine.mjs, tenant-billing-handlers.mjs, providers/catalog.mjs, providers/parity/moov-money.mjs, providers/parity/moov-functions.mjs). (b) live_source: members new to the plan take the file in the 2026-10-11 live production bundle snapshot (f78e16d99). tenant-billing-destination.mjs live equals origin/main. tenant-collection-v2.mjs live lacks only main's obligation_status return field, so the branch bytes are a superset of live (nothing live-only is dropped). isProductionChecksOpsRuntime is defined in tenant-billing-destination.mjs (owner decision 2026-10-17: no provider-secrets lock change) on identity-env.mjs identityEnvFromChecksopsEnv and IDENTITY_ENV_PRODUCTION, which the live identity-env.mjs already exports; identity-env.mjs is therefore not a member. provider-flags.mjs is unchanged from main and not a member: live carries moovTransferPostEnabled and the AWS_MOOV_TRANSFER_POST_ENABLED flagSnapshot field that main does not (release 2026-10-17 deltas item 4). Every live_sha256 must be confirmed by a read-only production inspect before any apply. Owner answers on PR #1017 (2026-10-17): (a) the fee destination is the platform Moov wallet in account 41cb5d67-4911-4bef-aad5-d8ee9c582208, owner-confirmed (tenant-collection-v2.mjs PRODUCTION_FEE_DESTINATION ownerConfirmed true; the wallet payment method id is unchanged and not owner-confirmed); (c) invoice email after a pull: ADD tenant-fee-invoice-email.mjs (imports only names the live email.mjs, email-layout.mjs, email-policy.mjs export, plus email-branding.mjs, planned earlier, and tenant-billing-destination.mjs, planned just before it), ordered before tenant-billing-engine.mjs, which imports it; AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED is unset in production, so production sends nothing until the owner turns it on. Deposits switch (2026-10-17, option 2): tenants.deposits_enabled (SQL 98) gates every deposit-creating path. ADD tenant-deposits-gate.mjs (no local imports) before its first importer, workflow-rpc.mjs (deposit_action) and providers.mjs (Check Alt submit / approve). Both take the branch bytes (the release bytes they supersede were never applied; live values unchanged) and are held for SQL 98 (sql_before), because the gate fails closed when SQL 98's reader aws_tenant_deposits_enabled(uuid) does not exist: deploying either before SQL 98 would refuse every deposit. SQL 98 requires SQL 96, which requires SQL 90 and SQL 93, so the SQL 98 hold also covers workflow-rpc.mjs's former SQL 90 hold. Invoice email ordering: tenant-fee-invoice-email.mjs, tenant-billing-engine.mjs and tenant-billing-handlers.mjs re-pinned (outbox, send after commit).",
   "members": {
     "providers/parity/moov-functions.mjs": {
       "live_sha256": "2dff151e470aabf74f905d4f6af51c9ac7dd1d13696eeffa585ca43cf00302ee",
@@ -25,13 +25,13 @@
     },
     "tenant-billing-engine.mjs": {
       "live_sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
-      "accepted_sha256": "c8f92ca63d994d38ae5e829580b0292951c22b7558fbc6f6f6f186c31bacbd0b",
+      "accepted_sha256": "7c2eedd32aebc26630339817b07321afc4da64a915601083746f80d8f0c50d1b",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "tenant-billing-handlers.mjs": {
       "live_sha256": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
-      "accepted_sha256": "c4a0841518ed05d5bcf35358873622d5c4fc4ec9d087f214ba104697b5de09c7",
+      "accepted_sha256": "231be3d3068afbf88a6b77f22c0f84ad58ecd7bbe86f63a1300f87f24a71c6a7",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
@@ -49,7 +49,25 @@
     },
     "tenant-fee-invoice-email.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "fedc59335cef47c6bd353b38967dbf815f2931bc9308e4aac41664267b5e1374",
+      "accepted_sha256": "c7c1921bd6be6d311f1d81235911f79a55f0d1bbd1f7b4f9a5365d1324052dc2",
+      "operation": "add",
+      "live_source": "new file: absent from the 2026-10-11 live bundle snapshot (f78e16d99) and from main"
+    },
+    "workflow-rpc.mjs": {
+      "live_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
+      "accepted_sha256": "79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers.mjs": {
+      "live_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
+      "accepted_sha256": "af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-deposits-gate.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "46f99bea7ef9435a0c4c9865abaabf41255a177b3f46dd984f2bea9bc84ec6d2",
       "operation": "add",
       "live_source": "new file: absent from the 2026-10-11 live bundle snapshot (f78e16d99) and from main"
     }

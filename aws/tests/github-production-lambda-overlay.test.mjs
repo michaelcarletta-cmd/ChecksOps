@@ -106,6 +106,16 @@ function applyDeps(member, liveOpts = {}) {
   };
 }
 
+// providers.mjs (and workflow-rpc.mjs) wait for SQL 98 (the deposits gate fails closed without it; fee
+// collection test below). Tests about member order and links run them with SQL 98 recorded live.
+const SQL98_FILE = 'aws/workflows/sql/98_tenant_fee_collection.sql';
+const PLAN_SQL98_LIVE = (() => {
+  const plan = structuredClone(PLAN);
+  plan.sql_prerequisites[SQL98_FILE] = { verified_live: true, evidence: 'test' };
+  return plan;
+})();
+const withSql98 = (member, deps) => (PLAN.members[member]?.sql_before === SQL98_FILE ? { ...deps, plan: PLAN_SQL98_LIVE } : deps);
+
 const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
@@ -329,7 +339,7 @@ test('read-only Moov wallet sync members apply in order with nested ZIP paths', 
   assert.ok(!positions.includes(-1));
   for (const member of MOOV) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), deps);
+    const result = await run(applyEnv(member), withSql98(member, deps));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -352,7 +362,7 @@ test('read-only Moov wallet sync members refuse to apply out of order', async ()
   );
   // providers.mjs before the added module: its import is not in the live ZIP yet.
   await assert.rejects(
-    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-sync.mjs'] }).deps),
+    run(applyEnv('providers.mjs'), withSql98('providers.mjs', applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-sync.mjs'] }).deps)),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
 });
@@ -364,7 +374,7 @@ test('Moov send members apply in order: the send module, then providers.mjs last
   assert.equal(PLAN.members['providers/production/moov-send.mjs'].operation, 'replace');
   for (const member of SEND) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), deps);
+    const result = await run(applyEnv(member), withSql98(member, deps));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -377,7 +387,7 @@ test('Moov send members apply in order: the send module, then providers.mjs last
   }
   assert.ok(sendImports.includes('providers/production/moov-wallet-fund.mjs'));
   await assert.rejects(
-    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-send.mjs'] }).deps),
+    run(applyEnv('providers.mjs'), withSql98('providers.mjs', applyDeps('providers.mjs', { pending: ['providers/production/moov-send.mjs'] }).deps)),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
 });
@@ -395,7 +405,7 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
   assert.ok(positions.every((pos, i) => pos >= 0 && (i === 0 || pos > positions[i - 1])), JSON.stringify(positions));
   for (const member of FUND) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), deps);
+    const result = await run(applyEnv(member), withSql98(member, deps));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -407,7 +417,7 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
   assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api/auth-financial-totp.mjs'), 'utf8'), 'auth-financial-totp.mjs')
     .includes('providers/production/moov-fund-authz.mjs'));
   await assert.rejects(
-    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-fund.mjs'] }).deps),
+    run(applyEnv('providers.mjs'), withSql98('providers.mjs', applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-fund.mjs'] }).deps)),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   await assert.rejects(
@@ -558,7 +568,7 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   }
 });
 
-test('fee collection: eight members on the fee manifest, collection-v2 then destination then invoice email then billing, held for SQL 98', async () => {
+test('fee collection: eleven members on the fee manifest, collection-v2 then destination then invoice email then billing, held for SQL 98', async () => {
   const MANIFEST_FEES = 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json';
   const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
   const SQL96 = 'aws/workflows/sql/96_platform_owner_tenant_pricing.sql';
@@ -568,16 +578,20 @@ test('fee collection: eight members on the fee manifest, collection-v2 then dest
   const ENGINE = 'tenant-billing-engine.mjs';
   const HANDLERS = 'tenant-billing-handlers.mjs';
   const INVOICE_EMAIL = 'tenant-fee-invoice-email.mjs';
+  const DEPOSITS_GATE = 'tenant-deposits-gate.mjs';
+  const WORKFLOW_RPC = 'workflow-rpc.mjs';
+  const PROVIDERS = 'providers.mjs';
+  const ADDS = new Set([INVOICE_EMAIL, DEPOSITS_GATE]);
   const fees = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_FEES), 'utf8'));
   const release = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_RELEASE), 'utf8'));
   assert.equal(fees.deploy_authorized, false);
 
-  const superseded = ['providers/parity/moov-functions.mjs', 'providers/parity/moov-money.mjs', 'providers/catalog.mjs', ENGINE, HANDLERS];
-  assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION, INVOICE_EMAIL].sort());
+  const superseded = ['providers/parity/moov-functions.mjs', 'providers/parity/moov-money.mjs', 'providers/catalog.mjs', ENGINE, HANDLERS, WORKFLOW_RPC, PROVIDERS];
+  assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION, INVOICE_EMAIL, DEPOSITS_GATE].sort());
   for (const member of Object.keys(fees.members)) {
     const row = PLAN.members[member];
     assert.equal(row.manifest, MANIFEST_FEES, member);
-    assert.equal(row.operation, member === INVOICE_EMAIL ? 'add' : 'replace', member);
+    assert.equal(row.operation, ADDS.has(member) ? 'add' : 'replace', member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
@@ -620,6 +634,24 @@ test('fee collection: eight members on the fee manifest, collection-v2 then dest
   );
   assert.deepEqual(PLAN.order.slice(-2), ['providers/production/moov-send.mjs', 'providers.mjs']);
 
+  // The deposits gate (ADD, no local imports) lands before both deposit choke points that import it,
+  // and both are held for SQL 98: the gate fails closed without SQL 98's reader.
+  assert.deepEqual(localImports(fs.readFileSync(path.join(API, DEPOSITS_GATE), 'utf8'), DEPOSITS_GATE), []);
+  for (const member of [WORKFLOW_RPC, PROVIDERS]) {
+    assert.ok(localImports(fs.readFileSync(path.join(API, member), 'utf8'), member).includes(DEPOSITS_GATE), member);
+    assert.ok(at(DEPOSITS_GATE) >= 0 && at(DEPOSITS_GATE) < at(member), member);
+    assert.equal(PLAN.members[member].sql_before, SQL98, member);
+    await assert.rejects(
+      run(applyEnv(member), applyDeps(member).deps),
+      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL98,
+      member,
+    );
+    const held = await run(applyEnv(member), { ...applyDeps(member).deps, plan: PLAN_SQL98_LIVE });
+    assert.equal(held.mutation, false, member);
+  }
+  assert.equal(PLAN.members[DEPOSITS_GATE].expected_live_sha256, null);
+  assert.equal(PLAN.members[DEPOSITS_GATE].sql_before, null);
+  assert.equal((await run(applyEnv(DEPOSITS_GATE), applyDeps(DEPOSITS_GATE).deps)).mutation, false);
   // SQL 98 holds the billing members; it is a pending pin (SQL 98 itself requires SQL 96).
   for (const member of [ENGINE, HANDLERS]) assert.equal(PLAN.members[member].sql_before, SQL98, member);
   for (const member of [COLLECTION, DESTINATION]) assert.equal(PLAN.members[member].sql_before, null, member);

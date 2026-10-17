@@ -2166,13 +2166,13 @@ export const AUTHORIZED_SQL98_TENANT_FEE_COLLECTION = Object.freeze({
   filename: 'aws/workflows/sql/98_tenant_fee_collection.sql',
   migration_id: '98_tenant_fee_collection',
   // The commit that last authored the file bytes on claude/fee-collection-fixes.
-  commit: '2014129d3265b284c6236012484e3649a332634f',
-  source_sha256: '7db0fe4939f1faa2e9967f608aafad95b61bf6bac5bc1fcbca545a8d37117e29',
+  commit: '146c04d33816d0e6c2d11eb801bf14f28bb90580',
+  source_sha256: '7a42dc1384dc27fa62d4ad406109419cbc7f0843732958de41abae762425c0d6',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
   intended_replacement_sha256: null,
-  function_identities: Object.freeze(['public.aws_check_billing_default_price_cents()', 'public.aws_check_billing_charges_when_per_check_off()', 'public.record_check_billing_event()', 'public.aws_platform_owner_record_billing_audit(jsonb)', 'public.aws_platform_billing_destination_audit_row()']),
+  function_identities: Object.freeze(['public.aws_check_billing_default_price_cents()', 'public.aws_check_billing_charges_when_per_check_off()', 'public.record_check_billing_event()', 'public.aws_platform_owner_record_billing_audit(jsonb)', 'public.aws_platform_billing_destination_audit_row()', 'public.aws_tenant_deposits_enabled(uuid)', 'public.aws_tenant_deposits_enabled_audit_row()', 'public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)', 'public.aws_tenants_member_column_guard()']),
 });
 
 export const FEE_COLLECTION_PENDING_SQL_PINS = Object.freeze({

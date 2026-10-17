@@ -8,14 +8,18 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/98_tenant_fee_collection.sql",
   "migration_id": "98_tenant_fee_collection",
-  "staging_pin_commit": "2014129d3265b284c6236012484e3649a332634f",
-  "source_sha256": "7db0fe4939f1faa2e9967f608aafad95b61bf6bac5bc1fcbca545a8d37117e29",
+  "staging_pin_commit": "146c04d33816d0e6c2d11eb801bf14f28bb90580",
+  "source_sha256": "7a42dc1384dc27fa62d4ad406109419cbc7f0843732958de41abae762425c0d6",
   "function_identities": [
     "public.aws_check_billing_default_price_cents()",
     "public.aws_check_billing_charges_when_per_check_off()",
     "public.record_check_billing_event()",
     "public.aws_platform_owner_record_billing_audit(jsonb)",
-    "public.aws_platform_billing_destination_audit_row()"
+    "public.aws_platform_billing_destination_audit_row()",
+    "public.aws_tenant_deposits_enabled(uuid)",
+    "public.aws_tenant_deposits_enabled_audit_row()",
+    "public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)",
+    "public.aws_tenants_member_column_guard()"
   ],
   "expected_live_definition_sha256": null,
   "intended_replacement_sha256": null,
@@ -23,7 +27,7 @@
   "predecessors": [
     "sql96"
   ],
-  "order_note": "After SQL 96 (SQL 98 refuses with 55000 sql98_prerequisite_missing without aws_platform_owner_set_tenant_pricing); before tenant-billing-engine.mjs and tenant-billing-handlers.mjs (plan sql_before; without it a pull or verify-debit refuses with 503 billing_audit_unavailable before anything is booked or posted).",
+  "order_note": "After SQL 96 (SQL 98 refuses with 55000 sql98_prerequisite_missing without aws_platform_owner_set_tenant_pricing and SQL 96's pricing helpers); before tenant-billing-engine.mjs, tenant-billing-handlers.mjs, workflow-rpc.mjs and providers.mjs (plan sql_before: without SQL 98 a pull or verify-debit refuses with 503 billing_audit_unavailable, and every deposit refuses with deposits_status_unavailable). SQL 98 replaces SQL 96's aws_tenants_member_column_guard() (same body plus deposits_enabled for the platform owner); do not re-run SQL 96 after SQL 98.",
   "admin_login": "checksops_admin",
   "rds_identifier": "checksops-production",
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
@@ -48,7 +52,7 @@
   },
   "intended_post_state": {
     "fingerprint": null,
-    "note": "check_processing events stamped once per check at the tenant per-check rate or the check_billing_config default (owner question (b) switch aws_check_billing_charges_when_per_check_off() true); one tenant_maintenance_payments row per (tenant_id, billing_period); platform_billing_destination readable and writable by the platform owner only, audited; append-only platform_billing_audit (events pull, verify_debit, destination_set, invoice_email; at most one sent/sunk invoice_email per charge) written only by aws_platform_owner_record_billing_audit(jsonb) and the destination trigger. The fingerprint is defined by the SQL 98 tooling (pending)."
+    "note": "check_processing events stamped once per check at the tenant per-check rate or the check_billing_config default (owner question (b) switch aws_check_billing_charges_when_per_check_off() true); one tenant_maintenance_payments row per (tenant_id, billing_period); platform_billing_destination readable and writable by the platform owner only, audited; append-only platform_billing_audit (events pull, verify_debit, destination_set, invoice_email; at most one sent/sunk invoice_email per charge) written only by aws_platform_owner_record_billing_audit(jsonb) and the destination trigger. The fingerprint is defined by the SQL 98 tooling (pending). tenants.deposits_enabled boolean NOT NULL DEFAULT true (every tenant on), set only through aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean), audited in tenant_pricing_audit; tenant_fee_invoice_outbox (platform owner only)."
   },
   "staging_acceptance": {
     "ok": false,
