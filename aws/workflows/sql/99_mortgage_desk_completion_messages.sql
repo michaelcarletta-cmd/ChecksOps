@@ -22,8 +22,13 @@
 --    that way, or when the segment does not start with that timestamp, so a
 --    rewritten work_notes never leaks earlier notes into the message.
 -- 2) public.aws_mortgage_desk_completion_messages() (new trigger function,
---    SECURITY DEFINER, search_path = public, row_security = off, owned by the
---    applying login like the other aws/workflows/sql DEFINER functions). On a
+--    SECURITY DEFINER, search_path = public, owned by the applying login like
+--    the other aws/workflows/sql DEFINER functions). It does not set
+--    row_security: as the owner of check_messages it is not subject to that
+--    table's RLS anyway, and row_security = off would carry into the triggers
+--    its inserts fire (trg_mirror_check_message_to_homeowner_ledger, then
+--    assign_case_on_ledger_events), making their reads of tables their own
+--    owners do not own fail with 42501 instead of running under RLS. On a
 --    change of status to 'completed' (OLD.status IS DISTINCT FROM 'completed'),
 --    with check_intake_item_id and assigned_employee_id set and the updating
 --    user (auth.uid()) being the assigned agent, it inserts into
@@ -63,7 +68,8 @@
 -- (aws_is_tenant_member) and the tables and columns it uses, and (55000
 -- sql99_definer_cannot_write_check_messages) unless the applying login owns
 -- public.check_messages without FORCE ROW LEVEL SECURITY (or is a superuser or
--- BYPASSRLS): row_security = off would otherwise make every completion fail.
+-- BYPASSRLS): otherwise aws_write_check_messages would refuse the inserts and
+-- every completion would fail.
 --
 -- Transactions: like main's other aws/workflows/sql files this has no
 -- BEGIN/COMMIT; the guarded SQL executor runs it inside one transaction.
@@ -154,7 +160,6 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-SET row_security = off
 AS $$
 DECLARE
   v_company text;
