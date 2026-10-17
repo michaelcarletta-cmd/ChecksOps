@@ -1,0 +1,50 @@
+{
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "branch": "cursor/prod-sql53-retry-prep-3bc9",
+  "commit": "5f8f63fa4e9541999a991fb4475a86df34177fa3",
+  "operator": "cursor-agent",
+  "target_environment": "production",
+  "target_component": "checksops-production-prep-api",
+  "function_name": "checksops-production-prep-api",
+  "deployment_type": "lambda-sql53-temporary-config",
+  "owned_components": [
+    "checksops-production-prep-api"
+  ],
+  "preflight_live_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "d49b27cc-3dcb-48ab-8490-206097172689",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "production_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "d49b27cc-3dcb-48ab-8490-206097172689",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "immediately_before_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "d49b27cc-3dcb-48ab-8490-206097172689",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "inherited": false,
+    "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation"
+  },
+  "approval": {
+    "approved": false,
+    "workstream_id": "prod-sql53-temporary-config-3bc9",
+    "inherited": false,
+    "from_previous_workstream": false
+  },
+  "contract_results": {
+    "tenant-isolation": {
+      "ok": true
+    }
+  },
+  "apply": false,
+  "execute": false,
+  "notes": "Retry preparation after merged PR #869. Do not reuse the consumed first-attempt receipt or the pre-apply RevisionId 534d4e36-0e62-461e-948e-e2bf00d3920e. Refresh --fingerprint-only and set approval.approved=true only after owner retry execution authorization."
+}
