@@ -1,0 +1,145 @@
+{
+  "id": "production-sql53-iam-cleanup-review",
+  "authorization": "read-only-review",
+  "iam_update_authorized": false,
+  "stop_for_approval": true,
+  "lambda_modified": false,
+  "sql_modified": false,
+  "production_configuration_modified": false,
+  "inspected_at": "2026-10-11T02:21:30Z",
+  "role_name": "ChecksOpsProductionSql53ConfigWriter",
+  "role_arn": "arn:aws:iam::806168576068:role/ChecksOpsProductionSql53ConfigWriter",
+  "live_trust_read": "AccessDenied",
+  "live_permission_read": "AccessDenied",
+  "probe_identities": [
+    {
+      "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-execute-retry",
+      "get_role": "AccessDenied",
+      "list_role_policies": "AccessDenied",
+      "list_attached_role_policies": "AccessDenied"
+    },
+    {
+      "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/sql53-iam-cleanup-read",
+      "get_role": "AccessDenied",
+      "staging_broadened": false
+    }
+  ],
+  "cursor_oidc_statement_present_functionally": true,
+  "cursor_oidc_assume_proof": {
+    "Account": "806168576068",
+    "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-execute-retry",
+    "oidc": {
+      "iss": "https://api.cursor.com",
+      "aud": "sts.amazonaws.com",
+      "sub": "user:325724407"
+    }
+  },
+  "intended_removed_statement": {
+    "Sid": "AllowOwnerCursorCloudOidcFingerprintOnly",
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "api.cursor.com:aud": "sts.amazonaws.com",
+        "api.cursor.com:sub": "user:325724407"
+      }
+    }
+  },
+  "current_trust_policy": {
+    "live_document": null,
+    "reason": "iam:GetRole AccessDenied from every identity available to this review",
+    "known_present": [
+      {
+        "kind": "temporary-cursor-oidc",
+        "status": "functionally_proven",
+        "statement": {
+          "Sid": "AllowOwnerCursorCloudOidcFingerprintOnly",
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "api.cursor.com:aud": "sts.amazonaws.com",
+              "api.cursor.com:sub": "user:325724407"
+            }
+          }
+        }
+      },
+      {
+        "kind": "identity-center-administrator-access",
+        "status": "unread_live_document",
+        "preserve": true,
+        "matcher": "Effect=Allow Action includes sts:AssumeRole and principal/text matches sso.amazonaws.com or AWSReservedSSO_AdministratorAccess"
+      }
+    ]
+  },
+  "proposed_trust_policy": {
+    "live_document": null,
+    "operation": "remove_only_approved_cursor_oidc_statement",
+    "removed_statement": {
+      "Sid": "AllowOwnerCursorCloudOidcFingerprintOnly",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "api.cursor.com:aud": "sts.amazonaws.com",
+          "api.cursor.com:sub": "user:325724407"
+        }
+      }
+    },
+    "remaining": "every other live trust statement, including Identity Center AdministratorAccess, left byte-identical and in order",
+    "official_remover": "removeSql53ConfigWriterOidcTrust"
+  },
+  "comparison": {
+    "added": [],
+    "removed": [
+      "Sid=AllowOwnerCursorCloudOidcFingerprintOnly Federated=oidc-provider/api.cursor.com Action=sts:AssumeRoleWithWebIdentity aud=sts.amazonaws.com sub=user:325724407"
+    ],
+    "unchanged": [
+      "Identity Center AdministratorAccess sts:AssumeRole statement(s)",
+      "any other non-Cursor-OIDC trust statements",
+      "inline and attached permission policies (remover does not call PutRolePolicy, DeleteRolePolicy, AttachRolePolicy, or DetachRolePolicy)"
+    ],
+    "only_intended_statement_would_change": true,
+    "live_full_document_comparison": "blocked_until_identity_center_administrator_get_role"
+  },
+  "permissions_preservation": {
+    "live_policy_document": "unread",
+    "official_expected": {
+      "inline_policies": 1,
+      "attached_managed_policies": 0,
+      "actions": [
+        "lambda:GetFunctionConfiguration",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:InvokeFunction"
+      ],
+      "resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
+    },
+    "effective_this_session": {
+      "lambda:GetFunctionConfiguration": "allowed_during_sql53_inspection",
+      "lambda:UpdateFunctionConfiguration": "allowed_during_sql53_inspection",
+      "lambda:InvokeFunction": "allowed_during_sql53_inspection",
+      "iam:GetRole": "denied",
+      "iam:ListRolePolicies": "denied",
+      "iam:ListAttachedRolePolicies": "denied"
+    },
+    "cleanup_touches_permission_policies": false
+  },
+  "required_apply_identity": "arn:aws:sts::806168576068:assumed-role/AWSReservedSSO_AdministratorAccess_<suffix>/<session>",
+  "do_not": [
+    "update-assume-role-policy until explicitly approved",
+    "replace the live trust document",
+    "remove or edit the Identity Center AdministratorAccess statement",
+    "change writer permission policies",
+    "broaden ChecksOpsCursorCloudStaging",
+    "modify Lambda, SQL, or production configuration"
+  ]
+}
