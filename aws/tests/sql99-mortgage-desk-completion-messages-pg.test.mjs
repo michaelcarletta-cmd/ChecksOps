@@ -12,11 +12,14 @@
  * API's own. The bodies are compared with the SPA builders
  * (src/lib/mortgageDeskReturn.ts); run with --experimental-strip-types.
  *
- * The first test gives mortgage_handling_requests no RLS so the API UPDATE
- * succeeds and the trigger fires: under the repo's policies and grants a
- * Mortgage Agent can neither read nor update another tenant's request (the
- * second test pins that down, before and after SQL 90); that needs its own
- * owner-approved policy and is not part of SQL 99.
+ * The first test gives mortgage_handling_requests no RLS so the trigger's own
+ * rules (only the assigned agent's completion posts) are tested on their own.
+ * The agent's access to the request comes from the production policies and
+ * grants recorded in aws/workflows/sql/98_mortgage_desk_live_access.sql: the
+ * second test pins down that a non-member Mortgage Agent reads and works the
+ * queue under them, before and after SQL 90, and
+ * sql98-mortgage-desk-live-access-pg.test.mjs runs SQL 99 end to end under
+ * them.
  *
  * The check thread's own triggers are the repo's: the mirror into the
  * homeowner ledger (supabase migration 20260717193324) and, on the ledger,
@@ -47,6 +50,7 @@ const SQL_90 = path.join(AWS_ROOT, 'workflows/sql/90_users_only_tenant_roles.sql
 const SQL_99 = path.join(AWS_ROOT, 'workflows/sql/99_mortgage_desk_completion_messages.sql');
 const SQL_88 = path.join(AWS_ROOT, 'workflows/sql/88_claim_id_assign_case_tenant_scope.sql');
 const SQL_50 = path.join(AWS_ROOT, 'workflows/sql/50_tranche5_write_grants.sql');
+const SQL_98 = path.join(AWS_ROOT, 'workflows/sql/98_mortgage_desk_live_access.sql');
 const REPO_ROOT = path.join(AWS_ROOT, '..');
 const MIRROR_MIGRATION = path.join(REPO_ROOT, 'supabase/migrations/20260717193324_2a3e315b-a40a-474e-9eac-5e37824da513.sql');
 const CASE_MIGRATION = path.join(REPO_ROOT, 'supabase/migrations/20260826125804_316a5658-9b2c-4b7d-aaf3-9b81a5d5ccfd.sql');
@@ -483,17 +487,19 @@ test('PostgreSQL 16: SQL 99 posts the Mortgage Desk completion note and one retu
 });
 
 /**
- * Review finding (not changed by SQL 99): with the repo's own
- * mortgage_handling_requests policies (aws_select_ from 12_final_select_policies,
- * aws_write_ from 24_complete_write_policies) and grants (50_tranche5_write_grants),
- * a Mortgage Agent who is not a member of the request's tenant can neither
- * read the queue nor accept or update a request through the API bridge, both
- * before and after SQL 90. Two layers refuse: checksops has no UPDATE on
- * assigned_employee_id / accepted_at / completed_at (42501 permission denied),
- * and without that, RLS matches no row. Fixing it needs an owner-approved
- * agent policy; this test changes with it.
+ * Mortgage Agent access to mortgage_handling_requests through the API bridge.
+ *
+ * The repository's older policies (aws_select_ from 12_final_select_policies,
+ * aws_write_ from 24_complete_write_policies) and grants (50_tranche5_write_grants)
+ * alone give a Mortgage Agent who is not a member of the request's tenant
+ * nothing: checksops has no UPDATE on assigned_employee_id / accepted_at /
+ * completed_at (42501 permission denied), and with that grant RLS still matches
+ * no row. That was never production's state: SQL 98
+ * (98_mortgage_desk_live_access.sql) records the live agent policies and
+ * column grants, and with it the agent reads the queue, accepts and completes
+ * through the API.
  */
-test('PostgreSQL 16: repo policies and grants give a non-member Mortgage Agent no handling-request read or update, before and after SQL 90', {
+test('PostgreSQL 16: a non-member Mortgage Agent has no handling-request access under 12/24/50 alone, before and after SQL 90, and the live access under SQL 98', {
   timeout: 180000, skip: pgSkipReason() || false,
 }, async () => {
   const { default: pg } = await import('pg');
@@ -523,13 +529,14 @@ ALTER TABLE public.mortgage_handling_requests ENABLE ROW LEVEL SECURITY;
     await client.query(`
 INSERT INTO public.tenants (id, name) VALUES ('${TENANT_A}', 'A');
 INSERT INTO public.identity_accounts (application_user_id, email, status) VALUES
-  ('${MEMBER}', 'm@example.com', 'active'), ('${AGENT}', 'agent@example.com', 'active');
+  ('${MEMBER}', 'm@example.com', 'active'), ('${AGENT}', 'agent@example.com', 'active'),
+  ('${OUTSIDER}', 'o@example.com', 'active');
 INSERT INTO public.user_roles (user_id, role) VALUES ('${AGENT}', 'mortgage_agent');
 INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ('${TENANT_A}', '${MEMBER}', 'owner');
 INSERT INTO public.check_intake_items (id, tenant_id) VALUES ('${CHECK_1}', '${TENANT_A}'), ('${CHECK_2}', '${TENANT_A}');
-INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_id, status, assigned_employee_id) VALUES
-  ('${REQ_1}', '${TENANT_A}', '${CHECK_1}', 'requested', NULL),
-  ('${REQ_2}', '${TENANT_A}', '${CHECK_2}', 'in_progress', '${AGENT}');
+INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_id, status, assigned_employee_id, accepted_at) VALUES
+  ('${REQ_1}', '${TENANT_A}', '${CHECK_1}', 'requested', NULL, NULL),
+  ('${REQ_2}', '${TENANT_A}', '${CHECK_2}', 'in_progress', '${AGENT}', now());
 `);
 
     /** One API request as checksops for this user; `grantAgentColumns` adds the missing column grant first. Rolled back. */
@@ -554,6 +561,7 @@ INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_
     )).rows.map((r) => r.id));
     const permissionDenied = (error) => error.code === '42501' && /permission denied/.test(error.message);
 
+    /** 12, 24 and 50 alone (no SQL 98). */
     const agentCannot = async (label) => {
       // The queue read (MortgageOpsQueue fetchQueues): the agent sees nothing; the member sees its tenant's rows.
       assert.deepEqual(await queue(AGENT), [], label);
@@ -569,11 +577,47 @@ INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_
         { _request_id: REQ_2, _status: 'completed', _notes: 'done' }, { grantAgentColumns: true })).error,
       'not_assigned_to_you', label);
     };
-
-    await agentCannot('before SQL 90');
+    await agentCannot('12/24/50, before SQL 90');
     await client.query(fs.readFileSync(SQL_90, 'utf8'));
-    await agentCannot('after SQL 90');
-    // Nothing was written.
+    await agentCannot('12/24/50, after SQL 90');
+
+    // SQL 98: the live policies and grants. No SQL 47 roster table here, so the
+    // roster helper is not created.
+    await client.query(fs.readFileSync(SQL_98, 'utf8'));
+    assert.equal((await client.query("SELECT to_regprocedure('public.aws_is_active_mortgage_agent(uuid)') AS f")).rows[0].f, null);
+    assert.deepEqual((await client.query(
+      `SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mortgage_handling_requests' ORDER BY 1`,
+    )).rows.map((r) => r.policyname), [
+      'aws_delete_mortgage_handling_requests', 'aws_insert_mortgage_handling_requests', 'aws_select_mortgage_handling_requests',
+      'aws_select_mortgage_ops_agent_queue', 'aws_update_mortgage_ops_accept_complete',
+    ]);
+
+    const agentCan = async (label) => {
+      // The agent reads the queue; the member still reads its tenant's rows; an outsider nothing.
+      assert.deepEqual(await queue(AGENT), [REQ_1, REQ_2], label);
+      assert.deepEqual(await queue(MEMBER), [REQ_1, REQ_2], label);
+      assert.deepEqual(await queue(OUTSIDER), [], label);
+      // Accept the unassigned requested request, without any extra grant.
+      const accepted = await rpc(AGENT, 'accept_mortgage_handling_request', { _request_id: REQ_1 });
+      assert.equal(accepted.error, undefined, `${label} ${JSON.stringify(accepted)}`);
+      assert.equal(accepted.data.status, 'in_progress', label);
+      assert.equal(accepted.data.assigned_employee_id, AGENT, label);
+      assert.ok(accepted.data.accepted_at, label);
+      // Complete its own request.
+      const done = await rpc(AGENT, 'update_mortgage_handling_request_status', { _request_id: REQ_2, _status: 'completed', _notes: 'done' });
+      assert.equal(done.error, undefined, `${label} ${JSON.stringify(done)}`);
+      assert.equal(done.data.status, 'completed', label);
+      assert.ok(done.data.completed_at, label);
+      assert.match(done.data.work_notes, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2} — done$/, label);
+      // A non-agent is still refused by the API.
+      assert.equal((await rpc(OUTSIDER, 'accept_mortgage_handling_request', { _request_id: REQ_1 })).error, 'not_authorized', label);
+    };
+
+    await agentCan('SQL 98, after SQL 90');
+    // Applied again: the same access.
+    await client.query(fs.readFileSync(SQL_98, 'utf8'));
+    await agentCan('SQL 98 twice');
+    // Every API request above was rolled back: nothing was written.
     assert.deepEqual((await client.query(
       'SELECT id, status, assigned_employee_id FROM public.mortgage_handling_requests ORDER BY id')).rows, [
       { id: REQ_1, status: 'requested', assigned_employee_id: null },
