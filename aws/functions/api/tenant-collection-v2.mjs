@@ -689,7 +689,10 @@ export async function collectTenantObligation(client, {
     };
   }
 
-  const walletSource = amountDueCents > 0
+  // bankOnly: the whole amount is an ACH debit from the tenant's authorized
+  // bank account; the tenant's wallet is never touched (tenant fee pulls,
+  // owner decision 2026-10-17).
+  const walletSource = amountDueCents > 0 && deps.bankOnly !== true
     ? await resolveTenantWalletSource(client, {
       tenantId,
       environment,

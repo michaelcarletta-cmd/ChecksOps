@@ -6,7 +6,11 @@
  * exported by that module on this branch, or the live importer stops loading.
  *
  * The edges come from main (fixtures/main-api-import-edges.json, base sha in
- * the file); names that were already missing on main are not listed.
+ * the file); names that were already missing on main are not listed, except
+ * tenant-billing-destination.mjs -> provider-flags.mjs isProductionChecksOpsRuntime,
+ * broken on main and exported on this branch (fee collection fixes), so its
+ * exclusion is gone. invoice-actions.mjs -> invoice-provider.mjs (module
+ * missing on main) is still the one excluded edge.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,6 +24,9 @@ const FIXTURE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/m
 
 test('every export main\'s API files import still exists on the branch (each file can be overlaid alone)', () => {
   assert.ok(FIXTURE.edges.length > 400, String(FIXTURE.edges.length));
+  assert.ok(FIXTURE.edges.some((edge) => edge.importer === 'aws/functions/api/tenant-billing-destination.mjs'
+    && edge.target === 'aws/functions/api/provider-flags.mjs'
+    && edge.names.includes('isProductionChecksOpsRuntime')), 'the production credential import is checked, not excluded');
   const missing = [];
   const cache = new Map();
   for (const { importer, target, names } of FIXTURE.edges) {

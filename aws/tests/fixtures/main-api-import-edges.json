@@ -4099,6 +4099,13 @@
     },
     {
       "importer": "aws/functions/api/tenant-billing-destination.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "isProductionChecksOpsRuntime"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-destination.mjs",
       "target": "aws/functions/api/sandbox-credentials.mjs",
       "names": [
         "loadSandboxCredentials"

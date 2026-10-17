@@ -71,7 +71,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-transfer-status', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Live GET facilitator transfer + payment_transfers write-back for sandbox rows.'),
   fn('moov-transfer-group-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates grouped transfers.'),
   fn('moov-disburse', 'moov', OP_CLASS.DISBURSEMENT, 'sandbox_parity', 'Executes disbursement splits.'),
-  fn('moov-tenant-fee-charge', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Charges tenant fees via Moov.'),
+  fn('moov-tenant-fee-charge', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Retired: answers 410 use_tenant_billing_pull (tenant fees go through tenant-billing-admin preview + pull).'),
   fn('moov-fee-schedule-upsert', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Mutates fee schedules.'),
   fn('moov-fee-schedule-cancel', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Cancels fee schedules.'),
   fn('moov-fee-rollup', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Fee reporting against provider state.'),

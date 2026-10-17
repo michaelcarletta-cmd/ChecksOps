@@ -5,6 +5,8 @@ import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCar
 import { TenantManagementV2Dashboard } from "@/components/admin/TenantManagementV2Dashboard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
+import { PlatformFeeDestinationCard, TenantBillingVerifyButton, TenantFeeCollectButton } from "@/components/admin/TenantFeeCollection";
+import { billingPeriodKey } from "@/lib/tenantFeeBilling";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { resolveAdminTenantTab } from "@/lib/adminTenantTab";
 import { supabase } from "@/integrations/supabase/client";
@@ -398,6 +400,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
+            <PlatformFeeDestinationCard />
             <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
@@ -820,25 +823,12 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   );
 }
 
-/** Reads the JSON error body an edge function returned with a non-2xx status. */
-async function readFnError(error: any): Promise<string> {
-  try {
-    const parsed = await error?.context?.json?.();
-    if (parsed?.error) return parsed.error;
-    if (parsed?.message) return parsed.message;
-  } catch {
-    /* fall through to the generic message */
-  }
-  return error?.message ?? "Request failed";
-}
-
-/* ---------------- Bank Account (for pulling maintenance fees) ---------------- */
+/* ---------------- Bank Account (tenant fees are pulled from it) ---------------- */
 
 function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   const [bank, setBank] = useState<any>(null);
   const [billing, setBilling] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [charging, setCharging] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -873,38 +863,6 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
 
   useEffect(() => { load(); }, [tenantId]);
 
-  const pullNow = async () => {
-    setCharging(true);
-    const { data: t } = await supabase
-      .from("tenants")
-      .select("monthly_rate_cents, referral_discount_cents")
-      .eq("id", tenantId)
-      .maybeSingle();
-    const amount_cents = Math.max(
-      0,
-      (t?.monthly_rate_cents ?? 0) - (t?.referral_discount_cents ?? 0),
-    );
-    if (amount_cents <= 0) {
-      setCharging(false);
-      return sonnerToast.warning("No maintenance fee configured for this organization.");
-    }
-    const { data, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
-      body: {
-        tenant_id: tenantId,
-        amount_cents,
-        kind: "maintenance",
-        line_items: [{ label: "Monthly maintenance", amount_cents }],
-        send_invoice: true,
-      },
-    });
-    setCharging(false);
-    const failure = (data as any)?.error ?? (error ? await readFnError(error) : null);
-    if (failure) return sonnerToast.error(failure);
-    const r = (data as any)?.results?.[0];
-    if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
-    else sonnerToast.info(JSON.stringify(r ?? data));
-  };
-
   const linkForBilling = async () => {
     if (!bank?.id) return;
     const payload = {
@@ -928,11 +886,10 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
       accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
       description={`Moov-verified account we pull maintenance fees from for ${tenantName}.`}
     >
-      <div className="flex justify-end">
-        <Button size="sm" onClick={pullNow} disabled={charging}>
-          {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-          Pull maintenance fee now
-        </Button>
+      {/* Fees are computed by the server (tenant-billing-admin preview), confirmed, then pulled. */}
+      <div className="flex justify-end gap-2">
+        <TenantBillingVerifyButton tenantId={tenantId} tenantName={tenantName} />
+        <TenantFeeCollectButton tenantId={tenantId} tenantName={tenantName} label="Preview & collect this period's fees" />
       </div>
 
         {loading ? (
@@ -985,7 +942,6 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pulling, setPulling] = useState(false);
 
   const range = (() => {
     if (scope === "month") {
@@ -1073,8 +1029,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
-  // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
-  // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
+  // Usage summary for the month (display only): each event's recorded unit price
+  // plus maintenance (monthly rate - referral discount). The amount actually
+  // collected is computed by the server (TenantFeeCollectButton preview).
   const usageEvents: any[] = data?.events || [];
   const checkProcessingCents = usageEvents.filter(e => e.event_type === 'check_processing').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
   const mortgageOpsCents = usageEvents.filter(e => e.event_type === 'mortgage_handling').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
@@ -1084,50 +1041,6 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const discount = tenantMeta?.referral_discount_cents ?? 0;
   const netMaintenance = Math.max(0, grossMaintenance - discount);
   const consolidatedTotalCents = checkProcessingCents + mortgageOpsCents + disbursementCents + netMaintenance;
-
-  const pullConsolidated = async () => {
-    if (scope !== "month") {
-      sonnerToast.error("Switch to a specific month to pull consolidated billing.");
-      return;
-    }
-    if (consolidatedTotalCents <= 0) {
-      sonnerToast.warning("Nothing to charge for this period.");
-      return;
-    }
-    const confirmed = window.confirm(
-      `Pull $${(consolidatedTotalCents / 100).toFixed(2)} from ${tenantName}'s verified bank account and email them an invoice?`
-    );
-    if (!confirmed) return;
-    setPulling(true);
-    const line_items = [
-      checkProcessingCents > 0 && { label: "Check processing", detail: `${usageEvents.filter(e => e.event_type === 'check_processing').length} checks`, amount_cents: checkProcessingCents },
-      disbursementCents > 0 && { label: "Moov disbursements", detail: `${usageEvents.filter(e => e.event_type?.startsWith('moov_')).length} txns`, amount_cents: disbursementCents },
-      mortgageOpsCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageOpsCents },
-      grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
-      discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
-    ].filter(Boolean);
-
-    const { data: resp, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
-      body: {
-        tenant_id: tenantId,
-        amount_cents: consolidatedTotalCents,
-        kind: "consolidated",
-        line_items,
-        period_label: range.label,
-        send_invoice: true,
-      },
-    });
-    setPulling(false);
-    const failure = (resp as any)?.error ?? (error ? await readFnError(error) : null);
-    if (failure) return sonnerToast.error(failure);
-    const r = (resp as any)?.results?.[0];
-    if (r?.status === "submitted") {
-      sonnerToast.success(
-        `ACH debit for $${(r.amount_cents / 100).toFixed(2)} submitted${r.invoice_sent ? " · invoice emailed" : r.invoice_error ? ` · invoice: ${r.invoice_error}` : ""}`
-      );
-      load();
-    } else sonnerToast.info(JSON.stringify(r ?? resp));
-  };
 
   return (
     <SectionCard
@@ -1200,13 +1113,16 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   <div>
                     <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
                     <p className="text-[11px] text-muted-foreground">
-                      One ACH pull covers all ChecksOps fees for the month. Invoice is emailed automatically.
+                      One ACH pull covers all ChecksOps fees for the month. The server computes the amount; review it before collecting.
                     </p>
                   </div>
-                  <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
-                    {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                    Pull {fmt(consolidatedTotalCents)} & email invoice
-                  </Button>
+                  <TenantFeeCollectButton
+                    tenantId={tenantId}
+                    tenantName={tenantName}
+                    period={billingPeriodKey(year, month)}
+                    label={`Preview & collect ${range.label}`}
+                    onCollected={load}
+                  />
                 </div>
                 <table className="w-full text-sm">
                   <thead className="text-[10px] text-muted-foreground bg-muted/20">
@@ -1221,19 +1137,19 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                     <tr>
                       <td className="px-4 py-2">Check Processing Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{checkCount} checks</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">as recorded</td>
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'check_processing').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">MortgageOps Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$10.00 / $5.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">as recorded</td>
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">Disbursement Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">as recorded</td>
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
