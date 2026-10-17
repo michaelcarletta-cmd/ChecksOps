@@ -38,12 +38,18 @@ run-to-run comparison.
 - A function's definition text is printed only when `repo_match` is `differs_from_repo` and
   every literal is a role name. Role names are live roles, `app_role` labels and the
   application role words in `APP_ROLE_WORDS`; `search_path` schema names and `''` are also
-  allowed. The text must also have no nested dollar-quoted or `E''` string, no number longer
-  than 4 digits, and nothing shaped like a UUID, email or long number anywhere, comments
-  included. Otherwise the report says `definition_withheld: "differs from repo (<reason>)"`.
-- Policy expressions are schema metadata and are printed, unless they contain a UUID-, email-
-  or long-number-shaped literal. Then only their sha256 is printed, with `text_withheld`.
-- Errors report only the SQLSTATE.
+  allowed. The text must also have no comment at all (`comment_present`), no `"quoted
+  identifier"` other than a known schema, table, column or role name
+  (`quoted_identifier_beyond_known_names`), no nested dollar-quoted or `E''` string, no
+  number longer than 4 digits, and nothing shaped like a UUID, email or long number anywhere.
+  Otherwise the report says `definition_withheld: "differs from repo (<reason>)"`.
+- Policy expressions (`using` / `with_check`) go through the same allowlist. If one has a
+  UUID-, email- or long-number-shaped literal, `text_withheld` names that; if it has any
+  other literal beyond role and schema names (a company name, SSN, phone, ULID, tenant slug,
+  status value ...), an unknown quoted identifier or a number over 4 digits, `text_withheld`
+  is `literal_beyond_role_names`. Either way only the sha256 is printed.
+- Errors, a failed connection included, report only the stage and the error's code
+  (SQLSTATE or a Node `E*` code): never a message, hostname, stack or credential.
 
 ## Run (SSM runner `i-0c35557c4e5385406`)
 

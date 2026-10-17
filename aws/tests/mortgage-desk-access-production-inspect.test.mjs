@@ -8,8 +8,9 @@
  *   - the CLI accepts exactly --inspect and refuses every other argument before reading a
  *     secret or connecting;
  *   - definition text is printed only for a function that matches no repository definition
- *     and has no literal beyond role and schema names (and no id, email or long number);
- *     policy text is withheld when it carries an id-, email- or long-number-shaped literal;
+ *     and has no literal beyond role and schema names, no comment, no unknown quoted
+ *     identifier (and no id, email or long number); policy text goes through the same
+ *     allowlist; a connection or any other failure prints only JSON with an error code;
  *   - on PostgreSQL 16, as a non-superuser checksops_admin that owns the tables: every
  *     statement is BEGIN READ ONLY, a catalog SELECT or ROLLBACK; nothing changes; the report
  *     has no row data or ids; repo-matching helpers report "exact", drifted ones "differs";
@@ -29,6 +30,7 @@ import {
   NAMED_FUNCTIONS,
   buildRepoIndex,
   definitionTextSafety,
+  expressionReport,
   identifierShapedContent,
   inspectMortgageDeskAccess,
   loadInspectConfig,
@@ -38,6 +40,7 @@ import {
   sqlLiterals,
 } from '../../scripts/deployment-guard/lib/mortgage-desk-access-inspect.mjs';
 import { ONE_SHOT_TOOLS } from '../../scripts/deployment-guard/lib/production-sql-one-shot.mjs';
+import { createProductionDatabaseConnect } from '../../scripts/deployment-guard/lib/sql53-production-apply.mjs';
 import { pgSkipReason, policyBlock, startPg } from './helpers/stakeholder-policies-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -129,6 +132,69 @@ test('a secret refusal is reported without its details and without connecting', 
   assert.doesNotMatch(text, /checksops-staging/);
 });
 
+// --- connection and unexpected failures: structured JSON with a code only --------------
+
+const UNREACHABLE_HOST = 'mortgage-desk-unreachable.invalid';
+const PASSWORD = 'Hunter2-not-a-real-password';
+const assertCodeOnly = (text, { stage, codes }) => {
+  const result = JSON.parse(text);
+  assert.equal(result.ok, false);
+  assert.deepEqual(Object.keys(result.details).sort(), ['error_code', 'read_only', 'stage']);
+  assert.equal(result.details.stage, stage);
+  if (codes) assert.ok(codes.includes(result.details.error_code), `error_code ${result.details.error_code}`);
+  assert.ok(result.details.error_code === null || /^([0-9A-Z]{5}|E[A-Z0-9_]+)$/.test(result.details.error_code));
+  for (const leak of [UNREACHABLE_HOST, '127.0.0.1', PASSWORD, 'checksops_admin:', 'postgres://', '    at ', 'node:internal', '.mjs:']) {
+    assert.ok(!text.includes(leak), `leaked ${leak}`);
+  }
+};
+
+test('a connection failure prints only the JSON error with its code: no hostname, stack or password', async () => {
+  const config = loadInspectConfig(ROOT);
+  const failing = async () => {
+    const error = new Error(`getaddrinfo ENOTFOUND ${UNREACHABLE_HOST} (postgres://checksops_admin:${PASSWORD}@${UNREACHABLE_HOST}:5432/postgres)`);
+    error.code = 'ENOTFOUND';
+    error.hostname = UNREACHABLE_HOST;
+    throw error;
+  };
+  const { code, text } = await quiet(() => main(['--inspect'], {}, { root: ROOT, config, connect: failing, index: { functions: new Map(), policies: new Map() } }));
+  assert.equal(code, 1);
+  assertCodeOnly(text, { stage: 'connect', codes: ['ENOTFOUND'] });
+
+  // A code that is neither a SQLSTATE nor a Node E* code is not echoed.
+  const odd = async () => { const e = new Error(UNREACHABLE_HOST); e.code = `host ${UNREACHABLE_HOST}`; throw e; };
+  const oddRun = await quiet(() => main(['--inspect'], {}, { root: ROOT, config, connect: odd, index: { functions: new Map(), policies: new Map() } }));
+  assertCodeOnly(oddRun.text, { stage: 'connect', codes: [null] });
+});
+
+test('the real production connect to an unreachable host reports only the JSON error with its code', { timeout: 60000 }, async () => {
+  const config = loadInspectConfig(ROOT);
+  const index = { functions: new Map(), policies: new Map() };
+  for (const [url, codes] of [
+    // Closed port: refused (or pg missing, when the module is not installed).
+    [`postgres://checksops_admin:${PASSWORD}@127.0.0.1:1/postgres`, ['ECONNREFUSED', 'ERR_MODULE_NOT_FOUND']],
+    // A name that never resolves (.invalid); a resolver timeout has no code at all.
+    [`postgres://checksops_admin:${PASSWORD}@${UNREACHABLE_HOST}:5432/postgres`, ['ENOTFOUND', 'EAI_AGAIN', 'EAI_FAIL', 'ETIMEDOUT', 'ERR_MODULE_NOT_FOUND', null]],
+  ]) {
+    // inspectMortgageDeskAccess returns exactly what the CLI prints (stdout is not captured
+    // here: the test runner reports through it while the socket is pending).
+    const connect = createProductionDatabaseConnect(url, { root: ROOT });
+    const result = await inspectMortgageDeskAccess({ connect, root: ROOT, config, index });
+    assertCodeOnly(JSON.stringify(result, null, 2), { stage: 'connect', codes });
+  }
+});
+
+test('an unexpected error anywhere in the CLI prints only the JSON error with its code', async () => {
+  const config = loadInspectConfig(ROOT);
+  const throwing = async () => {
+    const error = new Error(`connect to ${UNREACHABLE_HOST} with ${PASSWORD}`);
+    error.code = 'ECONNRESET';
+    throw error;
+  };
+  const { code, text } = await quiet(() => main(['--inspect'], {}, { root: ROOT, config, resolveUrl: throwing }));
+  assert.equal(code, 1);
+  assertCodeOnly(text, { stage: 'entry', codes: ['ECONNRESET'] });
+});
+
 // --- redaction and parsing rules -----------------------------------------------------
 
 test('identifier-shaped content is detected', () => {
@@ -143,6 +209,57 @@ test('sqlLiterals finds strings, dollar quotes and numbers, and skips comments a
   assert.deepEqual(lit.strings, ["a'b", "E:x\\'y"]);
   assert.deepEqual(lit.dollar, ['e']);
   assert.deepEqual(lit.numbers, ['42']);
+  assert.equal(lit.comments, 2);
+  assert.deepEqual(lit.quotedIdentifiers, ["it's"]);
+  assert.equal(sqlLiterals("SELECT '-- not a comment', '/* nor this */'").comments, 0);
+});
+
+test('policy text is printed only when every literal is a role or schema name and every number is short', () => {
+  const withheld = [
+    "(mortgage_company = 'Rocket Mortgage'::text)",
+    "((mortgage_company)::text = 'Rocket Mortgage'::text)",
+    "(ssn = '123-45-6789'::text)",
+    "(phone = '+1 555 867 5309'::text)",
+    "((auth.jwt() ->> 'email'::text) = 'jane.doe@corp'::text)",
+    "(external_id = '01ARZ3NDEKTSV4RRFFQ69G5FAV'::text)",
+    "(tenant_slug = 'acme-roofing'::text)",
+    "(status = ANY (ARRAY['requested'::text, 'accepted'::text]))",
+    "(current_setting('request.jwt.claims'::text, true) IS NOT NULL)",
+    "(note = E'Jane\\nDoe'::text)",
+    '(note = $x$Jane Doe$x$)',
+    '(amount > 1234.56)',
+    '("Jane Doe" IS NOT NULL)',
+  ];
+  for (const text of withheld) {
+    const report = expressionReport(text, ['checksops', 'authenticated']);
+    assert.equal(report.text, null, text);
+    assert.equal(report.text_withheld, 'literal_beyond_role_names', text);
+    assert.match(report.sha256, /^[0-9a-f]{64}$/, text);
+    assert.ok(!JSON.stringify(report).includes(text), text);
+  }
+  // Id-, email- and long-number-shaped content keeps its own reason.
+  assert.equal(expressionReport("(tenant_id = '0b8f6f1e-2f0c-4c7e-9a51-6a3f1d2e4b5c'::uuid)").text_withheld, 'uuid_shaped_literal');
+  assert.equal(expressionReport("(email = 'jane.doe@corp.com'::text)").text_withheld, 'email_shaped_literal');
+  assert.equal(expressionReport('(amount > 123456)').text_withheld, 'long_number');
+
+  const printed = [
+    ['(public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id))', []],
+    ['public.aws_can_write_tenant(tenant_id)', []],
+    ['(assigned_employee_id = auth.uid())', []],
+    ["public.has_role(auth.uid(), 'mortgage_agent'::public.app_role)", []],
+    ["(public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'staff'::public.app_role))", []],
+    ["(CURRENT_USER = 'checksops'::name)", ['checksops']],
+    ["(COALESCE(role, ''::text) <> 'viewer'::text)", []],
+    ['(length(body) <= 4000)', []],
+    ['("check_id" IS NOT NULL)', [], ['check_id']],
+    ['true', []],
+  ];
+  for (const [text, words, known = []] of printed) {
+    const report = expressionReport(text, words, known);
+    assert.deepEqual(report, { text, sha256: report.sha256 }, text);
+    assert.match(report.sha256, /^[0-9a-f]{64}$/);
+  }
+  assert.deepEqual(expressionReport(null), { text: null, sha256: null });
 });
 
 test('definition text is safe only with role and schema name literals and short numbers', () => {
@@ -156,6 +273,28 @@ test('definition text is safe only with role and schema name literals and short 
   assert.equal(definitionTextSafety(...def('SELECT length(x) <= 50000'), []).reason, 'long_number');
   assert.equal(definitionTextSafety(...def('SELECT $x$admin$x$'), []).reason, 'nested_dollar_quoted_literal');
   assert.equal(definitionTextSafety(...def("SELECT E'\\n'"), []).reason, 'literal_beyond_role_names');
+});
+
+test('definition text is withheld when it has any comment or an unknown quoted identifier', () => {
+  const def = (body, header = "SET search_path TO 'public'") => [`CREATE OR REPLACE FUNCTION public.f()\n RETURNS boolean\n LANGUAGE sql\n ${header}\nAS $function$${body}$function$\n`, body];
+  for (const body of [
+    'SELECT true -- exception for Jane Doe (555-867-5309), Acme Roofing',
+    '-- exception for Jane Doe (555-867-5309), Acme Roofing\nSELECT true',
+    "SELECT has_role(auth.uid(), 'admin') /* Acme Roofing */",
+    '/* a harmless-looking note */ SELECT true',
+    'SELECT true --',
+  ]) assert.equal(definitionTextSafety(...def(body), []).reason, 'comment_present', body);
+  for (const body of [
+    'SELECT "Jane Doe".id IS NOT NULL FROM public.profiles "Jane Doe"',
+    'SELECT true AS "acme-roofing"',
+    'SELECT 1 FROM public."Rocket Mortgage"',
+  ]) assert.equal(definitionTextSafety(...def(body), []).reason, 'quoted_identifier_beyond_known_names', body);
+  // A comment or quoted identifier in the rendered header is caught too.
+  assert.equal(definitionTextSafety(...def('SELECT true', 'SET search_path TO "Acme Roofing"'), []).reason, 'quoted_identifier_beyond_known_names');
+  // Known schema, table, column and role names may be quoted; -- inside a string is not a comment.
+  assert.deepEqual(definitionTextSafety(...def('SELECT "check_id" IS NOT NULL FROM "public"."check_messages" WHERE current_user = \'checksops\''), ['checksops'], ['check_id']), { safe: true, reason: null });
+  assert.deepEqual(definitionTextSafety(...def('SELECT current_user = "checksops"::name'), ['checksops']), { safe: true, reason: null });
+  assert.equal(definitionTextSafety(...def("SELECT '-- Jane Doe'"), []).reason, 'literal_beyond_role_names');
 });
 
 test('repository parsing finds function bodies and policy names as PostgreSQL stores them', () => {
@@ -193,6 +332,9 @@ const CHECK = '55555555-5555-4555-8555-555555555555';
 const REQ = 'd1000000-0000-4000-8000-000000000001';
 const AGENT = 'a1000000-0000-4000-8000-000000000003';
 const LEAK_UUID = '9e9e9e9e-1234-4abc-8def-000000000042';
+const COMMENT_PII = 'Jane Doe (555-867-5309), Acme Roofing';
+const QUOTED_PII = 'jane-doe-acme-roofing';
+const POLICY_PII = 'Rocket Mortgage';
 
 const SCHEMA = `
 SET check_function_bodies = off;
@@ -259,6 +401,14 @@ $$;`,
   `CREATE POLICY prod_agent_update_mortgage_handling_requests ON public.mortgage_handling_requests FOR UPDATE TO authenticated
     USING (assigned_employee_id = auth.uid()) WITH CHECK (assigned_employee_id = auth.uid() OR tenant_id = '${LEAK_UUID}'::uuid);`,
   'CREATE POLICY aws_select_check_messages ON public.check_messages FOR SELECT TO authenticated USING (true);',
+  // Drifted: free text in a comment and in a quoted identifier -> withheld.
+  `CREATE OR REPLACE FUNCTION public.aws_desk_exception() RETURNS boolean LANGUAGE sql STABLE AS $$
+  -- exception for ${COMMENT_PII}
+  SELECT current_user <> 'checksops' AS "${QUOTED_PII}"
+$$;`,
+  `CREATE POLICY prod_desk_exception_check_messages ON public.check_messages FOR SELECT TO authenticated
+    USING (public.aws_desk_exception() AND body <> '${POLICY_PII}');`,
+  'CREATE POLICY prod_desk_admin_check_messages ON public.check_messages FOR DELETE TO authenticated USING (current_user = \'checksops\');',
   `INSERT INTO public.check_intake_items VALUES ('${CHECK}', '${TENANT}', 'new', NULL);`,
   `INSERT INTO public.mortgage_handling_requests VALUES ('${REQ}', '${TENANT}', '${CHECK}', 'Ledger Bank', NULL, 'accepted', '${AGENT}', 'private note');`,
   `INSERT INTO public.profiles VALUES ('${AGENT}', 'agent@example.com');`,
@@ -317,7 +467,8 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
     assert.equal(report.current_user, 'checksops_admin');
 
     // No row data, ids, emails or the drifted literal anywhere in the output.
-    for (const leak of [TENANT, CHECK, REQ, AGENT, LEAK_UUID, 'agent@example.com', 'private note', 'Ledger Bank']) {
+    for (const leak of [TENANT, CHECK, REQ, AGENT, LEAK_UUID, 'agent@example.com', 'private note', 'Ledger Bank',
+      COMMENT_PII, 'Jane Doe', '555-867-5309', 'Acme Roofing', QUOTED_PII, POLICY_PII, "'requested'", "'accepted'"]) {
       assert.ok(!text.includes(leak), `leaked ${leak}`);
     }
 
@@ -342,7 +493,20 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
     assert.equal(pol.aws_write_mortgage_handling_requests.command, 'ALL');
     assert.equal(pol.aws_write_mortgage_handling_requests.with_check.text, 'public.aws_can_write_tenant(tenant_id)');
     assert.equal(pol.prod_agent_read_mortgage_handling_requests.created_in_repo, false);
-    assert.match(pol.prod_agent_read_mortgage_handling_requests.using.text, /aws_is_active_mortgage_agent\(\)/);
+    // Its status literals ('requested', 'accepted') are not role names: only the hash is printed.
+    assert.equal(pol.prod_agent_read_mortgage_handling_requests.using.text, null);
+    assert.equal(pol.prod_agent_read_mortgage_handling_requests.using.text_withheld, 'literal_beyond_role_names');
+    assert.match(pol.prod_agent_read_mortgage_handling_requests.using.sha256, /^[0-9a-f]{64}$/);
+    assert.deepEqual(pol.prod_agent_read_mortgage_handling_requests.depends_on_functions, ['public.aws_is_active_mortgage_agent']);
+    const cmPol = Object.fromEntries(report.tables.check_messages.policies.map((p) => [p.policy, p]));
+    assert.equal(cmPol.prod_desk_exception_check_messages.using.text, null);
+    assert.equal(cmPol.prod_desk_exception_check_messages.using.text_withheld, 'literal_beyond_role_names');
+    assert.equal(cmPol.prod_desk_admin_check_messages.using.text, "(CURRENT_USER = 'checksops'::name)");
+    assert.equal(cmPol.aws_select_check_messages.using.text, 'true');
+    const exception = report.policy_dependency_functions['public.aws_desk_exception'].overloads[0];
+    assert.equal(exception.repo_match, 'differs_from_repo');
+    assert.equal(exception.definition, undefined);
+    assert.equal(exception.definition_withheld, 'differs from repo (comment_present)');
     assert.equal(pol.prod_agent_update_mortgage_handling_requests.command, 'UPDATE');
     assert.equal(pol.prod_agent_update_mortgage_handling_requests.using.text, '(assigned_employee_id = auth.uid())');
     assert.equal(pol.prod_agent_update_mortgage_handling_requests.with_check.text, null);

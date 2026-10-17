@@ -18,11 +18,25 @@ import { fileURLToPath } from 'node:url';
 import { printResult } from './lib/cli.mjs';
 import { CODES, fail } from './lib/errors.mjs';
 import { resolveLedgerDatabaseUrl } from './lib/ledger-production-apply.mjs';
-import { inspectMortgageDeskAccess, loadInspectConfig } from './lib/mortgage-desk-access-inspect.mjs';
+import { inspectMortgageDeskAccess, loadInspectConfig, safeErrorCode } from './lib/mortgage-desk-access-inspect.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
 import { createProductionDatabaseConnect } from './lib/sql53-production-apply.mjs';
 
+/** The only output an unexpected error produces: structured JSON with the error's code. */
+export function unexpectedErrorResult(error) {
+  return fail(CODES.UNRELATED_MUTATION, 'mortgage desk access inspect failed', { read_only: true, stage: 'entry', error_code: safeErrorCode(error) });
+}
+
+/** main() that never throws: any error is printed as unexpectedErrorResult only. */
 export async function main(argv = process.argv.slice(2), env = process.env, deps = {}) {
+  try {
+    return await runInspect(argv, env, deps);
+  } catch (error) {
+    return printResult(unexpectedErrorResult(error));
+  }
+}
+
+async function runInspect(argv, env, deps) {
   if (argv.length !== 1 || argv[0] !== '--inspect') {
     return printResult(fail(CODES.INVALID_MANIFEST, 'mortgage desk access inspect accepts exactly one argument: --inspect (read-only; there is no apply, input, credential or SQL argument)', {
       argument_count: argv.length,
@@ -44,6 +58,19 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
 
 const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirect) {
-  const code = await main();
-  process.exitCode = typeof code === 'number' ? code : (code ? 0 : 1);
+  // Nothing but the structured JSON error may reach the terminal: no stack, host or message,
+  // including for an error a socket emits after main() has settled.
+  const report = (error) => {
+    try { process.stderr.write(`${JSON.stringify(unexpectedErrorResult(error))}\n`); } catch { /* nothing else may be printed */ }
+    process.exitCode = 1;
+  };
+  process.on('uncaughtException', report);
+  process.on('unhandledRejection', report);
+  let code = 1;
+  try {
+    code = await main();
+  } catch (error) {
+    report(error);
+  }
+  process.exitCode = process.exitCode === 1 ? 1 : (typeof code === 'number' ? code : (code ? 0 : 1));
 }

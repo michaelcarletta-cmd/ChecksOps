@@ -20,14 +20,16 @@
  *                 sha256 of pg_get_functiondef and of prosrc, and whether prosrc matches a
  *                 repository definition (exactly or up to whitespace). The definition text
  *                 is printed only when it matches no repository definition AND passes
- *                 definitionTextSafety (no literals beyond role and schema names, no id,
- *                 email or long number anywhere); otherwise "differs from repo" without text.
+ *                 definitionTextSafety (no literals beyond role and schema names, no comment,
+ *                 no unknown "quoted identifier", no id, email or long number anywhere);
+ *                 otherwise "differs from repo" without text.
  *   - ownership   SQL 99: the mirror and case-assign trigger functions, homeowner_ledger_events,
  *                 profiles, check_cases (owner, RLS / FORCE) and the file's own preconditions
  *                 as booleans.
  *
- * Policy expressions are schema metadata and are printed, unless they contain an id-, email-
- * or long-number-shaped literal (then only their sha256).
+ * Policy expressions are printed only under the same literal allowlist as function text
+ * (expressionReport); otherwise only their sha256. A failure (connecting included) reports
+ * the stage and the error's code / SQLSTATE only: no message, host or stack.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -105,33 +107,39 @@ export function identifierShapedContent(text) {
 
 /**
  * The literals of a SQL / PL/pgSQL text: single-quoted strings (E'' escapes honoured),
- * dollar-quoted strings and numeric constants. Comments and "quoted identifiers" are skipped.
+ * dollar-quoted strings and numeric constants; plus how many comments it has and the
+ * contents of its "quoted identifiers" (neither is a literal, but both can carry free text).
  */
 export function sqlLiterals(text) {
   const s = String(text ?? '');
   const strings = [];
   const dollar = [];
   const numbers = [];
+  const quotedIdentifiers = [];
+  let comments = 0;
   const ident = (c) => c !== undefined && /[A-Za-z0-9_$]/.test(c);
   let i = 0;
   while (i < s.length) {
     const c = s[i];
     const next = s[i + 1];
     if (c === '-' && next === '-') {
+      comments += 1;
       const nl = s.indexOf('\n', i);
       i = nl < 0 ? s.length : nl + 1;
     } else if (c === '/' && next === '*') {
+      comments += 1;
       let depth = 1;
       i += 2;
       while (i < s.length && depth > 0) {
         if (s[i] === '/' && s[i + 1] === '*') { depth += 1; i += 2; } else if (s[i] === '*' && s[i + 1] === '/') { depth -= 1; i += 2; } else i += 1;
       }
     } else if (c === '"') {
+      let value = '';
       i += 1;
       while (i < s.length) {
-        if (s[i] === '"' && s[i + 1] === '"') i += 2;
-        else if (s[i] === '"') { i += 1; break; } else i += 1;
+        if (s[i] === '"' && s[i + 1] === '"') { value += '"'; i += 2; } else if (s[i] === '"') { i += 1; break; } else { value += s[i]; i += 1; }
       }
+      quotedIdentifiers.push(value);
     } else if (c === "'") {
       const escaped = /[Ee]/.test(s[i - 1] || '') && !ident(s[i - 2]);
       let value = '';
@@ -155,7 +163,25 @@ export function sqlLiterals(text) {
       i += 1;
     }
   }
-  return { strings, dollar, numbers };
+  return { strings, dollar, numbers, comments, quotedIdentifiers };
+}
+
+/**
+ * Why a SQL text's literals keep it from being printed, or null: a comment, a "quoted
+ * identifier" that is not a known schema, table, column or role name, a dollar-quoted or E''
+ * string, a string literal other than a role name (live roles, the app_role labels,
+ * APP_ROLE_WORDS), a schema name or '', or a number longer than MAX_NUMERIC_DIGITS digits.
+ */
+export function literalAllowlistReason(text, allowedWords = [], knownIdentifiers = []) {
+  const allowed = new Set([...allowedWords, ...APP_ROLE_WORDS, ...SCHEMA_WORDS, '']);
+  const known = new Set([...allowedWords, ...SCHEMA_WORDS, ...DESK_TABLES, ...OWNERSHIP_TABLES, ...knownIdentifiers]);
+  const lit = sqlLiterals(text);
+  if (lit.comments) return 'comment_present';
+  if (lit.quotedIdentifiers.some((v) => !known.has(v))) return 'quoted_identifier_beyond_known_names';
+  if (lit.dollar.length) return 'nested_dollar_quoted_literal';
+  if (lit.strings.some((v) => !allowed.has(v))) return 'literal_beyond_role_names';
+  if (lit.numbers.some((n) => n.replace(/[^0-9]/g, '').length > MAX_NUMERIC_DIGITS)) return 'long_number';
+  return null;
 }
 
 /**
@@ -175,21 +201,19 @@ function functionHeader(def, prosrc) {
 
 /**
  * Whether a function definition may be printed: no id-, email- or long-number-shaped content
- * anywhere (comments included), no string literal other than a role name (live roles, the
- * app_role labels, APP_ROLE_WORDS), a search_path schema name or '', no nested dollar-quoted
- * or E'' string, and no numeric constant longer than MAX_NUMERIC_DIGITS digits.
+ * anywhere (comments included), and header and body each pass literalAllowlistReason (no
+ * comment at all, no unknown "quoted identifier", no string literal other than a role or
+ * schema name or '', no nested dollar-quoted or E'' string, no number over
+ * MAX_NUMERIC_DIGITS digits).
  */
-export function definitionTextSafety(def, prosrc, allowedWords = []) {
+export function definitionTextSafety(def, prosrc, allowedWords = [], knownIdentifiers = []) {
   const shaped = identifierShapedContent(def);
   if (shaped) return { safe: false, reason: shaped };
   const header = functionHeader(def, prosrc);
   if (header == null) return { safe: false, reason: 'unparsed_definition' };
-  const allowed = new Set([...allowedWords, ...APP_ROLE_WORDS, ...SCHEMA_WORDS, '']);
   for (const part of [header, String(prosrc ?? '')]) {
-    const lit = sqlLiterals(part);
-    if (lit.dollar.length) return { safe: false, reason: 'nested_dollar_quoted_literal' };
-    if (lit.strings.some((v) => !allowed.has(v))) return { safe: false, reason: 'literal_beyond_role_names' };
-    if (lit.numbers.some((n) => n.replace(/[^0-9]/g, '').length > MAX_NUMERIC_DIGITS)) return { safe: false, reason: 'long_number' };
+    const reason = literalAllowlistReason(part, allowedWords, knownIdentifiers);
+    if (reason) return { safe: false, reason };
   }
   return { safe: true, reason: null };
 }
@@ -396,13 +420,28 @@ const byKey = (rows, keyFn) => {
 };
 const asArray = (v) => (Array.isArray(v) ? v : (v == null ? [] : String(v).replace(/^\{|\}$/g, '').split(',').filter(Boolean)));
 
-function expressionReport(text) {
+/**
+ * A policy USING / WITH CHECK expression: printed only when it has no id-, email- or
+ * long-number-shaped content and passes the same literal allowlist as function text;
+ * otherwise only its sha256 (an id-shaped reason is kept, every other is
+ * 'literal_beyond_role_names').
+ */
+export function expressionReport(text, allowedWords = [], knownIdentifiers = []) {
   if (text == null) return { text: null, sha256: null };
   const shaped = identifierShapedContent(text);
-  return shaped ? { text: null, sha256: sha256(text), text_withheld: shaped } : { text, sha256: sha256(text) };
+  if (shaped) return { text: null, sha256: sha256(text), text_withheld: shaped };
+  if (literalAllowlistReason(text, allowedWords, knownIdentifiers)) return { text: null, sha256: sha256(text), text_withheld: 'literal_beyond_role_names' };
+  return { text, sha256: sha256(text) };
 }
 
-function functionReport(row, index, allowedWords) {
+/** A Node / pg error's code (SQLSTATE or a Node E* code) and nothing else: no message, host or stack. */
+export function safeErrorCode(error) {
+  const code = error?.code;
+  if (typeof code !== 'string') return null;
+  return /^[0-9A-Z]{5}$/.test(code) || /^E[A-Z0-9_]{2,40}$/.test(code) ? code : null;
+}
+
+function functionReport(row, index, allowedWords, knownIdentifiers) {
   const key = `${row.schema}.${row.name}`;
   const cmp = compareWithRepo(index, key, row.prosrc);
   const out = {
@@ -418,7 +457,7 @@ function functionReport(row, index, allowedWords) {
     ...cmp,
   };
   if (cmp.repo_match === 'differs_from_repo') {
-    const safety = definitionTextSafety(row.definition, row.prosrc, allowedWords);
+    const safety = definitionTextSafety(row.definition, row.prosrc, allowedWords, knownIdentifiers);
     if (safety.safe) out.definition = row.definition;
     else out.definition_withheld = `differs from repo (${safety.reason})`;
   }
@@ -428,6 +467,7 @@ function functionReport(row, index, allowedWords) {
 /** Builds the report from the query results (pure; the tests feed it PostgreSQL 16 output). */
 export function buildMortgageDeskAccessReport(r, index, config = {}) {
   const allowedWords = [...(r.roleNames || []).map((x) => x.rolname), ...(r.appRoles || []).map((x) => x.label)];
+  const knownIdentifiers = [...new Set((r.columns || []).map((c) => c.column_name))];
   const tablesByName = new Map((r.tables || []).map((t) => [t.relname, t]));
   const policies = byKey(r.policies || [], (p) => p.table_name);
   const deps = byKey(r.policyFunctions || [], (d) => `${d.table_name}\u0000${d.policy}`);
@@ -481,8 +521,8 @@ export function buildMortgageDeskAccessReport(r, index, config = {}) {
           command: POLCMD[p.cmd] || p.cmd,
           permissive: p.permissive === true,
           roles: asArray(p.roles),
-          using: expressionReport(p.using_expr),
-          with_check: expressionReport(p.check_expr),
+          using: expressionReport(p.using_expr, allowedWords, knownIdentifiers),
+          with_check: expressionReport(p.check_expr, allowedWords, knownIdentifiers),
           depends_on_functions: (deps.get(`${name}\u0000${p.policy}`) || []).map((d) => d.function_name),
           created_in_repo: repoFiles.length > 0,
           repo_sources: repoFiles,
@@ -495,7 +535,7 @@ export function buildMortgageDeskAccessReport(r, index, config = {}) {
 
   const fnReport = (key) => {
     const rows = fnRows.get(key) || [];
-    return { present: rows.length > 0, overloads: rows.map((row) => functionReport(row, index, allowedWords)) };
+    return { present: rows.length > 0, overloads: rows.map((row) => functionReport(row, index, allowedWords, knownIdentifiers)) };
   };
   const functions = {};
   for (const key of NAMED_FUNCTIONS) functions[key] = fnReport(key);
@@ -587,11 +627,13 @@ export async function inspectMortgageDeskAccess({ connect, root, config, index }
   const cfg = config || loadInspectConfig(root);
   const repo = index || buildRepoIndex(root);
   const allTables = [...DESK_TABLES, ...OWNERSHIP_TABLES];
-  const client = await connect();
   const names = new Map(Object.entries(Q).map(([k, v]) => [v, k]));
+  let client = null;
   let stage = null;
   const rows = async (sql, params) => { stage = names.get(sql); return (await client.query(sql, params)).rows; };
   try {
+    stage = 'connect';
+    client = await connect();
     await rows(Q.begin);
     await rows(Q.searchPath);
     await rows(Q.statementTimeout);
@@ -611,7 +653,7 @@ export async function inspectMortgageDeskAccess({ connect, root, config, index }
     r.tableAcl = await rows(Q.tableAcl, [[...DESK_TABLES], ROLE_GRANTEES]);
     r.columnAcl = await rows(Q.columnAcl, [[...DESK_TABLES], ROLE_GRANTEES]);
     r.effective = await rows(Q.effective, [[...DESK_TABLES], ROLE_GRANTEES, [...TABLE_PRIVILEGES], [...COLUMN_PRIVILEGES]]);
-    r.columns = await rows(Q.columns, [Object.keys(SQL99_COLUMNS)]);
+    r.columns = await rows(Q.columns, [[...new Set([...allTables, ...Object.keys(SQL99_COLUMNS)])]]);
     r.triggers = await rows(Q.triggers, [[...DESK_TABLES, ...OWNERSHIP_TABLES], [...Object.keys(OWNERSHIP_TRIGGERS), SQL99_TRIGGER]]);
     const chainFns = r.triggers.filter((t) => Object.hasOwn(OWNERSHIP_TRIGGERS, t.trigger)).map((t) => t.function_name);
     const fnKeys = [...new Set([...NAMED_FUNCTIONS, ...SQL99_FUNCTIONS, ...r.policyFunctions.map((d) => d.function_name), ...chainFns])];
@@ -622,10 +664,12 @@ export async function inspectMortgageDeskAccess({ connect, root, config, index }
     return fail(CODES.UNRELATED_MUTATION, 'mortgage desk access inspect failed', {
       read_only: true,
       stage,
-      error_code: typeof error?.code === 'string' && /^[0-9A-Z]{5}$/.test(error.code) ? error.code : null,
+      error_code: safeErrorCode(error),
     });
   } finally {
-    await client.query(Q.rollback).catch(() => {});
-    await client.end().catch(() => {});
+    if (client) {
+      try { await client.query(Q.rollback); } catch { /* closed below */ }
+      try { await client.end(); } catch { /* nothing to report */ }
+    }
   }
 }
