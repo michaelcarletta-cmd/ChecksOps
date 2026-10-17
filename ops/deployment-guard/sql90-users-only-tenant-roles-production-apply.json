@@ -64,7 +64,7 @@
     "live_definition_sha256": null,
     "apply_preconditions_met": null,
     "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 90 (and no inspect tool exists yet). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect), but no production inspect has been run for SQL 90 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c",
@@ -73,6 +73,6 @@
   "staging_acceptance": {
     "ok": false,
     "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 90 here in the reviewed change that sets execute true. Until then there is no tool that could apply this pin, and any tool must refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null)."
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 90 here in the reviewed change that sets execute true. The staging executor handler and the production tool (scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs) exist; the staging read-live, apply and acceptance are still pending. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
   }
 }

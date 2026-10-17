@@ -35,7 +35,12 @@ import {
 import {
   RELEASE_SQL_KEYS,
   RELEASE_SQL_SPECS,
+  readReleaseSqlState,
+  readReleaseUnrelatedSnapshot,
+  releaseChangedCategories,
+  releaseForbiddenStatements,
   releaseFunctionDefinitions,
+  releaseSharedPreconditionFailures,
   releaseIntendedHash,
   releaseIntendedState,
   releaseSqlExecutableText,
@@ -184,6 +189,64 @@ test('apply refuses before connecting: no pre-state, a mismatched pin, the read-
   }
 });
 
+test('a staging pin must itself authorize the apply: execute true and an owner-approved authorization; inspect works while pending', async () => {
+  for (const key of RELEASE_SQL_KEYS) {
+    const live = 'd'.repeat(64);
+    // Pre-state recorded but the pin still pending (execute false, authorization pending).
+    const pending = Object.freeze({ ...PINS[key], expected_live_definition_sha256: live });
+    const refusedPending = await handlerFor(neverConnect, { pins: { [key]: pending } })(releaseEvent(key, { pin: pending }));
+    assert.equal(refusedPending.code, CODES.GUARD_APPLY_FORBIDDEN, key);
+    assert.deepEqual(refusedPending.details.failed, ['pin_execute', 'pin_owner_approved'], key);
+    // execute true but no owner approval.
+    for (const authorization of ['pending', '', 'approved', 'owner said ok', null]) {
+      const noApproval = Object.freeze({ ...pending, execute: true, authorization });
+      const refused = await handlerFor(neverConnect, { pins: { [key]: noApproval } })(releaseEvent(key, { pin: noApproval }));
+      assert.equal(refused.code, CODES.GUARD_APPLY_FORBIDDEN, `${key} ${authorization}`);
+      assert.deepEqual(refused.details.failed, ['pin_owner_approved'], `${key} ${authorization}`);
+    }
+    // Owner approved but execute false.
+    const notExecutable = Object.freeze({ ...pending, authorization: 'Owner approved test fixture' });
+    const refusedExecute = await handlerFor(neverConnect, { pins: { [key]: notExecutable } })(releaseEvent(key, { pin: notExecutable }));
+    assert.equal(refusedExecute.code, CODES.GUARD_APPLY_FORBIDDEN, key);
+    assert.deepEqual(refusedExecute.details.failed, ['pin_execute'], key);
+    // Inspect / read-live still runs against the pending pin (and reports it as not executable).
+    const rec = recordingConnect();
+    const inspected = await handlerFor(rec.connect, { pins: { [key]: pending } })(inspectEvent(key, { pin: pending }));
+    assert.equal(inspected.ok, true, key);
+    assert.equal(inspected.details.receipt.pin_executable, false, key);
+  }
+});
+
+test('forbidden statements anywhere in a file refuse it; the eight reviewed files pass', () => {
+  const statements = {
+    set_role: 'SET ROLE checksops;',
+    set_local_role: 'SET LOCAL ROLE checksops;',
+    set_session_authorization: 'SET SESSION AUTHORIZATION checksops;',
+    set_local_session_authorization: 'SET LOCAL SESSION AUTHORIZATION checksops;',
+    session_replication_role: 'SET session_replication_role = replica;',
+    set_config_role: "SELECT set_config('role', 'checksops', true);",
+    set_config_replication: "SELECT set_config('session_replication_role', 'replica', true);",
+    alter_default_privileges: 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated;',
+    grant_role: 'GRANT checksops_admin TO checksops;',
+    revoke_role: 'REVOKE authenticated FROM checksops;',
+    create_role: 'CREATE ROLE intruder LOGIN;',
+    alter_role: 'ALTER ROLE checksops BYPASSRLS;',
+    reassign_owned: 'REASSIGN OWNED BY checksops TO checksops_admin;',
+    in_do_block: "DO $x$ BEGIN EXECUTE 'GRANT checksops_admin TO checksops'; END $x$;",
+    in_function_body: "CREATE OR REPLACE FUNCTION public.zz() RETURNS void LANGUAGE plpgsql AS $z$ BEGIN PERFORM set_config('role', 'x', true); END $z$;",
+  };
+  for (const key of RELEASE_SQL_KEYS) {
+    assert.ok(releaseSqlExecutableText(key, TEXT[key]), key);
+    for (const [name, statement] of Object.entries(statements)) {
+      assert.equal(releaseSqlExecutableText(key, `${TEXT[key]}\n${statement}\n`), null, `${key} ${name}`);
+    }
+  }
+  // A privilege GRANT ... ON ... TO is not a role grant.
+  assert.deepEqual(releaseForbiddenStatements('GRANT UPDATE (signature_request_id) ON TABLE public.check_files TO checksops;'), []);
+  assert.deepEqual(releaseForbiddenStatements('REVOKE INSERT ON TABLE public.financial_stepup_log FROM PUBLIC;'), []);
+  assert.deepEqual(releaseForbiddenStatements('GRANT checksops_admin TO checksops;'), ['role_grant']);
+});
+
 function recordingConnect() {
   const seen = [];
   return {
@@ -259,8 +322,10 @@ test('PostgreSQL 16: the release order through the executor: read-only inspects,
     assert.ok(seen.every((text) => READ_ONLY_STATEMENT_RE.test(text)), `${key}: ${JSON.stringify(seen.filter((text) => !READ_ONLY_STATEMENT_RE.test(text)))}`);
     return result.details.receipt;
   };
+  // An execute-authorized, owner-approved copy of the staging pin (test only); the committed
+  // pins stay pending, and the apply-refusal test below proves a pending pin refuses.
   const apply = async (key, live, extra = {}) => {
-    const pin = Object.freeze({ ...PINS[key], expected_live_definition_sha256: live, ...extra.pin });
+    const pin = Object.freeze({ ...PINS[key], expected_live_definition_sha256: live, execute: true, authorization: 'Owner approved test fixture', ...extra.pin });
     return handlerFor(connect, { pins: { [key]: pin }, files: extra.files || FILES })(releaseEvent(key, { pin }));
   };
 
@@ -345,4 +410,77 @@ test('PostgreSQL 16: the release order through the executor: read-only inspects,
   await assert.rejects(asMember((c) => c.query('UPDATE public.tenants SET partner_code = $1 WHERE id = $2', ['x', TENANT_A])), (error) => error.code === '42501');
   const dropped = (await admin.query("SELECT to_regprocedure('public.aws_ingest_shared_check(jsonb)') IS NULL AS gone")).rows[0].gone;
   assert.equal(dropped, true);
+}));
+
+test('PostgreSQL 16: every unrelated-snapshot category catches a change; SQL 95 refuses while a function body still calls what it drops', { timeout: 300000 }, async (t) => withPg(t, 'pg-sql9097-snap-', 58900, async ({ admin }) => {
+  const SNAPSHOT_CASES = [
+    ['relations', 'CREATE TABLE public.zz_snapshot (id int)'],
+    ['columns', 'ALTER TABLE public.tenants ADD COLUMN zz_snapshot text'],
+    ['constraints', 'ALTER TABLE public.tenants ADD CONSTRAINT zz_snapshot CHECK (true)'],
+    ['policies', 'CREATE POLICY zz_snapshot ON public.tenants FOR SELECT TO authenticated USING (false)'],
+    ['functions', 'ALTER FUNCTION public.aws_is_authenticated() STRICT'],
+    ['functions', 'ALTER FUNCTION public.aws_is_authenticated() COST 500'],
+    ['functions', 'ALTER FUNCTION public.aws_is_authenticated() LEAKPROOF'],
+    ['triggers', 'CREATE TRIGGER zz_snapshot AFTER INSERT ON public.claims FOR EACH ROW EXECUTE FUNCTION public.share_library_docs_to_mortgage_request()'],
+    ['views', 'CREATE VIEW public.zz_snapshot_v AS SELECT 1 AS x'],
+    ['types', "ALTER TYPE public.deposit_provider ADD VALUE 'zz_snapshot'"],
+    ['schema', 'GRANT CREATE ON SCHEMA public TO authenticated'],
+    ['default_acl', 'ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT SELECT ON TABLES TO anon'],
+    ['role_memberships', 'GRANT checksops_admin TO checksops'],
+    ['roles', 'ALTER ROLE checksops BYPASSRLS'],
+  ];
+  for (const [category, statement] of SNAPSHOT_CASES) {
+    await admin.query('BEGIN');
+    try {
+      const before = await readReleaseUnrelatedSnapshot(admin, 'sql90');
+      await admin.query(statement);
+      const after = await readReleaseUnrelatedSnapshot(admin, 'sql90');
+      const changed = releaseChangedCategories(before, after);
+      assert.ok(changed.includes(category), `${category}: ${statement} -> ${JSON.stringify(changed)}`);
+    } finally {
+      await admin.query('ROLLBACK');
+    }
+  }
+  // An index redefined under the same name changes only its definition, which the indexes category sees.
+  await admin.query('BEGIN');
+  try {
+    await admin.query('CREATE INDEX zz_snapshot_idx ON public.tenants (name)');
+    const before = await readReleaseUnrelatedSnapshot(admin, 'sql90');
+    await admin.query('DROP INDEX public.zz_snapshot_idx');
+    await admin.query('CREATE INDEX zz_snapshot_idx ON public.tenants (id)');
+    const after = await readReleaseUnrelatedSnapshot(admin, 'sql90');
+    assert.deepEqual(releaseChangedCategories(before, after), ['indexes']);
+  } finally {
+    await admin.query('ROLLBACK');
+  }
+
+  // SQL 95: a plpgsql caller of a dropped function is not in pg_depend; the state and the
+  // executor inspect report it (identity and count only) and the precondition refuses.
+  await admin.query('BEGIN');
+  try {
+    const clean = (await readReleaseSqlState(admin, 'sql95')).details;
+    assert.deepEqual(clean.dropped_function_callers, []);
+    // (Read as the superuser here, so only the caller rule is asserted; ownership is checksops_admin's.)
+    assert.ok(!releaseSharedPreconditionFailures('sql95', clean, TEXT.sql95).includes('dropped_functions_not_called_by_other_functions'));
+    await admin.query(`CREATE FUNCTION public.zz_bridge_caller(_p jsonb) RETURNS uuid LANGUAGE plpgsql AS $f$
+      BEGIN RETURN public.aws_ingest_shared_check(_p); END $f$`);
+    const state = (await readReleaseSqlState(admin, 'sql95')).details;
+    assert.deepEqual(state.dropped_function_callers, ['public.zz_bridge_caller(jsonb)']);
+    assert.ok(releaseSharedPreconditionFailures('sql95', state, TEXT.sql95).includes('dropped_functions_not_called_by_other_functions'));
+  } finally {
+    await admin.query('ROLLBACK').catch(() => {});
+  }
+  await admin.query(`CREATE FUNCTION public.zz_bridge_caller(_p text) RETURNS void LANGUAGE plpgsql AS $f$
+    BEGIN PERFORM public.vault_update_bridge_secret(_p); END $f$`);
+  try {
+    const inspected = await handlerFor(async () => ({ query: (sql, params) => admin.query(sql, params), end: async () => {} }))(inspectEvent('sql95'));
+    assert.equal(inspected.ok, true, JSON.stringify(inspected));
+    const receipt = inspected.details.receipt;
+    assert.deepEqual(receipt.release_sql_inspect.dropped_function_callers, ['zz_bridge_caller(text)']);
+    assert.equal(receipt.release_sql_inspect.dropped_function_caller_count, 1);
+    assert.ok(receipt.precondition_failures.includes('dropped_functions_not_called_by_other_functions'));
+    assert.equal(receipt.apply_preconditions_met, false);
+  } finally {
+    await admin.query('DROP FUNCTION public.zz_bridge_caller(text)');
+  }
 }));

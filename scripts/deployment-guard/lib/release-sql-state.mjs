@@ -57,6 +57,21 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 export const collapse = (text) => (text == null ? null : String(text).replace(/\s+/g, ' ').trim());
 const hashOrDash = (text) => (text == null || text === '' ? '-' : sha(collapse(text)));
 
+/** The production tools' owner-approval rule (homeowner-sql-production-apply.mjs), for the staging pins too. */
+export const RELEASE_OWNER_APPROVED_RE = /^owner[- ]approved\b/i;
+
+/**
+ * Whether a staging pin authorizes an apply: execute true and an owner-approved
+ * authorization. A pending pin still allows inspect / read-live.
+ */
+export function releasePinApplyFailures(pin) {
+  const authorization = typeof pin?.authorization === 'string' ? pin.authorization.trim() : '';
+  return failed([
+    ['pin_execute', pin?.execute === true],
+    ['pin_owner_approved', authorization !== '' && authorization.toLowerCase() !== 'pending' && RELEASE_OWNER_APPROVED_RE.test(authorization)],
+  ]);
+}
+
 export function releaseSpec(key) {
   const spec = RELEASE_SQL_SPECS[key];
   if (!spec) throw new Error(`unknown release SQL migration ${key}`);
@@ -115,6 +130,35 @@ export function releaseFunctionDefinitions(text) {
 
 const fnName = (identity) => /^public\.([a-z0-9_]+)\(/.exec(identity)?.[1] || null;
 
+/**
+ * Statements no release file may contain anywhere (top level, DO blocks, EXECUTE strings or
+ * function bodies): role and session identity changes, replication-role tricks, default
+ * privileges, role grants and role DDL. Returns the names of the rules that matched.
+ */
+const FORBIDDEN_STATEMENT_RULES = Object.freeze([
+  ['set_role', /\bSET\s+(?:LOCAL\s+|SESSION\s+)?ROLE\b/i],
+  ['set_session_authorization', /\bSESSION\s+AUTHORIZATION\b/i],
+  ['session_replication_role', /\bsession_replication_role\b/i],
+  ['set_config_identity', /\bset_config\s*\(\s*'(?:role|session_authorization|session_replication_role)'/i],
+  ['alter_default_privileges', /\bALTER\s+DEFAULT\s+PRIVILEGES\b/i],
+  ['role_ddl', /\b(?:CREATE|ALTER|DROP)\s+(?:ROLE|USER|GROUP)\b/i],
+  ['reassign_or_drop_owned', /\b(?:REASSIGN|DROP)\s+OWNED\b/i],
+  ['security_label', /\bSECURITY\s+LABEL\b/i],
+]);
+
+export function releaseForbiddenStatements(text) {
+  const source = String(text || '').replace(/--[^\n]*/g, '');
+  const hits = FORBIDDEN_STATEMENT_RULES.filter(([, re]) => re.test(source)).map(([name]) => name);
+  // GRANT <role> TO <role> / REVOKE <role> FROM <role>: a GRANT or REVOKE with no ON clause.
+  for (const match of source.matchAll(/\b(GRANT|REVOKE)\b([^;]*?)\b(TO|FROM)\b/gi)) {
+    if (!/\bON\b/i.test(match[2])) {
+      hits.push('role_grant');
+      break;
+    }
+  }
+  return hits;
+}
+
 /** The reviewed bytes as the guarded tools execute them (none of SQL 90-97 has BEGIN/COMMIT), or null. */
 export function releaseSqlExecutableText(key, text) {
   const spec = releaseSpec(key);
@@ -124,6 +168,7 @@ export function releaseSqlExecutableText(key, text) {
   const outside = source.replace(/--[^\n]*/g, '').replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '').replace(/'(?:[^']|'')*'/g, "''");
   if (/\b(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|END|ABORT)\b/i.test(outside)) return null;
   if (/\bSTART\s+TRANSACTION\b|\bSET\s+(SESSION|ROLE|LOCAL\s+ROLE)\b|\bRESET\b|\bDISCARD\b|\bCOPY\b|^\s*\\/im.test(outside)) return null;
+  if (releaseForbiddenStatements(source).length) return null;
   const defs = releaseFunctionDefinitions(source);
   if (!defs) return null;
   const expected = spec.functions.map((fn) => fnName(fn.identity)).sort();
@@ -163,6 +208,15 @@ WHERE d.refclassid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND d.refobjid = 
   functionTriggers: `SELECT count(*)::int AS n FROM pg_catalog.pg_trigger t
 WHERE t.tgfoid = pg_catalog.to_regprocedure($1) AND NOT t.tgisinternal
   AND NOT (t.tgrelid = pg_catalog.to_regclass($2) AND t.tgname = $3)`,
+  // Functions in public / auth (other than the dropped ones) whose body names a function the
+  // migration drops: plpgsql and EXECUTE callers that pg_depend does not record. $1 the
+  // identities dropped, $2 their bare names. Returns identities only, never bodies.
+  functionCallers: `SELECT p.oid::regprocedure::text AS name
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('public', 'auth')
+  AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) x WHERE pg_catalog.to_regprocedure(x) = p.oid)
+  AND EXISTS (SELECT 1 FROM unnest($2::text[]) f WHERE p.prosrc ~* ('\\m' || f || '\\M'))
+ORDER BY 1`,
   relation: `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner, c.relkind::text AS kind, c.relrowsecurity AS rls,
   c.relforcerowsecurity AS forced, COALESCE(c.reloptions, ARRAY[]::text[]) AS options
 FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass($1)`,
@@ -509,6 +563,10 @@ export async function readReleaseSqlState(client, key, { counts = true } = {}) {
     const trig = droppedTrigger ? (await q(RELEASE_READS.functionTriggers, [identity, droppedTrigger.table, droppedTrigger.name]))[0]?.n ?? 0 : 0;
     dependents[identity] = Number(deps) + Number(trig);
   }
+  const dropped = spec.dropped_functions || [];
+  const callers = dropped.length
+    ? (await q(RELEASE_READS.functionCallers, [dropped, dropped.map(fnName).filter(Boolean)])).map((row) => String(row.name))
+    : [];
   const state = {
     current_user: login.current_user ?? null,
     session_user: login.session_user ?? null,
@@ -519,6 +577,7 @@ export async function readReleaseSqlState(client, key, { counts = true } = {}) {
     successors_applied: Object.entries(refuseAfter).filter(([, v]) => v).map(([k]) => k),
     library_sql30_check_shape: library?.sql30?.check?.shape ?? (spec.reads_library ? 'absent' : null),
     dependents,
+    dropped_function_callers: callers,
     ...objects,
   };
   state.live_definition_sha256 = releaseStateHash(key, objects);
@@ -572,6 +631,8 @@ export function releaseSharedPreconditionFailures(key, state, text) {
       return live?.exists === true && (live.acl || []).every((line) => c.acl.includes(line));
     })],
     ['dropped_functions_have_no_other_dependents', Object.values(s.dependents || {}).every((n) => n === 0)],
+    // plpgsql / EXECUTE callers are not in pg_depend; a function body naming a dropped function would break.
+    ['dropped_functions_not_called_by_other_functions', Array.isArray(s.dropped_function_callers) && s.dropped_function_callers.length === 0],
   ];
   for (const extra of spec.extra_preconditions || []) {
     if (extra === 'doc_type_check_supported') {
@@ -612,6 +673,8 @@ export function releaseUnrelatedScope(key) {
     skip_functions: [...spec.functions.map((fn) => fn.identity), ...(spec.dropped_functions || [])],
     skip_triggers: [...(spec.triggers || []), ...(spec.dropped_triggers || [])].map((t) => objectName(t.table, t.name)),
     skip_views: (spec.views || []).map((v) => v.name),
+    // Indexes a migration creates on an existing table (none in SQL 90-97); its own tables' indexes are skipped with them.
+    skip_indexes: [...(spec.added_indexes || [])],
   };
 }
 
@@ -643,11 +706,36 @@ ORDER BY 1`,
 FROM pg_catalog.pg_policy pol JOIN pg_catalog.pg_class c ON c.oid = pol.polrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND NOT ${SKIPPED_REL('c.oid')} AND NOT ((n.nspname || '.' || c.relname || '.' || pol.polname) = ANY ($2::text[]))
 ORDER BY 1`,
+  // Every attribute (strictness, result type, language, kind, defaults, leakproof, parallel,
+  // cost/rows, the full pg_get_functiondef), not only the ones a spec fingerprints.
   functions: `SELECT p.oid::regprocedure::text || ' ' || pg_catalog.pg_get_userbyid(p.proowner) || ' ' || md5(p.prosrc) || ' '
-  || p.prosecdef::text || ' ' || p.provolatile::text || ' ' || COALESCE(p.proconfig::text, '') || ' ' || COALESCE(p.proacl::text, '') AS d
-FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  || p.prosecdef::text || ' ' || p.provolatile::text || ' ' || COALESCE(p.proconfig::text, '') || ' ' || COALESCE(p.proacl::text, '')
+  || ' strict=' || p.proisstrict::text || ' ret=' || p.prorettype::regtype::text || ' retset=' || p.proretset::text
+  || ' lang=' || l.lanname || ' kind=' || p.prokind::text || ' leakproof=' || p.proleakproof::text || ' parallel=' || p.proparallel::text
+  || ' cost=' || p.procost::text || ' rows=' || p.prorows::text
+  || ' args=' || pg_catalog.pg_get_function_arguments(p.oid) || ' result=' || COALESCE(pg_catalog.pg_get_function_result(p.oid), '')
+  || ' def=' || CASE WHEN p.prokind IN ('f', 'p') THEN md5(pg_catalog.pg_get_functiondef(p.oid)) ELSE '-' END AS d
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace JOIN pg_catalog.pg_language l ON l.oid = p.prolang
 WHERE n.nspname IN ('public', 'auth') AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) x WHERE pg_catalog.to_regprocedure(x) = p.oid)
 ORDER BY 1`,
+  // Index definitions (the relations category sees only their names and owners).
+  indexes: `SELECT c.oid::regclass::text || ' ' || pg_catalog.pg_get_indexdef(i.indexrelid) || ' valid=' || i.indisvalid::text AS d
+FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND NOT ${SKIPPED_REL('i.indrelid')} AND NOT ((n.nspname || '.' || c.relname) = ANY ($2::text[]))
+ORDER BY 1`,
+  // Default privileges of every role (ALTER DEFAULT PRIVILEGES).
+  default_acl: `SELECT pg_catalog.pg_get_userbyid(d.defaclrole) || ' ' || COALESCE(n.nspname, '-') || ' ' || d.defaclobjtype::text || ' '
+  || COALESCE(d.defaclacl::text, '') AS d
+FROM pg_catalog.pg_default_acl d LEFT JOIN pg_catalog.pg_namespace n ON n.oid = d.defaclnamespace
+ORDER BY 1`,
+  // Role memberships (GRANT <role> TO <role>).
+  role_memberships: `SELECT pg_catalog.pg_get_userbyid(m.roleid) || ' ' || pg_catalog.pg_get_userbyid(m.member) || ' admin=' || m.admin_option::text AS d
+FROM pg_catalog.pg_auth_members m ORDER BY 1`,
+  // Role attributes (LOGIN, SUPERUSER, BYPASSRLS, INHERIT, ...): names and flags only.
+  roles: `SELECT r.rolname || ' super=' || r.rolsuper::text || ' inherit=' || r.rolinherit::text || ' createrole=' || r.rolcreaterole::text
+  || ' createdb=' || r.rolcreatedb::text || ' login=' || r.rolcanlogin::text || ' replication=' || r.rolreplication::text
+  || ' bypassrls=' || r.rolbypassrls::text AS d
+FROM pg_catalog.pg_roles r ORDER BY 1`,
   triggers: `SELECT t.tgrelid::regclass::text || ' ' || t.tgname || ' ' || t.tgenabled::text || ' ' || pg_catalog.pg_get_triggerdef(t.oid) AS d
 FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND NOT t.tgisinternal AND NOT ${SKIPPED_REL('c.oid')}
@@ -676,6 +764,7 @@ export async function readReleaseUnrelatedSnapshot(client, key) {
     functions: [scope.skip_functions],
     triggers: [scope.skip_relations, scope.skip_triggers],
     views: [scope.skip_views],
+    indexes: [scope.skip_relations, scope.skip_indexes],
   };
   await client.query(RELEASE_READS.searchPath);
   const categories = {};
@@ -762,6 +851,9 @@ export function releaseSqlReport(key, state, text) {
     })),
     function_acl: spec.functions.map((fn) => ({ name: fn.identity.replace(/^public\./, ''), acl: [...(s.functions?.[fn.identity]?.acl || [])] })),
     dropped_function_dependents: Object.values(s.dependents || {}).reduce((n, v) => n + (Number(v) || 0), 0),
+    // Names and a count only (never the bodies).
+    dropped_function_callers: [...(s.dropped_function_callers || [])].map((name) => name.replace(/^public\./, '')),
+    dropped_function_caller_count: (s.dropped_function_callers || []).length,
     doc_type_check_shape: s.library_sql30_check_shape ?? null,
     counts: s.counts ?? null,
   };

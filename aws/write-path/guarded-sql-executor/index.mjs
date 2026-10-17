@@ -148,6 +148,7 @@ import {
   readReleaseSqlState,
   readReleaseUnrelatedSnapshot,
   releaseChangedCategories,
+  releasePinApplyFailures,
   releaseSharedPostconditionFailures,
   releaseSharedPreconditionFailures,
   releaseSpec,
@@ -2172,6 +2173,12 @@ async function handleReleaseSqlMigration({ key, event, authorization, identity, 
     )) {
       return fail(CODES.SQL_COLLISION, `${label} apply is bound to the exact allowlisted pin`);
     }
+    // The staging pin itself must authorize the apply (execute true, owner-approved);
+    // a pending pin allows only inspect / read-live.
+    const pinFailures = releasePinApplyFailures(pin);
+    if (pinFailures.length) {
+      return fail(CODES.GUARD_APPLY_FORBIDDEN, `${label} staging pin does not authorize an apply (execute true and an owner-approved authorization are required)`, { failed: pinFailures });
+    }
   }
 
   let client;
@@ -2203,7 +2210,7 @@ async function handleReleaseSqlMigration({ key, event, authorization, identity, 
           result: event.action,
           executor_identity: identity,
           live_definition_sha256: live,
-          pin_executable: RELEASE_SHA256_RE.test(String(pin.expected_live_definition_sha256 || '')),
+          pin_executable: RELEASE_SHA256_RE.test(String(pin.expected_live_definition_sha256 || '')) && releasePinApplyFailures(pin).length === 0,
           already_applied: live === pin.intended_replacement_sha256,
           precondition_failures: failures,
           apply_preconditions_met: failures.length === 0

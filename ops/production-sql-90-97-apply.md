@@ -106,15 +106,24 @@ post-condition is the intended hash); reconcile the rendering in a reviewed chan
 - `function_results_match`; `function_acl_replaceable` (no EXECUTE grant the file neither
   keeps nor revokes: CREATE OR REPLACE keeps an existing ACL).
 - `created_tables_absent_or_intended`, `added_columns_absent_or_intended`,
-  `column_acl_replaceable`, `dropped_functions_have_no_other_dependents` (SQL 95).
+  `column_acl_replaceable`, `dropped_functions_have_no_other_dependents` (SQL 95, `pg_depend`)
+  and `dropped_functions_not_called_by_other_functions` (SQL 95: no other `public` / `auth`
+  function body names a function it drops; the inspect lists the callers' identities and count).
+- Staging apply additionally needs the staging pin itself to say `execute: true` with an
+  `Owner approved …` authorization (read-live works while it is pending).
+- The file may not contain, anywhere (DO blocks and function bodies included), `SET [LOCAL]
+  ROLE`, `SESSION AUTHORIZATION`, `session_replication_role`, `set_config('role' | …)`,
+  `ALTER DEFAULT PRIVILEGES`, a role `GRANT` / `REVOKE` (no `ON`), role DDL or `REASSIGN` /
+  `DROP OWNED`.
 - SQL 94: `doc_type_check_supported` (3- or 6-value predecessor, SQL 30's or already SQL 94's)
   and `no_rows_outside_sql94_rule` (aggregate COUNT(*), the only row read).
 
 Post-conditions (inside the transaction, before COMMIT): the intended fingerprint; functions
 and created tables owned by the login; owners of altered relations unchanged; SQL 97: every
 other privilege on `financial_stepup_log` unchanged; and everything else in schema `public`
-(relations, columns, constraints, policies, triggers, views, types, schema ACL) and the
-functions of `public` and `auth` unchanged.
+(relations, columns, constraints, indexes (`pg_get_indexdef`), policies, triggers, views,
+types, schema ACL), every function of `public` and `auth` (all attributes, defaults and
+`pg_get_functiondef`), default privileges, role memberships and role attributes unchanged.
 
 ## Inspect (read-only)
 
