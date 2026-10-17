@@ -20,7 +20,7 @@ production").
 | `sql97` | `97_financial_stepup_log_server_writer.sql` (`e3c8fd41…`) | `INSERT` on `financial_stepup_log` revoked from PUBLIC and `authenticated`, granted to `checksops`; the `aws_financial_stepup_log_writer_guard` BEFORE INSERT trigger. | — (Lambda gate, below) |
 | `sql98` | `98_tenant_fee_collection.sql` (`7a42dc13…`) | Per-check price stamping (`record_check_billing_event()` and `trg_record_check_billing_event`, the `check_billing_config` default and the owner-question switch, a seed config row only when the table is empty); one charge per tenant period (`tenant_maintenance_payments_tenant_period_uidx`); `check_billing_events` unique (check, event) index when none covers it; `platform_billing_destination` (platform owner only, audited), `platform_billing_audit`, `tenant_fee_invoice_outbox`, `aws_platform_owner_record_billing_audit(jsonb)`; `tenants.deposits_enabled` with `aws_tenant_deposits_enabled(uuid)`, `aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)` and its audit trigger; SQL 96's `aws_tenants_member_column_guard()` replaced (plus `deposits_enabled` for the platform owner). | SQL 96 |
 | `sql99` | `99_mortgage_desk_completion_messages.sql` (`0c079fe4…`) | `aws_mortgage_desk_appended_note(text, text)`, the SECURITY DEFINER trigger function `aws_mortgage_desk_completion_messages()` and `tr_mortgage_desk_completion_messages` on `mortgage_handling_requests`. | SQL 90 |
-| `sql100` | `100_mortgage_desk_live_access.sql` (`6fae188e…`) | Records production's live Mortgage Desk access: `aws_is_mortgage_ops_agent()`, `aws_mortgage_agent_queue_visible(text, uuid)`, `aws_is_active_mortgage_agent(uuid)`; the five live `mortgage_handling_requests` policies (drops the repository-only `aws_write_mortgage_handling_requests`); `checksops` table SELECT / INSERT / DELETE and UPDATE on 17 columns, `authenticated` UPDATE on three columns only. A strict no-op on production. | SQL 90 (and 12 / 24 / SQL 50, already live) |
+| `sql100` | `100_mortgage_desk_live_access.sql` (`16cb8c9a…`) | Records production's live Mortgage Desk access: `aws_is_mortgage_ops_agent()`, `aws_mortgage_agent_queue_visible(text, uuid)`, `aws_is_active_mortgage_agent(uuid)`; the five live `mortgage_handling_requests` policies (drops the repository-only `aws_write_mortgage_handling_requests`); `checksops` table SELECT / INSERT / DELETE and UPDATE on 17 columns, `authenticated` UPDATE on three columns only; the helpers' live EXECUTE grants and the Accept / Complete policy's live comment. A strict no-op on production. | SQL 90 (and 12 / 24 / SQL 50, already live) |
 
 ## Tooling
 
@@ -125,7 +125,7 @@ from the pinned file's bytes; renderings from the reviewed constants in
 | `sql97` | `5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef` |
 | `sql98` | `f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f` |
 | `sql99` | `481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4` |
-| `sql100` | `4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e` |
+| `sql100` | `52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777` |
 
 SQL 98's fingerprint also has a line for `tenant_maintenance_payments_tenant_period_uidx` (an
 index on an existing table) and one for whether a unique index covers `check_billing_events
@@ -135,7 +135,7 @@ the same either way. SQL 100's fingerprint (spec `render`) also carries each ACL
 grantor (the owner as `owner`) for the helpers' EXECUTE, the column UPDATE grants and the table
 privileges of `checksops` / `authenticated` on `mortgage_handling_requests`, and the sha256 of
 each policy's comment (never the text): a grant by another grantor, a widened helper EXECUTE
-or a policy comment is a different state.
+or a policy comment other than the recorded one is a different state.
 
 Staging is PostgreSQL 18; the tests run PostgreSQL 16. The renderings are collapsed to
 single spaces to absorb pretty-print differences. If a staging read-live after apply reports
@@ -282,7 +282,7 @@ nothing. The production tool therefore never runs the file there:
 
 1. `sql100-mortgage-desk-live-access-production-apply.mjs --inspect` (read-only, the owner runs
    it). Production is recorded when `already_applied` is `true` (`live_definition_sha256` equals
-   `4a9e9b26…`), `production_noop.live_is_intended` is `true` and `precondition_failures` is
+   `52c00e3a…`), `production_noop.live_is_intended` is `true` and `precondition_failures` is
    `[]`. Record that run in the SQL 100 production pin (`production_inspect`) and in
    `production-api-overlay-plan.json` if a member ever needs it.
 2. If `live_definition_sha256` differs, SQL 100 does not describe production (for example a

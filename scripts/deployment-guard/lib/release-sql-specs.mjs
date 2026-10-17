@@ -33,6 +33,10 @@
  *                      privileges only of the roles the file revokes from
  *   column_acl[].revokes
  *                      column grants the file revokes (SQL 100)
+ *   policies[].comment the COMMENT ON POLICY text the file sets (SQL 100; with render.policy_comments
+ *                      the intended state carries its sha256)
+ *   whole_tables       tables whose whole access surface is fingerprinted (SQL 100): RLS flags,
+ *                      every policy, every non-owner table grant and every unlisted column grant
  *   indexes            created on an existing table: name and pg_get_indexdef (SQL 98)
  *   unique_covers      a unique index covering columns (contains, none outside within) that the
  *                      file adds only when none exists; duplicates_count names the count that
@@ -2189,6 +2193,49 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         ],
         "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination"
       },
+      "platform_billing_destination_production_rows": {
+        "requires": [
+          "public.platform_billing_destination",
+          "column public.platform_billing_destination.environment"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination WHERE environment = 'production'"
+      },
+      "platform_billing_destination_sandbox_rows": {
+        "requires": [
+          "public.platform_billing_destination",
+          "column public.platform_billing_destination.environment"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination WHERE environment = 'sandbox'"
+      },
+      "platform_billing_destination_reviewed_account_rows": {
+        "requires": [
+          "public.platform_billing_destination",
+          "column public.platform_billing_destination.moov_account_id"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination WHERE moov_account_id = '41cb5d67-4911-4bef-aad5-d8ee9c582208'"
+      },
+      "platform_billing_destination_production_reviewed_account_rows": {
+        "requires": [
+          "public.platform_billing_destination",
+          "column public.platform_billing_destination.environment",
+          "column public.platform_billing_destination.moov_account_id"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination WHERE environment = 'production' AND moov_account_id = '41cb5d67-4911-4bef-aad5-d8ee9c582208'"
+      },
+      "platform_billing_destination_payment_method_rows": {
+        "requires": [
+          "public.platform_billing_destination",
+          "column public.platform_billing_destination.moov_payment_method_id"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination WHERE COALESCE(moov_payment_method_id, '') <> ''"
+      },
+      "platform_billing_destination_verified_rows": {
+        "requires": [
+          "public.platform_billing_destination",
+          "column public.platform_billing_destination.verified_at"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination WHERE verified_at IS NOT NULL"
+      },
       "duplicate_billing_periods": {
         "requires": [
           "public.tenant_maintenance_payments",
@@ -2767,26 +2814,42 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       {
         "identity": "public.aws_is_mortgage_ops_agent()",
         "acl": [
-          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner",
           "owner EXECUTE grantor=owner"
         ],
-        "revokes": []
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ]
       },
       {
         "identity": "public.aws_mortgage_agent_queue_visible(text, uuid)",
         "acl": [
           "PUBLIC EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner",
           "owner EXECUTE grantor=owner"
         ],
-        "revokes": []
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ]
       },
       {
         "identity": "public.aws_is_active_mortgage_agent(uuid)",
         "acl": [
           "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner",
           "owner EXECUTE grantor=owner"
         ],
-        "revokes": []
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ]
       }
     ],
     "policies": [
@@ -2816,6 +2879,7 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       {
         "table": "public.mortgage_handling_requests",
         "name": "aws_update_mortgage_ops_accept_complete",
+        "comment": "Mortgage agent Accept (requested+unassigned → self+in_progress+accepted_at) and Complete/Cancel only when assigned to the caller. Not a table-wide UPDATE grant.",
         "cmd": "UPDATE",
         "roles": [
           "authenticated",

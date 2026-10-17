@@ -204,7 +204,7 @@ test('PostgreSQL 16: read-only inspects; SQL 98 and SQL 99 apply once as checkso
     assert.equal(d.apply_preconditions_met, false, 'no recorded pre-state');
     assert.equal(d.production_noop, undefined, key);
     if (key === 'sql98') {
-      assert.deepEqual(d.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0, platform_billing_destination_rows: null });
+      assert.deepEqual(d.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0, platform_billing_destination_rows: null, platform_billing_destination_production_rows: null, platform_billing_destination_sandbox_rows: null, platform_billing_destination_reviewed_account_rows: null, platform_billing_destination_production_reviewed_account_rows: null, platform_billing_destination_payment_method_rows: null, platform_billing_destination_verified_rows: null });
     }
     const pin = authorized(key, d.live_definition_sha256);
     const asSuper = await executeReleaseProductionApply(key, manifest(key, pin), { root: ROOT, pin, connect: connectWith('ubuntu'), consumedPath: consumedPath() });
@@ -260,7 +260,9 @@ test('PostgreSQL 16: read-only inspects; SQL 98 and SQL 99 apply once as checkso
     ['GRANT UPDATE (status) ON public.mortgage_handling_requests TO checksops WITH GRANT OPTION', 'SET ROLE checksops',
       'GRANT UPDATE (note) ON public.mortgage_handling_requests TO authenticated', 'RESET ROLE'],
     ["COMMENT ON POLICY aws_select_mortgage_ops_agent_queue ON public.mortgage_handling_requests IS 'x'"],
-    ['GRANT EXECUTE ON FUNCTION public.aws_is_mortgage_ops_agent() TO authenticated'],
+    ['GRANT EXECUTE ON FUNCTION public.aws_is_mortgage_ops_agent() TO PUBLIC'],
+    ['REVOKE EXECUTE ON FUNCTION public.aws_mortgage_agent_queue_visible(text, uuid) FROM checksops'],
+    ["COMMENT ON POLICY aws_update_mortgage_ops_accept_complete ON public.mortgage_handling_requests IS 'edited'"],
   ]) {
     await admin.query('BEGIN');
     try {

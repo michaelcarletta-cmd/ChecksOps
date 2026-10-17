@@ -573,8 +573,8 @@ export function releaseIntendedState(key, text) {
   for (const p of spec.policies || []) {
     policies[objKey(p.table, p.name)] = {
       exists: true, cmd: p.cmd, permissive: p.permissive !== false, roles: [...p.roles].sort(), qual: collapse(p.qual), with_check: collapse(p.with_check),
-      // CREATE POLICY leaves no comment.
-      ...(spec.render?.policy_comments === true ? { comment_sha256: null } : {}),
+      // CREATE POLICY leaves no comment; the file's COMMENT ON POLICY (spec `comment`) sets one.
+      ...(spec.render?.policy_comments === true ? { comment_sha256: p.comment == null ? null : sha(p.comment) } : {}),
     };
   }
   for (const p of spec.dropped_policies || []) policies[objKey(p.table, p.name)] = { exists: false };

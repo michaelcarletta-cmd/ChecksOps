@@ -8,15 +8,15 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/100_mortgage_desk_live_access.sql",
   "migration_id": "100_mortgage_desk_live_access",
-  "staging_pin_commit": "c42bcd9c4f8edf1ab7d0f8d2b7e3d56a180ab994",
-  "source_sha256": "6fae188e0d07e4484025ff7154cec5b3cc80cbcd9e40f9dfa6174f86b0d3e11c",
+  "staging_pin_commit": "7d6cdcb3fbc425a9905fa49291b4b164800884a9",
+  "source_sha256": "16cb8c9ae8ab63bfce4948c560ce6b97a2a53dae11ce502af606ed837a086724",
   "function_identities": [
     "public.aws_is_mortgage_ops_agent()",
     "public.aws_mortgage_agent_queue_visible(text, uuid)",
     "public.aws_is_active_mortgage_agent(uuid)"
   ],
   "expected_live_definition_sha256": null,
-  "intended_replacement_sha256": "4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e",
+  "intended_replacement_sha256": "52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777",
   "authorization_phrase": "APPLY_MORTGAGE_DESK_LIVE_ACCESS",
   "predecessors": [
     "sql90"
@@ -57,11 +57,11 @@
     "already_applied": null,
     "apply_preconditions_met": null,
     "precondition_failures": null,
-    "note": "Pending: no SQL 100 production inspect has been run. Run scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs --inspect (read-only) and, for the detail behind it, scripts/deployment-guard/mortgage-desk-access-production-inspect.mjs (now also reporting function EXECUTE grants with grantors, policy comment presence and sha256, and column ACL grantors). Production is recorded when already_applied is true (live_definition_sha256 equals intended_replacement_sha256) and precondition_failures is []. If live_definition_sha256 differs (for example a helper with EXECUTE granted beyond PUBLIC and the owner, a grant whose grantor is not checksops_admin, or a commented policy), SQL 100 does not record production: stop and reconcile the file in a reviewed change. Never set execute true to make production match SQL 100."
+    "note": "Run 2026-10-17 at source commit 969e2b2b1 (SSM 24b9f38c-d721-4b82-b3a5-056c6c84d37a, read-only, checksops_admin): live_definition_sha256 52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777, then not the intended 4a9e9b26... because the file assumed the default helper EXECUTE ACL and no policy comment; precondition_failures predecessors_applied (SQL 90 not applied), function_acl_replaceable, production_state_already_intended. The file was reconciled in a reviewed change (the live EXECUTE grants; the SQL 39 comment on aws_update_mortgage_ops_accept_complete, sha256 equal to the live 34ef5bf7...); its intended fingerprint is now that live value. status stays pending until a re-run at the merged commit shows already_applied true; predecessors_applied stays false until SQL 90 is applied. Never set execute true to make production match SQL 100."
   },
   "intended_post_state": {
-    "fingerprint": "4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e",
-    "note": "The five live policies on public.mortgage_handling_requests (no comments), aws_write_mortgage_handling_requests absent; the helpers aws_is_mortgage_ops_agent(), aws_mortgage_agent_queue_visible(text, uuid) and aws_is_active_mortgage_agent(uuid) (SECURITY DEFINER, sql, STABLE, row_security off, search_path public; prosrc sha256 787bad58…, b9f70c8b…, 2bba15b2…, the 2026-10-17 production inspect values) with the default EXECUTE ACL (PUBLIC and the owner); checksops table SELECT, INSERT, DELETE and column UPDATE on 17 columns, authenticated column UPDATE on accepted_at, assigned_employee_id, completed_at only, every entry granted by the owner. The fingerprint is releaseIntendedHash('sql100', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e."
+    "fingerprint": "52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777",
+    "note": "The five live policies on public.mortgage_handling_requests (only aws_update_mortgage_ops_accept_complete commented, with SQL 39's text, sha256 34ef5bf7...), aws_write_mortgage_handling_requests absent; the helpers aws_is_mortgage_ops_agent(), aws_mortgage_agent_queue_visible(text, uuid) and aws_is_active_mortgage_agent(uuid) (SECURITY DEFINER, sql, STABLE, row_security off, search_path public; prosrc sha256 787bad58…, b9f70c8b…, 2bba15b2…, the 2026-10-17 production inspect values) with the live EXECUTE grants (aws_is_mortgage_ops_agent: authenticated, checksops; aws_mortgage_agent_queue_visible: PUBLIC, checksops; aws_is_active_mortgage_agent: PUBLIC, authenticated, checksops; plus the owner); checksops table SELECT, INSERT, DELETE and column UPDATE on 17 columns, authenticated column UPDATE on accepted_at, assigned_employee_id, completed_at only, every entry granted by the owner. The fingerprint is releaseIntendedHash('sql100', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777. Equal to production's live fingerprint in the 2026-10-17 inspect at 969e2b2b1."
   },
   "staging_acceptance": {
     "ok": false,

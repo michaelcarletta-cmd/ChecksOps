@@ -81,6 +81,11 @@ const PRODUCTION = Object.freeze({
       with_check: "(public.aws_is_mortgage_ops_agent() AND (assigned_employee_id = auth.uid()) AND (status = ANY (ARRAY['in_progress'::text, 'completed'::text, 'cancelled'::text])) AND (((status = 'in_progress'::text) AND (accepted_at IS NOT NULL)) OR (status = ANY (ARRAY['completed'::text, 'cancelled'::text]))))",
     },
   },
+  // Policy comment sha256 (the 2026-10-17 inspect at 969e2b2b1): only the Accept / Complete
+  // policy has one, SQL 39's text.
+  policy_comments: {
+    aws_update_mortgage_ops_accept_complete: '34ef5bf77e463d6ee683477d160b50ff9fd7bab6383d8802082a8d1605b61301',
+  },
   grants: {
     checksops: {
       table: ['DELETE', 'INSERT', 'SELECT'],
@@ -93,16 +98,22 @@ const PRODUCTION = Object.freeze({
   functions: {
     'public.aws_is_mortgage_ops_agent': {
       signature: 'public.aws_is_mortgage_ops_agent()',
+      // Live EXECUTE grantees besides the owner (2026-10-17 inspect at 969e2b2b1), all granted by the owner.
+      execute: ['authenticated', 'checksops'],
       prosrc_sha256: '787bad580adace93c661f60d4486e6623fbd4c6004c8e42b38e3bb9c0ff957ba',
       functiondef_sha256: '9a0fd53811d4bfaf8f06fe530eddea5b9c6b3fb69d8371d5608b0a8b2635b007',
     },
     'public.aws_mortgage_agent_queue_visible': {
       signature: 'public.aws_mortgage_agent_queue_visible(p_status text, p_assigned_employee_id uuid)',
+      // Live EXECUTE grantees besides the owner (2026-10-17 inspect at 969e2b2b1), all granted by the owner.
+      execute: ['PUBLIC', 'checksops'],
       prosrc_sha256: 'b9f70c8b1421f264b4537d4eac9e7ad18f81281648a33197b55aa826ff6b6711',
       functiondef_sha256: 'e8012bab7455679ba9a53341cd679b063cc6d7b9df977a35d5d92933b34bc6d2',
     },
     'public.aws_is_active_mortgage_agent': {
       signature: 'public.aws_is_active_mortgage_agent(_user_id uuid)',
+      // Live EXECUTE grantees besides the owner (2026-10-17 inspect at 969e2b2b1), all granted by the owner.
+      execute: ['PUBLIC', 'authenticated', 'checksops'],
       // The inspect's live value starts 2bba15b2 and equals the SQL 47 test fixture's body.
       prosrc_sha256: '2bba15b20b7e43c60fadf7032e834ec1937183af865d14ab1985a5bdd4f12117',
       functiondef_sha256: 'd8846afb599babf83e5657ec63e54a7cd8a6e950bec96096ab5925972b37c98b',
@@ -310,8 +321,11 @@ test('PostgreSQL 16: the repository plus SQL 100 reproduces production Mortgage 
     }
     assert.deepEqual(g.checksops.column_acl_entries.map((e) => e.column), PRODUCTION.grants.checksops.column_update);
     assert.deepEqual(g.authenticated.column_acl_entries.map((e) => e.column), PRODUCTION.grants.authenticated.column_update);
-    // ... and no policy comment (DROP POLICY + CREATE POLICY would lose one).
-    for (const p of mhr.policies) assert.deepEqual(p.comment, { present: false, sha256: null }, p.policy);
+    // ... and production's policy comments: only the Accept / Complete policy has one.
+    for (const p of mhr.policies) {
+      const want = PRODUCTION.policy_comments[p.policy] || null;
+      assert.deepEqual(p.comment, { present: want !== null, sha256: want }, p.policy);
+    }
 
     // Helpers: prosrc hash equal to production's, SECURITY DEFINER sql STABLE, row_security + search_path.
     const fnReport = (key) => (report.functions[key] || report.policy_dependency_functions[key]);
@@ -333,14 +347,12 @@ test('PostgreSQL 16: the repository plus SQL 100 reproduces production Mortgage 
       assert.ok(f.matched_kinds.includes('aws_sql'), key);
       // pg_get_functiondef (attributes and SET values included): confirmed equal to the production inspect output.
       assert.equal(f.functiondef_sha256, want.functiondef_sha256, key);
-      // EXECUTE: SQL 100 grants and revokes nothing on its helpers, so a function it creates has the
-      // default ACL (PUBLIC and the owner, granted by the owner).
-      assert.equal(f.execute_acl_default, true, key);
-      assert.equal(f.public_execute, true, key);
-      assert.deepEqual(f.execute_acl, [
-        { grantee: 'PUBLIC', privilege: 'EXECUTE', grantable: false, grantor: 'checksops_admin' },
-        { grantee: 'checksops_admin', privilege: 'EXECUTE', grantable: false, grantor: 'checksops_admin' },
-      ], key);
+      // EXECUTE: production's grants, every entry granted by the owner.
+      assert.equal(f.execute_acl_default, false, key);
+      assert.equal(f.public_execute, want.execute.includes('PUBLIC'), key);
+      const byGrantee = (a, b) => (a.grantee < b.grantee ? -1 : a.grantee > b.grantee ? 1 : 0);
+      assert.deepEqual([...f.execute_acl].sort(byGrantee), [...want.execute, 'checksops_admin']
+        .map((grantee) => ({ grantee, privilege: 'EXECUTE', grantable: false, grantor: 'checksops_admin' })).sort(byGrantee), key);
     }
     assert.deepEqual(mhr.policies.find((p) => p.policy === 'aws_select_mortgage_ops_agent_queue').depends_on_functions,
       ['public.aws_is_mortgage_ops_agent']);
