@@ -54,6 +54,17 @@ export function buildMortgageDeskCompletedMessage(
   return `✅ ChecksOps Mortgage Desk completed work with ${mortgageCompany || "the mortgage company"}.${notes ? ` Notes: ${notes}` : ""}`;
 }
 
+/**
+ * Whether the Mortgage Desk client posts the completed-work note and the
+ * return marker itself after completing a request. On the AWS backend the
+ * database does it (SQL 99 trigger, as the assigned agent; agents have no
+ * check_messages write policy there). The Supabase backend keeps the
+ * client-side posts.
+ */
+export function mortgageDeskCompletionPostedByClient(usesAwsBackend: boolean): boolean {
+  return !usesAwsBackend;
+}
+
 export function buildReturnMessage(requestId: string): string {
   return `${MORTGAGE_DESK_RETURN_PREFIX}${requestId} ${MORTGAGE_DESK_RETURN_MESSAGE}`;
 }
