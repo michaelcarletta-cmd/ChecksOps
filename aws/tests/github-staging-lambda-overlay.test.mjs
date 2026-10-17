@@ -508,14 +508,22 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
     else assert.equal(record.evidence, null, file);
     assert.ok(fs.existsSync(new URL(`../../${file}`, import.meta.url)), file);
   }
-  // Not applied in staging or production yet (production-api-overlay-plan.json sql_prerequisites).
-  for (const n of ['90_users_only_tenant_roles', '91_moov_onboarding', '93_tenant_company_info', '94_document_library_restore', '98_tenant_fee_collection']) {
+  // Not applied in staging yet (release 2026-10-17 waves 2 and 3).
+  for (const n of ['94_document_library_restore', '98_tenant_fee_collection']) {
     assert.equal(STAGING_SQL.sql[`aws/workflows/sql/${n}.sql`].verified_live, false, n);
   }
-  // Staging is never ahead of the record it claims: a SQL recorded live in production with a
-  // staging acceptance is the only kind recorded true here.
+  // A SQL recorded true here is either recorded live in production (with its staging acceptance)
+  // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and
+  // a receipt that ended on the pin's intended fingerprint. It is never production's record.
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) {
-    if (record.verified_live) assert.equal(PLAN.sql_prerequisites[file]?.verified_live, true, file);
+    if (!record.verified_live || PLAN.sql_prerequisites[file]?.verified_live === true) continue;
+    assert.match(record.evidence, /^Guarded staging SQL executor apply of [a-z0-9-]+ on \d{4}-\d{2}-\d{2} \(run [0-9]{11},/, file);
+    assert.match(record.evidence, /= the pin's intended_replacement_sha256/, file);
+    assert.notEqual(PLAN.sql_prerequisites[file]?.verified_live, true, file);
+  }
+  // Production's record is unchanged by staging: SQL 90-98 stay not live there.
+  for (const n of ['90_users_only_tenant_roles', '91_moov_onboarding', '93_tenant_company_info', '94_document_library_restore', '98_tenant_fee_collection']) {
+    assert.notEqual(PLAN.sql_prerequisites[`aws/workflows/sql/${n}.sql`]?.verified_live, true, n);
   }
 });
 
