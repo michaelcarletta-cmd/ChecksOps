@@ -558,7 +558,7 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   }
 });
 
-test('fee collection: seven members on the fee manifest, collection-v2 then destination then billing, held for SQL 98', async () => {
+test('fee collection: eight members on the fee manifest, collection-v2 then destination then invoice email then billing, held for SQL 98', async () => {
   const MANIFEST_FEES = 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json';
   const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
   const SQL96 = 'aws/workflows/sql/96_platform_owner_tenant_pricing.sql';
@@ -567,16 +567,17 @@ test('fee collection: seven members on the fee manifest, collection-v2 then dest
   const DESTINATION = 'tenant-billing-destination.mjs';
   const ENGINE = 'tenant-billing-engine.mjs';
   const HANDLERS = 'tenant-billing-handlers.mjs';
+  const INVOICE_EMAIL = 'tenant-fee-invoice-email.mjs';
   const fees = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_FEES), 'utf8'));
   const release = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_RELEASE), 'utf8'));
   assert.equal(fees.deploy_authorized, false);
 
   const superseded = ['providers/parity/moov-functions.mjs', 'providers/parity/moov-money.mjs', 'providers/catalog.mjs', ENGINE, HANDLERS];
-  assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION].sort());
+  assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION, INVOICE_EMAIL].sort());
   for (const member of Object.keys(fees.members)) {
     const row = PLAN.members[member];
     assert.equal(row.manifest, MANIFEST_FEES, member);
-    assert.equal(row.operation, 'replace', member);
+    assert.equal(row.operation, member === INVOICE_EMAIL ? 'add' : 'replace', member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
@@ -599,8 +600,24 @@ test('fee collection: seven members on the fee manifest, collection-v2 then dest
   // Order: collection-v2 (PRODUCTION_FEE_DESTINATION, bankOnly) -> destination -> engine -> handlers.
   const at = (name) => PLAN.order.indexOf(name);
   assert.ok(at(COLLECTION) >= 0 && at(COLLECTION) < at(DESTINATION));
-  assert.ok(at(DESTINATION) < at(ENGINE) && at(ENGINE) < at(HANDLERS));
+  assert.ok(at(DESTINATION) < at(INVOICE_EMAIL) && at(INVOICE_EMAIL) < at(ENGINE) && at(ENGINE) < at(HANDLERS));
   assert.ok(localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes(COLLECTION));
+  // The invoice email module is new (ADD), imports the destination and is imported by the engine.
+  assert.equal(PLAN.members[INVOICE_EMAIL].expected_live_sha256, null);
+  assert.equal(PLAN.members[INVOICE_EMAIL].sql_before, null);
+  assert.ok(localImports(fs.readFileSync(path.join(API, INVOICE_EMAIL), 'utf8'), INVOICE_EMAIL).includes(DESTINATION));
+  assert.ok(localImports(fs.readFileSync(path.join(API, ENGINE), 'utf8'), ENGINE).includes(INVOICE_EMAIL));
+  // Its email imports are names the live bundle already exports (email.mjs, email-layout.mjs and
+  // email-policy.mjs are not members; email-branding.mjs is planned earlier).
+  for (const dep of ['email.mjs', 'email-layout.mjs', 'email-policy.mjs']) assert.ok(!PLAN.order.includes(dep), dep);
+  assert.ok(at('email-branding.mjs') >= 0 && at('email-branding.mjs') < at(INVOICE_EMAIL));
+  const invoiceApply = await run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL).deps);
+  assert.equal(invoiceApply.mutation, false);
+  await assert.rejects(
+    run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL, { sources: { 'email.mjs': 'export const handleSendEmail = async () => ({});\n' } }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION
+      && error.details.problems.some((row) => row === 'email.mjs does not export sendViaSesOrSink'),
+  );
   assert.deepEqual(PLAN.order.slice(-2), ['providers/production/moov-send.mjs', 'providers.mjs']);
 
   // SQL 98 holds the billing members; it is a pending pin (SQL 98 itself requires SQL 96).

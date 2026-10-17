@@ -26,7 +26,7 @@ live bytes that main never carried. No lock component contains a file this branc
 
 ## 2. Overlay plan (`ops/deployment-guard/production-api-overlay-plan.json`)
 
-Seven members take the branch bytes under `aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json`.
+Eight members take the branch bytes under `aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json`.
 Planning only: `deploy_authorized` is false and nothing is live or verified.
 
 | Member (under `aws/functions/api/`) | expected live | accepted (branch) | sql_before | Live provenance |
@@ -34,13 +34,18 @@ Planning only: `deploy_authorized` is false and nothing is live or verified.
 | `providers/parity/moov-functions.mjs` | `2dff151e…` | `dc20078ad6ea80841c35bc6c06797c00fd97e4fb57d3527d72048e87536460b8` | – | release manifest (unapplied) |
 | `providers/parity/moov-money.mjs` | `1cd405ca…` | `0ac52dbde62187d8e93ba229b0f5e4fa3428e84c7f3ba6538c4202242ca68e98` | – | release manifest (unapplied) |
 | `providers/catalog.mjs` | `ae788992…` | `5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9` | – | release manifest (unapplied) |
-| `tenant-collection-v2.mjs` (new member) | `8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66` | `4be03294ca832de29e57b51958d00681568601b1d8c533776a22d5538d5fa3c9` | – | 2026-10-11 snapshot `f78e16d99` |
-| `tenant-billing-destination.mjs` (new member) | `7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80` | `44c6525c8f6d9216f7f41abc28ae9582ccaa5ee21506c3ba93f49f51881f768d` | – | 2026-10-11 snapshot (= main) |
-| `tenant-billing-engine.mjs` | `65b75735…` | `a823c7c1177475668713900d6fc4f34909f6148f728d5f1fe3421929c012a6ee` | SQL 98 (was 96) | release manifest (unapplied) |
-| `tenant-billing-handlers.mjs` | `8aeb8b7f…` | `411eafae4422dad748ca294d9c1cc3b3d21a1c5ddb3ec0c389ebd329131da377` | SQL 98 (was 96) | release manifest (unapplied) |
+| `tenant-collection-v2.mjs` (new member) | `8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66` | `6b4a415fe38a49243f31a2ab9495ab72bc62e1f1e69afae37c48d67147e2a20a` | – | 2026-10-11 snapshot `f78e16d99` |
+| `tenant-billing-destination.mjs` (new member) | `7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80` | `dce1f7eb0e461fb70e41748952a9e915ce15a828ae14a86f819d36355ac19e69` | – | 2026-10-11 snapshot (= main) |
+| `tenant-fee-invoice-email.mjs` (new file, ADD) | – (absent) | `fedc59335cef47c6bd353b38967dbf815f2931bc9308e4aac41664267b5e1374` | – | not in the live bundle or main |
+| `tenant-billing-engine.mjs` | `65b75735…` | `c8f92ca63d994d38ae5e829580b0292951c22b7558fbc6f6f6f186c31bacbd0b` | SQL 98 (was 96) | release manifest (unapplied) |
+| `tenant-billing-handlers.mjs` | `8aeb8b7f…` | `c4a0841518ed05d5bcf35358873622d5c4fc4ec9d087f214ba104697b5de09c7` | SQL 98 (was 96) | release manifest (unapplied) |
 
-Order: `tenant-collection-v2.mjs` and `tenant-billing-destination.mjs` go just before `tenant-billing-engine.mjs`
-(they are also added to the `guarded-production-lambda-overlay.yml` member choices). The parity files and
+Order: `tenant-collection-v2.mjs`, `tenant-billing-destination.mjs` and the new `tenant-fee-invoice-email.mjs` go
+just before `tenant-billing-engine.mjs`, in that order (they are also added to the
+`guarded-production-lambda-overlay.yml` member choices). The invoice email module imports the destination file
+(and, from the live bundle, `email.mjs` `sendViaSesOrSink`, `email-layout.mjs` `renderChecksOpsEmail`,
+`email-policy.mjs` `normalizeEmail`, plus `email-branding.mjs`, which is planned earlier), and the engine imports
+it, so it must be live before the engine. The parity files and
 `providers/catalog.mjs` keep their places. `providers/production/moov-send.mjs` and `providers.mjs` stay last.
 
 - `tenant-collection-v2.mjs` must go before the engine. It holds `PRODUCTION_FEE_DESTINATION` (which the new
@@ -64,7 +69,7 @@ are still exported. The scheduler now refuses. `chargeTenantPeriod` requires a p
 
 | SQL file | source_sha256 (branch) | Authoring commit |
 |---|---|---|
-| `aws/workflows/sql/98_tenant_fee_collection.sql` | `668b072048494bff275ac2b803dfb1d2252f5cfc393591e97ff85478039e71e9` | `0d7917b9601de1fe8d5d1ff337cd23e0134443ce` |
+| `aws/workflows/sql/98_tenant_fee_collection.sql` | `7db0fe4939f1faa2e9967f608aafad95b61bf6bac5bc1fcbca545a8d37117e29` | `2014129d3265b284c6236012484e3649a332634f` |
 
 The number is 98, the next free one (main ends at 97). It is pinned as pending:
 - `ops/deployment-guard/sql98-tenant-fee-collection-production-apply.json`: `authorization: pending`,
@@ -121,24 +126,63 @@ Production also refuses before booking:
 
 `AWS_MOOV_MONTHLY_BILLING_SIMULATE` can no longer make production book a simulated charge.
 
-## 6. Open owner questions (isolated defaults; behavior unchanged until answered)
+New: `AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED` (invoice email after a pull). `true` / `false` win; unset means
+**on** everywhere except the production runtime and **off on production** until the owner sets it to `true`.
+It is in no template (a test keeps it out). Delivery still follows `email-policy.mjs` (`AWS_EMAIL_MODE`, sink by
+default, allowlist in SES mode).
 
-- **(a) Fee destination: platform Moov wallet or a bank account, and which platform Moov account?**
-  The one place is `aws/functions/api/tenant-collection-v2.mjs` `PRODUCTION_FEE_DESTINATION`. Default:
-  `kind: 'platform_moov_wallet'`, account `41cb5d67-4911-4bef-aad5-d8ee9c582208`, wallet payment method
-  `c70a90f2-9bcc-4084-8263-d5a0fb5d806c`, `ownerConfirmed: false`. These were identified read-only from tenant
-  wallet `partnerAccountID` values, not confirmed by the owner. `assertExplicitDestination` and the
-  destination pins both read this object. Sandbox stays pinned to the ChecksOps sandbox merchant
+## 6. Owner questions (answered on PR #1017, 2026-10-17)
+
+- **(a) Fee destination: ANSWERED, owner-confirmed.** The platform Moov wallet in platform Moov account
+  `41cb5d67-4911-4bef-aad5-d8ee9c582208`. `tenant-collection-v2.mjs` `PRODUCTION_FEE_DESTINATION` already
+  pinned exactly that account (`CHECKSOPS_PLATFORM_ACCOUNT_ID`); it is now `ownerConfirmed: true`
+  (`ownerConfirmedAt: '2026-10-17'`). No id changed. The wallet payment method id
+  `c70a90f2-9bcc-4084-8263-d5a0fb5d806c` was not part of the answer and stays `paymentMethodOwnerConfirmed: false`
+  (the destination status reports both). Sandbox stays pinned to the ChecksOps sandbox merchant
   `36b79957-ce7a-4ca7-a68f-30986c9e47bb`.
-- **(b) Does per-check billing "off" mean no per-check fee?** Default: no. Off still bills the
-  `check_billing_config` default per deposited check (the Supabase behavior); "on" only means the tenant's own
-  rate is used. The switches are `public.aws_check_billing_charges_when_per_check_off()` in SQL 98 (returns
-  `true`), which decides the stamped price, and `PER_CHECK_OFF_BILLS_DEFAULT_PRICE` in
-  `tenant-billing-engine.mjs`, which mirrors it for display. Change both together.
-- **(c) Should the invoice email come back?** Default: no. `INVOICE_EMAIL_AFTER_PULL = false` in
-  `tenant-billing-engine.mjs`, and the pull reports `invoice_email_sent: false`. The retired
-  `moov-tenant-fee-charge` emailed one through Supabase `send-transactional-email`; no AWS invoice sender is
-  wired, so turning this on needs that sender first.
+- **(b) Per-check billing switched off: ANSWERED, NOT IMPLEMENTED: needs an owner decision on existing data.**
+  Owner rule: off means the tenant cannot make deposits and is never charged a per-check fee. Finding:
+  `tenants.per_check_billing_enabled` was added as `BOOLEAN DEFAULT false`
+  (`supabase/migrations/20260605162924_*.sql`), so every tenant that existed then is `false` (not null), and every
+  tenant created since is `false` unless the owner turned it on. SQL 96 does not change the column or its
+  default. `false` has meant "bill the `check_billing_config` default price" (the Supabase trigger, and SQL 98
+  today), and `CheckUsageCard.tsx` uses `true` to mean "show per-check amounts to the tenant". A gate on `false`
+  would stop deposits for practically every tenant, and "off = no fee" would make them all free. "Treat null as
+  on" does not help, because the values are `false`, and a backfill is out of scope. Behavior is unchanged: the
+  SQL 98 switch `aws_check_billing_charges_when_per_check_off()` (true) and `PER_CHECK_OFF_BILLS_DEFAULT_PRICE`
+  stay, and no deposit path is gated yet. Options for the owner:
+  1. an owner-approved data change that sets existing tenants to `true` and changes the column default to `true`,
+     then the gate and no-fee rule as specified (SQL 96 column, no new state);
+  2. a separate, explicit owner-only "deposits enabled" switch, with per-check billing off still meaning the
+     default price;
+  3. treat only an explicit owner switch-off recorded in `tenant_pricing_audit` as "off" (no data change, but a
+     legacy `false` tenant cannot be switched off with one save, because the setter audits only changes).
+  The gate is ready to place once decided: every deposit-creating path goes through two server choke points,
+  `providers.mjs` `handleFunctionInvoke` (`checkalt-submit-deposit`, `checkalt-approve-deposit` action
+  `approve`, production and sandbox, before any provider call) and `workflow-rpc.mjs` `deposit_action`
+  (`prepare_deposit`, `assign_provider`, `mark_manual_deposit`). Generic `/data/write` cannot set `status`,
+  `deposited_at` or deposit tables, admin override to `deposited` is disabled, and the deposit cron is off. A
+  database backstop on INSERT into `checkalt_deposits` / `deposit_items` would cover any other writer.
+- **(c) Invoice email after a pull: ANSWERED yes, built** (`aws/functions/api/tenant-fee-invoice-email.mjs`).
+  - When: only after a pull whose ACH debit was submitted. Never on a preview, refusal, mismatch, duplicate pull
+    or the $1 verification.
+  - Once: keyed on the charge (`fee-invoice:<tenant_maintenance_payments.id>`). A `sent` / `sunk` outcome is an
+    `invoice_email` row in `platform_billing_audit`, and SQL 98's unique index
+    `platform_billing_audit_invoice_email_once_uidx` allows one per charge. It is also logged in `email_send_log`
+    with the same key and the usual statuses.
+  - How: the existing AWS path, `sendViaSesOrSink` (SES, or the staging sink / allowlist), from the ChecksOps
+    address (`platformBranding`), with the tenant's name and logo (`resolveEmailBranding`) in the shared
+    ChecksOps layout.
+  - Recipient: the member who authorized the ACH debit (`tenant_billing_accounts.ach_authorized_by` →
+    `identity_accounts.email`), the billing contact who consented to the charge. Fallback is
+    `tenants.company_email` (SQL 93). Users-only roles (SQL 90) mean there is no owner role to choose.
+  - Contents: tenant name, period, date, booked lines, total, and the last four digits of the account. No
+    account, routing or provider ids, and no other personal data.
+  - Failure isolation: everything runs inside a savepoint, so a failed email never fails or rolls back the
+    pull. The failure is audited (`failed` / `no_recipient`), and the platform owner can resend
+    (`tenant-billing-admin` `invoice-resend`, the SPA's "Resend invoice email"), still at most once per charge.
+  - Limit: the email goes out before the pull's transaction commits. If the commit itself then fails, the
+    charge is rolled back but the email was sent.
 
 Also still open (from the earlier review): **live RLS for the pull's writes.** On staging,
 `tenant_maintenance_payments`, `payment_transfers` and `check_billing_events` write policies were reconciled

@@ -8,8 +8,8 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/98_tenant_fee_collection.sql",
   "migration_id": "98_tenant_fee_collection",
-  "staging_pin_commit": "0d7917b9601de1fe8d5d1ff337cd23e0134443ce",
-  "source_sha256": "668b072048494bff275ac2b803dfb1d2252f5cfc393591e97ff85478039e71e9",
+  "staging_pin_commit": "2014129d3265b284c6236012484e3649a332634f",
+  "source_sha256": "7db0fe4939f1faa2e9967f608aafad95b61bf6bac5bc1fcbca545a8d37117e29",
   "function_identities": [
     "public.aws_check_billing_default_price_cents()",
     "public.aws_check_billing_charges_when_per_check_off()",
@@ -48,7 +48,7 @@
   },
   "intended_post_state": {
     "fingerprint": null,
-    "note": "check_processing events stamped once per check at the tenant per-check rate or the check_billing_config default (owner question (b) switch aws_check_billing_charges_when_per_check_off() true); one tenant_maintenance_payments row per (tenant_id, billing_period); platform_billing_destination readable and writable by the platform owner only, audited; append-only platform_billing_audit written only by aws_platform_owner_record_billing_audit(jsonb) and the destination trigger. The fingerprint is defined by the SQL 98 tooling (pending)."
+    "note": "check_processing events stamped once per check at the tenant per-check rate or the check_billing_config default (owner question (b) switch aws_check_billing_charges_when_per_check_off() true); one tenant_maintenance_payments row per (tenant_id, billing_period); platform_billing_destination readable and writable by the platform owner only, audited; append-only platform_billing_audit (events pull, verify_debit, destination_set, invoice_email; at most one sent/sunk invoice_email per charge) written only by aws_platform_owner_record_billing_audit(jsonb) and the destination trigger. The fingerprint is defined by the SQL 98 tooling (pending)."
   },
   "staging_acceptance": {
     "ok": false,

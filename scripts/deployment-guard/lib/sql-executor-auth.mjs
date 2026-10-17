@@ -2166,8 +2166,8 @@ export const AUTHORIZED_SQL98_TENANT_FEE_COLLECTION = Object.freeze({
   filename: 'aws/workflows/sql/98_tenant_fee_collection.sql',
   migration_id: '98_tenant_fee_collection',
   // The commit that last authored the file bytes on claude/fee-collection-fixes.
-  commit: '0d7917b9601de1fe8d5d1ff337cd23e0134443ce',
-  source_sha256: '668b072048494bff275ac2b803dfb1d2252f5cfc393591e97ff85478039e71e9',
+  commit: '2014129d3265b284c6236012484e3649a332634f',
+  source_sha256: '7db0fe4939f1faa2e9967f608aafad95b61bf6bac5bc1fcbca545a8d37117e29',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
