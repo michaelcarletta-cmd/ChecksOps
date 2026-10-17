@@ -1,0 +1,64 @@
+{
+  "id": "production-sql53-iam-cleanup-apply",
+  "authorization": "owner-authorized-one-statement-oidc-trust-removal",
+  "iam_cleanup_verified": false,
+  "apply_executed": false,
+  "update_assume_role_policy_called": false,
+  "lambda_modified": false,
+  "sql_modified": false,
+  "production_configuration_modified": false,
+  "permissions_modified": false,
+  "other_roles_modified": false,
+  "staging_broadened": false,
+  "access_denied_bypassed": false,
+  "inspected_at": "2026-10-11T09:42:00Z",
+  "role_name": "ChecksOpsProductionSql53ConfigWriter",
+  "stop_reason": "AUTHORIZED_ADMINISTRATOR_UNAVAILABLE",
+  "identity_only": {
+    "ok": false,
+    "code": "PRODUCTION_APPROVAL_REQUIRED",
+    "message": "SQL53 OIDC trust cleanup could not verify the Identity Center administrator",
+    "apply_executed": false,
+    "arn_class": "unavailable"
+  },
+  "available_identities": {
+    "injected_default_aws": "invalid_or_unusable",
+    "cursor_assume_role": "ChecksOpsCursorCloudStaging",
+    "writer_session": "expired",
+    "identity_center_administrator_access": "unavailable",
+    "sso_config": false,
+    "sso_secrets": false
+  },
+  "live_trust_read": "not_attempted_without_administrator_session",
+  "before": null,
+  "after": null,
+  "comparison": {
+    "added": [],
+    "removed": [],
+    "unchanged": [],
+    "only_intended_statement_would_change": null,
+    "note": "Live trust was not read. Official cleanup stops before GetRole or update-assume-role-policy unless the caller is AWSReservedSSO_AdministratorAccess."
+  },
+  "intended_removed_statement": {
+    "Sid": "AllowOwnerCursorCloudOidcFingerprintOnly",
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "api.cursor.com:aud": "sts.amazonaws.com",
+        "api.cursor.com:sub": "user:325724407"
+      }
+    }
+  },
+  "required_apply_identity": "arn:aws:sts::806168576068:assumed-role/AWSReservedSSO_AdministratorAccess_<suffix>/<session>",
+  "official_command_when_admin_present": "CHECKSOPS_SQL53_OIDC_TRUST_CLEANUP=1 node scripts/deployment-guard/sql53-config-writer-trust-cleanup.mjs --apply",
+  "do_not": [
+    "use ChecksOpsCursorCloudStaging or ChecksOpsProductionSql53ConfigWriter to update IAM",
+    "bypass AccessDenied",
+    "broaden permissions",
+    "modify Lambda, SQL, or production configuration"
+  ]
+}
