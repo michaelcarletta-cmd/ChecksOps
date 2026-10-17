@@ -158,3 +158,19 @@ S3, Secrets Manager, RDS, or SQL. AWS IAM cannot constrain
 `UpdateFunctionConfiguration` to particular environment-variable keys; the
 dedicated identity, signed receipt, live drift checks, two-key writer logic,
 and cleanup verification are therefore all mandatory.
+
+## Live readiness after PR #861 (evaluate-only)
+
+The deployed overlay is authoritative for execute. Live
+`CHECKSOPS_ENV=production-prep` and the live inspect member accepts
+`production` or `production-prep`. Do not replace live `index.mjs` with
+origin/main. The two SQL53 authorization environment keys must remain
+unset until a later guarded apply.
+
+`ChecksOpsCursorCloudStaging` cannot `iam:GetRole` on
+`ChecksOpsProductionSql53ConfigWriter` or on known-existing roles. Role
+existence and the three required Lambda permissions therefore remain
+unverified from Cursor staging. Do not broaden that staging role. Official
+`--fingerprint-only` and apply both require an assumed-role session of
+`ChecksOpsProductionSql53ConfigWriter`. See
+`ops/deployment-guard/production-sql53-inspect-prereq.json`.
