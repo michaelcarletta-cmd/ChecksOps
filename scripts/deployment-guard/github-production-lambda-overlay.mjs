@@ -89,15 +89,26 @@ export function localImports(source, fromMember = '') {
   return [...found].sort();
 }
 
-/** Named imports from relative modules, resolved to ZIP member paths. */
+/**
+ * Named imports from relative modules, resolved to ZIP member paths: static
+ * `import { a } from './x.mjs'` and destructured dynamic
+ * `const { a } = await import('./x.mjs')` (a dropped name there fails at call
+ * time instead of link time, so it is refused the same way).
+ */
 export function namedImports(source, fromMember = '') {
   const dir = path.posix.dirname(fromMember);
   const out = [];
-  const re = /import\s*\{([^}]*)\}\s*from\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]/g;
-  let match;
-  while ((match = re.exec(source))) {
-    const names = match[1].split(',').map((part) => part.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
-    out.push({ module: path.posix.normalize(path.posix.join(dir, match[2])), names });
+  const patterns = [
+    { re: /import\s*\{([^}]*)\}\s*from\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]/g, split: /\s+as\s+/ },
+    { re: /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*await\s+import\(\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]\s*\)/g, split: /\s*:\s*/ },
+  ];
+  for (const { re, split } of patterns) {
+    let match;
+    while ((match = re.exec(source))) {
+      const names = match[1].split(',').map((part) => part.trim().split(split)[0].trim())
+        .filter((name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name));
+      out.push({ module: path.posix.normalize(path.posix.join(dir, match[2])), names });
+    }
   }
   return out;
 }

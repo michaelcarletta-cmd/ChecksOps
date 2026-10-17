@@ -225,6 +225,11 @@ export function safeErrorMessage(e: unknown, fallback = "Something went wrong.")
   return msg || fallback;
 }
 
+/** Server codes meaning onboarding is switched off on this deployment (not a failure). */
+export const ONBOARDING_UNAVAILABLE_CODES = Object.freeze(["production_execution_blocked", "provider_disabled"]);
+export const isOnboardingUnavailableCode = (code: string | null | undefined): boolean =>
+  !!code && (ONBOARDING_UNAVAILABLE_CODES as readonly string[]).includes(code);
+
 export class OnboardingApiError extends Error {
   code: string | null;
   status: number | null;

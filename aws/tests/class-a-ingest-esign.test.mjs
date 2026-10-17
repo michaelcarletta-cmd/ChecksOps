@@ -41,7 +41,13 @@ test('the retired Freedom Claims bridge routes are gone', async () => {
     // Not a class A route any more: the app-services dispatcher does not handle it.
     assert.equal(result, null, name);
   }
-  assert.equal(fs.existsSync(new URL('../functions/api/ingest-shared-check.mjs', import.meta.url)), false);
+  // Only a retired stub remains (for a live app-services.mjs during the overlay): 410, no SQL.
+  const stub = fs.readFileSync(new URL('../functions/api/ingest-shared-check.mjs', import.meta.url), 'utf8');
+  assert.match(stub, /RETIRED stub/);
+  assert.doesNotMatch(stub, /client\.query|SELECT|INSERT|UPDATE|S3Client|import /);
+  const { handleIngestSharedCheck, bridgeSecretMatches } = await import('../functions/api/ingest-shared-check.mjs');
+  assert.equal((await handleIngestSharedCheck({ headers: { 'x-bridge-secret': 'anything' } })).statusCode, 410);
+  assert.equal(bridgeSecretMatches({ headers: { 'x-bridge-secret': 'anything' } }), false);
 });
 
 test('e-sign adapter hashes tokens and stays on staging sign base', () => {

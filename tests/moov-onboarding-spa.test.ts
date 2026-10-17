@@ -22,6 +22,7 @@ import {
   redactSensitive,
   representativeFormFrom,
   resolveComplianceAccess,
+  isOnboardingUnavailableCode,
   safeErrorMessage,
   uploadOnboardingDocument,
   validateDocumentFile,
@@ -414,4 +415,14 @@ test("every call uses functions.invoke with the contract function names", async 
   await api.viewDocument("t", "d");
   await api.acceptTerms("t");
   assert.deepEqual(calls, ["moov-onboarding-get", "moov-onboarding-save", "moov-document-view", "moov-tos-accept"]);
+});
+
+test("Compliance tab: production onboarding switched off reads as not available yet, not an error", () => {
+  assert.equal(isOnboardingUnavailableCode("production_execution_blocked"), true);
+  assert.equal(isOnboardingUnavailableCode("provider_disabled"), true);
+  assert.equal(isOnboardingUnavailableCode("cross_tenant_denied"), false);
+  assert.equal(isOnboardingUnavailableCode(null), false);
+  const compliance = readFileSync(new URL("../src/components/settings/ComplianceSettings.tsx", import.meta.url), "utf8");
+  assert.match(compliance, /Payment account setup is not available yet/);
+  assert.match(compliance, /isOnboardingUnavailableCode\(code\)/);
 });

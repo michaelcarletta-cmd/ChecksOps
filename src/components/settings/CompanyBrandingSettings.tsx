@@ -256,7 +256,7 @@ export function CompanyBrandingSettings() {
               <Input
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Freedom Claims Adjusting"
+                placeholder="Your Company Name"
               />
             </div>
 

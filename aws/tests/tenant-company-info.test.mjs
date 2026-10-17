@@ -278,6 +278,9 @@ test('legacy tenant-company-branding-save is retired: 410, no database or handle
   assert.equal(res.statusCode, 410);
   assert.equal(res.error, 'route_retired');
   assert.equal(res.ok, false);
-  assert.equal('handleSaveTenantCompanyBranding' in tenantSettingsHandlers, false);
+  // Only the 410 compatibility shim remains for a live app-services.mjs during the overlay.
+  const shim = await tenantSettingsHandlers.handleSaveTenantCompanyBranding(event);
+  assert.equal(shim.statusCode, 410);
+  assert.equal(shim.error, 'route_retired');
   assert.equal('applyTenantCompanyBranding' in tenantSettingsHandlers, false);
 });

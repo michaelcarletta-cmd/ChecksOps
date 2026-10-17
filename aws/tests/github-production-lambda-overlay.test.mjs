@@ -541,3 +541,24 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     assert.equal(ahead.mutation, false, member);
   }
 });
+
+test('linkProblems refuses a member whose new bytes drop a name a live file imports (static or dynamic)', async () => {
+  const { linkProblems, namedImports } = await import('../../scripts/deployment-guard/github-production-lambda-overlay.mjs');
+  const live = {
+    'app-services.mjs': "import { handleA, handleB } from './x.mjs';\nexport const route = 1;\n",
+    'providers/caller-user.mjs': "export const go = async () => { const { isPlatformAdmin } = await import('../x.mjs'); return isPlatformAdmin; };\n",
+    'x.mjs': 'export const handleA = 1; export const handleB = 2; export const isPlatformAdmin = 3;\n',
+  };
+  // The new x.mjs keeps every name: links.
+  assert.deepEqual(linkProblems('x.mjs', 'export const handleA = 1; export const handleB = 2; export async function isPlatformAdmin() {}\n', live), []);
+  // Dropping a statically imported name is refused.
+  const dropStatic = linkProblems('x.mjs', 'export const handleA = 1; export const isPlatformAdmin = 3;\n', live);
+  assert.deepEqual(dropStatic, ['app-services.mjs imports handleB from x.mjs, which the new bytes drop']);
+  // Dropping a name a live file takes through a destructured dynamic import is refused too.
+  const dropDynamic = linkProblems('x.mjs', 'export const handleA = 1; export const handleB = 2;\n', live);
+  assert.deepEqual(dropDynamic, ['providers/caller-user.mjs imports isPlatformAdmin from x.mjs, which the new bytes drop']);
+  // The new member's own dynamic imports must exist in the live modules.
+  const forward = linkProblems('y.mjs', "export const f = async () => { const { missingName } = await import('./x.mjs'); };\n", live);
+  assert.deepEqual(forward, ['x.mjs does not export missingName']);
+  assert.deepEqual(namedImports("const { a, b: c } = await import('./z.mjs');", 'dir/m.mjs'), [{ module: 'dir/z.mjs', names: ['a', 'b'] }]);
+});

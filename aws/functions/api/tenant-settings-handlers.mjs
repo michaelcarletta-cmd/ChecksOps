@@ -321,3 +321,17 @@ const withSettingsWrite = (fn) => (event, deps = {}) => withIdentity(event, fn, 
 });
 
 export const handleSaveTenantBillingAccount = withSettingsWrite(runSaveTenantBillingAccount);
+
+/**
+ * Deprecated compatibility export (release 2026-10-17): the retired
+ * tenant-company-branding-save route. A live app-services.mjs from before this
+ * release still imports it; it answers 410 and writes nothing. The new
+ * app-services.mjs answers the route itself. Remove in a later release.
+ */
+export const handleSaveTenantCompanyBranding = async (event) => ({
+  ok: false,
+  statusCode: 410,
+  error: 'route_retired',
+  message: 'tenant-company-branding-save is retired. Save branding from Settings > Branding.',
+  spoofFieldsIgnored: ignoredSpoof(event, parseBody(event)),
+});

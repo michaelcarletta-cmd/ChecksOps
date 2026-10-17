@@ -37,6 +37,16 @@ export async function membershipsOf(client, userId) {
  * Platform owner by identity (public.is_platform_owner(): the checksopsadmin
  * email). A global user_roles admin is not the platform owner.
  */
+/**
+ * Deprecated compatibility export (release 2026-10-17) for live
+ * checkalt-functions.mjs / db.mjs from before users-only. It delegates to
+ * public.is_platform_owner(); user_roles admin is never read. `userId` is
+ * ignored. Remove once those files are overlaid.
+ */
+export async function isPlatformAdmin(client) {
+  return isPlatformOwner(client);
+}
+
 export async function isPlatformOwner(client) {
   try {
     const row = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];

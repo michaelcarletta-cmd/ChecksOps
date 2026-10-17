@@ -15,6 +15,14 @@
  * production money movement.
  */
 
+/**
+ * Deprecated compatibility export (release 2026-10-17): a live
+ * checkalt-authz.mjs from before users-only imports it. The new code does not
+ * use it (every tenant member is an equal user). Remove once every live
+ * importer is overlaid.
+ */
+export const FINANCIAL_ROLES = new Set(['owner', 'admin', 'manager']);
+
 export const FINANCIAL_OPERATIONS = {
   checkalt_deposit: {
     operation: 'checkalt_deposit',

@@ -251,7 +251,8 @@ test('the 43 columns are exactly the SET targets of the UPDATEs the API issues a
     assert.ok(!WRITE_ALLOWLIST.check_intake_items.columns.has(column), column);
   }
   // SQL 70's ingest was a prerequisite of the (applied) SQL 89 run; the API no longer calls it.
-  assert.equal(fs.existsSync(path.join(ROOT, 'aws/functions/api/ingest-shared-check.mjs')), false);
+  // Only a retired 410 stub remains (no SQL), kept for a live app-services.mjs during the overlay.
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'aws/functions/api/ingest-shared-check.mjs'), 'utf8'), /aws_ingest_shared_check|UPDATE public\./);
   assert.equal(STAGING_PIN.ingest_function, 'public.aws_ingest_shared_check(jsonb)');
 });
 

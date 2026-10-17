@@ -1,0 +1,4721 @@
+{
+  "base": "307417cbe0050db0d151a01b81bbc1eef53302da",
+  "generated_by": "release 2026-10-17 reverse-import fixture (static and destructured dynamic imports under aws/functions/api)",
+  "edges": [
+    {
+      "importer": "aws/functions/api/admin-override-check-status.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/admin-override-check-status.mjs",
+      "target": "aws/functions/api/tenant-check-user.mjs",
+      "names": [
+        "canMoveTenantChecks"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/admin-reset-totp.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/admin-reset-totp.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/admin-reset-totp.mjs",
+      "names": [
+        "handleAdminResetTotp"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/bill-mortgage-handling.mjs",
+      "names": [
+        "handleBillMortgageHandling"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/check-endorsement.mjs",
+      "names": [
+        "handleCheckEndorsement"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/check-reconciliation.mjs",
+      "names": [
+        "handleCheckReconciliation"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/documents.mjs",
+      "names": [
+        "handleCompositeEndorsementSignatures",
+        "handleContractsPdf",
+        "handleGenerateChecksopsDoc",
+        "handleGenerateDocument",
+        "handleGenerateEndorsementPacket",
+        "handleGenerateInvoice",
+        "handleGeneratePolDocx",
+        "handleRetryPdfGeneration"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/email-queue.mjs",
+      "names": [
+        "handleEmailSuppression",
+        "handleProcessEmailQueue",
+        "handleResendWebhook"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "handleEmailUnsubscribe",
+        "handleNotifyHomeownerLead",
+        "handleNotifyHomeownerLeadAccepted",
+        "handleNotifyMortgageHandlingRequest",
+        "handlePreviewTransactionalEmail",
+        "handleSendEmail",
+        "handleSendTransactionalEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/esign.mjs",
+      "names": [
+        "handleSendSignatureRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/homeowner-otp.mjs",
+      "names": [
+        "handleHomeownerUploadOtpStart",
+        "handleHomeownerUploadOtpVerify",
+        "handleHomeownerUploadSession"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/homeowner.mjs",
+      "names": [
+        "handleGetCheckImageUrls",
+        "handleHomeownerClaimPortal",
+        "handleHomeownerLedgerAttachUpload",
+        "handleHomeownerLedgerDocumentSignLink",
+        "handleHomeownerLedgerEndorseLink",
+        "handleHomeownerLedgerSend",
+        "handleHomeownerLedgerSignLink",
+        "handleHomeownerLedgerUpload",
+        "handleHomeownerLedgerView",
+        "handleHomeownerUploadCheck",
+        "handleLookupPartnerCodePublic",
+        "handlePublicContractorDirectory",
+        "handleSendFileToHomeowner",
+        "handleSendPortalInvite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/ingest-shared-check.mjs",
+      "names": [
+        "handleIngestSharedCheck"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/mortgage-agent-compensation.mjs",
+      "names": [
+        "handleMortgageAgentCompensation"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/ocr.mjs",
+      "names": [
+        "handleCheckOcrBacklog",
+        "handleCheckOcrIntake",
+        "handleDetectEndorsementZone"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/payment-direction-email.mjs",
+      "names": [
+        "handleSendPaymentDirectionRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-preflight.mjs",
+      "names": [
+        "handleCheckAltDepositPreflight"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/sms.mjs",
+      "names": [
+        "handleSendSms",
+        "handleTelnyxSmsStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/tax-profiles.mjs",
+      "names": [
+        "handleTaxProfiles"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/tenant-admin.mjs",
+      "names": [
+        "handleCreateTenantUser",
+        "handleDeleteUser",
+        "handleGetInstanceUsers",
+        "handleHireMortgageAgent",
+        "handleTenantDomainCheck",
+        "handleTenantDomainRecheckCron",
+        "handleTenantDomainVerify",
+        "handleTenantInviteUser",
+        "handleTenantRemoveOpenaiKey",
+        "handleTenantSetOpenaiKey",
+        "handleTenantValidateOpenaiKey"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/tenant-billing-handlers.mjs",
+      "names": [
+        "handleTenantBillingAdmin",
+        "handleTenantBillingAuthorize"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "names": [
+        "handleTenantDomainDisable",
+        "handleTenantEmailBrandingGet",
+        "handleTenantEmailBrandingSave",
+        "handleTenantEmailPreview",
+        "handleTenantSesIdentityDelete"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/tenant-settings-handlers.mjs",
+      "names": [
+        "handleSaveTenantBillingAccount",
+        "handleSaveTenantCompanyBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-cognito.mjs",
+      "target": "aws/functions/api/auth-mfa.mjs",
+      "names": [
+        "MFA_AUTH_ROUTES"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-cognito.mjs",
+      "target": "aws/functions/api/auth-webauthn.mjs",
+      "names": [
+        "WEBAUTHN_AUTH_ROUTES",
+        "WEBAUTHN_STAGING"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/auth-totp-code.mjs",
+      "names": [
+        "normalizeTotpCode",
+        "totpUserFailureMessage"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "commitWriteTransaction",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "isUuid",
+        "membershipForTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "membershipForTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/financial-totp.mjs",
+      "names": [
+        "decryptSecret",
+        "encryptSecret",
+        "enrollmentResponseWithoutSecret",
+        "evaluateFinancialTotpEnrollment",
+        "generateTotpSecret",
+        "otpauthUri",
+        "verifyFinancialTotp",
+        "wrapKeyFromHex"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/ops-readiness.mjs",
+      "names": [
+        "flagTrue"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/privileged-auth.mjs",
+      "names": [
+        "evaluatePrivilegedEnrollment",
+        "privilegedAuthPolicy"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "names": [
+        "CHECKALT_TOTP_ACTION",
+        "FINANCIAL_CHECKALT_STEPUP_ACTIONS",
+        "serverAmountCentsFromCheck"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
+      "names": [
+        "WALLET_FUND_TOTP_ACTION",
+        "loginSessionBinding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
+      "names": [
+        "WALLET_FUND_TOTP_ACTION"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "getSecretStringFromAws"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-mfa.mjs",
+      "target": "aws/functions/api/auth-financial-totp.mjs",
+      "names": [
+        "handleMfaAssociate",
+        "handleMfaSetPreference",
+        "handleMfaStatus",
+        "handleMfaStepUp",
+        "handleMfaVerify"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/authorization.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC",
+        "bearerToken",
+        "cognitoClaimsFromEvent",
+        "refuseSubAsApplicationId",
+        "verifyCognitoIdToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/authorization.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/authorization.mjs",
+      "target": "aws/functions/api/identity-env.mjs",
+      "names": [
+        "assertTrustedIssuer"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/authorization.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL",
+        "lookupIdentityMapping",
+        "resolveTrustedIdentityScope"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/authorization.mjs",
+      "target": "aws/functions/api/jwks.mjs",
+      "names": [
+        "fetchCognitoJwks"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/authorization.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/azure-di-secret.mjs",
+      "target": "aws/functions/api/azure-check-ocr.mjs",
+      "names": [
+        "parseAzureDiSecret"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/bill-mortgage-handling.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/bill-mortgage-handling.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialFlagSnapshot",
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/bill-mortgage-handling.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/bill-mortgage-handling.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution",
+        "flagSnapshot",
+        "providerExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-deposited.mjs",
+      "target": "aws/functions/api/financial-remaining.mjs",
+      "names": [
+        "CONFIRMED_MONEY_STATUSES",
+        "MONEY_IN_OPERATION_TYPES"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_ID_GUC"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/email-templates.mjs",
+      "names": [
+        "renderTransactionalTemplate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/endorsement-completion.mjs",
+      "names": [
+        "decideReadyTransition",
+        "evaluateEndorsementMath",
+        "isActiveLossDraft",
+        "isContractorPayee",
+        "isEndorsementSatisfied"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/endorsement-composite.mjs",
+      "names": [
+        "afterGenuineEndorsementSigned",
+        "compositeEndorsementSignatures",
+        "invalidateOfficialRearImage",
+        "requireDrawnSignature"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/endorsement-parity.mjs",
+      "names": [
+        "INELIGIBLE_AUTO_ADVANCE_STATUSES",
+        "allowDepositAdvance",
+        "endorsementAutoAdvanceEnabled",
+        "endorsementFromAddress",
+        "endorsementResendEnabled",
+        "isSuccessfulEndorsementDelivery",
+        "sendViaResend"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-ocr-provider.mjs",
+      "target": "aws/functions/api/azure-check-ocr.mjs",
+      "names": [
+        "analyzeAzureCheck",
+        "redactOcrLog"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-ocr-provider.mjs",
+      "target": "aws/functions/api/ocr-azure-image.mjs",
+      "names": [
+        "prepareAzureOcrImage"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-ocr-provider.mjs",
+      "target": "aws/functions/api/ocr-normalize-azure.mjs",
+      "names": [
+        "emptyAzureMicr",
+        "normalizeAzureMicr"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-ocr-provider.mjs",
+      "target": "aws/functions/api/ocr-parse.mjs",
+      "names": [
+        "digitsOnly",
+        "parseCheckFields"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-ocr-provider.mjs",
+      "target": "aws/functions/api/textract-check-ocr.mjs",
+      "names": [
+        "runTextract"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-reconciliation.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-reconciliation.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/claim-settlement-rpc.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "parseBody",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/claim-settlement-rpc.mjs",
+      "target": "aws/functions/api/workflow-flags.mjs",
+      "names": [
+        "applicationWorkflowWritesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/claim-settlement-rpc.mjs",
+      "names": [
+        "handleClaimSettlementRpc"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC",
+        "bearerToken",
+        "cognitoClaimsFromEvent",
+        "refuseSubAsApplicationId",
+        "verifyCognitoIdToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/identity-env.mjs",
+      "names": [
+        "assertTrustedIssuer"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "lookupIdentityMapping",
+        "resolveTrustedIdentityScope"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/partner-share-lifecycle.mjs",
+      "names": [
+        "PARTNER_SHARE_RPCS",
+        "handlePartnerShareRpc"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/providers/checkalt-account-mask.mjs",
+      "names": [
+        "maskAccountNumber",
+        "maskTenantAccountRow"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/tax-secrets.mjs",
+      "names": [
+        "denyTaxSecretQuery",
+        "denyTaxSecretRpc"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/data.mjs",
+      "target": "aws/functions/api/workflow-rpc.mjs",
+      "names": [
+        "SAFE_WRITE_RPCS",
+        "handleSafeWriteRpc"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/db-health.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/db-readonly-validate.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "EXPECTED_APPLICATION_ROLE",
+        "IDENTITY_PROBE",
+        "buildClientConfig",
+        "classifyDbError",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/db-readonly-validate.mjs",
+      "target": "aws/functions/api/rls-audit.mjs",
+      "names": [
+        "TENANT_COLUMNS",
+        "evaluateForceRls",
+        "summarizeRlsMatrix"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/db-readonly-validate.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/documents.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/documents.mjs",
+      "target": "aws/functions/api/endorsement-composite.mjs",
+      "names": [
+        "compositeEndorsementSignatures"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/documents.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-branding.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "defaultFromAddress",
+        "defaultReplyTo",
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-layout.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "PLATFORM_PRIMARY_COLOR",
+        "PLATFORM_SUPPORT_EMAIL",
+        "checksOpsLogoUrl",
+        "safeHttpUrl"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-queue.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-queue.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-queue.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-queue.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "emailMode",
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-queue.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-queue.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-templates.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "PLATFORM_PRIMARY_COLOR"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email-templates.mjs",
+      "target": "aws/functions/api/email-layout.mjs",
+      "names": [
+        "escapeHtml",
+        "renderChecksOpsEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "parseFromHeader",
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "applyRecipientPolicy",
+        "defaultFromAddress",
+        "defaultReplyTo",
+        "emailMode",
+        "mortgageOpsEmail",
+        "normalizeEmail",
+        "sinkAddress"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email.mjs",
+      "target": "aws/functions/api/email-ses.mjs",
+      "names": [
+        "sesConfigurationSetName",
+        "sesMessageTags"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email.mjs",
+      "target": "aws/functions/api/email-templates.mjs",
+      "names": [
+        "TEMPLATE_NAMES",
+        "renderTransactionalTemplate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/email.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/endorsement-composite.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "names": [
+        "loadCheckEndorsements",
+        "loadCheckPayees",
+        "stampCheckAltRearFingerprint"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/endorsement-composite.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "names": [
+        "loadDepositsForCheck",
+        "pickBlockingDeposit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/endorsement-composite.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-image-compliance.mjs",
+      "names": [
+        "CHECKALT_CANVAS_HEIGHT",
+        "CHECKALT_CANVAS_WIDTH",
+        "isCheckAltArtifactPath",
+        "normalizeToCheckAltCanvas",
+        "sha256"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/endorsement-composite.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-images.mjs",
+      "names": [
+        "downloadClaimFileBytes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/endorsement-composite.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/endorsement-parity.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "isAllowlistedRecipient",
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/endorsement-parity.mjs",
+      "target": "aws/functions/api/provider-secrets.mjs",
+      "names": [
+        "loadProviderSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/esign.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "IS_PLATFORM_OWNER_SQL",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/esign.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/esign.mjs",
+      "target": "aws/functions/api/email-layout.mjs",
+      "names": [
+        "escapeHtml",
+        "renderChecksOpsEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/esign.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/esign.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "normalizePath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/esign.mjs",
+      "target": "aws/functions/api/write-signature.mjs",
+      "names": [
+        "authorizeSignatureDocumentPath",
+        "resolveSignatureRequestIds"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial-flags.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-audit.mjs",
+      "names": [
+        "auditRow"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-authz.mjs",
+      "names": [
+        "FINANCIAL_OPERATIONS",
+        "denyFinancialPermission",
+        "evaluateFinancialAuthorization",
+        "financialPermissionSnapshot"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialFlagSnapshot",
+        "financialPermissionsActivated",
+        "financialSandboxSimulationEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-idempotency.mjs",
+      "names": [
+        "replaySafeResponse",
+        "stableIdempotencyKey"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "isUuid",
+        "verifyOwnershipChain"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-reconciliation.mjs",
+      "names": [
+        "reconcileOperations"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-state.mjs",
+      "names": [
+        "FINANCIAL_STATES",
+        "WEBHOOK_EVENT_ACTIONS",
+        "evaluateTransition",
+        "mapProviderStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL",
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/privileged-auth.mjs",
+      "names": [
+        "privilegedAuthPolicy"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution",
+        "flagSnapshot",
+        "providerExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "MOOV_AMOUNT_API",
+        "dollarsToIntegerCents",
+        "formatCheckAltUserAmount",
+        "formatMoovTransferAmount",
+        "rejectUntrustedAmountFields",
+        "validateProviderCents"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-dual-control.mjs",
+      "names": [
+        "handleCheckAltDualControl"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "emailMode"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/email-templates.mjs",
+      "names": [
+        "renderTransactionalTemplate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner-otp.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "emailAssetOrigin",
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/email-templates.mjs",
+      "names": [
+        "renderTransactionalTemplate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/homeowner-otp.mjs",
+      "names": [
+        "resolveHomeownerUploadToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/homeowner-signing-integration.mjs",
+      "names": [
+        "loadPendingSignaturesForHomeowner",
+        "runHomeownerLedgerDocumentSignLink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/identity.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC",
+        "bearerToken",
+        "cognitoClaimsFromEvent",
+        "refuseSubAsApplicationId",
+        "verifyCognitoIdToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/identity.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/identity.mjs",
+      "target": "aws/functions/api/identity-env.mjs",
+      "names": [
+        "LOOKUP_MAPPING_SQL",
+        "LOOKUP_PRODUCTION_IDENTITY_SQL",
+        "assertTrustedIssuer",
+        "lookupIdentityMapping",
+        "rejectUntrustedIdentityHints",
+        "resolveTrustedIdentityScope"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/identity.mjs",
+      "target": "aws/functions/api/privileged-auth.mjs",
+      "names": [
+        "isPrivilegedRoleList",
+        "privilegedAuthPolicy"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/identity.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/app-services.mjs",
+      "names": [
+        "handleAppServiceRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/auth-cognito.mjs",
+      "names": [
+        "AUTH_ROUTES"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/authorization.mjs",
+      "names": [
+        "handleAuthorizationProbe",
+        "handleJwksCheck"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/check-endorsement.mjs",
+      "names": [
+        "handlePublicEndorsement"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "handleDataQuery",
+        "handleDataRpc",
+        "handleFunctionsDisabled",
+        "handleWritesDisabled",
+        "resolveClaims"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "probeDatabase",
+        "probeIsHealthy"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/db-readonly-validate.mjs",
+      "names": [
+        "redactFunctionDefInspect",
+        "validateReadonlyCoreTables"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/db-validator-access.mjs",
+      "names": [
+        "authorizeDbValidatorDetails",
+        "dbValidatorHttpResponse"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/financial.mjs",
+      "names": [
+        "handleFinancialRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "handleIdentityMe",
+        "resolveIdentitySession"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/ops-readiness.mjs",
+      "names": [
+        "readinessSnapshot",
+        "stagingSafetyHolds"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/providers.mjs",
+      "names": [
+        "handleProviderRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/public-invoice.mjs",
+      "names": [
+        "handlePublicInvoice"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/sandbox.mjs",
+      "names": [
+        "handleSandboxRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/scheduled.mjs",
+      "names": [
+        "handleScheduledRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "databaseSecretConfigured"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/signature-submit.mjs",
+      "names": [
+        "handlePublicSignatureSubmit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/sql53-production-readonly-inspect.mjs",
+      "names": [
+        "handleSql53ProductionReadonlyInspect",
+        "isSql53ProductionReadonlyInspectEvent"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/storage-write.mjs",
+      "names": [
+        "handleStorageDelete",
+        "handleStorageMove",
+        "handleStorageUploadUrl"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/storage.mjs",
+      "names": [
+        "handlePublicSignatureDocument",
+        "handleStorageDownload",
+        "handleStorageList",
+        "handleStoragePublic",
+        "handleStorageSign",
+        "handleStorageSignMany",
+        "handleStorageWritesDisabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/tenant-collection-v2-uat.mjs",
+      "names": [
+        "handleCollectionV2UatRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs",
+      "names": [
+        "handleTmpRlsCatalogInspectRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/tenant-security-compliance.mjs",
+      "names": [
+        "handleTenantSecurityCompliance"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/workflow.mjs",
+      "names": [
+        "handleWorkflowRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/index.mjs",
+      "target": "aws/functions/api/write.mjs",
+      "names": [
+        "handleWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ingest-shared-check.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ingest-shared-check.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ingest-shared-check.mjs",
+      "target": "aws/functions/api/providers/hmac.mjs",
+      "names": [
+        "header",
+        "safeEqual"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ingest-shared-check.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ingest-shared-check.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/invoice-actions.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult",
+        "membershipsOf",
+        "resolveTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/mortgage-agent-compensation.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/mortgage-library-docs.mjs",
+      "target": "aws/functions/api/mortgage-library-doc-types.mjs",
+      "names": [
+        "MORTGAGE_LIBRARY_DOC_PREFIX",
+        "MORTGAGE_LIBRARY_DOC_TYPES",
+        "isApprovedMortgageLibraryDocType"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr-azure-image.mjs",
+      "target": "aws/functions/api/azure-check-ocr.mjs",
+      "names": [
+        "redactOcrLog"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr-azure-image.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-image.mjs",
+      "names": [
+        "applyExifOrientation",
+        "decodeRaster",
+        "encodeJpeg",
+        "isJpegMagic",
+        "readJpegExifOrientation",
+        "resizeBilinear",
+        "rotate90Cw"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr-descriptive-persist.mjs",
+      "target": "aws/functions/api/ocr-descriptive-text.mjs",
+      "names": [
+        "normalizeClaimNumber",
+        "normalizeDescriptiveText"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr-normalize-azure.mjs",
+      "target": "aws/functions/api/ocr-parse.mjs",
+      "names": [
+        "abaRoutingChecksumOk",
+        "digitsOnly",
+        "splitPayees"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/azure-check-ocr.mjs",
+      "names": [
+        "safeOcrLog"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/azure-di-secret.mjs",
+      "names": [
+        "azureDiAnalyzeSecretLoader"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/check-ocr-provider.mjs",
+      "names": [
+        "extractCheck",
+        "mergeCheckExtraction",
+        "ocrInProgress"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/ocr-descriptive-persist.mjs",
+      "names": [
+        "persistOcrDescriptiveHandoff"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/ocr-normalize-azure.mjs",
+      "names": [
+        "emptyAzureMicr"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/ocr-parse.mjs",
+      "names": [
+        "parseCheckFields"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/textract-check-ocr.mjs",
+      "names": [
+        "runTextract"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/partner-share-lifecycle.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/partner-share-lifecycle.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "writesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/payment-direction-email.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/payment-direction-email.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/payment-direction-email.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "defaultFromAddress"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/payment-direction-email.mjs",
+      "target": "aws/functions/api/email-templates.mjs",
+      "names": [
+        "renderTransactionalTemplate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/payment-direction-email.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/privileged-auth.mjs",
+      "target": "aws/functions/api/ops-readiness.mjs",
+      "names": [
+        "flagTrue"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/provider-secrets.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "getSecretStringFromAws"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/app-services.mjs",
+      "names": [
+        "CLASS_A_FUNCTIONS"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/provider-authz.mjs",
+      "names": [
+        "providerPermissionSnapshot"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution",
+        "executionAllowed",
+        "flagSnapshot",
+        "providerEnabled",
+        "providerExecutionEnabled",
+        "providerLiveReadsEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/provider-secrets.mjs",
+      "names": [
+        "providerSecretsConfigured"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/actum.mjs",
+      "names": [
+        "actumExecutionStub",
+        "actumInterface"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/catalog.mjs",
+      "names": [
+        "ACTUM_BOUNDARY",
+        "FUNCTION_BY_NAME",
+        "PROVIDER_FUNCTIONS",
+        "classifyFunction"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/checkalt.mjs",
+      "names": [
+        "checkAltAmountPreview",
+        "checkaltExecutionStub",
+        "publicCheckAltAccount",
+        "publicCheckAltDeposit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/egress.mjs",
+      "names": [
+        "handleProviderEgress"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/moov.mjs",
+      "names": [
+        "localMoovReadiness",
+        "moovExecutionStub",
+        "publicMoovAccount",
+        "publicMoovTransfer",
+        "publicMoovWallet"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/parity/dispatch.mjs",
+      "names": [
+        "hasParityHandler",
+        "runParityHandler"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/plaid.mjs",
+      "names": [
+        "plaidExecutionStub",
+        "publicPlaidStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "names": [
+        "hasProductionCheckAltHandler",
+        "runProductionCheckAltHandler"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-status-read.mjs",
+      "names": [
+        "checkaltStatusReadOnlyMode",
+        "denyCheckAltMutationUnderStatusRead",
+        "isCheckAltMutationFunction",
+        "isCheckAltStatusReadFunction"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/production/moov-send.mjs",
+      "names": [
+        "handleProductionMoovSend"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "names": [
+        "handleProductionMoovWalletFund"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "names": [
+        "handleProductionMoovWalletSync"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/quickbooks.mjs",
+      "names": [
+        "quickbooksExecutionStub",
+        "quickbooksInterface"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/webhooks.mjs",
+      "names": [
+        "handleProviderWebhook"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/actum.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/checkalt-sandbox.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "dollarsToIntegerCents",
+        "formatCheckAltUserAmount",
+        "validateProviderCents"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/checkalt-sandbox.mjs",
+      "target": "aws/functions/api/providers/moov-sandbox.mjs",
+      "names": [
+        "SANDBOX_MIN_CENTS"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/checkalt-sandbox.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "CHECKALT_UAT_HOST",
+        "CHECKALT_UAT_MERCHANT_EXPECTED",
+        "isApprovedCheckAltMerchant",
+        "isApprovedCheckAltUatUrl",
+        "isProviderNetworkError",
+        "merchantHeaderForCheckAltUat",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/checkalt.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/checkalt.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "formatCheckAltUserAmount",
+        "mapCheckAltStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/egress.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "CHECKALT_UAT_HOST",
+        "MOOV_SANDBOX_HOST"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/moov-sandbox.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "MIN_PROVIDER_AMOUNT_CENTS",
+        "MOOV_AMOUNT_API",
+        "formatMoovTransferAmount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/moov-sandbox.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "MOOV_SANDBOX_HOST",
+        "isProviderNetworkError",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/moov.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/moov.mjs",
+      "target": "aws/functions/api/providers/readiness.mjs",
+      "names": [
+        "evaluateReadiness"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/caller.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/caller.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "executionAllowed",
+        "providerLiveReadsEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/caller.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "bindMoovEnvironment"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/caller.mjs",
+      "target": "aws/functions/api/providers/readiness.mjs",
+      "names": [
+        "evaluateReadiness"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/caller.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "loadSandboxCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/caller.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-client.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "CHECKALT_UAT_HOST",
+        "merchantHeaderForCheckAltUat"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "formatCheckAltUserAmount",
+        "resolveCheckAltProviderStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/providers/checkalt-account-mask.mjs",
+      "names": [
+        "accountLast4",
+        "maskCheckAltPayload",
+        "normalizeDepositAccountNumber"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "checkAltParityContext",
+        "fail",
+        "isPlatformAdmin",
+        "jsonResult"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-client.mjs",
+      "names": [
+        "buildDepositProcessBody",
+        "buildRegisterPayload",
+        "checkAltFetch",
+        "extractSsoKey",
+        "getCheckAltJwt",
+        "getDepositAccountInfo",
+        "getUserAccountInfo",
+        "uatConfigOverlay"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-image.mjs",
+      "names": [
+        "inspectOriented",
+        "isAllowedPreparedPath",
+        "isAlreadyDepositReady",
+        "isJpegMagic",
+        "isRasterPath",
+        "isReusablePreparedCache",
+        "toDepositPath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "names": [
+        "loadCheckAltTenantRoles",
+        "roleAllowsCheckAlt"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "CHECKALT_UAT_HOST"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "isProviderNetworkError",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/db.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "isPlatformAdmin"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/dispatch.mjs",
+      "target": "aws/functions/api/providers/catalog.mjs",
+      "names": [
+        "classifyFunction"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/dispatch.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-functions.mjs",
+      "names": [
+        "CHECKALT_PARITY_HANDLERS"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/dispatch.mjs",
+      "target": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "names": [
+        "MOOV_PARITY_HANDLERS"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "executionAllowed"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult",
+        "moovParityContext",
+        "moovProductionReadContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "loadMoovAccount",
+        "logPaymentEvent",
+        "sanitize"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/parity/moov-capabilities.mjs",
+      "names": [
+        "MERCHANT_CAPABILITIES",
+        "MOOV_CAPABILITIES_API_VERSION",
+        "missingRequestedCapabilities"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "capabilityFlags",
+        "facilitatorAccountId",
+        "lastMoovRequestHeaders",
+        "moovFetch",
+        "moovToken",
+        "normalizeOnboardingStatus",
+        "normalizeTransferStatus",
+        "scopes",
+        "withMoovContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/parity/moov-money.mjs",
+      "names": [
+        "calculatePaymentFunding",
+        "cancelWalletFunding",
+        "disburse",
+        "initiateWalletFunding",
+        "processFundedPayment",
+        "tenantFeeCharge",
+        "transferCreate",
+        "transferGroupCreate",
+        "walletFund",
+        "walletFundOnClear"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "names": [
+        "accountFileUpload",
+        "accountFileView",
+        "accountFiles",
+        "accountOnboard",
+        "bankAccountAdd",
+        "bankLinkToken",
+        "bulkImportPreview",
+        "feeRollup",
+        "feeScheduleCancel",
+        "feeScheduleUpsert",
+        "homeownerDeductiblePay",
+        "invoice",
+        "microDepositConfirm",
+        "microDepositInitiate",
+        "onboardingLink",
+        "plaidBridge",
+        "platformBank",
+        "platformTreasury",
+        "publicInvoice",
+        "recipientBankAdd",
+        "recipientBankVerify",
+        "recipientCreate",
+        "recipientDisconnect",
+        "recipientKycUpdate",
+        "recipientSession",
+        "recipientTosAccept",
+        "stakeholderResendVerification",
+        "sweepConfig"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "readWallet",
+        "syncWallet"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/providers/readiness.mjs",
+      "names": [
+        "evaluateReadiness"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "loadSandboxCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-functions.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "isProviderNetworkError",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-money.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-money.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "canSendPayments",
+        "existingTransferByKey",
+        "insertTransferDraft",
+        "loadConnectedMethod",
+        "loadMoovAccount",
+        "logPaymentEvent",
+        "sanitize",
+        "updateTransferAfterMoov"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-money.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "facilitatorAccountId",
+        "moovFetch",
+        "normalizeTransferStatus",
+        "pendingCapabilities",
+        "scopes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-money.mjs",
+      "target": "aws/functions/api/providers/parity/moov-rails.mjs",
+      "names": [
+        "resolveDebitSourceMethodId",
+        "resolveRails",
+        "saveMethodRails",
+        "saveStakeholderRails"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-money.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "postTransferLedger",
+        "syncWallet",
+        "writeLedgerEntry"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-money.mjs",
+      "target": "aws/functions/api/providers/parity/rail-router.mjs",
+      "names": [
+        "railDecisionMetadata",
+        "selectRail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-money.mjs",
+      "target": "aws/functions/api/providers/parity/wallet-funding.mjs",
+      "names": [
+        "calculateFunding",
+        "isTerminalFundingStatus",
+        "loadFundingSettings",
+        "loadPaymentContext",
+        "pulledTodayCents"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "emailAssetOrigin",
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/email-templates.mjs",
+      "names": [
+        "renderTransactionalTemplate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/providers/moov-recipient-tos-policy.mjs",
+      "names": [
+        "buildIndividualKycPatch",
+        "dropTokenFromBody",
+        "identityRequirementsOutstanding",
+        "initiateAlreadyOpenError",
+        "interpretRecipientBankVerification",
+        "kycStatusFromMoov",
+        "liveAccountReadFailed",
+        "liveBankVerified",
+        "liveTosAccepted",
+        "moovInstantVerifyBody",
+        "providerVerifySuccessIsNotComplete",
+        "recipientBankVerifyBlocked",
+        "recipientOnboardingCompleteFromMoov",
+        "rejectBrowserBankSubstitution",
+        "rejectForgedRecipientTos",
+        "shouldInitiateInstantMicroDeposit",
+        "shouldResumeExistingBank",
+        "tosBoundToRecipientAccount",
+        "tosConfirmedByMoov",
+        "tosRequirementOutstanding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "loadConnectedMethod",
+        "loadMoovAccount",
+        "logPaymentEvent",
+        "sanitize",
+        "secureToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/providers/parity/moov-capabilities.mjs",
+      "names": [
+        "MERCHANT_CAPABILITIES",
+        "MOOV_CAPABILITIES_API_VERSION",
+        "RECIPIENT_CAPABILITIES"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "facilitatorAccountId",
+        "lastMoovRequestHeaders",
+        "moovFetch",
+        "moovToken",
+        "normalizeTransferStatus",
+        "safeLastFour",
+        "scopes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "readWallet",
+        "syncWallet"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-onboard.mjs",
+      "target": "aws/functions/api/providers/parity/sweep-read.mjs",
+      "names": [
+        "matchSweepForWallet",
+        "readSweepHistory",
+        "readSweepSnapshot",
+        "resolveSweepAccount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-rails.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "moovFetch",
+        "scopes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "moovFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/sweep-read.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "loadMoovAccount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/sweep-read.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "moovFetch",
+        "scopes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/sweep-read.mjs",
+      "target": "aws/functions/api/providers/parity/moov-provider-env.mjs",
+      "names": [
+        "failClosedMissingAccount",
+        "requireMoovProviderEnvironment"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/sweep-read.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "readWallet"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/plaid-sandbox.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "PLAID_SANDBOX_HOST"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/plaid.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "membershipForTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-client.mjs",
+      "names": [
+        "checkAltFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "names": [
+        "CHECKALT_APPROVE_ACTION",
+        "authorizeCheckAltProduction",
+        "serverAmountCentsFromCheck"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "names": [
+        "loadProductionCheckAltConfig",
+        "loadProductionTenantAccount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "names": [
+        "persistPollOutcome"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "names": [
+        "loadExistingProductionDeposit",
+        "reconcileProductionCheckAltDeposit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "names": [
+        "loadProductionCheckAltSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "target": "aws/functions/api/financial-authz.mjs",
+      "names": [
+        "FINANCIAL_ROLES"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "membershipForTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "formatCheckAltUserAmount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "names": [
+        "productionCheckAltExecutionAllowed"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "names": [
+        "isApprovedCheckAltProductionUrl"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "CHECKALT_UAT_HOST",
+        "looksLikeSandboxHost"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-approve.mjs",
+      "names": [
+        "handleProductionCheckAltApprove"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "names": [
+        "PRODUCTION_CHECKALT_FUNCTIONS",
+        "denyAmbiguousCheckAltMode",
+        "productionCheckAltAmbiguousMode",
+        "productionCheckAltExecutionAllowed"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "names": [
+        "bindCheckAltProductionGucs",
+        "bindCheckAltStatusReadGucs"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "names": [
+        "handleProductionCheckAltPoll"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-register.mjs",
+      "names": [
+        "handleProductionCheckAltRegister",
+        "handleProductionCheckAltVerify"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-status-read.mjs",
+      "names": [
+        "checkaltStatusReadAllowed",
+        "denyCheckAltMutationUnderStatusRead",
+        "denyCheckAltStatusReadDisabled",
+        "isCheckAltStatusReadFunction",
+        "statusReadOnlyFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "names": [
+        "handleProductionCheckAltSubmit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "isProviderNetworkError",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-image-compliance.mjs",
+      "names": [
+        "isCheckAltArtifactPath",
+        "toCheckAltPath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "executionAllowed",
+        "providerEnabled",
+        "providerExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "target": "aws/functions/api/financial-audit.mjs",
+      "names": [
+        "sanitizeAuditDetails"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "target": "aws/functions/api/financial-idempotency.mjs",
+      "names": [
+        "replaySafeResponse",
+        "stableIdempotencyKey"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "applyCheckAltSettlementInvariant",
+        "extractFinCaptureDepositDate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-image-compliance.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-image.mjs",
+      "names": [
+        "isJpegMagic",
+        "readJpegExifOrientation"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-images.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-image.mjs",
+      "names": [
+        "isJpegMagic"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-images.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-image-compliance.mjs",
+      "names": [
+        "CHECKALT_IMAGE_ERROR",
+        "bytesToBase64",
+        "evaluateCheckAltImageCompliance",
+        "failCheckAltImageCompliance",
+        "isAllowedCheckAltArtifactPath",
+        "isCheckAltArtifactPath",
+        "resolveCheckAltArtifactPaths",
+        "sha256"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-images.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "membershipForTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "CHECKALT_STATUS_REFRESH_STATUSES",
+        "resolveCheckAltProviderStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-client.mjs",
+      "names": [
+        "checkAltFetch",
+        "getDepositItemStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "names": [
+        "authorizeCheckAltProduction"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "names": [
+        "loadProductionCheckAltConfig",
+        "loadProductionTenantAccount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "names": [
+        "persistPollOutcome"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "names": [
+        "loadProductionCheckAltSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-status-read.mjs",
+      "names": [
+        "statusReadOnlyFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-preflight.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-preflight.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "membershipForTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-preflight.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-preflight.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "names": [
+        "CHECK_ELIGIBILITY_SELECT",
+        "ERROR_CHECKALT_IMAGE_NONCOMPLIANT",
+        "ERROR_ENDORSEMENTS_INCOMPLETE",
+        "ERROR_ENDORSEMENT_MISSING",
+        "ERROR_ENDORSEMENT_RELATIONSHIP_INVALID",
+        "ERROR_ENDORSEMENT_STATE_AMBIGUOUS",
+        "ERROR_PROVIDER_FRONT_IMAGE_MISSING",
+        "ERROR_PROVIDER_REAR_IMAGE_MISSING",
+        "ERROR_PROVIDER_REAR_IMAGE_STALE",
+        "evaluateEndorsementEligibility",
+        "evaluateOfficialImagePaths",
+        "evaluateRearImageFreshness",
+        "loadCheckEndorsements",
+        "loadCheckPayees",
+        "mapCheckAltImageGateError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-preflight.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "names": [
+        "loadDepositsForCheck",
+        "pickBlockingDeposit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-preflight.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-images.mjs",
+      "names": [
+        "loadProductionDepositImages"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-register.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "IS_PLATFORM_OWNER_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-register.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "isUuid"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-register.mjs",
+      "target": "aws/functions/api/providers/checkalt-account-mask.mjs",
+      "names": [
+        "accountLast4",
+        "maskAccountNumber",
+        "maskCheckAltPayload",
+        "normalizeDepositAccountNumber"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-register.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-client.mjs",
+      "names": [
+        "buildRegisterPayload",
+        "checkAltFetch",
+        "extractSsoKey",
+        "getDepositAccountInfo",
+        "getUserAccountInfo"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-register.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "names": [
+        "loadProductionCheckAltConfig"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-register.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "names": [
+        "loadProductionCheckAltSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "target": "aws/functions/api/provider-secrets.mjs",
+      "names": [
+        "loadProviderSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "CHECKALT_UAT_HOST",
+        "looksLikeSandboxHost"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-read.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "names": [
+        "checkaltStatusReconcileEnabled",
+        "productionCheckAltExecutionAllowed"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "names": [
+        "loadProductionCheckAltConfig",
+        "loadProductionTenantAccount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "names": [
+        "checkaltStatusReconcileEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "names": [
+        "CHECKALT_STATUS_REFRESH_STATUSES",
+        "loadDepositsForStatusRefresh",
+        "reconcileProductionCheckAltDeposit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "names": [
+        "loadProductionCheckAltSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-status-read.mjs",
+      "names": [
+        "statusReadOnlyFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "ignoredOwnershipSpoof",
+        "verifyOwnershipChain"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "formatCheckAltUserAmount",
+        "rejectUntrustedAmountFields",
+        "validateProviderCents"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/parity/checkalt-client.mjs",
+      "names": [
+        "buildDepositProcessBody",
+        "checkAltFetch",
+        "extractSsoKey",
+        "getCheckAltJwt",
+        "getUserAccountInfo"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "names": [
+        "authorizeCheckAltProduction"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-config.mjs",
+      "names": [
+        "loadProductionCheckAltConfig",
+        "loadProductionTenantAccount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "names": [
+        "CHECK_ELIGIBILITY_SELECT",
+        "evaluateProductionDepositEligibility",
+        "loadCheckEndorsements",
+        "loadCheckPayees",
+        "mapCheckAltImageGateError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "names": [
+        "checkAltIdempotencyKey",
+        "commitDurableAttempt",
+        "insertQueuedDeposit",
+        "loadDepositByIdempotency",
+        "loadDepositsForCheck",
+        "markHttpAttempted",
+        "persistAutoApproveOutcome",
+        "persistProviderOutcome",
+        "pickBlockingDeposit",
+        "replayDepositResponse",
+        "shouldReconcileInsteadOfPost"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-images.mjs",
+      "names": [
+        "loadProductionDepositImages"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "names": [
+        "reconcileProductionCheckAltDeposit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-secrets.mjs",
+      "names": [
+        "loadProductionCheckAltSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-submit.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "isProviderNetworkError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "isUuid"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/ops-readiness.mjs",
+      "names": [
+        "flagTrue"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult",
+        "moovProductionReadContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "loadMoovAccount",
+        "sanitize"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "moovFetch",
+        "normalizeTransferStatus",
+        "scopes",
+        "withMoovContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "syncWalletReadOnly"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
+      "names": [
+        "WALLET_FUND_TOTP_ACTION",
+        "loadSessionFundStepUp",
+        "loginSessionBinding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "names": [
+        "MOOV_POST_TIMEOUT_MS",
+        "moovRefusedTransfer",
+        "parseFundAmountCents",
+        "preferredBank",
+        "resolveFacilitatorId",
+        "selectDebitMethod",
+        "transferPostEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "isProviderNetworkError",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-send.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/financial-ownership.mjs",
+      "names": [
+        "isUuid"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/ops-readiness.mjs",
+      "names": [
+        "flagTrue"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult",
+        "moovProductionReadContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "loadMoovAccount",
+        "sanitize"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "moovFetch",
+        "normalizeTransferStatus",
+        "scopes",
+        "withMoovContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "syncWalletReadOnly"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
+      "names": [
+        "WALLET_FUND_TOTP_ACTION",
+        "loadSessionFundStepUp",
+        "loginSessionBinding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "isProviderNetworkError",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-fund.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult",
+        "moovProductionReadContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "loadMoovAccount"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "withMoovContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "readWallet",
+        "syncWalletReadOnly"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/moov-wallet-sync.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "isProviderNetworkError",
+        "providerEgressFailure"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/quickbooks.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhook-apply.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhook-apply.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "providerExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhook-apply.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "sanitize"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhook-apply.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "normalizeTransferStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhook-apply.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "postTransferLedger"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhook-apply.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "providerWebhookDryRun"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/provider-secrets.mjs",
+      "names": [
+        "loadProviderSecrets",
+        "webhookSecret"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/providers/hmac.mjs",
+      "names": [
+        "rawEventBody",
+        "verifyHmacBodySignature",
+        "verifyMoovSignature"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/providers/webhook-apply.mjs",
+      "names": [
+        "applyCheckAltWebhook",
+        "applyMoovWebhook",
+        "sandboxWebhookApplyEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/tenant-collection-v2-settlement.mjs",
+      "names": [
+        "applyCollectionV2ProviderCompletion"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/public-invoice.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/public-invoice.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/public-invoice.mjs",
+      "target": "aws/functions/api/invoice-actions.mjs",
+      "names": [
+        "isPublicInvoiceToken",
+        "loadPublicInvoiceByToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/public-invoice.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/rls-audit.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/rls-audit.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox-credentials.mjs",
+      "target": "aws/functions/api/provider-secrets.mjs",
+      "names": [
+        "configuredFlags",
+        "loadProviderSecrets"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/financial-flags.mjs",
+      "names": [
+        "financialFlagSnapshot",
+        "financialPermissionsActivated"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/financial-idempotency.mjs",
+      "names": [
+        "stableIdempotencyKey"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/financial-reconciliation.mjs",
+      "names": [
+        "reconcileOperations"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "denyProviderExecution",
+        "flagSnapshot",
+        "providerExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/providers/amounts.mjs",
+      "names": [
+        "mapCheckAltStatus",
+        "rejectUntrustedAmountFields"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/providers/checkalt-sandbox.mjs",
+      "names": [
+        "CHECKALT_UAT_AUTH_PATH",
+        "CHECKALT_USER_AMOUNT",
+        "assertCheckAltSandboxCredentials",
+        "buildCheckAltSandboxDeposit",
+        "buildCheckAltUatDepositBody",
+        "checkAltSandboxAuthenticate",
+        "checkAltSandboxFetch",
+        "extractCheckAltAmountEcho",
+        "extractCheckAltReference",
+        "extractCheckAltSsoAndAccount",
+        "extractCheckAltStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/providers/hmac.mjs",
+      "names": [
+        "rawEventBody",
+        "verifyHmacBodySignature",
+        "verifyMoovSignature"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/providers/moov-sandbox.mjs",
+      "names": [
+        "MOOV_SANDBOX_AMOUNT_API",
+        "SANDBOX_MIN_CENTS",
+        "buildMoovSandboxTransferBody",
+        "collectMoovAccountIds",
+        "collectMoovPaymentMethods",
+        "collectMoovTransferIds",
+        "moovSandboxFetch",
+        "moovSandboxScopes",
+        "moovSandboxToken",
+        "normalizeMoovSandboxTransfer",
+        "pickMoovSandboxTransferMethods",
+        "redactProviderId"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/providers/plaid-sandbox.mjs",
+      "names": [
+        "assertPlaidSandboxCredentials",
+        "buildPlaidLinkTokenBody",
+        "plaidSandboxFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/providers/webhooks.mjs",
+      "names": [
+        "sanitizeWebhookPayload"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "CHECKALT_UAT_HOST",
+        "CHECKALT_UAT_MERCHANT_EXPECTED",
+        "isProviderNetworkError",
+        "loadSandboxCredentials",
+        "publicSandboxCapability"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled",
+        "sandboxFlagSnapshot"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sandbox.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/scheduled.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/scheduled.mjs",
+      "target": "aws/functions/api/email-queue.mjs",
+      "names": [
+        "handleProcessEmailQueue"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/scheduled.mjs",
+      "target": "aws/functions/api/ocr.mjs",
+      "names": [
+        "handleCheckOcrBacklog"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/scheduled.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "names": [
+        "handleCheckAltStatusReconcileJob"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/scheduled.mjs",
+      "target": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "names": [
+        "handleTenantDomainRecheckCron"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-submit.mjs",
+      "target": "aws/functions/api/check-endorsement.mjs",
+      "names": [
+        "clientIpFromEvent",
+        "userAgentFromEvent"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-submit.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-submit.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-submit.mjs",
+      "target": "aws/functions/api/esign.mjs",
+      "names": [
+        "hashToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-submit.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-submit.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sms.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sms.mjs",
+      "target": "aws/functions/api/sms-policy.mjs",
+      "names": [
+        "applySmsRecipientPolicy",
+        "normalizePhone",
+        "smsMode",
+        "smsSinkNumber"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sql53-production-readonly-inspect.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "EXPECTED_APPLICATION_ROLE",
+        "IDENTITY_PROBE",
+        "buildClientConfig"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/sql53-production-readonly-inspect.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/staging-db-readonly-diagnostic-output.mjs",
+      "target": "aws/functions/api/db-readonly-validate.mjs",
+      "names": [
+        "CORE_TABLES",
+        "EXPECTED_PUBLIC_TRIGGERS",
+        "EXPECTED_ROW_COUNTS",
+        "EXPECTED_SKIPPED_AUTH_USERS_FKS",
+        "PUBLIC_TRIGGER_INVENTORY_LIMIT",
+        "redactFunctionDefInspect",
+        "sanitizePublicTriggerRow"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/staging-db-readonly-diagnostic.mjs",
+      "target": "aws/functions/api/db-readonly-validate.mjs",
+      "names": [
+        "validateReadonlyCoreTables"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/staging-db-readonly-diagnostic.mjs",
+      "target": "aws/functions/api/staging-db-readonly-diagnostic-output.mjs",
+      "names": [
+        "projectValidation"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write-auth.mjs",
+      "target": "aws/functions/api/mortgage-library-docs.mjs",
+      "names": [
+        "canManageTenantDocumentLibrary",
+        "mortgageAgentCanWriteTenantLossDraft"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write-auth.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "STORAGE_WRITE_BUCKETS",
+        "isBrandingUploadPath",
+        "isCheckScopedPathFor",
+        "matchCheckScopedPath",
+        "matchDepositAttachmentPath",
+        "matchLossDraftDocumentPath",
+        "matchTenantDocumentPath",
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "names": [
+        "stampOfficialRearFingerprintIfNeeded"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "ALLOWED_UPLOAD_CONTENT_TYPES",
+        "MAX_UPLOAD_BYTES",
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write.mjs",
+      "target": "aws/functions/api/storage-write-auth.mjs",
+      "names": [
+        "authorizeStorageWritePath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write.mjs",
+      "target": "aws/functions/api/storage.mjs",
+      "names": [
+        "authorizeObject"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "storageWritesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage.mjs",
+      "target": "aws/functions/api/mortgage-library-docs.mjs",
+      "names": [
+        "MORTGAGE_LIBRARY_STORAGE_AUTH_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "APP_BUCKET_SET",
+        "PUBLIC_BRANDING_BUCKETS",
+        "SKIP_BUCKET_SET",
+        "endorsedGeneratedStem",
+        "isExactCleanStemOfGeneratedPointer",
+        "isNarrowCleanStemPath",
+        "normalizePath",
+        "pathCandidates",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage.mjs",
+      "target": "aws/functions/api/tenant-logo-path.mjs",
+      "names": [
+        "isUuid",
+        "normalizeTenantLogoObjectPath",
+        "storedLogoMatchesRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tax-profiles.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tax-profiles.mjs",
+      "target": "aws/functions/api/tax-secrets.mjs",
+      "names": [
+        "evaluateTaxAccess",
+        "publicTaxProfile",
+        "sanitizeTaxError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-admin.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-admin.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "emailAssetOrigin",
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-admin.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-admin.mjs",
+      "target": "aws/functions/api/email-templates.mjs",
+      "names": [
+        "renderTransactionalTemplate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-admin.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-destination.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "loadSandboxCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-engine.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "moovEnvironment",
+        "moovFetch",
+        "scopes",
+        "withMoovContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-engine.mjs",
+      "target": "aws/functions/api/providers/parity/moov-rails.mjs",
+      "names": [
+        "resolveDebitSourceMethodId"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-engine.mjs",
+      "target": "aws/functions/api/tenant-billing-destination.mjs",
+      "names": [
+        "billingEnvironment",
+        "billingShouldSimulate",
+        "billingVerificationPostEnabled",
+        "billingVerificationShouldSimulate",
+        "monthlyBillingEnabled",
+        "monthlyBillingProductionPostEnabled",
+        "resolveBillingDestination",
+        "resolveBillingMoovContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-engine.mjs",
+      "target": "aws/functions/api/tenant-collection-v2.mjs",
+      "names": [
+        "classifyCollectionStatus",
+        "collectTenantObligation",
+        "receivedCentsFromLegs"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildWriteClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
+      "target": "aws/functions/api/tenant-billing-destination.mjs",
+      "names": [
+        "billingEnvironment",
+        "monthlyBillingEnabled",
+        "resolveBillingDestination"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
+      "target": "aws/functions/api/tenant-billing-engine.mjs",
+      "names": [
+        "actorIsPlatformOwner",
+        "applyBillingProviderEvent",
+        "billingIdempotencyKey",
+        "buildTenantBillingSnapshot",
+        "canAuthorizeTenantBilling",
+        "canViewTenantBilling",
+        "chargeTenantPeriod",
+        "defaultPullPeriodKey",
+        "loadTenantBillingContext",
+        "runMonthlyBillingScheduler",
+        "saveBillingAuthorization",
+        "saveBillingSettings",
+        "verifyTenantBillingDebit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-collection-v2-settlement.mjs",
+      "target": "aws/functions/api/tenant-collection-v2.mjs",
+      "names": [
+        "COLLECTION_CONTRACT_ID",
+        "COLLECTION_STATUS",
+        "FAILED_STATUSES",
+        "IN_FLIGHT_STATUSES",
+        "SETTLED_STATUSES",
+        "classifyCollectionStatus",
+        "receivedCentsFromLegs"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-collection-v2-uat.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "parseBody",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-collection-v2-uat.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-collection-v2-uat.mjs",
+      "target": "aws/functions/api/tenant-collection-v2-settlement.mjs",
+      "names": [
+        "applyBillingProviderEvent"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-collection-v2-uat.mjs",
+      "target": "aws/functions/api/tenant-collection-v2.mjs",
+      "names": [
+        "COLLECTION_CONTRACT_ID"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-collection-v2.mjs",
+      "target": "aws/functions/api/providers/parity/moov-wallet.mjs",
+      "names": [
+        "readWallet"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "brandingForTemplate",
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "target": "aws/functions/api/email-layout.mjs",
+      "names": [
+        "renderChecksOpsEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "defaultFromAddress"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "target": "aws/functions/api/tenant-email-domain.mjs",
+      "names": [
+        "DEFAULT_FROM_LOCAL_PART",
+        "DOMAIN_STATUS",
+        "RATE_LIMITS",
+        "consumeDurableRateLimit",
+        "displayNameIsUnsafe",
+        "dkimRecordsFromTokens",
+        "fallbackFromHeader",
+        "findDomainOwner",
+        "fromAddressOnVerifiedDomain",
+        "loadTenantEmailSettings",
+        "mailFromRecordsFor",
+        "normalizeFromLocalPart",
+        "normalizeReplyTo",
+        "normalizeSendingDomain",
+        "publicStatusLabel",
+        "resolveSesV2",
+        "resolveTenantAccess",
+        "sanitizeDisplayName",
+        "sesIdentityVerified",
+        "tenantEmailDomainEnabled",
+        "tenantSesIdentityDeleteEnabled",
+        "uiDomainStatus",
+        "upsertTenantEmailSettings",
+        "writeDomainAudit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-email-domain.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "PLATFORM_FROM_DOMAIN",
+        "addressDomain",
+        "formatFromHeader",
+        "parseFromHeader"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-email-domain.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-management-v2.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-security-compliance.mjs",
+      "target": "aws/functions/api/authorization.mjs",
+      "names": [
+        "resolveCognitoClaims"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-security-compliance.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "resolveIdentitySession"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-settings-handlers.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-settings-handlers.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "isSafeHexColor",
+        "isSafeHttpUrl",
+        "safeHttpUrl"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-settings-handlers.mjs",
+      "target": "aws/functions/api/tenant-email-domain.mjs",
+      "names": [
+        "resolveTenantAccess"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-delete-check.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-delete-check.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-delete-check.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "isCheckScopedPathFor",
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-delete-check.mjs",
+      "target": "aws/functions/api/workflow-flags.mjs",
+      "names": [
+        "applicationWorkflowWritesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-delete-check.mjs",
+      "target": "aws/functions/api/workflow-transitions.mjs",
+      "names": [
+        "isPartnerLinked",
+        "isTerminalFinancial"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-delete-check.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "storageWritesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/admin-override-check-status.mjs",
+      "names": [
+        "executeAdminOverrideCheckStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "IS_PLATFORM_OWNER_SQL",
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/mortgage-ops-usage.mjs",
+      "names": [
+        "accrueMortgageOpsAcceptedRequest"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/providers/checkalt-account-mask.mjs",
+      "names": [
+        "maskAccountNumber"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/workflow-flags.mjs",
+      "names": [
+        "applicationWorkflowWritesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "writesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/write-claim-settlement.mjs",
+      "names": [
+        "SAVE_CLAIM_SETTLEMENT_BREAKDOWN",
+        "executeClaimSettlementBreakdownWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/identity.mjs",
+      "names": [
+        "TENANT_MEMBERSHIP_SQL",
+        "USER_ROLES_SQL"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "flagSnapshot"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "names": [
+        "evaluateEndorsementEligibility",
+        "loadCheckEndorsements",
+        "loadCheckPayees"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "isCheckScopedPathFor",
+        "normalizePath",
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/workflow-flags.mjs",
+      "names": [
+        "applicationWorkflowWritesEnabled",
+        "workflowFlagSnapshot"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/workflow-transitions.mjs",
+      "names": [
+        "INTERNAL_CREATE_STAGE",
+        "INTERNAL_CREATE_STATUS",
+        "TRANSITIONS",
+        "evaluateTransition",
+        "isPartnerLinked",
+        "isTerminalFinancial",
+        "mapReviewPath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "checkWorkflowWritesEnabled",
+        "storageWritesEnabled",
+        "writesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-app-metadata.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ident"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-app-metadata.mjs",
+      "target": "aws/functions/api/mortgage-library-doc-types.mjs",
+      "names": [
+        "isAllowedTenantDocumentDocType"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-app-metadata.mjs",
+      "target": "aws/functions/api/mortgage-library-docs.mjs",
+      "names": [
+        "canManageTenantDocumentLibrary",
+        "mortgageAgentCanWriteTenantLossDraft"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-app-metadata.mjs",
+      "target": "aws/functions/api/mortgage-library-docs.mjs",
+      "names": [
+        "executeMortgageRequestLibraryDocuments"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-app-metadata.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "matchLossDraftDocumentPath",
+        "matchTenantDocumentPath",
+        "normalizePath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-app-metadata.mjs",
+      "target": "aws/functions/api/tenant-moov-defaults.mjs",
+      "names": [
+        "tenantMoovDefaults"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-check-workflow.mjs",
+      "target": "aws/functions/api/check-deposited.mjs",
+      "names": [
+        "rejectPayeeLineIfDeposited"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-check-workflow.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ident"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-check-workflow.mjs",
+      "target": "aws/functions/api/endorsement-material-invalidation.mjs",
+      "names": [
+        "invalidateEndorsementsForMaterialPayeeChange",
+        "isMaterialPayeeChange",
+        "materialPayeeFieldsChanged"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-check-workflow.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "isCheckScopedPathFor",
+        "normalizePath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-check-workflow.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "REVIEW_CHECK_STAGE",
+        "REVIEW_FINANCIAL_COLUMNS",
+        "WRITE_ALLOWLIST"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-check-workflow.mjs",
+      "target": "aws/functions/api/write-app-metadata.mjs",
+      "names": [
+        "executeAppMetadataWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-check-workflow.mjs",
+      "target": "aws/functions/api/write-signature.mjs",
+      "names": [
+        "executeSignatureWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-signature.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "normalizePath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ident",
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write.mjs",
+      "target": "aws/functions/api/tax-secrets.mjs",
+      "names": [
+        "TAX_SECRET_TABLES",
+        "denyTaxSecretWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "CLIENT_IDENTITY_KEYS",
+        "T5_INTAKE_COLUMNS",
+        "WRITE_ALLOWLIST",
+        "applicationWorkflowWritesEnabled",
+        "checkWorkflowWritesEnabled",
+        "denyTableReason",
+        "pickAllowlistedValues",
+        "writesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write.mjs",
+      "target": "aws/functions/api/write-check-workflow.mjs",
+      "names": [
+        "executeCheckWorkflowWrite"
+      ]
+    }
+  ]
+}

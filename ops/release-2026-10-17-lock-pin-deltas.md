@@ -19,11 +19,11 @@ include this report (it is outside every ownership group).
 | `delete-check-contract` | `68c6e436c9bdf32102c46b5bf9a8314a0373d411322461311df301d6a977fc10` | `e57e9f5b3624d9fed1144921b87093e7439f6743eb7fac26a3f40ba8f111e64b` |
 | `moov-webhooks` | `38f606278d8270390eee04cf1a2c4adf77975915a72a1ae323342cb85add1764` | `1064cd0b284bd942ca4538b0c3fe0361a72ba282ba6764bda19d51196cee4599` |
 | `checkalt-submission` | `5e14fc4efdcd34cae497e8e2c3d175d8acabbbb7a3a5fd4540088d53fa8697ed` | `09275f18a575cfd2f0fc3c33d461eed2c7891b5ba1ef9011d4c96b63cdf7e599` |
-| `financial-ledger` | `7d2f72fb0d09ee8aaadaf8f7fc8cba6d659c4474d0c959ee27af6aa84ecf1936` | `ec0fc59c51e9643e63dd1c53b35c9f38e7819e4c036e2bd4edc521259323b6c0` |
+| `financial-ledger` | `7d2f72fb0d09ee8aaadaf8f7fc8cba6d659c4474d0c959ee27af6aa84ecf1936` | `1603bb084d89ce413c47d5de00885378462404ae47c31b643e648a4c64368391` |
 | `tenant-email` | `ba67f886fecc7bf93a158f19e594a88e324a7222cfd3be00d9e18901d1cec428` | `d42d37156d2978fbca1cfcc6e03340aa1b1b434174c824b1bb556486bbc73f7f` |
 | `partner-sharing` | `6c803165b0833f9a3f20b37f76663bae2cfba529b71628eadb54a3437b6839d2` | `0ab1c642cc90fa269da6295573ff4f1c3a148d34df99e2dd770322fe8c7d1d9e` |
 | `mortgage-ops` | `0837905420fbcc381bf03c81bd12c35e611883797b9ba1124dd070852bc15b20` | `044b605f7b1fb3f11c6596727cb3056ba7614d9e784f4fb4c04030c31005e2cd` |
-| `database-rls` | `0d925c1d19ccf7e9a5013b6d614c8c8555af96cd5d8d0f1370d221f83b662230` | `25acdd10dc4598c78fafda9ee77b3c8679225c9003e0a36de5e42b2824756630` |
+| `database-rls` | `0d925c1d19ccf7e9a5013b6d614c8c8555af96cd5d8d0f1370d221f83b662230` | `3e9813863d551575c3844e5b7f2d54edb3f5f587ef98ddc095ffe6718a3ca3f7` |
 | `production-release` | `3a439b8af5514eecf76f12ad4f00db68a9ad31f360a733def3b417af62ea43c7` | `6ecb5d8ca850f777be42b09ed7ecb72f84fbcc86aa6f662fd78ffb8cd11b0f43` |
 
 All other components (including `production-spa`, PRODUCTION_LOCKED) match. `production-spa` stays
@@ -66,10 +66,10 @@ the ZIP or keep live bytes until the route is gone).
 | `check-endorsement.mjs` | modified (REPLACE) | `85f4bec43620e574498a289e6d245ddd02301603fd6698a1d6bacb915e922677` |
 | `documents.mjs` | modified (REPLACE) | `7cc8dd90241cffef3466117357cc47c8e3387e14869568a3411d4cad64bf795c` |
 | `endorsement-composite.mjs` | modified (REPLACE) | `9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80` |
-| `financial-authz.mjs` | modified (REPLACE) | `1f3dca0e31053264cdebe8bb3fd5b6668ec375f988ae0dde27732bf221edff55` |
+| `financial-authz.mjs` | modified (REPLACE) | `0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8` |
 | `financial.mjs` | modified (REPLACE) | `332da536c8225c343f73df0275798e7d0621344d512b71f24691c5a0bf0627bb` |
 | `identity.mjs` | modified (REPLACE) | `0a5ad4c00b258102da38db83722615dae328f80e4d363cb140579f2db5381d7c` |
-| `ingest-shared-check.mjs` | DELETED on the branch | (absent) |
+| `ingest-shared-check.mjs` | DELETED on the branch | `a4149a0fff4b4770867da317605a35e3167b1f9daf6aafa477d79cffb17c5634` |
 | `invoice-actions.mjs` | modified (REPLACE) | `866032c6f972a1d02a1c3e9649b21990d91ba62b6a5a49ac4e1f1274e2045507` |
 | `mortgage-library-doc-types.mjs` | modified (REPLACE) | `8e31c5c906c1a2f05012297296a4f14be788d7462a5fd9dfb0d5c47f0f381c7a` |
 | `mortgage-library-docs.mjs` | modified (REPLACE) | `16204986c7ca7b3f533bafb2e6f72f9600a5d986e41c1c260d8c310ab9dd044c` |
@@ -77,7 +77,7 @@ the ZIP or keep live bytes until the route is gone).
 | `package-lock.json` | modified (REPLACE) | `0f901adbe95830e228a5d515c37f9e2607c0627ed9551b6de6101b85c9abc6e5` |
 | `package.json` | modified (REPLACE) | `d03dd31c3ad0b915438281380593caab92bdd1a82544c0cdff6c9a81b3e88ac2` |
 | `platform-announcements.mjs` | ADD (new file) | `8141775a7e75a1d2b28426f250da6e5b81eb6d33a1baea55c248a87c38b4e76c` |
-| `privileged-auth.mjs` | modified (REPLACE) | `22d52e0662a53a2dae3cf1c23e9bbf37e31ba7bd45f38c262345e6426b23110e` |
+| `privileged-auth.mjs` | modified (REPLACE) | `55d079a7c59f29a42c3cd5d8a03a191cbd54e28826339dcb87e2ea444e910b9b` |
 | `providers/catalog.mjs` | modified (REPLACE) | `6a3bf4e5dd8a2a23efd6e2c92a601aad96c4ebac43055da7af25b53608bdc7d8` |
 | `providers/onboarding/context.mjs` | ADD (new file) | `ba7315e03d55e92d4c78e838ab3486f004240337c6e527a280c9ff32d1d65189` |
 | `providers/onboarding/crypto.mjs` | ADD (new file) | `2fb63cb012cb1b21213fc7d29d2770845bc2f2b5788ff3379596d2b116426e90` |
@@ -88,7 +88,7 @@ the ZIP or keep live bytes until the route is gone).
 | `providers/onboarding/redact.mjs` | ADD (new file) | `962017211bd33f7af8a53423f84f5bbef45cbd2c71dbbde3e2299ecca20a4cf9` |
 | `providers/onboarding/store.mjs` | ADD (new file) | `56961c0affbece63d924fdf51e7e64045bd05f808fd4d25e885a420d7e9807ed` |
 | `providers/onboarding/webhook-status.mjs` | ADD (new file) | `45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f` |
-| `providers/parity/caller.mjs` | modified (REPLACE) | `3bdda56066ca8d2f00345afb3e0675af3a42599aa9f07eac351e84d7b0a063ed` |
+| `providers/parity/caller.mjs` | modified (REPLACE) | `15ba09643b5b4b77189d944c3069eabe0b9c5b7a8b453aed8e5872222d851d30` |
 | `providers/parity/db.mjs` | modified (REPLACE) | `d23eefb5ee34477ac918ae5be1a892202ee16e71be2fd7570c23f53b1d552512` |
 | `providers/parity/moov-client.mjs` | modified (REPLACE) | `56928d66128c4a60141ef6d7392749ebad5211acef9bce6516411f1a2420612a` |
 | `providers/parity/moov-functions.mjs` | modified (REPLACE) | `7b0cde12ff969f7bfc5d83204cde77e2f322e42fe67399ca1a1e4a867eea6e75` |
@@ -111,7 +111,7 @@ the ZIP or keep live bytes until the route is gone).
 | `tenant-library-rules.mjs` | ADD (new file) | `43abcf433458e296872dca92fc674053f3131e1dafe9278d1f76126625684d98` |
 | `tenant-library.mjs` | ADD (new file) | `c9b1219b4f327f2c5ebaa6b505906b11051a0141f54b10b22dc0b816852ff7d5` |
 | `tenant-maintenance-payments-catalog-inspect.mjs` | modified (REPLACE) | `c7b83fed089ceec3656de2a4976a3e084fa7305c5cd7275ee26cc17c03da78fe` |
-| `tenant-settings-handlers.mjs` | modified (REPLACE) | `e07dd50fbac217388b654e23ca424d9bbfdd3de7f512f9c0683c0ab535b749f7` |
+| `tenant-settings-handlers.mjs` | modified (REPLACE) | `9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717` |
 | `workflow-delete-check.mjs` | modified (REPLACE) | `bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f` |
 | `write-app-metadata.mjs` | modified (REPLACE) | `32b805080a38f222ad99b8d558b16ce05795f6eb3a6d7a86b60d9fe2493766d5` |
 
@@ -155,65 +155,64 @@ Numbering on the branch is unique for 90-97 (90 users-only, 91 Moov onboarding, 
 97 financial_stepup_log server writer). The older duplicate
 prefixes 67, 68, 70 and 76 exist on `origin/main` already and are not touched.
 
-## 5. Required deploy order
+## 5. Required deploy order (reviewer's corrected order, verified against the branch import graph)
 
-Collected from the SQL headers, the branch commit messages, `ops/production-sql-29-30-apply.md`, the
-sql29/sql30 apply JSON `order_note`s and the code dependencies. Staging first for every step, with a
-staging acceptance reference before the matching production step.
+Every Lambda file can now be overlaid alone: the files main's live modules import from keep compatibility
+exports (`privileged-auth.mjs` `isPrivilegedRoleList` (always false), `parity/caller.mjs` `isPlatformAdmin`
+(delegates to `is_platform_owner()`), `financial-authz.mjs` `FINANCIAL_ROLES` (unused by the new code),
+`tenant-settings-handlers.mjs` `handleSaveTenantCompanyBranding` (410), and a 410 stub `ingest-shared-check.mjs`
+(delete in a later release)). `aws/tests/release-reverse-imports.test.mjs` checks every export main's API files
+import (566 edges, fixture `aws/tests/fixtures/main-api-import-edges.json`) still exists on the branch. The overlay
+guard (`classifyLive` → `linkProblems`) already refused a member whose new bytes drop a name a live file imports
+statically; it now also checks destructured dynamic imports (`const { x } = await import('./y.mjs')`) in both
+directions. Remaining order constraints are the forward ones in the import graph (Appendix A) plus SQL.
 
-SQL order:
-1. **SQL 29** (`aws/rls/sql/29_mortgage_ops_library_parity.sql`) **before SQL 90**. The tools refuse SQL 29
-   (`sql90_not_applied`) once SQL 90's `aws_is_tenant_member(uuid)` exists.
-2. **SQL 30** (`aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql`) **before SQL 94** (SQL 94 accepts
-   SQL 30's CHECK as its predecessor; SQL 30 refuses SQL 94's).
-3. **SQL 90** (`90_users_only_tenant_roles.sql`) after SQL 29 and SQL 80/35/24 (it refuses with
-   `sql90_prerequisite_missing` otherwise).
-4. **SQL 93** after SQL 90 (refuses with `sql93_prerequisite_missing` without `aws_is_tenant_member` and
-   `aws_write_tenants`).
-5. **SQL 94** after SQL 90 and SQL 30.
-6. **SQL 96** (`96_platform_owner_tenant_pricing.sql`) after SQL 90 and SQL 93 (refuses with
-   `sql96_prerequisite_missing` otherwise). It replaces SQL 93's `aws_tenants_member_column_guard`: do not
-   re-run SQL 93 after SQL 96 (that restores the member-only guard and blocks the platform owner's pricing
-   setter until SQL 96 is re-run).
-7. **SQL 97** (`97_financial_stepup_log_server_writer.sql`) AFTER `auth-financial-totp.mjs` and
-   `admin-reset-totp.mjs` (they set `app.stepup_writer`; without them every step-up insert is refused).
-   SQL 91 is now re-runnable (IF NOT EXISTS / DROP POLICY IF EXISTS); its bytes changed.
-8. **SQL 91** and **SQL 92** are independent of the others. **SQL 95** is independent of the other SQL
-   but must follow the Lambda change below.
+Staging first for every step, with a staging acceptance reference before the matching production step.
 
-SQL before Lambda:
-- **SQL 90 before** `tenant-admin.mjs` (calls `aws_invite_create_user_identity` / first-invite RLS) and
-  `workflow-rpc.mjs` (`aws_create_deposit_batch_for_item`), and before the users-only members that rely on
-  members-only RLS (`write-app-metadata.mjs` tenants insert/update, `admin-reset-totp.mjs`, `tax-*.mjs`,
-  `storage-write-auth.mjs`).
-- **SQL 91 before** `providers/onboarding/*.mjs`, `providers.mjs`, `providers/catalog.mjs`,
-  `providers/webhooks.mjs` and `providers/webhook-apply.mjs` (onboarding tables, `aws_moov_onboarding_*`).
-  The `aws/template.yaml` KMS keys / env must be in place before the onboarding handlers too.
-- **SQL 92 before** `esign.mjs` for the check_files link to be recorded (without it the link is skipped
-  inside a savepoint; the request still succeeds).
-- **SQL 93 before** `write-app-metadata.mjs` / `write-allowlist.mjs` company-info columns are useful; the
-  SPA saves core fields first and `email-branding.mjs` tolerates missing columns, so this is soft.
-- **SQL 94 before** `tenant-library.mjs`, `signature-library-source.mjs`, `app-services.mjs` (library routes)
-  and `homeowner.mjs` (shared documents reader; returns [] without SQL 94).
-- **SQL 96 before** `tenant-billing-engine.mjs` / `tenant-billing-handlers.mjs` (pricing saves call
-  `aws_platform_owner_set_tenant_pricing`; without SQL 96 they return 503 `pricing_setter_missing`) and
-  before `providers/parity/moov-onboard.mjs` relies on members not writing `platform_fee_schedules`.
-  The SPA (AdminTenants pricing through tenant-billing-admin) goes after both.
-- **SQL 95 after** `app-services.mjs` without the `ingest-shared-check` route is live (SQL 95 drops
-  `aws_ingest_shared_check`, which the old route calls).
-
-Lambda order (Check Alt / step-up):
-- **`auth-financial-totp.mjs` before `checkalt-*`**: the session-bound `loadSessionCheckAltStepUp` only
-  accepts rows with `metadata.source = 'app_financial_totp'` and `metadata.login_session`, which only the
-  new auth-financial-totp writes; it also keeps old checkalt-authz working during the gap.
-- **`checkalt-submit.mjs` and `checkalt-approve.mjs` before `checkalt-authz.mjs`**: the new authz needs the
-  caller's `claims` to bind the login; the existing plan order already lists approve, submit, then authz.
-- `providers.mjs` last, as in the existing plan.
-- `write-allowlist.mjs` (drops `financial_stepup_log`) after the SPA that no longer writes it; the AWS SPA
-  never used that write (it is the legacy Supabase branch).
-
-SPA: one combined SPA build from this branch (users-only, Moov onboarding, document library, branding,
-signature repairs, announcements, Inter font, Freedom removal) after the Lambda members its screens call.
+1. **Guarded SQL executor Lambda first** (`aws/write-path/guarded-sql-executor/index.mjs`): the SQL 29/30 support
+   (and the pins the later SQL steps need) live there. Deploy it through its reviewed path before any SQL below.
+2. **SQL:** 29 → 30 → 90 → 93 / 94 (91 and 92 any time before their Lambdas) → 96. SQL 97 is NOT in this step:
+   it goes after `auth-financial-totp.mjs` and `admin-reset-totp.mjs` (step 6). Do not re-run SQL 93 after SQL 96.
+   SQL before Lambda: SQL 90 before `tenant-admin.mjs` / `workflow-rpc.mjs` and the member-only RLS users; SQL 91
+   before `providers/onboarding/*`; SQL 92 before `esign.mjs` (soft: the link is skipped without it); SQL 93 before
+   `write-allowlist.mjs` / `write-app-metadata.mjs` company columns; SQL 94 before the library Lambdas (step 7);
+   SQL 96 before the billing Lambdas; SQL 95 after `app-services.mjs` (step 8); SQL 97 after step 6's step-up writers.
+3. **`privileged-auth.mjs` → `identity.mjs`** (identity imports the new `isPrivilegedIdentity`). Independent of the
+   rest thanks to the `isPrivilegedRoleList` shim.
+4. **`workflow-transitions.mjs` → `workflow.mjs`** (workflow imports the new `TENANT_MEMBER_SQL`).
+   `workflow-delete-check.mjs` stays `do_not_overlay`.
+5. **The parity files** (`providers/parity/checkalt-functions.mjs`, `db.mjs`, `moov-functions.mjs`, `moov-money.mjs`,
+   `moov-onboard.mjs`, `moov-client.mjs`) **→ `providers/parity/caller.mjs`** (any order works with the
+   `isPlatformAdmin` shim; this keeps the old callers on the shim for the shortest time).
+6. **Step-up and authorization**, right after SQL 90 (invites break between SQL 90 and the new tenant-admin):
+   `write-allowlist.mjs` FIRST (final position: before `auth-financial-totp.mjs` / `checkalt-authz.mjs`; it removes
+   the client `financial_stepup_log` insert and allowlists SQL 93's company columns, which exist after step 2) →
+   `auth-financial-totp.mjs` → `providers/production/checkalt-submit.mjs` / `checkalt-approve.mjs` →
+   `providers/production/checkalt-authz.mjs` → `financial-authz.mjs` / `financial.mjs` → `admin-reset-totp.mjs` /
+   `tenant-admin.mjs` → **SQL 97** (needs both Lambdas that set `app.stepup_writer`).
+   Soft dependency: `auth-financial-totp.mjs` reads `TEAM_RESET_TOTP_ACTION` from `admin-reset-totp.mjs` at run
+   time; until the new admin-reset-totp is live it is undefined, so a `team.reset_totp` step-up is refused
+   (`action_mismatch`) — nothing crashes, teammate 2FA reset is simply unavailable in that gap.
+7. **Library:** `mortgage-library-doc-types.mjs` → ADD `tenant-library-rules.mjs` / `tenant-library.mjs` /
+   `signature-library-source.mjs` / `platform-announcements.mjs` → `mortgage-library-docs.mjs` /
+   `write-app-metadata.mjs` / `storage-write-auth.mjs` / `storage-write.mjs` / `storage.mjs`.
+8. **Branding, e-sign, routes:** `email-branding.mjs` / `write-signature.mjs` / `esign.mjs` → `documents.mjs`
+   (imports the new `requireSignatureRequestActor` from esign) → `homeowner.mjs` (imports `tenant-library.mjs`) →
+   `app-services.mjs` (imports the library and announcements handlers) → `tenant-settings-handlers.mjs` → the
+   `ingest-shared-check.mjs` stub → **SQL 95**.
+   Staging: `app-services.mjs` needs the `tenant-management-v2` route reconciliation first — the staging live
+   router (84a8e9e7) carries a `tenant-management-v2` route these bytes do not (see the plan notes); do not overlay
+   app-services.mjs in staging until that is reconciled.
+9. **Onboarding and providers:** after SQL 91 and the `aws/template.yaml` KMS keys / VPC endpoint / env
+   (`AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED="false"`): ADD `providers/onboarding/*` (flags, crypto, redact → store →
+   context → documents / moov-sync / webhook-status → handlers) → `providers/catalog.mjs` /
+   `providers/webhook-apply.mjs` / `providers/webhooks.mjs` → `write-check-workflow.mjs` (held for SQL 89, already
+   live) → `providers.mjs` last. `@aws-sdk/client-kms` (new in `aws/functions/api/package.json`) is not in the live
+   ZIP: production onboarding needs a full rebuilt ZIP, not an overlay, before `AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED`
+   is turned on.
+   Billing: `tenant-billing-engine.mjs` / `tenant-billing-handlers.mjs` after SQL 96 (pricing saves call the SQL 96
+   setter; without it they answer 503 `pricing_setter_missing`).
+10. **One SPA build and promote** from this branch, after the Lambdas its screens call.
 
 ## 6. Retirements on the release branch (owner-approved)
 
@@ -242,3 +241,125 @@ requires the ingest function; nothing else in the SQL 89 rules changed.
   `platform_fee_cents` ignored) are listed in section 3 with their branch sha256.
 - `tenant_billing_settings` (billing_enabled, billing_day_of_month) is written only by the platform-owner
   billing admin; it has no RLS policy in `aws/rls/sql`, so SQL 96 does not change it.
+
+## Appendix A. Import graph of the changed API files (branch)
+
+Each changed or added file under `aws/functions/api/` with its imports of other changed files. `[needs new: ...]`
+lists names main's version of that module does not export, i.e. a forward order constraint (the importer goes
+after the target). Imports without it link against main's live bytes.
+
+```
+A platform-announcements.mjs -> (no changed imports)
+A providers/onboarding/context.mjs -> providers/parity/caller.mjs; providers/parity/moov-client.mjs; providers/onboarding/flags.mjs [needs new: onboardingDeployment]
+A providers/onboarding/crypto.mjs -> (no changed imports)
+A providers/onboarding/documents.mjs -> providers/parity/moov-client.mjs; providers/onboarding/crypto.mjs [needs new: OnboardingError]; providers/onboarding/redact.mjs [needs new: isNetworkError, moovErrorCode, onboardingLog]; providers/onboarding/store.mjs [needs new: completeOutbox, enqueueOutbox, failOutboxAttempt, loadAccount, publicDocument]
+A providers/onboarding/flags.mjs -> (no changed imports)
+A providers/onboarding/handlers.mjs -> providers/parity/moov-client.mjs; providers/parity/caller.mjs; providers/parity/db.mjs; providers/onboarding/crypto.mjs [needs new: OnboardingError]; providers/onboarding/context.mjs [needs new: isUuid, loadOnboardingMoovContext, resolveOnboardingAccess, resolveOnboardingEnvironment]; providers/onboarding/documents.mjs [needs new: createUploadUrl, finalizeDocument, viewUrl]; providers/onboarding/flags.mjs [needs new: onboardingDeployment]; providers/onboarding/moov-sync.mjs [needs new: ensureMoovAccount, syncOnboardingToMoov]; providers/onboarding/redact.mjs [needs new: isNetworkError, moovErrorCode, onboardingLog, redact]; providers/onboarding/store.mjs [needs new: buildOnboardingView, decryptProfileEin, enqueueOutbox, loadAccount, loadDocument, loadDocuments, loadDueOutbox, loadProfile, loadRepresentatives, lockTenantOnboarding, maskLast4, publicRepresentative, removeRepresentative, upsertProfile, upsertRepresentative, validateBusiness, validateRepresentatives]
+A providers/onboarding/moov-sync.mjs -> providers/parity/moov-client.mjs; providers/parity/db.mjs; providers/onboarding/crypto.mjs [needs new: OnboardingError]; providers/onboarding/redact.mjs [needs new: isNetworkError, moovErrorCode, onboardingLog]; providers/onboarding/store.mjs [needs new: completeOutbox, decryptProfileEin, decryptRepresentativeDob, failOutboxAttempt, loadAccount, loadProfile, loadRepresentatives, markRepresentativeSsnResubmit, markRepresentativeSynced, moovAddress, setProfileSyncState]
+A providers/onboarding/redact.mjs -> (no changed imports)
+A providers/onboarding/store.mjs -> providers/onboarding/crypto.mjs [needs new: OnboardingError, decryptPii, encryptPii]
+A providers/onboarding/webhook-status.mjs -> providers/parity/moov-client.mjs
+A signature-library-source.mjs -> write-signature.mjs; tenant-library-rules.mjs [needs new: LIBRARY_BUCKET, LIBRARY_MAX_BYTES, normalizeContentType]; tenant-library.mjs [needs new: claimBelongsToTenant, isTenantMember, shareableLibraryDocument]; write-allowlist.mjs
+A tenant-library-rules.mjs -> mortgage-library-doc-types.mjs [needs new: LIBRARY_CATEGORIES, libraryCategoryOf]
+A tenant-library.mjs -> mortgage-library-doc-types.mjs [needs new: libraryCategoryOf]; tenant-library-rules.mjs [needs new: LIBRARY_BUCKET, isLibraryContentType, isLibrarySize, libraryObjectPath, normalizeContentType]; write-allowlist.mjs
+M admin-reset-totp.mjs -> (no changed imports)
+M app-services.mjs -> homeowner.mjs; documents.mjs; tenant-admin.mjs; esign.mjs; check-endorsement.mjs; admin-reset-totp.mjs; tax-profiles.mjs; tenant-settings-handlers.mjs; tenant-billing-handlers.mjs; tenant-library.mjs [needs new: handleClaimLibraryDocuments, handleHomeownerRevokeLibraryDocument, handleHomeownerShareLibraryDocument, handleHomeownerSharedDocumentUrl, handleTenantLibraryDocumentCreate]; signature-library-source.mjs [needs new: handleSignatureLibraryDocumentCopy]; platform-announcements.mjs [needs new: handlePlatformAnnouncements]
+M auth-financial-totp.mjs -> ops-readiness.mjs; privileged-auth.mjs; identity.mjs; providers/production/checkalt-authz.mjs; admin-reset-totp.mjs [needs new: TEAM_RESET_TOTP_ACTION]
+M check-endorsement.mjs -> email-branding.mjs; endorsement-composite.mjs
+M documents.mjs -> esign.mjs [needs new: requireSignatureRequestActor]; endorsement-composite.mjs
+M email-branding.mjs -> (no changed imports)
+M endorsement-composite.mjs -> (no changed imports)
+M esign.mjs -> email-branding.mjs [needs new: resolveTenantDocumentBranding]; write-signature.mjs
+M financial-authz.mjs -> (no changed imports)
+M financial.mjs -> identity.mjs; financial-authz.mjs; privileged-auth.mjs
+M homeowner.mjs -> email-branding.mjs; tenant-library.mjs [needs new: loadSharedDocumentsSafely]
+M identity.mjs -> privileged-auth.mjs [needs new: isPrivilegedIdentity]
+M invoice-actions.mjs -> providers/parity/caller.mjs
+M mortgage-library-doc-types.mjs -> (no changed imports)
+M mortgage-library-docs.mjs -> mortgage-library-doc-types.mjs
+M ops-readiness.mjs -> (no changed imports)
+M privileged-auth.mjs -> ops-readiness.mjs
+M providers.mjs -> identity.mjs; providers/catalog.mjs; providers/webhooks.mjs; providers/onboarding/handlers.mjs [needs new: handleMoovOnboarding, isOnboardingFunction]; providers/onboarding/flags.mjs [needs new: moovOnboardingProductionEnabled]; app-services.mjs
+M providers/catalog.mjs -> (no changed imports)
+M providers/parity/caller.mjs -> identity.mjs; providers/parity/moov-client.mjs
+M providers/parity/checkalt-functions.mjs -> providers/parity/caller.mjs; providers/production/checkalt-authz.mjs
+M providers/parity/db.mjs -> (no changed imports)
+M providers/parity/moov-client.mjs -> (no changed imports)
+M providers/parity/moov-functions.mjs -> providers/parity/moov-client.mjs; providers/parity/caller.mjs; providers/parity/db.mjs; providers/parity/moov-money.mjs; providers/parity/moov-onboard.mjs
+M providers/parity/moov-money.mjs -> providers/parity/moov-client.mjs; providers/parity/caller.mjs; providers/parity/db.mjs
+M providers/parity/moov-onboard.mjs -> providers/parity/moov-client.mjs; providers/parity/caller.mjs; email-branding.mjs; providers/parity/db.mjs
+M providers/production/checkalt-approve.mjs -> identity.mjs; providers/production/checkalt-authz.mjs
+M providers/production/checkalt-authz.mjs -> (no changed imports)
+M providers/production/checkalt-submit.mjs -> identity.mjs; providers/production/checkalt-authz.mjs
+M providers/webhook-apply.mjs -> providers/parity/moov-client.mjs; providers/parity/db.mjs; providers/onboarding/webhook-status.mjs [needs new: applyOnboardingWebhookStatus]
+M providers/webhooks.mjs -> providers/webhook-apply.mjs; providers/onboarding/flags.mjs [needs new: productionOnboardingWebhookApplyEnabled]; providers/onboarding/webhook-status.mjs [needs new: applyProductionOnboardingWebhook]
+M storage-write-auth.mjs -> mortgage-library-docs.mjs; tenant-library-rules.mjs [needs new: libraryObjectPath]
+M storage-write.mjs -> storage.mjs; storage-write-auth.mjs; tenant-library-rules.mjs [needs new: LIBRARY_BUCKET, isLibraryContentType, isLibrarySize]; write-allowlist.mjs
+M storage.mjs -> mortgage-library-docs.mjs
+M tax-profiles.mjs -> tax-secrets.mjs
+M tax-secrets.mjs -> (no changed imports)
+M tenant-admin.mjs -> email-branding.mjs
+M tenant-billing-engine.mjs -> providers/parity/moov-client.mjs
+M tenant-billing-handlers.mjs -> tenant-billing-engine.mjs
+M tenant-check-user.mjs -> (no changed imports)
+M tenant-collection-v2-uat.mjs -> (no changed imports)
+M tenant-email-domain.mjs -> email-branding.mjs
+M tenant-maintenance-payments-catalog-inspect.mjs -> identity.mjs
+M tenant-settings-handlers.mjs -> tenant-email-domain.mjs
+M workflow-delete-check.mjs -> write-allowlist.mjs; workflow-transitions.mjs [needs new: TENANT_MEMBER_SQL]
+M workflow-rpc.mjs -> identity.mjs; write-allowlist.mjs
+M workflow-transitions.mjs -> (no changed imports)
+M workflow.mjs -> identity.mjs; write-allowlist.mjs; workflow-transitions.mjs [needs new: TENANT_MEMBER_SQL]
+M write-allowlist.mjs -> (no changed imports)
+M write-app-metadata.mjs -> mortgage-library-doc-types.mjs; mortgage-library-docs.mjs; tenant-library-rules.mjs [needs new: isLibraryContentType, isLibrarySize, libraryFolderFor, libraryObjectPath]
+M write-check-workflow.mjs -> write-allowlist.mjs; write-signature.mjs; write-app-metadata.mjs
+M write-signature.mjs -> (no changed imports)
+```
+
+Forward constraints:
+
+```
+app-services.mjs after platform-announcements.mjs (handlePlatformAnnouncements)
+app-services.mjs after signature-library-source.mjs (handleSignatureLibraryDocumentCopy)
+app-services.mjs after tenant-library.mjs (handleClaimLibraryDocuments, handleHomeownerRevokeLibraryDocument, handleHomeownerShareLibraryDocument, handleHomeownerSharedDocumentUrl, handleTenantLibraryDocumentCreate)
+auth-financial-totp.mjs after admin-reset-totp.mjs (TEAM_RESET_TOTP_ACTION)
+documents.mjs after esign.mjs (requireSignatureRequestActor)
+esign.mjs after email-branding.mjs (resolveTenantDocumentBranding)
+homeowner.mjs after tenant-library.mjs (loadSharedDocumentsSafely)
+identity.mjs after privileged-auth.mjs (isPrivilegedIdentity)
+providers.mjs after providers/onboarding/flags.mjs (moovOnboardingProductionEnabled)
+providers.mjs after providers/onboarding/handlers.mjs (handleMoovOnboarding, isOnboardingFunction)
+providers/onboarding/context.mjs after providers/onboarding/flags.mjs (onboardingDeployment)
+providers/onboarding/documents.mjs after providers/onboarding/crypto.mjs (OnboardingError)
+providers/onboarding/documents.mjs after providers/onboarding/redact.mjs (isNetworkError, moovErrorCode, onboardingLog)
+providers/onboarding/documents.mjs after providers/onboarding/store.mjs (completeOutbox, enqueueOutbox, failOutboxAttempt, loadAccount, publicDocument)
+providers/onboarding/handlers.mjs after providers/onboarding/context.mjs (isUuid, loadOnboardingMoovContext, resolveOnboardingAccess, resolveOnboardingEnvironment)
+providers/onboarding/handlers.mjs after providers/onboarding/crypto.mjs (OnboardingError)
+providers/onboarding/handlers.mjs after providers/onboarding/documents.mjs (createUploadUrl, finalizeDocument, viewUrl)
+providers/onboarding/handlers.mjs after providers/onboarding/flags.mjs (onboardingDeployment)
+providers/onboarding/handlers.mjs after providers/onboarding/moov-sync.mjs (ensureMoovAccount, syncOnboardingToMoov)
+providers/onboarding/handlers.mjs after providers/onboarding/redact.mjs (isNetworkError, moovErrorCode, onboardingLog, redact)
+providers/onboarding/handlers.mjs after providers/onboarding/store.mjs (buildOnboardingView, decryptProfileEin, enqueueOutbox, loadAccount, loadDocument, loadDocuments, loadDueOutbox, loadProfile, loadRepresentatives, lockTenantOnboarding, maskLast4, publicRepresentative, removeRepresentative, upsertProfile, upsertRepresentative, validateBusiness, validateRepresentatives)
+providers/onboarding/moov-sync.mjs after providers/onboarding/crypto.mjs (OnboardingError)
+providers/onboarding/moov-sync.mjs after providers/onboarding/redact.mjs (isNetworkError, moovErrorCode, onboardingLog)
+providers/onboarding/moov-sync.mjs after providers/onboarding/store.mjs (completeOutbox, decryptProfileEin, decryptRepresentativeDob, failOutboxAttempt, loadAccount, loadProfile, loadRepresentatives, markRepresentativeSsnResubmit, markRepresentativeSynced, moovAddress, setProfileSyncState)
+providers/onboarding/store.mjs after providers/onboarding/crypto.mjs (OnboardingError, decryptPii, encryptPii)
+providers/webhook-apply.mjs after providers/onboarding/webhook-status.mjs (applyOnboardingWebhookStatus)
+providers/webhooks.mjs after providers/onboarding/flags.mjs (productionOnboardingWebhookApplyEnabled)
+providers/webhooks.mjs after providers/onboarding/webhook-status.mjs (applyProductionOnboardingWebhook)
+signature-library-source.mjs after tenant-library-rules.mjs (LIBRARY_BUCKET, LIBRARY_MAX_BYTES, normalizeContentType)
+signature-library-source.mjs after tenant-library.mjs (claimBelongsToTenant, isTenantMember, shareableLibraryDocument)
+storage-write-auth.mjs after tenant-library-rules.mjs (libraryObjectPath)
+storage-write.mjs after tenant-library-rules.mjs (LIBRARY_BUCKET, isLibraryContentType, isLibrarySize)
+tenant-library-rules.mjs after mortgage-library-doc-types.mjs (LIBRARY_CATEGORIES, libraryCategoryOf)
+tenant-library.mjs after mortgage-library-doc-types.mjs (libraryCategoryOf)
+tenant-library.mjs after tenant-library-rules.mjs (LIBRARY_BUCKET, isLibraryContentType, isLibrarySize, libraryObjectPath, normalizeContentType)
+workflow-delete-check.mjs after workflow-transitions.mjs (TENANT_MEMBER_SQL)
+workflow.mjs after workflow-transitions.mjs (TENANT_MEMBER_SQL)
+write-app-metadata.mjs after tenant-library-rules.mjs (isLibraryContentType, isLibrarySize, libraryFolderFor, libraryObjectPath)
+```
+
+## Appendix B. Listed, not changed
+
+- `src/pages/payments/InvoicesTab.tsx:216` still falls back to `/freedom` for the settings link outside white-label
+  routes (left as is on request).

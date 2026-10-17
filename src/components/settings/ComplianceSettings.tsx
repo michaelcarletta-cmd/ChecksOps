@@ -43,8 +43,7 @@ import {
   type OnboardingState,
   type RepresentativeForm,
   type SaveResult,
-  type SyncTone,
-} from "@/lib/payments/moovOnboarding";
+  type SyncTone, isOnboardingUnavailableCode } from "@/lib/payments/moovOnboarding";
 
 const SYNC_CLASS: Record<SyncTone, string> = {
   idle: "border-muted-foreground/30 text-muted-foreground",
@@ -209,6 +208,19 @@ export function ComplianceSettings({
 
   if (error || !data) {
     const status = error instanceof OnboardingApiError ? error.status : null;
+    const code = error instanceof OnboardingApiError ? error.code : null;
+    if (isOnboardingUnavailableCode(code)) {
+      // Production onboarding is switched off on this deployment: not an error.
+      return (
+        <div className="space-y-6 max-w-7xl mx-auto">
+          {hero}
+          <div role="status" className="rounded-md border border-border/60 bg-muted/30 p-4 space-y-1">
+            <p className="text-sm font-medium">Payment account setup is not available yet</p>
+            <p className="text-xs text-muted-foreground">ChecksOps will turn on Compliance &amp; Docs for your organization soon. Nothing needs to be done now.</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="space-y-6 max-w-7xl mx-auto">
         {hero}

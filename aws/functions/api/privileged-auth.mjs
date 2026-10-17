@@ -13,6 +13,15 @@ export const isPrivilegedIdentity = ({ tenants = [], isPlatformOwner = false } =
   isPlatformOwner === true || (Array.isArray(tenants) && tenants.length > 0)
 );
 
+/**
+ * Deprecated compatibility export (release 2026-10-17): a live identity.mjs
+ * from before users-only still imports it while the overlay runs one file at
+ * a time. Role names (tenant_users.role or user_roles admin/staff) never make
+ * anyone privileged any more, so it always returns false. Use
+ * isPrivilegedIdentity. Remove once every live identity.mjs is the new one.
+ */
+export const isPrivilegedRoleList = () => false;
+
 export const privilegedAuthPolicy = () => ({
   policy: 'totp_or_webauthn_before_privileged_and_financial',
   privileged: 'any_tenant_member_or_platform_owner',
