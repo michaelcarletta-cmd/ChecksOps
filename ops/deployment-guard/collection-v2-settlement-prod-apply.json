@@ -1,0 +1,78 @@
+{
+  "workstream_id": "collection-v2-settlement-prod-93da",
+  "branch": "cursor/collection-v2-settlement-prod-93da",
+  "commit": "9bf9a0af813542aba2a72c5a751f9252649c3fc4",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "checksops-production-prep-api",
+  "deployment_type": "lambda-overlay",
+  "owned_members": [
+    "providers/webhooks.mjs",
+    "tenant-collection-v2-settlement.mjs"
+  ],
+  "add_members": [
+    "tenant-collection-v2-settlement.mjs"
+  ],
+  "member_sources": {
+    "providers/webhooks.mjs": "aws/functions/api/providers/webhooks.mjs",
+    "tenant-collection-v2-settlement.mjs": "aws/functions/api/tenant-collection-v2-settlement.mjs"
+  },
+  "preflight": {
+    "codeSha256": "RUOC6wUAE9eCkhbhF8h8FAfUyegj9KCrvZt5vCojOlw=",
+    "revisionId": "48b8b0da-7448-435b-b9ea-d068a4497f1e"
+  },
+  "immediately_before": {
+    "codeSha256": "RUOC6wUAE9eCkhbhF8h8FAfUyegj9KCrvZt5vCojOlw=",
+    "revisionId": "48b8b0da-7448-435b-b9ea-d068a4497f1e"
+  },
+  "production_fingerprint": {
+    "codeSha256": "RUOC6wUAE9eCkhbhF8h8FAfUyegj9KCrvZt5vCojOlw=",
+    "revisionId": "48b8b0da-7448-435b-b9ea-d068a4497f1e"
+  },
+  "immediately_before_fingerprint": {
+    "codeSha256": "RUOC6wUAE9eCkhbhF8h8FAfUyegj9KCrvZt5vCojOlw=",
+    "revisionId": "48b8b0da-7448-435b-b9ea-d068a4497f1e"
+  },
+  "package": {
+    "origin": "fresh-live-download"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "staging#checksops-staging-api#BcJrlqeUbMxHWLbayOByi+mRs/iSIN//dtgsEzb/lv8=#CLEANUP_ACCEPTED#settlement-sync"
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "collection-v2-settlement-prod-93da",
+    "inherited": false,
+    "from_previous_workstream": false
+  },
+  "contract_results": {
+    "review-claim-save": {
+      "ok": true
+    },
+    "claim-ledger": {
+      "ok": true
+    },
+    "signature-requests": {
+      "ok": true
+    },
+    "check-files": {
+      "ok": true
+    },
+    "ocr": {
+      "ok": true
+    },
+    "moov": {
+      "ok": true
+    },
+    "checkalt": {
+      "ok": true
+    },
+    "tenant-isolation": {
+      "ok": true
+    },
+    "financial-write-protections": {
+      "ok": true
+    }
+  }
+}
