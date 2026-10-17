@@ -94,6 +94,8 @@ on:
           - providers/catalog.mjs
           - providers/webhook-apply.mjs
           - providers/webhooks.mjs
+          - tenant-collection-v2.mjs
+          - tenant-billing-destination.mjs
           - tenant-billing-engine.mjs
           - tenant-billing-handlers.mjs
           - write-check-workflow.mjs

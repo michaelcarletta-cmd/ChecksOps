@@ -558,6 +558,107 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   }
 });
 
+test('fee collection: seven members on the fee manifest, collection-v2 then destination then billing, held for SQL 98', async () => {
+  const MANIFEST_FEES = 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json';
+  const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const SQL96 = 'aws/workflows/sql/96_platform_owner_tenant_pricing.sql';
+  const SQL98 = 'aws/workflows/sql/98_tenant_fee_collection.sql';
+  const COLLECTION = 'tenant-collection-v2.mjs';
+  const DESTINATION = 'tenant-billing-destination.mjs';
+  const ENGINE = 'tenant-billing-engine.mjs';
+  const HANDLERS = 'tenant-billing-handlers.mjs';
+  const fees = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_FEES), 'utf8'));
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_RELEASE), 'utf8'));
+  assert.equal(fees.deploy_authorized, false);
+
+  const superseded = ['providers/parity/moov-functions.mjs', 'providers/parity/moov-money.mjs', 'providers/catalog.mjs', ENGINE, HANDLERS];
+  assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION].sort());
+  for (const member of Object.keys(fees.members)) {
+    const row = PLAN.members[member];
+    assert.equal(row.manifest, MANIFEST_FEES, member);
+    assert.equal(row.operation, 'replace', member);
+    assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  }
+  // The release's planned bytes were never applied: same live values, the fee branch's accepted bytes.
+  for (const member of superseded) {
+    assert.equal(fees.members[member].supersedes_unapplied_manifest, MANIFEST_RELEASE, member);
+    assert.equal(fees.members[member].live_sha256, release.members[member].live_sha256, member);
+  }
+  // New to the plan: the 2026-10-11 live snapshot values.
+  assert.equal(PLAN.members[COLLECTION].expected_live_sha256, '8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66');
+  assert.equal(PLAN.members[DESTINATION].expected_live_sha256, '7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80');
+  // provider-flags.mjs stays live: production already exports isProductionChecksOpsRuntime and carries
+  // live-only moovTransferPostEnabled, which the branch bytes would drop.
+  assert.ok(!PLAN.order.includes('provider-flags.mjs'));
+  assert.equal(PLAN.members['provider-flags.mjs'], undefined);
+
+  // Order: collection-v2 (PRODUCTION_FEE_DESTINATION, bankOnly) -> destination -> engine -> handlers.
+  const at = (name) => PLAN.order.indexOf(name);
+  assert.ok(at(COLLECTION) >= 0 && at(COLLECTION) < at(DESTINATION));
+  assert.ok(at(DESTINATION) < at(ENGINE) && at(ENGINE) < at(HANDLERS));
+  assert.ok(localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes(COLLECTION));
+  assert.deepEqual(PLAN.order.slice(-2), ['providers/production/moov-send.mjs', 'providers.mjs']);
+
+  // SQL 98 holds the billing members; it is a pending pin (SQL 98 itself requires SQL 96).
+  for (const member of [ENGINE, HANDLERS]) assert.equal(PLAN.members[member].sql_before, SQL98, member);
+  for (const member of [COLLECTION, DESTINATION]) assert.equal(PLAN.members[member].sql_before, null, member);
+  const pre = PLAN.sql_prerequisites[SQL98];
+  assert.equal(pre.verified_live, false);
+  assert.equal(pre.evidence, null);
+  assert.equal(PLAN.sql_prerequisites[SQL96].verified_live, false);
+  const pin = JSON.parse(fs.readFileSync(path.join(ROOT, pre.pin), 'utf8'));
+  assert.equal(pin.execute, false);
+  assert.equal(pin.authorization, 'pending');
+  assert.equal(pin.filename, SQL98);
+  assert.equal(pin.source_sha256, sha(SQL98));
+  assert.deepEqual(pin.predecessors, ['sql96']);
+  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.staging_acceptance.ok, false);
+  const { AUTHORIZED_SQL98_TENANT_FEE_COLLECTION: reg, FEE_COLLECTION_PENDING_SQL_PINS } = await import('../../scripts/deployment-guard/lib/sql-executor-auth.mjs');
+  assert.equal(FEE_COLLECTION_PENDING_SQL_PINS.sql98, reg);
+  assert.equal(reg.execute, false);
+  assert.equal(reg.authorization, 'pending');
+  assert.equal(reg.source_sha256, pin.source_sha256);
+  assert.equal(reg.commit, pin.staging_pin_commit);
+  assert.deepEqual([...reg.function_identities], pin.function_identities);
+  assert.match(fs.readFileSync(path.join(ROOT, SQL98), 'utf8'), /to_regprocedure\('public\.aws_platform_owner_set_tenant_pricing\(uuid, jsonb\)'\) IS NULL/);
+
+  // Held while SQL 98 is not recorded live ...
+  for (const member of [ENGINE, HANDLERS]) {
+    await assert.rejects(
+      run(applyEnv(member), applyDeps(member).deps),
+      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL98,
+      member,
+    );
+  }
+  const with98 = structuredClone(PLAN);
+  with98.sql_prerequisites[SQL98] = { verified_live: true, evidence: 'test' };
+  // ... then the engine still waits for collection-v2 and the destination ...
+  await assert.rejects(
+    run(applyEnv(ENGINE), { ...applyDeps(ENGINE, { pending: [COLLECTION] }).deps, plan: with98 }),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes(COLLECTION),
+  );
+  // ... and applies once they are live.
+  const engine = applyDeps(ENGINE);
+  const applied = await run(applyEnv(ENGINE), { ...engine.deps, plan: with98 });
+  assert.equal(applied.mutation, false);
+  assert.deepEqual(engine.calls.receipt.owned_member_ops, { replace: [ENGINE], add: [] });
+
+  // collection-v2 and the destination need no SQL; the destination links against live provider-flags.mjs,
+  // which exports isProductionChecksOpsRuntime, and refuses one that does not.
+  const collection = await run(applyEnv(COLLECTION), applyDeps(COLLECTION).deps);
+  assert.equal(collection.mutation, false);
+  const liveFlags = 'export const isProductionChecksOpsRuntime = () => false;\nexport const moovTransferPostEnabled = () => false;\nexport const flagSnapshot = () => ({});\n';
+  const destination = await run(applyEnv(DESTINATION), applyDeps(DESTINATION, { sources: { 'provider-flags.mjs': liveFlags } }).deps);
+  assert.equal(destination.mutation, false);
+  await assert.rejects(
+    run(applyEnv(DESTINATION), applyDeps(DESTINATION, { sources: { 'provider-flags.mjs': 'export const flagSnapshot = () => ({});\n' } }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION
+      && error.details.problems.some((row) => row === 'provider-flags.mjs does not export isProductionChecksOpsRuntime'),
+  );
+});
+
 test('linkProblems refuses a member whose new bytes drop a name a live file imports (static or dynamic)', async () => {
   const { linkProblems, namedImports } = await import('../../scripts/deployment-guard/github-production-lambda-overlay.mjs');
   const live = {

@@ -1,63 +1,84 @@
 # Fee collection fixes: lock, pin and deploy-order deltas
 
-Branch `claude/fee-collection-fixes`, built on the unmerged release branch `claude/release-2026-10-17`
-(head 361dfd8c6). Read this with `ops/release-2026-10-17-lock-pin-deltas.md`: every value there still applies,
-except the rows below. They replace that file's values for the same files.
+Branch `claude/fee-collection-fixes`. It was built on the release branch head `361dfd8c6`, then merged with `main` at
+`e2ca97bc2` (release #1015). Read this with `ops/release-2026-10-17-lock-pin-deltas.md`: every value there still
+applies, except the rows below. They replace that file's values for the same files.
 
-Documentation only. Nothing in `ops/release-locks/` or `ops/deployment-guard/production-api-overlay-plan.json`
-is edited. No deploy, workflow run, AWS call or Moov call was made to produce this file. Hashes are sha256
-of the branch bytes, plus `node scripts/validate-release-locks.mjs --print-hashes` for locks.
+No deploy, workflow run, AWS call or Moov call was made to produce this file. Hashes are sha256 of the branch
+bytes, plus `node scripts/validate-release-locks.mjs --print-hashes` for locks.
 
 Owner decisions (2026-10-17) this implements: the platform owner collects tenant fees manually from Tenant
 Management. There is no automatic or scheduled pull. The amount comes only from the Billing tab rates (SQL 96)
 and recorded usage. It is pulled by ACH from the bank account the tenant authorized into the ChecksOps
 platform account. There are no amount limits.
 
-## 1. Release locks
+## 1. Release locks (needs fresh owner approval; NOT applied)
 
 | Component | Recorded tree_hash | Branch tree_hash | Why |
 |---|---|---|---|
 | `provider-secrets` (UNVERIFIED, not production-active) | `e4a20f5b6983f9e66732d87b14c1574701ae2263f03211ee4cdf354ade75ad74` | `6c47674d8446d08eb6e938e33ffc0e58ee7494f4b87442bfbb97a9533152e8f6` | `provider-flags.mjs` now exports `isProductionChecksOpsRuntime` |
 
-No other lock component contains a file this branch changes.
+This is the only change `node scripts/validate-release-locks.mjs` asks for: set
+`ops/release-locks/locked-components.json` `components.provider-secrets.source.tree_hash` to the branch value.
+Until then the validator fails on that one line. No other lock component contains a file this branch changes.
 
-## 2. Lambda files (all would be REPLACE plan members; none is a plan member today)
+Alternative that needs no lock change: move `isProductionChecksOpsRuntime` out of `provider-flags.mjs` into an
+unlocked module (for example `identity-env.mjs`, which it already wraps). Live production already exports a
+`provider-flags.mjs` `isProductionChecksOpsRuntime`, so the overlay does not need the repository file either way.
 
-These replace the section 3 values in the release report where a file is listed there. Files marked "new
-here" are not in that report, because the release branch did not change them.
+## 2. Overlay plan (`ops/deployment-guard/production-api-overlay-plan.json`)
 
-| File (under `aws/functions/api/`) | Branch sha256 | Change |
+Seven members take the branch bytes under `aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json`.
+Planning only: `deploy_authorized` is false and nothing is live or verified.
+
+| Member (under `aws/functions/api/`) | expected live | accepted (branch) | sql_before | Live provenance |
+|---|---|---|---|---|
+| `providers/parity/moov-functions.mjs` | `2dff151e…` | `dc20078ad6ea80841c35bc6c06797c00fd97e4fb57d3527d72048e87536460b8` | – | release manifest (unapplied) |
+| `providers/parity/moov-money.mjs` | `1cd405ca…` | `0ac52dbde62187d8e93ba229b0f5e4fa3428e84c7f3ba6538c4202242ca68e98` | – | release manifest (unapplied) |
+| `providers/catalog.mjs` | `ae788992…` | `5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9` | – | release manifest (unapplied) |
+| `tenant-collection-v2.mjs` (new member) | `8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66` | `4be03294ca832de29e57b51958d00681568601b1d8c533776a22d5538d5fa3c9` | – | 2026-10-11 snapshot `f78e16d99` |
+| `tenant-billing-destination.mjs` (new member) | `7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80` | `b68386b4d560a69cffacc74950ed256e619f9a7b2d486a04e0a1fb6e5afad39e` | – | 2026-10-11 snapshot (= main) |
+| `tenant-billing-engine.mjs` | `65b75735…` | `a823c7c1177475668713900d6fc4f34909f6148f728d5f1fe3421929c012a6ee` | SQL 98 (was 96) | release manifest (unapplied) |
+| `tenant-billing-handlers.mjs` | `8aeb8b7f…` | `411eafae4422dad748ca294d9c1cc3b3d21a1c5ddb3ec0c389ebd329131da377` | SQL 98 (was 96) | release manifest (unapplied) |
+
+Order: `tenant-collection-v2.mjs` and `tenant-billing-destination.mjs` go just before `tenant-billing-engine.mjs`
+(they are also added to the `guarded-production-lambda-overlay.yml` member choices). The parity files and
+`providers/catalog.mjs` keep their places. `providers/production/moov-send.mjs` and `providers.mjs` stay last.
+
+- `tenant-collection-v2.mjs` must go before the engine. It holds `PRODUCTION_FEE_DESTINATION` (which the new
+  destination file imports) and `bankOnly`. Against live collection-v2 the new engine's `bankOnly` would be
+  ignored, and the tenant wallet would be debited first. Live lacks only main's `obligation_status` return field,
+  so the branch bytes are a superset of live.
+- `provider-flags.mjs` is deliberately **not** a plan member. Live production already exports
+  `isProductionChecksOpsRuntime` (`CHECKSOPS_ENV` starts with `production`), and the destination file links
+  against it. Live also carries `moovTransferPostEnabled` and an `AWS_MOOV_TRANSFER_POST_ENABLED` `flagSnapshot`
+  field that main and this branch lack (release report item 4). Overlaying the branch bytes would drop them.
+
+Reverse imports: `aws/tests/fixtures/main-api-import-edges.json` lists
+`tenant-billing-destination.mjs -> provider-flags.mjs isProductionChecksOpsRuntime`. Main's live files keep
+loading: `runMonthlyBillingScheduler`, `chargeTenantPeriod`, `tenantFeeCharge` and every other imported name
+are still exported. The scheduler now refuses. `chargeTenantPeriod` requires a preview hash, so main's live
+`tenant-billing-handlers.mjs` cannot charge through the new engine without a preview (`preview_required`).
+
+## 3. SQL 98 pending pin
+
+| SQL file | source_sha256 (branch) | Authoring commit |
 |---|---|---|
-| `provider-flags.mjs` | `6a40bc217a44a5ffe915188a0f796c5274c8ebc65dc633d6c5e84c7832e3d1bd` | new here: exports `isProductionChecksOpsRuntime` |
-| `tenant-billing-destination.mjs` | `2e547f9ba81d6c3e0763a90ddfe16289446607d4d8e65483a09fef6a8ac0262c` | new here: static import of the helper, production pin, status and set |
-| `tenant-collection-v2.mjs` | `fa635db849bcbe474ad17d9c427272f1279d5cfd96f2363529c90f812ff41247` | new here: `deps.bankOnly` (tenant wallet never debited for fees) |
-| `tenant-billing-engine.mjs` | `a7f1b8a8c7368eb13f5209494094178f6587dbb861eaef22bf7435cc377ba234` | replaces `3397c65d…`: preview, hash, lock, audit, scheduler refusal, single per-check default |
-| `tenant-billing-handlers.mjs` | `411eafae4422dad748ca294d9c1cc3b3d21a1c5ddb3ec0c389ebd329131da377` | replaces `2866356c…`: preview / pull / destination actions, scheduler 410 |
-| `providers/parity/moov-money.mjs` | `0ac52dbde62187d8e93ba229b0f5e4fa3428e84c7f3ba6538c4202242ca68e98` | replaces `b35beaa7…`: `moov-tenant-fee-charge` retired |
-| `providers/parity/moov-functions.mjs` | `dc20078ad6ea80841c35bc6c06797c00fd97e4fb57d3527d72048e87536460b8` | replaces `7b0cde12…`: retired handlers answer before identity |
-| `providers/catalog.mjs` | `5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9` | replaces `6a3bf4e5…`: description only |
+| `aws/workflows/sql/98_tenant_fee_collection.sql` | `668b072048494bff275ac2b803dfb1d2252f5cfc393591e97ff85478039e71e9` | `0d7917b9601de1fe8d5d1ff337cd23e0134443ce` |
 
-Reverse imports: `aws/tests/fixtures/main-api-import-edges.json` now also lists
-`tenant-billing-destination.mjs -> provider-flags.mjs isProductionChecksOpsRuntime`. That name was missing on
-main and was excluded from the fixture; it is checked now, giving 567 edges. Main's live files keep loading:
-`runMonthlyBillingScheduler`, `chargeTenantPeriod`, `tenantFeeCharge` and every other imported name are still
-exported. The scheduler now refuses. `chargeTenantPeriod` now requires a preview hash, so main's live
-`tenant-billing-handlers.mjs` cannot charge through the new engine without a preview. It gets `preview_required`.
+The number is 98, the next free one (main ends at 97). It is pinned as pending:
+- `ops/deployment-guard/sql98-tenant-fee-collection-production-apply.json`: `authorization: pending`,
+  `execute: false`, predecessor `sql96`, no expected live definition;
+- `scripts/deployment-guard/lib/sql-executor-auth.mjs` `AUTHORIZED_SQL98_TENANT_FEE_COLLECTION`
+  (`FEE_COLLECTION_PENDING_SQL_PINS`), not in the staging executor MIGRATIONS or workflow choices;
+- plan `sql_prerequisites` entry with `verified_live: false`.
 
-## 3. New SQL pin
+No tooling, ledger entry, staging apply or production apply exists. SQL 98 now refuses without SQL 96's
+`aws_platform_owner_set_tenant_pricing(uuid, jsonb)`, so "SQL 98 verified live" implies SQL 96 is live.
 
-| SQL file | source_sha256 (branch) |
-|---|---|
-| `aws/workflows/sql/98_tenant_fee_collection.sql` | `2be331f5387465520b80729f836bae2cf0db5e62d997aa3a824196d6b8608096` |
-
-It is not pinned yet. It has no `AUTHORIZED_SQL98_*` entry, no production-apply JSON, no ledger entry and no
-overlay-plan `sql_prerequisites` entry. It needs a reviewed staging pin with expected live state from a
-read-only inspect, then a staging apply, staging acceptance and a production pin. The number is 98, the next
-free one after 90-97.
-
-What a read-only inspect must confirm before the pin:
-- `check_billing_config` has an active row (or no rows: SQL 98 then seeds 300). The live default price is
-  the answer to section 6's question.
+What a read-only inspect must confirm before an execute pin:
+- `check_billing_config` has an active row, or no rows (SQL 98 then seeds 300). The live default price is
+  the answer to owner question (b)'s price.
 - `tenant_maintenance_payments` has no two rows for one `(tenant_id, billing_period)`. SQL 98 refuses with
   `23505 sql98_duplicate_billing_periods` otherwise; reconcile first. Also check whether
   `tenant_maintenance_payments_tenant_period_uidx` already exists (from the earlier billing SQL).
@@ -67,32 +88,25 @@ What a read-only inspect must confirm before the pin:
 - The current body of `public.record_check_billing_event()` and `trg_record_check_billing_event`. The DB-copy
   analysis lists the trigger as present on AWS (`aws/db-copy/analysis/TRIGGER_RECONCILIATION.md`); SQL 98
   replaces it.
-- The `platform_billing_destination` rows and policies. SQL 98 replaces both policies with platform-owner-only
-  ones, which drops the `aws_monthly_billing_job()` read path.
+- Every policy and grant on `platform_billing_destination`. SQL 98 now drops every policy except its two
+  platform-owner ones and resets `checksops` to SELECT, INSERT, UPDATE. This removes the `aws_monthly_billing_job()`
+  read path and any other permissive policy.
 
 ## 4. Deploy order (add to section 5 of the release report)
 
-1. **SQL 98 after SQL 96, before the billing Lambdas.** Without SQL 98, a pull or verify-debit refuses with
-   503 `billing_audit_unavailable` before anything is booked or posted. Fail closed, nothing charged.
-2. **`provider-flags.mjs` before (or with) `tenant-billing-destination.mjs`.** The new destination file imports
-   `isProductionChecksOpsRuntime` statically and would not load against main's `provider-flags.mjs`.
-   `provider-flags.mjs` itself only adds an export and imports `identity-env.mjs`, which is unchanged and
-   already live.
-3. **`tenant-collection-v2.mjs` before (or with) `tenant-billing-destination.mjs`.** The destination file
-   imports `assertExplicitDestination` from it; that name is already exported on main, so this is a soft
-   dependency.
-4. **`tenant-billing-destination.mjs` → `tenant-billing-engine.mjs` → `tenant-billing-handlers.mjs`.** The
-   engine imports `COLLECTION_CONTRACT_ID` from collection-v2. The handlers import `MANUAL_BILLING_ONLY` and
-   `previewTenantPeriodCharge` from the engine and `billingDestinationStatus` and `setBillingDestination` from
-   the destination file. This replaces the release report's single "billing after SQL 96" line.
-5. **`providers/parity/moov-money.mjs` and `moov-functions.mjs`** in the parity group (release step 5). Any
+1. **SQL 96, then SQL 98, before the billing Lambdas.** Enforced by SQL 98's prerequisite check and the plan's
+   `sql_before`. Without SQL 98 a pull or verify-debit refuses with 503 `billing_audit_unavailable` before
+   anything is booked or posted. It fails closed and nothing is charged.
+2. **`tenant-collection-v2.mjs` → `tenant-billing-destination.mjs` → `tenant-billing-engine.mjs` →
+   `tenant-billing-handlers.mjs`** (plan order; the overlay refuses a member while an earlier one is pending).
+3. **`providers/parity/moov-money.mjs` and `moov-functions.mjs`** in the parity group (release step 5). Any
    order works. Together they retire `moov-tenant-fee-charge` (410 `use_tenant_billing_pull`).
-6. **SPA** (one build, after the Lambdas above): `AdminTenants.tsx`, `TenantFeeCollection.tsx`,
+4. **SPA** (one build, after the Lambdas above): `AdminTenants.tsx`, `TenantFeeCollection.tsx`,
    `tenantFeeBilling.ts`. Its buttons call `tenant-billing-admin` `preview` / `pull` / `verify-debit` /
-   `destination-get` / `destination-set`. An SPA in front of the old handlers would get `unknown_action` for
-   the destination actions and `preview_required` for pulls. It fails closed.
-7. **Supabase edge function** `supabase/functions/moov-tenant-fee-charge` now only answers 410. It is not
-   deployed by this change; deploy it only through the Supabase path, if that is still live.
+   `destination-get` / `destination-set`. An SPA in front of the old handlers gets `unknown_action` for the
+   destination actions and `preview_required` for pulls, so it fails closed.
+5. **Supabase edge function** `supabase/functions/moov-tenant-fee-charge` now only answers 410. This change does not
+   deploy it; deploy it only through the Supabase path, if that is still live.
 
 ## 5. Flags (unchanged, still unset in every template)
 
@@ -107,30 +121,36 @@ Production also refuses before booking:
 
 `AWS_MOOV_MONTHLY_BILLING_SIMULATE` can no longer make production book a simulated charge.
 
-## 6. Needs owner input
+## 6. Open owner questions (isolated defaults; behavior unchanged until answered)
 
-- **Platform Moov destination ids.** Production fees are pinned to the account and payment method that
-  `tenant-collection-v2.mjs` already requires: account `41cb5d67-4911-4bef-aad5-d8ee9c582208`, wallet payment
-  method `c70a90f2-9bcc-4084-8263-d5a0fb5d806c`. They were identified read-only from tenant wallet
-  `partnerAccountID` values (`tenant-billing-destination.mjs`), not confirmed by the owner. Confirm them, then
-  set them once from Tenant Management, Billing & Usage, Fee destination. If the platform's own bank account
-  should receive the fees instead of the wallet, both pins (here and in `assertExplicitDestination`) must
-  change. Sandbox is pinned to the ChecksOps sandbox merchant `36b79957-ce7a-4ca7-a68f-30986c9e47bb`; the
-  sandbox payment method id still has to be entered.
-- **The live `check_billing_config` price.** The repo cannot show which per-check price production charged
-  historically; read it in section 3's inspect. What the code does show:
-  - The charged amount always came from each event's stamped `unit_price_cents`. The Supabase trigger
-    stamped the tenant rate when per-check billing was on, otherwise the active `check_billing_config` price
-    (seed 300).
-  - The Supabase Tenant Management total summed those stamped prices.
-  - The `$4.00` was only a display label in `AdminTenants.tsx` and the engine's display/readiness fallback
-    (`DEFAULT_CHECK_RATE_CENTS = 400`). It never priced an event.
-- **Per-check billing off still bills.** The ported trigger keeps the Supabase behavior: with per-check billing
-  off, a deposited check is still billed at the default price. "Per-check billing on" only means the tenant's
-  own rate is used. If "off" should mean no per-check fee, the trigger and the engine need one more change.
-- **Invoice email.** The retired `moov-tenant-fee-charge` emailed an invoice after a pull. The
-  `tenant-billing-admin` pull does not send one.
-- **Live RLS for the pull's writes.** On staging, `tenant_maintenance_payments`, `payment_transfers` and
-  `check_billing_events` write policies were reconciled toward `aws_can_write_tenant` (guarded SQL 39), which a
-  non-member platform owner does not pass. A staging UAT pull must confirm that the owner's writes go through,
-  or that a reviewed server-writer path is added. This change adds no new bypass.
+- **(a) Fee destination: platform Moov wallet or a bank account, and which platform Moov account?**
+  The one place is `aws/functions/api/tenant-collection-v2.mjs` `PRODUCTION_FEE_DESTINATION`. Default:
+  `kind: 'platform_moov_wallet'`, account `41cb5d67-4911-4bef-aad5-d8ee9c582208`, wallet payment method
+  `c70a90f2-9bcc-4084-8263-d5a0fb5d806c`, `ownerConfirmed: false`. These were identified read-only from tenant
+  wallet `partnerAccountID` values, not confirmed by the owner. `assertExplicitDestination` and the
+  destination pins both read this object. Sandbox stays pinned to the ChecksOps sandbox merchant
+  `36b79957-ce7a-4ca7-a68f-30986c9e47bb`.
+- **(b) Does per-check billing "off" mean no per-check fee?** Default: no. Off still bills the
+  `check_billing_config` default per deposited check (the Supabase behavior); "on" only means the tenant's own
+  rate is used. The switches are `public.aws_check_billing_charges_when_per_check_off()` in SQL 98 (returns
+  `true`), which decides the stamped price, and `PER_CHECK_OFF_BILLS_DEFAULT_PRICE` in
+  `tenant-billing-engine.mjs`, which mirrors it for display. Change both together.
+- **(c) Should the invoice email come back?** Default: no. `INVOICE_EMAIL_AFTER_PULL = false` in
+  `tenant-billing-engine.mjs`, and the pull reports `invoice_email_sent: false`. The retired
+  `moov-tenant-fee-charge` emailed one through Supabase `send-transactional-email`; no AWS invoice sender is
+  wired, so turning this on needs that sender first.
+
+Also still open (from the earlier review): **live RLS for the pull's writes.** On staging,
+`tenant_maintenance_payments`, `payment_transfers` and `check_billing_events` write policies were reconciled
+toward `aws_can_write_tenant` (guarded SQL 39), which a non-member platform owner does not pass. A staging UAT
+pull must confirm that the owner's writes go through, or that a reviewed server-writer path is added. This change
+adds no new bypass.
+
+## 7. Review fixes after the merge
+
+- `preview_hash` v2 also binds the fee destination and the tenant's authorized funding source, so a preview
+  cannot be replayed after either changes, even at the same amount.
+- Preview and pull require positive safe-integer cents (`invalid_amount_cents`) before booking.
+- The $1 verification debit applies the pull's bank-source rules (`assertTenantBankSource`).
+- SQL 98 fails closed on unknown live `platform_billing_destination` policies and grants (see section 3).
+- SQL 98 requires SQL 96.

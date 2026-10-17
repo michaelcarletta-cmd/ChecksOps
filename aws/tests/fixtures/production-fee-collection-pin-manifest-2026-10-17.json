@@ -1,0 +1,51 @@
+{
+  "workstream_id": "fee-collection-fixes-2026-10-17",
+  "authorization": "Owner-approved task 2026-10-17 (\"bring claude/fee-collection-fixes up to date with main and review it, ready for a PR\"; update the pins and overlay plan entries the fee work touches, pending pins execute false / verified_live false): the claude/fee-collection-fixes bytes may be planned for production as these accepted_sha256 values, in the plan order. Planning only. Each production apply still needs SQL 98 (and so SQL 96) recorded verified live where the plan says so, the owner's run-time approval for this workstream, a staging acceptance run and the phrase DEPLOY <member> TO PRODUCTION.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Manual tenant fee collection (claude/fee-collection-fixes, merged with main e2ca97bc2). Nothing here is live or verified; no inspect, deploy or AWS call was made for this manifest. live_sha256 provenance: (a) supersedes_unapplied_manifest: no production apply of the release 2026-10-17 accepted bytes is recorded, so live_sha256 stays that manifest's live value (tenant-billing-engine.mjs, tenant-billing-handlers.mjs, providers/catalog.mjs, providers/parity/moov-money.mjs, providers/parity/moov-functions.mjs). (b) live_source: members new to the plan take the file in the 2026-10-11 live production bundle snapshot (f78e16d99). tenant-billing-destination.mjs live equals origin/main. tenant-collection-v2.mjs live lacks only main's obligation_status return field, so the branch bytes are a superset of live (nothing live-only is dropped). provider-flags.mjs is deliberately NOT a member: live production already exports isProductionChecksOpsRuntime (CHECKSOPS_ENV startsWith production), which tenant-billing-destination.mjs links against, and live carries moovTransferPostEnabled and the AWS_MOOV_TRANSFER_POST_ENABLED flagSnapshot field that main and this branch do not (release 2026-10-17 deltas item 4). Every live_sha256 must be confirmed by a read-only production inspect before any apply.",
+  "members": {
+    "providers/parity/moov-functions.mjs": {
+      "live_sha256": "2dff151e470aabf74f905d4f6af51c9ac7dd1d13696eeffa585ca43cf00302ee",
+      "accepted_sha256": "dc20078ad6ea80841c35bc6c06797c00fd97e4fb57d3527d72048e87536460b8",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/parity/moov-money.mjs": {
+      "live_sha256": "1cd405caec4982369c6a858efec8168b3f98cff8fb881fe888c3994217e93726",
+      "accepted_sha256": "0ac52dbde62187d8e93ba229b0f5e4fa3428e84c7f3ba6538c4202242ca68e98",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/catalog.mjs": {
+      "live_sha256": "ae78899274a1dfe93835d2e8fc4856f5d47d84fde18de688ed1f533a800fb521",
+      "accepted_sha256": "5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+      "accepted_sha256": "a823c7c1177475668713900d6fc4f34909f6148f728d5f1fe3421929c012a6ee",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-billing-handlers.mjs": {
+      "live_sha256": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
+      "accepted_sha256": "411eafae4422dad748ca294d9c1cc3b3d21a1c5ddb3ec0c389ebd329131da377",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-collection-v2.mjs": {
+      "live_sha256": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+      "accepted_sha256": "4be03294ca832de29e57b51958d00681568601b1d8c533776a22d5538d5fa3c9",
+      "operation": "replace",
+      "live_source": "origin/claude/production-api-live-snapshot f78e16d99 (2026-10-11 live bundle)"
+    },
+    "tenant-billing-destination.mjs": {
+      "live_sha256": "7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80",
+      "accepted_sha256": "b68386b4d560a69cffacc74950ed256e619f9a7b2d486a04e0a1fb6e5afad39e",
+      "operation": "replace",
+      "live_source": "origin/claude/production-api-live-snapshot f78e16d99 (2026-10-11 live bundle)"
+    }
+  }
+}
