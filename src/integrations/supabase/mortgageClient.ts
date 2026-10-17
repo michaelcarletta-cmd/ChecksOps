@@ -20,6 +20,13 @@ const shouldUseAws = AWS_BUILD || shouldUseAwsChecksOpsBackendFor({
   authProvider: String(import.meta.env.VITE_AUTH_PROVIDER || ""),
 });
 
+/**
+ * True when the Mortgage Desk talks to the ChecksOps AWS API. There the
+ * database (SQL 99 trigger tr_mortgage_desk_completion_messages) posts the
+ * completed-work note and the return marker when a request is completed.
+ */
+export const mortgageUsesAwsBackend: boolean = shouldUseAws;
+
 export const mortgageSupabase = shouldUseAws
   ? (createAwsStagingClient({
       sessionKey: AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,

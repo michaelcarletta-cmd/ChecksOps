@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
+import { mortgageSupabase as supabase, mortgageUsesAwsBackend } from "@/integrations/supabase/mortgageClient";
 import { useMortgageAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import { ensureMortgageDeskReturnMessage } from "@/hooks/useMortgageDeskReturnAlert";
-import { buildMortgageDeskCompletedMessage } from "@/lib/mortgageDeskReturn";
+import { buildMortgageDeskCompletedMessage, mortgageDeskCompletionPostedByClient } from "@/lib/mortgageDeskReturn";
 
 interface Request {
   id: string;
@@ -172,24 +172,29 @@ export default function MortgageOpsQueue() {
       // Notify the tenant thread + homeowner timeline (best-effort, never blocks)
       const row = [...mine, ...available, ...completed].find((r) => r.id === id);
       if (row?.check_intake_item_id) {
-        void supabase.from("check_messages").insert({
-          check_id: row.check_intake_item_id,
-          sender_id: user?.id ?? null,
-          body: buildMortgageDeskCompletedMessage(row.mortgage_company || row.mortgage_servicer, notes),
-        } as any);
-        // Additive return-to-tenant marker (idempotent per request) that drives
-        // the tenant "Returned from Mortgage Desk" banner. Awaited so a failed
-        // insert is surfaced instead of silently hiding the return.
+        // On the AWS backend the completed-work note and the return marker are
+        // posted by the database in the same transaction as the status change
+        // (SQL 99), so a successful status update already notified the tenant.
         let returnMarkerError: string | null = null;
-        try {
-          const marker = await ensureMortgageDeskReturnMessage({
-            checkId: row.check_intake_item_id,
-            requestId: id,
-            senderId: user?.id ?? null,
-          });
-          if (marker.error) returnMarkerError = marker.error.message || "unknown error";
-        } catch (e) {
-          returnMarkerError = e instanceof Error ? e.message : "unknown error";
+        if (mortgageDeskCompletionPostedByClient(mortgageUsesAwsBackend)) {
+          void supabase.from("check_messages").insert({
+            check_id: row.check_intake_item_id,
+            sender_id: user?.id ?? null,
+            body: buildMortgageDeskCompletedMessage(row.mortgage_company || row.mortgage_servicer, notes),
+          } as any);
+          // Additive return-to-tenant marker (idempotent per request) that drives
+          // the tenant "Returned from Mortgage Desk" banner. Awaited so a failed
+          // insert is surfaced instead of silently hiding the return.
+          try {
+            const marker = await ensureMortgageDeskReturnMessage({
+              checkId: row.check_intake_item_id,
+              requestId: id,
+              senderId: user?.id ?? null,
+            });
+            if (marker.error) returnMarkerError = marker.error.message || "unknown error";
+          } catch (e) {
+            returnMarkerError = e instanceof Error ? e.message : "unknown error";
+          }
         }
         void supabase.from("homeowner_ledger_events").insert({
           check_intake_item_id: row.check_intake_item_id,
