@@ -86,6 +86,12 @@ test("Review/Endorsing sources do not reference the validator", () => {
   }
 });
 
+test("App route remains wired for the staging admin page", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.ok(app.includes('path="/admin/db-validator"'));
+  assert.ok(app.includes("AdminDbValidator"));
+});
+
 test("AWS adapter exposes the Cognito ID token as session access_token", () => {
   const src = readFileSync(new URL("../src/integrations/aws/client.ts", import.meta.url), "utf8");
   assert.ok(src.includes("access_token: String(tokens.idToken || \"\")"));
