@@ -18,7 +18,7 @@ production").
 | `sql95` | `95_remove_freedom_claims_bridge.sql` (`0cf0dafd…`) | Drops `trg_notify_freedom_status_change`, `notify_freedom_status_change()`, `list_checks_by_freedom_claim(text, uuid)`, `aws_ingest_shared_check(jsonb)`, `vault_create_bridge_secret(text)`, `vault_update_bridge_secret(text)`. | — (Lambda gate, below) |
 | `sql96` | `96_platform_owner_tenant_pricing.sql` (`18109fed…`) | `tenant_pricing_audit` and its trigger, `aws_platform_owner_set_tenant_pricing(uuid, jsonb)`, the replaced `aws_tenants_member_column_guard()`, platform-owner-only `platform_fee_schedules` writes. | SQL 93 |
 | `sql97` | `97_financial_stepup_log_server_writer.sql` (`e3c8fd41…`) | `INSERT` on `financial_stepup_log` revoked from PUBLIC and `authenticated`, granted to `checksops`; the `aws_financial_stepup_log_writer_guard` BEFORE INSERT trigger. | — (Lambda gate, below) |
-| `sql98` | `98_tenant_fee_collection.sql` (`7a42dc13…`) | Per-check price stamping (`record_check_billing_event()` and `trg_record_check_billing_event`, the `check_billing_config` default and the owner-question switch, a seed config row only when the table is empty); one charge per tenant period (`tenant_maintenance_payments_tenant_period_uidx`); `check_billing_events` unique (check, event) index when none covers it; `platform_billing_destination` (platform owner only, audited), `platform_billing_audit`, `tenant_fee_invoice_outbox`, `aws_platform_owner_record_billing_audit(jsonb)`; `tenants.deposits_enabled` with `aws_tenant_deposits_enabled(uuid)`, `aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)` and its audit trigger; SQL 96's `aws_tenants_member_column_guard()` replaced (plus `deposits_enabled` for the platform owner). | SQL 96 |
+| `sql98` | `98_tenant_fee_collection.sql` (`5a42e485…`) | Per-check price stamping (`record_check_billing_event()` and `trg_record_check_billing_event`, the `check_billing_config` default and the owner-question switch, a seed config row only when the table is empty); one charge per tenant period (`tenant_maintenance_payments_tenant_period_uidx`); `check_billing_events` unique (check, event) index when none covers it; `platform_billing_destination` (platform owner only, audited), `platform_billing_audit`, `tenant_fee_invoice_outbox`, `aws_platform_owner_record_billing_audit(jsonb)`; `tenants.deposits_enabled` with `aws_tenant_deposits_enabled(uuid)`, `aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)` and its audit trigger; SQL 96's `aws_tenants_member_column_guard()` replaced (plus `deposits_enabled` for the platform owner). | SQL 96 |
 | `sql99` | `99_mortgage_desk_completion_messages.sql` (`0c079fe4…`) | `aws_mortgage_desk_appended_note(text, text)`, the SECURITY DEFINER trigger function `aws_mortgage_desk_completion_messages()` and `tr_mortgage_desk_completion_messages` on `mortgage_handling_requests`. | SQL 90 |
 | `sql100` | `100_mortgage_desk_live_access.sql` (`16cb8c9a…`) | Records production's live Mortgage Desk access: `aws_is_mortgage_ops_agent()`, `aws_mortgage_agent_queue_visible(text, uuid)`, `aws_is_active_mortgage_agent(uuid)`; the five live `mortgage_handling_requests` policies (drops the repository-only `aws_write_mortgage_handling_requests`); `checksops` table SELECT / INSERT / DELETE and UPDATE on 17 columns, `authenticated` UPDATE on three columns only; the helpers' live EXECUTE grants and the Accept / Complete policy's live comment. A strict no-op on production. | SQL 90 (and 12 / 24 / SQL 50, already live) |
 
@@ -123,7 +123,7 @@ from the pinned file's bytes; renderings from the reviewed constants in
 | `sql95` | `a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2` |
 | `sql96` | `ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767` |
 | `sql97` | `5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef` |
-| `sql98` | `f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f` |
+| `sql98` | `abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603` |
 | `sql99` | `481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4` |
 | `sql100` | `52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777` |
 
@@ -137,8 +137,11 @@ privileges of `checksops` / `authenticated` on `mortgage_handling_requests`, and
 each policy's comment (never the text): a grant by another grantor, a widened helper EXECUTE
 or a policy comment other than the recorded one is a different state.
 
-Staging is PostgreSQL 18; the tests run PostgreSQL 16. The renderings are collapsed to
-single spaces to absorb pretty-print differences. If a staging read-live after apply reports
+Staging is PostgreSQL 18 (production too); the tests run PostgreSQL 16. The renderings are
+collapsed to single spaces to absorb pretty-print differences, and table constraints leave out
+PostgreSQL 18's named NOT NULL constraints (contype `n`): the column's `notnull` carries them,
+and PostgreSQL 16 has none (the 2026-10-17 production inspect showed six on
+`platform_billing_destination`, which made the take-over shape differ). If a staging read-live after apply reports
 an object as `different` although the file ran, stop: the apply has rolled back (the
 post-condition is the intended hash); reconcile the rendering in a reviewed change.
 
@@ -177,10 +180,13 @@ post-condition is the intended hash); reconcile the rendering in a reviewed chan
   pre-existing `platform_billing_destination` only when it is owned by the login and has the
   reviewed columns, constraints and indexes (FORCE off), no trigger but the file's and
   privileges only of PUBLIC, `authenticated` and `checksops` (the roles the file revokes from;
-  any other policy is dropped by the file), and `platform_billing_destination_absent_or_empty`
-  only while it holds no row (the `platform_billing_destination_rows` count): an existing row
-  would become the fee destination with no review and no audit history, so a non-empty table is
-  refused and reconciled in a reviewed change. `successors_not_applied` on SQL 96 once SQL 98 is in
+  any other policy is dropped by the file), and `platform_billing_destination_absent_empty_or_reviewed`
+  only while it holds no row or exactly the reviewed one (counts only: one row, production, on
+  the owner-confirmed platform account `41cb5d67-…`, with a payment method, verified; owner
+  decision 2026-10-17, the row live in production): any other row would become the fee
+  destination unreviewed, so it is refused and reconciled in a reviewed change. The payment
+  method id is not compared with a reviewed value (none is recorded); the kept row has no audit
+  history before SQL 98 creates the audit trigger. `successors_not_applied` on SQL 96 once SQL 98 is in
   place.
 - SQL 99: `definer_can_write_relations` (`check_messages`: superuser, BYPASSRLS, or a member of
   the owner and no FORCE RLS, the file's own check); `altered_relations_owned_by_login`

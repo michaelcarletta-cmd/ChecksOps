@@ -84,7 +84,7 @@ are still exported. The scheduler now refuses. `chargeTenantPeriod` requires a p
 
 | SQL file | source_sha256 (branch) | Authoring commit |
 |---|---|---|
-| `aws/workflows/sql/98_tenant_fee_collection.sql` | `7a42dc1384dc27fa62d4ad406109419cbc7f0843732958de41abae762425c0d6` | `146c04d33816d0e6c2d11eb801bf14f28bb90580` |
+| `aws/workflows/sql/98_tenant_fee_collection.sql` | `5a42e485c84f7c9976390d12c275cdf32612fbba7656b66f553110c0ae697c2a` | `567772a9034cae4ec4d7c56b07c983fb4e797103` |
 
 The number is 98, the next free one (main ends at 97). It is pinned as pending:
 - `ops/deployment-guard/sql98-tenant-fee-collection-production-apply.json`: `authorization: pending`,
@@ -99,7 +99,7 @@ No tooling, ledger entry, staging apply or production apply exists. SQL 98 now r
 Update (claude/sql98-100-apply-tooling): SQL 98 now has guarded tooling on the SQL 90-97 engine:
 the staging executor choice `sql98-tenant-fee-collection`, the production tool
 `scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs` (`--inspect`), the
-one-shot key `sql98`, a code-derived `intended_replacement_sha256` (`f101573a…`) in both pins and
+one-shot key `sql98`, a code-derived `intended_replacement_sha256` (`abcb8f21…`) in both pins and
 the runbook `ops/production-sql-90-97-apply.md`. Both pins stay `execute: false` /
 `authorization: pending`; nothing was applied. The inspect reports the checks below (counts,
 the covering unique index, the tenant period index, the destination table).
@@ -270,3 +270,17 @@ adds no new bypass.
   on the SQL 90-97 engine. That is a follow-up PR, and it is required before the staging
   deploy. Production is held by the plan's `sql_before` on SQL 98. (Done in
   claude/sql98-100-apply-tooling, with SQL 100.)
+
+## §9 Production inspect 2026-10-17 and reconciliation
+
+Read-only SQL 98 inspects (SSM `24b9f38c-…`, `f6419152-…`, `2693cdef-…`):
+- `platform_billing_destination` already exists in production (created outside the repository;
+  its definition matches the Cursor `43_moov_monthly_tenant_billing.sql`) with exactly one row:
+  production, on the owner-confirmed platform account `41cb5d67-4911-4bef-aad5-d8ee9c582208`,
+  with a payment method, verified (counts only; no id read out). SQL 98 keeps it
+  (`platform_billing_destination_absent_empty_or_reviewed`, owner decision 2026-10-17); any
+  other row is refused. The payment method is not compared with a reviewed value.
+- `record_check_billing_event()` has EXECUTE for PUBLIC, `checksops` and the owner; SQL 98 now
+  grants `checksops` as live (owner decision 2026-10-17) and still revokes PUBLIC.
+- The take-over shape differed only by PostgreSQL 18's named NOT NULL constraints; the release
+  engine now leaves contype `n` out (the column `notnull` carries it).

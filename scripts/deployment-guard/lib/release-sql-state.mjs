@@ -245,8 +245,10 @@ FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum`,
+  // contype 'n' (PostgreSQL 18 records each NOT NULL as a named constraint) is left out: the
+  // column's notnull already carries it, and PostgreSQL 16 has no such row.
   constraints: `SELECT con.conname AS name, pg_catalog.pg_get_constraintdef(con.oid) AS def, con.convalidated AS validated
-FROM pg_catalog.pg_constraint con WHERE con.conrelid = pg_catalog.to_regclass($1) ORDER BY 1`,
+FROM pg_catalog.pg_constraint con WHERE con.conrelid = pg_catalog.to_regclass($1) AND con.contype <> 'n' ORDER BY 1`,
   indexes: `SELECT c.relname AS name, pg_catalog.pg_get_indexdef(i.indexrelid) AS def
 FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
 WHERE i.indrelid = pg_catalog.to_regclass($1) ORDER BY 1`,
@@ -804,11 +806,16 @@ export function releaseSharedPreconditionFailures(key, state, text) {
     if (extra === 'no_rows_outside_sql94_rule') checks.push(['no_rows_outside_sql94_rule', s.counts?.rows_outside_sql94_rule === 0]);
     // SQL 98: the file raises 23505 on duplicate tenant periods; refuse before it runs.
     if (extra === 'no_duplicate_billing_periods') checks.push(['no_duplicate_billing_periods', s.counts?.duplicate_billing_periods === 0]);
-    // SQL 98: a pre-existing platform_billing_destination is taken over only while it is empty:
-    // a row there would become the fee destination with no review and no audit history.
-    if (extra === 'platform_billing_destination_absent_or_empty') {
-      checks.push(['platform_billing_destination_absent_or_empty', s.tables?.['public.platform_billing_destination']?.exists !== true
-        || s.counts?.platform_billing_destination_rows === 0]);
+    // SQL 98: a pre-existing platform_billing_destination is taken over only while it is empty or
+    // holds exactly the reviewed row: one production row on the owner-confirmed platform account
+    // (41cb5d67-..., 2026-10-17), with a payment method, verified, and no sandbox row. Any other
+    // row would become the fee destination unreviewed.
+    if (extra === 'platform_billing_destination_absent_empty_or_reviewed') {
+      const c = s.counts || {};
+      checks.push(['platform_billing_destination_absent_empty_or_reviewed', s.tables?.['public.platform_billing_destination']?.exists !== true
+        || c.platform_billing_destination_rows === 0
+        || (c.platform_billing_destination_rows === 1 && c.platform_billing_destination_production_reviewed_account_rows === 1
+          && c.platform_billing_destination_payment_method_rows === 1 && c.platform_billing_destination_verified_rows === 1)]);
     }
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {

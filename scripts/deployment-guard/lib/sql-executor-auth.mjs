@@ -2155,13 +2155,13 @@ export const AUTHORIZED_SQL98_TENANT_FEE_COLLECTION = Object.freeze({
   filename: 'aws/workflows/sql/98_tenant_fee_collection.sql',
   migration_id: '98_tenant_fee_collection',
   // The commit that last authored the file bytes on claude/fee-collection-fixes.
-  commit: '146c04d33816d0e6c2d11eb801bf14f28bb90580',
-  source_sha256: '7a42dc1384dc27fa62d4ad406109419cbc7f0843732958de41abae762425c0d6',
+  commit: '567772a9034cae4ec4d7c56b07c983fb4e797103',
+  source_sha256: '5a42e485c84f7c9976390d12c275cdf32612fbba7656b66f553110c0ae697c2a',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql98', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: 'f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f',
+  intended_replacement_sha256: 'abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603',
   function_identities: Object.freeze(['public.aws_check_billing_default_price_cents()', 'public.aws_check_billing_charges_when_per_check_off()', 'public.record_check_billing_event()', 'public.aws_platform_owner_record_billing_audit(jsonb)', 'public.aws_platform_billing_destination_audit_row()', 'public.aws_tenant_deposits_enabled(uuid)', 'public.aws_tenant_deposits_enabled_audit_row()', 'public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)', 'public.aws_tenants_member_column_guard()']),
 });
 // Mortgage Desk 2026-10-17 staging pins: SQL 99 (completion messages posted by a DEFINER trigger;
