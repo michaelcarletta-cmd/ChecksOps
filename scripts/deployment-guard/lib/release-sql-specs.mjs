@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 97) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 100) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -8,9 +8,10 @@
  *
  * Function bodies, languages, volatility, SECURITY DEFINER, result types and proconfig are
  * not repeated here: the engine derives them from the pinned file's bytes. Everything below
- * is re-derived on PostgreSQL 16 by aws/tests/release-sql90-97-executor.test.mjs (the real
- * files applied in order, as a non-superuser owner): a change to a file or a rendering fails
- * those tests and the pins' intended_replacement_sha256.
+ * is re-derived on PostgreSQL 16 by aws/tests/release-sql90-97-executor.test.mjs and
+ * release-sql98-100-executor.test.mjs (the real files applied in order, as a non-superuser
+ * owner): a change to a file or a rendering fails those tests and the pins'
+ * intended_replacement_sha256.
  *
  * Field reference:
  *   prerequisites      objects that must exist (the file's own prerequisite checks plus every
@@ -25,8 +26,25 @@
  *   added_columns      added to an existing table; column_acl: column grants on an existing column
  *   table_privileges   pinned grantees' pinned privileges on an existing table, after the file
  *   altered_relations  existing relations the file changes (must be owned by the login)
+ *   tables[].may_preexist / revokes_from
+ *                      CREATE TABLE IF NOT EXISTS of a table that may already exist (SQL 98's
+ *                      platform_billing_destination): taken over only with the reviewed
+ *                      columns, constraints and indexes, no trigger but the file's and
+ *                      privileges only of the roles the file revokes from
+ *   column_acl[].revokes
+ *                      column grants the file revokes (SQL 100)
+ *   indexes            created on an existing table: name and pg_get_indexdef (SQL 98)
+ *   unique_covers      a unique index covering columns (contains, none outside within) that the
+ *                      file adds only when none exists; duplicates_count names the count that
+ *                      must be 0 otherwise (SQL 98)
+ *   added_indexes      index names the unrelated snapshot skips (created only conditionally)
+ *   definer_writes     tables a DEFINER function of the file writes under RLS (SQL 99)
+ *   render             { grantors, policy_comments }: ACL grantors and policy comment hashes
+ *                      in the fingerprint (SQL 100)
+ *   production_noop    on production the state must already be the intended one (SQL 100);
+ *                      the production tool never runs the file
  *
- * SQL 98 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 101 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -1919,6 +1937,12 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "predecessors": [
       "sql93"
     ],
+    "refuse_after": [
+      {
+        "key": "sql98",
+        "object": "public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)"
+      }
+    ],
     "supersedes": [
       "sql93"
     ],
@@ -2107,6 +2131,927 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.financial_stepup_log"
+    ]
+  },
+  sql98: {
+    "key": "sql98",
+    "label": "SQL 98",
+    "choice": "sql98-tenant-fee-collection",
+    "production_pin_rel": "ops/deployment-guard/sql98-tenant-fee-collection-production-apply.json",
+    "script": "sql98-tenant-fee-collection-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.check_intake_items",
+      "public.check_billing_events",
+      "public.check_billing_config",
+      "public.tenant_maintenance_payments",
+      "auth.uid()",
+      "public.is_platform_owner()",
+      "public.aws_is_authenticated()",
+      "public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)",
+      "public.aws_tenant_pricing_columns()",
+      "public.aws_is_tenant_member(uuid)",
+      "public.tenant_pricing_audit",
+      "column public.tenant_maintenance_payments.billing_period",
+      "column public.tenant_maintenance_payments.tenant_id",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.check_billing_events.tenant_id",
+      "column public.check_billing_events.unit_price_cents",
+      "column public.check_billing_events.currency",
+      "column public.check_billing_events.status",
+      "column public.check_billing_config.price_per_check_cents",
+      "column public.check_billing_config.currency",
+      "column public.check_billing_config.active",
+      "column public.check_billing_config.created_at",
+      "column public.check_intake_items.status",
+      "column public.check_intake_items.tenant_id",
+      "column public.tenants.per_check_billing_enabled",
+      "column public.tenants.per_check_rate_cents",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [
+      "sql96"
+    ],
+    "supersedes": [
+      "sql96"
+    ],
+    "extra_preconditions": [
+      "no_duplicate_billing_periods",
+      "check_billing_config_active_or_empty",
+      "platform_billing_destination_absent_or_empty"
+    ],
+    "counts": {
+      "platform_billing_destination_rows": {
+        "requires": [
+          "public.platform_billing_destination"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination"
+      },
+      "duplicate_billing_periods": {
+        "requires": [
+          "public.tenant_maintenance_payments",
+          "column public.tenant_maintenance_payments.billing_period"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM (SELECT 1 FROM public.tenant_maintenance_payments\nWHERE billing_period IS NOT NULL GROUP BY tenant_id, billing_period HAVING count(*) > 1) d"
+      },
+      "check_billing_event_duplicates": {
+        "requires": [
+          "public.check_billing_events",
+          "column public.check_billing_events.check_intake_item_id",
+          "column public.check_billing_events.event_type"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM (SELECT 1 FROM public.check_billing_events\nWHERE check_intake_item_id IS NOT NULL GROUP BY check_intake_item_id, event_type HAVING count(*) > 1) d"
+      },
+      "check_billing_config_rows": {
+        "requires": [
+          "public.check_billing_config"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.check_billing_config"
+      },
+      "check_billing_config_active_rows": {
+        "requires": [
+          "public.check_billing_config",
+          "column public.check_billing_config.active"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.check_billing_config WHERE active = true"
+      }
+    },
+    "functions": [
+      {
+        "identity": "public.aws_check_billing_default_price_cents()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_check_billing_charges_when_per_check_off()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.record_check_billing_event()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_platform_owner_record_billing_audit(jsonb)",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_platform_billing_destination_audit_row()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenant_deposits_enabled(uuid)",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenant_deposits_enabled_audit_row()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenants_member_column_guard()",
+        "acl": [
+          "PUBLIC EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": []
+      }
+    ],
+    "policies": [
+      {
+        "table": "public.platform_billing_audit",
+        "name": "aws_select_platform_billing_audit",
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_fee_invoice_outbox",
+        "name": "aws_platform_owner_tenant_fee_invoice_outbox",
+        "cmd": "ALL",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))",
+        "with_check": "(public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))"
+      },
+      {
+        "table": "public.platform_billing_destination",
+        "name": "aws_select_platform_billing_destination",
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))",
+        "with_check": null
+      },
+      {
+        "table": "public.platform_billing_destination",
+        "name": "aws_write_platform_billing_destination",
+        "cmd": "ALL",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))",
+        "with_check": "(public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))"
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.platform_billing_audit",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          [
+            "id",
+            "uuid",
+            true,
+            "gen_random_uuid()"
+          ],
+          [
+            "event",
+            "text",
+            true,
+            null
+          ],
+          [
+            "actor_id",
+            "uuid",
+            false,
+            null
+          ],
+          [
+            "tenant_id",
+            "uuid",
+            false,
+            null
+          ],
+          [
+            "billing_period",
+            "text",
+            false,
+            null
+          ],
+          [
+            "amount_cents",
+            "bigint",
+            false,
+            null
+          ],
+          [
+            "occurrence_id",
+            "uuid",
+            false,
+            null
+          ],
+          [
+            "provider_transfer_ids",
+            "text[]",
+            true,
+            "ARRAY[]::text[]"
+          ],
+          [
+            "outcome",
+            "text",
+            true,
+            null
+          ],
+          [
+            "preview_hash",
+            "text",
+            false,
+            null
+          ],
+          [
+            "details",
+            "jsonb",
+            true,
+            "'{}'::jsonb"
+          ],
+          [
+            "created_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ]
+        ],
+        "constraints": [
+          [
+            "platform_billing_audit_event_check",
+            "CHECK ((event = ANY (ARRAY['pull'::text, 'verify_debit'::text, 'destination_set'::text, 'invoice_email'::text])))"
+          ],
+          [
+            "platform_billing_audit_pkey",
+            "PRIMARY KEY (id)"
+          ]
+        ],
+        "indexes": [
+          [
+            "platform_billing_audit_invoice_email_once_uidx",
+            "CREATE UNIQUE INDEX platform_billing_audit_invoice_email_once_uidx ON public.platform_billing_audit USING btree (occurrence_id) WHERE ((event = 'invoice_email'::text) AND (outcome = ANY (ARRAY['sent'::text, 'sunk'::text])))"
+          ],
+          [
+            "platform_billing_audit_pkey",
+            "CREATE UNIQUE INDEX platform_billing_audit_pkey ON public.platform_billing_audit USING btree (id)"
+          ],
+          [
+            "platform_billing_audit_tenant_idx",
+            "CREATE INDEX platform_billing_audit_tenant_idx ON public.platform_billing_audit USING btree (tenant_id, created_at DESC)"
+          ]
+        ],
+        "acl": [
+          "authenticated SELECT",
+          "checksops SELECT"
+        ]
+      },
+      {
+        "name": "public.tenant_fee_invoice_outbox",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          [
+            "occurrence_id",
+            "uuid",
+            true,
+            null
+          ],
+          [
+            "tenant_id",
+            "uuid",
+            true,
+            null
+          ],
+          [
+            "billing_period",
+            "text",
+            true,
+            null
+          ],
+          [
+            "status",
+            "text",
+            true,
+            "'pending'::text"
+          ],
+          [
+            "attempts",
+            "integer",
+            true,
+            "0"
+          ],
+          [
+            "last_error",
+            "text",
+            false,
+            null
+          ],
+          [
+            "message_id",
+            "text",
+            false,
+            null
+          ],
+          [
+            "created_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ],
+          [
+            "updated_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ]
+        ],
+        "constraints": [
+          [
+            "tenant_fee_invoice_outbox_pkey",
+            "PRIMARY KEY (occurrence_id)"
+          ],
+          [
+            "tenant_fee_invoice_outbox_status_check",
+            "CHECK ((status = ANY (ARRAY['pending'::text, 'sending'::text, 'sent'::text, 'sunk'::text, 'failed'::text, 'no_recipient'::text])))"
+          ]
+        ],
+        "indexes": [
+          [
+            "tenant_fee_invoice_outbox_pkey",
+            "CREATE UNIQUE INDEX tenant_fee_invoice_outbox_pkey ON public.tenant_fee_invoice_outbox USING btree (occurrence_id)"
+          ]
+        ],
+        "acl": [
+          "authenticated SELECT",
+          "checksops INSERT",
+          "checksops SELECT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "name": "public.platform_billing_destination",
+        "may_preexist": true,
+        "revokes_from": [
+          "PUBLIC",
+          "authenticated",
+          "checksops"
+        ],
+        "rls": true,
+        "forced": false,
+        "columns": [
+          [
+            "environment",
+            "text",
+            true,
+            null
+          ],
+          [
+            "moov_account_id",
+            "text",
+            true,
+            null
+          ],
+          [
+            "moov_payment_method_id",
+            "text",
+            true,
+            null
+          ],
+          [
+            "label",
+            "text",
+            true,
+            "'ChecksOps merchant'::text"
+          ],
+          [
+            "verified_at",
+            "timestamp with time zone",
+            false,
+            null
+          ],
+          [
+            "created_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ],
+          [
+            "updated_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ]
+        ],
+        "constraints": [
+          [
+            "platform_billing_destination_environment_check",
+            "CHECK ((environment = ANY (ARRAY['sandbox'::text, 'production'::text])))"
+          ],
+          [
+            "platform_billing_destination_pkey",
+            "PRIMARY KEY (environment)"
+          ]
+        ],
+        "indexes": [
+          [
+            "platform_billing_destination_pkey",
+            "CREATE UNIQUE INDEX platform_billing_destination_pkey ON public.platform_billing_destination USING btree (environment)"
+          ]
+        ],
+        "acl": [
+          "authenticated SELECT",
+          "checksops INSERT",
+          "checksops SELECT",
+          "checksops UPDATE"
+        ]
+      }
+    ],
+    "added_columns": [
+      {
+        "table": "public.tenants",
+        "column": "deposits_enabled",
+        "type": "boolean",
+        "notnull": true,
+        "default": "true",
+        "acl": []
+      }
+    ],
+    "indexes": [
+      {
+        "table": "public.tenant_maintenance_payments",
+        "name": "tenant_maintenance_payments_tenant_period_uidx",
+        "def": "CREATE UNIQUE INDEX tenant_maintenance_payments_tenant_period_uidx ON public.tenant_maintenance_payments USING btree (tenant_id, billing_period) WHERE (billing_period IS NOT NULL)"
+      }
+    ],
+    "unique_covers": [
+      {
+        "table": "public.check_billing_events",
+        "name": "check_event",
+        "contains": [
+          "check_intake_item_id",
+          "event_type"
+        ],
+        "within": [
+          "check_intake_item_id",
+          "event_type",
+          "tenant_id"
+        ],
+        "duplicates_count": "check_billing_event_duplicates"
+      }
+    ],
+    "added_indexes": [
+      "public.check_billing_events_check_event_uidx"
+    ],
+    "triggers": [
+      {
+        "table": "public.check_intake_items",
+        "name": "trg_record_check_billing_event",
+        "def": "CREATE TRIGGER trg_record_check_billing_event AFTER UPDATE OF status ON public.check_intake_items FOR EACH ROW EXECUTE FUNCTION public.record_check_billing_event()"
+      },
+      {
+        "table": "public.platform_billing_destination",
+        "name": "aws_platform_billing_destination_audit",
+        "def": "CREATE TRIGGER aws_platform_billing_destination_audit AFTER INSERT OR DELETE OR UPDATE ON public.platform_billing_destination FOR EACH ROW EXECUTE FUNCTION public.aws_platform_billing_destination_audit_row()"
+      },
+      {
+        "table": "public.tenants",
+        "name": "aws_tenant_deposits_enabled_audit",
+        "def": "CREATE TRIGGER aws_tenant_deposits_enabled_audit AFTER UPDATE OF deposits_enabled ON public.tenants FOR EACH ROW EXECUTE FUNCTION public.aws_tenant_deposits_enabled_audit_row()"
+      }
+    ],
+    "altered_relations": [
+      "public.tenants",
+      "public.check_intake_items",
+      "public.check_billing_events",
+      "public.tenant_maintenance_payments"
+    ]
+  },
+  sql99: {
+    "key": "sql99",
+    "label": "SQL 99",
+    "choice": "sql99-mortgage-desk-completion-messages",
+    "production_pin_rel": "ops/deployment-guard/sql99-mortgage-desk-completion-messages-production-apply.json",
+    "script": "sql99-mortgage-desk-completion-messages-production-apply",
+    "prerequisites": [
+      "public.aws_is_tenant_member(uuid)",
+      "auth.uid()",
+      "public.check_messages",
+      "public.mortgage_handling_requests",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.mortgage_handling_requests.mortgage_servicer",
+      "column public.mortgage_handling_requests.work_notes"
+    ],
+    "predecessors": [
+      "sql90"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_appended_note(text, text)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_completion_messages()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "name": "tr_mortgage_desk_completion_messages",
+        "def": "CREATE TRIGGER tr_mortgage_desk_completion_messages AFTER UPDATE ON public.mortgage_handling_requests FOR EACH ROW WHEN (((old.status IS DISTINCT FROM 'completed'::text) AND (new.status = 'completed'::text) AND (new.check_intake_item_id IS NOT NULL) AND (new.assigned_employee_id IS NOT NULL))) EXECUTE FUNCTION public.aws_mortgage_desk_completion_messages()"
+      }
+    ],
+    "definer_writes": [
+      "public.check_messages"
+    ],
+    "altered_relations": [
+      "public.mortgage_handling_requests"
+    ]
+  },
+  sql100: {
+    "key": "sql100",
+    "label": "SQL 100",
+    "choice": "sql100-mortgage-desk-live-access",
+    "production_pin_rel": "ops/deployment-guard/sql100-mortgage-desk-live-access-production-apply.json",
+    "script": "sql100-mortgage-desk-live-access-production-apply",
+    "production_noop": true,
+    "render": {
+      "grantors": true,
+      "policy_comments": true
+    },
+    "prerequisites": [
+      "public.mortgage_handling_requests",
+      "type public.app_role",
+      "public.has_role(uuid, public.app_role)",
+      "public.aws_is_authenticated()",
+      "public.aws_is_cross_tenant_reader()",
+      "public.aws_can_access_tenant(uuid)",
+      "public.aws_can_write_tenant(uuid)",
+      "auth.uid()",
+      "public.mortgage_agent_accounts",
+      "column public.mortgage_agent_accounts.application_user_id",
+      "column public.mortgage_agent_accounts.status",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.accepted_at",
+      "column public.mortgage_handling_requests.cancelled_at",
+      "column public.mortgage_handling_requests.claim_number",
+      "column public.mortgage_handling_requests.completed_at",
+      "column public.mortgage_handling_requests.homeowner_email",
+      "column public.mortgage_handling_requests.homeowner_name",
+      "column public.mortgage_handling_requests.homeowner_phone",
+      "column public.mortgage_handling_requests.insurance_company",
+      "column public.mortgage_handling_requests.loan_number",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.mortgage_handling_requests.mortgage_servicer",
+      "column public.mortgage_handling_requests.note",
+      "column public.mortgage_handling_requests.property_address",
+      "column public.mortgage_handling_requests.updated_at",
+      "column public.mortgage_handling_requests.work_notes",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [
+      "sql90"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_is_mortgage_ops_agent()",
+        "acl": [
+          "PUBLIC EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": []
+      },
+      {
+        "identity": "public.aws_mortgage_agent_queue_visible(text, uuid)",
+        "acl": [
+          "PUBLIC EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": []
+      },
+      {
+        "identity": "public.aws_is_active_mortgage_agent(uuid)",
+        "acl": [
+          "PUBLIC EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": []
+      }
+    ],
+    "policies": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "name": "aws_select_mortgage_handling_requests",
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id) OR public.aws_mortgage_agent_queue_visible(status, assigned_employee_id))",
+        "with_check": null
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "name": "aws_select_mortgage_ops_agent_queue",
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated",
+          "checksops"
+        ],
+        "permissive": true,
+        "qual": "public.aws_is_mortgage_ops_agent()",
+        "with_check": null
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "name": "aws_update_mortgage_ops_accept_complete",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated",
+          "checksops"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_mortgage_ops_agent() AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid())))",
+        "with_check": "(public.aws_is_mortgage_ops_agent() AND (assigned_employee_id = auth.uid()) AND (status = ANY (ARRAY['in_progress'::text, 'completed'::text, 'cancelled'::text])) AND (((status = 'in_progress'::text) AND (accepted_at IS NOT NULL)) OR (status = ANY (ARRAY['completed'::text, 'cancelled'::text]))))"
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "name": "aws_insert_mortgage_handling_requests",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": null,
+        "with_check": "(public.aws_is_cross_tenant_reader() OR (public.aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))"
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "name": "aws_delete_mortgage_handling_requests",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_cross_tenant_reader() OR public.aws_can_write_tenant(tenant_id))",
+        "with_check": null
+      }
+    ],
+    "dropped_policies": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "name": "aws_write_mortgage_handling_requests"
+      }
+    ],
+    "column_acl": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "accepted_at",
+        "acl": [
+          "authenticated UPDATE grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "assigned_employee_id",
+        "acl": [
+          "authenticated UPDATE grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "cancelled_at",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "claim_number",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "completed_at",
+        "acl": [
+          "authenticated UPDATE grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "homeowner_email",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "homeowner_name",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "homeowner_phone",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "insurance_company",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "loan_number",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "mortgage_company",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "mortgage_servicer",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "note",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "property_address",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "status",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "updated_at",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "work_notes",
+        "acl": [
+          "checksops UPDATE grantor=owner"
+        ],
+        "revokes": [
+          "authenticated UPDATE grantor=owner"
+        ]
+      }
+    ],
+    "table_privileges": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE",
+          "TRUNCATE",
+          "REFERENCES",
+          "TRIGGER"
+        ],
+        "intended": [
+          "checksops DELETE grantor=owner",
+          "checksops INSERT grantor=owner",
+          "checksops SELECT grantor=owner"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.mortgage_handling_requests"
+    ],
+    "whole_tables": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "rls": true,
+        "forced": false
+      }
     ]
   },
 });

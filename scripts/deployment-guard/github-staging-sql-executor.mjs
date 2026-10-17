@@ -104,6 +104,9 @@ export const MIGRATIONS = Object.freeze({
   'sql95-remove-freedom-claims-bridge': RELEASE_2026_10_17_PENDING_SQL_PINS.sql95,
   'sql96-platform-owner-tenant-pricing': RELEASE_2026_10_17_PENDING_SQL_PINS.sql96,
   'sql97-financial-stepup-log-server-writer': RELEASE_2026_10_17_PENDING_SQL_PINS.sql97,
+  'sql98-tenant-fee-collection': RELEASE_2026_10_17_PENDING_SQL_PINS.sql98,
+  'sql99-mortgage-desk-completion-messages': RELEASE_2026_10_17_PENDING_SQL_PINS.sql99,
+  'sql100-mortgage-desk-live-access': RELEASE_2026_10_17_PENDING_SQL_PINS.sql100,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

@@ -22,7 +22,7 @@
     "public.aws_tenants_member_column_guard()"
   ],
   "expected_live_definition_sha256": null,
-  "intended_replacement_sha256": null,
+  "intended_replacement_sha256": "f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f",
   "authorization_phrase": "APPLY_TENANT_FEE_COLLECTION",
   "predecessors": [
     "sql96"
@@ -33,10 +33,24 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "tooling": {
-    "status": "missing",
-    "production_tool": null,
-    "staging_executor_handler": null,
-    "note": "Pending: no guarded tooling exists for SQL 98 yet. Needed before this pin can be execute-authorized: a production-apply tool with --inspect, a guarded staging SQL executor handler and workflow choice (sql98-tenant-fee-collection), a code-derived intended-state fingerprint in scripts/deployment-guard/lib/sql-executor-auth.mjs (intended_replacement_sha256 is null until then), the production one-shot entry, a runbook and PostgreSQL 16 tests, as SQL 87-89 have."
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql98-tenant-fee-collection",
+    "one_shot_migration": "sql98",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-90-97-apply.md",
+    "tests": [
+      "aws/tests/release-sql98-100-executor.test.mjs",
+      "aws/tests/release-sql98-100-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/tenant-fee-collection-sql98-pg.test.mjs",
+      "aws/tests/tenant-deposits-switch-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 98: sql98-tenant-fee-collection-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql98-tenant-fee-collection); production-sql-one-shot.mjs --migration sql98. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). Requires SQL 96 in place (or superseded by SQL 98 itself), refuses on duplicate (tenant_id, billing_period) rows, on duplicated (check, event_type) billing events without a covering unique index, and when check_billing_config has rows but none active (aggregate COUNT(*)s only); a pre-existing platform_billing_destination is taken over only with the reviewed columns, constraints and indexes, no trigger but the file's own and privileges only of PUBLIC, authenticated and checksops. SQL 96's tools refuse once SQL 98 is in place. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval.",
+    "superseded_note": "Pending: no guarded tooling exists for SQL 98 yet. Needed before this pin can be execute-authorized: a production-apply tool with --inspect, a guarded staging SQL executor handler and workflow choice (sql98-tenant-fee-collection), a code-derived intended-state fingerprint in scripts/deployment-guard/lib/sql-executor-auth.mjs (intended_replacement_sha256 is null until then), the production one-shot entry, a runbook and PostgreSQL 16 tests, as SQL 87-89 have."
   },
   "production_inspect": {
     "status": "pending",
@@ -48,15 +62,15 @@
     "live_definition_sha256": null,
     "apply_preconditions_met": null,
     "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 98. It must record (ops/fee-collection-deltas.md section 3): the active check_billing_config row (the live per-check default), duplicate (tenant_id, billing_period) rows in tenant_maintenance_payments (SQL 98 refuses on any), the unique index on check_billing_events (check_intake_item_id, event_type), the live record_check_billing_event() body and trigger, and every policy and grant on platform_billing_destination (SQL 98 drops all but its two platform-owner policies and resets checksops to SELECT, INSERT, UPDATE). Copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "note": "Pending: no read-only production inspect has been run for SQL 98. It must record (ops/fee-collection-deltas.md section 3): the active check_billing_config row (the live per-check default), duplicate (tenant_id, billing_period) rows in tenant_maintenance_payments (SQL 98 refuses on any), the unique index on check_billing_events (check_intake_item_id, event_type), the live record_check_billing_event() body and trigger, and every policy and grant on platform_billing_destination (SQL 98 drops all but its two platform-owner policies and resets checksops to SELECT, INSERT, UPDATE). Copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change. Update (guarded tooling built): the read-only inspect is scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect; it reports counts.duplicate_billing_periods, counts.check_billing_event_duplicates, counts.check_billing_config_rows and counts.check_billing_config_active_rows (aggregate COUNT(*)s), release_sql_inspect.unique_covers (whether a unique index already covers check_billing_events (check_intake_item_id, event_type)), release_sql_inspect.indexes (tenant_maintenance_payments_tenant_period_uidx), the function ACLs (record_check_billing_event() included) and the platform_billing_destination table state (intended / different / absent, policy count). It does not print the record_check_billing_event() body or the destination policies; their fingerprints are in live_definition_sha256."
   },
   "intended_post_state": {
-    "fingerprint": null,
-    "note": "check_processing events stamped once per check at the tenant per-check rate or the check_billing_config default (owner question (b) switch aws_check_billing_charges_when_per_check_off() true); one tenant_maintenance_payments row per (tenant_id, billing_period); platform_billing_destination readable and writable by the platform owner only, audited; append-only platform_billing_audit (events pull, verify_debit, destination_set, invoice_email; at most one sent/sunk invoice_email per charge) written only by aws_platform_owner_record_billing_audit(jsonb) and the destination trigger. The fingerprint is defined by the SQL 98 tooling (pending). tenants.deposits_enabled boolean NOT NULL DEFAULT true (every tenant on), set only through aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean), audited in tenant_pricing_audit; tenant_fee_invoice_outbox (platform owner only)."
+    "fingerprint": "f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f",
+    "note": "check_processing events stamped once per check at the tenant per-check rate or the check_billing_config default (owner question (b) switch aws_check_billing_charges_when_per_check_off() true); one tenant_maintenance_payments row per (tenant_id, billing_period); platform_billing_destination readable and writable by the platform owner only, audited; append-only platform_billing_audit (events pull, verify_debit, destination_set, invoice_email; at most one sent/sunk invoice_email per charge) written only by aws_platform_owner_record_billing_audit(jsonb) and the destination trigger. The fingerprint is defined by the SQL 98 tooling (pending). tenants.deposits_enabled boolean NOT NULL DEFAULT true (every tenant on), set only through aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean), audited in tenant_pricing_audit; tenant_fee_invoice_outbox (platform owner only). Defined now: releaseIntendedHash('sql98', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs) = f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f."
   },
   "staging_acceptance": {
     "ok": false,
     "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 98 here in the reviewed change that sets execute true. Until then there is no tool that could apply this pin, and any tool must refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null)."
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 98 here in the reviewed change that sets execute true. Until then there is no tool that could apply this pin, and any tool must refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null). Update: the staging executor handler (choice sql98-tenant-fee-collection) and the production tool (scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs) now exist; the staging read-live, apply and acceptance are still pending, so the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
   }
 }

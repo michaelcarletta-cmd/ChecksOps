@@ -1,5 +1,6 @@
 /**
- * Production apply of the release 2026-10-17 SQL (SQL 90 to SQL 97, aws/workflows/sql/9x_*.sql),
+ * Production apply of the release 2026-10-17 SQL (SQL 90 to SQL 100, aws/workflows/sql/9x_*.sql
+ * and 100_*.sql),
  * one migration per run, on the engine shared with the staging guarded executor
  * (release-sql-state.mjs): the same state reader, code-derived fingerprints, predecessor rules,
  * pre- and post-conditions and unrelated-catalog snapshot. The production rules add the pinned
@@ -15,6 +16,12 @@
  * (release-sql-production-cli.mjs) before the receipt is spent. One transaction (lock_timeout
  * 5s, advisory locks): the pinned file only; it rolls back unless the intended fingerprint is
  * reached and everything else in schema public (and auth's functions) is unchanged.
+ *
+ * A spec with production_noop (SQL 100: it records what production already has) must be a
+ * strict no-op on production: the precondition production_state_already_intended refuses
+ * every apply whose live state is not already the intended fingerprint, and an apply whose
+ * live state is the intended one is refused as already in place. So the production tool never
+ * runs that file; its read-only --inspect (already_applied true) is the production record.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -80,12 +87,15 @@ export function loadReleaseProductionPin(key, root = repoRootFrom(import.meta.ur
   return JSON.parse(fs.readFileSync(path.join(root, toolFor(key).pin_rel), 'utf8'));
 }
 
-/** Production pre-apply rule: the pinned login plus the shared rules. */
+/** Production pre-apply rule: the pinned login plus the shared rules (and, for a production_noop spec, the intended state already live). */
 export function releaseProductionPreconditionFailures(key, state, pin, text) {
   const login = releaseAdminLogin(pin);
+  const noop = releaseSpec(key).production_noop === true;
   return [
     ...failed([['login_is_pinned_admin', login !== null && state?.current_user === login && state?.session_user === login]]),
     ...releaseSharedPreconditionFailures(key, state, text),
+    ...(noop ? failed([['production_state_already_intended', typeof state?.live_definition_sha256 === 'string'
+      && state.live_definition_sha256 === pin?.intended_replacement_sha256]]) : []),
   ];
 }
 
@@ -226,6 +236,8 @@ export async function inspectReleaseProduction(key, { connect, pin, root = repoR
       intended_replacement_sha256: thePin.intended_replacement_sha256,
       live_matches_expected: typeof live === 'string' && live === thePin.expected_live_definition_sha256,
       already_applied: applied,
+      // SQL 100: the file must change nothing on production; the tool never runs it there.
+      ...(releaseSpec(key).production_noop === true ? { production_noop: { required: true, live_is_intended: applied } } : {}),
       precondition_failures: failures,
       apply_preconditions_met: source.ok
         && live === thePin.expected_live_definition_sha256

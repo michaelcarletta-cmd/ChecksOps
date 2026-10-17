@@ -12,12 +12,16 @@
  *   - tables      owner, RLS enabled / forced, every policy (name, command, permissive,
  *                 roles, USING / WITH CHECK text and sha256, the functions it depends on,
  *                 whether a repository SQL file creates a policy of that name on the table),
- *                 table and column ACL entries and effective privileges for checksops,
- *                 authenticated, PUBLIC and checksops_admin, and the non-internal triggers
- *                 (name and function name only)
+ *                 table and column ACL entries (each with its grantor) and effective
+ *                 privileges for checksops, authenticated, PUBLIC and checksops_admin, and the
+ *                 non-internal triggers (name and function name only); for the policies on
+ *                 mortgage_handling_requests also whether each has a comment and the comment's
+ *                 sha256, computed in the database (the text is never read out)
  *   - functions   the named helpers, every function a policy above depends on and the
  *                 trigger functions SQL 99 relies on: existence, owner, SECURITY DEFINER,
- *                 sha256 of pg_get_functiondef and of prosrc, and whether prosrc matches a
+ *                 sha256 of pg_get_functiondef and of prosrc, the EXECUTE ACL entries
+ *                 (aclexplode(proacl), the default ACL when proacl is NULL; grantee, PUBLIC
+ *                 included, grantor and grant option), and whether prosrc matches a
  *                 repository definition (exactly or up to whitespace). The definition text
  *                 is printed only when it matches no repository definition AND passes
  *                 definitionTextSafety (no literals beyond role and schema names, no comment,
@@ -67,6 +71,8 @@ export const OWNERSHIP_TRIGGERS = Object.freeze({
   assign_case_on_ledger_events: 'homeowner_ledger_events',
 });
 export const SQL99_FUNCTIONS = Object.freeze(['public.aws_mortgage_desk_appended_note', 'public.aws_mortgage_desk_completion_messages']);
+/** Tables whose policies' comments are reported (SQL 100 drops and recreates these policies, which loses a comment). */
+export const POLICY_COMMENT_TABLES = Object.freeze(['mortgage_handling_requests']);
 export const SQL99_TRIGGER = 'tr_mortgage_desk_completion_messages';
 /** The columns aws/workflows/sql/99_mortgage_desk_completion_messages.sql refuses without. */
 export const SQL99_COLUMNS = Object.freeze({
@@ -390,7 +396,7 @@ export const Q = Object.freeze({
   ORDER BY 1, 2, 4`,
   columnAcl: `SELECT c.relname::text AS table_name, att.attname::text AS column_name,
   CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee)::text END AS grantee,
-  a.privilege_type::text AS privilege, a.is_grantable
+  pg_catalog.pg_get_userbyid(a.grantor)::text AS grantor, a.privilege_type::text AS privilege, a.is_grantable
   FROM pg_catalog.pg_attribute att JOIN pg_catalog.pg_class c ON c.oid = att.attrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace,
   LATERAL pg_catalog.aclexplode(att.attacl) AS a
   WHERE n.nspname = 'public' AND c.relname = ANY($1::text[]) AND att.attnum > 0 AND NOT att.attisdropped
@@ -417,6 +423,21 @@ export const Q = Object.freeze({
   FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace JOIN pg_catalog.pg_language l ON l.oid = p.prolang
   WHERE p.prokind = 'f' AND (n.nspname || '.' || p.proname) = ANY($1::text[])
   ORDER BY 1, 2, 3`,
+  // EXECUTE ACL of the reported functions: every entry (PUBLIC included), the default ACL when proacl is NULL.
+  functionAcl: `SELECT n.nspname::text AS schema, p.proname::text AS name, pg_catalog.pg_get_function_identity_arguments(p.oid)::text AS identity_args,
+  p.proacl IS NULL AS acl_default,
+  CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee)::text END AS grantee,
+  pg_catalog.pg_get_userbyid(a.grantor)::text AS grantor, a.privilege_type::text AS privilege, a.is_grantable
+  FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace,
+  LATERAL pg_catalog.aclexplode(COALESCE(p.proacl, pg_catalog.acldefault('f', p.proowner))) AS a
+  WHERE p.prokind = 'f' AND (n.nspname || '.' || p.proname) = ANY($1::text[])
+  ORDER BY 1, 2, 3, 5, 7`,
+  // Policy comments: presence and sha256 only, computed here, so the text never leaves the database.
+  policyComments: `SELECT c.relname::text AS table_name, pol.polname::text AS policy,
+  pg_catalog.obj_description(pol.oid, 'pg_policy') IS NOT NULL AS described,
+  pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(pg_catalog.obj_description(pol.oid, 'pg_policy'), 'UTF8')), 'hex') AS description_sha256
+  FROM pg_catalog.pg_policy pol JOIN pg_catalog.pg_class c ON c.oid = pol.polrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relname = ANY($1::text[]) ORDER BY 1, 2`,
   sql99: `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.proname = 'aws_is_tenant_member' AND p.proargtypes::text = ('uuid'::regtype::oid)::text) AS aws_is_tenant_member_uuid_present,
   EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -463,7 +484,7 @@ export function safeErrorCode(error) {
   return /^[0-9A-Z]{5}$/.test(code) || /^E[A-Z0-9_]{2,40}$/.test(code) ? code : null;
 }
 
-function functionReport(row, index, allowedWords, knownIdentifiers) {
+function functionReport(row, index, allowedWords, knownIdentifiers, acl = []) {
   const key = `${row.schema}.${row.name}`;
   const cmp = compareWithRepo(index, key, row.prosrc);
   const out = {
@@ -476,6 +497,10 @@ function functionReport(row, index, allowedWords, knownIdentifiers) {
     sets_row_security: asArray(row.proconfig).some((c) => /^row_security=/i.test(String(c))),
     functiondef_sha256: sha256(row.definition),
     prosrc_sha256: sha256(row.prosrc),
+    // EXECUTE grants (aclexplode of proacl, or of the default ACL when proacl is NULL).
+    execute_acl_default: acl.length > 0 && acl.every((a) => a.acl_default === true),
+    execute_acl: acl.map((a) => ({ grantee: a.grantee, privilege: a.privilege, grantable: a.is_grantable === true, grantor: a.grantor })),
+    public_execute: acl.some((a) => a.grantee === 'PUBLIC' && a.privilege === 'EXECUTE'),
     ...cmp,
   };
   if (cmp.repo_match === 'differs_from_repo') {
@@ -499,6 +524,8 @@ export function buildMortgageDeskAccessReport(r, index, config = {}) {
   const triggers = byKey(r.triggers || [], (t) => t.table_name);
   const roles = new Map((r.roles || []).map((x) => [x.rolname, x]));
   const fnRows = byKey(r.functions || [], (f) => `${f.schema}.${f.name}`);
+  const fnAcl = byKey(r.functionAcl || [], (a) => `${a.schema}.${a.name}(${a.identity_args})`);
+  const comments = new Map((r.policyComments || []).map((c) => [`${c.table_name}\u0000${c.policy}`, c]));
   const columns = byKey(r.columns || [], (c) => c.table_name);
 
   const tables = {};
@@ -510,6 +537,10 @@ export function buildMortgageDeskAccessReport(r, index, config = {}) {
       const exists = grantee === 'PUBLIC' || roles.has(grantee);
       const direct = (tacl.get(`${name}\u0000${grantee}`) || []).map((a) => ({ privilege: a.privilege, grantable: a.is_grantable === true, grantor: a.grantor }));
       const colEntries = cacl.get(`${name}\u0000${grantee}`) || [];
+      // Every column ACL entry with its grantor (a re-GRANT by another grantor adds an entry).
+      const columnEntries = colEntries
+        .map((e) => ({ column: e.column_name, privilege: e.privilege, grantable: e.is_grantable === true, grantor: e.grantor }))
+        .sort((a, b) => (`${a.privilege}\u0000${a.column}\u0000${a.grantor}` < `${b.privilege}\u0000${b.column}\u0000${b.grantor}` ? -1 : 1));
       const columnPrivileges = {};
       for (const e of colEntries) {
         const k = e.is_grantable ? `${e.privilege} WITH GRANT OPTION` : e.privilege;
@@ -522,6 +553,8 @@ export function buildMortgageDeskAccessReport(r, index, config = {}) {
         table_acl: direct,
         column_acl: columnPrivileges,
         column_acl_entry_count: colEntries.length,
+        column_acl_entries: columnEntries,
+        column_acl_grantors: [...new Set(columnEntries.map((e) => e.grantor))].sort(),
         ...(grantee === 'PUBLIC' ? {} : {
           effective_table_privileges: exists && e ? asArray(e.table_privileges) : null,
           effective_any_column_privileges: exists && e ? asArray(e.any_column_privileges) : null,
@@ -538,8 +571,12 @@ export function buildMortgageDeskAccessReport(r, index, config = {}) {
       policy_count: (policies.get(name) || []).length,
       policies: (policies.get(name) || []).map((p) => {
         const repoFiles = index.policies.get(`${name}\u0000${p.policy}`) || [];
+        const comment = comments.get(`${name}\u0000${p.policy}`);
         return {
           policy: p.policy,
+          ...(POLICY_COMMENT_TABLES.includes(name)
+            ? { comment: { present: comment?.described === true, sha256: comment?.described === true ? comment.description_sha256 : null } }
+            : {}),
           command: POLCMD[p.cmd] || p.cmd,
           permissive: p.permissive === true,
           roles: asArray(p.roles),
@@ -557,7 +594,10 @@ export function buildMortgageDeskAccessReport(r, index, config = {}) {
 
   const fnReport = (key) => {
     const rows = fnRows.get(key) || [];
-    return { present: rows.length > 0, overloads: rows.map((row) => functionReport(row, index, allowedWords, knownIdentifiers)) };
+    return {
+      present: rows.length > 0,
+      overloads: rows.map((row) => functionReport(row, index, allowedWords, knownIdentifiers, fnAcl.get(`${row.schema}.${row.name}(${row.identity_args})`) || [])),
+    };
   };
   const functions = {};
   for (const key of NAMED_FUNCTIONS) functions[key] = fnReport(key);
@@ -680,6 +720,8 @@ export async function inspectMortgageDeskAccess({ connect, root, config, index }
     const chainFns = r.triggers.filter((t) => Object.hasOwn(OWNERSHIP_TRIGGERS, t.trigger)).map((t) => t.function_name);
     const fnKeys = [...new Set([...NAMED_FUNCTIONS, ...SQL99_FUNCTIONS, ...r.policyFunctions.map((d) => d.function_name), ...chainFns])];
     r.functions = await rows(Q.functions, [fnKeys]);
+    r.functionAcl = await rows(Q.functionAcl, [fnKeys]);
+    r.policyComments = await rows(Q.policyComments, [[...POLICY_COMMENT_TABLES]]);
     r.sql99 = await rows(Q.sql99);
     return ok(buildMortgageDeskAccessReport(r, repo, cfg));
   } catch (error) {

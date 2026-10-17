@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 97), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 100), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -19,7 +19,15 @@
  *              non-owner table ACL
  *   column     (added to an existing table) absent, or type, NOT NULL, default, column ACL
  *   constraint / trigger on an existing table: absent, or the collapsed definition
- *   privileges the pinned grantees' pinned table privileges (SQL 97)
+ *   privileges the pinned grantees' pinned table privileges (SQL 97, SQL 100)
+ *   index      (created on an existing table) absent, or the collapsed pg_get_indexdef (SQL 98)
+ *   unique     whether a unique index covers the named columns (SQL 98: the file adds one only
+ *              when none does)
+ *
+ * A spec may ask for more detail (spec.render, SQL 100): `grantors` adds each ACL entry's
+ * grantor (the object owner read as `owner`) to the function, column and table privilege
+ * lines, and `policy_comments` adds sha256 of each policy's comment (never the text), so a
+ * re-GRANT by another grantor or a policy comment DROP POLICY would lose is another state.
  *
  * Owner names are never part of it, so the post-state hash is the same in staging and
  * production. The intended state is code-derived: function attributes and sha256(prosrc)
@@ -31,7 +39,7 @@
  * inspect report carries flags, hashes, object names and those counts: never ids, owner
  * names, definitions or row data.
  *
- * Adding a migration (SQL 98, SQL 99, ...) means adding its spec, its staging pin and its
+ * Adding a migration (SQL 101, ...) means adding its spec, its staging pin and its
  * production pin; the engine, the executor handler, the production tool and the one-shot
  * registration are generic.
  */
@@ -159,7 +167,7 @@ export function releaseForbiddenStatements(text) {
   return hits;
 }
 
-/** The reviewed bytes as the guarded tools execute them (none of SQL 90-97 has BEGIN/COMMIT), or null. */
+/** The reviewed bytes as the guarded tools execute them (none of SQL 90-100 has BEGIN/COMMIT), or null. */
 export function releaseSqlExecutableText(key, text) {
   const spec = releaseSpec(key);
   const source = String(text || '');
@@ -180,7 +188,8 @@ export function releaseSqlExecutableText(key, text) {
 
 const ACL_SQL = (column, owner, kind) => `
 SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC' WHEN a.grantee = ${owner} THEN 'owner' ELSE pg_catalog.pg_get_userbyid(a.grantee) END AS grantee,
-  a.privilege_type, a.is_grantable
+  a.privilege_type, a.is_grantable,
+  CASE WHEN a.grantor = ${owner} THEN 'owner' ELSE pg_catalog.pg_get_userbyid(a.grantor) END AS grantor
 FROM pg_catalog.aclexplode(COALESCE(${column}, pg_catalog.acldefault('${kind}', ${owner}))) a`;
 
 export const RELEASE_READS = Object.freeze({
@@ -198,7 +207,7 @@ WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attname = $2 AND a.attnum > 
   COALESCE(p.proconfig, ARRAY[]::text[]) AS config, pg_catalog.pg_get_function_result(p.oid) AS result
 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_language l ON l.oid = p.prolang
 WHERE p.oid = pg_catalog.to_regprocedure($1)`,
-  functionAcl: `SELECT x.grantee, x.privilege_type, x.is_grantable FROM pg_catalog.pg_proc p
+  functionAcl: `SELECT x.grantee, x.privilege_type, x.is_grantable, x.grantor FROM pg_catalog.pg_proc p
 CROSS JOIN LATERAL (${ACL_SQL('p.proacl', 'p.proowner', 'f')}) x
 WHERE p.oid = pg_catalog.to_regprocedure($1) ORDER BY 1, 2`,
   // Objects other than its trigger that depend on a function SQL 95 drops (DROP FUNCTION without CASCADE).
@@ -220,15 +229,20 @@ ORDER BY 1`,
   relation: `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner, c.relkind::text AS kind, c.relrowsecurity AS rls,
   c.relforcerowsecurity AS forced, COALESCE(c.reloptions, ARRAY[]::text[]) AS options
 FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass($1)`,
-  relationAcl: `SELECT x.grantee, x.privilege_type, x.is_grantable FROM pg_catalog.pg_class c
+  relationAcl: `SELECT x.grantee, x.privilege_type, x.is_grantable, x.grantor FROM pg_catalog.pg_class c
 CROSS JOIN LATERAL (${ACL_SQL('c.relacl', 'c.relowner', 'r')}) x
 WHERE c.oid = pg_catalog.to_regclass($1) ORDER BY 1, 2`,
   columns: `SELECT a.attname AS name, pg_catalog.format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS notnull,
   pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default,
   ARRAY(SELECT CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(x.grantee) END || ' ' || x.privilege_type
           || CASE WHEN x.is_grantable THEN ' with grant option' ELSE '' END
-        FROM pg_catalog.aclexplode(a.attacl) x ORDER BY 1)::text[] AS acl
-FROM pg_catalog.pg_attribute a LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+        FROM pg_catalog.aclexplode(a.attacl) x ORDER BY 1)::text[] AS acl,
+  ARRAY(SELECT CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(x.grantee) END || ' ' || x.privilege_type
+          || CASE WHEN x.is_grantable THEN ' with grant option' ELSE '' END
+          || ' grantor=' || CASE WHEN x.grantor = c.relowner THEN 'owner' ELSE pg_catalog.pg_get_userbyid(x.grantor) END
+        FROM pg_catalog.aclexplode(a.attacl) x ORDER BY 1)::text[] AS acl_grantors
+FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum`,
   constraints: `SELECT con.conname AS name, pg_catalog.pg_get_constraintdef(con.oid) AS def, con.convalidated AS validated
@@ -243,13 +257,39 @@ FROM pg_catalog.pg_trigger t WHERE t.tgrelid = pg_catalog.to_regclass($1) AND NO
   pol.polpermissive AS permissive,
   ARRAY(SELECT CASE WHEN r = 0 THEN 'public' ELSE pg_catalog.pg_get_userbyid(r)::text END FROM unnest(pol.polroles) r ORDER BY 1)::text[] AS roles,
   pg_catalog.pg_get_expr(pol.polqual, pol.polrelid) AS qual,
-  pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+  pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check,
+  (SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(d.description, 'UTF8')), 'hex')
+     FROM pg_catalog.pg_description d
+    WHERE d.classoid = 'pg_catalog.pg_policy'::pg_catalog.regclass AND d.objoid = pol.oid AND d.objsubid = 0) AS description_sha256
 FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass($1) ORDER BY 1`,
   view: `SELECT pg_catalog.pg_get_viewdef(c.oid) AS def FROM pg_catalog.pg_class c
 WHERE c.oid = pg_catalog.to_regclass($1) AND c.relkind = 'v'`,
+  // One index on an existing table, by name (SQL 98).
+  index: `SELECT pg_catalog.pg_get_indexdef(i.indexrelid) AS def FROM pg_catalog.pg_index i
+JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+WHERE i.indrelid = pg_catalog.to_regclass($1) AND c.relname = $2`,
+  // Whether a unique index on $1 covers the columns $2 and no column outside $3: SQL 98's own
+  // test for check_billing_events (check_intake_item_id, event_type), as the file runs it.
+  uniqueCover: `SELECT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_index i
+  WHERE i.indrelid = pg_catalog.to_regclass($1) AND i.indisunique
+    AND (SELECT pg_catalog.array_agg(a.attname::text ORDER BY a.attname) FROM pg_catalog.unnest(i.indkey) AS k(attnum)
+          JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum) OPERATOR(pg_catalog.<@) $3::text[]
+    AND (SELECT pg_catalog.array_agg(a.attname::text) FROM pg_catalog.unnest(i.indkey) AS k(attnum)
+          JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum) OPERATOR(pg_catalog.@>) $2::text[]
+) AS covered`,
+  // Whether a SECURITY DEFINER function owned by this login may write $1 under RLS (SQL 99's
+  // own check): superuser, BYPASSRLS, or a member of the owner and the table not FORCE RLS.
+  definerWrite: `SELECT (me.rolsuper OR me.rolbypassrls
+    OR (pg_catalog.pg_has_role(current_user, c.relowner, 'USAGE') AND NOT c.relforcerowsecurity)) AS ok
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_roles me ON me.rolname = current_user
+WHERE c.oid = pg_catalog.to_regclass($1)`,
 });
 
 const aclLine = (row) => `${row.grantee} ${row.privilege_type}${row.is_grantable === true ? ' with grant option' : ''}`;
+// spec.render.grantors (SQL 100): each ACL line also names its grantor (the owner as `owner`).
+const aclLineFor = (spec) => (spec?.render?.grantors === true ? (row) => `${aclLine(row)} grantor=${row.grantor}` : aclLine);
+const columnAcl = (spec, row) => [...((spec?.render?.grantors === true ? row.acl_grantors : row.acl) || [])].map(String).sort();
 
 async function prerequisitePresent(q, name) {
   if (name.startsWith('role ')) return (await q(RELEASE_READS.role, [name.slice(5)]))[0]?.present === true;
@@ -262,10 +302,10 @@ async function prerequisitePresent(q, name) {
   return (await q(RELEASE_READS.regclass, [name]))[0]?.present === true;
 }
 
-async function readFunction(q, identity, login) {
+async function readFunction(q, identity, login, spec) {
   const row = (await q(RELEASE_READS.function, [identity]))[0];
   if (!row) return { exists: false };
-  const acl = (await q(RELEASE_READS.functionAcl, [identity])).map(aclLine).sort();
+  const acl = (await q(RELEASE_READS.functionAcl, [identity])).map(aclLineFor(spec)).sort();
   return {
     exists: true,
     owner_is_login: row.owner === login,
@@ -280,9 +320,13 @@ async function readFunction(q, identity, login) {
   };
 }
 
-const policyState = (row) => (row
-  ? { exists: true, cmd: row.cmd, permissive: row.permissive === true, roles: [...(row.roles || [])].map(String).sort(), qual: collapse(row.qual), with_check: collapse(row.with_check) }
-  : { exists: false });
+const policyState = (row, spec) => {
+  if (!row) return { exists: false };
+  const state = { exists: true, cmd: row.cmd, permissive: row.permissive === true, roles: [...(row.roles || [])].map(String).sort(), qual: collapse(row.qual), with_check: collapse(row.with_check) };
+  // spec.render.policy_comments (SQL 100): DROP POLICY + CREATE POLICY would lose a comment.
+  if (spec?.render?.policy_comments === true) state.comment_sha256 = row.description_sha256 ?? null;
+  return state;
+};
 
 async function readRelation(q, name, login) {
   const row = (await q(RELEASE_READS.relation, [name]))[0];
@@ -291,11 +335,11 @@ async function readRelation(q, name, login) {
   return { exists: true, owner_is_login: row.owner === login, kind: row.kind, rls: row.rls === true, forced: row.forced === true, options: [...(row.options || [])].map(String).sort(), acl };
 }
 
-async function readTable(q, name, login) {
+async function readTable(q, name, login, spec) {
   const rel = await readRelation(q, name, login);
   if (!rel.exists) return { exists: false };
   const columns = (await q(RELEASE_READS.columns, [name])).map((c) => ({
-    name: c.name, type: c.type, notnull: c.notnull === true, default: collapse(c.default), acl: [...(c.acl || [])].map(String).sort(),
+    name: c.name, type: c.type, notnull: c.notnull === true, default: collapse(c.default), acl: columnAcl(spec, c),
   }));
   const constraints = (await q(RELEASE_READS.constraints, [name])).map((c) => ({ name: c.name, def: collapse(c.def), validated: c.validated === true }));
   const indexes = (await q(RELEASE_READS.indexes, [name])).map((i) => ({ name: i.name, def: collapse(i.def) }));
@@ -322,8 +366,8 @@ const objKey = (table, name) => `${table} ${name}`;
 /** The catalog state of every object one migration creates, replaces or drops. */
 async function readObjects(q, spec, login) {
   const functions = {};
-  for (const fn of spec.functions) functions[fn.identity] = await readFunction(q, fn.identity, login);
-  for (const identity of spec.dropped_functions || []) functions[identity] = await readFunction(q, identity, login);
+  for (const fn of spec.functions) functions[fn.identity] = await readFunction(q, fn.identity, login, spec);
+  for (const identity of spec.dropped_functions || []) functions[identity] = await readFunction(q, identity, login, spec);
   const policies = {};
   const policyRows = new Map();
   const rowsFor = async (table) => {
@@ -333,7 +377,7 @@ async function readObjects(q, spec, login) {
   for (const p of [...(spec.policies || []), ...(spec.dropped_policies || [])]) {
     const present = (await q(RELEASE_READS.regclass, [p.table]))[0]?.present === true;
     const row = present ? (await rowsFor(p.table)).find((r) => r.name === p.name) : null;
-    policies[objKey(p.table, p.name)] = policyState(row);
+    policies[objKey(p.table, p.name)] = policyState(row, spec);
   }
   const views = {};
   for (const v of spec.views || []) {
@@ -342,7 +386,7 @@ async function readObjects(q, spec, login) {
     views[v.name] = row ? { exists: true, def: collapse(row.def), options: rel.options } : { exists: false };
   }
   const tables = {};
-  for (const t of spec.tables || []) tables[t.name] = await readTable(q, t.name, login);
+  for (const t of spec.tables || []) tables[t.name] = await readTable(q, t.name, login, spec);
   const columns = {};
   for (const c of [...(spec.added_columns || []), ...(spec.column_acl || [])]) {
     const key = `${c.table}.${c.column}`;
@@ -350,7 +394,7 @@ async function readObjects(q, spec, login) {
     const present = (await q(RELEASE_READS.regclass, [c.table]))[0]?.present === true;
     const row = present ? (await q(RELEASE_READS.columns, [c.table])).find((r) => r.name === c.column) : null;
     columns[key] = row
-      ? { exists: true, type: row.type, notnull: row.notnull === true, default: collapse(row.default), acl: [...(row.acl || [])].map(String).sort() }
+      ? { exists: true, type: row.type, notnull: row.notnull === true, default: collapse(row.default), acl: columnAcl(spec, row) }
       : { exists: false };
   }
   const constraints = {};
@@ -368,7 +412,7 @@ async function readObjects(q, spec, login) {
   const privileges = {};
   for (const p of spec.table_privileges || []) {
     const rel = await readRelation(q, p.table, login);
-    const all = rel.exists ? (await q(RELEASE_READS.relationAcl, [p.table])).map(aclLine).sort() : [];
+    const all = rel.exists ? (await q(RELEASE_READS.relationAcl, [p.table])).map(aclLineFor(spec)).sort() : [];
     privileges[p.table] = {
       exists: rel.exists,
       lines: all.filter((line) => p.grantees.includes(line.split(' ')[0]) && p.privileges.includes(line.split(' ')[1])),
@@ -380,7 +424,42 @@ async function readObjects(q, spec, login) {
     const rel = await readRelation(q, name, login);
     altered[name] = { exists: rel.exists, owner_is_login: rel.owner_is_login === true };
   }
-  return { functions, policies, views, tables, columns, constraints, triggers, privileges, altered };
+  const indexes = {};
+  for (const i of spec.indexes || []) {
+    const row = (await q(RELEASE_READS.index, [i.table, i.name]))[0];
+    indexes[objKey(i.table, i.name)] = row ? { exists: true, def: collapse(row.def) } : { exists: false };
+  }
+  const covers = {};
+  for (const u of spec.unique_covers || []) {
+    const present = (await q(RELEASE_READS.regclass, [u.table]))[0]?.present === true;
+    covers[objKey(u.table, u.name)] = { covered: present && (await q(RELEASE_READS.uniqueCover, [u.table, u.contains, u.within]))[0]?.covered === true };
+  }
+  const definer = {};
+  for (const table of spec.definer_writes || []) definer[table] = (await q(RELEASE_READS.definerWrite, [table]))[0]?.ok === true;
+  // spec.whole_tables (SQL 100): the whole access surface of the table, not only the named
+  // objects: RLS flags, every other policy, every non-owner table grant and every grant on an
+  // unlisted column, so a policy or grant the file does not describe moves the fingerprint.
+  const whole = {};
+  for (const w of spec.whole_tables || []) {
+    const rel = await readRelation(q, w.table, login);
+    if (!rel.exists) {
+      whole[w.table] = { exists: false };
+      continue;
+    }
+    const named = new Set([...(spec.policies || []), ...(spec.dropped_policies || [])].filter((p) => p.table === w.table).map((p) => p.name));
+    const listed = new Set((spec.column_acl || []).filter((c) => c.table === w.table).map((c) => c.column));
+    whole[w.table] = {
+      exists: true,
+      rls: rel.rls === true,
+      forced: rel.forced === true,
+      other_policies: (await rowsFor(w.table)).filter((r) => !named.has(r.name))
+        .map((r) => policyLine(objKey(w.table, r.name), policyState(r, spec), spec)).sort(),
+      acl: (await q(RELEASE_READS.relationAcl, [w.table])).filter((r) => r.grantee !== 'owner').map(aclLineFor(spec)).sort(),
+      other_column_acl: (await q(RELEASE_READS.columns, [w.table])).filter((c) => !listed.has(c.name))
+        .flatMap((c) => columnAcl(spec, c).map((line) => `${c.name} ${line}`)).sort(),
+    };
+  }
+  return { functions, policies, views, tables, columns, constraints, triggers, privileges, altered, indexes, covers, definer, whole };
 }
 
 // --- state text --------------------------------------------------------------------
@@ -389,8 +468,9 @@ const list = (values) => [...(values || [])].join(';');
 const fnLine = (identity, f) => (f?.exists
   ? `function ${identity}: lang=${f.language} vol=${f.volatility} parallel=${f.parallel} secdef=${f.security_definer === true} result=${f.result} config=${list(f.config)} prosrc=${f.prosrc_sha256} acl=${list(f.acl)}`
   : `function ${identity}: absent`);
-const policyLine = (key, p) => (p?.exists
-  ? `policy ${key}: cmd=${p.cmd} permissive=${p.permissive === true} roles=${list(p.roles)} qual=${hashOrDash(p.qual)} with_check=${hashOrDash(p.with_check)}`
+const policyLine = (key, p, spec) => (p?.exists
+  ? `policy ${key}: cmd=${p.cmd} permissive=${p.permissive === true} roles=${list(p.roles)} qual=${hashOrDash(p.qual)} with_check=${hashOrDash(p.with_check)}${
+    spec?.render?.policy_comments === true ? ` comment=${p.comment_sha256 || '-'}` : ''}`
   : `policy ${key}: absent`);
 const columnText = (c) => `${c.type} notnull=${c.notnull === true} default=${hashOrDash(c.default)} acl=${list(c.acl)}`;
 function tableLines(name, t) {
@@ -415,7 +495,7 @@ export function releaseStateText(key, state = {}) {
   for (const identity of spec.dropped_functions || []) lines.push(fnLine(identity, s.functions?.[identity]));
   for (const p of [...(spec.policies || []), ...(spec.dropped_policies || [])]) {
     const k = objKey(p.table, p.name);
-    lines.push(policyLine(k, s.policies?.[k]));
+    lines.push(policyLine(k, s.policies?.[k], spec));
   }
   for (const v of spec.views || []) {
     const row = s.views?.[v.name];
@@ -441,6 +521,26 @@ export function releaseStateText(key, state = {}) {
   for (const p of spec.table_privileges || []) {
     const row = s.privileges?.[p.table];
     lines.push(row?.exists ? `privileges ${p.table} ${p.privileges.join(',')}: ${list(row.lines)}` : `privileges ${p.table}: absent`);
+  }
+  for (const i of spec.indexes || []) {
+    const row = s.indexes?.[objKey(i.table, i.name)];
+    lines.push(row?.exists ? `index ${i.table} ${i.name}: ${hashOrDash(row.def)}` : `index ${i.table} ${i.name}: absent`);
+  }
+  for (const u of spec.unique_covers || []) {
+    lines.push(`unique ${u.table} ${u.name} (${u.contains.join(',')}): covered=${s.covers?.[objKey(u.table, u.name)]?.covered === true}`);
+  }
+  for (const w of spec.whole_tables || []) {
+    const row = s.whole?.[w.table];
+    if (!row?.exists) {
+      lines.push(`whole ${w.table}: absent`);
+      continue;
+    }
+    lines.push(
+      `whole ${w.table}: rls=${row.rls === true} forced=${row.forced === true}`,
+      `whole ${w.table} other policies: ${list(row.other_policies)}`,
+      `whole ${w.table} acl: ${list(row.acl)}`,
+      `whole ${w.table} other column acl: ${list(row.other_column_acl)}`,
+    );
   }
   return lines.join('\n');
 }
@@ -473,6 +573,8 @@ export function releaseIntendedState(key, text) {
   for (const p of spec.policies || []) {
     policies[objKey(p.table, p.name)] = {
       exists: true, cmd: p.cmd, permissive: p.permissive !== false, roles: [...p.roles].sort(), qual: collapse(p.qual), with_check: collapse(p.with_check),
+      // CREATE POLICY leaves no comment.
+      ...(spec.render?.policy_comments === true ? { comment_sha256: null } : {}),
     };
   }
   for (const p of spec.dropped_policies || []) policies[objKey(p.table, p.name)] = { exists: false };
@@ -504,7 +606,18 @@ export function releaseIntendedState(key, text) {
   for (const t of spec.triggers || []) triggers[objKey(t.table, t.name)] = { exists: true, enabled: 'O', def: collapse(t.def) };
   for (const t of spec.dropped_triggers || []) triggers[objKey(t.table, t.name)] = { exists: false };
   const privileges = Object.fromEntries((spec.table_privileges || []).map((p) => [p.table, { exists: true, lines: [...p.intended].sort() }]));
-  return { functions, policies, views, tables, columns, constraints, triggers, privileges };
+  const indexes = Object.fromEntries((spec.indexes || []).map((i) => [objKey(i.table, i.name), { exists: true, def: collapse(i.def) }]));
+  const covers = Object.fromEntries((spec.unique_covers || []).map((u) => [objKey(u.table, u.name), { covered: true }]));
+  // Only the policies and grants the file names: no other policy, table grant or column grant.
+  const whole = Object.fromEntries((spec.whole_tables || []).map((w) => [w.table, {
+    exists: true,
+    rls: w.rls === true,
+    forced: w.forced === true,
+    other_policies: [],
+    acl: (spec.table_privileges || []).filter((p) => p.table === w.table).flatMap((p) => p.intended).sort(),
+    other_column_acl: [],
+  }]));
+  return { functions, policies, views, tables, columns, constraints, triggers, privileges, indexes, covers, whole };
 }
 
 export function releaseIntendedHash(key, text) {
@@ -597,6 +710,25 @@ export async function readReleaseSqlState(client, key, { counts = true } = {}) {
 // --- rules --------------------------------------------------------------------------
 
 const PUBLIC_EXECUTE = 'PUBLIC EXECUTE';
+const grantee = (line) => String(line).split(' ')[0];
+
+/**
+ * A table the file creates with CREATE TABLE IF NOT EXISTS that may already exist (SQL 98's
+ * platform_billing_destination: no repository SQL created it). The file keeps its columns,
+ * constraints and indexes, so those must already be the intended ones (and FORCE off); it
+ * enables RLS, drops every other policy, recreates its trigger and revokes every privilege of
+ * the roles in `revokes_from` before granting, so live policies may be anything, triggers only
+ * the file's own and privileges only of those roles. Owned by the login (the file alters it).
+ */
+function preexistingTableReplaceable(t, live, want) {
+  if (!want || live.owner_is_login !== true) return false;
+  const structural = (x) => tableLines(t.name, { ...x, rls: false, policies: [], triggers: [], acl: [], columns: (x.columns || []).map((c) => ({ ...c, acl: [] })) });
+  const revocable = new Set(['owner', ...(t.revokes_from || [])]);
+  return same(structural(live), structural(want))
+    && (live.triggers || []).every((name) => want.triggers.includes(name))
+    && (live.acl || []).every((line) => revocable.has(grantee(line)))
+    && (live.columns || []).every((c) => (c.acl || []).every((line) => revocable.has(grantee(line))));
+}
 
 /** Rules both environments apply before the migration runs. */
 export function releaseSharedPreconditionFailures(key, state, text) {
@@ -606,7 +738,10 @@ export function releaseSharedPreconditionFailures(key, state, text) {
   const fnRows = spec.functions.map((fn) => [fn, s.functions?.[fn.identity] || { exists: false }]);
   const tableOk = (t) => {
     const live = s.tables?.[t.name];
-    return !live?.exists || (intended && same(tableLines(t.name, live), tableLines(t.name, intended.tables[t.name])));
+    if (!live?.exists) return true;
+    if (!intended) return false;
+    if (t.may_preexist === true) return preexistingTableReplaceable(t, live, intended.tables[t.name]);
+    return same(tableLines(t.name, live), tableLines(t.name, intended.tables[t.name]));
   };
   const columnOk = (c) => {
     const live = s.columns?.[`${c.table}.${c.column}`];
@@ -626,10 +761,21 @@ export function releaseSharedPreconditionFailures(key, state, text) {
       fn.acl.includes(line) || (fn.revokes || [PUBLIC_EXECUTE]).includes(line))))],
     ['created_tables_absent_or_intended', (spec.tables || []).every(tableOk)],
     ['added_columns_absent_or_intended', (spec.added_columns || []).every(columnOk)],
+    // Every live column grant is one the file keeps or revokes (SQL 100: revokes; with
+    // render.grantors only the owner's own grants are revocable by the owner).
     ['column_acl_replaceable', (spec.column_acl || []).every((c) => {
       const live = s.columns?.[`${c.table}.${c.column}`];
-      return live?.exists === true && (live.acl || []).every((line) => c.acl.includes(line));
+      return live?.exists === true && (live.acl || []).every((line) => c.acl.includes(line) || (c.revokes || []).includes(line));
     })],
+    ['added_indexes_absent_or_intended', (spec.indexes || []).every((i) => {
+      const live = s.indexes?.[objKey(i.table, i.name)];
+      return !live?.exists || live.def === collapse(i.def);
+    })],
+    ['definer_can_write_relations', (spec.definer_writes || []).every((table) => s.definer?.[table] === true)],
+    // SQL 98: with duplicates and no covering unique index the file only warns and skips the
+    // index, so the post-state would not be fixed; refuse instead.
+    ['unique_covered_or_no_duplicates', (spec.unique_covers || []).every((u) => (
+      s.covers?.[objKey(u.table, u.name)]?.covered === true || s.counts?.[u.duplicates_count] === 0))],
     ['dropped_functions_have_no_other_dependents', Object.values(s.dependents || {}).every((n) => n === 0)],
     // plpgsql / EXECUTE callers are not in pg_depend; a function body naming a dropped function would break.
     ['dropped_functions_not_called_by_other_functions', Array.isArray(s.dropped_function_callers) && s.dropped_function_callers.length === 0],
@@ -639,6 +785,18 @@ export function releaseSharedPreconditionFailures(key, state, text) {
       checks.push(['doc_type_check_supported', ['predecessor_3', 'predecessor_6', 'sql30', 'sql94'].includes(s.library_sql30_check_shape)]);
     }
     if (extra === 'no_rows_outside_sql94_rule') checks.push(['no_rows_outside_sql94_rule', s.counts?.rows_outside_sql94_rule === 0]);
+    // SQL 98: the file raises 23505 on duplicate tenant periods; refuse before it runs.
+    if (extra === 'no_duplicate_billing_periods') checks.push(['no_duplicate_billing_periods', s.counts?.duplicate_billing_periods === 0]);
+    // SQL 98: a pre-existing platform_billing_destination is taken over only while it is empty:
+    // a row there would become the fee destination with no review and no audit history.
+    if (extra === 'platform_billing_destination_absent_or_empty') {
+      checks.push(['platform_billing_destination_absent_or_empty', s.tables?.['public.platform_billing_destination']?.exists !== true
+        || s.counts?.platform_billing_destination_rows === 0]);
+    }
+    // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
+    if (extra === 'check_billing_config_active_or_empty') {
+      checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);
+    }
   }
   return failed(checks);
 }
@@ -673,8 +831,10 @@ export function releaseUnrelatedScope(key) {
     skip_functions: [...spec.functions.map((fn) => fn.identity), ...(spec.dropped_functions || [])],
     skip_triggers: [...(spec.triggers || []), ...(spec.dropped_triggers || [])].map((t) => objectName(t.table, t.name)),
     skip_views: (spec.views || []).map((v) => v.name),
-    // Indexes a migration creates on an existing table (none in SQL 90-97); its own tables' indexes are skipped with them.
-    skip_indexes: [...(spec.added_indexes || [])],
+    // Indexes a migration creates on an existing table (SQL 98: the tenant period index and the
+    // check_billing_events unique index it adds only when none covers the pair); its own
+    // tables' indexes are skipped with them.
+    skip_indexes: [...(spec.indexes || []).map((i) => `public.${i.name}`), ...(spec.added_indexes || [])],
   };
 }
 
@@ -687,6 +847,7 @@ const RELEASE_UNRELATED_SQL = Object.freeze({
 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND NOT ${SKIPPED_REL('c.oid')}
   AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_index i WHERE i.indexrelid = c.oid AND ${SKIPPED_REL('i.indrelid')})
+  AND NOT ((n.nspname || '.' || c.relname) = ANY ($3::text[]))
 ORDER BY 1`,
   columns: `SELECT a.attrelid::regclass::text || ' ' || a.attnum::text || ' ' || a.attname || ' ' || pg_catalog.format_type(a.atttypid, a.atttypmod)
   || ' ' || a.attnotnull::text || ' ' || COALESCE(a.attacl::text, '') || ' ' || COALESCE(pg_catalog.pg_get_expr(d.adbin, d.adrelid), '') AS d
@@ -757,7 +918,7 @@ FROM pg_catalog.pg_namespace n WHERE n.nspname IN ('public', 'auth') ORDER BY 1`
 export async function readReleaseUnrelatedSnapshot(client, key) {
   const scope = releaseUnrelatedScope(key);
   const params = {
-    relations: [scope.skip_relations, scope.acl_relations],
+    relations: [scope.skip_relations, scope.acl_relations, scope.skip_indexes],
     columns: [scope.skip_relations, scope.skip_columns],
     constraints: [scope.skip_relations, scope.skip_constraints],
     policies: [scope.skip_relations, scope.skip_policies],
@@ -850,6 +1011,15 @@ export function releaseSqlReport(key, state, text) {
         .filter((line) => !line.startsWith('owner ') && ['UPDATE', 'DELETE', 'TRUNCATE'].includes(line.split(' ')[1])),
     })),
     function_acl: spec.functions.map((fn) => ({ name: fn.identity.replace(/^public\./, ''), acl: [...(s.functions?.[fn.identity]?.acl || [])] })),
+    indexes: objectLabels((spec.indexes || []).map((i) => [objKey(i.table, i.name).replace(/^public\./, ''), s.indexes?.[objKey(i.table, i.name)], want?.indexes?.[objKey(i.table, i.name)]])),
+    unique_covers: (spec.unique_covers || []).map((u) => ({
+      name: objKey(u.table, u.name).replace(/^public\./, ''), columns: [...u.contains], covered: s.covers?.[objKey(u.table, u.name)]?.covered === true,
+    })),
+    definer_writes: (spec.definer_writes || []).map((table) => ({ name: table.replace(/^public\./, ''), ok: s.definer?.[table] === true })),
+    // spec.render.policy_comments: whether each policy carries a comment (never its text).
+    policy_comments: spec.render?.policy_comments === true
+      ? (spec.policies || []).map((p) => ({ name: objKey(p.table, p.name).replace(/^public\./, ''), present: Boolean(s.policies?.[objKey(p.table, p.name)]?.comment_sha256) }))
+      : null,
     dropped_function_dependents: Object.values(s.dependents || {}).reduce((n, v) => n + (Number(v) || 0), 0),
     // Names and a count only (never the bodies).
     dropped_function_callers: [...(s.dropped_function_callers || [])].map((name) => name.replace(/^public\./, '')),

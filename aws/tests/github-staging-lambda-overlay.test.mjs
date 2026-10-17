@@ -471,3 +471,100 @@ test('workflow never interpolates expressions into run scripts', () => {
   assert.deepEqual(offenders, [], `run scripts must read inputs and outputs through env (lines ${offenders.join(', ')})`);
   assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
 });
+
+// --- sql_before (the staging mirror of the production overlay's guard) -----------------------
+
+const PLAN = JSON.parse(fs.readFileSync(new URL('../../ops/deployment-guard/production-api-overlay-plan.json', import.meta.url), 'utf8'));
+const STAGING_SQL = JSON.parse(fs.readFileSync(new URL('../../ops/deployment-guard/staging-sql-live.json', import.meta.url), 'utf8'));
+const SQL98 = 'aws/workflows/sql/98_tenant_fee_collection.sql';
+
+function memberDeps(member, { calls = [] } = {}) {
+  const zip = writeZipMembers({ 'index.mjs': 'unrelated live handler', [member]: 'reviewed live member' });
+  return {
+    calls,
+    zip,
+    lambda: {
+      async send(command) {
+        calls.push(command);
+        return { Configuration: { CodeSha256: 'live-code-sha', RevisionId: 'live-revision' }, Code: { Location: 'https://example.invalid/mock-lambda.zip' } };
+      },
+    },
+    async fetchImpl() { return new Response(zip); },
+    loadSdk() { throw new Error('must not load any writer or signer SDK'); },
+  };
+}
+
+test('staging SQL record: every sql_before of the plan has an entry; the pending SQL is not live in staging', async () => {
+  const { STAGING_SQL_LIVE_REL, OVERLAY_PLAN_REL } = await import('../../scripts/deployment-guard/github-staging-lambda-overlay.mjs');
+  assert.equal(STAGING_SQL_LIVE_REL, 'ops/deployment-guard/staging-sql-live.json');
+  assert.equal(OVERLAY_PLAN_REL, 'ops/deployment-guard/production-api-overlay-plan.json');
+  assert.equal(STAGING_SQL.target_environment, 'staging');
+  const required = [...new Set(Object.values(PLAN.members).map((m) => m.sql_before).filter(Boolean))].sort();
+  assert.deepEqual(Object.keys(STAGING_SQL.sql).sort(), required, `${STAGING_SQL_LIVE_REL} must cover every sql_before of ${OVERLAY_PLAN_REL}`);
+  for (const [file, record] of Object.entries(STAGING_SQL.sql)) {
+    assert.equal(typeof record.verified_live, 'boolean', file);
+    // A recorded staging run id (a GitHub Actions run) is the evidence.
+    if (record.verified_live) assert.match(record.evidence, /\b[0-9]{11}\b/, file);
+    else assert.equal(record.evidence, null, file);
+    assert.ok(fs.existsSync(new URL(`../../${file}`, import.meta.url)), file);
+  }
+  // Not applied in staging or production yet (production-api-overlay-plan.json sql_prerequisites).
+  for (const n of ['90_users_only_tenant_roles', '91_moov_onboarding', '93_tenant_company_info', '94_document_library_restore', '98_tenant_fee_collection']) {
+    assert.equal(STAGING_SQL.sql[`aws/workflows/sql/${n}.sql`].verified_live, false, n);
+  }
+  // Staging is never ahead of the record it claims: a SQL recorded live in production with a
+  // staging acceptance is the only kind recorded true here.
+  for (const [file, record] of Object.entries(STAGING_SQL.sql)) {
+    if (record.verified_live) assert.equal(PLAN.sql_prerequisites[file]?.verified_live, true, file);
+  }
+});
+
+test('staging apply of a member held by sql_before is refused before any AWS call, lease or receipt', async (t) => {
+  const { stagingSqlBefore } = await import('../../scripts/deployment-guard/github-staging-lambda-overlay.mjs');
+  t.after(() => mock.restoreAll());
+  for (const method of ['writeFileSync', 'mkdirSync', 'renameSync']) {
+    mock.method(fs, method, () => assert.fail(`a held member must not reach ${method}`));
+  }
+  // providers.mjs and workflow-rpc.mjs are held behind SQL 98 (ops/fee-collection-deltas.md), the billing members too.
+  for (const member of ['providers.mjs', 'workflow-rpc.mjs', 'tenant-billing-engine.mjs', 'tenant-billing-handlers.mjs']) {
+    assert.equal(PLAN.members[member].sql_before, SQL98, member);
+    assert.deepEqual(stagingSqlBefore(member), { sql_before: SQL98, verified_live_in_staging: false, evidence: null }, member);
+    const deps = memberDeps(member);
+    for (const operation of ['replace', 'add']) {
+      await assert.rejects(run({
+        ...env,
+        CHECKSOPS_STAGING_OVERLAY_MEMBER: member,
+        CHECKSOPS_STAGING_DEPLOY_MODE: 'apply',
+        CHECKSOPS_STAGING_OVERLAY_OPERATION: operation,
+        CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: hashZipMembers(deps.zip)[member],
+      }, deps), (error) => error.code === 'DEPLOYMENT_COLLISION' && error.details.sql_before === SQL98 && error.details.member === member, `${member} ${operation}`);
+    }
+    assert.equal(deps.calls.length, 0, `${member}: no AWS call`);
+  }
+  // A sql_before with no staging record is not live either (fail closed).
+  const plan = { members: { 'providers.mjs': { sql_before: 'aws/workflows/sql/999_unrecorded.sql' } } };
+  await assert.rejects(run({ ...env, CHECKSOPS_STAGING_OVERLAY_MEMBER: 'providers.mjs', CHECKSOPS_STAGING_DEPLOY_MODE: 'apply' }, { ...memberDeps('providers.mjs'), plan }),
+    (error) => error.code === 'DEPLOYMENT_COLLISION' && error.details.sql_before === 'aws/workflows/sql/999_unrecorded.sql');
+});
+
+test('staging sql_before: inspect reports the hold without refusing; a recorded staging SQL lifts it; a member with no sql_before has none', async () => {
+  const deps = memberDeps('providers.mjs');
+  const inspected = await run({ ...env, CHECKSOPS_STAGING_OVERLAY_MEMBER: 'providers.mjs' }, deps);
+  assert.equal(inspected.mode, 'inspect');
+  assert.deepEqual(inspected.sql_before, { sql_before: SQL98, verified_live_in_staging: false, evidence: null });
+  assert.equal(deps.calls.length, 1);
+  // Recorded live in staging: the hold lifts and the run goes on to the reviewed-hash check (refused here on a wrong hash).
+  const stagingSqlLive = structuredClone(STAGING_SQL);
+  stagingSqlLive.sql[SQL98] = { verified_live: true, evidence: 'test fixture run 00000000000' };
+  const lifted = memberDeps('providers.mjs');
+  await assert.rejects(run({
+    ...env,
+    CHECKSOPS_STAGING_OVERLAY_MEMBER: 'providers.mjs',
+    CHECKSOPS_STAGING_DEPLOY_MODE: 'apply',
+    CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: 'b'.repeat(64),
+  }, { ...lifted, stagingSqlLive }), { code: 'SOURCE_RECONCILIATION_REQUIRED' });
+  assert.equal(lifted.calls.length, 1);
+  // tenant-management-v2.mjs is not in the plan: no hold.
+  const plain = await run(env, inspectionDeps());
+  assert.deepEqual(plain.sql_before, { sql_before: null, verified_live_in_staging: null, evidence: null });
+});

@@ -96,6 +96,14 @@ The number is 98, the next free one (main ends at 97). It is pinned as pending:
 No tooling, ledger entry, staging apply or production apply exists. SQL 98 now refuses without SQL 96's
 `aws_platform_owner_set_tenant_pricing(uuid, jsonb)`, so "SQL 98 verified live" implies SQL 96 is live.
 
+Update (claude/sql98-100-apply-tooling): SQL 98 now has guarded tooling on the SQL 90-97 engine:
+the staging executor choice `sql98-tenant-fee-collection`, the production tool
+`scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs` (`--inspect`), the
+one-shot key `sql98`, a code-derived `intended_replacement_sha256` (`f101573a…`) in both pins and
+the runbook `ops/production-sql-90-97-apply.md`. Both pins stay `execute: false` /
+`authorization: pending`; nothing was applied. The inspect reports the checks below (counts,
+the covering unique index, the tenant period index, the destination table).
+
 What a read-only inspect must confirm before an execute pin:
 - `check_billing_config` has an active row, or no rows (SQL 98 then seeds 300). The live default price is
   the answer to owner question (b)'s price.
@@ -250,10 +258,15 @@ adds no new bypass.
   reference. Only "no rows" still passes to the handler, which refuses an unknown deposit
   itself. Covered by a new test. Re-pinned `tenant-deposits-gate.mjs` in the plan and the
   fee manifest.
-- **Staging hold (operator rule, not enforced by the staging overlay).** The staging Lambda
-  overlay has no `sql_before` check. Do not overlay `providers.mjs` or `workflow-rpc.mjs`
+- **Staging hold (now enforced by the staging overlay).** Originally an operator rule: the
+  staging Lambda overlay had no `sql_before` check. It now has one
+  (`scripts/deployment-guard/github-staging-lambda-overlay.mjs`, record
+  `ops/deployment-guard/staging-sql-live.json`, where SQL 98 is `verified_live: false`), so
+  `providers.mjs`, `workflow-rpc.mjs` and the billing members are refused in staging until SQL
+  98 is recorded live there. Do not overlay `providers.mjs` or `workflow-rpc.mjs`
   to staging until SQL 98 is applied in staging. Before that, every staging deposit call
   returns 503 `deposits_status_unavailable`, because `aws_tenant_deposits_enabled` does not
   exist yet. SQL 98 (and SQL 99) still need staging-executor and production apply tooling
   on the SQL 90-97 engine. That is a follow-up PR, and it is required before the staging
-  deploy. Production is held by the plan's `sql_before` on SQL 98.
+  deploy. Production is held by the plan's `sql_before` on SQL 98. (Done in
+  claude/sql98-100-apply-tooling, with SQL 100.)

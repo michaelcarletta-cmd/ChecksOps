@@ -1,0 +1,71 @@
+{
+  "id": "sql100-mortgage-desk-live-access-production-apply",
+  "migration": "sql100",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/100_mortgage_desk_live_access.sql",
+  "migration_id": "100_mortgage_desk_live_access",
+  "staging_pin_commit": "c42bcd9c4f8edf1ab7d0f8d2b7e3d56a180ab994",
+  "source_sha256": "6fae188e0d07e4484025ff7154cec5b3cc80cbcd9e40f9dfa6174f86b0d3e11c",
+  "function_identities": [
+    "public.aws_is_mortgage_ops_agent()",
+    "public.aws_mortgage_agent_queue_visible(text, uuid)",
+    "public.aws_is_active_mortgage_agent(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e",
+  "authorization_phrase": "APPLY_MORTGAGE_DESK_LIVE_ACCESS",
+  "predecessors": [
+    "sql90"
+  ],
+  "production_noop": true,
+  "order_note": "After SQL 90 (it replaces aws_can_write_tenant(uuid), which the insert and delete policies call) and after aws/rls/sql/12_final_select_policies.sql, aws/rls/sql/24_complete_write_policies.sql and aws/workflows/sql/50_tranche5_write_grants.sql, which are already live. Independent of SQL 98 and SQL 99 in the database (SQL 99's trigger works under these policies). On production SQL 100 is a strict no-op: it records what production already has, so the production tool never runs it (an apply is refused unless the live state is already the intended fingerprint, production_state_already_intended, and then as already in place). In staging it is applied through the guarded executor (choice sql100-mortgage-desk-live-access) to bring staging to production's Mortgage Desk access.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql100-mortgage-desk-live-access",
+    "one_shot_migration": "sql100",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-90-97-apply.md",
+    "tests": [
+      "aws/tests/release-sql98-100-executor.test.mjs",
+      "aws/tests/release-sql98-100-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql100-mortgage-desk-live-access-pg.test.mjs",
+      "aws/tests/mortgage-desk-access-production-inspect.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 100: sql100-mortgage-desk-live-access-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql100-mortgage-desk-live-access); production-sql-one-shot.mjs --migration sql100. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). production_noop: the production tool only inspects; its fingerprint includes every ACL entry's grantor (owner as owner) and each policy's comment hash, so a grant by another grantor or a policy comment (which DROP POLICY + CREATE POLICY would lose) makes the live state not the intended one and the tool refuses. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "already_applied": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no SQL 100 production inspect has been run. Run scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs --inspect (read-only) and, for the detail behind it, scripts/deployment-guard/mortgage-desk-access-production-inspect.mjs (now also reporting function EXECUTE grants with grantors, policy comment presence and sha256, and column ACL grantors). Production is recorded when already_applied is true (live_definition_sha256 equals intended_replacement_sha256) and precondition_failures is []. If live_definition_sha256 differs (for example a helper with EXECUTE granted beyond PUBLIC and the owner, a grant whose grantor is not checksops_admin, or a commented policy), SQL 100 does not record production: stop and reconcile the file in a reviewed change. Never set execute true to make production match SQL 100."
+  },
+  "intended_post_state": {
+    "fingerprint": "4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e",
+    "note": "The five live policies on public.mortgage_handling_requests (no comments), aws_write_mortgage_handling_requests absent; the helpers aws_is_mortgage_ops_agent(), aws_mortgage_agent_queue_visible(text, uuid) and aws_is_active_mortgage_agent(uuid) (SECURITY DEFINER, sql, STABLE, row_security off, search_path public; prosrc sha256 787bad58…, b9f70c8b…, 2bba15b2…, the 2026-10-17 production inspect values) with the default EXECUTE ACL (PUBLIC and the owner); checksops table SELECT, INSERT, DELETE and column UPDATE on 17 columns, authenticated column UPDATE on accepted_at, assigned_employee_id, completed_at only, every entry granted by the owner. The fingerprint is releaseIntendedHash('sql100', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 100 (choice sql100-mortgage-desk-live-access) here. This pin never becomes execute true: production is recorded by the read-only inspect (already_applied true), and the tool refuses an apply with SQL_COLLISION (expected_live_definition_sha256 is null), PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance) and, against any live state, DEPLOYMENT_COLLISION production_state_already_intended or UNRELATED_MUTATION already in place."
+  }
+}
