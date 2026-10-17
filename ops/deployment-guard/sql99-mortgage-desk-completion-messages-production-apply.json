@@ -8,8 +8,8 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/99_mortgage_desk_completion_messages.sql",
   "migration_id": "99_mortgage_desk_completion_messages",
-  "staging_pin_commit": "6221119e4edb5fb040915c8002f2d4285762cf82",
-  "source_sha256": "477bce2c33e8d6bd817b8659f1a7d5e555553f46bc11789cbe1fbed602b9b5a3",
+  "staging_pin_commit": "600311866039adb0a85217be84d7dfb09f9eeec2",
+  "source_sha256": "0c079fe41c932f34f33262ba00a17f3201f99960c89a944750f5312bd97f8b15",
   "function_identities": [
     "public.aws_mortgage_desk_appended_note(text, text)",
     "public.aws_mortgage_desk_completion_messages()"
@@ -45,7 +45,7 @@
   },
   "intended_post_state": {
     "fingerprint": null,
-    "note": "Adds public.aws_mortgage_desk_appended_note(text, text) (IMMUTABLE, INVOKER) and the SECURITY DEFINER trigger function public.aws_mortgage_desk_completion_messages() (search_path public, row_security off), both owned by checksops_admin with EXECUTE revoked from PUBLIC, and the AFTER UPDATE trigger tr_mortgage_desk_completion_messages on public.mortgage_handling_requests. No policy, grant, table, column or row change. The fingerprint is defined by the SQL 99 tooling (pending)."
+    "note": "Adds public.aws_mortgage_desk_appended_note(text, text) (IMMUTABLE, INVOKER) and the SECURITY DEFINER trigger function public.aws_mortgage_desk_completion_messages() (search_path public; no row_security setting), both owned by checksops_admin with EXECUTE revoked from PUBLIC, and the AFTER UPDATE trigger tr_mortgage_desk_completion_messages on public.mortgage_handling_requests. No policy, grant, table, column or row change. The fingerprint is defined by the SQL 99 tooling (pending)."
   },
   "staging_acceptance": {
     "ok": false,
