@@ -39,6 +39,8 @@ import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.
 import { handleMoovOnboarding, isOnboardingFunction } from './providers/onboarding/handlers.mjs';
 import { moovOnboardingProductionEnabled } from './providers/onboarding/flags.mjs';
 import { hasProductionCheckAltHandler, runProductionCheckAltHandler } from './providers/production/checkalt-dispatch.mjs';
+import { gateProviderDeposit } from './tenant-deposits-gate.mjs';
+import { productionCheckAltAmbiguousMode, productionCheckAltExecutionAllowed } from './providers/production/checkalt-holds.mjs';
 import {
   checkaltStatusReadOnlyMode,
   denyCheckAltMutationUnderStatusRead,
@@ -387,7 +389,20 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     });
   }
 
+  // Per-tenant deposits switch (SQL 98 tenants.deposits_enabled): a Check Alt
+  // submit, or an approve, for a tenant whose deposits are off is refused
+  // before the production or sandbox handler and any provider call. It runs
+  // only where a handler would actually execute (the money holds, stubs and
+  // hard blocks keep answering first, without a database read).
+  const depositGate = () => gateProviderDeposit(name, body, (fn) => (
+    deps.depositGateClient ? fn({ client: deps.depositGateClient }) : withIdentity(event, fn, deps)
+  ));
+
   if (hasProductionCheckAltHandler(name) || isCheckAltStatusReadFunction(name)) {
+    if (!productionCheckAltAmbiguousMode() && productionCheckAltExecutionAllowed()) {
+      const depositRefusal = await depositGate();
+      if (depositRefusal) return depositRefusal;
+    }
     const production = await runProductionCheckAltHandler(name, event, deps);
     if (production) return production;
   }
@@ -442,6 +457,8 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   if ((providerSandboxExecutionEnabled() || isAuthorizedMoovProductionRead(spec, body)) && hasParityHandler(name)) {
+    const depositRefusal = await depositGate();
+    if (depositRefusal) return depositRefusal;
     return runParityHandler(name, event, deps);
   }
 

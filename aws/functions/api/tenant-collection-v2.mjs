@@ -14,6 +14,28 @@ export const CHECKSOPS_PLATFORM_WALLET_ID = '72630a70-4954-4761-b652-e8beff1ad02
 export const CHECKSOPS_PLATFORM_WALLET_PM_ID = 'c70a90f2-9bcc-4084-8263-d5a0fb5d806c';
 export const CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
 
+/**
+ * Owner question (a), ANSWERED 2026-10-17 (PR #1017): production tenant fees
+ * land in the ChecksOps platform Moov wallet, platform Moov account
+ * 41cb5d67-4911-4bef-aad5-d8ee9c582208 (owner-confirmed).
+ *
+ * This object is the one place that answer lives. assertExplicitDestination
+ * (every collection) and the fee destination pins
+ * (tenant-billing-destination.mjs normalizeDest, destination-set) read it.
+ * The wallet payment method id (c70a90f2-…) is unchanged: it was identified
+ * read-only from tenant wallet partnerAccountID values and was not part of the
+ * owner's answer, so paymentMethodOwnerConfirmed stays false until it is
+ * confirmed (for example by the first verified destination-set).
+ */
+export const PRODUCTION_FEE_DESTINATION = Object.freeze({
+  kind: 'platform_moov_wallet',
+  accountId: CHECKSOPS_PLATFORM_ACCOUNT_ID,
+  paymentMethodId: CHECKSOPS_PLATFORM_WALLET_PM_ID,
+  ownerConfirmed: true,
+  ownerConfirmedAt: '2026-10-17',
+  paymentMethodOwnerConfirmed: false,
+});
+
 export const LEG_TYPE = Object.freeze({
   WALLET: 'wallet',
   BANK: 'ach_debit',
@@ -338,10 +360,10 @@ export function assertExplicitDestination(destination, environment) {
   if (environment === 'production' && accountId === CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID) {
     errors.push('sandbox_resource_in_production');
   }
-  if (environment === 'production' && accountId && accountId !== CHECKSOPS_PLATFORM_ACCOUNT_ID) {
+  if (environment === 'production' && accountId && accountId !== PRODUCTION_FEE_DESTINATION.accountId) {
     errors.push('destination_not_checksops_platform');
   }
-  if (environment === 'production' && paymentMethodId && paymentMethodId !== CHECKSOPS_PLATFORM_WALLET_PM_ID) {
+  if (environment === 'production' && paymentMethodId && paymentMethodId !== PRODUCTION_FEE_DESTINATION.paymentMethodId) {
     errors.push('destination_not_checksops_wallet_pm');
   }
   if (destination?.selection && FALLBACK_SELECTIONS.has(destination.selection)) {
@@ -689,7 +711,10 @@ export async function collectTenantObligation(client, {
     };
   }
 
-  const walletSource = amountDueCents > 0
+  // bankOnly: the whole amount is an ACH debit from the tenant's authorized
+  // bank account; the tenant's wallet is never touched (tenant fee pulls,
+  // owner decision 2026-10-17).
+  const walletSource = amountDueCents > 0 && deps.bankOnly !== true
     ? await resolveTenantWalletSource(client, {
       tenantId,
       environment,

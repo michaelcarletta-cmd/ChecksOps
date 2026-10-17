@@ -636,58 +636,27 @@ export const walletFundOnClear = {
   },
 };
 
+/**
+ * Retired (owner decision 2026-10-17): moov-tenant-fee-charge took the amount
+ * and line items from the browser and pulled into "the first facilitator
+ * wallet". Tenant fees are collected by the platform owner through
+ * tenant-billing-admin (preview, then pull with the preview hash; the server
+ * computes the amount and pays the ChecksOps platform account). `retired`
+ * makes the wrapper answer 410 before any identity, database or provider
+ * work; `run` answers the same if it is ever reached.
+ */
+export const TENANT_FEE_CHARGE_RETIRED = Object.freeze({
+  ok: false,
+  statusCode: 410,
+  error: 'use_tenant_billing_pull',
+  message: 'moov-tenant-fee-charge is retired. Collect tenant fees from Tenant Management (tenant-billing-admin preview, then pull).',
+  liveProviderCalled: false,
+});
+
 export const tenantFeeCharge = {
   requireAdmin: true,
-  run: async ({ client, mapping, body, ctx, fetchImpl }) => {
-    const tenantId = body.tenant_id || ctx.tenantId;
-    const lines = Array.isArray(body.line_items) ? body.line_items : [];
-    const amount = lines.reduce((s, l) => s + Math.max(0, Number(l.amount_cents) || 0), 0) || Number(body.amount_cents);
-    if (!Number.isFinite(amount) || amount <= 0) return fail('Amount must be greater than zero.', 400);
-    const account = await loadMoovAccount(client, tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const source = await loadConnectedMethod(client, { tenantId, providerAccountId: account.provider_account_id });
-    if (!source) return fail('Connect an eligible business bank account first.', 409);
-    const sourceMethodId = await resolveDebitSourceMethodId(client, source, account.provider_account_id, fetchImpl);
-    const facilitatorId = await facilitatorAccountId(account.provider_account_id, fetchImpl);
-    const methods = await moovFetch(`/accounts/${facilitatorId}/payment-methods`, {
-      scopes: scopes.paymentMethodsRead(facilitatorId), fetchImpl,
-    }).catch(() => []);
-    const dest = (methods ?? []).find((m) => m?.paymentMethodType === 'moov-wallet');
-    const destId = dest?.paymentMethodID ?? dest?.paymentMethodId;
-    if (!sourceMethodId || !destId) return fail('Platform fee destination is not configured.', 409);
-    const key = body.idempotency_key ?? `tenant-fee:${tenantId}:${amount}:${body.period || 'adhoc'}`;
-    const existing = await existingTransferByKey(client, tenantId, key);
-    if (existing) return jsonResult({ success: true, duplicate: true, transfer: existing });
-    const draft = await insertTransferDraft(client, {
-      tenant_id: tenantId, idempotency_key: key, amount_cents: amount,
-      description: body.description ?? 'ChecksOps platform fee',
-      source_tenant_account_id: account.provider_account_id,
-      source_payment_method_id: source.id,
-      leg_role: 'platform_fee',
-      created_by: mapping.application_user_id,
-    });
-    let created;
-    try {
-      ({ created } = await postFacilitatorTransfer({
-        facilitatorHint: account.provider_account_id,
-        sourceMethodId, destMethodId: destId, amount,
-        description: body.description ?? 'ChecksOps platform fee',
-        metadata: { checksops_transfer_id: draft.id, checksops_tenant_id: tenantId, kind: 'platform_fee' },
-        idempotencyKey: `checksops-fee-${draft.id}`,
-        fetchImpl,
-      }));
-    } catch (e) {
-      await updateTransferAfterMoov(client, draft.id, { status: 'failed', failure_reason: e.message });
-      return fail(e.message, 502, { liveProviderCalled: true });
-    }
-    const finalTransfer = await updateTransferAfterMoov(client, draft.id, {
-      provider_transfer_id: created?.transferID ?? created?.transferId ?? null,
-      provider_status: created?.status ?? null,
-      status: normalizeTransferStatus(created?.status),
-      provider_metadata: sanitize(created ?? {}),
-    });
-    return jsonResult({ success: true, transfer: finalTransfer, liveProviderCalled: true });
-  },
+  retired: TENANT_FEE_CHARGE_RETIRED,
+  run: async () => ({ ...TENANT_FEE_CHARGE_RETIRED }),
 };
 
 export { postTransferLedger };
