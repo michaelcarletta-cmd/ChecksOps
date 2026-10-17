@@ -2198,7 +2198,7 @@ async function handleReleaseSqlMigration({ key, event, authorization, identity, 
       if (!state.ok) return state;
       const s = state.details;
       const live = s.live_definition_sha256;
-      const failures = releaseSharedPreconditionFailures(key, s, text);
+      const failures = releaseSharedPreconditionFailures(key, s, text, { environment: 'staging' });
       return ok({
         authorization: authorization.details,
         receipt: {
@@ -2244,7 +2244,7 @@ async function handleReleaseSqlMigration({ key, event, authorization, identity, 
       await rollback();
       return fail(CODES.DEPLOYMENT_COLLISION, 'expected live definition changed immediately before apply');
     }
-    const preFailures = releaseSharedPreconditionFailures(key, b, text);
+    const preFailures = releaseSharedPreconditionFailures(key, b, text, { environment: 'staging' });
     if (preFailures.length) {
       await rollback();
       return fail(CODES.DEPLOYMENT_COLLISION, `${label} pre-apply conditions are not met`, { failed: preFailures });

@@ -284,3 +284,7 @@ Read-only SQL 98 inspects (SSM `24b9f38c-…`, `f6419152-…`, `2693cdef-…`):
   grants `checksops` as live (owner decision 2026-10-17) and still revokes PUBLIC.
 - The take-over shape differed only by PostgreSQL 18's named NOT NULL constraints; the release
   engine now leaves contype `n` out (the column `notnull` carries it).
+- Staging (read-live run 39076252693): `platform_billing_destination` holds one verified sandbox
+  row with a payment method. Owner decision 2026-10-17 (option A): the staging executor accepts
+  exactly that shape (one verified `sandbox` row, a payment method, no `production` row); the
+  production tool keeps the reviewed-row rule.
