@@ -15,10 +15,10 @@
  * The first test gives mortgage_handling_requests no RLS so the trigger's own
  * rules (only the assigned agent's completion posts) are tested on their own.
  * The agent's access to the request comes from the production policies and
- * grants recorded in aws/workflows/sql/98_mortgage_desk_live_access.sql: the
+ * grants recorded in aws/workflows/sql/100_mortgage_desk_live_access.sql: the
  * second test pins down that a non-member Mortgage Agent reads and works the
  * queue under them, before and after SQL 90, and
- * sql98-mortgage-desk-live-access-pg.test.mjs runs SQL 99 end to end under
+ * sql100-mortgage-desk-live-access-pg.test.mjs runs SQL 99 end to end under
  * them.
  *
  * The check thread's own triggers are the repo's: the mirror into the
@@ -50,7 +50,7 @@ const SQL_90 = path.join(AWS_ROOT, 'workflows/sql/90_users_only_tenant_roles.sql
 const SQL_99 = path.join(AWS_ROOT, 'workflows/sql/99_mortgage_desk_completion_messages.sql');
 const SQL_88 = path.join(AWS_ROOT, 'workflows/sql/88_claim_id_assign_case_tenant_scope.sql');
 const SQL_50 = path.join(AWS_ROOT, 'workflows/sql/50_tranche5_write_grants.sql');
-const SQL_98 = path.join(AWS_ROOT, 'workflows/sql/98_mortgage_desk_live_access.sql');
+const SQL_100 = path.join(AWS_ROOT, 'workflows/sql/100_mortgage_desk_live_access.sql');
 const REPO_ROOT = path.join(AWS_ROOT, '..');
 const MIRROR_MIGRATION = path.join(REPO_ROOT, 'supabase/migrations/20260717193324_2a3e315b-a40a-474e-9eac-5e37824da513.sql');
 const CASE_MIGRATION = path.join(REPO_ROOT, 'supabase/migrations/20260826125804_316a5658-9b2c-4b7d-aaf3-9b81a5d5ccfd.sql');
@@ -494,12 +494,12 @@ test('PostgreSQL 16: SQL 99 posts the Mortgage Desk completion note and one retu
  * alone give a Mortgage Agent who is not a member of the request's tenant
  * nothing: checksops has no UPDATE on assigned_employee_id / accepted_at /
  * completed_at (42501 permission denied), and with that grant RLS still matches
- * no row. That was never production's state: SQL 98
- * (98_mortgage_desk_live_access.sql) records the live agent policies and
+ * no row. That was never production's state: SQL 100
+ * (100_mortgage_desk_live_access.sql) records the live agent policies and
  * column grants, and with it the agent reads the queue, accepts and completes
  * through the API.
  */
-test('PostgreSQL 16: a non-member Mortgage Agent has no handling-request access under 12/24/50 alone, before and after SQL 90, and the live access under SQL 98', {
+test('PostgreSQL 16: a non-member Mortgage Agent has no handling-request access under 12/24/50 alone, before and after SQL 90, and the live access under SQL 100', {
   timeout: 180000, skip: pgSkipReason() || false,
 }, async () => {
   const { default: pg } = await import('pg');
@@ -561,7 +561,7 @@ INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_
     )).rows.map((r) => r.id));
     const permissionDenied = (error) => error.code === '42501' && /permission denied/.test(error.message);
 
-    /** 12, 24 and 50 alone (no SQL 98). */
+    /** 12, 24 and 50 alone (no SQL 100). */
     const agentCannot = async (label) => {
       // The queue read (MortgageOpsQueue fetchQueues): the agent sees nothing; the member sees its tenant's rows.
       assert.deepEqual(await queue(AGENT), [], label);
@@ -581,9 +581,9 @@ INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_
     await client.query(fs.readFileSync(SQL_90, 'utf8'));
     await agentCannot('12/24/50, after SQL 90');
 
-    // SQL 98: the live policies and grants. No SQL 47 roster table here, so the
+    // SQL 100: the live policies and grants. No SQL 47 roster table here, so the
     // roster helper is not created.
-    await client.query(fs.readFileSync(SQL_98, 'utf8'));
+    await client.query(fs.readFileSync(SQL_100, 'utf8'));
     assert.equal((await client.query("SELECT to_regprocedure('public.aws_is_active_mortgage_agent(uuid)') AS f")).rows[0].f, null);
     assert.deepEqual((await client.query(
       `SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mortgage_handling_requests' ORDER BY 1`,
@@ -613,10 +613,10 @@ INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_
       assert.equal((await rpc(OUTSIDER, 'accept_mortgage_handling_request', { _request_id: REQ_1 })).error, 'not_authorized', label);
     };
 
-    await agentCan('SQL 98, after SQL 90');
+    await agentCan('SQL 100, after SQL 90');
     // Applied again: the same access.
-    await client.query(fs.readFileSync(SQL_98, 'utf8'));
-    await agentCan('SQL 98 twice');
+    await client.query(fs.readFileSync(SQL_100, 'utf8'));
+    await agentCan('SQL 100 twice');
     // Every API request above was rolled back: nothing was written.
     assert.deepEqual((await client.query(
       'SELECT id, status, assigned_employee_id FROM public.mortgage_handling_requests ORDER BY id')).rows, [

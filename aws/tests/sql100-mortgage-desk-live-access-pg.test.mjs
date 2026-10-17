@@ -1,12 +1,12 @@
 /**
- * SQL 98 (Mortgage Desk access as live in production) against PostgreSQL 16.
+ * SQL 100 (Mortgage Desk access as live in production) against PostgreSQL 16.
  *
  * Builds the repository's sequence for public.mortgage_handling_requests (the
  * real AWS RLS helpers through the shared stakeholder fixture, the
  * aws_select_ block of 12_final_select_policies.sql, the aws_write_ block of
  * 24_complete_write_policies.sql, the table's grants from
  * 50_tranche5_write_grants.sql, SQL 90), then applies
- * aws/workflows/sql/98_mortgage_desk_live_access.sql and SQL 99 as a
+ * aws/workflows/sql/100_mortgage_desk_live_access.sql and SQL 99 as a
  * non-superuser owner login (like checksops_admin), and:
  *
  *   1. runs the production inspect library (inspectMortgageDeskAccess) on that
@@ -14,7 +14,7 @@
  *      the production values of the 2026-10-17 inspect (SSM
  *      ee5c42a3-fe1b-4da8-bb84-106766285bfa, 45d46a8f-beeb-4ea7-9b1e-598fe6b980b4,
  *      041bc13d-70fa-4f43-805a-e4d7b22afd19): the repository reproduces production;
- *   2. re-applies SQL 98 on that state (production's) and checks the catalog
+ *   2. re-applies SQL 100 on that state (production's) and checks the catalog
  *      did not change: on production it is a no-op;
  *   3. drives the Mortgage Desk as the API does (checksops, RLS on,
  *      request.app_user_id), through workflow-rpc.mjs: an agent sees and accepts
@@ -33,8 +33,8 @@ import { buildRepoIndex, inspectMortgageDeskAccess, loadInspectConfig } from '..
 import { buildMortgageDeskCompletedMessage, buildReturnMessage } from '../../src/lib/mortgageDeskReturn.ts';
 
 const ROOT = path.join(AWS_ROOT, '..');
-const SQL_98_REL = 'aws/workflows/sql/98_mortgage_desk_live_access.sql';
-const SQL_98 = path.join(ROOT, SQL_98_REL);
+const SQL_100_REL = 'aws/workflows/sql/100_mortgage_desk_live_access.sql';
+const SQL_100 = path.join(ROOT, SQL_100_REL);
 const SQL_99 = path.join(AWS_ROOT, 'workflows/sql/99_mortgage_desk_completion_messages.sql');
 const SQL_90 = path.join(AWS_ROOT, 'workflows/sql/90_users_only_tenant_roles.sql');
 const SQL_50 = path.join(AWS_ROOT, 'workflows/sql/50_tranche5_write_grants.sql');
@@ -94,15 +94,18 @@ const PRODUCTION = Object.freeze({
     'public.aws_is_mortgage_ops_agent': {
       signature: 'public.aws_is_mortgage_ops_agent()',
       prosrc_sha256: '787bad580adace93c661f60d4486e6623fbd4c6004c8e42b38e3bb9c0ff957ba',
+      functiondef_sha256: '9a0fd53811d4bfaf8f06fe530eddea5b9c6b3fb69d8371d5608b0a8b2635b007',
     },
     'public.aws_mortgage_agent_queue_visible': {
       signature: 'public.aws_mortgage_agent_queue_visible(p_status text, p_assigned_employee_id uuid)',
       prosrc_sha256: 'b9f70c8b1421f264b4537d4eac9e7ad18f81281648a33197b55aa826ff6b6711',
+      functiondef_sha256: 'e8012bab7455679ba9a53341cd679b063cc6d7b9df977a35d5d92933b34bc6d2',
     },
     'public.aws_is_active_mortgage_agent': {
       signature: 'public.aws_is_active_mortgage_agent(_user_id uuid)',
       // The inspect's live value starts 2bba15b2 and equals the SQL 47 test fixture's body.
       prosrc_sha256: '2bba15b20b7e43c60fadf7032e834ec1937183af865d14ab1985a5bdd4f12117',
+      functiondef_sha256: 'd8846afb599babf83e5657ec63e54a7cd8a6e950bec96096ab5925972b37c98b',
     },
   },
 });
@@ -185,7 +188,19 @@ VALUES
   ('${REQ_B_DONE}', '${TENANT_B}', NULL, 'B Bank', 'completed', '${OTHER_AGENT}', now(), now());
 `;
 
-/** What applying SQL 98 could change: policies, table / column ACLs, RLS flags, the helpers. */
+test('SQL 100 has its own migration number, compared as a number (not two digits, not text order)', () => {
+  const dir = path.join(AWS_ROOT, 'workflows/sql');
+  const files = fs.readdirSync(dir).filter((name) => name.endsWith('.sql'));
+  const prefixOf = (name) => Number(name.match(/^(\d+)_/)?.[1]);
+  assert.deepEqual(files.filter((name) => prefixOf(name) === 100), [path.basename(SQL_100)]);
+  // After SQL 99 (the Desk completion trigger) numerically, although '100_' sorts before '10_' / '99_' as text.
+  assert.ok(prefixOf(path.basename(SQL_100)) > prefixOf('99_mortgage_desk_completion_messages.sql'));
+  assert.ok(files.includes('99_mortgage_desk_completion_messages.sql'));
+  assert.ok(!files.some((name) => /^98_mortgage_desk/.test(name)), 'the old SQL 98 name is gone');
+  assert.match(fs.readFileSync(SQL_100, 'utf8'), /^-- AWS: Mortgage Desk access as it is live in production \(SQL 100\)\./);
+});
+
+/** What applying SQL 100 could change: policies, table / column ACLs, RLS flags, the helpers. */
 const catalogSnapshot = async (c) => (await c.query(`SELECT
   (SELECT json_agg(json_build_object('name', polname, 'cmd', polcmd, 'permissive', polpermissive,
       'roles', (SELECT array_agg(CASE WHEN r = 0 THEN 'PUBLIC' ELSE r::regrole::text END ORDER BY 1) FROM unnest(polroles) AS r),
@@ -200,11 +215,11 @@ const catalogSnapshot = async (c) => (await c.query(`SELECT
      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
       AND p.proname IN ('aws_is_mortgage_ops_agent', 'aws_mortgage_agent_queue_visible', 'aws_is_active_mortgage_agent')) AS functions`)).rows[0];
 
-test('PostgreSQL 16: the repository plus SQL 98 reproduces production Mortgage Desk access; agents work the queue and SQL 99 posts under it', {
+test('PostgreSQL 16: the repository plus SQL 100 reproduces production Mortgage Desk access; agents work the queue and SQL 99 posts under it', {
   timeout: 180000, skip: pgSkipReason() || false,
-}, async (t) => {
+}, async () => {
   const { default: pg } = await import('pg');
-  const server = startPg('pg-sql98-desk-', 62400);
+  const server = startPg('pg-sql100-desk-', 62400);
   const open = async (user) => {
     const c = new pg.Client({ host: server.host, port: server.port, user, database: 'postgres' });
     await c.connect();
@@ -230,12 +245,12 @@ test('PostgreSQL 16: the repository plus SQL 98 reproduces production Mortgage D
 
     const owner = await open('checksops_admin');
     clients.push(owner);
-    const sql98 = fs.readFileSync(SQL_98, 'utf8');
-    await owner.query(sql98);
+    const sql100 = fs.readFileSync(SQL_100, 'utf8');
+    await owner.query(sql100);
 
     // --- Applied again on the state it produces (production's): nothing changes.
     const applied = await catalogSnapshot(owner);
-    await owner.query(sql98);
+    await owner.query(sql100);
     assert.deepEqual(await catalogSnapshot(owner), applied);
 
     await owner.query(fs.readFileSync(SQL_99, 'utf8'));
@@ -243,11 +258,11 @@ test('PostgreSQL 16: the repository plus SQL 98 reproduces production Mortgage D
 
     // --- The production inspect on this database reports production's values.
     const config = loadInspectConfig(ROOT);
-    // The inspect run SQL 98 records is the one in the configuration.
+    // The inspect run SQL 100 records is the one in the configuration.
     assert.equal(config.production_inspect.date, '2026-10-17');
     assert.equal(config.production_inspect.source_commit, '09aa7ab00');
-    assert.equal(config.production_inspect.drift_recorded_in, SQL_98_REL);
-    for (const id of config.production_inspect.ssm_command_ids) assert.ok(sql98.includes(id), id);
+    assert.equal(config.production_inspect.drift_recorded_in, SQL_100_REL);
+    for (const id of config.production_inspect.ssm_command_ids) assert.ok(sql100.includes(id), id);
     assert.equal(config.production_inspect.ssm_command_ids.length, 3);
     const inspected = await inspectMortgageDeskAccess({ connect: () => open('checksops_admin'), root: ROOT, config });
     assert.equal(inspected.ok, true, JSON.stringify(inspected));
@@ -267,7 +282,7 @@ test('PostgreSQL 16: the repository plus SQL 98 reproduces production Mortgage D
       assert.equal(p.permissive, true, p.policy);
       assert.equal(p.using.text_withheld, undefined, p.policy);
       assert.equal(p.with_check.text_withheld, undefined, p.policy);
-      assert.ok(p.repo_sources.includes(SQL_98_REL), p.policy);
+      assert.ok(p.repo_sources.includes(SQL_100_REL), p.policy);
     }
     assert.ok(!mhr.policies.some((p) => p.policy === 'aws_write_mortgage_handling_requests'));
 
@@ -299,10 +314,10 @@ test('PostgreSQL 16: the repository plus SQL 98 reproduces production Mortgage D
       assert.deepEqual(f.proconfig_names, ['row_security', 'search_path'], key);
       assert.equal(f.sets_row_security, true, key);
       assert.equal(f.repo_match, 'exact', key);
-      assert.ok(f.matched_sources.includes(SQL_98_REL), key);
+      assert.ok(f.matched_sources.includes(SQL_100_REL), key);
       assert.ok(f.matched_kinds.includes('aws_sql'), key);
-      // Compare with functiondef_sha256 in the production inspect output.
-      t.diagnostic(`${key} functiondef_sha256 ${f.functiondef_sha256}`);
+      // pg_get_functiondef (attributes and SET values included): confirmed equal to the production inspect output.
+      assert.equal(f.functiondef_sha256, want.functiondef_sha256, key);
     }
     assert.deepEqual(mhr.policies.find((p) => p.policy === 'aws_select_mortgage_ops_agent_queue').depends_on_functions,
       ['public.aws_is_mortgage_ops_agent']);
@@ -310,10 +325,10 @@ test('PostgreSQL 16: the repository plus SQL 98 reproduces production Mortgage D
       ['public.aws_can_access_tenant', 'public.aws_is_cross_tenant_reader', 'public.aws_mortgage_agent_queue_visible']);
     assert.deepEqual(mhr.triggers.map((x) => x.trigger), ['tr_mortgage_desk_completion_messages']);
 
-    // The repository index (what the inspect's created_in_repo uses) names SQL 98 for every live policy.
+    // The repository index (what the inspect's created_in_repo uses) names SQL 100 for every live policy.
     const index = buildRepoIndex(ROOT);
     for (const name of Object.keys(PRODUCTION.policies)) {
-      assert.ok((index.policies.get(`mortgage_handling_requests\u0000${name}`) || []).includes(SQL_98_REL), name);
+      assert.ok((index.policies.get(`mortgage_handling_requests\u0000${name}`) || []).includes(SQL_100_REL), name);
     }
 
     // aws_is_active_mortgage_agent: the roster's inactive flag.

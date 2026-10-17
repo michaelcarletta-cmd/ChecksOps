@@ -1,4 +1,4 @@
--- AWS: Mortgage Desk access as it is live in production (SQL 98).
+-- AWS: Mortgage Desk access as it is live in production (SQL 100).
 -- RECORDS LIVE STATE. NOT AN ACCESS CHANGE.
 --
 -- Source of truth: the read-only production inspect of 2026-10-17
@@ -37,10 +37,17 @@
 --        aws/tests/fixtures/mortgage-agent-compensation/47_mortgage_agent_compensation.sql).
 --        It reads public.mortgage_agent_accounts, which only SQL 47 creates,
 --        so it is created only when that table exists (it does live).
---    The inspect reports proconfig names only; the values here
---    (search_path = public, row_security = off) are those of the matched
---    sources. Function EXECUTE privileges and comments are not reported by
---    the inspect and are left as they are.
+--    The full definitions (pg_get_functiondef, so attributes and SET values
+--    search_path = public, row_security = off included) are confirmed against
+--    the production inspect output: functiondef_sha256 matches live for all three
+--      aws_is_mortgage_ops_agent()
+--        9a0fd53811d4bfaf8f06fe530eddea5b9c6b3fb69d8371d5608b0a8b2635b007
+--      aws_mortgage_agent_queue_visible(text, uuid)
+--        e8012bab7455679ba9a53341cd679b063cc6d7b9df977a35d5d92933b34bc6d2
+--      aws_is_active_mortgage_agent(uuid)
+--        d8846afb599babf83e5657ec63e54a7cd8a6e950bec96096ab5925972b37c98b
+--    Function EXECUTE privileges and comments are not reported by the inspect
+--    and are left as they are.
 -- 2) The five live policies on public.mortgage_handling_requests, nothing
 --    else: aws_select_mortgage_handling_requests (with the agent queue term),
 --    aws_select_mortgage_ops_agent_queue, aws_update_mortgage_ops_accept_complete,
@@ -51,6 +58,12 @@
 --      checksops      SELECT, INSERT, DELETE; UPDATE on the 17 columns below
 --      authenticated  UPDATE (accepted_at, assigned_employee_id, completed_at) only
 --    and revokes from authenticated what SQL 50 grants it that is not live.
+--    Confirmed against the production inspect output: authenticated has no
+--    table-level ACL entry on mortgage_handling_requests, so the REVOKEs below
+--    are a no-op on production.
+--
+-- Numbering: SQL 100, after SQL 98 (tenant fee collection) and SQL 99 (the
+-- Desk completion trigger).
 --
 -- Not changed: RLS stays enabled and not forced; no table, column, row or
 -- trigger; no other table.
@@ -59,7 +72,7 @@
 -- BEGIN/COMMIT; the guarded SQL executor runs it inside one transaction.
 -- Idempotent. Not applied by this change.
 
-DO $sql98_prereq$
+DO $sql100_prereq$
 DECLARE
   v_missing text[];
 BEGIN
@@ -88,12 +101,12 @@ BEGIN
        WHERE c.table_schema = 'public' AND c.table_name = 'mortgage_handling_requests' AND c.column_name = want.col);
   END IF;
   IF v_missing IS NOT NULL THEN
-    RAISE EXCEPTION 'sql98_prerequisite_missing: SQL 98 needs the RLS helpers and public.mortgage_handling_requests; missing %',
+    RAISE EXCEPTION 'sql100_prerequisite_missing: SQL 100 needs the RLS helpers and public.mortgage_handling_requests; missing %',
       array_to_string(v_missing, ', ')
       USING ERRCODE = '55000';
   END IF;
 END
-$sql98_prereq$;
+$sql100_prereq$;
 
 -- 1) Helpers -----------------------------------------------------------------
 
@@ -127,13 +140,13 @@ AS $$
      );
 $$;
 
-DO $sql98_active_agent$
+DO $sql100_active_agent$
 BEGIN
   IF to_regclass('public.mortgage_agent_accounts') IS NULL THEN
-    RAISE NOTICE 'sql98: public.mortgage_agent_accounts (SQL 47) is absent; public.aws_is_active_mortgage_agent(uuid) not recorded here';
+    RAISE NOTICE 'sql100: public.mortgage_agent_accounts (SQL 47) is absent; public.aws_is_active_mortgage_agent(uuid) not recorded here';
     RETURN;
   END IF;
-  EXECUTE $sql98_active_agent_def$
+  EXECUTE $sql100_active_agent_def$
 CREATE OR REPLACE FUNCTION public.aws_is_active_mortgage_agent(_user_id uuid DEFAULT auth.uid())
 RETURNS boolean
 LANGUAGE sql
@@ -152,9 +165,9 @@ AS $$
         AND a.status = 'inactive'
     );
 $$
-$sql98_active_agent_def$;
+$sql100_active_agent_def$;
 END
-$sql98_active_agent$;
+$sql100_active_agent$;
 
 -- 2) Policies on public.mortgage_handling_requests -------------------------------
 
