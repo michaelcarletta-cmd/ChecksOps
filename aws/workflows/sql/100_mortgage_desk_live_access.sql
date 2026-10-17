@@ -46,14 +46,24 @@
 --        e8012bab7455679ba9a53341cd679b063cc6d7b9df977a35d5d92933b34bc6d2
 --      aws_is_active_mortgage_agent(uuid)
 --        d8846afb599babf83e5657ec63e54a7cd8a6e950bec96096ab5925972b37c98b
---    Function EXECUTE privileges and comments are not reported by the inspect
---    and are left as they are.
+--    EXECUTE grants, as live (production inspect of 2026-10-17 at source commit
+--    969e2b2b1, SSM command 24b9f38c-d721-4b82-b3a5-056c6c84d37a; every entry
+--    granted by checksops_admin, the owner):
+--      aws_is_mortgage_ops_agent()                 authenticated, checksops (not PUBLIC)
+--      aws_mortgage_agent_queue_visible(text, uuid) PUBLIC, checksops
+--      aws_is_active_mortgage_agent(uuid)          PUBLIC, authenticated, checksops
+--    Each is reset from PUBLIC, authenticated and checksops and then granted,
+--    so the result is exact whatever those three roles held before. Function
+--    comments are not recorded (CREATE OR REPLACE keeps them).
 -- 2) The five live policies on public.mortgage_handling_requests, nothing
 --    else: aws_select_mortgage_handling_requests (with the agent queue term),
 --    aws_select_mortgage_ops_agent_queue, aws_update_mortgage_ops_accept_complete,
 --    aws_insert_mortgage_handling_requests, aws_delete_mortgage_handling_requests.
 --    Drops the repository-only aws_write_mortgage_handling_requests (24),
---    which is not live.
+--    which is not live. aws_update_mortgage_ops_accept_complete carries its
+--    live comment (the SQL 39 text; sha256 34ef5bf77e463d6ee683477d160b50ff9fd7bab6383d8802082a8d1605b61301,
+--    equal to the live comment's sha256 in the same inspect); the other four
+--    have none live.
 -- 3) The live grants on public.mortgage_handling_requests:
 --      checksops      SELECT, INSERT, DELETE; UPDATE on the 17 columns below
 --      authenticated  UPDATE (accepted_at, assigned_employee_id, completed_at) only
@@ -140,6 +150,11 @@ AS $$
      );
 $$;
 
+REVOKE ALL ON FUNCTION public.aws_is_mortgage_ops_agent() FROM PUBLIC, authenticated, checksops;
+GRANT EXECUTE ON FUNCTION public.aws_is_mortgage_ops_agent() TO authenticated, checksops;
+REVOKE ALL ON FUNCTION public.aws_mortgage_agent_queue_visible(text, uuid) FROM PUBLIC, authenticated, checksops;
+GRANT EXECUTE ON FUNCTION public.aws_mortgage_agent_queue_visible(text, uuid) TO PUBLIC, checksops;
+
 DO $sql100_active_agent$
 BEGIN
   IF to_regclass('public.mortgage_agent_accounts') IS NULL THEN
@@ -166,6 +181,8 @@ AS $$
     );
 $$
 $sql100_active_agent_def$;
+  REVOKE ALL ON FUNCTION public.aws_is_active_mortgage_agent(uuid) FROM PUBLIC, authenticated, checksops;
+  GRANT EXECUTE ON FUNCTION public.aws_is_active_mortgage_agent(uuid) TO PUBLIC, authenticated, checksops;
 END
 $sql100_active_agent$;
 
@@ -207,6 +224,8 @@ CREATE POLICY aws_update_mortgage_ops_accept_complete ON public.mortgage_handlin
       OR status IN ('completed', 'cancelled')
     )
   );
+COMMENT ON POLICY aws_update_mortgage_ops_accept_complete ON public.mortgage_handling_requests IS
+  'Mortgage agent Accept (requested+unassigned → self+in_progress+accepted_at) and Complete/Cancel only when assigned to the caller. Not a table-wide UPDATE grant.';
 
 DROP POLICY IF EXISTS aws_insert_mortgage_handling_requests ON public.mortgage_handling_requests;
 CREATE POLICY aws_insert_mortgage_handling_requests ON public.mortgage_handling_requests
