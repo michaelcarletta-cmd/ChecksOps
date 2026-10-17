@@ -135,6 +135,24 @@ test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and n
   for (const key of ['admin_login', 'rds_identifier', 'rds_host', 'admin_secret_arn']) assert.equal(COMMITTED.sql100[key], COMMITTED.sql99[key], key);
 });
 
+test('the production tool applies the production fee-destination rule: a sandbox-only row (staging\'s shape) is refused, the reviewed row is not', () => {
+  const RULE = 'platform_billing_destination_absent_empty_or_reviewed';
+  const login = { current_user: 'checksops_admin', session_user: 'checksops_admin' };
+  const at = (counts) => releaseProductionPreconditionFailures('sql98', {
+    ...login, live_definition_sha256: 'e'.repeat(64), tables: { 'public.platform_billing_destination': { exists: true } }, counts,
+  }, COMMITTED.sql98, text('sql98')).includes(RULE);
+  assert.equal(at({
+    platform_billing_destination_rows: 1, platform_billing_destination_sandbox_rows: 1, platform_billing_destination_production_rows: 0,
+    platform_billing_destination_production_reviewed_account_rows: 0, platform_billing_destination_payment_method_rows: 1,
+    platform_billing_destination_verified_rows: 1,
+  }), true);
+  assert.equal(at({
+    platform_billing_destination_rows: 1, platform_billing_destination_sandbox_rows: 0, platform_billing_destination_production_rows: 1,
+    platform_billing_destination_production_reviewed_account_rows: 1, platform_billing_destination_payment_method_rows: 1,
+    platform_billing_destination_verified_rows: 1,
+  }), false);
+});
+
 test('SQL 100 is production_noop: production refuses unless the live state is already the intended one; other keys have no such rule', () => {
   const login = { current_user: 'checksops_admin', session_user: 'checksops_admin' };
   const intended = COMMITTED.sql100.intended_replacement_sha256;

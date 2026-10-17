@@ -812,7 +812,7 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     // SQL 98: the file raises 23505 on duplicate tenant periods; refuse before it runs.
     if (extra === 'no_duplicate_billing_periods') checks.push(['no_duplicate_billing_periods', s.counts?.duplicate_billing_periods === 0]);
     // SQL 98: a pre-existing platform_billing_destination is taken over only while it is empty or
-    // holds exactly the reviewed row: one production row on the owner-confirmed platform account
+    // holds exactly the reviewed row (production; staging's rule follows below): one production row on the owner-confirmed platform account
     // (41cb5d67-..., 2026-10-17), with a payment method, verified, and no sandbox row. Any other
     // row would become the fee destination unreviewed.
     if (extra === 'platform_billing_destination_absent_empty_or_reviewed') {
