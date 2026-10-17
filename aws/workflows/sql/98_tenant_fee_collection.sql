@@ -61,7 +61,8 @@
 --    UPDATE or DELETE it directly; the platform owner reads it.
 --
 -- Refuses to run (55000 sql98_prerequisite_missing) without the tables and
--- helpers it builds on. Idempotent. No BEGIN/COMMIT: the guarded SQL executor
+-- helpers it builds on, SQL 96's aws_platform_owner_set_tenant_pricing among
+-- them (apply SQL 96 first). Idempotent. No BEGIN/COMMIT: the guarded SQL executor
 -- runs it in one transaction. Not applied by this change.
 --
 -- Deploy order: SQL 98 BEFORE tenant-billing-engine.mjs /
@@ -78,6 +79,9 @@ BEGIN
      OR to_regprocedure('auth.uid()') IS NULL
      OR to_regprocedure('public.is_platform_owner()') IS NULL
      OR to_regprocedure('public.aws_is_authenticated()') IS NULL
+     -- SQL 96 first: fees are priced only from its platform-owner pricing, and
+     -- the overlay plan holds the billing Lambdas on SQL 98 alone.
+     OR to_regprocedure('public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)') IS NULL
      OR NOT EXISTS (
        SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'tenant_maintenance_payments'

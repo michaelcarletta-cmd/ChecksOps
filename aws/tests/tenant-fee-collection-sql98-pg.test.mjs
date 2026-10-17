@@ -129,6 +129,10 @@ GRANT SELECT, INSERT, UPDATE ON public.tenants, public.tenant_users, public.tena
   public.check_intake_items, public.check_billing_config, public.check_billing_events, public.payment_transfers,
   public.tenant_maintenance_payments, public.tenant_invoice_allocations TO checksops;
 GRANT SELECT ON public.identity_accounts, public.profiles TO checksops;
+-- SQL 96 is a prerequisite of SQL 98; only its setter's presence is checked here
+-- (tenant-pricing-platform-owner and sql90 PG tests cover SQL 96 itself).
+CREATE FUNCTION public.aws_platform_owner_set_tenant_pricing(_tenant_id uuid, _pricing jsonb) RETURNS jsonb
+  LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;
 `;
 
 const seedTenant = (id, { perCheck, rate }) => `
@@ -202,6 +206,11 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     // Refuses without a prerequisite; refuses duplicate tenant periods; then applies twice.
     await admin.query('BEGIN');
     await admin.query('ALTER TABLE public.check_billing_config RENAME TO cbc_x');
+    await assert.rejects(admin.query(sql98), (e) => e.code === '55000' && /sql98_prerequisite_missing/.test(e.message));
+    await admin.query('ROLLBACK');
+    // Without SQL 96 (its pricing setter) SQL 98 refuses too.
+    await admin.query('BEGIN');
+    await admin.query('DROP FUNCTION public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)');
     await assert.rejects(admin.query(sql98), (e) => e.code === '55000' && /sql98_prerequisite_missing/.test(e.message));
     await admin.query('ROLLBACK');
     await admin.query('BEGIN');
