@@ -17,8 +17,21 @@
  * lives in tenant-collection-v2.mjs PRODUCTION_FEE_DESTINATION.
  */
 
-import { isProductionChecksOpsRuntime } from './provider-flags.mjs';
+import { IDENTITY_ENV_PRODUCTION, identityEnvFromChecksopsEnv } from './identity-env.mjs';
 import { PRODUCTION_FEE_DESTINATION, assertExplicitDestination } from './tenant-collection-v2.mjs';
+
+/**
+ * True only on the ChecksOps production API runtime: CHECKSOPS_ENV is
+ * `production` or `production-prep` (trimmed, any case). The same test as
+ * identity-env.mjs identityEnvFromChecksopsEnv, email-branding.mjs and
+ * homeowner.mjs isProductionChecksopsEnv. Staging, unset and unknown values
+ * are not production. Lives here, its only user, so the locked
+ * provider-flags.mjs stays unchanged; identity-env.mjs already exports both
+ * names in the live production bundle.
+ */
+export const isProductionChecksOpsRuntime = (env = process.env.CHECKSOPS_ENV) => (
+  identityEnvFromChecksopsEnv(env) === IDENTITY_ENV_PRODUCTION
+);
 
 export const CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
 
@@ -35,7 +48,7 @@ export const billingVerificationPostEnabled = () => (
   isTrue(process.env.AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED)
 );
 
-/** Production only on the production API runtime (provider-flags isProductionChecksOpsRuntime). */
+/** Production only on the production API runtime (isProductionChecksOpsRuntime above). */
 export const billingEnvironment = () => (isProductionChecksOpsRuntime() ? 'production' : 'sandbox');
 
 export const billingShouldSimulate = (deps = {}) => {

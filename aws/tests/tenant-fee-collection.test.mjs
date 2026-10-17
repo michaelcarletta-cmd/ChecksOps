@@ -12,10 +12,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { isProductionChecksOpsRuntime } from '../functions/api/provider-flags.mjs';
 import {
   CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID,
   billingEnvironment,
+  isProductionChecksOpsRuntime,
   normalizeDest,
   resolveBillingDestination,
   resolveBillingMoovContext,
@@ -131,8 +131,13 @@ test('the production credential step works: it no longer throws, binds productio
     assert.equal(refused.ok, false);
     assert.equal(refused.error, 'production_credentials_refused');
   });
-  // The import the release excluded as broken now resolves.
-  assert.match(read('aws/functions/api/provider-flags.mjs'), /export const isProductionChecksOpsRuntime/);
+  // The helper lives in the destination file, on identity-env.mjs (exported live and on main); the
+  // locked provider-flags.mjs is not touched and no longer imported for it.
+  const dest = read('aws/functions/api/tenant-billing-destination.mjs');
+  assert.match(dest, /export const isProductionChecksOpsRuntime/);
+  assert.match(dest, /import \{ IDENTITY_ENV_PRODUCTION, identityEnvFromChecksopsEnv \} from '\.\/identity-env\.mjs';/);
+  assert.doesNotMatch(dest, /from '\.\/provider-flags\.mjs'|import\('\.\/provider-flags\.mjs'\)/);
+  assert.doesNotMatch(read('aws/functions/api/provider-flags.mjs'), /isProductionChecksOpsRuntime/);
 });
 
 test('members, partners and anyone but the platform owner get nothing from billing admin', async () => {

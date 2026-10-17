@@ -12,19 +12,17 @@ Management. There is no automatic or scheduled pull. The amount comes only from 
 and recorded usage. It is pulled by ACH from the bank account the tenant authorized into the ChecksOps
 platform account. There are no amount limits.
 
-## 1. Release locks (needs fresh owner approval; NOT applied)
+## 1. Release locks: no change
 
-| Component | Recorded tree_hash | Branch tree_hash | Why |
-|---|---|---|---|
-| `provider-secrets` (UNVERIFIED, not production-active) | `e4a20f5b6983f9e66732d87b14c1574701ae2263f03211ee4cdf354ade75ad74` | `6c47674d8446d08eb6e938e33ffc0e58ee7494f4b87442bfbb97a9533152e8f6` | `provider-flags.mjs` now exports `isProductionChecksOpsRuntime` |
-
-This is the only change `node scripts/validate-release-locks.mjs` asks for: set
-`ops/release-locks/locked-components.json` `components.provider-secrets.source.tree_hash` to the branch value.
-Until then the validator fails on that one line. No other lock component contains a file this branch changes.
-
-Alternative that needs no lock change: move `isProductionChecksOpsRuntime` out of `provider-flags.mjs` into an
-unlocked module (for example `identity-env.mjs`, which it already wraps). Live production already exports a
-`provider-flags.mjs` `isProductionChecksOpsRuntime`, so the overlay does not need the repository file either way.
+`node scripts/validate-release-locks.mjs` passes with no lock edit. Owner decision (2026-10-17, option A): there is
+no `provider-secrets` lock change. `aws/functions/api/provider-flags.mjs` is byte-identical to `main`
+(`122b8769…`). `isProductionChecksOpsRuntime` is defined and exported in `tenant-billing-destination.mjs`, its
+only user, on `identity-env.mjs` `identityEnvFromChecksopsEnv` and `IDENTITY_ENV_PRODUCTION`. Both names are
+already exported by the live production `identity-env.mjs` (snapshot `f78e16d99`) and by `main`, so
+`identity-env.mjs` is neither changed nor a plan member, and no deploy-order constraint is added.
+`identity-env.mjs` is the right base rather than the new home: live `identity-env.mjs` differs from `main`
+(the release changed it) and is not a plan member, so adding an export there would mean planning a REPLACE of
+live bytes that main never carried. No lock component contains a file this branch changes.
 
 ## 2. Overlay plan (`ops/deployment-guard/production-api-overlay-plan.json`)
 
@@ -37,7 +35,7 @@ Planning only: `deploy_authorized` is false and nothing is live or verified.
 | `providers/parity/moov-money.mjs` | `1cd405ca…` | `0ac52dbde62187d8e93ba229b0f5e4fa3428e84c7f3ba6538c4202242ca68e98` | – | release manifest (unapplied) |
 | `providers/catalog.mjs` | `ae788992…` | `5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9` | – | release manifest (unapplied) |
 | `tenant-collection-v2.mjs` (new member) | `8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66` | `4be03294ca832de29e57b51958d00681568601b1d8c533776a22d5538d5fa3c9` | – | 2026-10-11 snapshot `f78e16d99` |
-| `tenant-billing-destination.mjs` (new member) | `7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80` | `b68386b4d560a69cffacc74950ed256e619f9a7b2d486a04e0a1fb6e5afad39e` | – | 2026-10-11 snapshot (= main) |
+| `tenant-billing-destination.mjs` (new member) | `7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80` | `44c6525c8f6d9216f7f41abc28ae9582ccaa5ee21506c3ba93f49f51881f768d` | – | 2026-10-11 snapshot (= main) |
 | `tenant-billing-engine.mjs` | `65b75735…` | `a823c7c1177475668713900d6fc4f34909f6148f728d5f1fe3421929c012a6ee` | SQL 98 (was 96) | release manifest (unapplied) |
 | `tenant-billing-handlers.mjs` | `8aeb8b7f…` | `411eafae4422dad748ca294d9c1cc3b3d21a1c5ddb3ec0c389ebd329131da377` | SQL 98 (was 96) | release manifest (unapplied) |
 
@@ -49,13 +47,15 @@ Order: `tenant-collection-v2.mjs` and `tenant-billing-destination.mjs` go just b
   destination file imports) and `bankOnly`. Against live collection-v2 the new engine's `bankOnly` would be
   ignored, and the tenant wallet would be debited first. Live lacks only main's `obligation_status` return field,
   so the branch bytes are a superset of live.
-- `provider-flags.mjs` is deliberately **not** a plan member. Live production already exports
-  `isProductionChecksOpsRuntime` (`CHECKSOPS_ENV` starts with `production`), and the destination file links
-  against it. Live also carries `moovTransferPostEnabled` and an `AWS_MOOV_TRANSFER_POST_ENABLED` `flagSnapshot`
-  field that main and this branch lack (release report item 4). Overlaying the branch bytes would drop them.
+- `provider-flags.mjs` is main's bytes and **not** a plan member. Live carries `moovTransferPostEnabled` and an
+  `AWS_MOOV_TRANSFER_POST_ENABLED` `flagSnapshot` field that main lacks (release report item 4). The new
+  destination file no longer imports `provider-flags.mjs` at all.
+- `identity-env.mjs` is not a plan member: the destination imports only names it already exports live.
 
-Reverse imports: `aws/tests/fixtures/main-api-import-edges.json` lists
-`tenant-billing-destination.mjs -> provider-flags.mjs isProductionChecksOpsRuntime`. Main's live files keep
+Reverse imports: `aws/tests/fixtures/main-api-import-edges.json` is main's again. Main's live
+`tenant-billing-destination.mjs` dynamically imports `isProductionChecksOpsRuntime` from `provider-flags.mjs`.
+That name is missing on main and exported by live `provider-flags.mjs`; main already excluded the edge, and the
+overlay replaces the destination file without touching `provider-flags.mjs`. Main's live files keep
 loading: `runMonthlyBillingScheduler`, `chargeTenantPeriod`, `tenantFeeCharge` and every other imported name
 are still exported. The scheduler now refuses. `chargeTenantPeriod` requires a preview hash, so main's live
 `tenant-billing-handlers.mjs` cannot charge through the new engine without a preview (`preview_required`).

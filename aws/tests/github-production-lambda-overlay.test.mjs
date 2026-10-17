@@ -588,8 +588,11 @@ test('fee collection: seven members on the fee manifest, collection-v2 then dest
   // New to the plan: the 2026-10-11 live snapshot values.
   assert.equal(PLAN.members[COLLECTION].expected_live_sha256, '8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66');
   assert.equal(PLAN.members[DESTINATION].expected_live_sha256, '7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80');
-  // provider-flags.mjs stays live: production already exports isProductionChecksOpsRuntime and carries
-  // live-only moovTransferPostEnabled, which the branch bytes would drop.
+  // provider-flags.mjs (locked) is main's bytes and never a member: live carries moovTransferPostEnabled,
+  // which main's bytes would drop. identity-env.mjs is not a member either: the destination imports only
+  // names it already exports live and on main.
+  assert.equal(sha('aws/functions/api/provider-flags.mjs'), '122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec');
+  assert.ok(!PLAN.order.includes('identity-env.mjs'));
   assert.ok(!PLAN.order.includes('provider-flags.mjs'));
   assert.equal(PLAN.members['provider-flags.mjs'], undefined);
 
@@ -645,17 +648,18 @@ test('fee collection: seven members on the fee manifest, collection-v2 then dest
   assert.equal(applied.mutation, false);
   assert.deepEqual(engine.calls.receipt.owned_member_ops, { replace: [ENGINE], add: [] });
 
-  // collection-v2 and the destination need no SQL; the destination links against live provider-flags.mjs,
-  // which exports isProductionChecksOpsRuntime, and refuses one that does not.
+  // collection-v2 and the destination need no SQL. The destination links against live identity-env.mjs
+  // (identityEnvFromChecksopsEnv, IDENTITY_ENV_PRODUCTION) and no longer imports provider-flags.mjs.
+  assert.ok(!localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes('provider-flags.mjs'));
+  assert.ok(localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes('identity-env.mjs'));
   const collection = await run(applyEnv(COLLECTION), applyDeps(COLLECTION).deps);
   assert.equal(collection.mutation, false);
-  const liveFlags = 'export const isProductionChecksOpsRuntime = () => false;\nexport const moovTransferPostEnabled = () => false;\nexport const flagSnapshot = () => ({});\n';
-  const destination = await run(applyEnv(DESTINATION), applyDeps(DESTINATION, { sources: { 'provider-flags.mjs': liveFlags } }).deps);
+  const destination = await run(applyEnv(DESTINATION), applyDeps(DESTINATION).deps);
   assert.equal(destination.mutation, false);
   await assert.rejects(
-    run(applyEnv(DESTINATION), applyDeps(DESTINATION, { sources: { 'provider-flags.mjs': 'export const flagSnapshot = () => ({});\n' } }).deps),
+    run(applyEnv(DESTINATION), applyDeps(DESTINATION, { sources: { 'identity-env.mjs': "export const IDENTITY_ENV_PRODUCTION = 'production';\n" } }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION
-      && error.details.problems.some((row) => row === 'provider-flags.mjs does not export isProductionChecksOpsRuntime'),
+      && error.details.problems.some((row) => row === 'identity-env.mjs does not export identityEnvFromChecksopsEnv'),
   );
 });
 
