@@ -2184,7 +2184,7 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "extra_preconditions": [
       "no_duplicate_billing_periods",
       "check_billing_config_active_or_empty",
-      "platform_billing_destination_absent_or_empty"
+      "platform_billing_destination_absent_empty_or_reviewed"
     ],
     "counts": {
       "platform_billing_destination_rows": {
@@ -2285,6 +2285,7 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       {
         "identity": "public.record_check_billing_event()",
         "acl": [
+          "checksops EXECUTE",
           "owner EXECUTE"
         ]
       },

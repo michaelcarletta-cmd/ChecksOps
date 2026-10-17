@@ -258,6 +258,9 @@ BEGIN
 END
 $$;
 REVOKE ALL ON FUNCTION public.record_check_billing_event() FROM PUBLIC;
+-- Production's live ACL also grants checksops (2026-10-17 inspect); kept (owner
+-- decision 2026-10-17). A trigger function cannot be called directly.
+GRANT EXECUTE ON FUNCTION public.record_check_billing_event() TO checksops;
 COMMENT ON FUNCTION public.record_check_billing_event() IS
   'SQL 98 (port of the Supabase trigger): first deposit of a check records one check_processing event priced at the tenant per-check rate (per-check billing on) or the check_billing_config default.';
 

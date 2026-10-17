@@ -116,8 +116,8 @@ test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and n
     assert.equal(ONE_SHOT_TOOLS[key].script, RELEASE_PRODUCTION[key].cli, key);
   }
   // The recorded hashes of the earlier pending pins (ops/fee-collection-deltas.md section 3).
-  assert.equal(COMMITTED.sql98.source_sha256, '7a42dc1384dc27fa62d4ad406109419cbc7f0843732958de41abae762425c0d6');
-  assert.equal(COMMITTED.sql98.staging_pin_commit, '146c04d33816d0e6c2d11eb801bf14f28bb90580');
+  assert.equal(COMMITTED.sql98.source_sha256, '5a42e485c84f7c9976390d12c275cdf32612fbba7656b66f553110c0ae697c2a');
+  assert.equal(COMMITTED.sql98.staging_pin_commit, '567772a9034cae4ec4d7c56b07c983fb4e797103');
   assert.equal(COMMITTED.sql99.source_sha256, '0c079fe41c932f34f33262ba00a17f3201f99960c89a944750f5312bd97f8b15');
   assert.equal(COMMITTED.sql99.staging_pin_commit, '600311866039adb0a85217be84d7dfb09f9eeec2');
   // ... and their notes (kept, with an update appended; the old tooling note kept as superseded_note).
