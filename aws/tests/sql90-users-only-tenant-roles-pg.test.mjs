@@ -191,6 +191,9 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
     assert.equal((await client.query("SELECT to_regprocedure('public.aws_can_access_tax_profiles(uuid)') IS NOT NULL AS present")).rows[0].present, true);
     await client.query('ROLLBACK');
 
+    // Production's ACL on the SQL 35 helper (2026-10-17): PUBLIC and checksops, not authenticated.
+    await client.query('REVOKE ALL ON FUNCTION public.aws_is_tenant_manager_admin() FROM PUBLIC, authenticated, checksops');
+    await client.query('GRANT EXECUTE ON FUNCTION public.aws_is_tenant_manager_admin() TO PUBLIC, checksops');
     // Apply twice: idempotent.
     await client.query(fs.readFileSync(SQL_90, 'utf8'));
     await client.query(fs.readFileSync(SQL_90, 'utf8'));
