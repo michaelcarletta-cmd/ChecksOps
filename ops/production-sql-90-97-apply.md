@@ -184,7 +184,11 @@ post-condition is the intended hash); reconcile the rendering in a reviewed chan
   only while it holds no row or exactly the reviewed one (counts only: one row, production, on
   the owner-confirmed platform account `41cb5d67-…`, with a payment method, verified; owner
   decision 2026-10-17, the row live in production): any other row would become the fee
-  destination unreviewed, so it is refused and reconciled in a reviewed change. The payment
+  destination unreviewed, so it is refused and reconciled in a reviewed change. In staging (the
+  guarded staging executor, Moov sandbox; owner decision 2026-10-17, option A) the kept row is
+  instead exactly one verified `sandbox` row with a payment method and no `production` row (the
+  2026-10-17 staging read-live, run 39076252693, showed that row); the sandbox account is not
+  compared with a reviewed id. The production tool keeps the reviewed-row rule. The payment
   method id is not compared with a reviewed value (none is recorded); the kept row has no audit
   history before SQL 98 creates the audit trigger. `successors_not_applied` on SQL 96 once SQL 98 is in
   place.

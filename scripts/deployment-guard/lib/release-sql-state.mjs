@@ -750,8 +750,12 @@ function preexistingTableReplaceable(t, live, want) {
     && d.unexpected_acl_grantees.length === 0 && d.unexpected_column_acl_grantees.length === 0;
 }
 
-/** Rules both environments apply before the migration runs. */
-export function releaseSharedPreconditionFailures(key, state, text) {
+/**
+ * Rules both environments apply before the migration runs. `environment` is 'production'
+ * (the default, the strict rules) or 'staging' (the guarded staging executor); it only
+ * changes rules that differ by environment (SQL 98's fee destination).
+ */
+export function releaseSharedPreconditionFailures(key, state, text, { environment = 'production' } = {}) {
   const spec = releaseSpec(key);
   const s = state || {};
   const intended = text != null ? releaseIntendedState(key, text) : null;
@@ -808,15 +812,23 @@ export function releaseSharedPreconditionFailures(key, state, text) {
     // SQL 98: the file raises 23505 on duplicate tenant periods; refuse before it runs.
     if (extra === 'no_duplicate_billing_periods') checks.push(['no_duplicate_billing_periods', s.counts?.duplicate_billing_periods === 0]);
     // SQL 98: a pre-existing platform_billing_destination is taken over only while it is empty or
-    // holds exactly the reviewed row: one production row on the owner-confirmed platform account
+    // holds exactly the reviewed row (production; staging's rule follows below): one production row on the owner-confirmed platform account
     // (41cb5d67-..., 2026-10-17), with a payment method, verified, and no sandbox row. Any other
     // row would become the fee destination unreviewed.
     if (extra === 'platform_billing_destination_absent_empty_or_reviewed') {
       const c = s.counts || {};
+      // Staging (Moov sandbox, owner decision 2026-10-17, option A): exactly one verified sandbox
+      // row with a payment method and no production row; the sandbox account is not compared
+      // with a reviewed id (none is recorded). Production keeps the reviewed-row rule.
+      const reviewedRow = environment === 'staging'
+        ? c.platform_billing_destination_rows === 1 && c.platform_billing_destination_sandbox_rows === 1
+          && c.platform_billing_destination_production_rows === 0
+          && c.platform_billing_destination_payment_method_rows === 1 && c.platform_billing_destination_verified_rows === 1
+        : c.platform_billing_destination_rows === 1 && c.platform_billing_destination_production_reviewed_account_rows === 1
+          && c.platform_billing_destination_payment_method_rows === 1 && c.platform_billing_destination_verified_rows === 1;
       checks.push(['platform_billing_destination_absent_empty_or_reviewed', s.tables?.['public.platform_billing_destination']?.exists !== true
         || c.platform_billing_destination_rows === 0
-        || (c.platform_billing_destination_rows === 1 && c.platform_billing_destination_production_reviewed_account_rows === 1
-          && c.platform_billing_destination_payment_method_rows === 1 && c.platform_billing_destination_verified_rows === 1)]);
+        || reviewedRow === true]);
     }
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {

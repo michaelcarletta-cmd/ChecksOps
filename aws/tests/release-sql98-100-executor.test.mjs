@@ -188,6 +188,42 @@ test('SQL 98 destination rule: only absent, empty or exactly the reviewed row; u
     ['unreadable counts', Object.fromEntries(Object.keys(REVIEWED).map((k) => [k, null]))],
     ['counts not read', undefined],
   ]) assert.equal(refused(counts), true, what);
+  // A verified sandbox row with a payment method (staging's Moov sandbox) is production-refused.
+  const SANDBOX = {
+    platform_billing_destination_rows: 1, platform_billing_destination_sandbox_rows: 1, platform_billing_destination_production_rows: 0,
+    platform_billing_destination_production_reviewed_account_rows: 0, platform_billing_destination_payment_method_rows: 1,
+    platform_billing_destination_verified_rows: 1,
+  };
+  assert.equal(refused(SANDBOX), true, 'production refuses a sandbox-only row');
+});
+
+test('SQL 98 destination rule in staging: exactly one verified sandbox row with a payment method; no production row', () => {
+  const RULE = 'platform_billing_destination_absent_empty_or_reviewed';
+  const refused = (counts, exists = true) => releaseSharedPreconditionFailures('sql98', {
+    tables: { 'public.platform_billing_destination': { exists } }, counts,
+  }, TEXT.sql98, { environment: 'staging' }).includes(RULE);
+  const SANDBOX = {
+    platform_billing_destination_rows: 1, platform_billing_destination_sandbox_rows: 1, platform_billing_destination_production_rows: 0,
+    platform_billing_destination_payment_method_rows: 1, platform_billing_destination_verified_rows: 1,
+  };
+  assert.equal(refused({}, false), false, 'absent');
+  assert.equal(refused({ platform_billing_destination_rows: 0 }), false, 'empty');
+  assert.equal(refused(SANDBOX), false, 'the staging sandbox row');
+  for (const [what, counts] of [
+    ['the production reviewed row (not staging\'s)', {
+      platform_billing_destination_rows: 1, platform_billing_destination_sandbox_rows: 0, platform_billing_destination_production_rows: 1,
+      platform_billing_destination_production_reviewed_account_rows: 1, platform_billing_destination_payment_method_rows: 1,
+      platform_billing_destination_verified_rows: 1,
+    }],
+    ['a second row', { ...SANDBOX, platform_billing_destination_rows: 2 }],
+    ['also a production row', { ...SANDBOX, platform_billing_destination_rows: 2, platform_billing_destination_production_rows: 1 }],
+    ['no payment method', { ...SANDBOX, platform_billing_destination_payment_method_rows: 0 }],
+    ['unverified', { ...SANDBOX, platform_billing_destination_verified_rows: 0 }],
+    ['unreadable counts', Object.fromEntries(Object.keys(SANDBOX).map((k) => [k, null]))],
+    ['counts not read', undefined],
+  ]) assert.equal(refused(counts), true, what);
+  // The default is production's strict rule.
+  assert.ok(releaseSharedPreconditionFailures('sql98', { tables: { 'public.platform_billing_destination': { exists: true } }, counts: SANDBOX }, TEXT.sql98).includes(RULE));
 });
 
 test('SQL 100 fingerprint: a grantor or a policy comment is another state; specs without render are unchanged by either', () => {
@@ -412,6 +448,11 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   const withRow = await apply('sql98', r98.live_definition_sha256);
   assert.equal(withRow.code, CODES.DEPLOYMENT_COLLISION);
   assert.ok(withRow.details.failed.includes('platform_billing_destination_absent_empty_or_reviewed'));
+  // Through the staging executor, the same sandbox row once verified is staging's destination: no refusal.
+  await admin.query('UPDATE public.platform_billing_destination SET verified_at = now()');
+  const verifiedSandbox = await inspect('sql98');
+  assert.deepEqual(verifiedSandbox.precondition_failures, [], JSON.stringify(verifiedSandbox.release_sql_inspect.counts));
+  await admin.query('UPDATE public.platform_billing_destination SET verified_at = NULL');
   await admin.query('DELETE FROM public.platform_billing_destination');
   r98 = await inspect('sql98');
   assert.deepEqual(r98.precondition_failures, [], JSON.stringify(r98.release_sql_inspect));
