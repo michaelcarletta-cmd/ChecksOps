@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { test } from "node:test";
 import {
   MORTGAGE_DESK_RETURN_ID_CHUNK,
@@ -8,6 +9,7 @@ import {
   chunkMortgageDeskReturnIds,
   fetchAllMortgageDeskReturnPages,
   loadMortgageDeskReturnStates,
+  mortgageDeskCompletionPostedByClient,
   buildReturnAckMessage,
   buildReturnMessage,
   compareLossDraftReturnPriority,
@@ -155,6 +157,44 @@ test("completion keeps the existing completed-work message with notes alongside 
     [{ body: completed, created_at: "2026-09-27T12:01:00Z" }],
   );
   assert.equal(withoutMarker.actionRequired, false);
+});
+
+test("on the AWS backend the client no longer posts the completion messages; Supabase keeps them", () => {
+  assert.equal(mortgageDeskCompletionPostedByClient(true), false);
+  assert.equal(mortgageDeskCompletionPostedByClient(false), true);
+
+  const queue = fs.readFileSync(new URL("../src/pages/mortgage-ops/MortgageOpsQueue.tsx", import.meta.url), "utf8");
+  const guard = queue.indexOf("if (mortgageDeskCompletionPostedByClient(mortgageUsesAwsBackend)) {");
+  assert.ok(guard > 0, "client posts are guarded by the backend check");
+  const guardEnd = queue.indexOf("\n        }\n", guard);
+  assert.ok(guardEnd > guard);
+  const guarded = queue.slice(guard, guardEnd);
+  // Both client-side posts live only inside the Supabase-backend branch.
+  assert.match(guarded, /from\("check_messages"\)\.insert/);
+  assert.match(guarded, /buildMortgageDeskCompletedMessage\(row\.mortgage_company \|\| row\.mortgage_servicer, notes\)/);
+  assert.match(guarded, /ensureMortgageDeskReturnMessage\(/);
+  const outside = queue.slice(0, guard) + queue.slice(guardEnd);
+  assert.doesNotMatch(outside, /from\("check_messages"\)/);
+  assert.doesNotMatch(outside, /ensureMortgageDeskReturnMessage\(\{/);
+  // The "not notified" toast can only come from a client-side post failure.
+  assert.match(queue, /let returnMarkerError: string \| null = null;\n\s+if \(mortgageDeskCompletionPostedByClient/);
+
+  const client = fs.readFileSync(new URL("../src/integrations/supabase/mortgageClient.ts", import.meta.url), "utf8");
+  assert.match(client, /export const mortgageUsesAwsBackend: boolean = shouldUseAws;/);
+});
+
+test("SQL 99 posts the same bodies the SPA builders produce", () => {
+  const sql = fs.readFileSync(new URL("../aws/workflows/sql/99_mortgage_desk_completion_messages.sql", import.meta.url), "utf8");
+  // Marker: 'MORTGAGE_DESK_RETURN:' || id || ' ' || MORTGAGE_DESK_RETURN_MESSAGE.
+  assert.ok(sql.includes(`v_marker_prefix := 'MORTGAGE_DESK_RETURN:' || NEW.id::text;`));
+  assert.ok(sql.includes(`v_marker_prefix || ' ${MORTGAGE_DESK_RETURN_MESSAGE}'`));
+  assert.equal(buildReturnMessage(REQUEST_ID), `MORTGAGE_DESK_RETURN:${REQUEST_ID} ${MORTGAGE_DESK_RETURN_MESSAGE}`);
+  // Completed-work note: the builder's fixed text around company and notes.
+  const sample = buildMortgageDeskCompletedMessage("ACME", "N");
+  assert.equal(sample, "✅ ChecksOps Mortgage Desk completed work with ACME. Notes: N");
+  assert.ok(sql.includes(`'✅ ChecksOps Mortgage Desk completed work with ' || v_company || '.'`));
+  assert.ok(sql.includes(`' Notes: ' || v_note`));
+  assert.ok(sql.includes(`'the mortgage company'`));
 });
 
 /**
