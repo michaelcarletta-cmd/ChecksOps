@@ -693,11 +693,16 @@ export function resolveComplianceAccess(args: {
   canSubmit: boolean | null | undefined;
   adminView?: boolean;
   editOnBehalf?: boolean;
-}): { readOnly: boolean; canRevealEin: boolean; showEditOnBehalfToggle: boolean } {
+}): { readOnly: boolean; canRevealEin: boolean; canAcceptTerms: boolean; showEditOnBehalfToggle: boolean } {
   const canSubmit = args.canSubmit === true;
+  const readOnly = !canSubmit || (!!args.adminView && !args.editOnBehalf);
   return {
-    readOnly: !canSubmit || (!!args.adminView && !args.editOnBehalf),
-    canRevealEin: canSubmit,
+    readOnly,
+    // EIN reveal and the Moov terms are the tenant members' own (the server
+    // refuses the platform owner unless it is a member): never offered in the
+    // Tenant Management view, even when editing on the tenant's behalf.
+    canRevealEin: canSubmit && !args.adminView,
+    canAcceptTerms: !readOnly && !args.adminView,
     showEditOnBehalfToggle: !!args.adminView && canSubmit,
   };
 }

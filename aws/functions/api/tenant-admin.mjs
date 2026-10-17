@@ -102,6 +102,13 @@ const tenantMemberCount = async (client, tenantId) => {
  * transaction, so two concurrent first invites cannot both see zero members.
  * SQL 90's aws_first_invite_allowed takes the same lock.
  */
+/** The target's memberships the caller may remove: tenants both belong to (optionally one tenant). */
+export const REMOVABLE_MEMBERSHIPS_SQL = `SELECT target.tenant_id
+  FROM public.tenant_users target
+  JOIN public.tenant_users mine ON mine.tenant_id = target.tenant_id AND mine.user_id = $2::uuid
+ WHERE target.user_id = $1::uuid
+   AND ($3::uuid IS NULL OR target.tenant_id = $3::uuid)`;
+
 export const FIRST_INVITE_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtextextended('first-invite:' || $1::uuid::text, 0))`;
 
 /**
@@ -381,6 +388,25 @@ export const runDeleteUser = async ({
     // the login reaches every tenant, so it stays with the platform owner.
     if (!userId) {
       return { ok: false, statusCode: 400, error: 'missing_user', spoofFieldsIgnored: spoof };
+    }
+    // A tenant never loses its last member here: an empty tenant reopens the
+    // platform owner's first invite. The count runs under the same per-tenant
+    // first-invite advisory lock SQL 90's aws_first_invite_allowed takes.
+    const removable = (await client.query(REMOVABLE_MEMBERSHIPS_SQL, [userId, mapping.application_user_id, tenantId]))
+      .rows.map((row) => String(row.tenant_id)).sort();
+    for (const removableTenantId of removable) {
+      await client.query(FIRST_INVITE_LOCK_SQL, [removableTenantId]);
+      const count = await tenantMemberCount(client, removableTenantId);
+      if (count === null || count <= 1) {
+        return {
+          ok: false,
+          statusCode: 409,
+          error: 'last_member_protected',
+          message: 'A company must keep at least one member.',
+          tenant_id: removableTenantId,
+          spoofFieldsIgnored: spoof,
+        };
+      }
     }
     const removed = await client.query(
       `DELETE FROM public.tenant_users

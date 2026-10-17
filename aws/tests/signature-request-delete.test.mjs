@@ -159,3 +159,44 @@ test('the SPA deletes through the server handler and no longer removes the sourc
   assert.equal(/\.remove\(\[request\.document_path\]\)/.test(src), false);
   assert.match(src, /canDeleteSignatureRequest\(request\) && \(/);
 });
+
+test('delete locks the request and its signers FOR UPDATE and re-checks signers in the DELETE', async () => {
+  const seen = [];
+  const result = await runDeleteSignatureRequest({
+    client: client({ request: draft(), signers: [{ status: 'pending' }] }, seen),
+    mapping,
+    body: { requestId: REQUEST },
+    spoof,
+  });
+  assert.equal(result.ok, true);
+  const lockRequest = seen.findIndex((row) => /FROM public\.signature_requests WHERE id = \$1::uuid FOR UPDATE/.test(row.sql));
+  const lockSigners = seen.findIndex((row) => /FROM public\.signature_signers WHERE signature_request_id = \$1::uuid FOR UPDATE/.test(row.sql));
+  const del = seen.findIndex((row) => /^DELETE FROM public\.signature_requests/.test(row.sql));
+  assert.ok(lockRequest >= 0 && lockSigners > lockRequest && del > lockSigners, JSON.stringify(seen.map((r) => r.sql)));
+  assert.match(seen[del].sql, /NOT EXISTS \( SELECT 1 FROM public\.signature_signers s/);
+  assert.match(seen[del].sql, /s\.viewed_at IS NOT NULL/);
+  assert.match(seen[del].sql, /s\.signed_at IS NOT NULL/);
+});
+
+test('a claim-only request (no check) is refused with 409 delete_not_supported_for_claim_only', async () => {
+  const seen = [];
+  const result = await runDeleteSignatureRequest({
+    client: {
+      query: async (sql, params = []) => {
+        const compact = String(sql).replace(/\s+/g, ' ');
+        seen.push({ sql: compact, params });
+        if (compact.includes('FROM public.signature_requests')) return { rows: [draft({ claim_id: '22222222-2222-4222-8222-222222222222', check_intake_item_id: null })] };
+        if (compact.includes('FROM public.claims')) return { rows: [{ id: 'c', tenant_id: TENANT }] };
+        if (compact.includes('aws_can_write_tenant')) return { rows: [{ ok: true }] };
+        if (compact.includes('FROM public.tenant_users')) return { rows: [{ x: 1 }] };
+        return { rows: [], rowCount: 0 };
+      },
+    },
+    mapping,
+    body: { requestId: REQUEST },
+    spoof,
+  });
+  assert.equal(result.statusCode, 409);
+  assert.equal(result.error, 'delete_not_supported_for_claim_only');
+  assert.equal(deletes(seen).length, 0);
+});

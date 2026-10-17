@@ -409,7 +409,12 @@ export function sql89SharedPreconditionFailures(state) {
       && state.grantee_update_grantors.every((grantor) => grantor === login)],
     ['login_can_grant', state?.login_can_grant === true],
     ['update_functions_safe', Array.isArray(state?.unsafe_update_functions) && state.unsafe_update_functions.length === 0],
-    ['sql70_ingest_function_security_definer', state?.ingest_function_present === true && state?.ingest_function_security_definer === true],
+    // SQL 95 drops SQL 70's ingest with the retired Freedom Claims bridge. SQL 89
+    // needs it only to run: once SQL 89 is applied (already_applied, the intended
+    // column state), the check is skipped so a later read-live of SQL 89 does not
+    // report a collision for a function SQL 95 removed on purpose.
+    ['sql70_ingest_function_security_definer', state?.already_applied === true
+      || (state?.ingest_function_present === true && state?.ingest_function_security_definer === true)],
     // SQL 89 names authenticated; the REVOKE fails without the role.
     ['authenticated_role_present', state?.authenticated_role_present === true],
     // Every other LOGIN role that uses authenticated's privileges would lose UPDATE with it.

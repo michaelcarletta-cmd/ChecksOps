@@ -341,14 +341,14 @@ export function ComplianceSettings({
               and{" "}
               <a href="https://moov.io/legal/privacy-policy/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">privacy policy</a>.
             </p>
-            {readOnly ? (
+            {readOnly || !access.canAcceptTerms ? (
               <StatusPill label="Not accepted yet" done={false} />
             ) : (
               <Button size="sm" className="h-8 text-xs" onClick={handleAcceptTerms} disabled={tosBusy || !data.account.connected}>
                 {tosBusy ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Recording acceptance…</> : "Accept terms"}
               </Button>
             )}
-            {!data.account.connected && !readOnly && (
+            {!data.account.connected && access.canAcceptTerms && (
               <p className="text-[11px] text-muted-foreground">Save and send your business details first.</p>
             )}
           </div>

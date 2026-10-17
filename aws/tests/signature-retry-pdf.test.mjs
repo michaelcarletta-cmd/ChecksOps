@@ -135,6 +135,10 @@ const completedRequest = {
   last_error: 'PDF attach failed: no_signature_image_to_stamp',
 };
 
+const RETRY_TENANT = '7a1d3c2a-6dc0-4680-92dd-a013e1141c11';
+const RETRY_MEMBER = '7b1d3c2a-6dc0-4680-92dd-a013e1141c12';
+const retryMapping = { application_user_id: RETRY_MEMBER };
+
 const retryClient = ({
   request = completedRequest,
   signers = [{
@@ -178,6 +182,12 @@ const retryClient = ({
       if (String(sql).includes('UPDATE public.signature_requests')) {
         if (typeof onUpdate === 'function') return onUpdate(sql, params);
         return { rows: [], rowCount: 1 };
+      }
+      // requireSignatureRequestActor: the claim's tenant, then membership.
+      if (String(sql).includes('FROM public.claims')) return { rows: [{ id: CLAIM_ID, tenant_id: RETRY_TENANT }] };
+      if (String(sql).includes('aws_can_write_tenant')) return { rows: [{ ok: params[0] === RETRY_TENANT }] };
+      if (String(sql).includes('FROM public.tenant_users')) {
+        return { rows: params[0] === RETRY_MEMBER && params[1] === RETRY_TENANT ? [{ '?column?': 1 }] : [] };
       }
       throw new Error(`unexpected sql: ${sql}`);
     },
@@ -229,6 +239,7 @@ test('successful completed-request regeneration uses persisted association and c
 
   const result = await runRetryPdfGeneration({
     client,
+    mapping: retryMapping,
     body: { requestId: REQUEST_ID },
     spoof: [],
   }, { s3 });
@@ -331,6 +342,7 @@ test('missing signature value fails closed', async () => {
     client: retryClient({
       signers: [{ id: 's1', signing_order: 1, token_hash: 'abc', field_values: {} }],
     }),
+    mapping: retryMapping,
     body: { requestId: REQUEST_ID },
     spoof: [],
   });
@@ -363,6 +375,7 @@ test('SQL update failure is not swallowed', async () => {
   await assert.rejects(
     () => runRetryPdfGeneration({
       client,
+      mapping: retryMapping,
       body: { requestId: REQUEST_ID },
       spoof: [],
     }, {
@@ -388,6 +401,7 @@ test('handleRetryPdfGeneration only reports success after commit', async () => {
         assert.equal(opts.write, true);
         assert.equal(opts.commit, true);
         const inner = await fn({
+          mapping: retryMapping,
           client: retryClient(),
           body: { requestId: REQUEST_ID },
           spoof: [],
@@ -413,6 +427,7 @@ test('handleRetryPdfGeneration does not commit when the inner handler fails', as
     {
       withIdentity: async (_event, fn, opts) => {
         const inner = await fn({
+          mapping: retryMapping,
           client: retryClient({ request: null }),
           body: { requestId: REQUEST_ID },
           spoof: [],
@@ -426,4 +441,22 @@ test('handleRetryPdfGeneration does not commit when the inner handler fails', as
   );
   assert.equal(result.ok, false);
   assert.equal(committed, false);
+});
+
+test('retry PDF: a non-member of the request\'s tenant is refused before any S3 or database write', async () => {
+  const client = retryClient();
+  let s3Called = false;
+  const result = await runRetryPdfGeneration({
+    client,
+    mapping: { application_user_id: '7c1d3c2a-6dc0-4680-92dd-a013e1141c13' },
+    body: { requestId: REQUEST_ID },
+    spoof: [],
+  }, {
+    s3: { send: async () => { s3Called = true; return {}; } },
+    attachCompletedSignatureDocument: async () => { throw new Error('must not attach'); },
+  });
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'forbidden');
+  assert.equal(s3Called, false);
+  assert.equal(client.sqls.some((row) => /UPDATE|INSERT|aws_public_signature_attach_signed/.test(String(row.sql))), false);
 });

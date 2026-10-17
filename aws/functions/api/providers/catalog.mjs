@@ -42,7 +42,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-onboarding-link', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Creates hosted onboarding session.'),
   fn('moov-onboarding-get', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Compliance & Docs masked status from ChecksOps (SQL 91). Members and platform owner read.'),
   fn('moov-onboarding-save', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Saves business profile + representatives in ChecksOps (EIN encrypted, SSN last four only), then syncs Moov idempotently.'),
-  fn('moov-ein-reveal', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Members of the tenant and the platform owner. Audit-logged EIN decrypt.'),
+  fn('moov-ein-reveal', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Members of the tenant only (not the platform owner). Audit-logged EIN decrypt.'),
   fn('moov-document-upload-url', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Presigned SSE-KMS S3 PUT for a compliance document.'),
   fn('moov-document-finalize', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Verifies the stored document and sends it to Moov files (multipart).'),
   fn('moov-document-view', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Short-lived presigned GET for a stored compliance document.'),

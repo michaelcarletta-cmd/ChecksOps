@@ -10,8 +10,10 @@ export const isSensitiveKey = (key) => SENSITIVE_KEY.test(String(key || '').repl
 
 /** Masks runs of 4+ digits (keeps nothing) so SSN/EIN/account numbers cannot leak through free text. */
 export const redactText = (value, max = 200) => String(value ?? '')
-  .replace(/\d{3}-\d{2}-\d{4}/g, '[redacted]')
-  .replace(/\d{2}-\d{7}/g, '[redacted]')
+  // SSN with any separator run (dash, space, dot, slash, underscore): 123-45-6789, 123 45 6789, 123.45.6789.
+  .replace(/\d{3}[\s.\-_/]+\d{2}[\s.\-_/]+\d{4}/g, '[redacted]')
+  // EIN with any separator: 12-3456789, 12 3456789, 12.3456789.
+  .replace(/\d{2}[\s.\-_/]+\d{7}/g, '[redacted]')
   .replace(/\d{4,}/g, '[redacted]')
   .slice(0, max);
 

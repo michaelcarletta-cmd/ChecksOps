@@ -286,6 +286,10 @@ export const ONBOARDING_HANDLERS = {
   'moov-ein-reveal': {
     access: access.submit,
     run: async ({ client, ctx, deps }) => {
+      // Owner decision (2026-10-17): members of this tenant only. The platform
+      // owner may submit Compliance & Docs on a tenant's behalf, but it does not
+      // see the EIN or accept the Moov terms unless it is itself a member.
+      if (ctx.member !== true) return fail('tenant_member_required', 403, { message: 'Only a member of this organization can do this.' });
       const profile = await loadProfile(client, ctx.tenantId, ctx.environment);
       if (!profile?.ein_ciphertext) return fail('ein_not_on_file', 404);
       const ein = await decryptProfileEin(deps, profile);
@@ -618,6 +622,10 @@ export const ONBOARDING_HANDLERS = {
     // access token (profile.write) is ever handed to the browser.
     access: access.submit,
     run: async ({ client, ctx }) => {
+      // Owner decision (2026-10-17): members of this tenant only. The platform
+      // owner may submit Compliance & Docs on a tenant's behalf, but it does not
+      // see the EIN or accept the Moov terms unless it is itself a member.
+      if (ctx.member !== true) return fail('tenant_member_required', 403, { message: 'Only a member of this organization can do this.' });
       const account = await loadAccount(client, ctx.tenantId, ctx.environment);
       return ok({
         token: null,
@@ -635,6 +643,10 @@ export const ONBOARDING_HANDLERS = {
     access: access.submit,
     moov: true,
     run: async ({ client, ctx, body, event, fetchImpl }) => {
+      // Owner decision (2026-10-17): members of this tenant only. The platform
+      // owner may submit Compliance & Docs on a tenant's behalf, but it does not
+      // see the EIN or accept the Moov terms unless it is itself a member.
+      if (ctx.member !== true) return fail('tenant_member_required', 403, { message: 'Only a member of this organization can do this.' });
       const clientToken = typeof body.terms_of_service_token === 'string' && body.terms_of_service_token.length >= 8
         ? body.terms_of_service_token
         : null;

@@ -202,6 +202,16 @@ export const requireSignatureActor = async (client, { mapping, tenantId, spoof }
 };
 
 /**
+ * The same tenant-member gate for an existing request (send, delete, retry
+ * PDF): its owning tenant is resolved server-side from the claim or check.
+ */
+export const requireSignatureRequestActor = async (client, { mapping, request, spoof }) => {
+  const claims = await loadClaimsContext(client, request);
+  const tenantId = await resolveRequestTenantId(client, { ...request, claims });
+  return requireSignatureActor(client, { mapping, tenantId, spoof });
+};
+
+/**
  * Link the signed source document to its check file. Best-effort inside a
  * savepoint: a missing column grant must not abort the request transaction.
  */
@@ -628,10 +638,35 @@ export const runDeleteSignatureRequest = async ({ client, mapping, body, spoof }
   const tenantId = await resolveRequestTenantId(client, request);
   const actor = await requireSignatureActor(client, { mapping, tenantId, spoof });
   if (actor.ok === false) return actor;
+  // aws_write_signature_requests admits a row only through its check
+  // (aws_can_write_check(check_intake_item_id)): a claim-only request cannot
+  // be deleted under RLS, so say so instead of reporting a silent no-op.
+  if (!request.check_intake_item_id) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'delete_not_supported_for_claim_only',
+      message: 'Signature requests that are not attached to a check cannot be deleted yet',
+      requestId,
+      spoofFieldsIgnored: spoof,
+    };
+  }
 
+  // Lock the request and its signers so a concurrent send, view or signature
+  // cannot slip between the check and the DELETE.
+  const locked = (await client.query(
+    `SELECT id, claim_id, check_intake_item_id, status, sent_at, final_pdf_path, delivery_mode
+     FROM public.signature_requests WHERE id = $1::uuid FOR UPDATE`,
+    [requestId],
+  )).rows[0];
+  if (!locked) {
+    return { ok: false, statusCode: 409, error: 'not_deletable', requestId, spoofFieldsIgnored: spoof };
+  }
+  Object.assign(request, locked);
   const signers = (await client.query(
     `SELECT id, status, signed_at, viewed_at, delivery_status
-     FROM public.signature_signers WHERE signature_request_id = $1::uuid`,
+     FROM public.signature_signers WHERE signature_request_id = $1::uuid
+     FOR UPDATE`,
     [requestId],
   )).rows;
   if (!signatureRequestDeletable(request, signers)) {
@@ -650,7 +685,14 @@ export const runDeleteSignatureRequest = async ({ client, mapping, body, spoof }
      WHERE id = $1::uuid
        AND status IN ('draft', 'failed')
        AND sent_at IS NULL
-       AND final_pdf_path IS NULL`,
+       AND final_pdf_path IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM public.signature_signers s
+          WHERE s.signature_request_id = signature_requests.id
+            AND (lower(COALESCE(s.status, '')) = 'signed'
+                 OR s.signed_at IS NOT NULL
+                 OR s.viewed_at IS NOT NULL
+                 OR lower(COALESCE(s.delivery_status, '')) = 'sent'))`,
     [requestId],
   );
   if (Number(deleted?.rowCount || 0) !== 1) {

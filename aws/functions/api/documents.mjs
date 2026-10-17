@@ -7,6 +7,7 @@ import { PutObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { withIdentity } from './data.mjs';
+import { requireSignatureRequestActor } from './esign.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 import {
   attachCompletedSignatureDocument,
@@ -284,7 +285,7 @@ export const reconstructRetrySignersWithValues = ({
   return reconstructed;
 };
 
-export const runRetryPdfGeneration = async ({ client, body, spoof }, deps = {}) => {
+export const runRetryPdfGeneration = async ({ client, mapping, body, spoof }, deps = {}) => {
   const requestId = body.requestId || body.request_id;
   if (!requestId) {
     return { ok: false, statusCode: 400, error: 'missing_request_id', spoofFieldsIgnored: spoof };
@@ -301,6 +302,9 @@ export const runRetryPdfGeneration = async ({ client, body, spoof }, deps = {}) 
   if (!request) {
     return { ok: false, statusCode: 404, error: 'request_not_found', spoofFieldsIgnored: spoof };
   }
+  // Same tenant-member gate as send and delete, before any S3 write or DEFINER call.
+  const actor = await requireSignatureRequestActor(client, { mapping, request, spoof });
+  if (actor.ok === false) return actor;
   if (request.status !== 'completed') {
     return { ok: false, statusCode: 400, error: 'request_not_completed', spoofFieldsIgnored: spoof };
   }

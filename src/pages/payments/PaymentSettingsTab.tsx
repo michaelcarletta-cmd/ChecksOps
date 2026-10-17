@@ -1,6 +1,5 @@
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentProviderAdmin } from "@/components/payments/PaymentProviderAdmin";
-import { PlatformFeeSchedulePanel } from "@/components/payments/PlatformFeeSchedulePanel";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
@@ -17,7 +16,7 @@ export function PaymentSettingsTab() {
       <PaymentAccountPanel />
       <WalletPanel />
       <MoovTreasuryPanel />
-      <PlatformFeeSchedulePanel />
+      {/* PlatformFeeSchedulePanel is not shown: the Moov recurring fee schedule is retired (fees are billed from Tenant Management). */}
       <TenantBankAccountSettings />
       {PAYMENT_FLAGS.SHOW_PAYMENT_ADMIN && <PaymentProviderAdmin />}
     </div>

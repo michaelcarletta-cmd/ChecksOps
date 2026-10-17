@@ -1237,38 +1237,21 @@ export const platformBank = {
   },
 };
 
+/**
+ * Retired (owner decision 2026-10-17): ChecksOps fees are collected by Tenant
+ * Management billing (tenant-billing-admin pulls what the tenant owes from the
+ * tenant's account). A Moov recurring fee schedule would charge the tenant a
+ * second time, so creating or changing one is refused for everyone, the
+ * platform owner included. moov-fee-schedule-cancel stays (platform owner
+ * only) so an existing schedule can be stopped.
+ */
 export const feeScheduleUpsert = {
   requireAdmin: true,
   platformOwnerOnly: true,
-  run: async ({ client, body, ctx, fetchImpl }) => {
-    // Owner decision (2026-10-17): ChecksOps' fees for a tenant are set by
-    // the platform owner only (by email); tenant members never set them.
-    if (ctx.isPlatformOwner !== true) {
-      return fail('Platform owner access required', 403, { error: 'platform_owner_required' });
-    }
-    if (!ctx.tenantId) return fail('tenant_id is required', 400, { error: 'invalid_uuid', field: 'tenant_id' });
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const facilitatorId = await facilitatorAccountId(account.provider_account_id, fetchImpl);
-    const created = await moovFetch(`/accounts/${facilitatorId}/transfers/schedules`, {
-      method: 'POST', scopes: scopes.transfersWrite(facilitatorId), fetchImpl,
-      body: {
-        description: body.name || 'ChecksOps platform fees',
-        amount: { currency: 'USD', value: Number(body.amount_cents) || 0 },
-        recurrence: { cadence: body.cadence || 'monthly', dayOfMonth: body.day_of_month || 1 },
-      },
-    }).catch((e) => ({ error: e.message, status: e.status }));
-    await client.query(
-      `INSERT INTO public.payment_fee_schedules (tenant_id, provider, environment, name, fee_code, amount_cents, cadence, provider_metadata)
-       VALUES ($1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6::jsonb)
-       ON CONFLICT (tenant_id, fee_code) DO UPDATE SET amount_cents = EXCLUDED.amount_cents, provider_metadata = EXCLUDED.provider_metadata`,
-      [
-        ctx.tenantId, body.name || 'ChecksOps platform fees', body.fee_code || 'platform_fees',
-        Number(body.amount_cents) || 0, body.cadence || 'monthly', JSON.stringify(sanitize(created)),
-      ],
-    ).catch(() => {});
-    return jsonResult({ success: true, schedule: created, liveProviderCalled: !created?.error });
-  },
+  run: async () => fail('Recurring Moov fee schedules are retired; fees are billed from Tenant Management.', 410, {
+    error: 'fee_schedule_retired',
+    liveProviderCalled: false,
+  }),
 };
 
 export const feeScheduleCancel = {

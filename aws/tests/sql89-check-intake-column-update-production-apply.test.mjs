@@ -589,6 +589,9 @@ const postState = (overrides = {}) => state({
 
 test('production preconditions and postconditions', () => {
   assert.deepEqual(sql89ProductionPreconditionFailures(state(), PIN), []);
+  // Once SQL 89 is applied, SQL 95 may drop SQL 70's ingest: the ingest check is skipped.
+  assert.equal(sql89ProductionPreconditionFailures(postState({ ingest_function_present: false, ingest_function_security_definer: false }), PIN)
+    .includes('sql70_ingest_function_security_definer'), false);
   const refusedPre = [
     [{ current_user: 'ubuntu' }, 'login_is_pinned_admin'],
     [{ session_user: 'ubuntu' }, 'login_is_pinned_admin'],
@@ -598,8 +601,8 @@ test('production preconditions and postconditions', () => {
     [{ grantee_update_grantors: ['checksops_admin', 'rds_superuser'] }, 'grantee_update_granted_by_login'],
     [{ login_can_grant: false }, 'login_can_grant'],
     [{ unsafe_update_functions: ['public.f()'] }, 'update_functions_safe'],
-    [{ ingest_function_present: false, ingest_function_security_definer: false }, 'sql70_ingest_function_security_definer'],
-    [{ ingest_function_security_definer: false }, 'sql70_ingest_function_security_definer'],
+    [{ ingest_function_present: false, ingest_function_security_definer: false, already_applied: false }, 'sql70_ingest_function_security_definer'],
+    [{ ingest_function_security_definer: false, already_applied: false }, 'sql70_ingest_function_security_definer'],
     [{ table_owner: 'other' }, 'table_owner_as_inspected'],
     [{ table_acl: '{x}' }, 'table_acl_as_inspected'],
     [{ updatable_columns: SQL89_COLUMNS }, 'updatable_columns_as_inspected'],

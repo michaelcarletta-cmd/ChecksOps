@@ -77,14 +77,13 @@ const isPlatformOwner = async (client) => (
   (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0]?.is_owner === true
 );
 
-// Check Alt UAT setup: the platform owner (who keeps Check Alt setup) or any
-// member of the target tenant. A global user_roles admin (ctx.isAdmin) is not
-// enough, and role tiers are ignored.
-const denyUnlessCheckAltSetupAdmin = async (client, ctx, userId, tenantId) => {
+// Check Alt UAT setup (test connection, register, verify) is the platform
+// owner's, matching production Check Alt setup (SQL 81 / SQL 90
+// checkalt_tenant_accounts). Members and a global user_roles admin
+// (ctx.isAdmin) are refused.
+const denyUnlessCheckAltSetupAdmin = async (client) => {
   if (await isPlatformOwner(client)) return null;
-  const roles = await loadCheckAltTenantRoles(client, userId, tenantId);
-  if (roleAllowsCheckAlt(roles)) return null;
-  return fail('Membership of this company required', 403);
+  return fail('Platform owner access required', 403, { error: 'platform_owner_required' });
 };
 const MAX_TOTAL_B64_CHARS = 1_600_000;
 

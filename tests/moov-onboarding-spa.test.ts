@@ -183,7 +183,12 @@ test("Reveal is visible whenever the server allows submit (any tenant member or 
   assert.equal(resolveComplianceAccess({ canSubmit: false }).canRevealEin, false);
   assert.equal(resolveComplianceAccess({ canSubmit: undefined }).canRevealEin, false);
   // Platform owner in Tenant Management can reveal without turning on editing.
-  assert.equal(resolveComplianceAccess({ canSubmit: true, adminView: true }).canRevealEin, true);
+  // Tenant Management (edit on behalf or not): no EIN reveal and no terms acceptance.
+  assert.equal(resolveComplianceAccess({ canSubmit: true, adminView: true }).canRevealEin, false);
+  assert.equal(resolveComplianceAccess({ canSubmit: true, adminView: true, editOnBehalf: true }).canRevealEin, false);
+  assert.equal(resolveComplianceAccess({ canSubmit: true, adminView: true, editOnBehalf: true }).canAcceptTerms, false);
+  assert.equal(resolveComplianceAccess({ canSubmit: true }).canAcceptTerms, true);
+  assert.equal(resolveComplianceAccess({ canSubmit: false }).canAcceptTerms, false);
   assert.match(businessSection, /\{canRevealEin && einMasked && \(/);
   assert.match(compliance, /canRevealEin=\{access\.canRevealEin\}/);
   assert.match(businessSection, /EIN_REVEAL_MS/);

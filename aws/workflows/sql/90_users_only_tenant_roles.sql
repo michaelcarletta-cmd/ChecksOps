@@ -565,7 +565,7 @@ AS $body$
 $body$
 $fn$;
     EXECUTE $c$COMMENT ON FUNCTION public.aws_can_manage_mortgage_library(uuid) IS
-  'Any tenant_users member of _tenant_id or the platform owner (aws_can_write_tenant). Mortgage agents cannot backfill. No role tiers (SQL 90).'$c$;
+  'Any tenant_users member of _tenant_id (aws_can_write_tenant, members only; the platform owner is not a writer). Mortgage agents cannot backfill. No role tiers (SQL 90).'$c$;
   END IF;
 END
 $$;

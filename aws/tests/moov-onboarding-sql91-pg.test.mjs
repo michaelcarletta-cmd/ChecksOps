@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { enqueueOutbox, failOutboxAttempt, ONBOARDING_LOCK_SQL } from '../functions/api/providers/onboarding/store.mjs';
+import { pgSkipReason, startPg } from './helpers/stakeholder-policies-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SQL91 = path.join(ROOT, 'workflows/sql/91_moov_onboarding.sql');
@@ -88,29 +89,17 @@ INSERT INTO public.user_roles VALUES ('${U.globalAdmin}', 'admin');
 `;
 
 test('disposable PostgreSQL SQL 91 Moov onboarding RLS matrix', { timeout: 180000 }, async (t) => {
-  if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
-    t.skip('PostgreSQL 16 binaries are not installed');
+  // The repo's shared helper (stakeholder-policies-pg.mjs) starts the server,
+  // as the ubuntu account when the tests run as root.
+  const skip = pgSkipReason(PG_BIN);
+  if (skip) {
+    t.skip(skip);
     return;
   }
-  const stamp = `${Date.now()}_${process.pid}`;
-  const pgData = fs.mkdtempSync(path.join(os.tmpdir(), `pg-sql91-${stamp}-`));
-  const port = 56100 + (process.pid % 1000);
-  let started = false;
-  t.after(() => {
-    if (started) run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', 'stop']);
-    fs.rmSync(pgData, { recursive: true, force: true });
-  });
-  mustRun(path.join(PG_BIN, 'initdb'), ['-D', pgData, '--auth=trust', '--no-sync', '--username=ubuntu', '--encoding=UTF8']);
-  fs.appendFileSync(path.join(pgData, 'postgresql.conf'), `
-listen_addresses = ''
-port = ${port}
-unix_socket_directories = '${pgData}'
-logging_collector = off
-shared_buffers = 32MB
-max_connections = 20
-`);
-  mustRun(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-l', path.join(pgData, 'pg.log'), '-w', 'start']);
-  started = true;
+  const server = startPg('pg-sql91-', 56100, { bin: PG_BIN });
+  t.after(() => server.stop());
+  const pgData = server.host;
+  const port = server.port;
   const base = ['-h', pgData, '-p', String(port), '-v', 'ON_ERROR_STOP=1', '-X', '-q'];
   const psql = (user, db, input) => run(path.join(PG_BIN, 'psql'), [...base, '-U', user, '-d', db, '-A', '-t'], { input });
   mustRun(path.join(PG_BIN, 'createdb'), ['-h', pgData, '-p', String(port), '-U', 'ubuntu', 'sql91']);
@@ -118,6 +107,9 @@ max_connections = 20
   assert.equal(shim.status, 0, shim.stderr);
   const apply = psql('ubuntu', 'sql91', fs.readFileSync(SQL91, 'utf8'));
   assert.equal(apply.status, 0, apply.stderr);
+  // Re-runnable: a second apply succeeds and changes nothing.
+  const reapply = psql('ubuntu', 'sql91', fs.readFileSync(SQL91, 'utf8'));
+  assert.equal(reapply.status, 0, reapply.stderr);
 
   /** Runs `sql` as checksops for `user`, with or without the onboarding GUC. Returns { ok, out, err }. */
   const as = (user, sql, { onboarding = true, webhook = false } = {}) => {

@@ -124,23 +124,36 @@ test('members read their own rates (any role value); other tenants do not', asyn
   assert.equal(await canViewTenantBilling(fakeClient({ owner: true }), USER, TENANT), true);
 });
 
-test('Moov fee schedules: platform owner only; members and other tenants refused before any provider call', async () => {
-  for (const handler of [feeScheduleUpsert, feeScheduleCancel]) {
-    assert.equal(handler.platformOwnerOnly, true);
+test('Moov fee schedules: upsert is retired (410) for everyone; cancel is platform owner only', async () => {
+  for (const ctx of [{ tenantId: TENANT, isPlatformOwner: true }, { tenantId: TENANT, isPlatformOwner: false }, { tenantId: null, isPlatformOwner: true }]) {
     const client = fakeClient();
     let fetched = false;
-    const res = await handler.run({
-      client, body: { amount_cents: 100, fee_code: 'platform_fees', schedule_id: 'x' },
-      ctx: { tenantId: TENANT, isPlatformOwner: false }, fetchImpl: async () => { fetched = true; return {}; },
+    const res = await feeScheduleUpsert.run({
+      client, body: { amount_cents: 100, fee_code: 'platform_fees' }, ctx, fetchImpl: async () => { fetched = true; return {}; },
     });
-    assert.equal(res.statusCode, 403);
+    assert.equal(res.statusCode, 410, JSON.stringify(ctx));
+    assert.equal(res.error, 'fee_schedule_retired');
     assert.equal(client.queries.length, 0);
     assert.equal(fetched, false);
-    const noTenant = await handler.run({ client, body: {}, ctx: { tenantId: null, isPlatformOwner: true }, fetchImpl: async () => ({}) });
-    assert.equal(noTenant.statusCode, 400);
   }
+  assert.equal(feeScheduleCancel.platformOwnerOnly, true);
+  const client = fakeClient();
+  let fetched = false;
+  const refused = await feeScheduleCancel.run({
+    client, body: { fee_code: 'platform_fees', schedule_id: 'x' },
+    ctx: { tenantId: TENANT, isPlatformOwner: false }, fetchImpl: async () => { fetched = true; return {}; },
+  });
+  assert.equal(refused.statusCode, 403);
+  assert.equal(client.queries.length, 0);
+  assert.equal(fetched, false);
+  const noTenant = await feeScheduleCancel.run({ client, body: {}, ctx: { tenantId: null, isPlatformOwner: true }, fetchImpl: async () => ({}) });
+  assert.equal(noTenant.statusCode, 400);
   // The browser cannot set ChecksOps' payout fee.
   assert.doesNotMatch(read('aws/functions/api/providers/parity/moov-money.mjs'), /body\.platform_fee_cents/);
+  // The SPA no longer shows the recurring fee schedule panel anywhere.
+  for (const rel of ['src/pages/payments/PaymentSettingsTab.tsx', 'src/pages/admin/AdminTenants.tsx', 'src/pages/Payments.tsx']) {
+    assert.doesNotMatch(read(rel), /<PlatformFeeSchedulePanel/, rel);
+  }
 });
 
 test('SPA: Tenant Management saves pricing through tenant-billing-admin; tenant screens are read-only', () => {

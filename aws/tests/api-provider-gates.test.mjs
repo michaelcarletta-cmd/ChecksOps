@@ -276,7 +276,8 @@ test('checkalt-register-account is blocked without an approved UAT deposit accou
       'POST',
       {
         loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
-        createClient: () => identityClient(),
+        // Check Alt UAT setup is the platform owner's.
+        createClient: () => identityClient((sql) => (sql.includes('is_platform_owner') ? { rows: [{ is_owner: true }] } : { rows: [] })),
         loadSandboxCredentials: async () => ({
           checkalt: {
             username: 'api-login',
@@ -541,4 +542,39 @@ test('production provider flags remain false in the staging template', () => {
   assert.match(template, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
   assert.match(template, /CidrIp: 0\.0\.0\.0\/0/);
   assert.match(template, /CreateStagingNat/);
+});
+
+test('applyMoovWebhook resets request.provider_webhook_apply on every path (sandbox, production skip, error)', async () => {
+  const run = async (handler) => {
+    const settings = [];
+    const client = {
+      query: async (sql, params = []) => {
+        const m = String(sql).match(/set_config\('request\.provider_webhook_apply', '(\d)'/);
+        if (m) settings.push(m[1]);
+        return handler(String(sql), params);
+      },
+    };
+    let error = null;
+    try {
+      await applyMoovWebhook(client, { type: 'transfer.updated', accountID: 'acct-1', data: { transferID: 't1' } });
+    } catch (e) {
+      error = e;
+    }
+    return { settings, error };
+  };
+  // Sandbox account found.
+  const sandbox = await run((sql) => (sql.includes("environment = 'sandbox'") && sql.includes('payment_provider_accounts')
+    ? { rows: [{ id: 'a', tenant_id: '11111111-1111-4111-8111-111111111111', environment: 'sandbox' }] } : { rows: [] }));
+  assert.equal(sandbox.settings[0], '1');
+  assert.equal(sandbox.settings.at(-1), '0');
+  // Production row: skipped early, still reset.
+  const production = await run((sql) => (sql.includes("environment = 'production'") ? { rows: [{ id: 'p', environment: 'production' }] } : { rows: [] }));
+  assert.equal(production.settings.at(-1), '0');
+  // A failing query: reset, error propagated.
+  const failing = await run((sql) => {
+    if (sql.includes('payment_provider_accounts')) throw new Error('boom');
+    return { rows: [] };
+  });
+  assert.match(String(failing.error?.message), /boom/);
+  assert.equal(failing.settings.at(-1), '0');
 });

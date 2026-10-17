@@ -16,6 +16,8 @@ import {
   SAFE_WRITE_RPC_CLASSIFICATION,
   SAFE_WRITE_RPCS,
   executeSafeWriteRpc,
+  DEPOSIT_BATCH_LOCK_SQL,
+  DEPOSIT_BATCH_TENANT_SQL,
 } from '../functions/api/workflow-rpc.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -422,4 +424,44 @@ test('7. resolve_check_return honors p_restore_stage', async () => {
   const restoreUpdate = restore.queries.find((q) => /UPDATE public.check_intake_items/.test(q.sql));
   assert.match(restoreUpdate.sql, /check_stage/);
   assert.equal(restoreUpdate.params[1], 'review');
+});
+
+test('6b. assign_provider with a client batch id: the batch must hold only the item tenant\'s checks', async () => {
+  const OTHER_BATCH = '77777777-7777-4777-8777-777777777777';
+  const run = async (batch) => {
+    const client = identityClient((sql, params) => {
+      if (sql === DEPOSIT_BATCH_LOCK_SQL) return { rows: batch.exists ? [{ id: params[0] }] : [] };
+      if (sql === DEPOSIT_BATCH_TENANT_SQL) {
+        assert.equal(params[1], FREEDOM);
+        return { rows: [{ item_count: batch.items, foreign_count: batch.foreign }] };
+      }
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ '?column?': 1 }] };
+      if (/JOIN public.check_intake_items/.test(sql)) {
+        return { rows: [{ id: ITEM_ID, status: 'pending_assignment', amount: 25, check_id: CHECK_ID, tenant_id: FREEDOM }] };
+      }
+      if (/FROM public.deposit_provider_config/.test(sql)) return { rows: [{ '?column?': 1 }] };
+      return { rows: [] };
+    });
+    const result = await executeSafeWriteRpc({
+      client,
+      mapping: { application_user_id: APP_ID },
+      name: 'deposit_action',
+      args: { p_action: 'assign_provider', p_deposit_item_id: ITEM_ID, p_provider: 'manual_branch', p_batch_id: OTHER_BATCH },
+    });
+    const wrote = client.queries.some((q) => /UPDATE public.deposit_batches|UPDATE public.deposit_items/.test(q.sql));
+    return { result, wrote };
+  };
+  for (const batch of [
+    { exists: false, items: 0, foreign: 0 },
+    { exists: true, items: 0, foreign: 0 },
+    { exists: true, items: 3, foreign: 1 },
+  ]) {
+    const { result, wrote } = await run(batch);
+    assert.equal(result.error, 'batch_not_in_tenant', JSON.stringify(batch));
+    assert.equal(wrote, false, JSON.stringify(batch));
+  }
+  const { result, wrote } = await run({ exists: true, items: 2, foreign: 0 });
+  assert.equal(result.error, undefined, JSON.stringify(result));
+  assert.equal(result.data.batch_id, OTHER_BATCH);
+  assert.equal(wrote, true);
 });

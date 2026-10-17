@@ -22,6 +22,7 @@ import { authorizeObject } from '../functions/api/storage.mjs';
 import { APP_BUCKET_SET, s3KeyFor } from '../functions/api/storage-paths.mjs';
 import { sanitizeWebhookPayload } from '../functions/api/providers/webhooks.mjs';
 import { FUNCTION_BY_NAME } from '../functions/api/providers/catalog.mjs';
+import { redactText } from '../functions/api/providers/onboarding/redact.mjs';
 
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const OTHER_TENANT = '9b1f7a52-1c0e-4d5a-9a3f-5d6e7f8a9b0c';
@@ -557,7 +558,7 @@ test('SSN never persisted: Moov gets it once; DB writes, outbox and logs only se
   });
 });
 
-test('EIN encrypted at rest, masked in every read, revealed only through moov-ein-reveal to members and the platform owner with an audit row', async () => {
+test('EIN encrypted at rest, masked in every read, revealed only through moov-ein-reveal to tenant members with an audit row', async () => {
   await withEnv(BASE_ENV, async () => {
     resetMoovTokenCache();
     const db = makeDb();
@@ -580,7 +581,7 @@ test('EIN encrypted at rest, masked in every read, revealed only through moov-ei
       assert.equal(view.business.ein_masked, '*****4321', who);
       assert.equal(JSON.stringify(view).includes(EIN), false, who);
     }
-    for (const who of ['owner', 'viewer', 'operator', 'platformOwner']) {
+    for (const who of ['owner', 'viewer', 'operator']) {
       const before = db.state.events.length;
       const revealed = await run('moov-ein-reveal', { tenant_id: TENANT }, USERS[who], { db, kms });
       assert.equal(revealed.ok, true, who);
@@ -589,11 +590,15 @@ test('EIN encrypted at rest, masked in every read, revealed only through moov-ei
       assert.ok(audit, `audit ${who}`);
       assert.equal(audit.params[2].includes(EIN), false);
     }
-    for (const who of ['partner', 'globalAdmin']) {
+    // Owner decision: the platform owner (not a member) is refused, as are partners and global admins.
+    for (const who of ['platformOwner', 'partner', 'globalAdmin']) {
+      const before = db.state.events.length;
       const r = await run('moov-ein-reveal', { tenant_id: TENANT }, USERS[who], { db, kms });
       assert.equal(r.statusCode, 403, who);
       assert.equal(r.ein, undefined, who);
+      assert.equal(db.state.events.slice(before).some((e) => e.sql.includes('onboarding.ein_revealed') || e.params.includes('onboarding.ein_revealed')), false, who);
     }
+    assert.equal((await run('moov-ein-reveal', { tenant_id: TENANT }, USERS.platformOwner, { db, kms })).error, 'tenant_member_required');
   });
 });
 
@@ -1119,7 +1124,7 @@ test('generic storage can never address compliance documents', async () => {
 test('SQL 91: tenant-scoped tables with RLS, member/platform-owner writers, no SSN column, ids-only outbox', () => {
   const sql = readFileSync(new URL('../workflows/sql/91_moov_onboarding.sql', import.meta.url), 'utf8');
   for (const table of ['moov_onboarding_profiles', 'moov_onboarding_representatives', 'moov_compliance_documents', 'moov_onboarding_outbox']) {
-    assert.match(sql, new RegExp(`CREATE TABLE public\\.${table} \\(`));
+    assert.match(sql, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table} \\(`));
     assert.match(sql, new RegExp(`ALTER TABLE public\\.${table} ENABLE ROW LEVEL SECURITY`));
     assert.match(sql, new RegExp(`aws_select_${table} ON public\\.${table}[\\s\\S]*?aws_can_access_tenant\\(tenant_id\\)`));
     assert.match(sql, new RegExp(`aws_insert_${table} ON public\\.${table}[\\s\\S]*?aws_moov_onboarding_writer\\(tenant_id\\)`));
@@ -1235,7 +1240,15 @@ test('moov-tos-token never hands the browser a Moov access token; moov-tos-accep
     assert.equal(r.token, null);
     assert.equal(r.accept_with, 'moov-tos-accept');
     assert.equal(fetch.calls.length, 0);
-    const accepted = await run('moov-tos-accept', { tenant_id: TENANT, accepted: true }, USERS.owner, { db, fetch });
+    // The platform owner (not a member), partners and global admins cannot fetch or accept the terms.
+    for (const who of ['platformOwner', 'partner', 'globalAdmin']) {
+      for (const fn of ['moov-tos-token', 'moov-tos-accept']) {
+        const refused = await run(fn, { tenant_id: TENANT, accepted: true }, USERS[who], { db, fetch });
+        assert.equal(refused.statusCode, 403, `${who} ${fn}`);
+      }
+    }
+    assert.equal(fetch.calls.length, 0);
+    const accepted = await run('moov-tos-accept', { tenant_id: TENANT, accepted: true }, USERS.viewer, { db, fetch });
     assert.equal(accepted.ok, true);
     const patch = fetch.calls.find((c) => c.method === 'PATCH');
     assert.deepEqual(JSON.parse(patch.body), { termsOfService: { token: 'tos-token-from-moov' } });
@@ -1397,4 +1410,14 @@ test('micro-deposit attempt is committed before calling Moov and still counts on
     assert.ok(afterCommit.includes('request.app_user_id') || afterCommit.includes("SELECT set_config('request.moov_onboarding', '1', true)"));
     assert.equal(db.state.locks.length >= 2, true);
   });
+});
+
+test('redactText masks SSNs and EINs written with spaces, dots or other separators', () => {
+  for (const text of ['ssn 123-45-6789', 'ssn 123 45 6789', 'ssn 123.45.6789', 'ssn 123  45  6789', 'ssn 123/45/6789', 'ssn 123_45_6789',
+    'ein 12-3456789', 'ein 12 3456789', 'ein 12.3456789']) {
+    const out = redactText(text);
+    assert.doesNotMatch(out, /\d{2,}/, `${text} -> ${out}`);
+    assert.match(out, /\[redacted\]/, text);
+  }
+  assert.equal(redactText('Account ok'), 'Account ok');
 });

@@ -125,6 +125,7 @@ const parityClient = ({
   operations = [],
   tenantRole = 'admin',
   platformAdmin = true,
+  platformOwner = false,
 } = {}) => {
   const queries = [];
   return {
@@ -133,6 +134,7 @@ const parityClient = ({
     end: async () => {},
     query: async (sql, params = []) => {
       queries.push({ sql, params });
+      if (sql.includes('is_platform_owner()')) return { rows: [{ is_owner: platformOwner, ok: platformOwner }] };
       if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
         return { rows: [] };
       }
@@ -915,7 +917,7 @@ test('checkalt depositor identity is never the UAT API login', async () => {
       'POST',
       {
         loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
-        createClient: () => parityClient(),
+        createClient: () => parityClient({ platformOwner: true }),
         loadSandboxCredentials: async () => sandboxCreds(),
         fetchImpl: async () => ({ ok: true, status: 200, text: async () => '{}' }),
       },
@@ -925,37 +927,29 @@ test('checkalt depositor identity is never the UAT API login', async () => {
   });
 });
 
-test('UAT Check Alt setup: any member registers its own tenant depositor; test-connection is platform owner only', async () => {
+test('UAT Check Alt setup: platform owner only (register, verify, test-connection); members and global admins refused', async () => {
   await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
     const depositorRowWritten = (client) => client.queries.some((q) => q.sql.includes('INSERT INTO public.aws_provider_sandbox_objects'));
-    // Owner policy: any member (stored role viewer included) sets up its own UAT depositor.
-    for (const tenantRole of ['viewer', 'operator', 'owner']) {
+    // The platform owner sets up a tenant's UAT depositor (it need not be a member).
+    {
       const { fetchImpl } = uatReadFetch();
-      const client = parityClient({ tenantRole, platformAdmin: false });
+      const client = parityClient({ tenantRole: null, platformAdmin: false, platformOwner: true });
       const result = await parityCall('checkalt-register-account', client, fetchImpl, {
-        sso_user_id: 'depositor-2',
-        deposit_account_number: '90002222',
+        tenant_id: FREEDOM_TENANT, sso_user_id: 'depositor-2', deposit_account_number: '90002222',
       });
-      assert.equal(result.success, true, `${tenantRole} ${JSON.stringify(result)}`);
+      assert.equal(result.success, true, JSON.stringify(result));
       assert.equal(depositorRowWritten(client), true);
     }
-    // A platform admin with no membership cannot set up a tenant depositor.
-    for (const fn of ['checkalt-register-account', 'checkalt-verify-account']) {
-      const { fetchImpl, calls } = uatReadFetch();
-      const client = parityClient({ tenantRole: null, platformAdmin: true });
-      const result = await parityCall(fn, client, fetchImpl, { sso_user_id: 'depositor-2', deposit_account_number: '90002222' });
-      assert.equal(result.statusCode, 403, fn);
-      assert.equal(calls.length, 0, fn);
-      assert.equal(depositorRowWritten(client), false, fn);
-    }
-    // The platform-level connection test is the platform owner's: a member or a
-    // global admin is refused before any provider call.
-    for (const [tenantRole, platformAdmin] of [['owner', false], ['admin', true]]) {
-      const { fetchImpl, calls } = uatReadFetch();
-      const client = parityClient({ tenantRole, platformAdmin });
-      const result = await parityCall('checkalt-test-connection', client, fetchImpl, {});
-      assert.equal(result.statusCode, 403, `${tenantRole} ${platformAdmin}`);
-      assert.equal(calls.length, 0);
+    // Members (any stored role) and a global user_roles admin are refused before any provider call.
+    for (const fn of ['checkalt-register-account', 'checkalt-verify-account', 'checkalt-test-connection']) {
+      for (const [tenantRole, platformAdmin] of [['viewer', false], ['operator', false], ['owner', false], [null, true], ['admin', true]]) {
+        const { fetchImpl, calls } = uatReadFetch();
+        const client = parityClient({ tenantRole, platformAdmin, platformOwner: false });
+        const result = await parityCall(fn, client, fetchImpl, { sso_user_id: 'depositor-2', deposit_account_number: '90002222', action: 'status' });
+        assert.equal(result.statusCode, 403, `${fn} ${tenantRole} ${platformAdmin}`);
+        assert.equal(calls.length, 0, fn);
+        assert.equal(depositorRowWritten(client), false, fn);
+      }
     }
   });
 });
@@ -963,7 +957,7 @@ test('UAT Check Alt setup: any member registers its own tenant depositor; test-c
 test('UAT Check Alt verify: status reads the UAT row (no provider call); live lookups come back masked to the last four', async () => {
   await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
     let { fetchImpl, calls } = uatReadFetch();
-    let result = await parityCall('checkalt-verify-account', parityClient(), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
+    let result = await parityCall('checkalt-verify-account', parityClient({ platformOwner: true }), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
     assert.equal(result.success, true, JSON.stringify(result));
     assert.equal(result.status, 'registered');
     assert.equal(result.environment, 'uat');
@@ -971,7 +965,7 @@ test('UAT Check Alt verify: status reads the UAT row (no provider call); live lo
     assert.equal(calls.length, 0);
     assert.equal(JSON.stringify(result).includes('90001111'), false);
 
-    result = await parityCall('checkalt-verify-account', parityClient({ uatAccounts: [] }), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
+    result = await parityCall('checkalt-verify-account', parityClient({ uatAccounts: [], platformOwner: true }), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
     assert.equal(result.status, 'not_registered');
     assert.equal(result.registered, false);
 
@@ -979,7 +973,7 @@ test('UAT Check Alt verify: status reads the UAT row (no provider call); live lo
       { match: '/public/fincapture/authenticate', method: 'POST', body: 'header.payload.sig' },
       { match: '/fincapture/useraccount/getDepositAccountInformation', method: 'POST', body: { accountNumber: '90001111', note: 'acct 90001111 ok' } },
     ]));
-    result = await parityCall('checkalt-verify-account', parityClient(), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'account' });
+    result = await parityCall('checkalt-verify-account', parityClient({ platformOwner: true }), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'account' });
     assert.equal(result.success, true, JSON.stringify(result));
     assert.equal(result.data.accountNumber, '****1111');
     assert.equal(result.data.note, 'acct ****1111 ok');
@@ -992,7 +986,7 @@ test('UAT Check Alt register refuses a non-digit deposit account number before c
   await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
     for (const bad of ['1234-5678', 'abc12345', '123', '123456789012345678']) {
       const { fetchImpl, calls } = uatReadFetch();
-      const result = await parityCall('checkalt-register-account', parityClient(), fetchImpl, {
+      const result = await parityCall('checkalt-register-account', parityClient({ platformOwner: true }), fetchImpl, {
         tenant_id: FREEDOM_TENANT, sso_user_id: 'depositor-2', deposit_account_number: bad,
       });
       assert.equal(result.statusCode, 400, bad);
@@ -1006,7 +1000,7 @@ test('UAT Check Alt verify: a missing or unknown action is 400 with no provider 
   await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
     for (const body of [{ tenant_id: FREEDOM_TENANT }, { tenant_id: FREEDOM_TENANT, action: 'history' }]) {
       const { fetchImpl, calls } = uatReadFetch();
-      const result = await parityCall('checkalt-verify-account', parityClient(), fetchImpl, body);
+      const result = await parityCall('checkalt-verify-account', parityClient({ platformOwner: true }), fetchImpl, body);
       assert.equal(result.statusCode, 400, JSON.stringify(body));
       assert.equal(result.error, 'invalid_action', JSON.stringify(body));
       assert.equal(calls.length, 0, JSON.stringify(body));

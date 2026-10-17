@@ -19,6 +19,7 @@ import {
   INVITE_CREATE_USER_IDENTITY_SQL,
   PLATFORM_OWNER_EMAIL,
   runDeleteUser,
+  REMOVABLE_MEMBERSHIPS_SQL,
   runHireMortgageAgent,
   runTenantInviteUser,
   TENANT_MEMBER_COUNT_SQL,
@@ -196,6 +197,11 @@ const teamClient = ({
       if (sql === TENANT_MEMBER_COUNT_SQL) return { rows: [{ member_count: tenantMemberCount }] };
       if (sql === IDENTITY_BY_SUB_SQL) return { rows: linkedUserId ? [{ application_user_id: linkedUserId }] : [] };
       if (sql === FIRST_INVITE_LOCK_SQL) return { rows: [{}] };
+      if (sql === REMOVABLE_MEMBERSHIPS_SQL) {
+        const [, callerId, tenantFilter] = params;
+        if (callerId !== USER) return { rows: [] };
+        return { rows: memberships.filter((m) => tenantFilter == null || m.tenant_id === tenantFilter).map((m) => ({ tenant_id: m.tenant_id })) };
+      }
       if (/^(SAVEPOINT|ROLLBACK TO SAVEPOINT|RELEASE SAVEPOINT) tenant_invite_identity$/.test(sql)) return { rows: [] };
       if (sql === INVITE_CREATE_USER_IDENTITY_SQL) {
         // SQL 90 DEFINER: an existing login keeps its user; the platform owner is refused.
@@ -441,7 +447,7 @@ test('invite: a failed membership insert fails loudly; a failed email is reporte
 
 test('remove member: any member removes only from its own tenants; disabling the login stays platform owner', async () => {
   for (const role of ['viewer', 'operator', 'owner']) {
-    const member = teamClient({ memberships: [{ tenant_id: TENANT, role }] });
+    const member = teamClient({ memberships: [{ tenant_id: TENANT, role }], tenantMemberCount: 2 });
     const removed = await runDeleteUser({
       client: member, mapping, spoof: {}, body: { user_id: TEAMMATE, tenant_id: TENANT, email: 'mate@example.com' },
       cognitoJson: async () => { throw new Error('must not disable the login'); },
@@ -633,4 +639,23 @@ test('moov-platform-bank add never targets a tenant account, even for the platfo
     assert.equal(result.error, error);
     assert.equal(queries.some((sql) => /payment_provider/.test(sql)), false);
   }
+});
+
+test('remove member: the last member of a tenant is protected (counted under the first-invite lock)', async () => {
+  const client = teamClient({ memberships: [{ tenant_id: TENANT, role: 'owner' }], tenantMemberCount: 1 });
+  const refused = await runDeleteUser({
+    client, mapping, spoof: {}, body: { user_id: TEAMMATE, tenant_id: TENANT },
+    cognitoJson: async () => { throw new Error('must not disable the login'); },
+  });
+  assert.equal(refused.statusCode, 409);
+  assert.equal(refused.error, 'last_member_protected');
+  assert.equal(client.queries.some((q) => /DELETE FROM public\.tenant_users/.test(q.sql)), false);
+  const lock = client.queries.findIndex((q) => q.sql === FIRST_INVITE_LOCK_SQL);
+  const count = client.queries.findIndex((q) => q.sql === TENANT_MEMBER_COUNT_SQL);
+  assert.ok(lock >= 0 && count > lock, 'count after the lock');
+  assert.deepEqual(client.queries[lock].params, [TENANT]);
+  // An unreadable count fails closed too.
+  const unreadable = teamClient({ memberships: [{ tenant_id: TENANT, role: 'owner' }], tenantMemberCount: null });
+  const closed = await runDeleteUser({ client: unreadable, mapping, spoof: {}, body: { user_id: TEAMMATE, tenant_id: TENANT } });
+  assert.equal(closed.error, 'last_member_protected');
 });

@@ -1324,6 +1324,16 @@ const executeDepositAction = async ({ client, mapping, args }) => {
     )).rows[0]?.id;
     if (!resolvedBatchId) return { error: 'rls_denied', message: 'Deposit batch was not created' };
   } else {
+    // A client-named batch must already belong to the item's tenant: it must
+    // exist, hold at least one item, and every item it holds must be a check
+    // of that tenant. An empty or foreign batch is refused.
+    const lockedBatch = (await client.query(DEPOSIT_BATCH_LOCK_SQL, [resolvedBatchId])).rows[0];
+    const owner = lockedBatch
+      ? (await client.query(DEPOSIT_BATCH_TENANT_SQL, [resolvedBatchId, item.tenant_id])).rows[0]
+      : null;
+    if (!owner || Number(owner.item_count) < 1 || Number(owner.foreign_count) !== 0) {
+      return { error: 'batch_not_in_tenant', message: 'Deposit batch does not belong to this company' };
+    }
     await client.query(
       `UPDATE public.deposit_batches
        SET total_items = total_items + 1,
@@ -1360,6 +1370,13 @@ const executeDepositAction = async ({ client, mapping, args }) => {
   return { data: { success: true, batch_id: resolvedBatchId } };
 };
 
+
+export const DEPOSIT_BATCH_LOCK_SQL = 'SELECT id FROM public.deposit_batches WHERE id = $1::uuid FOR UPDATE';
+export const DEPOSIT_BATCH_TENANT_SQL = `SELECT count(bi.id)::int AS item_count,
+       count(bi.id) FILTER (WHERE bc.tenant_id IS DISTINCT FROM $2::uuid)::int AS foreign_count
+  FROM public.deposit_items bi
+  LEFT JOIN public.check_intake_items bc ON bc.id = bi.check_id
+ WHERE bi.batch_id = $1::uuid`;
 
 export const CLAIM_LEDGER_LINK_OR_CREATE_SQL =
   'SELECT public.claim_ledger_link_or_create($1::uuid, $2::uuid, $3::text, $4::text) AS result';

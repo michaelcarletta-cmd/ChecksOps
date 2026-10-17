@@ -484,7 +484,15 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
   return { ok: true, check, amountCents, actionKey, loginSession: session.loginSession };
 };
 
+/**
+ * Marks this transaction as the server's step-up writer (SQL 97): a
+ * financial_stepup_log row with source app_financial_totp is refused unless
+ * this transaction-local setting is present. Set right before each insert.
+ */
+export const STEPUP_WRITER_SQL = "SELECT set_config('app.stepup_writer', '1', true)";
+
 export const insertAppStepUpLog = async (client, mapping, bound) => {
+  await client.query(STEPUP_WRITER_SQL);
   if (bound.kind === 'login_session') {
     const row = (await client.query(
       `INSERT INTO public.financial_stepup_log

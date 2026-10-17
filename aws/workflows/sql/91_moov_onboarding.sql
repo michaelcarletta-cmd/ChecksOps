@@ -88,7 +88,7 @@ GRANT EXECUTE ON FUNCTION public.aws_moov_onboarding_writer(uuid) TO checksops, 
 GRANT EXECUTE ON FUNCTION public.aws_moov_webhook_apply_active() TO checksops, authenticated;
 
 -- ---------------------------------------------------------------- profiles
-CREATE TABLE public.moov_onboarding_profiles (
+CREATE TABLE IF NOT EXISTS public.moov_onboarding_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   environment text NOT NULL,
@@ -118,11 +118,11 @@ CREATE TABLE public.moov_onboarding_profiles (
   CONSTRAINT moov_onboarding_profiles_ein_ciphertext_check CHECK (ein_ciphertext IS NULL OR ein_ciphertext LIKE 'kms:v1:%'),
   CONSTRAINT moov_onboarding_profiles_ein_pair_check CHECK ((ein_ciphertext IS NULL) = (ein_last4 IS NULL))
 );
-CREATE INDEX moov_onboarding_profiles_moov_account_idx
+CREATE INDEX IF NOT EXISTS moov_onboarding_profiles_moov_account_idx
   ON public.moov_onboarding_profiles (environment, moov_account_id) WHERE moov_account_id IS NOT NULL;
 
 -- ---------------------------------------------------------------- representatives
-CREATE TABLE public.moov_onboarding_representatives (
+CREATE TABLE IF NOT EXISTS public.moov_onboarding_representatives (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL,
   environment text NOT NULL,
@@ -153,14 +153,14 @@ CREATE TABLE public.moov_onboarding_representatives (
   CONSTRAINT moov_onboarding_representatives_dob_ciphertext_check CHECK (dob_ciphertext IS NULL OR dob_ciphertext LIKE 'kms:v1:%'),
   CONSTRAINT moov_onboarding_representatives_ownership_check CHECK (ownership_pct IS NULL OR (ownership_pct >= 0 AND ownership_pct <= 100))
 );
-CREATE INDEX moov_onboarding_representatives_tenant_idx
+CREATE INDEX IF NOT EXISTS moov_onboarding_representatives_tenant_idx
   ON public.moov_onboarding_representatives (tenant_id, environment);
-CREATE UNIQUE INDEX moov_onboarding_representatives_moov_id_unique
+CREATE UNIQUE INDEX IF NOT EXISTS moov_onboarding_representatives_moov_id_unique
   ON public.moov_onboarding_representatives (environment, moov_representative_id)
   WHERE moov_representative_id IS NOT NULL;
 
 -- ---------------------------------------------------------------- documents
-CREATE TABLE public.moov_compliance_documents (
+CREATE TABLE IF NOT EXISTS public.moov_compliance_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   environment text NOT NULL,
@@ -206,14 +206,14 @@ CREATE TABLE public.moov_compliance_documents (
     status NOT IN ('stored', 'sent') OR (s3_version_id IS NOT NULL AND final_storage_key IS NOT NULL)
   )
 );
-CREATE INDEX moov_compliance_documents_tenant_idx
+CREATE INDEX IF NOT EXISTS moov_compliance_documents_tenant_idx
   ON public.moov_compliance_documents (tenant_id, environment, created_at DESC);
-CREATE UNIQUE INDEX moov_compliance_documents_moov_file_unique
+CREATE UNIQUE INDEX IF NOT EXISTS moov_compliance_documents_moov_file_unique
   ON public.moov_compliance_documents (environment, moov_file_id)
   WHERE moov_file_id IS NOT NULL;
 
 -- ---------------------------------------------------------------- outbox
-CREATE TABLE public.moov_onboarding_outbox (
+CREATE TABLE IF NOT EXISTS public.moov_onboarding_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   environment text NOT NULL,
@@ -239,9 +239,9 @@ CREATE TABLE public.moov_onboarding_outbox (
     AND payload::text !~ '"[0-9]{3}-?[0-9]{2}-?[0-9]{4}"'
   )
 );
-CREATE INDEX moov_onboarding_outbox_tenant_idx
+CREATE INDEX IF NOT EXISTS moov_onboarding_outbox_tenant_idx
   ON public.moov_onboarding_outbox (tenant_id, environment, status);
-CREATE UNIQUE INDEX moov_onboarding_outbox_one_pending
+CREATE UNIQUE INDEX IF NOT EXISTS moov_onboarding_outbox_one_pending
   ON public.moov_onboarding_outbox (tenant_id, environment, kind, subject_id)
   WHERE status = 'pending';
 
@@ -260,44 +260,58 @@ ALTER TABLE public.moov_onboarding_representatives ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.moov_compliance_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.moov_onboarding_outbox ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS aws_select_moov_onboarding_profiles ON public.moov_onboarding_profiles;
 CREATE POLICY aws_select_moov_onboarding_profiles ON public.moov_onboarding_profiles
   FOR SELECT TO authenticated USING (public.aws_can_access_tenant(tenant_id));
+DROP POLICY IF EXISTS aws_insert_moov_onboarding_profiles ON public.moov_onboarding_profiles;
 CREATE POLICY aws_insert_moov_onboarding_profiles ON public.moov_onboarding_profiles
   FOR INSERT TO authenticated WITH CHECK (public.aws_moov_onboarding_writer(tenant_id));
+DROP POLICY IF EXISTS aws_update_moov_onboarding_profiles ON public.moov_onboarding_profiles;
 CREATE POLICY aws_update_moov_onboarding_profiles ON public.moov_onboarding_profiles
   FOR UPDATE TO authenticated
   USING (public.aws_moov_onboarding_writer(tenant_id))
   WITH CHECK (public.aws_moov_onboarding_writer(tenant_id));
 -- UPDATE ... WHERE also needs SELECT visibility; the webhook route has no user.
+DROP POLICY IF EXISTS aws_webhook_select_moov_onboarding_profiles ON public.moov_onboarding_profiles;
 CREATE POLICY aws_webhook_select_moov_onboarding_profiles ON public.moov_onboarding_profiles
   FOR SELECT TO authenticated USING (public.aws_moov_webhook_apply_active());
+DROP POLICY IF EXISTS aws_webhook_update_moov_onboarding_profiles ON public.moov_onboarding_profiles;
 CREATE POLICY aws_webhook_update_moov_onboarding_profiles ON public.moov_onboarding_profiles
   FOR UPDATE TO authenticated
   USING (public.aws_moov_webhook_apply_active())
   WITH CHECK (public.aws_moov_webhook_apply_active());
 
+DROP POLICY IF EXISTS aws_select_moov_onboarding_representatives ON public.moov_onboarding_representatives;
 CREATE POLICY aws_select_moov_onboarding_representatives ON public.moov_onboarding_representatives
   FOR SELECT TO authenticated USING (public.aws_can_access_tenant(tenant_id));
+DROP POLICY IF EXISTS aws_insert_moov_onboarding_representatives ON public.moov_onboarding_representatives;
 CREATE POLICY aws_insert_moov_onboarding_representatives ON public.moov_onboarding_representatives
   FOR INSERT TO authenticated WITH CHECK (public.aws_moov_onboarding_writer(tenant_id));
+DROP POLICY IF EXISTS aws_update_moov_onboarding_representatives ON public.moov_onboarding_representatives;
 CREATE POLICY aws_update_moov_onboarding_representatives ON public.moov_onboarding_representatives
   FOR UPDATE TO authenticated
   USING (public.aws_moov_onboarding_writer(tenant_id))
   WITH CHECK (public.aws_moov_onboarding_writer(tenant_id));
 
+DROP POLICY IF EXISTS aws_select_moov_compliance_documents ON public.moov_compliance_documents;
 CREATE POLICY aws_select_moov_compliance_documents ON public.moov_compliance_documents
   FOR SELECT TO authenticated USING (public.aws_can_access_tenant(tenant_id));
+DROP POLICY IF EXISTS aws_insert_moov_compliance_documents ON public.moov_compliance_documents;
 CREATE POLICY aws_insert_moov_compliance_documents ON public.moov_compliance_documents
   FOR INSERT TO authenticated WITH CHECK (public.aws_moov_onboarding_writer(tenant_id));
+DROP POLICY IF EXISTS aws_update_moov_compliance_documents ON public.moov_compliance_documents;
 CREATE POLICY aws_update_moov_compliance_documents ON public.moov_compliance_documents
   FOR UPDATE TO authenticated
   USING (public.aws_moov_onboarding_writer(tenant_id))
   WITH CHECK (public.aws_moov_onboarding_writer(tenant_id));
 
+DROP POLICY IF EXISTS aws_select_moov_onboarding_outbox ON public.moov_onboarding_outbox;
 CREATE POLICY aws_select_moov_onboarding_outbox ON public.moov_onboarding_outbox
   FOR SELECT TO authenticated USING (public.aws_can_access_tenant(tenant_id));
+DROP POLICY IF EXISTS aws_insert_moov_onboarding_outbox ON public.moov_onboarding_outbox;
 CREATE POLICY aws_insert_moov_onboarding_outbox ON public.moov_onboarding_outbox
   FOR INSERT TO authenticated WITH CHECK (public.aws_moov_onboarding_writer(tenant_id));
+DROP POLICY IF EXISTS aws_update_moov_onboarding_outbox ON public.moov_onboarding_outbox;
 CREATE POLICY aws_update_moov_onboarding_outbox ON public.moov_onboarding_outbox
   FOR UPDATE TO authenticated
   USING (public.aws_moov_onboarding_writer(tenant_id))
