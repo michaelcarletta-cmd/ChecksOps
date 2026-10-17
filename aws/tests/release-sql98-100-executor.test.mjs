@@ -298,6 +298,16 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   const foreign = await whatIf('sql98', [DEST, 'CREATE ROLE zz_billing_reader NOLOGIN', 'GRANT SELECT ON public.platform_billing_destination TO zz_billing_reader']);
   assert.ok(foreign.failures.includes('created_tables_absent_or_intended'));
   // whatIf reads as the test superuser, so owner_is_login is false there; the inspect (as checksops_admin) checks it below.
+  // asOwned forces ownership so a refusal below is the shape / trigger / grant rule's, not ownership's.
+  const asOwned = (state) => {
+    const copy = structuredClone(state);
+    copy.tables['public.platform_billing_destination'].owner_is_login = true;
+    return copy;
+  };
+  const takeoverRefused = (state) => releaseSharedPreconditionFailures('sql98', asOwned(state), TEXT.sql98).includes('created_tables_absent_or_intended');
+  assert.equal(takeoverRefused(foreign.state), true);
+  const reviewedShape = await whatIf('sql98', [DEST]);
+  assert.equal(takeoverRefused(reviewedShape.state), false, 'the reviewed shape, owned by the login, is taken over');
   const takeoverOf = (state) => {
     const { owner_is_login: _o, ...rest } = releaseSqlReport('sql98', state, TEXT.sql98).tables.find((x) => x.name === 'platform_billing_destination').takeover;
     return rest;
@@ -306,12 +316,14 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   const otherShape = await whatIf('sql98', [DEST, 'ALTER TABLE public.platform_billing_destination ADD COLUMN notes text']);
   assert.ok(otherShape.failures.includes('created_tables_absent_or_intended'));
   assert.deepEqual(takeoverOf(otherShape.state).shape_differs, ['column notes']);
+  assert.equal(takeoverRefused(otherShape.state), true);
   // Same columns in another order (two text columns swapped): still refused, reported as order.
   const swapped = await whatIf('sql98', [DEST.replace(
     'moov_account_id text NOT NULL, moov_payment_method_id text NOT NULL',
     'moov_payment_method_id text NOT NULL, moov_account_id text NOT NULL')]);
   assert.ok(swapped.failures.includes('created_tables_absent_or_intended'));
   assert.deepEqual(takeoverOf(swapped.state).shape_differs, ['order']);
+  assert.equal(takeoverRefused(swapped.state), true, 'column order is part of the shape');
   // A literal in a default or CHECK never reaches the report (names only).
   const literal = await whatIf('sql98', [DEST, "ALTER TABLE public.platform_billing_destination ALTER COLUMN label SET DEFAULT 'sk_live_SECRET'",
     "ALTER TABLE public.platform_billing_destination ADD CONSTRAINT zz_lit CHECK (label <> 'hunter2')"]);
@@ -321,6 +333,7 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
     'CREATE TRIGGER zz_touch BEFORE UPDATE ON public.platform_billing_destination FOR EACH ROW EXECUTE FUNCTION public.zz_touch()']);
   assert.ok(extraTrigger.failures.includes('created_tables_absent_or_intended'));
   assert.deepEqual(takeoverOf(extraTrigger.state).unexpected_triggers, ['zz_touch']);
+  assert.equal(takeoverRefused(extraTrigger.state), true);
   // A pre-existing one of the reviewed shape, with an extra permissive policy and wider grants, is taken over,
   // but only while it holds no row (a row would become the fee destination unreviewed and unaudited).
   await admin.query(DEST);
