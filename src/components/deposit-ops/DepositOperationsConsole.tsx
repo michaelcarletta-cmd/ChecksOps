@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useStepUp } from "@/hooks/useStepUp";
 import { runCheckAltDepositClick } from "@/lib/checkaltDepositOrchestrator";
+import { useTenantDepositsEnabled } from "@/lib/tenantDeposits";
+import { DepositsDisabledNotice } from "./DepositsDisabledNotice";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { matchesAmountQuery } from "@/features/check-command/status";
@@ -116,6 +118,8 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   // Check Alt Submit/Resubmit Deposit are hidden from non-members (partners included).
   const checkAltAccess = useCheckAltAccess();
   const canOperateCheckAlt = checkAltAccess.canOperateIn(tenantId);
+  // Per-tenant deposits switch (platform owner, SQL 98): off disables every deposit action.
+  const { depositsEnabled } = useTenantDepositsEnabled(tenantId);
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -326,6 +330,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
 
   return (
     <div className="space-y-4">
+      {!depositsEnabled && <DepositsDisabledNotice />}
       {/* Provider Status Banner */}
       {stubbedProviders.length > 0 && (
         <Card className="border-amber-500/30 bg-amber-500/5">
@@ -394,7 +399,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                       <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(c.amount)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button size="sm" onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}>
+                          <Button size="sm" disabled={!depositsEnabled} onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}>
                             <ArrowRight className="h-3 w-3 mr-1" />Prepare
                           </Button>
                         </div>
@@ -487,20 +492,20 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                         <TableCell>
                           <div className="flex gap-1 flex-wrap">
                             {item.status === "pending_assignment" && (
-                              <Button size="sm" variant="outline" className="text-xs h-7"
+                              <Button size="sm" variant="outline" className="text-xs h-7" disabled={!depositsEnabled}
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "assign_provider", itemId: item.id }); }}>
                                 Assign Route
                               </Button>
                             )}
                             {item.status === "provider_assigned" && (item.provider === "manual_branch" || item.provider === "internal_ready") && (
-                              <Button size="sm" variant="outline" className="text-xs h-7"
+                              <Button size="sm" variant="outline" className="text-xs h-7" disabled={!depositsEnabled}
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "mark_manual_deposit", itemId: item.id }); }}>
                                 <Building2 className="h-3 w-3 mr-1" />Deposited
                               </Button>
                             )}
                             {canOperateCheckAlt && item.status === "provider_assigned" && item.provider === "checkalt" && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
-                                disabled={checkaltSubmitMutation.isPending}
+                                disabled={checkaltSubmitMutation.isPending || !depositsEnabled}
                                 onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
                                 <Send className="h-3 w-3 mr-1" />Submit Deposit
                               </Button>
@@ -531,7 +536,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                             )}
                             {canOperateCheckAlt && item.status === "failed" && item.provider === "checkalt" && (
                               <Button size="sm" variant="outline" className="text-xs h-7 border-amber-500/50 text-amber-500"
-                                disabled={checkaltSubmitMutation.isPending}
+                                disabled={checkaltSubmitMutation.isPending || !depositsEnabled}
                                 onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
                                 <RotateCcw className="h-3 w-3 mr-1" />Resubmit Deposit
                               </Button>

@@ -508,5 +508,6 @@ test('owner questions: (a) answered and isolated, (b) still the isolated default
   for (const file of ['aws/functions/api/tenant-billing-engine.mjs', 'aws/functions/api/tenant-billing-handlers.mjs']) {
     assert.doesNotMatch(read(file), /send-transactional-email|sendTransactionalEmail|sendEmail\(|SendEmailCommand|SESv2Client|SESClient|client-sesv?2?|sendViaSesOrSink/, file);
   }
-  assert.match(read('aws/functions/api/tenant-billing-engine.mjs'), /import \{ sendFeeInvoiceEmail \} from '\.\/tenant-fee-invoice-email\.mjs';/);
+  assert.match(read('aws/functions/api/tenant-billing-engine.mjs'), /import \{ queueFeeInvoiceEmail \} from '\.\/tenant-fee-invoice-email\.mjs';/);
+  assert.match(read('aws/functions/api/tenant-billing-handlers.mjs'), /import \{ deliverFeeInvoiceEmail \} from '\.\/tenant-fee-invoice-email\.mjs';/);
 });

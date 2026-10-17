@@ -54,6 +54,8 @@
 -- 4) public.platform_billing_audit (new, append-only): one row per pull /
 --    verification debit attempt and outcome (who = auth.uid(), tenant,
 --    period, amount, Moov transfer ids, outcome), per invoice email attempt
+--    (the email itself goes through public.tenant_fee_invoice_outbox, queued
+--    with the charge and sent only after it commits)
 --    (at most one sent / sunk per charge: platform_billing_audit_invoice_email_once_uidx)
 --    and per destination change.
 --    Written only by SECURITY DEFINER functions:
@@ -61,6 +63,16 @@
 --      only, 42501 otherwise; the actor is auth.uid(), never a payload field)
 --      and the platform_billing_destination trigger. No role may INSERT,
 --    UPDATE or DELETE it directly; the platform owner reads it.
+--
+-- 5) tenants.deposits_enabled (boolean NOT NULL DEFAULT true: every existing
+--    and new tenant is on): the per-tenant deposits switch (owner decision
+--    2026-10-17, option 2). Read by the API through
+--    public.aws_tenant_deposits_enabled(uuid); set only by the platform owner
+--    through public.aws_platform_owner_set_tenant_deposits_enabled(uuid,
+--    boolean); every change audited in tenant_pricing_audit (field
+--    deposits_enabled, old -> new, actor). SQL 96's column guard is replaced
+--    with the same body plus deposits_enabled for the platform owner only, so
+--    members cannot change it. per_check_billing_enabled is unchanged.
 --
 -- Refuses to run (55000 sql98_prerequisite_missing) without the tables and
 -- helpers it builds on, SQL 96's aws_platform_owner_set_tenant_pricing among
@@ -84,6 +96,9 @@ BEGIN
      -- SQL 96 first: fees are priced only from its platform-owner pricing, and
      -- the overlay plan holds the billing Lambdas on SQL 98 alone.
      OR to_regprocedure('public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)') IS NULL
+     OR to_regprocedure('public.aws_tenant_pricing_columns()') IS NULL
+     OR to_regprocedure('public.aws_is_tenant_member(uuid)') IS NULL
+     OR to_regclass('public.tenant_pricing_audit') IS NULL
      OR NOT EXISTS (
        SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'tenant_maintenance_payments'
@@ -309,6 +324,37 @@ CREATE POLICY aws_select_platform_billing_audit ON public.platform_billing_audit
   FOR SELECT TO authenticated
   USING (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false));
 
+-- Invoice email outbox (tenant-fee-invoice-email.mjs): one row per charge,
+-- queued in the pull's own transaction (so a rolled-back pull leaves none),
+-- claimed (sending) and finished (sent / sunk / failed / no_recipient) in
+-- separate transactions after that commit. A sending row is never sent again
+-- automatically (delivery unconfirmed); sent / sunk is final.
+CREATE TABLE IF NOT EXISTS public.tenant_fee_invoice_outbox (
+  occurrence_id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  billing_period text NOT NULL,
+  status text NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'sending', 'sent', 'sunk', 'failed', 'no_recipient')),
+  attempts integer NOT NULL DEFAULT 0,
+  last_error text,
+  message_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.tenant_fee_invoice_outbox IS
+  'SQL 98: invoice email outbox, one row per tenant fee charge. Platform owner only.';
+ALTER TABLE public.tenant_fee_invoice_outbox ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.tenant_fee_invoice_outbox FROM PUBLIC;
+REVOKE ALL ON TABLE public.tenant_fee_invoice_outbox FROM authenticated;
+REVOKE ALL ON TABLE public.tenant_fee_invoice_outbox FROM checksops;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.tenant_fee_invoice_outbox TO checksops;
+GRANT SELECT ON TABLE public.tenant_fee_invoice_outbox TO authenticated;
+DROP POLICY IF EXISTS aws_platform_owner_tenant_fee_invoice_outbox ON public.tenant_fee_invoice_outbox;
+CREATE POLICY aws_platform_owner_tenant_fee_invoice_outbox ON public.tenant_fee_invoice_outbox
+  FOR ALL TO authenticated
+  USING (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false))
+  WITH CHECK (public.aws_is_authenticated() AND COALESCE(public.is_platform_owner(), false));
+
 CREATE OR REPLACE FUNCTION public.aws_platform_owner_record_billing_audit(_entry jsonb)
 RETURNS uuid
 LANGUAGE plpgsql
@@ -435,3 +481,138 @@ CREATE TRIGGER aws_platform_billing_destination_audit
   AFTER INSERT OR UPDATE OR DELETE ON public.platform_billing_destination
   FOR EACH ROW
   EXECUTE FUNCTION public.aws_platform_billing_destination_audit_row();
+
+-- 5) per-tenant deposits switch ------------------------------------------------
+-- Owner decision (2026-10-17, option 2): a separate platform-owner switch.
+-- tenants.deposits_enabled false means the tenant cannot submit or record a
+-- check deposit (the API refuses every deposit path with deposits_disabled,
+-- tenant-deposits-gate.mjs). per_check_billing_enabled keeps its meaning
+-- ("off" = bill the default per-check price) and gates nothing.
+-- ADD COLUMN ... NOT NULL DEFAULT true sets every existing tenant to true in
+-- the same statement (no separate backfill) and every new tenant defaults on.
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS deposits_enabled boolean NOT NULL DEFAULT true;
+COMMENT ON COLUMN public.tenants.deposits_enabled IS
+  'SQL 98: false = this tenant cannot submit or record check deposits. Platform owner only (aws_platform_owner_set_tenant_deposits_enabled); audited in tenant_pricing_audit.';
+
+-- The API's read for a deposit gate: the flag for one tenant, whatever the
+-- caller may otherwise read (NULL when there is no such tenant).
+CREATE OR REPLACE FUNCTION public.aws_tenant_deposits_enabled(_tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT t.deposits_enabled FROM public.tenants t WHERE t.id = _tenant_id;
+$$;
+REVOKE ALL ON FUNCTION public.aws_tenant_deposits_enabled(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_tenant_deposits_enabled(uuid) TO checksops, authenticated;
+COMMENT ON FUNCTION public.aws_tenant_deposits_enabled(uuid) IS
+  'SQL 98: tenants.deposits_enabled for one tenant (NULL when absent). Read by every deposit path before it writes or calls a provider.';
+
+-- Every change of the switch, by any path, is audited (who, tenant, old -> new).
+CREATE OR REPLACE FUNCTION public.aws_tenant_deposits_enabled_audit_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+BEGIN
+  IF NEW.deposits_enabled IS DISTINCT FROM OLD.deposits_enabled THEN
+    INSERT INTO public.tenant_pricing_audit (tenant_id, actor_id, field, old_value, new_value)
+    VALUES (NEW.id, auth.uid(), 'deposits_enabled', to_jsonb(OLD.deposits_enabled), to_jsonb(NEW.deposits_enabled));
+  END IF;
+  RETURN NULL;
+END
+$$;
+REVOKE ALL ON FUNCTION public.aws_tenant_deposits_enabled_audit_row() FROM PUBLIC;
+
+DROP TRIGGER IF EXISTS aws_tenant_deposits_enabled_audit ON public.tenants;
+CREATE TRIGGER aws_tenant_deposits_enabled_audit
+  AFTER UPDATE OF deposits_enabled ON public.tenants
+  FOR EACH ROW
+  EXECUTE FUNCTION public.aws_tenant_deposits_enabled_audit_row();
+
+-- The platform owner's only write path for the switch (the same mechanism as
+-- SQL 96's pricing setter: DEFINER, platform owner only, audited).
+CREATE OR REPLACE FUNCTION public.aws_platform_owner_set_tenant_deposits_enabled(
+  _tenant_id uuid,
+  _enabled boolean
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $body$
+DECLARE
+  v_enabled boolean;
+BEGIN
+  IF auth.uid() IS NULL OR NOT COALESCE(public.is_platform_owner(), false) THEN
+    RAISE EXCEPTION 'not_authorized: platform owner required' USING ERRCODE = '42501';
+  END IF;
+  IF _tenant_id IS NULL OR _enabled IS NULL THEN
+    RAISE EXCEPTION 'missing_required_field' USING ERRCODE = '22023';
+  END IF;
+  UPDATE public.tenants SET deposits_enabled = _enabled WHERE id = _tenant_id
+  RETURNING deposits_enabled INTO v_enabled;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_not_found' USING ERRCODE = 'P0002';
+  END IF;
+  RETURN jsonb_build_object('ok', true, 'tenant_id', _tenant_id, 'deposits_enabled', v_enabled);
+END
+$body$;
+REVOKE ALL ON FUNCTION public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean) TO checksops, authenticated;
+COMMENT ON FUNCTION public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean) IS
+  'SQL 98: the platform owner turns a tenant''s deposits on or off. Everyone else is refused (42501). Audited in tenant_pricing_audit (field deposits_enabled).';
+
+-- Column guard (SQL 96's, replaced here): SQL 96's body unchanged except that
+-- the platform owner may also change deposits_enabled. Members still change
+-- only SQL 93's display/branding/company-info columns, so a member write to
+-- deposits_enabled is refused (42501 tenant_column_not_member_writable).
+-- Re-running SQL 96 after this file would put back SQL 96's guard (fail
+-- closed: the platform owner could no longer change the switch; nothing else
+-- changes) until SQL 98 is re-run.
+CREATE OR REPLACE FUNCTION public.aws_tenants_member_column_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_member_columns CONSTANT text[] := ARRAY[
+    'name', 'logo_url', 'primary_color', 'secondary_color',
+    'invoice_letterhead_url', 'invoice_footer_note', 'invoice_default_terms',
+    'invoice_accent_color', 'invoice_theme',
+    'company_address', 'company_phone', 'company_email', 'letterhead_url'
+  ];
+  v_allowed text[] := ARRAY['updated_at'];
+  v_old jsonb := to_jsonb(OLD);
+  v_changed text[];
+BEGIN
+  -- Only end-user requests are limited; RLS already refuses requests with no caller.
+  IF NOT COALESCE(public.aws_is_authenticated(), false) THEN
+    RETURN NEW;
+  END IF;
+  IF COALESCE(public.aws_is_tenant_member(OLD.id), false) THEN
+    v_allowed := v_allowed || v_member_columns;
+  END IF;
+  IF COALESCE(public.is_platform_owner(), false) THEN
+    v_allowed := v_allowed || public.aws_tenant_pricing_columns() || ARRAY['deposits_enabled'];
+  END IF;
+  SELECT array_agg(n.key ORDER BY n.key) INTO v_changed
+    FROM jsonb_each(to_jsonb(NEW)) AS n
+   WHERE NOT (n.key = ANY (v_allowed))
+     AND n.value IS DISTINCT FROM (v_old -> n.key);
+  IF v_changed IS NOT NULL THEN
+    RAISE EXCEPTION 'tenant_column_not_member_writable: %', array_to_string(v_changed, ', ')
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+COMMENT ON FUNCTION public.aws_tenants_member_column_guard() IS
+  'SQL 98 (replaces SQL 96): members change only display/branding/company-info columns; the platform owner only pricing columns (aws_tenant_pricing_columns()) and deposits_enabled; everything else is refused (42501).';

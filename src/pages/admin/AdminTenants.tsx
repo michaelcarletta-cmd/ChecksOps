@@ -7,6 +7,7 @@ import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
 import { PlatformFeeDestinationCard, TenantBillingVerifyButton, TenantFeeCollectButton } from "@/components/admin/TenantFeeCollection";
 import { billingPeriodKey } from "@/lib/tenantFeeBilling";
+import { TenantDepositsSwitch } from "@/components/admin/TenantDepositsSwitch";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { resolveAdminTenantTab } from "@/lib/adminTenantTab";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,6 +69,8 @@ type Tenant = {
   partner_code: string | null;
   is_system_tenant: boolean | null;
   per_check_billing_enabled?: boolean | null;
+  /** SQL 98 deposits switch (platform owner only); absent = on. */
+  deposits_enabled?: boolean | null;
   per_check_rate_cents?: number | null;
   is_founding_partner?: boolean | null;
   monthly_rate_cents?: number | null;
@@ -400,6 +403,12 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
+            <TenantDepositsSwitch
+              tenantId={tenant.id}
+              tenantName={tenant.name}
+              depositsEnabled={tenant.deposits_enabled}
+              onSaved={(enabled) => onUpdated({ ...tenant, deposits_enabled: enabled })}
+            />
             <PlatformFeeDestinationCard />
             <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />

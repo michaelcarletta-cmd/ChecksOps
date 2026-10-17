@@ -42,6 +42,7 @@ const T_A = '11111111-1111-4111-8111-111111111111'; // per-check on, 250
 const T_B = '22222222-2222-4222-8222-222222222222'; // per-check off
 const T_C = '33333333-3333-4333-8333-333333333333'; // per-check on, NULL rate
 const DEST_PM = '44444444-4444-4444-8444-444444444444';
+const T_D = '55555555-5555-4555-8555-555555555555'; // invoice email ordering (outbox)
 
 const SCHEMA = `
 CREATE ROLE authenticated NOLOGIN;
@@ -137,6 +138,13 @@ GRANT SELECT, INSERT ON public.email_send_log TO checksops;
 -- (tenant-pricing-platform-owner and sql90 PG tests cover SQL 96 itself).
 CREATE FUNCTION public.aws_platform_owner_set_tenant_pricing(_tenant_id uuid, _pricing jsonb) RETURNS jsonb
   LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;
+CREATE FUNCTION public.aws_tenant_pricing_columns() RETURNS text[]
+  LANGUAGE sql IMMUTABLE AS $$ SELECT ARRAY['monthly_rate_cents', 'per_check_rate_cents']::text[] $$;
+CREATE FUNCTION public.aws_is_tenant_member(_tenant_id uuid) RETURNS boolean LANGUAGE sql STABLE
+  AS $$ SELECT EXISTS (SELECT 1 FROM public.tenant_users WHERE tenant_id = _tenant_id AND user_id = auth.uid()) $$;
+CREATE TABLE public.tenant_pricing_audit (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, actor_id uuid, field text NOT NULL,
+  old_value jsonb, new_value jsonb, created_at timestamptz NOT NULL DEFAULT now());
 `;
 
 const seedTenant = (id, { perCheck, rate }) => `
@@ -188,19 +196,35 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     }),
     ...extra,
   });
-  /** One withIdentityWrite-like transaction: commit only an ok result. */
-  const call = async (c, user, body, extra = {}, { hold = null } = {}) => {
+  /**
+   * One withIdentityWrite-like transaction: commit only an ok result, then run
+   * the handler's post-commit step (the invoice email). failCommit rolls back
+   * an ok result (a commit that failed); crashBeforeSend commits but never runs
+   * the post-commit step (the Lambda died after the commit).
+   */
+  const call = async (c, user, body, extra = {}, { hold = null, failCommit = false, crashBeforeSend = false } = {}) => {
+    let res;
+    let committed = false;
     await c.query('BEGIN');
     try {
       await c.query("SELECT set_config('request.app_user_id', $1, true)", [user]);
-      const res = await handleTenantBillingAdmin({ body: JSON.stringify(body) }, { client: c, mapping: { application_user_id: user }, ...deps(extra) });
+      res = await handleTenantBillingAdmin({ body: JSON.stringify(body) }, { client: c, mapping: { application_user_id: user }, ...deps(extra) });
       if (hold) await hold;
-      await c.query(res.ok !== false && Number(res.statusCode || 200) < 400 ? 'COMMIT' : 'ROLLBACK');
-      return res;
+      committed = !failCommit && res.ok !== false && Number(res.statusCode || 200) < 400;
+      await c.query(committed ? 'COMMIT' : 'ROLLBACK');
     } catch (error) {
       await c.query('ROLLBACK');
       throw error;
     }
+    if (typeof res.post_commit === 'function') {
+      if (failCommit) {
+        // Even if a post-commit step ran after a failed commit, it finds no queued invoice.
+        res.post_commit_after_failed_commit = await res.post_commit();
+      } else if (committed && !crashBeforeSend) {
+        res = await res.post_commit();
+      }
+    }
+    return res;
   };
   const count = async (sql, params = []) => Number((await admin.query(sql, params)).rows[0].n);
   const period = periodKey(new Date());
@@ -212,7 +236,7 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     await admin.query(fs.readFileSync(AUTH_UID, 'utf8'));
     await admin.query(fs.readFileSync(OWNER_HELPERS, 'utf8'));
     await admin.query(GRANTS);
-    for (const [id, opts] of [[T_A, { perCheck: true, rate: 250 }], [T_B, { perCheck: false, rate: 999 }], [T_C, { perCheck: true, rate: null }]]) {
+    for (const [id, opts] of [[T_A, { perCheck: true, rate: 250 }], [T_B, { perCheck: false, rate: 999 }], [T_C, { perCheck: true, rate: null }], [T_D, { perCheck: true, rate: 250 }]]) {
       await admin.query(seedTenant(id, opts));
     }
     const sql98 = fs.readFileSync(SQL_98, 'utf8');
@@ -223,10 +247,16 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     await assert.rejects(admin.query(sql98), (e) => e.code === '55000' && /sql98_prerequisite_missing/.test(e.message));
     await admin.query('ROLLBACK');
     // Without SQL 96 (its pricing setter) SQL 98 refuses too.
-    await admin.query('BEGIN');
-    await admin.query('DROP FUNCTION public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)');
-    await assert.rejects(admin.query(sql98), (e) => e.code === '55000' && /sql98_prerequisite_missing/.test(e.message));
-    await admin.query('ROLLBACK');
+    for (const drop of [
+      'DROP FUNCTION public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)',
+      'DROP FUNCTION public.aws_tenant_pricing_columns()',
+      'DROP TABLE public.tenant_pricing_audit',
+    ]) {
+      await admin.query('BEGIN');
+      await admin.query(drop);
+      await assert.rejects(admin.query(sql98), (e) => e.code === '55000' && /sql98_prerequisite_missing/.test(e.message), drop);
+      await admin.query('ROLLBACK');
+    }
     await admin.query('BEGIN');
     await admin.query(`INSERT INTO public.tenant_maintenance_payments (tenant_id, amount_cents, billing_period) VALUES ('${T_B}', 1, '2020-01'), ('${T_B}', 1, '2020-01')`);
     await assert.rejects(admin.query(sql98), (e) => e.code === '23505' && /sql98_duplicate_billing_periods/.test(e.message));
@@ -383,6 +413,7 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.equal(mailAudit[0].outcome, 'sunk');
     assert.equal(mailAudit[0].actor_id, OWNER);
     assert.equal(mailAudit[0].occurrence_id, occA);
+    assert.deepEqual((await admin.query('SELECT status, attempts FROM public.tenant_fee_invoice_outbox WHERE occurrence_id = $1', [occA])).rows, [{ status: 'sunk', attempts: 1 }]);
     const sendLog = (await admin.query('SELECT template_name, recipient_email, status, idempotency_key FROM public.email_send_log')).rows;
     assert.deepEqual(sendLog, [{ template_name: 'tenant-fee-invoice', recipient_email: 'member@example.com', status: 'sunk', idempotency_key: `fee-invoice:${occA}` }]);
     // The database also refuses a second sent/sunk invoice for the same charge.
@@ -432,9 +463,15 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.equal((await admin.query("SELECT status FROM public.tenant_maintenance_payments WHERE tenant_id = $1", [T_B])).rows[0].status, 'submitted');
     assert.deepEqual((await admin.query("SELECT outcome FROM public.platform_billing_audit WHERE event = 'invoice_email' AND tenant_id = $1", [T_B])).rows.map((r) => r.outcome), ['failed']);
     assert.equal(mails.length, 1);
-    // The platform owner resends once SES is back; a second resend sends nothing.
+    assert.equal((await admin.query('SELECT status FROM public.tenant_fee_invoice_outbox WHERE tenant_id = $1', [T_B])).rows[0].status, 'failed');
     failMail.delete(T_B);
-    const resentB = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_B, period, confirm: true });
+    // A crash after the send was claimed (row left 'sending'): never resent automatically ...
+    await admin.query("UPDATE public.tenant_fee_invoice_outbox SET status = 'sending' WHERE tenant_id = $1", [T_B]);
+    const unconfirmed = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_B, period, confirm: true });
+    assert.equal(unconfirmed.invoice_email.status, 'delivery_unconfirmed');
+    assert.equal(mails.length, 1);
+    // ... until the platform owner confirms it was not sent; then it is sent once, and a second resend sends nothing.
+    const resentB = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_B, period, confirm: true, confirm_unsent: true });
     assert.equal(resentB.invoice_email.status, 'sunk', JSON.stringify(resentB));
     assert.equal(mails.length, 2);
     const resentB2 = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_B, period, confirm: true });
@@ -516,6 +553,38 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
       if (saved === undefined) delete process.env.CHECKSOPS_ENV;
       else process.env.CHECKSOPS_ENV = saved;
     }
+
+    // 9) Invoice email ordering (outbox): sent only after the charge commits.
+    const mailsBefore = mails.length;
+    const pD = await call(c1, OWNER, { action: 'preview', tenant_id: T_D, period });
+    assert.equal(pD.readiness.ready, true, JSON.stringify(pD.readiness));
+    // The pull's commit fails: no charge, no queued invoice, no email (even if a post-commit step ran).
+    const failed = await call(c1, OWNER, { action: 'pull', tenant_id: T_D, period, preview_hash: pD.preview_hash, confirm: true }, {}, { failCommit: true });
+    assert.equal(failed.pull.invoice_email.status, 'pending', 'queued inside the transaction that then failed');
+    assert.equal(failed.post_commit_after_failed_commit.pull.invoice_email.status, 'no_pending_invoice');
+    assert.equal(mails.length, mailsBefore);
+    assert.equal(await count('SELECT count(*) AS n FROM public.tenant_maintenance_payments WHERE tenant_id = $1', [T_D]), 0);
+    assert.equal(await count('SELECT count(*) AS n FROM public.tenant_fee_invoice_outbox WHERE tenant_id = $1', [T_D]), 0);
+    // The pull commits, then the Lambda dies before the send: the charge stands and the invoice is pending ...
+    const pD2 = await call(c1, OWNER, { action: 'preview', tenant_id: T_D, period });
+    const crashed = await call(c1, OWNER, { action: 'pull', tenant_id: T_D, period, preview_hash: pD2.preview_hash, confirm: true }, {}, { crashBeforeSend: true });
+    assert.equal(crashed.ok, true);
+    assert.equal(crashed.charged, true);
+    assert.equal(mails.length, mailsBefore, 'nothing was sent');
+    assert.deepEqual((await admin.query('SELECT status, attempts FROM public.tenant_fee_invoice_outbox WHERE tenant_id = $1', [T_D])).rows, [{ status: 'pending', attempts: 0 }]);
+    // ... and the platform owner's resend sends it exactly once.
+    const resentD = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_D, period, confirm: true });
+    assert.equal(resentD.invoice_email.status, 'sunk', JSON.stringify(resentD));
+    assert.equal(mails.length, mailsBefore + 1);
+    const resentD2 = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_D, period, confirm: true });
+    assert.equal(resentD2.invoice_email.status, 'already_sent');
+    assert.equal(mails.length, mailsBefore + 1);
+    // Outbox: platform owner only.
+    await c1.query('BEGIN');
+    await c1.query("SELECT set_config('request.app_user_id', $1, true)", [MEMBER]);
+    assert.equal((await c1.query('SELECT * FROM public.tenant_fee_invoice_outbox')).rows.length, 0);
+    await assert.rejects(c1.query(`INSERT INTO public.tenant_fee_invoice_outbox (occurrence_id, tenant_id, billing_period) VALUES (gen_random_uuid(), '${T_A}', '2020-01')`), /row-level security/);
+    await c1.query('ROLLBACK');
   } finally {
     await c1?.end().catch(() => {});
     await c2?.end().catch(() => {});

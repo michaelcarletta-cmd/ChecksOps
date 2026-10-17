@@ -13,6 +13,7 @@ import { writesEnabled } from './write-allowlist.mjs';
 import { executeClaimSettlementBreakdownWrite, SAVE_CLAIM_SETTLEMENT_BREAKDOWN } from './write-claim-settlement.mjs';
 import { executeAdminOverrideCheckStatus } from './admin-override-check-status.mjs';
 import { maskAccountNumber } from './providers/checkalt-account-mask.mjs';
+import { checkTenantDepositsEnabled } from './tenant-deposits-gate.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -1172,6 +1173,13 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
   }
 };
 
+/** deposit_action refusal when the tenant's deposits are off (tenant-deposits-gate.mjs). */
+const depositsGateError = (gate) => ({
+  error: gate.error,
+  message: gate.message,
+  ...(gate.statusCode ? { statusCode: gate.statusCode } : {}),
+});
+
 const executeDepositAction = async ({ client, mapping, args }) => {
   const action = String(arg(args, 'p_action', 'action') || '').trim();
   if (!action) return { error: 'missing_required_field', field: 'p_action' };
@@ -1199,6 +1207,8 @@ const executeDepositAction = async ({ client, mapping, args }) => {
     if (!(await canAccessTenant(client, actorId, check.tenant_id))) {
       return { error: 'not_authorized', message: 'Not authorized' };
     }
+    const depositsGate = await checkTenantDepositsEnabled(client, check.tenant_id);
+    if (!depositsGate.ok) return depositsGateError(depositsGate);
     if (check.status !== 'approved_for_deposit') {
       return { error: 'invalid_status', message: `Check must be approved_for_deposit, got: ${check.status}` };
     }
@@ -1239,6 +1249,8 @@ const executeDepositAction = async ({ client, mapping, args }) => {
     if (!item) return { error: 'rls_denied', message: 'Deposit item not found' };
     const tenantGate = await requireDepositManagerForTenant(client, actorId, item.tenant_id);
     if (tenantGate.error) return tenantGate;
+    const depositsGate = await checkTenantDepositsEnabled(client, item.tenant_id);
+    if (!depositsGate.ok) return depositsGateError(depositsGate);
     const alreadyClosed = item.status === 'succeeded'
       || item.status === 'reconciled'
       || item.check_status === 'deposited'
@@ -1301,6 +1313,8 @@ const executeDepositAction = async ({ client, mapping, args }) => {
   if (!(await canAccessTenant(client, actorId, item.tenant_id))) {
     return { error: 'not_authorized', message: 'Not authorized' };
   }
+  const depositsGate = await checkTenantDepositsEnabled(client, item.tenant_id);
+  if (!depositsGate.ok) return depositsGateError(depositsGate);
   if (item.status !== 'pending_assignment') {
     return { error: 'invalid_status', message: `Invalid transition: ${item.status} -> assign_provider` };
   }

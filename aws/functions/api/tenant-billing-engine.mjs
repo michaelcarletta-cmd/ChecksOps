@@ -16,7 +16,7 @@
  * Mortgage Ops accrues on Accept (status in_progress + accepted_at), not on submit.
  */
 import { createHash } from 'node:crypto';
-import { sendFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
+import { queueFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
 import {
   billingEnvironment,
   billingShouldSimulate,
@@ -340,7 +340,8 @@ export async function loadTenantBillingContext(client, tenantId) {
     `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
             is_founding_partner, per_check_rate_cents, per_check_billing_enabled,
             next_day_rate_cents, same_day_rate_cents,
-            mortgage_ops_initial_rate_cents, mortgage_ops_additional_rate_cents
+            mortgage_ops_initial_rate_cents, mortgage_ops_additional_rate_cents,
+            deposits_enabled
      FROM public.tenants WHERE id = $1::uuid`,
     [tenantId],
   ).catch(() => client.query(
@@ -1901,17 +1902,16 @@ export async function chargeTenantPeriod(client, {
     previewHash,
     details: { simulated: submitted.simulated === true, environment },
   });
-  // Invoice email: only after the debit was submitted, once per charge, and a
-  // failure never fails the pull (sendFeeInvoiceEmail never throws).
+  // Invoice email: queued in this transaction (outbox) only when the debit was
+  // submitted; it is sent only after this transaction commits
+  // (tenant-billing-handlers.mjs post-commit step). Never fails the pull.
   const charged = submitted.ok === true && submitted.duplicate !== true
     && CHARGED_STATUSES.has(String(submitted.occurrence?.status || ''));
   const invoiceEmail = charged
-    ? await sendFeeInvoiceEmail(client, {
-      occurrence: submitted.occurrence,
+    ? await queueFeeInvoiceEmail(client, {
+      occurrenceId: submitted.occurrence.id,
       tenantId,
       period,
-      authorization: readiness.authorization,
-      recordAudit: recordBillingAudit,
       deps,
     })
     : { status: 'not_charged', sent: false };
@@ -1923,14 +1923,16 @@ export async function chargeTenantPeriod(client, {
     provider_transfer_ids: transferIds,
     audit_recorded: audit.ok === true,
     invoice_email: invoiceEmail,
-    invoice_email_sent: invoiceEmail.sent === true,
+    invoice_email_sent: false,
+    invoice_email_after_commit: invoiceEmail.status === 'pending' ? submitted.occurrence.id : null,
   };
 }
 
 /**
  * Platform owner resends the invoice email for a charged period (after a
- * failed or missing send). Still once per charge: a period whose invoice was
- * already sent answers already_sent and sends nothing.
+ * failed, missing or unqueued send). Validates in this transaction and makes
+ * sure the charge has an outbox row; the send itself runs after commit.
+ * Still once per charge: an invoice already sent answers already_sent.
  */
 export async function resendTenantFeeInvoice(client, { tenantId, period, deps = {} }) {
   if (!BILLING_PERIOD_RE.test(String(period || ''))) {
@@ -1941,18 +1943,12 @@ export async function resendTenantFeeInvoice(client, { tenantId, period, deps = 
   if (!occurrence || !['submitted', 'settled'].includes(occurrence.status)) {
     return fail('not_charged', { statusCode: 409, message: 'No collected charge for this period.' });
   }
-  const ctx = await loadTenantBillingContext(client, tenantId);
-  if (!ctx.ok) return ctx;
-  const invoiceEmail = await sendFeeInvoiceEmail(client, {
-    occurrence,
-    tenantId,
-    period,
-    authorization: ctx.authorization,
-    recordAudit: recordBillingAudit,
-    resend: true,
-    deps,
-  });
-  return { ok: true, statusCode: 200, invoice_email: invoiceEmail };
+  const queued = await queueFeeInvoiceEmail(client, { occurrenceId: occurrence.id, tenantId, period, deps });
+  if (queued.status === 'disabled') return { ok: true, statusCode: 200, invoice_email: queued };
+  if (queued.status !== 'pending') {
+    return fail('invoice_queue_failed', { statusCode: 503, invoice_email: queued });
+  }
+  return { ok: true, statusCode: 200, invoice_email: queued, invoice_email_after_commit: occurrence.id };
 }
 
 /**
@@ -2069,6 +2065,9 @@ export const TENANT_PRICING_COLUMNS = Object.freeze([
 
 export const SET_TENANT_PRICING_SQL = 'SELECT public.aws_platform_owner_set_tenant_pricing($1::uuid, $2::jsonb) AS result';
 
+/** SQL 98: the platform owner's deposits switch setter (audited in tenant_pricing_audit). */
+export const SET_TENANT_DEPOSITS_ENABLED_SQL = 'SELECT public.aws_platform_owner_set_tenant_deposits_enabled($1::uuid, $2::boolean) AS result';
+
 /** Maps a refusal from aws_platform_owner_set_tenant_pricing (SQL 96). */
 export const tenantPricingError = (error) => {
   const code = String(error?.code || '');
@@ -2098,8 +2097,11 @@ export async function saveBillingSettings(client, {
   tenantId, monthlyRateCents, referralDiscountCents, billingEnabled, billingDay, userId,
   perCheckRateCents, nextDayRateCents, sameDayRateCents,
   mortgageOpsInitialRateCents, mortgageOpsAdditionalRateCents,
-  perCheckBillingEnabled, isFoundingPartner,
+  perCheckBillingEnabled, isFoundingPartner, depositsEnabled,
 }) {
+  if (depositsEnabled !== undefined && depositsEnabled !== null && typeof depositsEnabled !== 'boolean') {
+    return fail('invalid_deposits_enabled', { statusCode: 400, field: 'deposits_enabled' });
+  }
   const pricing = {};
   const applyRate = (value, field, column) => {
     if (value === undefined) return true;
@@ -2131,6 +2133,19 @@ export async function saveBillingSettings(client, {
     try {
       await client.query(SET_TENANT_PRICING_SQL, [tenantId, JSON.stringify(pricing)]);
     } catch (error) {
+      return tenantPricingError(error);
+    }
+  }
+  if (typeof depositsEnabled === 'boolean') {
+    try {
+      await client.query(SET_TENANT_DEPOSITS_ENABLED_SQL, [tenantId, depositsEnabled]);
+    } catch (error) {
+      if (String(error?.code || '') === '42883') {
+        return fail('deposits_setter_missing', {
+          statusCode: 503,
+          message: 'The deposits switch cannot be saved until SQL 98 is applied.',
+        });
+      }
       return tenantPricingError(error);
     }
   }
@@ -2333,6 +2348,8 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     net_fee_cents: netFeeCents(ctx.tenant.monthly_rate_cents, ctx.tenant.referral_discount_cents),
     per_check_rate_cents: resolveCheckRateCents(ctx.tenant, ctx.checkDefaultCents),
     check_billing_default_cents: ctx.checkDefaultCents,
+    // SQL 98 deposits switch (platform owner sets it; NOT NULL DEFAULT true).
+    deposits_enabled: ctx.tenant.deposits_enabled !== false,
     next_day_rate_cents: resolveNextDayRateCents(ctx.tenant),
     same_day_rate_cents: resolveSameDayRateCents(ctx.tenant),
     mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(ctx.tenant),

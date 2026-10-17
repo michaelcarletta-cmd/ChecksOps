@@ -25,6 +25,7 @@ import {
   loadTenantBillingContext,
   MANUAL_BILLING_ONLY,
   previewTenantPeriodCharge,
+  recordBillingAudit,
   resendTenantFeeInvoice,
   saveBillingAuthorization,
   saveBillingSettings,
@@ -36,6 +37,7 @@ import {
   resolveBillingDestination,
   setBillingDestination,
 } from './tenant-billing-destination.mjs';
+import { deliverFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -98,7 +100,66 @@ const chargeResponse = (spoof, result, key, extra = {}) => {
   };
 };
 
+/**
+ * Runs fn({ client }) in its own committed transaction with the caller's
+ * identity: withIdentityWrite in the Lambda; on an injected client (tests)
+ * BEGIN / COMMIT on that client with request.app_user_id bound.
+ */
+const postCommitTxnRunner = (event, deps) => {
+  if (deps.client) {
+    const c = deps.client;
+    return async (fn) => {
+      await c.query('BEGIN');
+      try {
+        if (deps.mapping?.application_user_id) {
+          await c.query("SELECT set_config('request.app_user_id', $1, true)", [deps.mapping.application_user_id]);
+        }
+        const result = await fn({ client: c });
+        await c.query(result?.ok === false ? 'ROLLBACK' : 'COMMIT');
+        return result;
+      } catch (error) {
+        await c.query('ROLLBACK').catch(() => {});
+        throw error;
+      }
+    };
+  }
+  return (fn) => withIdentityWrite(event, ({ client }) => fn({ client }), deps);
+};
+
+/**
+ * Invoice email ordering: the pull / resend transaction only queues the
+ * invoice (outbox). Once that transaction has committed (result ok), the
+ * email is claimed, sent and recorded in separate transactions
+ * (deliverFeeInvoiceEmail). A refused or uncommitted request sends nothing.
+ * With an injected client the caller owns the commit, so the step is handed
+ * back as post_commit() instead of run here.
+ */
 export const handleTenantBillingAdmin = async (event, deps = {}) => {
+  const result = await handleTenantBillingAdminInTransaction(event, deps);
+  const marker = result?.post_commit_invoice || null;
+  if (result && typeof result === 'object') delete result.post_commit_invoice;
+  if (result?.pull && typeof result.pull === 'object') delete result.pull.invoice_email_after_commit;
+  if (!marker || result?.ok !== true) return result;
+  const deliver = () => deliverFeeInvoiceEmail({
+    runTxn: postCommitTxnRunner(event, deps),
+    occurrenceId: marker.occurrenceId,
+    recordAudit: recordBillingAudit,
+    confirmUnsent: marker.confirmUnsent === true,
+    resend: marker.resend === true,
+    deps,
+  });
+  const merge = (delivered) => {
+    if (marker.resend) return { ...result, invoice_email: delivered };
+    return {
+      ...result,
+      pull: { ...result.pull, invoice_email: delivered, invoice_email_sent: delivered.sent === true },
+    };
+  };
+  if (deps.client) return { ...result, post_commit: async () => merge(await deliver()) };
+  return merge(await deliver());
+};
+
+const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   return runWithIdentity(event, async ({ client, mapping }) => {
@@ -156,6 +217,7 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         mortgageOpsAdditionalRateCents: body.mortgage_ops_additional_rate_cents,
         perCheckBillingEnabled: body.per_check_billing_enabled,
         isFoundingPartner: body.is_founding_partner,
+        depositsEnabled: body.deposits_enabled,
         billingEnabled: body.billing_enabled,
         billingDay: body.billing_day_of_month,
         userId: mapping.application_user_id,
@@ -256,6 +318,9 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
       return chargeResponse(spoof, charged, 'pull', {
         period,
         idempotency_key: billingIdempotencyKey(tenantId, period),
+        post_commit_invoice: charged.invoice_email_after_commit
+          ? { occurrenceId: charged.invoice_email_after_commit, resend: false }
+          : null,
       });
     }
 
@@ -269,8 +334,17 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
       }
       const resent = await resendTenantFeeInvoice(client, { tenantId, period: String(body.period || ''), deps });
       if (!resent.ok) return denied(spoof, { ...resent, statusCode: resent.statusCode || 409 });
-      // ok:true commits the audit row whatever the email outcome was.
-      return { ...resent, ok: true, statusCode: 200, spoofFieldsIgnored: spoof };
+      const { invoice_email_after_commit: occurrenceId, ...rest } = resent;
+      // ok:true commits the queued outbox row; the send runs after commit.
+      return {
+        ...rest,
+        ok: true,
+        statusCode: 200,
+        spoofFieldsIgnored: spoof,
+        post_commit_invoice: occurrenceId
+          ? { occurrenceId, resend: true, confirmUnsent: body.confirm_unsent === true }
+          : null,
+      };
     }
 
     return denied(spoof, { statusCode: 400, error: 'unknown_action', action });

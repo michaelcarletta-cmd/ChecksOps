@@ -22,6 +22,8 @@ import {
   requireAwsCheckAltProviderPath,
 } from "@/lib/awsCheckAltMoneyPath";
 import { isPlatformOwner } from "@/lib/masterMerchant";
+import { DEPOSITS_DISABLED_MESSAGE, useTenantsDepositsEnabled } from "@/lib/tenantDeposits";
+import { DepositsDisabledNotice } from "@/components/deposit-ops/DepositsDisabledNotice";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 
@@ -459,6 +461,8 @@ export function PendingApprovalDeposits() {
   });
 
   const guardFinancial = useFinancialGuard();
+  // Per-tenant deposits switch (platform owner, SQL 98): approve-to-deposit is off for those tenants.
+  const depositsEnabledFor = useTenantsDepositsEnabled(((data ?? []) as Array<{ tenant_id?: string | null }>).map((r) => r.tenant_id ?? ""));
 
   const decide = useMutation({
     mutationFn: async (args: {
@@ -616,6 +620,7 @@ export function PendingApprovalDeposits() {
         const statusDesc = row.last_status_payload?.statusDescription ?? row.last_status_payload?.reasonDescription;
         const isRejecting = rejectingId === row.id;
         const canDecide = checkAltAccess.canOperateIn(row.tenant_id);
+        const depositsOn = depositsEnabledFor(row.tenant_id);
         return (
           <div
             key={row.id}
@@ -641,6 +646,7 @@ export function PendingApprovalDeposits() {
                     CheckAlt: {statusDesc}
                   </div>
                 )}
+                {!depositsOn && <DepositsDisabledNotice className="mt-1 py-1.5 text-xs" />}
                 {row.status_unresolved && (
                   <div className="text-xs text-destructive mt-1 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
@@ -667,7 +673,8 @@ export function PendingApprovalDeposits() {
                         check_intake_item_id: row.check_intake_item_id,
                       })
                     }
-                    disabled={decide.isPending}
+                    disabled={decide.isPending || !depositsOn}
+                    title={depositsOn ? undefined : DEPOSITS_DISABLED_MESSAGE}
                   >
                     {decide.isPending ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
