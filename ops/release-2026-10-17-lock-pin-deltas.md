@@ -1,10 +1,68 @@
 # Release 2026-10-17: release-lock and overlay-plan pin deltas
 
-Documentation only. Nothing in `ops/release-locks/` or `ops/deployment-guard/production-api-overlay-plan.json`
-is edited by the release branch `claude/release-2026-10-17` (base `origin/main` 307417cbe, ten merged
-feature branches plus merge glue). Every value below must be reviewed and recorded through the
-reviewed release-lock / overlay-plan process before any guarded staging or production run.
-No deploy, workflow run or AWS call was made to produce this file.
+**Status: the locks and pins below are applied in this branch** (owner-approved 2026-10-17, "approve the
+release lock and pin PR"; see section 0). Nothing is deployed, live or verified: no deploy, workflow run,
+inspect or AWS call was made to produce this file or the lock/pin commit. Sections 1-7 and the appendices
+are the original delta inventory (branch `claude/release-2026-10-17`, base `origin/main` 307417cbe, ten
+merged feature branches plus merge glue); section 0 records what was applied and what differs from it.
+
+## 0. Applied in this branch
+
+- **Release locks** (`ops/release-locks/locked-components.json`): the nine `source.tree_hash` values were set
+  to the branch values; `node scripts/validate-release-locks.mjs` passes (append-only vs trusted base
+  307417cbe). Two differ from the section 1 table because this change edits files in their groups:
+  `delete-check-contract` is `b487c1a75f9ae7d5f54861951a7187f442c71bfac7013ed85d120edd39ab4be2` (the contract's
+  `admin_only` invariant is now `tenant_members_only`: any member of the check's tenant may delete;
+  partner/shared, terminal financial and dependent financial/provider blocks remain) and
+  `production-release` is `2bb158a7782967bf8a77cda530f10c81967e37b1b465a9c3c8c6199773c8b10b` (plan, workflow,
+  pins). The other seven equal the section 1 actual values.
+- **Overlay plan** (`ops/deployment-guard/production-api-overlay-plan.json`, 82 members): the 16 section 2
+  members take the branch bytes; 46 files become members (13 ADD, 33 REPLACE), all under the new manifest
+  `aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json` (earlier manifests are unchanged
+  evidence). The workflow `guarded-production-lambda-overlay.yml` member choices follow the plan order.
+  - Four branch hashes differ from the section 2/3 tables (the last branch commit 56786e59d changed them):
+    `auth-financial-totp.mjs` `ccfe06bb…`, `admin-reset-totp.mjs` `9e85ae9a…`, `providers/onboarding/handlers.mjs`
+    `708cb33e…`, `providers/onboarding/moov-sync.mjs` `1352cd5a…`. `ingest-shared-check.mjs` is not deleted:
+    it is the 410 stub `a4149a0f…` (REPLACE).
+  - expected_live_sha256: the previous planned bytes where they are recorded live or were earlier in the
+    guarded order than a recorded apply (workflow.mjs, workflow-transitions.mjs, auth-financial-totp.mjs,
+    checkalt-approve/submit/authz.mjs, providers.mjs); the existing planned live value where no apply is
+    recorded (workflow-rpc.mjs, parity/checkalt-functions.mjs, homeowner.mjs, write-signature.mjs,
+    email-branding.mjs, esign.mjs, app-services.mjs, write-allowlist.mjs, write-check-workflow.mjs); the
+    2026-10-11 live snapshot (f78e16d99) for members new to the plan. Every value needs a read-only production
+    inspect before any apply; several new REPLACE members' live bytes differ from main and need a source review.
+  - Order: section 5 plus Appendix A, with one change: `admin-reset-totp.mjs` goes before
+    `auth-financial-totp.mjs` (the new auth-financial-totp reads `TEAM_RESET_TOTP_ACTION` through a destructured
+    dynamic import, which the overlay link check now enforces, so the reviewer's order would be refused).
+  - Not overlay members (`do_not_overlay`): `package.json`, `package-lock.json` (full rebuilt ZIP), and
+    `invoice-actions.mjs`, `tenant-collection-v2-uat.mjs`, `tenant-maintenance-payments-catalog-inspect.mjs`
+    (absent from the live bundle; only `index.mjs`, never overlaid, and `public-invoice.mjs` import them).
+  - sql_before: SQL 90 (tenant-admin.mjs, workflow-rpc.mjs), SQL 91 (providers/onboarding/*), SQL 93
+    (write-allowlist.mjs, write-app-metadata.mjs), SQL 94 (library members), SQL 96 (billing members); each is in
+    `sql_prerequisites` with `verified_live: false`.
+- **SQL pins:** pending production pins `ops/deployment-guard/sql90-…` to `sql97-…-production-apply.json`
+  (`authorization: "pending"`, `execute: false`, `expected_live_definition_sha256: null`) and pending staging
+  pins `AUTHORIZED_SQL90_…` to `AUTHORIZED_SQL97_…` (`RELEASE_2026_10_17_PENDING_SQL_PINS`) in
+  `scripts/deployment-guard/lib/sql-executor-auth.mjs`. They are not in the staging executor `MIGRATIONS` map or
+  the `guarded-staging-sql-executor.yml` choices: no executor handler exists for them, so a choice could not run.
+- **Accepted-features registry:** inventory-only invariants for delete-check, signature-requests and
+  mortgage-ops; Branding's accepted contract is unchanged (notes only).
+
+Tooling still needed before any SQL 90-97 pin can be execute-authorized (none exists; each pin's
+`tooling.status` is `missing` and `intended_replacement_sha256` is null):
+
+| SQL | Needed |
+|---|---|
+| 90 users-only tenant roles | production-apply tool with `--inspect`, staging executor handler + workflow choice, intended-state fingerprint, one-shot entry, runbook, PG16 tests |
+| 91 Moov onboarding | same (tables, RLS, outbox CHECK); plus `aws/template.yaml` KMS/VPC endpoint and a full ZIP rebuild for the Lambdas |
+| 92 signature link grant | same (column grant inspect, like SQL 77/89) |
+| 93 tenant company info | same (columns + member column guard trigger); must refuse a re-run after SQL 96 |
+| 94 document library restore | same (the file says its tooling is a follow-up to SQL 29/30's) |
+| 95 Freedom Claims bridge removal | same (drop-only: inspect must prove no other callers) |
+| 96 platform-owner tenant pricing | same (columns, audit table, setter, replaced column guard) |
+| 97 financial_stepup_log server writer | same (grant + BEFORE INSERT guard); ordered after the step-6 Lambdas |
+
+The original inventory follows.
 
 Values were computed on the branch tree with `node scripts/validate-release-locks.mjs` (locks) and
 sha256 of the branch bytes under `aws/functions/api/` (plan members). Lock tree hashes do not
