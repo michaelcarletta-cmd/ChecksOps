@@ -23,11 +23,15 @@ import {
 } from '../functions/api/tenant-billing-destination.mjs';
 import {
   CHECK_BILLING_DEFAULT_PRICE_SQL,
+  INVOICE_EMAIL_AFTER_PULL,
   MANUAL_BILLING_ONLY,
+  PER_CHECK_OFF_BILLS_DEFAULT_PRICE,
   billingPreviewHash,
   chargeTenantPeriod,
+  isChargeableCents,
   resolveCheckRateCents,
   runMonthlyBillingScheduler,
+  submitVerificationOccurrence,
 } from '../functions/api/tenant-billing-engine.mjs';
 import {
   CLIENT_AMOUNT_FIELDS,
@@ -36,7 +40,13 @@ import {
 } from '../functions/api/tenant-billing-handlers.mjs';
 import { tenantFeeCharge } from '../functions/api/providers/parity/moov-money.mjs';
 import { MOOV_PARITY_HANDLERS } from '../functions/api/providers/parity/moov-functions.mjs';
-import { CHECKSOPS_PLATFORM_ACCOUNT_ID, CHECKSOPS_PLATFORM_WALLET_PM_ID } from '../functions/api/tenant-collection-v2.mjs';
+import {
+  CHECKSOPS_PLATFORM_ACCOUNT_ID,
+  CHECKSOPS_PLATFORM_WALLET_PM_ID,
+  PRODUCTION_FEE_DESTINATION,
+  assertExplicitDestination,
+  collectTenantObligation,
+} from '../functions/api/tenant-collection-v2.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -346,4 +356,149 @@ test('the preview hash covers amount, booked row and every line', () => {
     { tenantId: TENANT, period: '2026-09', invoice, occurrence: { id: 'o1', amount_cents: 1300 } },
   ];
   for (const v of variants) assert.notEqual(billingPreviewHash(v), base);
+});
+
+test('the preview hash also binds the fee destination and the tenant funding source', () => {
+  const invoice = {
+    amount_cents: 1300,
+    maintenance_net_cents: 1000,
+    authorization: { provider_payment_method_id: 'pm-bank-a' },
+    lines: { checks: [], next_day: [], same_day: [], mortgage_ops_initial: [], mortgage_ops_additional: [] },
+  };
+  const dest = { ok: true, accountId: CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID, paymentMethodId: USER };
+  const base = billingPreviewHash({ tenantId: TENANT, period: '2026-09', invoice, occurrence: null, destination: dest });
+  assert.equal(base, billingPreviewHash({ tenantId: TENANT, period: '2026-09', invoice: { ...invoice }, occurrence: null, destination: { ...dest } }));
+  for (const changed of [
+    { destination: { ...dest, paymentMethodId: TENANT } },
+    { destination: { ...dest, accountId: CHECKSOPS_PLATFORM_ACCOUNT_ID } },
+    { destination: { ok: false, error: 'billing_destination_unresolved' } },
+    { destination: null },
+    { invoice: { ...invoice, authorization: { provider_payment_method_id: 'pm-bank-b' } } },
+    { invoice: { ...invoice, authorization: null } },
+  ]) {
+    assert.notEqual(
+      billingPreviewHash({ tenantId: TENANT, period: '2026-09', invoice, occurrence: null, destination: dest, ...changed }),
+      base,
+      JSON.stringify(changed),
+    );
+  }
+});
+
+test('only positive safe-integer cents are chargeable', () => {
+  for (const ok of [1, 100, 9900, Number.MAX_SAFE_INTEGER]) assert.equal(isChargeableCents(ok), true, String(ok));
+  for (const bad of [0, -1, 12.5, 0.1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '100', null, undefined]) {
+    assert.equal(isChargeableCents(bad), false, String(bad));
+  }
+  const src = read('aws/functions/api/tenant-billing-engine.mjs');
+  const pull = src.slice(src.indexOf('export async function chargeTenantPeriod'), src.indexOf('export async function runMonthlyBillingScheduler'));
+  assert.match(pull, /!isChargeableCents\(readiness\.amountCents\)\) readiness\.reasons\.push\('invalid_amount_cents'\)/);
+  const preview = src.slice(src.indexOf('export async function previewTenantPeriodCharge'), src.indexOf('const legTransferIds'));
+  assert.match(preview, /!isChargeableCents\(amountCents\)\) reasons\.push\('invalid_amount_cents'\)/);
+});
+
+test('a fee pull is bank-only: the tenant wallet is never debited, even with funds in it', async () => {
+  const run = async (bankOnly) => {
+    const posts = [];
+    const result = await collectTenantObligation(null, {
+      occurrence: { id: 'occ-1', tenant_id: TENANT, billing_period: '2026-09', amount_cents: 5000 },
+      readiness: { environment: 'sandbox', authorization: { tenant_id: TENANT, provider_payment_method_id: 'pm-bank' } },
+      destination: { accountId: CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID, paymentMethodId: USER },
+      deps: {
+        bankOnly,
+        simulate: true,
+        wallet: {
+          id: 'w1', tenant_id: TENANT, provider_account_id: 'acct-t', provider_wallet_id: 'wallet-t',
+          provider_payment_method_id: 'pm-wallet', available_cents: 10000, pending_cents: 0,
+        },
+      },
+      postTransfer: async ({ sourceMethodId, amount, idempotencyKey }) => {
+        posts.push({ sourceMethodId, amount });
+        return { transferID: `tr-${idempotencyKey}`, status: 'pending' };
+      },
+      resolveBillingDebitSource: async () => ({ ok: true, sourceMethodId: 'debit-pm-bank', sourceAccountId: 'acct-t' }),
+    });
+    return { result, posts };
+  };
+  const bank = await run(true);
+  assert.equal(bank.result.ok, true, JSON.stringify(bank.result));
+  assert.deepEqual(bank.posts, [{ sourceMethodId: 'debit-pm-bank', amount: 5000 }]);
+  assert.equal(bank.result.wallet_applied_cents, 0);
+  // Without bankOnly the shared collector would take the wallet first; the fee pull always passes it.
+  const walletFirst = await run(false);
+  assert.equal(walletFirst.posts[0].sourceMethodId, 'pm-wallet');
+  const src = read('aws/functions/api/tenant-billing-engine.mjs');
+  const pull = src.slice(src.indexOf('export async function chargeTenantPeriod'), src.indexOf('export async function runMonthlyBillingScheduler'));
+  assert.match(pull, /submitOccurrence\(client, \{[\s\S]*?deps: \{ \.\.\.deps, bankOnly: true \}/);
+});
+
+test('the $1 verification debit uses the same bank-source rules as a pull', async () => {
+  const occurrence = { id: 'v-occ', tenant_id: TENANT, status: 'due', idempotence_key: `billing-verify:${TENANT}:${USER}` };
+  const authorization = { tenant_id: TENANT, provider_payment_method_id: 'pm-bank', provider_account_id: 'acct-t', provider_environment: 'sandbox' };
+  const destination = { ok: true, environment: 'sandbox', accountId: CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID, paymentMethodId: USER };
+  await withEnv({ AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: 'true', AWS_MOOV_BILLING_VERIFICATION_SIMULATE: undefined }, async () => {
+    for (const [debit, error, env] of [
+      [{ ok: true, sourceMethodId: 'debit', sourceAccountId: CHECKSOPS_PLATFORM_ACCOUNT_ID }, 'platform_chase_used_as_source', 'sandbox'],
+      [{ ok: true, sourceMethodId: USER, sourceAccountId: 'acct-t' }, 'source_destination_reversal', 'sandbox'],
+      [{ ok: true, sourceMethodId: 'debit', sourceAccountId: CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID }, 'sandbox_resource_in_production', 'production'],
+    ]) {
+      const client = fakeClient({ owner: true });
+      const res = await submitVerificationOccurrence(client, {
+        occurrence,
+        readiness: { environment: env, authorization },
+        destination,
+        deps: { simulate: false, verificationId: USER, resolveBillingDebitSource: async () => debit },
+      });
+      assert.equal(res.ok, false, error);
+      assert.equal(res.error, error);
+      assert.equal(res.liveProviderCalled, false);
+      assert.equal(client.queries.some((q) => /UPDATE public\.tenant_maintenance_payments/.test(q.sql)), false, error);
+    }
+    const crossTenant = await submitVerificationOccurrence(fakeClient({ owner: true }), {
+      occurrence,
+      readiness: { environment: 'sandbox', authorization: { ...authorization, tenant_id: USER } },
+      destination,
+      deps: { simulate: false, resolveBillingDebitSource: async () => ({ ok: true, sourceMethodId: 'debit', sourceAccountId: 'acct-t' }) },
+    });
+    assert.equal(crossTenant.error, 'cross_tenant_bank');
+  });
+});
+
+test('open owner questions are isolated defaults, unchanged until the owner answers', async () => {
+  // (a) fee destination: the platform Moov wallet, not owner-confirmed; one object every pin reads.
+  assert.ok(Object.isFrozen(PRODUCTION_FEE_DESTINATION));
+  assert.deepEqual(PRODUCTION_FEE_DESTINATION, {
+    kind: 'platform_moov_wallet',
+    accountId: CHECKSOPS_PLATFORM_ACCOUNT_ID,
+    paymentMethodId: CHECKSOPS_PLATFORM_WALLET_PM_ID,
+    ownerConfirmed: false,
+  });
+  assert.equal(assertExplicitDestination(PRODUCTION_FEE_DESTINATION, 'production').ok, true);
+  assert.equal(normalizeDest({ moov_account_id: PRODUCTION_FEE_DESTINATION.accountId, moov_payment_method_id: PRODUCTION_FEE_DESTINATION.paymentMethodId }, 'production').ok, true);
+  const collection = read('aws/functions/api/tenant-collection-v2.mjs');
+  const assertFn = collection.slice(collection.indexOf('export function assertExplicitDestination'), collection.indexOf('export function assertTenantWalletSource'));
+  assert.match(assertFn, /PRODUCTION_FEE_DESTINATION\.accountId/);
+  assert.match(assertFn, /PRODUCTION_FEE_DESTINATION\.paymentMethodId/);
+  assert.doesNotMatch(assertFn, /CHECKSOPS_PLATFORM_ACCOUNT_ID|CHECKSOPS_PLATFORM_WALLET_PM_ID/);
+  await withEnv({ CHECKSOPS_ENV: 'production-prep', AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID: undefined, AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID: undefined }, async () => {
+    const { billingDestinationStatus } = await import('../functions/api/tenant-billing-destination.mjs');
+    const status = await billingDestinationStatus(fakeClient(), { environment: 'production' });
+    assert.equal(status.production_destination_kind, 'platform_moov_wallet');
+    assert.equal(status.production_destination_owner_confirmed, false);
+  });
+
+  // (b) per-check billing off still bills the config default; one switch in the API and one in SQL 98.
+  assert.equal(PER_CHECK_OFF_BILLS_DEFAULT_PRICE, true);
+  assert.equal(resolveCheckRateCents({ per_check_billing_enabled: false }, 300), 300);
+  assert.equal(resolveCheckRateCents({ per_check_billing_enabled: false }, 300, { perCheckOffBillsDefault: false }), 0);
+  assert.equal(resolveCheckRateCents({ per_check_billing_enabled: true, per_check_rate_cents: 250 }, 300, { perCheckOffBillsDefault: false }), 250);
+  const sql = read('aws/workflows/sql/98_tenant_fee_collection.sql');
+  assert.match(sql, /FUNCTION public\.aws_check_billing_charges_when_per_check_off\(\)[\s\S]*?AS \$\$ SELECT true \$\$;/);
+  assert.match(sql, /ELSIF v_enabled IS NOT TRUE AND NOT public\.aws_check_billing_charges_when_per_check_off\(\) THEN\s+-- [^\n]*\n\s+RETURN NEW;/);
+
+  // (c) no invoice email after a pull, and nothing in the fee path sends one.
+  assert.equal(INVOICE_EMAIL_AFTER_PULL, false);
+  for (const file of ['aws/functions/api/tenant-billing-engine.mjs', 'aws/functions/api/tenant-billing-handlers.mjs']) {
+    assert.doesNotMatch(read(file), /send-transactional-email|sendTransactionalEmail|sendEmail\(|SendEmailCommand|SESv2Client|SESClient|client-sesv?2?/, file);
+  }
+  assert.match(read('aws/functions/api/tenant-billing-engine.mjs'), /invoice_email_sent: false/);
 });

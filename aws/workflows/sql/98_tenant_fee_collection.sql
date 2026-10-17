@@ -19,6 +19,9 @@
 --        is true and a rate is set (0 allowed), otherwise
 --      - the active public.check_billing_config row's price_per_check_cents
 --        (public.aws_check_billing_default_price_cents()).
+--    Per-check billing off still bills that default unless owner question
+--    (b) is answered otherwise: public.aws_check_billing_charges_when_per_check_off()
+--    is the one switch (true, the Supabase behavior, until then).
 --    check_billing_config is the ONE per-check default (the Supabase seed is
 --    $3.00 = 300); the API reads the same row (tenant-billing-engine.mjs
 --    CHECK_BILLING_DEFAULT_PRICE_SQL) and has no constant of its own.
@@ -43,7 +46,11 @@
 --    environment (created when missing, same shape as the earlier billing
 --    SQL). SELECT and writes: the platform owner only (the old
 --    aws_monthly_billing_job() read path is dropped: nothing sets that GUC
---    any more). Every change is audited (event destination_set).
+--    any more). Every other policy on the table is dropped and checksops'
+--    privileges are reset to SELECT, INSERT, UPDATE, whatever the live table
+--    had. Every change is audited (event destination_set).
+--    Wallet or bank destination: owner question (a),
+--    tenant-collection-v2.mjs PRODUCTION_FEE_DESTINATION.
 -- 4) public.platform_billing_audit (new, append-only): one row per pull /
 --    verification debit attempt and outcome (who = auth.uid(), tenant,
 --    period, amount, Moov transfer ids, outcome) and per destination change.
@@ -119,6 +126,24 @@ GRANT EXECUTE ON FUNCTION public.aws_check_billing_default_price_cents() TO chec
 COMMENT ON FUNCTION public.aws_check_billing_default_price_cents() IS
   'SQL 98: the one per-check default price (active check_billing_config row); NULL when none is active.';
 
+-- OWNER QUESTION (b), OPEN: does per-check billing "off" mean no per-check fee?
+-- This function is the one database switch. true (the default, the Supabase
+-- trigger's behavior): a tenant with per-check billing off is still billed the
+-- check_billing_config default per deposited check. false: no check_processing
+-- event is recorded for such a tenant. The API mirrors it with
+-- tenant-billing-engine.mjs PER_CHECK_OFF_BILLS_DEFAULT_PRICE; change both
+-- together, in a reviewed change.
+CREATE OR REPLACE FUNCTION public.aws_check_billing_charges_when_per_check_off()
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$ SELECT true $$;
+REVOKE ALL ON FUNCTION public.aws_check_billing_charges_when_per_check_off() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_check_billing_charges_when_per_check_off() TO checksops, authenticated;
+COMMENT ON FUNCTION public.aws_check_billing_charges_when_per_check_off() IS
+  'SQL 98, owner question (b): whether per-check billing off still bills the check_billing_config default (true, the default) or nothing (false).';
+
 DO $sql98_event_unique$
 DECLARE
   v_has_unique boolean;
@@ -183,6 +208,9 @@ BEGIN
 
     IF v_enabled IS TRUE AND v_rate IS NOT NULL THEN
       v_price := v_rate;
+    ELSIF v_enabled IS NOT TRUE AND NOT public.aws_check_billing_charges_when_per_check_off() THEN
+      -- Owner question (b) answered "off means no per-check fee".
+      RETURN NEW;
     ELSE
       v_price := public.aws_check_billing_default_price_cents();
     END IF;
@@ -330,7 +358,27 @@ COMMENT ON TABLE public.platform_billing_destination IS
 ALTER TABLE public.platform_billing_destination ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.platform_billing_destination FROM PUBLIC;
 REVOKE ALL ON TABLE public.platform_billing_destination FROM authenticated;
+REVOKE ALL ON TABLE public.platform_billing_destination FROM checksops;
 GRANT SELECT ON TABLE public.platform_billing_destination TO checksops, authenticated;
+
+-- Fail closed on whatever policies the table already had: no repository SQL
+-- created it, so the live policy names are unknown and any other permissive
+-- policy would be OR'ed with the platform-owner-only ones below. Only these
+-- two may remain.
+DO $sql98_destination_policies$
+DECLARE
+  v_policy text;
+BEGIN
+  FOR v_policy IN
+    SELECT policyname FROM pg_policies
+     WHERE schemaname = 'public' AND tablename = 'platform_billing_destination'
+       AND policyname NOT IN ('aws_select_platform_billing_destination', 'aws_write_platform_billing_destination')
+  LOOP
+    RAISE NOTICE 'sql98: dropping policy % on public.platform_billing_destination', v_policy;
+    EXECUTE format('DROP POLICY %I ON public.platform_billing_destination', v_policy);
+  END LOOP;
+END
+$sql98_destination_policies$;
 GRANT INSERT, UPDATE ON TABLE public.platform_billing_destination TO checksops;
 DROP POLICY IF EXISTS aws_select_platform_billing_destination ON public.platform_billing_destination;
 CREATE POLICY aws_select_platform_billing_destination ON public.platform_billing_destination

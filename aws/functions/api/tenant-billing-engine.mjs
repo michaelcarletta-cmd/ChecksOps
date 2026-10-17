@@ -28,6 +28,7 @@ import {
 } from './tenant-billing-destination.mjs';
 import {
   COLLECTION_CONTRACT_ID,
+  assertTenantBankSource,
   collectTenantObligation,
   classifyCollectionStatus,
   receivedCentsFromLegs,
@@ -52,6 +53,26 @@ WHERE active = true
 ORDER BY created_at DESC
 LIMIT 1`;
 export const MANUAL_BILLING_ONLY = 'manual_billing_only';
+
+/**
+ * OWNER QUESTION (b), OPEN: does per-check billing "off" mean no per-check fee?
+ * Default (the Supabase trigger's behavior, unchanged): with per-check billing
+ * off a deposited check is still billed at the check_billing_config default;
+ * "on" only means the tenant's own rate is used. The charge itself comes from
+ * the price SQL 98 stamps on each event, so the database switch is
+ * public.aws_check_billing_charges_when_per_check_off() in
+ * 98_tenant_fee_collection.sql. Change both together, in a reviewed change.
+ */
+export const PER_CHECK_OFF_BILLS_DEFAULT_PRICE = true;
+
+/**
+ * OWNER QUESTION (c), OPEN: should an invoice email go out after a pull?
+ * Default: no. The retired moov-tenant-fee-charge emailed one; the
+ * tenant-billing-admin pull sends nothing, and no AWS invoice sender is wired.
+ * Turning this on needs that sender added first; the pull reports
+ * invoice_email_sent: false either way until then.
+ */
+export const INVOICE_EMAIL_AFTER_PULL = false;
 export const BILLING_PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
 export const DEFAULT_SAME_DAY_RATE_CENTS = 100;
@@ -185,11 +206,16 @@ export const parseRateCents = (value, field) => {
  * default. `defaultCents` is that config value (loadCheckBillingDefaultCents);
  * null when no active config row exists.
  */
-export const resolveCheckRateCents = (tenant, defaultCents = null) => {
+export const resolveCheckRateCents = (tenant, defaultCents = null, {
+  perCheckOffBillsDefault = PER_CHECK_OFF_BILLS_DEFAULT_PRICE,
+} = {}) => {
+  const enabled = tenant?.per_check_billing_enabled === true;
   const stored = tenant?.per_check_rate_cents;
-  if (tenant?.per_check_billing_enabled === true && stored !== null && stored !== undefined && Number.isFinite(Number(stored))) {
+  if (enabled && stored !== null && stored !== undefined && Number.isFinite(Number(stored))) {
     return Math.max(0, Number(stored));
   }
+  // Owner question (b): per-check billing off and no fee for it.
+  if (!enabled && !perCheckOffBillsDefault) return 0;
   return defaultCents === null || defaultCents === undefined ? null : Number(defaultCents);
 };
 
@@ -1340,12 +1366,26 @@ export async function submitVerificationOccurrence(client, {
       providerStatus = 'submitted';
     }
   } else {
-    const debit = await resolveBillingDebitSource(client, {
+    const resolveDebit = deps.resolveBillingDebitSource || resolveBillingDebitSource;
+    const debit = await resolveDebit(client, {
       authorization: readiness.authorization,
       fetchImpl,
     });
     if (!debit.ok) {
       return debit;
+    }
+    // Same source rules as a fee pull (collectTenantObligation): this tenant's
+    // authorized bank only, never the ChecksOps platform account, never the
+    // destination itself, never a sandbox resource in production.
+    const asserted = assertTenantBankSource({
+      tenantId: occurrence.tenant_id,
+      environment: readiness.environment || destination.environment || billingEnvironment(),
+      authorization: readiness.authorization,
+      debit,
+      destination,
+    });
+    if (!asserted.ok) {
+      return fail(asserted.errors[0], { statusCode: 409, errors: asserted.errors, liveProviderCalled: false });
     }
     debitSource = debit;
     try {
@@ -1581,21 +1621,32 @@ const chargeAmountFor = (invoice, occurrence) => (
   occurrence ? Number(occurrence.amount_cents || 0) : Number(invoice?.amount_cents || 0)
 );
 
+/** Integer cents only: a non-integer, unsafe or non-positive amount is never posted. */
+export const isChargeableCents = (value) => Number.isSafeInteger(value) && value > 0;
+
 /**
- * Hash of exactly what a pull will charge: tenant, period, amount, the booked
- * row (if any) and every invoice line. The preview returns it; the pull sends
- * it back and the server recomputes it inside the pull's lock, so what is
- * charged equals what was previewed or nothing is charged.
+ * Hash of exactly what a pull will charge, and from where to where: tenant,
+ * period, amount, the booked row (if any), every invoice line, the ChecksOps
+ * fee destination and the tenant's authorized funding source. The preview
+ * returns it; the pull sends it back and the server recomputes it inside the
+ * pull's lock, so what is charged (and the accounts it moves between) equals
+ * what was previewed or nothing is charged.
  */
-export function billingPreviewHash({ tenantId, period, invoice, occurrence }) {
+export function billingPreviewHash({
+  tenantId, period, invoice, occurrence, destination = null,
+}) {
   const canonical = {
-    v: 1,
+    v: 2,
     tenant_id: String(tenantId),
     period: String(period),
     amount_cents: chargeAmountFor(invoice, occurrence),
     occurrence: occurrence ? { id: occurrence.id, amount_cents: Number(occurrence.amount_cents || 0) } : null,
     maintenance_net_cents: Number(invoice?.maintenance_net_cents || 0),
     lines: invoiceLineItems(invoice).map((line) => `${line.fee_type}|${line.source}|${line.unit_price_cents}`),
+    destination: destination?.ok
+      ? { account_id: destination.accountId, payment_method_id: destination.paymentMethodId }
+      : null,
+    funding_source: invoice?.authorization?.provider_payment_method_id || null,
   };
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
@@ -1632,6 +1683,7 @@ export async function previewTenantPeriodCharge(client, {
   });
   const reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
   if (!(amountCents > 0)) reasons.push('invalid_amount');
+  else if (!isChargeableCents(amountCents)) reasons.push('invalid_amount_cents');
   if (!monthlyBillingEnabled() && deps.ignoreEnabledFlag !== true) reasons.push('monthly_billing_disabled');
   const alreadyCharged = Boolean(occurrence && CHARGED_STATUSES.has(occurrence.status));
   return {
@@ -1667,7 +1719,9 @@ export async function previewTenantPeriodCharge(client, {
       ? { configured: true, source: destination.source, environment: destination.environment, label: destination.label }
       : { configured: false, error: destination.error, reason: destination.reason },
     readiness: { ready: reasons.length === 0 && !alreadyCharged, reasons },
-    preview_hash: billingPreviewHash({ tenantId, period, invoice, occurrence }),
+    preview_hash: billingPreviewHash({
+      tenantId, period, invoice, occurrence, destination,
+    }),
   };
 }
 
@@ -1764,7 +1818,9 @@ export async function chargeTenantPeriod(client, {
     tenantId, period, persist: true,
   });
   if (!invoice.ok) return invoice;
-  const currentHash = billingPreviewHash({ tenantId, period, invoice, occurrence: existing });
+  const currentHash = billingPreviewHash({
+    tenantId, period, invoice, occurrence: existing, destination,
+  });
   if (currentHash !== previewHash) {
     return fail('preview_mismatch', {
       statusCode: 409,
@@ -1781,6 +1837,7 @@ export async function chargeTenantPeriod(client, {
   readiness.invoice = invoice;
   readiness.reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
   if (!(readiness.amountCents > 0)) readiness.reasons.push('invalid_amount');
+  else if (!isChargeableCents(readiness.amountCents)) readiness.reasons.push('invalid_amount_cents');
   readiness.ready = readiness.reasons.length === 0;
   readiness.ok = readiness.ready;
   if (!readiness.ready) {
@@ -1855,6 +1912,8 @@ export async function chargeTenantPeriod(client, {
     amount_cents: Number(booked.occurrence.amount_cents || 0),
     provider_transfer_ids: transferIds,
     audit_recorded: audit.ok === true,
+    // Owner question (c): no invoice email is sent (INVOICE_EMAIL_AFTER_PULL).
+    invoice_email_sent: false,
   };
 }
 

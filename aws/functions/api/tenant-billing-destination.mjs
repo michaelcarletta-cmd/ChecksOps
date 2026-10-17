@@ -12,10 +12,13 @@
  *   wallet   c70a90f2-9bcc-4084-8263-d5a0fb5d806c
  * Do not write those to production env until operator approval. Production
  * charges fail closed until both destination IDs are set explicitly.
+ *
+ * Wallet or bank, and which account, is OWNER QUESTION (a): the one answer
+ * lives in tenant-collection-v2.mjs PRODUCTION_FEE_DESTINATION.
  */
 
 import { isProductionChecksOpsRuntime } from './provider-flags.mjs';
-import { assertExplicitDestination } from './tenant-collection-v2.mjs';
+import { PRODUCTION_FEE_DESTINATION, assertExplicitDestination } from './tenant-collection-v2.mjs';
 
 export const CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
 
@@ -185,6 +188,9 @@ export async function billingDestinationStatus(client, { environment, deps = {} 
     error: resolved.ok ? null : resolved.error,
     reason: resolved.ok ? null : resolved.reason,
     expected_sandbox_account_id: env === 'sandbox' ? CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID : null,
+    // OWNER QUESTION (a): the production pin's kind and whether the owner confirmed it.
+    production_destination_kind: env === 'production' ? PRODUCTION_FEE_DESTINATION.kind : null,
+    production_destination_owner_confirmed: env === 'production' ? PRODUCTION_FEE_DESTINATION.ownerConfirmed : null,
   };
 }
 
@@ -246,8 +252,8 @@ export function normalizeDest(row, environment) {
   if (environment === 'production' && accountId === CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID) {
     return failClosed('production_destination_cannot_be_sandbox_merchant', { environment });
   }
-  // Production fees land only in the ChecksOps platform account and wallet
-  // payment method that collection (tenant-collection-v2) accepts.
+  // Production fees land only in PRODUCTION_FEE_DESTINATION (owner question
+  // (a)), the same pin collection (tenant-collection-v2) accepts.
   if (environment === 'production') {
     const pinned = assertExplicitDestination({ accountId, paymentMethodId: methodId }, environment);
     if (!pinned.ok) return failClosed(pinned.errors[0], { environment, errors: pinned.errors });

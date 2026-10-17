@@ -10,8 +10,12 @@
  *     from the tenant's bank only;
  *   - one charge per tenant period (repeat, concurrent double click,
  *     duplicate-period refusal of the unique index);
- *   - preview mismatch, member refusal, unset destination, production post
- *     flag off: nothing booked, nothing posted;
+ *   - preview mismatch (invoice changed, or the tenant's authorized bank
+ *     changed), member refusal, unset destination, production post flag off:
+ *     nothing booked, nothing posted;
+ *   - the destination table keeps only SQL 98's platform-owner policies and
+ *     checksops SELECT/INSERT/UPDATE, whatever it had before;
+ *   - owner question (b)'s switch (per-check billing off, no fee);
  *   - audit rows (who, tenant, period, amount, Moov transfer id) and that only
  *     the platform owner writes / reads the audit and the destination.
  */
@@ -211,6 +215,23 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.deepEqual((await admin.query('SELECT price_per_check_cents, active FROM public.check_billing_config')).rows, [{ price_per_check_cents: 300, active: true }]);
     await assert.rejects(admin.query(`INSERT INTO public.tenant_maintenance_payments (tenant_id, amount_cents, billing_period) VALUES ('${T_B}', 1, '2020-02'), ('${T_B}', 1, '2020-02')`), (e) => e.code === '23505');
 
+    // A destination table that already carries other policies and grants (live names unknown):
+    // SQL 98 leaves only its two platform-owner policies and checksops SELECT, INSERT, UPDATE.
+    await admin.query(`CREATE POLICY legacy_open ON public.platform_billing_destination FOR ALL TO authenticated USING (true) WITH CHECK (true)`);
+    await admin.query('GRANT ALL ON public.platform_billing_destination TO checksops, authenticated');
+    await admin.query(sql98);
+    assert.deepEqual(
+      (await admin.query("SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = 'platform_billing_destination' ORDER BY 1")).rows.map((r) => r.policyname),
+      ['aws_select_platform_billing_destination', 'aws_write_platform_billing_destination'],
+    );
+    for (const [role, privilege, expected] of [
+      ['checksops', 'SELECT', true], ['checksops', 'INSERT', true], ['checksops', 'UPDATE', true],
+      ['checksops', 'DELETE', false], ['checksops', 'TRUNCATE', false], ['authenticated', 'INSERT', false],
+    ]) {
+      const has = (await admin.query('SELECT has_table_privilege($1, $2, $3) AS ok', [role, 'public.platform_billing_destination', privilege])).rows[0].ok;
+      assert.equal(has, expected, `${role} ${privilege}`);
+    }
+
     c1 = await connect();
     c2 = await connect();
 
@@ -241,6 +262,20 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.equal((await admin.query('SELECT status FROM public.check_intake_items WHERE id = $1', [CK(5)])).rows[0].status, 'deposited');
     await admin.query("UPDATE public.check_billing_config SET active = true WHERE price_per_check_cents = 300");
     await admin.query("DELETE FROM public.check_billing_config WHERE price_per_check_cents = 350");
+
+    // Owner question (b): the one switch. Answered "off means no fee", per-check-off tenants record
+    // nothing while per-check-on tenants keep their rate. Rolled back: the default stays true.
+    assert.equal((await admin.query('SELECT public.aws_check_billing_charges_when_per_check_off() AS v')).rows[0].v, true);
+    await admin.query('BEGIN');
+    await admin.query('CREATE OR REPLACE FUNCTION public.aws_check_billing_charges_when_per_check_off() RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT false $$');
+    for (const [tenantId, n] of [[T_B, 90], [T_A, 91]]) {
+      await admin.query('INSERT INTO public.check_intake_items VALUES ($1, $2, $3)', [CK(n), tenantId, 'pending']);
+      await admin.query("UPDATE public.check_intake_items SET status = 'deposited' WHERE id = $1", [CK(n)]);
+    }
+    assert.equal(await price(CK(90)), null, 'per-check off: no per-check fee');
+    assert.deepEqual(await price(CK(91)), [250], 'per-check on: the tenant rate');
+    await admin.query('ROLLBACK');
+    assert.equal(await price(CK(90)), null);
 
     // 2) Destination: platform owner only, in the API and in the database.
     const memberDest = await call(c1, MEMBER, { action: 'destination-get' });
@@ -349,6 +384,16 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.equal(mismatch.error, 'preview_mismatch');
     assert.equal(posts.length, 2);
     assert.equal(await count('SELECT count(*) AS n FROM public.tenant_maintenance_payments WHERE tenant_id = $1', [T_C]), 0);
+    // Same amount, but the tenant re-pointed its authorized bank after the preview: refused too.
+    const pFund = await call(c1, OWNER, { action: 'preview', tenant_id: T_C, period });
+    await admin.query(`INSERT INTO public.payment_provider_methods (tenant_id, provider_account_id, provider_payment_method_id, connection_status, can_send, environment)
+      VALUES ('${T_C}', 'acct-3', 'pm-bank-3b', 'connected', true, 'sandbox')`);
+    await admin.query("UPDATE public.tenant_billing_accounts SET provider_payment_method_id = 'pm-bank-3b' WHERE tenant_id = $1", [T_C]);
+    const moved = await call(c1, OWNER, { action: 'pull', tenant_id: T_C, period, preview_hash: pFund.preview_hash, confirm: true });
+    assert.equal(moved.error, 'preview_mismatch');
+    assert.equal(posts.length, 2);
+    assert.equal(await count('SELECT count(*) AS n FROM public.tenant_maintenance_payments WHERE tenant_id = $1', [T_C]), 0);
+    await admin.query("UPDATE public.tenant_billing_accounts SET provider_payment_method_id = 'pm-bank-3' WHERE tenant_id = $1", [T_C]);
     // A browser amount is refused even with a valid preview.
     const pC2 = await call(c1, OWNER, { action: 'preview', tenant_id: T_C, period });
     const withAmount = await call(c1, OWNER, { action: 'pull', tenant_id: T_C, period, preview_hash: pC2.preview_hash, confirm: true, amount_cents: 1 });
