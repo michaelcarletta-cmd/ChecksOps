@@ -728,9 +728,12 @@ function preexistingTableTakeover(t, live, want) {
   // Names only (column, constraint or index name, or the table line), never definitions or rows.
   const lineName = (line) => line.slice(`table ${t.name}`.length).replace(/:.*$/, '').trim() || 'table';
   const uniq = (values) => [...new Set(values)].sort();
+  const differing = uniq([...liveLines.filter((l) => !wantLines.includes(l)), ...wantLines.filter((l) => !liveLines.includes(l))].map(lineName));
   return {
     owner_is_login: live.owner_is_login === true,
-    shape_differs: uniq([...liveLines.filter((l) => !wantLines.includes(l)), ...wantLines.filter((l) => !liveLines.includes(l))].map(lineName)),
+    // The shape is ordered (columns by attnum): the same lines in another order still differ.
+    shape_matches: same(liveLines, wantLines),
+    shape_differs: differing.length === 0 && !same(liveLines, wantLines) ? ['order'] : differing,
     unexpected_triggers: (live.triggers || []).filter((name) => !(want?.triggers || []).includes(name)).sort(),
     unexpected_acl_grantees: uniq((live.acl || []).map(grantee).filter((g) => !revocable.has(g))),
     unexpected_column_acl_grantees: uniq((live.columns || []).flatMap((c) => (c.acl || []).map(grantee)).filter((g) => !revocable.has(g))),
@@ -740,7 +743,7 @@ function preexistingTableTakeover(t, live, want) {
 function preexistingTableReplaceable(t, live, want) {
   if (!want) return false;
   const d = preexistingTableTakeover(t, live, want);
-  return d.owner_is_login && d.shape_differs.length === 0 && d.unexpected_triggers.length === 0
+  return d.owner_is_login && d.shape_matches && d.unexpected_triggers.length === 0
     && d.unexpected_acl_grantees.length === 0 && d.unexpected_column_acl_grantees.length === 0;
 }
 

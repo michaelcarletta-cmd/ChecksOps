@@ -302,10 +302,21 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
     const { owner_is_login: _o, ...rest } = releaseSqlReport('sql98', state, TEXT.sql98).tables.find((x) => x.name === 'platform_billing_destination').takeover;
     return rest;
   };
-  assert.deepEqual(takeoverOf(foreign.state), { shape_differs: [], unexpected_triggers: [], unexpected_acl_grantees: ['zz_billing_reader'], unexpected_column_acl_grantees: [] });
+  assert.deepEqual(takeoverOf(foreign.state), { shape_matches: true, shape_differs: [], unexpected_triggers: [], unexpected_acl_grantees: ['zz_billing_reader'], unexpected_column_acl_grantees: [] });
   const otherShape = await whatIf('sql98', [DEST, 'ALTER TABLE public.platform_billing_destination ADD COLUMN notes text']);
   assert.ok(otherShape.failures.includes('created_tables_absent_or_intended'));
   assert.deepEqual(takeoverOf(otherShape.state).shape_differs, ['column notes']);
+  // Same columns in another order (two text columns swapped): still refused, reported as order.
+  const swapped = await whatIf('sql98', [DEST.replace(
+    'moov_account_id text NOT NULL, moov_payment_method_id text NOT NULL',
+    'moov_payment_method_id text NOT NULL, moov_account_id text NOT NULL')]);
+  assert.ok(swapped.failures.includes('created_tables_absent_or_intended'));
+  assert.deepEqual(takeoverOf(swapped.state).shape_differs, ['order']);
+  // A literal in a default or CHECK never reaches the report (names only).
+  const literal = await whatIf('sql98', [DEST, "ALTER TABLE public.platform_billing_destination ALTER COLUMN label SET DEFAULT 'sk_live_SECRET'",
+    "ALTER TABLE public.platform_billing_destination ADD CONSTRAINT zz_lit CHECK (label <> 'hunter2')"]);
+  assert.deepEqual(takeoverOf(literal.state).shape_differs, ['column label', 'constraint zz_lit']);
+  assert.doesNotMatch(JSON.stringify(releaseSqlReport('sql98', literal.state, TEXT.sql98)), /sk_live_SECRET|hunter2/);
   const extraTrigger = await whatIf('sql98', [DEST, `CREATE FUNCTION public.zz_touch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$`,
     'CREATE TRIGGER zz_touch BEFORE UPDATE ON public.platform_billing_destination FOR EACH ROW EXECUTE FUNCTION public.zz_touch()']);
   assert.ok(extraTrigger.failures.includes('created_tables_absent_or_intended'));
@@ -347,7 +358,7 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   assert.deepEqual(r98.release_sql_inspect.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0, platform_billing_destination_rows: 0, platform_billing_destination_production_rows: 0, platform_billing_destination_sandbox_rows: 0, platform_billing_destination_reviewed_account_rows: 0, platform_billing_destination_production_reviewed_account_rows: 0, platform_billing_destination_payment_method_rows: 0, platform_billing_destination_verified_rows: 0 });
   assert.equal(r98.release_sql_inspect.tables.find((x) => x.name === 'platform_billing_destination').state, 'different');
   assert.deepEqual(r98.release_sql_inspect.tables.find((x) => x.name === 'platform_billing_destination').takeover,
-    { owner_is_login: true, shape_differs: [], unexpected_triggers: [], unexpected_acl_grantees: [], unexpected_column_acl_grantees: [] });
+    { owner_is_login: true, shape_matches: true, shape_differs: [], unexpected_triggers: [], unexpected_acl_grantees: [], unexpected_column_acl_grantees: [] });
   // The same fingerprint when an earlier unique index already covers the pair (SQL 98 then adds none).
   await admin.query('BEGIN');
   try {
