@@ -12,9 +12,27 @@
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "note": "Inspect-only configuration (no pin, no execute, no apply). Same production RDS and checksops_admin secret as the SQL 99 pin. The tool runs one BEGIN READ ONLY ... ROLLBACK of catalog SELECTs and prints names, booleans, hashes and counts only.",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null
+    "status": "completed",
+    "date": "2026-10-17",
+    "ssm_command_ids": [
+      "ee5c42a3-fe1b-4da8-bb84-106766285bfa",
+      "45d46a8f-beeb-4ea7-9b1e-598fe6b980b4",
+      "041bc13d-70fa-4f43-805a-e4d7b22afd19"
+    ],
+    "source_commit": "09aa7ab00",
+    "drift_recorded_in": "aws/workflows/sql/100_mortgage_desk_live_access.sql",
+    "drift_findings": [
+      "mortgage_handling_requests: aws_select_mortgage_handling_requests is live with a third OR term, public.aws_mortgage_agent_queue_visible(status, assigned_employee_id); the repository (12_final_select_policies.sql) lacked it.",
+      "mortgage_handling_requests: aws_select_mortgage_ops_agent_queue (SELECT TO authenticated, checksops) and aws_update_mortgage_ops_accept_complete (UPDATE TO authenticated, checksops) are live and were not in the repository.",
+      "mortgage_handling_requests: aws_insert_mortgage_handling_requests and aws_delete_mortgage_handling_requests are live and were not in the repository by those names.",
+      "mortgage_handling_requests: the repository's aws_write_mortgage_handling_requests (FOR ALL, 24_complete_write_policies.sql) is not live. Live has no tenant-writer UPDATE policy: only agents update, through aws_update_mortgage_ops_accept_complete.",
+      "mortgage_handling_requests grants: checksops has table DELETE, INSERT, SELECT and column UPDATE on 17 columns (SQL 50's 13 plus accepted_at, assigned_employee_id, cancelled_at, completed_at); authenticated has only column UPDATE on accepted_at, assigned_employee_id, completed_at (SQL 50 also grants it table SELECT, INSERT, DELETE and UPDATE on 13 columns).",
+      "public.aws_is_mortgage_ops_agent() and public.aws_mortgage_agent_queue_visible(text, uuid) are live (SECURITY DEFINER, sql, STABLE, owner checksops_admin, row_security + search_path) and were not in the repository; their bodies were found on unmerged branches with prosrc sha256 equal to the live values.",
+      "public.aws_is_active_mortgage_agent(uuid) is live with prosrc equal to the SQL 47 test fixture only (aws/tests/fixtures/mortgage-agent-compensation/47_mortgage_agent_compensation.sql).",
+      "Live triggers on mortgage_handling_requests: mortgage_handling_requests_set_updated_at, tr_accrue_mortgage_ops_billing, tr_earn_mortgage_agent_compensation, tr_reject_inactive_mortgage_agent_accept, trg_mirror_mortgage_dates, trg_share_library_docs_to_mortgage_request. tr_accrue_mortgage_ops_billing has no CREATE TRIGGER in any repository SQL file (it is only named in scripts/lib/justified-public-triggers.mjs and aws/functions/api/db-readonly-validate.mjs); tr_earn_mortgage_agent_compensation and tr_reject_inactive_mortgage_agent_accept are created only by the SQL 47 test fixture. Not recorded by SQL 100."
+    ],
+    "future_cleanup": [
+      "check_intake_items: the stale Supabase policies \"Owner tenant staff can insert checks\" and \"Owner tenant staff can update checks\" (has_role admin / staff) are still live. Not changed by SQL 100; remove in a separate, reviewed change."
+    ]
   }
 }

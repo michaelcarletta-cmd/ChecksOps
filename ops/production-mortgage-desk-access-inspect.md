@@ -2,10 +2,11 @@
 
 `scripts/deployment-guard/mortgage-desk-access-production-inspect.mjs --inspect` reports
 what is really live in production for the Mortgage Desk, without changing anything. Under
-the repository's RLS and grants, a Mortgage Agent who is not a member of the requesting
-tenant cannot read, accept or update `mortgage_handling_requests`, but the Desk is believed
-to be in use in production. This inspect shows the live policies, grants and helpers so that
-drift can be seen, and records the ownership facts SQL 99 needs.
+the repository's older RLS and grants (12, 24, SQL 50), a Mortgage Agent who is not a member
+of the requesting tenant could not read, accept or update `mortgage_handling_requests`, while
+the Desk was in use in production. This inspect shows the live policies, grants and helpers so
+that drift can be seen, and records the ownership facts SQL 99 needs. The 2026-10-17 run (below)
+confirmed the drift; SQL 100 now records the live access in the repository.
 
 It is inspect-only. It has no pin, no `execute`, no apply, no `--input`, no receipt and no
 one-shot entry. The configuration in
@@ -78,9 +79,75 @@ AWS_ENDPOINT_URL_SECRETS_MANAGER=https://vpce-01649ea2cdb21a689-tp7fo1qj.secrets
   node scripts/deployment-guard/mortgage-desk-access-production-inspect.mjs --inspect
 ```
 
-Record the date, SSM command id and source commit in `production_inspect` of the
+Record the date, SSM command ids and source commit in `production_inspect` of the
 configuration file, in a reviewed change. Running this inspect authorizes nothing: no SQL 99
 apply, no policy or grant change.
+
+## Production inspect of 2026-10-17
+
+Run at source commit `09aa7ab00`, SSM commands `ee5c42a3-fe1b-4da8-bb84-106766285bfa`,
+`45d46a8f-beeb-4ea7-9b1e-598fe6b980b4` and `041bc13d-70fa-4f43-805a-e4d7b22afd19` (recorded in
+`production_inspect`). It found that production has Mortgage Desk agent access the repository
+lacked. `aws/workflows/sql/100_mortgage_desk_live_access.sql` writes that live state into the
+repository. It is not an access change: applied to production it is a no-op. It lives in
+`aws/workflows/sql/` because `aws/rls/sql/` is covered by the `database-rls` release-lock tree
+hash; it comes after `12_final_select_policies.sql`, `24_complete_write_policies.sql` and SQL 50,
+and leaves a rebuilt database where production is. It is numbered 100, after SQL 98 (tenant fee
+collection) and SQL 99 (the Desk completion trigger).
+
+Live on `public.mortgage_handling_requests` (owner `checksops_admin`, RLS enabled, not forced):
+
+| policy | command | roles | in the repository before SQL 100 |
+|---|---|---|---|
+| `aws_select_mortgage_handling_requests` | SELECT | authenticated | yes, without the third OR term `aws_mortgage_agent_queue_visible(status, assigned_employee_id)` |
+| `aws_select_mortgage_ops_agent_queue` | SELECT | authenticated, checksops | no |
+| `aws_update_mortgage_ops_accept_complete` | UPDATE | authenticated, checksops | no |
+| `aws_insert_mortgage_handling_requests` | INSERT | authenticated | no |
+| `aws_delete_mortgage_handling_requests` | DELETE | authenticated | no |
+
+Drift findings:
+
+- The repository's `aws_write_mortgage_handling_requests` (FOR ALL, 24) is **not** live. Live has
+  no tenant-writer UPDATE policy: only agents update a request, through
+  `aws_update_mortgage_ops_accept_complete` (Accept an unassigned `requested` request to
+  `in_progress` with `accepted_at`; Complete / Cancel only when assigned to the caller; never
+  reassign or return to `requested`).
+- Grants: `checksops` has table DELETE, INSERT, SELECT and column UPDATE on 17 columns (SQL 50's
+  13 plus `accepted_at`, `assigned_employee_id`, `cancelled_at`, `completed_at`).
+  `authenticated` has only column UPDATE on `accepted_at`, `assigned_employee_id`,
+  `completed_at`; SQL 50 also grants it table SELECT, INSERT, DELETE and 13 UPDATE columns,
+  none of which is live.
+- `public.aws_is_mortgage_ops_agent()` (prosrc sha256 `787bad58…`) and
+  `public.aws_mortgage_agent_queue_visible(text, uuid)` (`b9f70c8b…`) are live (SECURITY
+  DEFINER, sql, STABLE, owner `checksops_admin`, `row_security` + `search_path`) and were not in
+  the repository. Their bodies were found on unmerged Mortgage Ops branches (SQL 39
+  `mortgage_ops_agent_accept_complete`, `mortgage_ops_agent_access` 29 / 31) with prosrc sha256
+  equal to the live values.
+- `public.aws_is_active_mortgage_agent(uuid)` is live with prosrc equal to the SQL 47 test
+  fixture (`2bba15b2…`); SQL 100 records it when `mortgage_agent_accounts` exists.
+- Live triggers: `mortgage_handling_requests_set_updated_at`, `tr_accrue_mortgage_ops_billing`,
+  `tr_earn_mortgage_agent_compensation`, `tr_reject_inactive_mortgage_agent_accept`,
+  `trg_mirror_mortgage_dates`, `trg_share_library_docs_to_mortgage_request`. SQL 100 does not
+  record triggers; `tr_accrue_mortgage_ops_billing` has no CREATE TRIGGER in a repository SQL
+  file, and the two compensation triggers exist only in the SQL 47 test fixture.
+- Confirmed against the production inspect output: `functiondef_sha256` matches live for all
+  three helpers (`aws_is_mortgage_ops_agent` `9a0fd538…`, `aws_mortgage_agent_queue_visible`
+  `e8012bab…`, `aws_is_active_mortgage_agent` `d8846afb…`; full values in the SQL 100 header
+  and asserted by its PG test). The SET values (`search_path = public`, `row_security = off`) and
+  the other attributes are therefore the live ones, not just the proconfig names.
+- Confirmed against the production inspect output: `authenticated` has no table-level ACL entry
+  on `mortgage_handling_requests`, so SQL 100's REVOKEs from `authenticated` are a no-op on
+  production.
+- Not reported by the inspect, so not asserted by SQL 100: function EXECUTE privileges and
+  function and policy comments.
+
+Future cleanup (not done now): the stale Supabase policies "Owner tenant staff can insert
+checks" and "Owner tenant staff can update checks" on `check_intake_items` (`has_role` admin /
+staff) are still live.
+
+`aws/tests/sql100-mortgage-desk-live-access-pg.test.mjs` applies the repository sequence plus
+SQL 100 to PostgreSQL 16, runs this inspect's library against it and checks that the policy
+texts, grants and helper prosrc hashes equal the production values above.
 
 Tests: `aws/tests/mortgage-desk-access-production-inspect.test.mjs`, in
 `npm run test:deployment-guard`. The PostgreSQL 16 part checks that a non-superuser

@@ -517,7 +517,9 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
     const pol = Object.fromEntries(mhr.policies.map((p) => [p.policy, p]));
     assert.deepEqual(Object.keys(pol).sort(), ['aws_select_mortgage_handling_requests', 'aws_write_mortgage_handling_requests', 'prod_agent_read_mortgage_handling_requests', 'prod_agent_update_mortgage_handling_requests']);
     assert.equal(pol.aws_select_mortgage_handling_requests.created_in_repo, true);
-    assert.deepEqual(pol.aws_select_mortgage_handling_requests.repo_sources, ['aws/rls/sql/12_final_select_policies.sql']);
+    assert.deepEqual(pol.aws_select_mortgage_handling_requests.repo_sources, ['aws/rls/sql/12_final_select_policies.sql', 'aws/workflows/sql/100_mortgage_desk_live_access.sql']);
+    // aws_write_ is still created by 24 (a rebuilt database then drops it in SQL 100).
+    assert.deepEqual(pol.aws_write_mortgage_handling_requests.repo_sources, ['aws/rls/sql/24_complete_write_policies.sql']);
     assert.equal(pol.aws_select_mortgage_handling_requests.command, 'SELECT');
     assert.deepEqual(pol.aws_select_mortgage_handling_requests.roles, ['authenticated']);
     assert.equal(pol.aws_select_mortgage_handling_requests.using.text, '(public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id))');
