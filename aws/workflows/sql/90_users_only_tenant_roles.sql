@@ -61,6 +61,8 @@
 --    (auth.uid() shares a tenant with u, OR u is the platform owner's own id).
 -- 4) aws_can_access_tax_profiles(t) = aws_is_tenant_member(t). No platform-owner
 --    or user_roles admin branch (the API matches: tax-secrets evaluateTaxAccess).
+--    Created when absent: production has no aws_can_access_tax_profiles
+--    (2026-10-17 inspect), so it is not a prerequisite.
 -- 5) aws_is_tenant_manager_admin() (SQL 35) = authenticated AND platform
 --    owner. SQL 35's checkalt_config_public (platform-wide merchant, fi_key,
 --    depositor account) is the platform owner's only. SQL 35's
@@ -70,6 +72,9 @@
 --    checkalt_tenant_auto_deposit_public. Replaced only if present.
 -- 6) aws_can_manage_mortgage_library(t) (SQL 29) = authenticated AND t IS NOT
 --    NULL AND aws_can_write_tenant(t). Replaced only if present.
+--    Both (5 and 6) get the SQL 90 helper ACL when replaced: EXECUTE for
+--    checksops and authenticated, none for PUBLIC (production had PUBLIC and
+--    checksops, 2026-10-17 inspect).
 -- 7) aws_save_checkalt_tenant_auto_deposit(uuid, jsonb) (SQL 80): the caller
 --    must be a member of _tenant_id (a tenant setting; the platform owner is
 --    refused); everything else is SQL 80's body unchanged. Replaced only if
@@ -126,7 +131,6 @@ BEGIN
       ('public.identity_accounts', to_regclass('public.identity_accounts')::oid),
       ('public.profiles', to_regclass('public.profiles')::oid),
       ('public.aws_can_write_same_tenant_user(uuid)', to_regprocedure('public.aws_can_write_same_tenant_user(uuid)')::oid),
-      ('public.aws_can_access_tax_profiles(uuid)', to_regprocedure('public.aws_can_access_tax_profiles(uuid)')::oid),
       ('role checksops', (SELECT oid FROM pg_roles WHERE rolname = 'checksops')),
       ('role authenticated', (SELECT oid FROM pg_roles WHERE rolname = 'authenticated'))
   ) AS req(name, obj)
@@ -521,6 +525,9 @@ $body$
 $fn$;
     EXECUTE $c$COMMENT ON FUNCTION public.aws_is_tenant_manager_admin() IS
   'Platform owner only. Gates SQL 35 checkalt_config_public (platform-wide merchant, fi_key, depositor account) and the full deposit_provider_config_public row. Members read their own tenant''s Check Alt status through is_checkalt_enabled_for_tenant / checkalt_tenant_auto_deposit_public (SQL 90).'$c$;
+    -- Like the other SQL 90 helpers: no PUBLIC EXECUTE (production had PUBLIC, 2026-10-17).
+    EXECUTE 'REVOKE ALL ON FUNCTION public.aws_is_tenant_manager_admin() FROM PUBLIC, authenticated, checksops';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.aws_is_tenant_manager_admin() TO checksops, authenticated';
   END IF;
 
   -- SQL 35 deposit_provider_config_public: members of any tenant see only the
@@ -566,6 +573,8 @@ $body$
 $fn$;
     EXECUTE $c$COMMENT ON FUNCTION public.aws_can_manage_mortgage_library(uuid) IS
   'Any tenant_users member of _tenant_id (aws_can_write_tenant, members only; the platform owner is not a writer). Mortgage agents cannot backfill. No role tiers (SQL 90).'$c$;
+    EXECUTE 'REVOKE ALL ON FUNCTION public.aws_can_manage_mortgage_library(uuid) FROM PUBLIC, authenticated, checksops';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.aws_can_manage_mortgage_library(uuid) TO checksops, authenticated';
   END IF;
 END
 $$;
