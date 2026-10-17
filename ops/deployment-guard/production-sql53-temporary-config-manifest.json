@@ -1,0 +1,49 @@
+{
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "branch": "cursor/prod-sql53-temporary-config-3bc9",
+  "commit": "b00899d93aed7887751eec213009770ae5474731",
+  "operator": "cursor-agent",
+  "target_environment": "production",
+  "target_component": "checksops-production-prep-api",
+  "function_name": "checksops-production-prep-api",
+  "deployment_type": "lambda-sql53-temporary-config",
+  "owned_components": [
+    "checksops-production-prep-api"
+  ],
+  "preflight_live_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "production_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "immediately_before_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation"
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "prod-sql53-temporary-config-3bc9",
+    "inherited": false,
+    "from_previous_workstream": false
+  },
+  "contract_results": {
+    "tenant-isolation": {
+      "ok": true
+    }
+  },
+  "apply": false,
+  "execute": false,
+  "notes": "Owner-authorized production inspection for this workstream only. Refresh immediately-before fingerprint at apply. Do not inherit other workstreams."
+}

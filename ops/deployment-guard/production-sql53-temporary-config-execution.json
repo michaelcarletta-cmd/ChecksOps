@@ -1,0 +1,58 @@
+{
+  "id": "production-sql53-temporary-config-execution",
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "authorization": "owner-authorized-guarded-apply",
+  "sql53_inspection_executed": false,
+  "production_fingerprint_matched": true,
+  "signed_receipt_valid": true,
+  "exclusive_lease_valid": true,
+  "diagnostic_read_only": true,
+  "cleanup_verified": true,
+  "sql53_database_objects": "UNKNOWN",
+  "receipt_consumed": true,
+  "lambda_code_unchanged": true,
+  "sql53_temp_vars_absent_after": true,
+  "iam_trust_unchanged": true,
+  "executed_at": "2026-10-11T00:55:17Z",
+  "writer_identity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-temporary-config-apply",
+  "before_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "after_independent_verify": {
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "d49b27cc-3dcb-48ab-8490-206097172689",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24",
+    "last_modified": "2026-10-11T00:55:17.000+0000",
+    "env_key_count": 49,
+    "sql53_authorization_present": false,
+    "sql53_expiry_present": false
+  },
+  "apply_result": {
+    "ok": false,
+    "code": "DEPLOYMENT_COLLISION",
+    "message": "SQL53 direct Lambda invocation or temporary configuration update failed",
+    "cleanup": {
+      "complete": true,
+      "drift_detected": false,
+      "attempts": 1
+    },
+    "authorization_cleanup_verified": true
+  },
+  "invoke_observed": {
+    "cloudwatch_request_id": "838dacac-c3a5-4796-ade9-d5ac78765ff7",
+    "duration_ms": 222.87,
+    "function_error_reported": false,
+    "catalog_parsed": false
+  },
+  "functions": null,
+  "settlement_columns": null,
+  "ledger_triggers": null,
+  "remaining_blockers": [
+    "Official apply consumed the receipt and then failed to parse a complete inspect payload",
+    "SQL53 catalog presence is unknown; do not retry without a new signed receipt and explicit owner authorization",
+    "Temporary Cursor OIDC trust must remain until a successful inspect and cleanup are both verified"
+  ]
+}
