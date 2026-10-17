@@ -53,8 +53,6 @@ import {
   microDepositInitiate,
   onboardingLink,
   plaidBridge,
-  platformBank,
-  platformTreasury,
   publicInvoice,
   recipientBankAdd,
   recipientBankVerify,
@@ -66,6 +64,12 @@ import {
   stakeholderResendVerification,
   sweepConfig,
 } from './moov-onboard.mjs';
+import {
+  isPlatformFinanceFunction,
+  platformFinanceBank,
+  platformFinanceTreasury,
+  wrapPlatformFinance,
+} from './platform-finance.mjs';
 
 const wrap = (handler, name) => async (event, deps = {}) => {
   const { parseBody, withIdentity, withIdentityWrite } = await import('../../data.mjs');
@@ -612,7 +616,7 @@ const HANDLERS = {
   'moov-micro-deposit-initiate': microDepositInitiate,
   'moov-micro-deposit-confirm': microDepositConfirm,
   'moov-plaid-bridge': plaidBridge,
-  'moov-platform-bank': platformBank,
+  'moov-platform-bank': platformFinanceBank,
   'moov-recipient-create': recipientCreate,
   'moov-recipient-session': recipientSession,
   'moov-recipient-tos-accept': recipientTosAccept,
@@ -635,12 +639,15 @@ const HANDLERS = {
   'calculate-payment-funding': calculatePaymentFunding,
   'process-funded-payment': processFundedPayment,
   'wallet-fund-on-clear': walletFundOnClear,
-  'platform-treasury': platformTreasury,
+  'platform-treasury': platformFinanceTreasury,
   'homeowner-deductible-pay': homeownerDeductiblePay,
   'stakeholder-resend-verification': stakeholderResendVerification,
   'public-invoice': publicInvoice,
 };
 
 export const MOOV_PARITY_HANDLERS = Object.fromEntries(
-  Object.entries(HANDLERS).map(([name, handler]) => [name, wrap(handler, name)]),
+  Object.entries(HANDLERS).map(([name, handler]) => [
+    name,
+    isPlatformFinanceFunction(name) ? wrapPlatformFinance(handler, name) : wrap(handler, name),
+  ]),
 );
