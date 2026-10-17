@@ -286,8 +286,8 @@ nothing. The production tool therefore never runs the file there:
    `[]`. Record that run in the SQL 100 production pin (`production_inspect`) and in
    `production-api-overlay-plan.json` if a member ever needs it.
 2. If `live_definition_sha256` differs, SQL 100 does not describe production (for example a
-   helper EXECUTE grant beyond PUBLIC and the owner, a grant whose grantor is not
-   `checksops_admin`, a policy comment, or anything on `mortgage_handling_requests` the file
+   helper EXECUTE grant other than the recorded ones, a grant whose grantor is not
+   `checksops_admin`, a policy comment other than the recorded one, or anything on `mortgage_handling_requests` the file
    does not name: RLS off or forced, another policy, a table grant to any other role (PUBLIC
    included) or a grant on an unlisted column; the fingerprint covers the table's whole access
    surface, spec `whole_tables`). Stop: reconcile the file in a reviewed change. Do not

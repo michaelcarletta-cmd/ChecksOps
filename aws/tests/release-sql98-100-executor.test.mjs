@@ -173,7 +173,7 @@ test('SQL 100 fingerprint: a grantor or a policy comment is another state; specs
   otherGrantor.columns['public.mortgage_handling_requests.status'].acl = ['checksops UPDATE grantor=checksops'];
   assert.notEqual(releaseStateHash('sql100', otherGrantor), base);
   const fnGrant = structuredClone(intended);
-  fnGrant.functions['public.aws_is_mortgage_ops_agent()'].acl.push('authenticated EXECUTE grantor=owner');
+  fnGrant.functions['public.aws_is_mortgage_ops_agent()'].acl.push('PUBLIC EXECUTE grantor=owner');
   assert.notEqual(releaseStateHash('sql100', fnGrant), base);
   // The whole table: RLS off or forced, another policy, a grant to any other role or on an unlisted column.
   const W = 'public.mortgage_handling_requests';
@@ -421,6 +421,14 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   assert.ok(r100.release_sql_inspect.functions.every((row) => row.state === 'intended'), JSON.stringify(r100.release_sql_inspect.functions));
   assert.deepEqual(r100.release_sql_inspect.policy_comments.map((p) => p.present), [false, false, true, false, false]);
   assert.equal((await apply('sql100', pre100)).code, CODES.UNRELATED_MUTATION);
+  // Likewise a helper EXECUTE grant by another grantor (the owner's REVOKE leaves it): refused (helpers exist now).
+  const fnGrantor = await whatIf('sql100', [
+    'GRANT EXECUTE ON FUNCTION public.aws_is_mortgage_ops_agent() TO checksops WITH GRANT OPTION',
+    'SET LOCAL ROLE checksops',
+    'GRANT EXECUTE ON FUNCTION public.aws_is_mortgage_ops_agent() TO PUBLIC',
+    'RESET ROLE',
+  ]);
+  assert.ok(fnGrantor.failures.includes('function_acl_replaceable'), JSON.stringify(fnGrantor.failures));
   // Access the file does not describe is another state, not "already applied" (no precondition names it).
   for (const wider of [
     'CREATE POLICY zz_open_read ON public.mortgage_handling_requests FOR SELECT TO authenticated USING (true)',
