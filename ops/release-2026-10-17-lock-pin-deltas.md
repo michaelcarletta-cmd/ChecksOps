@@ -42,6 +42,7 @@ reconciliation (S11/S14 and the 2026-10-11 live snapshot) applied after it.
     (write-allowlist.mjs, write-app-metadata.mjs), SQL 94 (library members), SQL 96 (billing members); each is in
     `sql_prerequisites` with `verified_live: false`.
 - **SQL pins:** pending production pins `ops/deployment-guard/sql90-…` to `sql97-…-production-apply.json`
+  SQL 90's pin lists `predecessors: ["sql29", "sql30"]`, matching its order note.
   (`authorization: "pending"`, `execute: false`, `expected_live_definition_sha256: null`) and pending staging
   pins `AUTHORIZED_SQL90_…` to `AUTHORIZED_SQL97_…` (`RELEASE_2026_10_17_PENDING_SQL_PINS`) in
   `scripts/deployment-guard/lib/sql-executor-auth.mjs`. They are not in the staging executor `MIGRATIONS` map or
@@ -345,10 +346,12 @@ Staging first for every step, with a staging acceptance reference before the mat
    Soft dependency: `auth-financial-totp.mjs` reads `TEAM_RESET_TOTP_ACTION` from `admin-reset-totp.mjs` at run
    time; until the new admin-reset-totp is live it is undefined, so a `team.reset_totp` step-up is refused
    (`action_mismatch`) — nothing crashes, teammate 2FA reset is simply unavailable in that gap.
-7. **Library:** `mortgage-library-doc-types.mjs` → ADD `tenant-library-rules.mjs` / `tenant-library.mjs` /
+7. **Library:** `mortgage-library-doc-types.mjs` → ADD `tenant-library-rules.mjs` / `tenant-library.mjs` →
+   `write-signature.mjs` (moved here from step 8: `signature-library-source.mjs` imports
+   `authorizeSignatureDocumentPath` from it, and it imports only `storage-paths.mjs`) → ADD
    `signature-library-source.mjs` / `platform-announcements.mjs` → `mortgage-library-docs.mjs` /
    `write-app-metadata.mjs` / `storage-write-auth.mjs` / `storage-write.mjs` / `storage.mjs`.
-8. **Branding, e-sign, routes:** `email-branding.mjs` / `write-signature.mjs` / `esign.mjs` → `documents.mjs`
+8. **Branding, e-sign, routes:** `email-branding.mjs` / `esign.mjs` → `documents.mjs`
    (imports the new `requireSignatureRequestActor` from esign) → `homeowner.mjs` (imports `tenant-library.mjs`) →
    `app-services.mjs` (imports the library and announcements handlers) → `tenant-settings-handlers.mjs` → the
    `ingest-shared-check.mjs` stub → **SQL 95**.

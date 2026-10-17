@@ -30,7 +30,10 @@
   "expected_live_definition_sha256": null,
   "intended_replacement_sha256": null,
   "authorization_phrase": "APPLY_USERS_ONLY_TENANT_ROLES",
-  "predecessors": [],
+  "predecessors": [
+    "sql29",
+    "sql30"
+  ],
   "order_note": "After SQL 29 and SQL 30 (aws/rls/sql/29_mortgage_ops_library_parity.sql, 30_tenant_documents_mortgage_doc_type.sql; the SQL 29 tools refuse once aws_is_tenant_member(uuid) exists) and before SQL 93, SQL 94 and SQL 96. Before tenant-admin.mjs and workflow-rpc.mjs (plan sql_before) and right before the step-6 Lambdas: invites break between SQL 90 and the new tenant-admin.mjs. Needs aws/rls/sql 02, 10, 11, 20, 21, 24, 29, 35 and aws/workflows/sql 80; the file refuses with sql90_prerequisite_missing otherwise.",
   "admin_login": "checksops_admin",
   "rds_identifier": "checksops-production",
