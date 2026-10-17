@@ -292,12 +292,26 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
             if (!user?.id) return;
             setAckBusy(true);
             try {
-              await acknowledgeReturn({
+              const result = await acknowledgeReturn({
                 checkId,
                 requestIds: returnAlert.unackedRequestIds,
                 senderId: user.id,
               });
+              if (result.error) {
+                toast({
+                  title: "Could not acknowledge the return",
+                  description: result.error.message || "Please try again.",
+                  variant: "destructive",
+                });
+                return;
+              }
               onRefresh?.();
+            } catch (e) {
+              toast({
+                title: "Could not acknowledge the return",
+                description: e instanceof Error ? e.message : "Please try again.",
+                variant: "destructive",
+              });
             } finally {
               setAckBusy(false);
             }

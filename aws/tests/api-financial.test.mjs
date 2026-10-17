@@ -675,3 +675,102 @@ test('partial disbursement uses remaining balance and sequence identity', async 
     assert.equal(over.error, 'exceeds_remaining');
   });
 });
+
+test('partial disbursement without disbursement_sequence is rejected so retries cannot double-reserve', async () => {
+  await withEnv({
+    AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    await confirmDeposit(client);
+    const before = client.ops.length;
+    const insertsBefore = client.queries.filter((q) => q.sql.includes('INSERT INTO public.aws_financial_operations')).length;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = await handleFinancialRequest(
+        jwtEvent('/financial/prepare', 'POST', {
+          operation_type: 'disbursement',
+          check_id: CHECK_ID,
+          requested_partial_cents: 5000,
+        }),
+        '/financial/prepare',
+        'POST',
+        depsFor(client),
+      );
+      assert.equal(result.ok, false);
+      assert.equal(result.statusCode, 400);
+      assert.equal(result.error, 'disbursement_sequence_required');
+      assert.equal(result.liveProviderCalled, false);
+    }
+    assert.equal(client.ops.length, before);
+    assert.equal(
+      client.queries.filter((q) => q.sql.includes('INSERT INTO public.aws_financial_operations')).length,
+      insertsBefore,
+    );
+  });
+});
+
+test('prepare replays a raced unique violation via savepoint instead of 25P02/503', async () => {
+  await withEnv({
+    AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+  }, async () => {
+    const base = mockClient();
+    // Postgres semantics: after an error the transaction is aborted and every
+    // statement fails with 25P02 until ROLLBACK or ROLLBACK TO SAVEPOINT.
+    let aborted = false;
+    let raced = false;
+    const savepoints = [];
+    const client = {
+      ...base,
+      query: async (sql, params = []) => {
+        const text = String(sql).trim();
+        if (aborted) {
+          const rollbackTo = /^ROLLBACK TO SAVEPOINT (\w+)$/.exec(text);
+          if (rollbackTo && savepoints.includes(rollbackTo[1])) {
+            savepoints.splice(savepoints.indexOf(rollbackTo[1]) + 1);
+            aborted = false;
+            base.queries.push({ sql: text, params });
+            return { rows: [] };
+          }
+          if (text === 'ROLLBACK') {
+            aborted = false;
+            savepoints.length = 0;
+            return { rows: [] };
+          }
+          const err = new Error('current transaction is aborted, commands ignored until end of transaction block');
+          err.code = '25P02';
+          throw err;
+        }
+        const savepoint = /^SAVEPOINT (\w+)$/.exec(text);
+        if (savepoint) savepoints.push(savepoint[1]);
+        const release = /^RELEASE SAVEPOINT (\w+)$/.exec(text);
+        if (release && savepoints.includes(release[1])) savepoints.splice(savepoints.indexOf(release[1]));
+        if (!raced && text.includes('INSERT INTO public.aws_financial_operations')) {
+          raced = true;
+          // A concurrent prepare committed the same idempotency key first.
+          await base.query(sql, params);
+          aborted = true;
+          const err = new Error('duplicate key value violates unique constraint');
+          err.code = '23505';
+          throw err;
+        }
+        return base.query(sql, params);
+      },
+    };
+    const result = await handleFinancialRequest(
+      jwtEvent('/financial/prepare', 'POST', { operation_type: 'checkalt_deposit', check_id: CHECK_ID }),
+      '/financial/prepare',
+      'POST',
+      depsFor(client),
+    );
+    assert.equal(raced, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.duplicate, true);
+    assert.equal(result.replayed, true);
+    assert.equal(base.ops.length, 1);
+    assert.equal(result.operation.id, base.ops[0].id);
+    assert.ok(base.queries.some((q) => q.sql === 'ROLLBACK TO SAVEPOINT financial_prepare_insert'));
+  });
+});

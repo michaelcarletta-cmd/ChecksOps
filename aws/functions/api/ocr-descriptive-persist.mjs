@@ -148,10 +148,17 @@ export const persistOcrDescriptiveHandoff = async ({
   }
 
   if (carrierName || payeeLine) {
+    // S14: a deposit can land between resolveWritablePayeeLine and this
+    // UPDATE. Re-check deposited_at (the check-deposited.mjs column) in the
+    // UPDATE itself so the payee_line lock holds atomically; carrier_name
+    // stays writable.
     await client.query(
       `UPDATE public.check_intake_items
        SET carrier_name = COALESCE($2, carrier_name),
-           payee_line = COALESCE($3, payee_line),
+           payee_line = CASE
+             WHEN $3::text IS NOT NULL AND deposited_at IS NULL THEN $3::text
+             ELSE payee_line
+           END,
            updated_at = now()
        WHERE id = $1::uuid`,
       [checkId, carrierName, payeeLine],

@@ -495,7 +495,7 @@
     },
     "financial.mjs": {
       "operation": "replace",
-      "accepted_sha256": "d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef",
+      "accepted_sha256": "1e7e7915e671bbbce7d5b531027492a5a1a457e4f6e4b1f91181029697ffce97",
       "expected_live_sha256": "3fcb5f3731b9ec64c49da211ec659e7bceeb5062f0c128f0f647c14bc9c77ebd",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"

@@ -167,3 +167,129 @@ export function compareLossDraftReturnPriority(
   if (aRequired === bRequired) return 0;
   return aRequired ? -1 : 1;
 }
+
+type ReturnReadResult = PromiseLike<{
+  data: Array<Record<string, unknown>> | null;
+  error: { message?: string } | null;
+}>;
+
+/**
+ * Minimal structural view of the data client (Supabase or the AWS adapter)
+ * used to read return state, so tests can pass a fake client.
+ */
+export type MortgageDeskReturnReadChain = ReturnReadResult & {
+  select: (columns: string) => MortgageDeskReturnReadChain;
+  in: (column: string, values: string[]) => MortgageDeskReturnReadChain;
+  eq: (column: string, value: unknown) => MortgageDeskReturnReadChain;
+  like: (column: string, pattern: string) => MortgageDeskReturnReadChain;
+  order: (column: string, options?: { ascending?: boolean }) => MortgageDeskReturnReadChain;
+  range: (from: number, to: number) => MortgageDeskReturnReadChain;
+};
+
+export type MortgageDeskReturnReadClient = {
+  from: (table: string) => { select: (columns: string) => MortgageDeskReturnReadChain };
+};
+
+/**
+ * The data API applies LIMIT 200 when no limit is sent (and clamps to 500)
+ * with no implicit ORDER BY. Return-state reads therefore chunk the check
+ * ids, order by created_at, and page with explicit ranges until a short page
+ * comes back, so a tenant with many returned checks never silently loses a
+ * return row (hidden return) or an ack row (stale banner).
+ */
+export const MORTGAGE_DESK_RETURN_ID_CHUNK = 25;
+export const MORTGAGE_DESK_RETURN_PAGE_SIZE = 200;
+export const MORTGAGE_DESK_RETURN_MAX_PAGES = 50;
+
+export function chunkMortgageDeskReturnIds(ids: string[], size: number = MORTGAGE_DESK_RETURN_ID_CHUNK): string[][] {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += size) chunks.push(unique.slice(i, i + size));
+  return chunks;
+}
+
+export async function fetchAllMortgageDeskReturnPages(
+  runPage: (from: number, to: number) => ReturnReadResult,
+  pageSize: number = MORTGAGE_DESK_RETURN_PAGE_SIZE,
+): Promise<Array<Record<string, unknown>>> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let page = 0; page < MORTGAGE_DESK_RETURN_MAX_PAGES; page += 1) {
+    const from = page * pageSize;
+    const { data, error } = await runPage(from, from + pageSize - 1);
+    if (error) throw new Error(error.message || "mortgage_desk_return_load_failed");
+    const batch = data || [];
+    rows.push(...batch);
+    if (batch.length < pageSize) return rows;
+  }
+  throw new Error("mortgage_desk_return_page_limit_exceeded");
+}
+
+function dedupeRowsById(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const seen = new Set<string>();
+  const out: Array<Record<string, unknown>> = [];
+  for (const row of rows) {
+    if (row.id != null) {
+      const id = String(row.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+export async function loadMortgageDeskReturnStates(
+  client: MortgageDeskReturnReadClient,
+  checkIds: string[],
+  options: { chunkSize?: number; pageSize?: number } = {},
+): Promise<Record<string, MortgageDeskReturnState>> {
+  const chunks = chunkMortgageDeskReturnIds(checkIds, options.chunkSize);
+  const result: Record<string, MortgageDeskReturnState> = {};
+  for (const chunk of chunks) for (const id of chunk) result[id] = emptyMortgageDeskReturnState();
+  if (chunks.length === 0) return result;
+
+  const [requestPages, messagePages] = await Promise.all([
+    Promise.all(
+      chunks.map((chunk) =>
+        fetchAllMortgageDeskReturnPages(
+          (from, to) =>
+            client
+              .from("mortgage_handling_requests")
+              .select("id, check_intake_item_id, status, completed_at, created_at")
+              .in("check_intake_item_id", chunk)
+              .eq("status", "completed")
+              .order("created_at", { ascending: true })
+              .range(from, to),
+          options.pageSize,
+        ),
+      ),
+    ),
+    Promise.all(
+      chunks.map((chunk) =>
+        fetchAllMortgageDeskReturnPages(
+          (from, to) =>
+            client
+              .from("check_messages")
+              .select("id, check_id, body, created_at, is_deleted")
+              .in("check_id", chunk)
+              .like("body", "MORTGAGE_DESK_RETURN%")
+              .eq("is_deleted", false)
+              .order("created_at", { ascending: true })
+              .range(from, to),
+          options.pageSize,
+        ),
+      ),
+    ),
+  ]);
+
+  const requests = dedupeRowsById(requestPages.flat()) as unknown as MortgageDeskReturnRequest[];
+  const messages = dedupeRowsById(messagePages.flat()) as unknown as MortgageDeskReturnMessage[];
+
+  for (const checkId of Object.keys(result)) {
+    result[checkId] = deriveMortgageDeskReturnState(
+      requests.filter((r) => r.check_intake_item_id === checkId),
+      messages.filter((m) => m.check_id === checkId),
+    );
+  }
+  return result;
+}

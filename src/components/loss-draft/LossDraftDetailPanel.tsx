@@ -362,10 +362,23 @@ export function LossDraftDetailPanel({
               if (!user?.id || !draft.check_intake_item_id) return;
               setAckBusy(true);
               try {
-                await acknowledgeReturn({
+                const result = await acknowledgeReturn({
                   checkId: draft.check_intake_item_id,
                   requestIds: returnAlert.unackedRequestIds,
                   senderId: user.id,
+                });
+                if (result.error) {
+                  toast({
+                    title: "Could not acknowledge the return",
+                    description: result.error.message || "Please try again.",
+                    variant: "destructive",
+                  });
+                }
+              } catch (e) {
+                toast({
+                  title: "Could not acknowledge the return",
+                  description: e instanceof Error ? e.message : "Please try again.",
+                  variant: "destructive",
                 });
               } finally {
                 setAckBusy(false);

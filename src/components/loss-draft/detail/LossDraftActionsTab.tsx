@@ -114,14 +114,24 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
         p_extra: extra,
       });
       if (error) throw error;
+      let ackError: string | null = null;
       if (draft.check_intake_item_id && returnAlert?.actionRequired && returnAlert.unackedRequestIds.length) {
-        await acknowledgeReturn({
+        const ack = await acknowledgeReturn({
           checkId: draft.check_intake_item_id,
           requestIds: returnAlert.unackedRequestIds,
           senderId: user.id,
         });
+        if (ack.error) ackError = ack.error.message || "unknown error";
       }
-      toast({ title: "Action completed", description: `${action.replace(/_/g, " ")} applied successfully.` });
+      if (ackError) {
+        toast({
+          title: "Action completed, but the Mortgage Desk return was not acknowledged",
+          description: ackError,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Action completed", description: `${action.replace(/_/g, " ")} applied successfully.` });
+      }
       setPendingAction(null);
       setActionAmount("");
       setActionNotes("");

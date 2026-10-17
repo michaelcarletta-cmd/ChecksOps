@@ -133,8 +133,14 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     if (filter === "non_monitored") return !isMonitored(d);
     return true;
   });
+  // Key the return-alert query on the search- and card-filter-independent set
+  // of active drafts, then look up per row on the client, so typing in search
+  // or switching cards never refetches (and badges never flicker).
   const returnAlerts = useMortgageDeskReturnAlerts(
-    filtered.map((d) => d.check_intake_item_id).filter((id): id is string => !!id),
+    visibleDrafts
+      .filter(isActiveDraft)
+      .map((d) => d.check_intake_item_id)
+      .filter((id): id is string => !!id),
   ).data;
   const prioritized = filtered.slice().sort((a, b) =>
     compareLossDraftReturnPriority(

@@ -169,6 +169,25 @@ are an earlier main version or lack later main changes, so the release loses not
 - Item 4 (full ZIP rebuild): no full rebuild until a separate, reviewed reconciliation brings the live-only files
   listed above into main. Moov onboarding production (which needs the rebuild) stays behind its flag until then.
 
+## 0c. Code-review fixes (applied in this branch, 2026-10-17)
+
+Owner-approved lock and pin update for the release-PR #1015 review findings. No deploy, AWS call or SQL apply.
+
+- `financial.mjs`: the prepare INSERT now runs inside `SAVEPOINT financial_prepare_insert`, so the 23505 race
+  replay rolls back to the savepoint before `lookupOperation` (no 25P02 / 503). `requested_partial_cents` without
+  `disbursement_sequence` is rejected with 400 `disbursement_sequence_required` (a derived sequence gave every
+  retry a new idempotency key). Overlay plan and `production-release-lock-pin-manifest-2026-10-17.json`
+  `accepted_sha256`: `d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef` ->
+  `1e7e7915e671bbbce7d5b531027492a5a1a457e4f6e4b1f91181029697ffce97`. `expected_live_sha256` / `live_sha256`
+  unchanged.
+- Release lock `financial-ledger` `source.tree_hash` (the only component `validate-release-locks.mjs` reported):
+  `be39d79b1ae2c316dc70c7d6b4113acc44629c8f4ea15ce9c44339a139a8d3a6` ->
+  `e45476496e8943d2bf8d918f828d7a0d392b24570b6f2329b809e102bb8de235` (from `--print-hashes`).
+- `ocr-descriptive-persist.mjs` (not a plan member, stays out of the plan; production keeps its live bytes): the
+  descriptive UPDATE only changes `payee_line` while `deposited_at IS NULL`, so a deposit landing after the S14
+  check cannot be overwritten. Repository bytes `2152c7c2…` -> `1b816845da972648b54aec9e2191caf9d617fbef38415897cc35ad00dd6be339`.
+  `check-deposited.mjs` is unchanged (its bytes stay pinned by the 2026-10-08 reconciliation test).
+
 The original inventory follows.
 
 Values were computed on the branch tree with `node scripts/validate-release-locks.mjs` (locks) and

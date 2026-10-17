@@ -391,6 +391,15 @@ const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ c
     if (requested.error) return denied(spoof, { statusCode: 400, ...requested });
     const parsedSequence = parseDisbursementSequence(body);
     if (parsedSequence.error) return denied(spoof, { statusCode: 400, ...parsedSequence });
+    if (requested.present && !parsedSequence.present) {
+      // A partial draw without a caller-held sequence would derive a fresh
+      // sequence (and idempotency key) on every retry and double-reserve.
+      return denied(spoof, {
+        statusCode: 400,
+        error: 'disbursement_sequence_required',
+        message: 'requested_partial_cents requires disbursement_sequence',
+      });
+    }
     await lockCheckMoney(client, found.check.id);
     const checkOps = await loadCheckOperations(client, found.check.id);
     remainingSnapshot = summarizeCheckMoney(checkOps);
@@ -553,6 +562,10 @@ const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ c
   }
   const ready = found.check.status === 'approved_for_deposit' || found.check.check_stage === 'ready_for_deposit';
   let inserted;
+  // A concurrent prepare can win the (tenant_id, idempotency_key) unique index.
+  // Without a savepoint the 23505 aborts the whole transaction and the replay
+  // lookup below fails with 25P02, so isolate the INSERT.
+  await client.query('SAVEPOINT financial_prepare_insert');
   try {
     inserted = (await client.query(
       `INSERT INTO public.aws_financial_operations
@@ -587,8 +600,11 @@ const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ c
         }),
       ],
     )).rows[0];
+    await client.query('RELEASE SAVEPOINT financial_prepare_insert');
   } catch (error) {
     if (error?.code === '23505') {
+      await client.query('ROLLBACK TO SAVEPOINT financial_prepare_insert');
+      await client.query('RELEASE SAVEPOINT financial_prepare_insert');
       const raced = await lookupOperation(client, { idempotencyKey: key, tenantId: found.check.tenant_id });
       if (raced) {
         const afterRace = moneyOut ? summarizeCheckMoney(await loadCheckOperations(client, found.check.id)) : remainingSnapshot;

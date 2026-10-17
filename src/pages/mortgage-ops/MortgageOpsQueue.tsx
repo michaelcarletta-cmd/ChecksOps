@@ -178,12 +178,19 @@ export default function MortgageOpsQueue() {
           body: buildMortgageDeskCompletedMessage(row.mortgage_company || row.mortgage_servicer, notes),
         } as any);
         // Additive return-to-tenant marker (idempotent per request) that drives
-        // the tenant "Returned from Mortgage Desk" banner.
-        void ensureMortgageDeskReturnMessage({
-          checkId: row.check_intake_item_id,
-          requestId: id,
-          senderId: user?.id ?? null,
-        });
+        // the tenant "Returned from Mortgage Desk" banner. Awaited so a failed
+        // insert is surfaced instead of silently hiding the return.
+        let returnMarkerError: string | null = null;
+        try {
+          const marker = await ensureMortgageDeskReturnMessage({
+            checkId: row.check_intake_item_id,
+            requestId: id,
+            senderId: user?.id ?? null,
+          });
+          if (marker.error) returnMarkerError = marker.error.message || "unknown error";
+        } catch (e) {
+          returnMarkerError = e instanceof Error ? e.message : "unknown error";
+        }
         void supabase.from("homeowner_ledger_events").insert({
           check_intake_item_id: row.check_intake_item_id,
           claim_id: row.claim_id,
@@ -191,6 +198,15 @@ export default function MortgageOpsQueue() {
           title: "Mortgage company step complete",
           description: "Our mortgage team finished working with your mortgage company on this check.",
         } as any);
+        if (returnMarkerError) {
+          setBusyId(null);
+          toast.error("Marked complete, but the tenant was not notified", {
+            description: returnMarkerError,
+          });
+          blurActive();
+          void fetchQueues();
+          return;
+        }
       }
       setBusyId(null);
       toast.success("Marked complete");
