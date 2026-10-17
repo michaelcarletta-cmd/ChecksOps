@@ -15,24 +15,25 @@ export const CHECKSOPS_PLATFORM_WALLET_PM_ID = 'c70a90f2-9bcc-4084-8263-d5a0fb5d
 export const CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
 
 /**
- * OWNER QUESTION (a), OPEN: where do production tenant fees land, the
- * ChecksOps platform Moov wallet or a platform bank account, and in which
- * platform Moov account?
+ * Owner question (a), ANSWERED 2026-10-17 (PR #1017): production tenant fees
+ * land in the ChecksOps platform Moov wallet, platform Moov account
+ * 41cb5d67-4911-4bef-aad5-d8ee9c582208 (owner-confirmed).
  *
  * This object is the one place that answer lives. assertExplicitDestination
  * (every collection) and the fee destination pins
  * (tenant-billing-destination.mjs normalizeDest, destination-set) read it.
- * Default until the owner answers: the platform Moov wallet, with the account
- * and wallet payment method identified read-only from tenant wallet
- * partnerAccountID values (not owner-confirmed, so ownerConfirmed is false).
- * For a bank destination, set kind 'platform_bank' and paymentMethodId to
- * that bank's Moov payment method id here, in a reviewed change.
+ * The wallet payment method id (c70a90f2-…) is unchanged: it was identified
+ * read-only from tenant wallet partnerAccountID values and was not part of the
+ * owner's answer, so paymentMethodOwnerConfirmed stays false until it is
+ * confirmed (for example by the first verified destination-set).
  */
 export const PRODUCTION_FEE_DESTINATION = Object.freeze({
   kind: 'platform_moov_wallet',
   accountId: CHECKSOPS_PLATFORM_ACCOUNT_ID,
   paymentMethodId: CHECKSOPS_PLATFORM_WALLET_PM_ID,
-  ownerConfirmed: false,
+  ownerConfirmed: true,
+  ownerConfirmedAt: '2026-10-17',
+  paymentMethodOwnerConfirmed: false,
 });
 
 export const LEG_TYPE = Object.freeze({

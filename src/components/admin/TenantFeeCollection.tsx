@@ -21,6 +21,7 @@ import {
   getFeeDestination,
   previewTenantFees,
   pullTenantFees,
+  resendTenantFeeInvoice,
   setFeeDestination,
   usd,
   verifyTenantBillingDebit,
@@ -99,10 +100,27 @@ export function TenantFeeCollectButton({
     } else if (result.charged) {
       const simulated = result.pull?.simulated ? " (simulated)" : "";
       sonnerToast.success(`ACH debit of ${usd(result.amount_cents_posted)} submitted for ${preview.period}${simulated}.`);
+      const email = result.pull?.invoice_email?.status;
+      if (email === "failed" || email === "no_recipient") {
+        sonnerToast.warning("The invoice email was not sent. The charge stands; use Resend invoice email from the preview.");
+      }
     } else {
       sonnerToast.error(`Collection failed: ${result.pull?.error || "provider refused"}. The attempt is recorded.`);
     }
     onCollected?.();
+  };
+
+  const resendInvoice = async () => {
+    if (!preview || busy) return;
+    setBusy("pull");
+    const result = await resendTenantFeeInvoice(tenantId, preview.period);
+    setBusy(null);
+    const status = result.invoice_email?.status;
+    if (!result.ok) sonnerToast.error(feeErrorText(result));
+    else if (status === "already_sent") sonnerToast.info(`The ${preview.period} invoice email was already sent.`);
+    else if (status === "sent" || status === "sunk") sonnerToast.success(`Invoice email for ${preview.period} sent.`);
+    else if (status === "disabled") sonnerToast.info("Invoice emails are turned off on this environment.");
+    else sonnerToast.error(`Invoice email not sent (${status || "failed"}). It is recorded; try again later.`);
   };
 
   const blocked = preview ? (!preview.readiness.ready || preview.already_charged) : true;
@@ -154,6 +172,11 @@ export function TenantFeeCollectButton({
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
+            {preview?.already_charged && preview.existing_charge?.status !== "returned" && (
+              <Button variant="outline" disabled={busy !== null} onClick={() => { void resendInvoice(); }}>
+                Resend invoice email
+              </Button>
+            )}
             <AlertDialogAction
               disabled={blocked || busy !== null}
               onClick={(event) => { event.preventDefault(); void collect(); }}

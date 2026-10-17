@@ -8,12 +8,14 @@
  * Production MOOV_ACCOUNT_ID / MOOV_PLATFORM_ACCOUNT_ID are absent from AWS
  * provider secrets. The existing approved production ChecksOps merchant was
  * identified read-only from tenant wallet partnerAccountID values:
- *   account  41cb5d67-4911-4bef-aad5-d8ee9c582208
- *   wallet   c70a90f2-9bcc-4084-8263-d5a0fb5d806c
- * Do not write those to production env until operator approval. Production
- * charges fail closed until both destination IDs are set explicitly.
+ *   account  41cb5d67-4911-4bef-aad5-d8ee9c582208 (owner-confirmed 2026-10-17
+ *            as the platform Moov wallet account fees land in)
+ *   wallet   c70a90f2-9bcc-4084-8263-d5a0fb5d806c (payment method; not part
+ *            of the owner's answer)
+ * Production charges fail closed until both destination IDs are set
+ * explicitly (env or platform_billing_destination).
  *
- * Wallet or bank, and which account, is OWNER QUESTION (a): the one answer
+ * Owner question (a), answered: the platform Moov wallet. The one answer
  * lives in tenant-collection-v2.mjs PRODUCTION_FEE_DESTINATION.
  */
 
@@ -201,9 +203,12 @@ export async function billingDestinationStatus(client, { environment, deps = {} 
     error: resolved.ok ? null : resolved.error,
     reason: resolved.ok ? null : resolved.reason,
     expected_sandbox_account_id: env === 'sandbox' ? CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID : null,
-    // OWNER QUESTION (a): the production pin's kind and whether the owner confirmed it.
+    // Owner question (a): the production pin's kind and what the owner confirmed.
     production_destination_kind: env === 'production' ? PRODUCTION_FEE_DESTINATION.kind : null,
     production_destination_owner_confirmed: env === 'production' ? PRODUCTION_FEE_DESTINATION.ownerConfirmed : null,
+    production_destination_payment_method_owner_confirmed: env === 'production'
+      ? PRODUCTION_FEE_DESTINATION.paymentMethodOwnerConfirmed
+      : null,
   };
 }
 

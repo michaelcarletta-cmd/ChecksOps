@@ -39,7 +39,13 @@ export interface FeeChargeResult {
   provider_transfer_ids?: string[];
   error?: string;
   message?: string;
-  pull?: { error?: string | null; reason?: string; simulated?: boolean; occurrence?: { status?: string } | null };
+  pull?: {
+    error?: string | null;
+    reason?: string;
+    simulated?: boolean;
+    occurrence?: { status?: string } | null;
+    invoice_email?: { status?: string; sent?: boolean } | null;
+  };
   verify?: { error?: string | null; simulated?: boolean; occurrence?: { status?: string } | null };
 }
 
@@ -88,6 +94,15 @@ export const pullTenantFees = (tenantId: string, period: string, previewHash: st
     tenant_id: tenantId,
     period,
     preview_hash: previewHash,
+    confirm: true,
+  });
+
+/** Platform owner resends a charged period's invoice email (server sends at most once per charge). */
+export const resendTenantFeeInvoice = (tenantId: string, period: string) =>
+  callBillingAdmin<{ invoice_email?: { status?: string; sent?: boolean } }>({
+    action: "invoice-resend",
+    tenant_id: tenantId,
+    period,
     confirm: true,
   });
 

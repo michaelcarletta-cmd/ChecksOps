@@ -25,6 +25,7 @@ import {
   loadTenantBillingContext,
   MANUAL_BILLING_ONLY,
   previewTenantPeriodCharge,
+  resendTenantFeeInvoice,
   saveBillingAuthorization,
   saveBillingSettings,
   verifyTenantBillingDebit,
@@ -256,6 +257,20 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         period,
         idempotency_key: billingIdempotencyKey(tenantId, period),
       });
+    }
+
+    if (action === 'invoice-resend') {
+      if (body.confirm !== true) {
+        return denied(spoof, {
+          statusCode: 409,
+          error: 'confirmation_required',
+          message: 'Resending the invoice email requires explicit operator confirmation.',
+        });
+      }
+      const resent = await resendTenantFeeInvoice(client, { tenantId, period: String(body.period || ''), deps });
+      if (!resent.ok) return denied(spoof, { ...resent, statusCode: resent.statusCode || 409 });
+      // ok:true commits the audit row whatever the email outcome was.
+      return { ...resent, ok: true, statusCode: 200, spoofFieldsIgnored: spoof };
     }
 
     return denied(spoof, { statusCode: 400, error: 'unknown_action', action });

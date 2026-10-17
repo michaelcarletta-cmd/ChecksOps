@@ -23,7 +23,6 @@ import {
 } from '../functions/api/tenant-billing-destination.mjs';
 import {
   CHECK_BILLING_DEFAULT_PRICE_SQL,
-  INVOICE_EMAIL_AFTER_PULL,
   MANUAL_BILLING_ONLY,
   PER_CHECK_OFF_BILLS_DEFAULT_PRICE,
   billingPreviewHash,
@@ -468,14 +467,18 @@ test('the $1 verification debit uses the same bank-source rules as a pull', asyn
   });
 });
 
-test('open owner questions are isolated defaults, unchanged until the owner answers', async () => {
-  // (a) fee destination: the platform Moov wallet, not owner-confirmed; one object every pin reads.
+test('owner questions: (a) answered and isolated, (b) still the isolated default, (c) one sender', async () => {
+  // (a) fee destination: the platform Moov wallet in the owner-confirmed account; one object every pin reads.
   assert.ok(Object.isFrozen(PRODUCTION_FEE_DESTINATION));
+  assert.equal(CHECKSOPS_PLATFORM_ACCOUNT_ID, '41cb5d67-4911-4bef-aad5-d8ee9c582208');
+  assert.equal(CHECKSOPS_PLATFORM_WALLET_PM_ID, 'c70a90f2-9bcc-4084-8263-d5a0fb5d806c');
   assert.deepEqual(PRODUCTION_FEE_DESTINATION, {
     kind: 'platform_moov_wallet',
-    accountId: CHECKSOPS_PLATFORM_ACCOUNT_ID,
+    accountId: '41cb5d67-4911-4bef-aad5-d8ee9c582208',
     paymentMethodId: CHECKSOPS_PLATFORM_WALLET_PM_ID,
-    ownerConfirmed: false,
+    ownerConfirmed: true,
+    ownerConfirmedAt: '2026-10-17',
+    paymentMethodOwnerConfirmed: false,
   });
   assert.equal(assertExplicitDestination(PRODUCTION_FEE_DESTINATION, 'production').ok, true);
   assert.equal(normalizeDest({ moov_account_id: PRODUCTION_FEE_DESTINATION.accountId, moov_payment_method_id: PRODUCTION_FEE_DESTINATION.paymentMethodId }, 'production').ok, true);
@@ -488,7 +491,8 @@ test('open owner questions are isolated defaults, unchanged until the owner answ
     const { billingDestinationStatus } = await import('../functions/api/tenant-billing-destination.mjs');
     const status = await billingDestinationStatus(fakeClient(), { environment: 'production' });
     assert.equal(status.production_destination_kind, 'platform_moov_wallet');
-    assert.equal(status.production_destination_owner_confirmed, false);
+    assert.equal(status.production_destination_owner_confirmed, true);
+    assert.equal(status.production_destination_payment_method_owner_confirmed, false);
   });
 
   // (b) per-check billing off still bills the config default; one switch in the API and one in SQL 98.
@@ -500,10 +504,9 @@ test('open owner questions are isolated defaults, unchanged until the owner answ
   assert.match(sql, /FUNCTION public\.aws_check_billing_charges_when_per_check_off\(\)[\s\S]*?AS \$\$ SELECT true \$\$;/);
   assert.match(sql, /ELSIF v_enabled IS NOT TRUE AND NOT public\.aws_check_billing_charges_when_per_check_off\(\) THEN\s+-- [^\n]*\n\s+RETURN NEW;/);
 
-  // (c) no invoice email after a pull, and nothing in the fee path sends one.
-  assert.equal(INVOICE_EMAIL_AFTER_PULL, false);
+  // (c) the engine and handlers never send mail themselves: only through tenant-fee-invoice-email.mjs.
   for (const file of ['aws/functions/api/tenant-billing-engine.mjs', 'aws/functions/api/tenant-billing-handlers.mjs']) {
-    assert.doesNotMatch(read(file), /send-transactional-email|sendTransactionalEmail|sendEmail\(|SendEmailCommand|SESv2Client|SESClient|client-sesv?2?/, file);
+    assert.doesNotMatch(read(file), /send-transactional-email|sendTransactionalEmail|sendEmail\(|SendEmailCommand|SESv2Client|SESClient|client-sesv?2?|sendViaSesOrSink/, file);
   }
-  assert.match(read('aws/functions/api/tenant-billing-engine.mjs'), /invoice_email_sent: false/);
+  assert.match(read('aws/functions/api/tenant-billing-engine.mjs'), /import \{ sendFeeInvoiceEmail \} from '\.\/tenant-fee-invoice-email\.mjs';/);
 });

@@ -114,6 +114,9 @@ CREATE TABLE public.tenant_maintenance_payments (
   submitted_at timestamptz, settled_at timestamptz, returned_at timestamptz, failure_reason text,
   return_reason text, received_at timestamptz DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.email_send_log (
+  id uuid PRIMARY KEY, template_name text, recipient_email text, tenant_id uuid, status text, provider text,
+  provider_message_id text, idempotency_key text, error_message text, metadata jsonb, created_at timestamptz);
 CREATE TABLE public.tenant_invoice_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), invoice_id uuid, tenant_id uuid, billing_period text,
   source_kind text, source_id uuid, fee_type text, unit_price_cents integer, amount_cents integer,
@@ -129,6 +132,7 @@ GRANT SELECT, INSERT, UPDATE ON public.tenants, public.tenant_users, public.tena
   public.check_intake_items, public.check_billing_config, public.check_billing_events, public.payment_transfers,
   public.tenant_maintenance_payments, public.tenant_invoice_allocations TO checksops;
 GRANT SELECT ON public.identity_accounts, public.profiles TO checksops;
+GRANT SELECT, INSERT ON public.email_send_log TO checksops;
 -- SQL 96 is a prerequisite of SQL 98; only its setter's presence is checked here
 -- (tenant-pricing-platform-owner and sql90 PG tests cover SQL 96 itself).
 CREATE FUNCTION public.aws_platform_owner_set_tenant_pricing(_tenant_id uuid, _pricing jsonb) RETURNS jsonb
@@ -162,9 +166,19 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     return c;
   };
   const posts = [];
+  // Invoice email spy: fails for tenants in failMail (failure isolation), sinks otherwise.
+  const mails = [];
+  const failMail = new Set();
+  const mailer = async (msg) => {
+    if (failMail.has(msg.tenantId)) throw new Error('ses unavailable');
+    mails.push(msg);
+    return { mode: 'sink', results: [{ delivery: 'sink', status: 'sunk', messageId: `mail-${mails.length}` }] };
+  };
   const deps = (extra = {}) => ({
     ignoreEnabledFlag: true,
     simulate: false,
+    invoiceEmailEnabled: true,
+    sendViaSesOrSink: mailer,
     postTransfer: async ({ amount, idempotencyKey, sourceMethodId, destMethodId, facilitatorAccountId }) => {
       posts.push({ amount, idempotencyKey, sourceMethodId, destMethodId, facilitatorAccountId });
       return { transferID: `tr-${posts.length}`, status: 'pending' };
@@ -331,6 +345,7 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.equal(preview.readiness.ready, true, JSON.stringify(preview.readiness));
     assert.equal(preview.amount_cents, 10000 - 1000 + 250 + 100);
     assert.equal(await count('SELECT count(*) AS n FROM public.tenant_maintenance_payments WHERE tenant_id = $1', [T_A]), 0, 'preview writes nothing');
+    assert.equal(mails.length, 0, 'no preview (or refused pull so far) sends an invoice email');
     const pulled = await call(c1, OWNER, { action: 'pull', tenant_id: T_A, period, preview_hash: preview.preview_hash, confirm: true });
     assert.equal(pulled.ok, true, JSON.stringify(pulled));
     assert.equal(pulled.charged, true);
@@ -354,6 +369,25 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     }
     assert.deepEqual(audit.find((r) => r.outcome === 'submitted').provider_transfer_ids, ['tr-1']);
 
+    // Invoice email: once, to the member who authorized the ACH debit, keyed on the charge.
+    const occA = (await admin.query('SELECT id FROM public.tenant_maintenance_payments WHERE tenant_id = $1', [T_A])).rows[0].id;
+    assert.equal(pulled.pull.invoice_email.status, 'sunk', JSON.stringify(pulled.pull.invoice_email));
+    assert.equal(pulled.pull.invoice_email_sent, true);
+    assert.equal(mails.length, 1);
+    assert.equal(mails[0].to, 'member@example.com');
+    assert.match(mails[0].text, new RegExp(`billing period ${period}`));
+    assert.match(mails[0].text, /ending in 6789/);
+    assert.match(mails[0].text, new RegExp(`\\$${(preview.amount_cents / 100).toFixed(2)}`));
+    const mailAudit = (await admin.query("SELECT actor_id, outcome, occurrence_id, details FROM public.platform_billing_audit WHERE event = 'invoice_email'")).rows;
+    assert.equal(mailAudit.length, 1);
+    assert.equal(mailAudit[0].outcome, 'sunk');
+    assert.equal(mailAudit[0].actor_id, OWNER);
+    assert.equal(mailAudit[0].occurrence_id, occA);
+    const sendLog = (await admin.query('SELECT template_name, recipient_email, status, idempotency_key FROM public.email_send_log')).rows;
+    assert.deepEqual(sendLog, [{ template_name: 'tenant-fee-invoice', recipient_email: 'member@example.com', status: 'sunk', idempotency_key: `fee-invoice:${occA}` }]);
+    // The database also refuses a second sent/sunk invoice for the same charge.
+    await assert.rejects(admin.query(`INSERT INTO public.platform_billing_audit (event, outcome, occurrence_id) VALUES ('invoice_email', 'sent', $1)`, [occA]), (e) => e.code === '23505');
+
     // The fee pull itself is never billed as the tenant's next-day usage.
     await admin.query("UPDATE public.payment_transfers SET status = 'completed', completed_at = now() WHERE provider_transfer_id = 'tr-1'");
     const after = await call(c1, OWNER, { action: 'preview', tenant_id: T_A, period });
@@ -367,8 +401,16 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.equal(again.duplicate, true);
     assert.equal(again.charged, false);
     assert.equal(posts.length, 1);
+    assert.equal(mails.length, 1, 'a duplicate pull sends no second invoice');
+    // A platform-owner resend of an already-sent invoice sends nothing; members cannot resend.
+    const resentA = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_A, period, confirm: true });
+    assert.equal(resentA.invoice_email.status, 'already_sent');
+    assert.equal(mails.length, 1);
+    const memberResend = await call(c1, MEMBER, { action: 'invoice-resend', tenant_id: T_A, period, confirm: true });
+    assert.equal(memberResend.error, 'platform_owner_required');
 
     // Concurrent double click on another tenant: the advisory lock serializes, the second sees the booked row.
+    failMail.add(T_B); // this tenant's invoice email fails: the pull must still commit.
     const pB = await call(c1, OWNER, { action: 'preview', tenant_id: T_B, period });
     assert.equal(pB.readiness.ready, true, JSON.stringify(pB.readiness));
     let release;
@@ -384,6 +426,22 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.equal(r2.duplicate, true);
     assert.equal(posts.length, 2);
     assert.equal(await count('SELECT count(*) AS n FROM public.tenant_maintenance_payments WHERE tenant_id = $1 AND billing_period = $2', [T_B, period]), 1);
+    // Failure isolation: the email failed, the charge is committed and the failure recorded.
+    assert.equal(r1.pull.invoice_email.status, 'failed');
+    assert.equal(r1.ok, true);
+    assert.equal((await admin.query("SELECT status FROM public.tenant_maintenance_payments WHERE tenant_id = $1", [T_B])).rows[0].status, 'submitted');
+    assert.deepEqual((await admin.query("SELECT outcome FROM public.platform_billing_audit WHERE event = 'invoice_email' AND tenant_id = $1", [T_B])).rows.map((r) => r.outcome), ['failed']);
+    assert.equal(mails.length, 1);
+    // The platform owner resends once SES is back; a second resend sends nothing.
+    failMail.delete(T_B);
+    const resentB = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_B, period, confirm: true });
+    assert.equal(resentB.invoice_email.status, 'sunk', JSON.stringify(resentB));
+    assert.equal(mails.length, 2);
+    const resentB2 = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_B, period, confirm: true });
+    assert.equal(resentB2.invoice_email.status, 'already_sent');
+    assert.equal(mails.length, 2);
+    const noCharge = await call(c1, OWNER, { action: 'invoice-resend', tenant_id: T_C, period, confirm: true });
+    assert.equal(noCharge.error, 'not_charged');
 
     // 6) The invoice changed after the preview: nothing is booked or posted.
     const pC = await call(c1, OWNER, { action: 'preview', tenant_id: T_C, period });
@@ -424,6 +482,7 @@ test('PostgreSQL 16: SQL 98 stamps per-check prices; the platform owner\'s manua
     assert.ok(vAudit.length >= 2);
     assert.ok(vAudit.every((r) => r.actor_id === OWNER && Number(r.amount_cents) === 100));
     assert.ok(vAudit.some((r) => r.outcome === 'submitted' && r.provider_transfer_ids.length === 1));
+    assert.equal(mails.length, 2, 'refused / mismatched pulls and the $1 verification send no invoice');
 
     // 7) Audit writer: platform owner only; no direct writes.
     await c1.query('BEGIN');

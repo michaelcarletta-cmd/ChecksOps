@@ -53,7 +53,9 @@
 --    tenant-collection-v2.mjs PRODUCTION_FEE_DESTINATION.
 -- 4) public.platform_billing_audit (new, append-only): one row per pull /
 --    verification debit attempt and outcome (who = auth.uid(), tenant,
---    period, amount, Moov transfer ids, outcome) and per destination change.
+--    period, amount, Moov transfer ids, outcome), per invoice email attempt
+--    (at most one sent / sunk per charge: platform_billing_audit_invoice_email_once_uidx)
+--    and per destination change.
 --    Written only by SECURITY DEFINER functions:
 --      public.aws_platform_owner_record_billing_audit(jsonb) (platform owner
 --      only, 42501 otherwise; the actor is auth.uid(), never a payload field)
@@ -272,7 +274,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS tenant_maintenance_payments_tenant_period_uidx
 -- 4) audit (before 3, whose trigger writes it) -------------------------------
 CREATE TABLE IF NOT EXISTS public.platform_billing_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event text NOT NULL CHECK (event IN ('pull', 'verify_debit', 'destination_set')),
+  event text NOT NULL CHECK (event IN ('pull', 'verify_debit', 'destination_set', 'invoice_email')),
   actor_id uuid,
   tenant_id uuid,
   billing_period text,
@@ -286,6 +288,14 @@ CREATE TABLE IF NOT EXISTS public.platform_billing_audit (
 );
 CREATE INDEX IF NOT EXISTS platform_billing_audit_tenant_idx
   ON public.platform_billing_audit (tenant_id, created_at DESC);
+-- Invoice email after a pull (tenant-fee-invoice-email.mjs): one event per
+-- attempt, and at most one sent / sunk invoice per charge (once-only).
+ALTER TABLE public.platform_billing_audit DROP CONSTRAINT IF EXISTS platform_billing_audit_event_check;
+ALTER TABLE public.platform_billing_audit ADD CONSTRAINT platform_billing_audit_event_check
+  CHECK (event IN ('pull', 'verify_debit', 'destination_set', 'invoice_email'));
+CREATE UNIQUE INDEX IF NOT EXISTS platform_billing_audit_invoice_email_once_uidx
+  ON public.platform_billing_audit (occurrence_id)
+  WHERE event = 'invoice_email' AND outcome IN ('sent', 'sunk');
 COMMENT ON TABLE public.platform_billing_audit IS
   'SQL 98: append-only audit of tenant fee pulls, verification debits and fee-destination changes (who, tenant, period, amount, Moov transfer ids, outcome).';
 
@@ -315,7 +325,7 @@ BEGIN
     RAISE EXCEPTION 'not_authorized: platform owner required' USING ERRCODE = '42501';
   END IF;
   IF _entry IS NULL OR jsonb_typeof(_entry) <> 'object'
-     OR v_event IS NULL OR v_event NOT IN ('pull', 'verify_debit')
+     OR v_event IS NULL OR v_event NOT IN ('pull', 'verify_debit', 'invoice_email')
      OR COALESCE(_entry ->> 'outcome', '') = ''
      OR COALESCE(_entry ->> 'tenant_id', '') = '' THEN
     RAISE EXCEPTION 'invalid_audit_entry' USING ERRCODE = '22023';
@@ -344,7 +354,7 @@ $body$;
 REVOKE ALL ON FUNCTION public.aws_platform_owner_record_billing_audit(jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_platform_owner_record_billing_audit(jsonb) TO checksops, authenticated;
 COMMENT ON FUNCTION public.aws_platform_owner_record_billing_audit(jsonb) IS
-  'SQL 98: the platform owner''s billing API records a pull / verification debit (actor = auth.uid()). Everyone else is refused (42501).';
+  'SQL 98: the platform owner''s billing API records a pull, verification debit or invoice email (actor = auth.uid()). Everyone else is refused (42501).';
 
 -- 3) fee destination -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.platform_billing_destination (

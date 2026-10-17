@@ -16,6 +16,7 @@
  * Mortgage Ops accrues on Accept (status in_progress + accepted_at), not on submit.
  */
 import { createHash } from 'node:crypto';
+import { sendFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
 import {
   billingEnvironment,
   billingShouldSimulate,
@@ -65,14 +66,9 @@ export const MANUAL_BILLING_ONLY = 'manual_billing_only';
  */
 export const PER_CHECK_OFF_BILLS_DEFAULT_PRICE = true;
 
-/**
- * OWNER QUESTION (c), OPEN: should an invoice email go out after a pull?
- * Default: no. The retired moov-tenant-fee-charge emailed one; the
- * tenant-billing-admin pull sends nothing, and no AWS invoice sender is wired.
- * Turning this on needs that sender added first; the pull reports
- * invoice_email_sent: false either way until then.
- */
-export const INVOICE_EMAIL_AFTER_PULL = false;
+// Invoice email after a pull (owner question (c), answered yes 2026-10-17):
+// tenant-fee-invoice-email.mjs, behind AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED
+// (on by default off production, off on production until the owner enables it).
 export const BILLING_PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
 export const DEFAULT_SAME_DAY_RATE_CENTS = 100;
@@ -1905,6 +1901,20 @@ export async function chargeTenantPeriod(client, {
     previewHash,
     details: { simulated: submitted.simulated === true, environment },
   });
+  // Invoice email: only after the debit was submitted, once per charge, and a
+  // failure never fails the pull (sendFeeInvoiceEmail never throws).
+  const charged = submitted.ok === true && submitted.duplicate !== true
+    && CHARGED_STATUSES.has(String(submitted.occurrence?.status || ''));
+  const invoiceEmail = charged
+    ? await sendFeeInvoiceEmail(client, {
+      occurrence: submitted.occurrence,
+      tenantId,
+      period,
+      authorization: readiness.authorization,
+      recordAudit: recordBillingAudit,
+      deps,
+    })
+    : { status: 'not_charged', sent: false };
   return {
     ...submitted,
     booked: true,
@@ -1912,9 +1922,37 @@ export async function chargeTenantPeriod(client, {
     amount_cents: Number(booked.occurrence.amount_cents || 0),
     provider_transfer_ids: transferIds,
     audit_recorded: audit.ok === true,
-    // Owner question (c): no invoice email is sent (INVOICE_EMAIL_AFTER_PULL).
-    invoice_email_sent: false,
+    invoice_email: invoiceEmail,
+    invoice_email_sent: invoiceEmail.sent === true,
   };
+}
+
+/**
+ * Platform owner resends the invoice email for a charged period (after a
+ * failed or missing send). Still once per charge: a period whose invoice was
+ * already sent answers already_sent and sends nothing.
+ */
+export async function resendTenantFeeInvoice(client, { tenantId, period, deps = {} }) {
+  if (!BILLING_PERIOD_RE.test(String(period || ''))) {
+    return fail('invalid_billing_period', { statusCode: 400, field: 'period' });
+  }
+  await client.query(BILLING_PULL_LOCK_SQL, [billingIdempotencyKey(tenantId, period)]);
+  const occurrence = await loadPeriodOccurrence(client, tenantId, period);
+  if (!occurrence || !['submitted', 'settled'].includes(occurrence.status)) {
+    return fail('not_charged', { statusCode: 409, message: 'No collected charge for this period.' });
+  }
+  const ctx = await loadTenantBillingContext(client, tenantId);
+  if (!ctx.ok) return ctx;
+  const invoiceEmail = await sendFeeInvoiceEmail(client, {
+    occurrence,
+    tenantId,
+    period,
+    authorization: ctx.authorization,
+    recordAudit: recordBillingAudit,
+    resend: true,
+    deps,
+  });
+  return { ok: true, statusCode: 200, invoice_email: invoiceEmail };
 }
 
 /**
