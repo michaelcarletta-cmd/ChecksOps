@@ -1,5 +1,5 @@
 /**
- * PostgreSQL 16 fixture for the release 2026-10-17 SQL (SQL 90 to SQL 97, with SQL 29 and
+ * PostgreSQL 16 fixture for the release 2026-10-17 SQL (SQL 90 to SQL 100, with SQL 29 and
  * SQL 30 as predecessors), in one database, owned like production:
  *
  *   - the real AWS RLS helper files (aws/rls/sql 01, 02, 03, 10, 11, 15, 20) and the real
@@ -14,6 +14,13 @@
  *     (production's admin login); checksops (the API login) is a member of authenticated.
  *
  * applyPredecessors(admin) runs the real SQL 29 and SQL 30 files as checksops_admin.
+ *
+ * releaseFixture(pg, prefix, port, { extra }) runs `extra` (SQL texts) as the superuser after
+ * the seed and before everything is handed to checksops_admin; sql98To100Schema() is the
+ * extra schema SQL 98, SQL 99 and SQL 100 need (the billing tables SQL 98 reads, the Mortgage
+ * Desk tables and columns, and mortgage_handling_requests as the repository leaves it: the
+ * aws_select_ policy of 12_final_select_policies.sql, the aws_write_ policy of
+ * 24_complete_write_policies.sql and the SQL 50 grants).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +31,7 @@ export const REPO_ROOT = path.join(AWS_ROOT, '..');
 export const SQL29_FILE = path.join(AWS_ROOT, 'rls/sql/29_mortgage_ops_library_parity.sql');
 export const SQL30_FILE = path.join(AWS_ROOT, 'rls/sql/30_tenant_documents_mortgage_doc_type.sql');
 const SQL80_FILE = path.join(AWS_ROOT, 'workflows/sql/80_checkalt_member_auto_deposit.sql');
+const SQL50_FILE = path.join(AWS_ROOT, 'workflows/sql/50_tranche5_write_grants.sql');
 const SQL35_FILE = path.join(AWS_ROOT, 'rls/sql/35_manager_partner_parity.sql');
 
 export const TENANT_A = '11111111-1111-4111-8111-111111111111';
@@ -192,6 +200,68 @@ INSERT INTO public.financial_stepup_log (user_id, tenant_id, action_key, metadat
   VALUES ('${MEMBER_A}', '${TENANT_A}', 'deposit.submit', '{"source": "app_financial_totp"}');
 `;
 
+/** The text from `start` through the end of the first `end` after it, exactly as the file has it. */
+const sliceFrom = (file, start, end) => {
+  const text = fs.readFileSync(file, 'utf8');
+  const from = text.indexOf(start);
+  const to = from < 0 ? -1 : text.indexOf(end, from + start.length);
+  if (from < 0 || to < 0) throw new Error(`${start} ... ${end} not found in ${file}`);
+  return text.slice(from, to + end.length);
+};
+
+/** The extra schema for SQL 98, SQL 99 and SQL 100 (run as the superuser, before ownership). */
+export function sql98To100Schema() {
+  return [`
+-- SQL 98: the billing tables it reads or changes (Supabase-era shapes, trimmed to what it uses).
+ALTER TABLE public.tenants ADD COLUMN per_check_rate_cents integer, ADD COLUMN per_check_billing_enabled boolean;
+CREATE TABLE public.check_billing_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), price_per_check_cents integer NOT NULL DEFAULT 300,
+  currency text NOT NULL DEFAULT 'usd', active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.check_billing_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, check_intake_item_id uuid,
+  event_type text NOT NULL DEFAULT 'check_processing', unit_price_cents integer NOT NULL,
+  currency text NOT NULL DEFAULT 'usd', status text NOT NULL DEFAULT 'recorded',
+  created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.tenant_maintenance_payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, amount_cents integer NOT NULL DEFAULT 0,
+  billing_period text, created_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT, INSERT, UPDATE ON public.check_billing_config, public.check_billing_events, public.tenant_maintenance_payments TO checksops;
+-- SQL 99 / SQL 100: the Mortgage Desk columns and tables.
+ALTER TABLE public.mortgage_handling_requests
+  ADD COLUMN claim_id uuid, ADD COLUMN mortgage_company text, ADD COLUMN mortgage_servicer text, ADD COLUMN loan_number text,
+  ADD COLUMN note text, ADD COLUMN work_notes text, ADD COLUMN property_address text, ADD COLUMN claim_number text,
+  ADD COLUMN insurance_company text, ADD COLUMN homeowner_name text, ADD COLUMN homeowner_email text,
+  ADD COLUMN homeowner_phone text, ADD COLUMN accepted_at timestamptz, ADD COLUMN completed_at timestamptz,
+  ADD COLUMN cancelled_at timestamptz, ADD COLUMN created_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
+CREATE TABLE public.check_messages (
+  id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  check_id uuid NOT NULL REFERENCES public.check_intake_items(id) ON DELETE CASCADE,
+  sender_id uuid NOT NULL,
+  body text NOT NULL CHECK (length(trim(body)) > 0 AND length(body) <= 5000),
+  is_deleted boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now());
+-- SQL 47's roster table (aws/tests/fixtures/mortgage-agent-compensation/47_mortgage_agent_compensation.sql).
+CREATE TABLE public.mortgage_agent_accounts (
+  application_user_id uuid PRIMARY KEY,
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')));
+GRANT SELECT, INSERT, DELETE ON TABLE public.check_messages TO checksops, authenticated;
+GRANT UPDATE (is_deleted, updated_at) ON TABLE public.check_messages TO checksops, authenticated;
+ALTER TABLE public.check_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mortgage_handling_requests ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.mortgage_handling_requests FROM checksops, authenticated;`,
+  policyBlock('12_final_select_policies.sql', 'aws_select_check_messages'),
+  policyBlock('24_complete_write_policies.sql', 'aws_write_check_messages'),
+  // The repository's sequence for mortgage_handling_requests: 12, 24, SQL 50.
+  policyBlock('12_final_select_policies.sql', 'aws_select_mortgage_handling_requests'),
+  policyBlock('24_complete_write_policies.sql', 'aws_write_mortgage_handling_requests'),
+  sliceFrom(SQL50_FILE, 'GRANT SELECT, INSERT, DELETE ON TABLE public.mortgage_handling_requests',
+    ') ON TABLE public.mortgage_handling_requests TO checksops, authenticated;'),
+  ];
+}
+
 const OWNERSHIP = `
 DO $own$
 DECLARE r record;
@@ -213,7 +283,7 @@ $own$;
 `;
 
 /** Starts a server and builds the schema; returns { server, admin, connectAs, applyPredecessors, close }. */
-export async function releaseFixture(pg, prefix, port) {
+export async function releaseFixture(pg, prefix, port, { extra = [] } = {}) {
   const server = startPg(prefix, port);
   const admin = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   await admin.connect();
@@ -241,6 +311,7 @@ export async function releaseFixture(pg, prefix, port) {
       GRANT CREATE, USAGE ON SCHEMA public TO checksops_admin;
       GRANT USAGE ON SCHEMA auth TO checksops_admin, authenticated;`);
     await admin.query(SEED);
+    for (const sql of extra) await admin.query(sql);
     await admin.query(OWNERSHIP);
   } catch (error) {
     await admin.end().catch(() => {});

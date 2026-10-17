@@ -295,8 +295,23 @@ test('PostgreSQL 16: the repository plus SQL 100 reproduces production Mortgage 
     assert.deepEqual(g.authenticated.column_acl, { UPDATE: PRODUCTION.grants.authenticated.column_update });
     assert.deepEqual(g.authenticated.effective_table_privileges, []);
     assert.deepEqual(g.authenticated.effective_any_column_privileges, ['UPDATE']);
-    assert.deepEqual(g.PUBLIC, { role_exists: true, table_acl: [], column_acl: {}, column_acl_entry_count: 0 });
+    assert.deepEqual(g.PUBLIC, { role_exists: true, table_acl: [], column_acl: {}, column_acl_entry_count: 0, column_acl_entries: [], column_acl_grantors: [] });
     for (const a of [...g.checksops.table_acl]) assert.equal(a.grantable, false);
+    // No-op on production also means the same grantor: every table and column ACL entry is
+    // checksops_admin's (production's owner). A re-GRANT by another grantor would add entries.
+    for (const grantee of ['checksops', 'authenticated']) {
+      for (const a of g[grantee].table_acl) assert.equal(a.grantor, 'checksops_admin', `${grantee} ${a.privilege}`);
+      assert.deepEqual(g[grantee].column_acl_grantors, ['checksops_admin'], grantee);
+      assert.equal(g[grantee].column_acl_entries.length, g[grantee].column_acl_entry_count, grantee);
+      for (const e of g[grantee].column_acl_entries) {
+        assert.equal(e.grantor, 'checksops_admin', `${grantee} ${e.privilege} ${e.column}`);
+        assert.equal(e.grantable, false, `${grantee} ${e.column}`);
+      }
+    }
+    assert.deepEqual(g.checksops.column_acl_entries.map((e) => e.column), PRODUCTION.grants.checksops.column_update);
+    assert.deepEqual(g.authenticated.column_acl_entries.map((e) => e.column), PRODUCTION.grants.authenticated.column_update);
+    // ... and no policy comment (DROP POLICY + CREATE POLICY would lose one).
+    for (const p of mhr.policies) assert.deepEqual(p.comment, { present: false, sha256: null }, p.policy);
 
     // Helpers: prosrc hash equal to production's, SECURITY DEFINER sql STABLE, row_security + search_path.
     const fnReport = (key) => (report.functions[key] || report.policy_dependency_functions[key]);
@@ -318,6 +333,14 @@ test('PostgreSQL 16: the repository plus SQL 100 reproduces production Mortgage 
       assert.ok(f.matched_kinds.includes('aws_sql'), key);
       // pg_get_functiondef (attributes and SET values included): confirmed equal to the production inspect output.
       assert.equal(f.functiondef_sha256, want.functiondef_sha256, key);
+      // EXECUTE: SQL 100 grants and revokes nothing on its helpers, so a function it creates has the
+      // default ACL (PUBLIC and the owner, granted by the owner).
+      assert.equal(f.execute_acl_default, true, key);
+      assert.equal(f.public_execute, true, key);
+      assert.deepEqual(f.execute_acl, [
+        { grantee: 'PUBLIC', privilege: 'EXECUTE', grantable: false, grantor: 'checksops_admin' },
+        { grantee: 'checksops_admin', privilege: 'EXECUTE', grantable: false, grantor: 'checksops_admin' },
+      ], key);
     }
     assert.deepEqual(mhr.policies.find((p) => p.policy === 'aws_select_mortgage_ops_agent_queue').depends_on_functions,
       ['public.aws_is_mortgage_ops_agent']);

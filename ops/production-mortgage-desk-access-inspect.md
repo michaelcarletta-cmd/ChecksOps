@@ -21,8 +21,8 @@ statement timeout and a 2 s lock timeout. Inside it, it runs only the fixed cata
 
 | section | content |
 |---|---|
-| `tables.<t>` for `mortgage_handling_requests`, `check_intake_items`, `check_messages`, `mortgage_agent_accounts` | owner; `rls_enabled`; `rls_forced`; every policy (name, command, permissive, roles, `using` / `with_check` text and sha256, `depends_on_functions`, `created_in_repo` and `repo_sources`); `grants` for `checksops`, `authenticated`, `PUBLIC` and `checksops_admin` (table ACL entries with grantor and grant option, column ACL by privilege, and effective table / any-column privileges); non-internal triggers (name and function name only) |
-| `functions` | `aws_can_write_tenant`, `aws_can_access_tenant`, `aws_is_tenant_member`, `aws_is_cross_tenant_reader`, `aws_is_active_mortgage_agent`, `mortgage_agent_can_view_check` and `auth.uid`, every overload: owner, SECURITY DEFINER, language, volatility, proconfig names, `sets_row_security`, `functiondef_sha256` (of `pg_get_functiondef`), `prosrc_sha256`, `repo_match` |
+| `tables.<t>` for `mortgage_handling_requests`, `check_intake_items`, `check_messages`, `mortgage_agent_accounts` | owner; `rls_enabled`; `rls_forced`; every policy (name, command, permissive, roles, `using` / `with_check` text and sha256, `depends_on_functions`, `created_in_repo` and `repo_sources`); `grants` for `checksops`, `authenticated`, `PUBLIC` and `checksops_admin` (table ACL entries with grantor and grant option; column ACL by privilege, plus `column_acl_entries` (column, privilege, grant option and grantor of every entry) and `column_acl_grantors`; effective table / any-column privileges); non-internal triggers (name and function name only); for the policies on `mortgage_handling_requests` also `comment` (`present` and `sha256`; the hash is computed in the database from `obj_description(oid, 'pg_policy')`, the text is never read out) |
+| `functions` | `aws_can_write_tenant`, `aws_can_access_tenant`, `aws_is_tenant_member`, `aws_is_cross_tenant_reader`, `aws_is_active_mortgage_agent`, `mortgage_agent_can_view_check` and `auth.uid`, every overload: owner, SECURITY DEFINER, language, volatility, proconfig names, `sets_row_security`, `functiondef_sha256` (of `pg_get_functiondef`), `prosrc_sha256`, the EXECUTE grants (`execute_acl`: every `aclexplode(proacl)` entry with grantee, `PUBLIC` included, grantor and grant option; the default ACL when `proacl` is NULL, `execute_acl_default`; `public_execute`), `repo_match` |
 | `policy_dependency_functions` | the same for every other function a policy above depends on (`pg_depend`) |
 | `roles`, `role_memberships` | superuser / BYPASSRLS / INHERIT / LOGIN for the three roles, and their `pg_auth_members` rows (names and options) |
 | `sql99_ownership` | the functions of `trg_mirror_check_message_to_homeowner_ledger` and `assign_case_on_ledger_events`, resolved from `pg_trigger` (owner, SECURITY DEFINER, `sets_row_security`, hashes); owner and RLS / FORCE of `homeowner_ledger_events`, `profiles`, `check_cases`, `check_messages` and `mortgage_handling_requests`; SQL 99's own preconditions as booleans, with `precondition_failures`; whether SQL 99's objects already exist |
@@ -138,8 +138,17 @@ Drift findings:
 - Confirmed against the production inspect output: `authenticated` has no table-level ACL entry
   on `mortgage_handling_requests`, so SQL 100's REVOKEs from `authenticated` are a no-op on
   production.
-- Not reported by the inspect, so not asserted by SQL 100: function EXECUTE privileges and
-  function and policy comments.
+- Not reported by the 2026-10-17 inspect, so not yet confirmed for production: the helpers'
+  EXECUTE grants, the policy comments and the column ACL grantors. The inspect now reports all
+  three (`execute_acl`, `comment`, `column_acl_entries[].grantor`; review of #1020); the next
+  production run (the owner runs it) confirms them. SQL 100 is a no-op on production only if
+  every helper has the default EXECUTE ACL (PUBLIC and the owner), no policy on
+  `mortgage_handling_requests` has a comment (DROP POLICY + CREATE POLICY would drop it) and
+  every table and column ACL entry was granted by `checksops_admin` (a GRANT by
+  `checksops_admin` next to another grantor's entry adds a second entry). The SQL 100 production
+  tool (`scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs
+  --inspect`, `ops/production-sql-90-97-apply.md`) checks the same three in its fingerprint.
+  Function comments survive CREATE OR REPLACE and are not reported.
 
 Future cleanup (not done now): the stale Supabase policies "Owner tenant staff can insert
 checks" and "Owner tenant staff can update checks" on `check_intake_items` (`has_role` admin /
@@ -147,7 +156,9 @@ staff) are still live.
 
 `aws/tests/sql100-mortgage-desk-live-access-pg.test.mjs` applies the repository sequence plus
 SQL 100 to PostgreSQL 16, runs this inspect's library against it and checks that the policy
-texts, grants and helper prosrc hashes equal the production values above.
+texts, grants and helper prosrc hashes equal the production values above, that every table and
+column ACL entry's grantor is `checksops_admin`, that no policy has a comment and that the
+helpers have the default EXECUTE ACL.
 
 Tests: `aws/tests/mortgage-desk-access-production-inspect.test.mjs`, in
 `npm run test:deployment-guard`. The PostgreSQL 16 part checks that a non-superuser

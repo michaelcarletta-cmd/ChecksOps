@@ -1,0 +1,48 @@
+{
+  "id": "staging-sql-live",
+  "target_environment": "staging",
+  "target_component": "staging-sql",
+  "notes": "The staging equivalent of production-api-overlay-plan.json sql_prerequisites[].verified_live, and nothing else: which SQL files are recorded as applied and verified in the staging database. scripts/deployment-guard/github-staging-lambda-overlay.mjs reads it in apply mode: a staging overlay of a member whose production plan entry has sql_before is refused (DEPLOYMENT_COLLISION, before any AWS call) until that file is recorded here with verified_live true. A file missing here counts as not live. Set verified_live true only in a reviewed change that names the guarded staging SQL executor apply (or read-live) run as evidence. It authorizes nothing: production keeps its own record in production-api-overlay-plan.json. Every sql_before value of the plan must have an entry (aws/tests/github-staging-lambda-overlay.test.mjs).",
+  "sql": {
+    "aws/workflows/sql/53_claim_settlement_breakdown.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging apply of SQL 53, accepted 2026-10-11 by a read-only staging diagnostic (run 37973071977): ops/deployment-guard/sql53-staging-execution.json and ops/deployment-guard/sql53-staging-acceptance.json."
+    },
+    "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of ledger-20261007193200 on 2026-10-12 (run 38255758030), recorded as the staging acceptance of ops/deployment-guard/ledger-20261007193200-production-apply.json."
+    },
+    "aws/workflows/sql/81_checkalt_production_register.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql81-checkalt-depositor-register (run 38782120576), recorded as the staging acceptance of ops/deployment-guard/sql81-checkalt-production-register-production-apply.json."
+    },
+    "aws/workflows/sql/85_mortgage_compensation_adjust.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql85-mortgage-compensation-adjust (run 38895045712), recorded as the staging acceptance of ops/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.json."
+    },
+    "aws/workflows/sql/89_check_intake_items_column_update.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql89-check-intake-column-update (run 38929944170), recorded as the staging acceptance of ops/deployment-guard/sql89-check-intake-column-update-production-apply.json."
+    },
+    "aws/workflows/sql/90_users_only_tenant_roles.sql": {
+      "verified_live": false,
+      "evidence": null
+    },
+    "aws/workflows/sql/91_moov_onboarding.sql": {
+      "verified_live": false,
+      "evidence": null
+    },
+    "aws/workflows/sql/93_tenant_company_info.sql": {
+      "verified_live": false,
+      "evidence": null
+    },
+    "aws/workflows/sql/94_document_library_restore.sql": {
+      "verified_live": false,
+      "evidence": null
+    },
+    "aws/workflows/sql/98_tenant_fee_collection.sql": {
+      "verified_live": false,
+      "evidence": null
+    }
+  }
+}

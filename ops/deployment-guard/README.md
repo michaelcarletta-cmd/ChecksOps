@@ -58,9 +58,11 @@ node scripts/deployment-guard/github-sql53-production-apply.mjs
 # Production SQL 29 / SQL 30 (Mortgage Ops library; ops/production-sql-29-30-apply.md)
 node scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs --inspect
 node scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs --inspect
-# Production SQL 90-97 (release 2026-10-17; ops/production-sql-90-97-apply.md), one tool per migration
+# Production SQL 90-100 (release 2026-10-17; ops/production-sql-90-97-apply.md), one tool per migration
 node scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect
-# Production SQL 71, 77-89 and 90-97 on the runner, one invocation (ops/production-sql-one-shot.md)
+node scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect
+node scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs --inspect   # inspect only: a no-op on production
+# Production SQL 71, 77-89 and 90-100 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
 node scripts/deployment-guard/scan-bypass.mjs
@@ -84,6 +86,14 @@ verifies both the HMAC and the pinned KMS signature before consumption. The rece
 exactly one member in `owned_member_ops.add` or `.replace`, never both.
 Only the official overlay writer mutates the current live ZIP, preserving all
 unrelated member contents and refusing member appearance or fingerprint drift.
+
+`sql_before` holds apply in staging too. A member whose entry in
+`ops/deployment-guard/production-api-overlay-plan.json` names `sql_before` is refused
+(`DEPLOYMENT_COLLISION`, before any AWS call, lease or receipt) until that SQL file is recorded
+with `verified_live: true` in `ops/deployment-guard/staging-sql-live.json`, the staging
+equivalent of the plan's `sql_prerequisites[].verified_live` (a missing entry counts as not
+live). `inspect` reports the hold (`sql_before`). Record a staging apply there only in a
+reviewed change that names the guarded staging SQL executor run.
 
 For source reconciliation, `inspect` with `export_live_member: true` uploads the
 live `.mjs`/`.js` member's exact bytes as a 1-day artifact. The bytes are

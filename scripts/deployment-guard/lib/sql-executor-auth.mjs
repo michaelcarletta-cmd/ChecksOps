@@ -2028,7 +2028,7 @@ export const LIBRARY_SQL_PINS = Object.freeze({
   sql30: AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
 });
 
-// Release 2026-10-17 staging pins: SQL 90-97 (aws/workflows/sql/9x_*.sql). One engine
+// Release 2026-10-17 staging pins: SQL 90-100 (aws/workflows/sql/9x_*.sql, 100_*.sql). One engine
 // (release-sql-state.mjs, specs in release-sql-specs.mjs) serves the staging guarded executor
 // (handleReleaseSqlMigration) and the production tools (release-sql-production-apply.mjs).
 // intended_replacement_sha256 is each file's code-derived intended-state fingerprint.
@@ -2147,20 +2147,9 @@ export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze
   function_identities: Object.freeze(['public.aws_financial_stepup_log_writer_guard()']),
 });
 
-export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
-  sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
-  sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
-  sql92: AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT,
-  sql93: AUTHORIZED_SQL93_TENANT_COMPANY_INFO,
-  sql94: AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE,
-  sql95: AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE,
-  sql96: AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING,
-  sql97: AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER,
-});
-
-// Fee collection 2026-10-17 pending staging pin: SQL 98 (manual tenant fee collection). Same status as
-// the release pins above: pinned bytes only, no handler, workflow choice or production tool, so nothing
-// can apply it; not in github-staging-sql-executor.mjs MIGRATIONS or the workflow choices.
+// Fee collection 2026-10-17 staging pin: SQL 98 (manual tenant fee collection and the per-tenant
+// deposits switch; needs SQL 96, whose column guard it replaces). On the release engine like SQL
+// 90-97 (choice sql98-tenant-fee-collection); pending like them.
 export const AUTHORIZED_SQL98_TENANT_FEE_COLLECTION = Object.freeze({
   key: 'sql98',
   filename: 'aws/workflows/sql/98_tenant_fee_collection.sql',
@@ -2171,10 +2160,57 @@ export const AUTHORIZED_SQL98_TENANT_FEE_COLLECTION = Object.freeze({
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql98', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f',
   function_identities: Object.freeze(['public.aws_check_billing_default_price_cents()', 'public.aws_check_billing_charges_when_per_check_off()', 'public.record_check_billing_event()', 'public.aws_platform_owner_record_billing_audit(jsonb)', 'public.aws_platform_billing_destination_audit_row()', 'public.aws_tenant_deposits_enabled(uuid)', 'public.aws_tenant_deposits_enabled_audit_row()', 'public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)', 'public.aws_tenants_member_column_guard()']),
 });
+// Mortgage Desk 2026-10-17 staging pins: SQL 99 (completion messages posted by a DEFINER trigger;
+// needs SQL 90) and SQL 100 (records production's live Desk access; needs SQL 90; a strict
+// no-op on production, where the tool never runs it: release-sql-specs.mjs production_noop).
+export const AUTHORIZED_SQL99_MORTGAGE_DESK_COMPLETION_MESSAGES = Object.freeze({
+  key: 'sql99',
+  filename: 'aws/workflows/sql/99_mortgage_desk_completion_messages.sql',
+  migration_id: '99_mortgage_desk_completion_messages',
+  // The commit that last authored the file bytes.
+  commit: '600311866039adb0a85217be84d7dfb09f9eeec2',
+  source_sha256: '0c079fe41c932f34f33262ba00a17f3201f99960c89a944750f5312bd97f8b15',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql99', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4',
+  function_identities: Object.freeze(['public.aws_mortgage_desk_appended_note(text, text)', 'public.aws_mortgage_desk_completion_messages()']),
+});
+export const AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS = Object.freeze({
+  key: 'sql100',
+  filename: 'aws/workflows/sql/100_mortgage_desk_live_access.sql',
+  migration_id: '100_mortgage_desk_live_access',
+  // The commit that last authored the file bytes.
+  commit: 'c42bcd9c4f8edf1ab7d0f8d2b7e3d56a180ab994',
+  source_sha256: '6fae188e0d07e4484025ff7154cec5b3cc80cbcd9e40f9dfa6174f86b0d3e11c',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql100', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'cdbc82da6afe1fa00241605f071d67e4c0ae5bcc82131b5fcdd23d910f528c3d',
+  function_identities: Object.freeze(['public.aws_is_mortgage_ops_agent()', 'public.aws_mortgage_agent_queue_visible(text, uuid)', 'public.aws_is_active_mortgage_agent(uuid)']),
+});
 
+export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
+  sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
+  sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
+  sql92: AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT,
+  sql93: AUTHORIZED_SQL93_TENANT_COMPANY_INFO,
+  sql94: AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE,
+  sql95: AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE,
+  sql96: AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING,
+  sql97: AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER,
+  sql98: AUTHORIZED_SQL98_TENANT_FEE_COLLECTION,
+  sql99: AUTHORIZED_SQL99_MORTGAGE_DESK_COMPLETION_MESSAGES,
+  sql100: AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS,
+});
+
+// The fee collection pin under its earlier map name (the same object as the release map's sql98).
 export const FEE_COLLECTION_PENDING_SQL_PINS = Object.freeze({
   sql98: AUTHORIZED_SQL98_TENANT_FEE_COLLECTION,
 });
@@ -2187,7 +2223,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql97) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql100) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

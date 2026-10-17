@@ -18,6 +18,7 @@
  *     SQL 99 ownership preconditions come out as booleans.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -365,6 +366,7 @@ const LEAK_UUID = '9e9e9e9e-1234-4abc-8def-000000000042';
 const COMMENT_PII = 'Jane Doe (555-867-5309), Acme Roofing';
 const QUOTED_PII = 'jane-doe-acme-roofing';
 const POLICY_PII = 'Rocket Mortgage';
+const POLICY_COMMENT_PII = 'Agent read path for Jane Q. Agent (jq.agent@example.com)';
 
 const SCHEMA = `
 SET check_function_bodies = off;
@@ -441,6 +443,16 @@ $$;`,
   `CREATE POLICY prod_desk_exception_check_messages ON public.check_messages FOR SELECT TO authenticated
     USING (public.aws_desk_exception() AND body <> '${POLICY_PII}');`,
   'CREATE POLICY prod_desk_admin_check_messages ON public.check_messages FOR DELETE TO authenticated USING (current_user = \'checksops\');',
+  // A policy comment (DROP POLICY + CREATE POLICY in SQL 100 would lose it): reported as present + sha256, never the text.
+  `COMMENT ON POLICY prod_agent_read_mortgage_handling_requests ON public.mortgage_handling_requests IS '${POLICY_COMMENT_PII}';`,
+  // A helper whose EXECUTE ACL is not the default (PUBLIC revoked, authenticated granted).
+  'REVOKE EXECUTE ON FUNCTION public.aws_is_tenant_member(uuid) FROM PUBLIC;',
+  'GRANT EXECUTE ON FUNCTION public.aws_is_tenant_member(uuid) TO authenticated;',
+  // A column grant made by another grantor (checksops, with grant option from the owner).
+  'GRANT UPDATE (is_deleted) ON public.check_messages TO checksops WITH GRANT OPTION;',
+  'SET ROLE checksops;',
+  'GRANT UPDATE (is_deleted) ON public.check_messages TO authenticated;',
+  'RESET ROLE;',
   `INSERT INTO public.check_intake_items VALUES ('${CHECK}', '${TENANT}', 'new', NULL);`,
   `INSERT INTO public.mortgage_handling_requests VALUES ('${REQ}', '${TENANT}', '${CHECK}', 'Ledger Bank', NULL, 'accepted', '${AGENT}', 'private note');`,
   `INSERT INTO public.profiles VALUES ('${AGENT}', 'agent@example.com');`,
@@ -500,7 +512,8 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
 
     // No row data, ids, emails or the drifted literal anywhere in the output.
     for (const leak of [TENANT, CHECK, REQ, AGENT, LEAK_UUID, 'agent@example.com', 'private note', 'Ledger Bank',
-      COMMENT_PII, 'Jane Doe', '555-867-5309', 'Acme Roofing', QUOTED_PII, POLICY_PII, "'accepted'", "'jane'"]) {
+      COMMENT_PII, 'Jane Doe', '555-867-5309', 'Acme Roofing', QUOTED_PII, POLICY_PII, "'accepted'", "'jane'",
+      POLICY_COMMENT_PII, 'Jane Q. Agent', 'jq.agent@example.com', 'Agent read path']) {
       assert.ok(!text.includes(leak), `leaked ${leak}`);
     }
 
@@ -556,7 +569,24 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
     assert.deepEqual(mhr.grants.authenticated.table_acl, []);
     assert.deepEqual(mhr.grants.authenticated.column_acl, { UPDATE: ['status', 'work_notes'] });
     assert.deepEqual(mhr.grants.authenticated.effective_any_column_privileges, ['UPDATE']);
-    assert.deepEqual(mhr.grants.PUBLIC, { role_exists: true, table_acl: [], column_acl: {}, column_acl_entry_count: 0 });
+    assert.deepEqual(mhr.grants.PUBLIC, { role_exists: true, table_acl: [], column_acl: {}, column_acl_entry_count: 0, column_acl_entries: [], column_acl_grantors: [] });
+    // Every column ACL entry with its grantor (the owner here: the superuser's GRANT is recorded as the owner's).
+    assert.deepEqual(mhr.grants.authenticated.column_acl_entries, [
+      { column: 'status', privilege: 'UPDATE', grantable: false, grantor: 'checksops_admin' },
+      { column: 'work_notes', privilege: 'UPDATE', grantable: false, grantor: 'checksops_admin' },
+    ]);
+    assert.deepEqual(mhr.grants.authenticated.column_acl_grantors, ['checksops_admin']);
+    // A grant by another grantor is a separate entry and is named.
+    const cmGrants = report.tables.check_messages.grants;
+    assert.deepEqual(cmGrants.checksops.column_acl_entries, [{ column: 'is_deleted', privilege: 'UPDATE', grantable: true, grantor: 'checksops_admin' }]);
+    assert.deepEqual(cmGrants.authenticated.column_acl_entries, [{ column: 'is_deleted', privilege: 'UPDATE', grantable: false, grantor: 'checksops' }]);
+    assert.deepEqual(cmGrants.authenticated.column_acl_grantors, ['checksops']);
+    // Policy comments on mortgage_handling_requests: present + sha256 of the text (computed in the database), never the text.
+    assert.deepEqual(pol.prod_agent_read_mortgage_handling_requests.comment, { present: true, sha256: createHash('sha256').update(POLICY_COMMENT_PII, 'utf8').digest('hex') });
+    for (const name of ['aws_select_mortgage_handling_requests', 'aws_write_mortgage_handling_requests', 'prod_agent_update_mortgage_handling_requests']) {
+      assert.deepEqual(pol[name].comment, { present: false, sha256: null }, name);
+    }
+    assert.ok(report.tables.check_messages.policies.every((p) => !Object.hasOwn(p, 'comment')));
     assert.deepEqual(mhr.grants.checksops_admin.table_acl.map((a) => a.privilege).sort(), ['DELETE', 'INSERT', 'REFERENCES', 'SELECT', 'TRIGGER', 'TRUNCATE', 'UPDATE']);
     assert.deepEqual(report.tables.check_messages.grants.PUBLIC.table_acl, [{ privilege: 'SELECT', grantable: false, grantor: 'checksops_admin' }]);
     assert.equal(report.tables.check_intake_items.grants.checksops.table_acl[0].grantable, true);
@@ -573,6 +603,21 @@ test('PostgreSQL 16: the inspect is read-only, reports the live access surface a
     assert.equal(report.functions['public.aws_can_write_tenant'].overloads[0].sets_row_security, true);
     const agent = report.functions['public.aws_is_active_mortgage_agent'].overloads[0];
     assert.equal(agent.repo_match, 'differs_from_repo');
+    // EXECUTE grants: the default ACL (PUBLIC and the owner) when proacl is NULL ...
+    assert.equal(agent.execute_acl_default, true);
+    assert.equal(agent.public_execute, true);
+    assert.deepEqual(agent.execute_acl, [
+      { grantee: 'PUBLIC', privilege: 'EXECUTE', grantable: false, grantor: 'ubuntu' },
+      { grantee: 'ubuntu', privilege: 'EXECUTE', grantable: false, grantor: 'ubuntu' },
+    ]);
+    // ... and every entry of an explicit one (PUBLIC revoked, authenticated granted).
+    const memberAcl = report.functions['public.aws_is_tenant_member'].overloads[0];
+    assert.equal(memberAcl.execute_acl_default, false);
+    assert.equal(memberAcl.public_execute, false);
+    assert.deepEqual(memberAcl.execute_acl, [
+      { grantee: 'authenticated', privilege: 'EXECUTE', grantable: false, grantor: 'ubuntu' },
+      { grantee: 'ubuntu', privilege: 'EXECUTE', grantable: false, grantor: 'ubuntu' },
+    ]);
     assert.match(agent.definition, /mortgage_agent_accounts/);
     const member = report.functions['public.aws_is_tenant_member'].overloads[0];
     assert.equal(member.repo_match, 'differs_from_repo');

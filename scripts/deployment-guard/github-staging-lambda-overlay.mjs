@@ -93,6 +93,42 @@ export function validateRequestedMember(member) {
   return { ok: true, details: { member: named.details.member, source, sourceRelative: `aws/functions/api/${named.details.member}` } };
 }
 
+/**
+ * The staging mirror of the production overlay's sql_before guard
+ * (github-production-lambda-overlay.mjs classifyLive): a member whose production plan entry
+ * names sql_before may be overlaid onto staging only once that SQL is recorded live in
+ * staging (ops/deployment-guard/staging-sql-live.json, verified_live true). A file missing
+ * from the record counts as not live; a member the plan does not list carries no hold.
+ */
+export const OVERLAY_PLAN_REL = 'ops/deployment-guard/production-api-overlay-plan.json';
+export const STAGING_SQL_LIVE_REL = 'ops/deployment-guard/staging-sql-live.json';
+
+const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(repoRoot, rel), 'utf8'));
+
+export function stagingSqlBefore(member, { plan, stagingSqlLive } = {}) {
+  const thePlan = plan || readJson(OVERLAY_PLAN_REL);
+  const sqlBefore = thePlan?.members?.[member]?.sql_before || null;
+  if (!sqlBefore) return { sql_before: null, verified_live_in_staging: null, evidence: null };
+  const record = (stagingSqlLive || readJson(STAGING_SQL_LIVE_REL))?.sql?.[sqlBefore];
+  return {
+    sql_before: sqlBefore,
+    verified_live_in_staging: record?.verified_live === true,
+    evidence: record?.verified_live === true ? (record.evidence || null) : null,
+  };
+}
+
+export function assertStagingSqlBefore(member, deps = {}) {
+  const hold = stagingSqlBefore(member, deps);
+  if (hold.sql_before && hold.verified_live_in_staging !== true) {
+    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'required staging SQL is not recorded as verified live in staging', {
+      member,
+      sql_before: hold.sql_before,
+      record: STAGING_SQL_LIVE_REL,
+    });
+  }
+  return hold;
+}
+
 export function validateExpectedMemberHash(actual, expected) {
   if (!HEX64.test(String(expected || ''))) {
     return { ok: false, code: CODES.INVALID_MANIFEST, message: 'apply mode requires a 64-character expected live member SHA-256' };
@@ -248,6 +284,10 @@ export async function run(env = process.env, deps = {}) {
   if (exportDir && mode !== 'inspect') {
     throw new GuardError(CODES.INVALID_MANIFEST, 'export_live_member is inspect-only');
   }
+  // sql_before: refused in apply before any AWS call, lease or receipt; reported by inspect.
+  const sqlBefore = mode === 'apply'
+    ? assertStagingSqlBefore(requested.details.member, deps)
+    : stagingSqlBefore(requested.details.member, deps);
   const live = await inspectLive(requested.details.member, deps);
 
   appendGithubOutput({
@@ -265,7 +305,7 @@ export async function run(env = process.env, deps = {}) {
       exported = exportLiveMember(live, exportDir);
       appendGithubOutput({ exported_member_file: exported.file, exported_member_sha256: exported.sha256 }, env);
     }
-    return { ok: true, mode, identity, live: liveSummary, exported, mutation: false };
+    return { ok: true, mode, identity, live: liveSummary, sql_before: sqlBefore, exported, mutation: false };
   }
 
   const receiptInput = buildOverlayReceiptInput(
@@ -320,6 +360,7 @@ export async function run(env = process.env, deps = {}) {
     mode,
     identity,
     live: liveSummary,
+    sql_before: sqlBefore,
     mutation: false,
     authorization: {
       lease: lease.details.lease,
