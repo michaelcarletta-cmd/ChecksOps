@@ -25,6 +25,7 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   'lambda-sql53-temporary-config',
   'sql53-production-apply',
   'apigateway-update',
+  'apigateway-cors-update',
   'infra-mutate',
   'verify-only',
 ]);
