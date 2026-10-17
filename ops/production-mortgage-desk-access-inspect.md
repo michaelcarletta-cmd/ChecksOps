@@ -138,17 +138,17 @@ Drift findings:
 - Confirmed against the production inspect output: `authenticated` has no table-level ACL entry
   on `mortgage_handling_requests`, so SQL 100's REVOKEs from `authenticated` are a no-op on
   production.
-- Not reported by the 2026-10-17 inspect, so not yet confirmed for production: the helpers'
-  EXECUTE grants, the policy comments and the column ACL grantors. The inspect now reports all
-  three (`execute_acl`, `comment`, `column_acl_entries[].grantor`; review of #1020); the next
-  production run (the owner runs it) confirms them. SQL 100 is a no-op on production only if
-  every helper has the default EXECUTE ACL (PUBLIC and the owner), no policy on
-  `mortgage_handling_requests` has a comment (DROP POLICY + CREATE POLICY would drop it) and
-  every table and column ACL entry was granted by `checksops_admin` (a GRANT by
-  `checksops_admin` next to another grantor's entry adds a second entry). The SQL 100 production
-  tool (`scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs
-  --inspect`, `ops/production-sql-90-97-apply.md`) checks the same three in its fingerprint.
-  Function comments survive CREATE OR REPLACE and are not reported.
+- Second production inspect, 2026-10-17 at source commit `969e2b2b1` (SSM
+  `24b9f38c-d721-4b82-b3a5-056c6c84d37a`, with `sql100-…-production-apply.mjs --inspect`): it
+  reports the three items the first run could not. Helper EXECUTE grants are not the default:
+  `aws_is_mortgage_ops_agent()` authenticated and checksops (no PUBLIC),
+  `aws_mortgage_agent_queue_visible(text, uuid)` PUBLIC and checksops,
+  `aws_is_active_mortgage_agent(uuid)` PUBLIC, authenticated and checksops (every entry granted by
+  the owner). `aws_update_mortgage_ops_accept_complete` has a comment (sha256 `34ef5bf7…`), equal
+  to SQL 39's `COMMENT ON POLICY` text on the cursor Mortgage Ops branches; the other four policies
+  have none. Every table and column ACL entry is granted by `checksops_admin`. SQL 100 now records
+  all of it; its intended fingerprint equals this run's live one (`52c00e3a…`). Function comments
+  survive CREATE OR REPLACE and are not reported.
 
 Future cleanup (not done now): the stale Supabase policies "Owner tenant staff can insert
 checks" and "Owner tenant staff can update checks" on `check_intake_items` (`has_role` admin /
@@ -157,8 +157,8 @@ staff) are still live.
 `aws/tests/sql100-mortgage-desk-live-access-pg.test.mjs` applies the repository sequence plus
 SQL 100 to PostgreSQL 16, runs this inspect's library against it and checks that the policy
 texts, grants and helper prosrc hashes equal the production values above, that every table and
-column ACL entry's grantor is `checksops_admin`, that no policy has a comment and that the
-helpers have the default EXECUTE ACL.
+column ACL entry's grantor is `checksops_admin`, that only the Accept / Complete policy has a
+comment (sha256 equal to production's) and that the helpers have production's EXECUTE grants.
 
 Tests: `aws/tests/mortgage-desk-access-production-inspect.test.mjs`, in
 `npm run test:deployment-guard`. The PostgreSQL 16 part checks that a non-superuser

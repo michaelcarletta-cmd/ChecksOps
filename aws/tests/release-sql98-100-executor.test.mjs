@@ -173,7 +173,7 @@ test('SQL 100 fingerprint: a grantor or a policy comment is another state; specs
   otherGrantor.columns['public.mortgage_handling_requests.status'].acl = ['checksops UPDATE grantor=checksops'];
   assert.notEqual(releaseStateHash('sql100', otherGrantor), base);
   const fnGrant = structuredClone(intended);
-  fnGrant.functions['public.aws_is_mortgage_ops_agent()'].acl.push('authenticated EXECUTE grantor=owner');
+  fnGrant.functions['public.aws_is_mortgage_ops_agent()'].acl.push('PUBLIC EXECUTE grantor=owner');
   assert.notEqual(releaseStateHash('sql100', fnGrant), base);
   // The whole table: RLS off or forced, another policy, a grant to any other role or on an unlisted column.
   const W = 'public.mortgage_handling_requests';
@@ -308,6 +308,22 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
     INSERT INTO public.platform_billing_destination (environment, moov_account_id, moov_payment_method_id) VALUES ('sandbox', 'acct_unreviewed', 'pm_unreviewed')`);
   r98 = await inspect('sql98');
   assert.equal(r98.release_sql_inspect.counts.platform_billing_destination_rows, 1);
+  // Counts only (never the ids): which environment, whether on the reviewed platform account, verified.
+  const destCounts = (counts) => Object.fromEntries(Object.entries(counts).filter(([k]) => k.startsWith('platform_billing_destination_')));
+  assert.deepEqual(destCounts(r98.release_sql_inspect.counts), {
+    platform_billing_destination_rows: 1, platform_billing_destination_production_rows: 0, platform_billing_destination_sandbox_rows: 1,
+    platform_billing_destination_reviewed_account_rows: 0, platform_billing_destination_production_reviewed_account_rows: 0,
+    platform_billing_destination_payment_method_rows: 1, platform_billing_destination_verified_rows: 0,
+  });
+  assert.doesNotMatch(JSON.stringify(r98), /acct_unreviewed|pm_unreviewed/);
+  const reviewed = await whatIf('sql98', `INSERT INTO public.platform_billing_destination (environment, moov_account_id, moov_payment_method_id, verified_at)
+    VALUES ('production', '41cb5d67-4911-4bef-aad5-d8ee9c582208', 'pm_reviewed', now())`);
+  assert.deepEqual(destCounts(reviewed.state.counts), {
+    platform_billing_destination_rows: 2, platform_billing_destination_production_rows: 1, platform_billing_destination_sandbox_rows: 1,
+    platform_billing_destination_reviewed_account_rows: 1, platform_billing_destination_production_reviewed_account_rows: 1,
+    platform_billing_destination_payment_method_rows: 2, platform_billing_destination_verified_rows: 1,
+  });
+  assert.ok(reviewed.failures.includes('platform_billing_destination_absent_or_empty'));
   assert.deepEqual(r98.precondition_failures, ['platform_billing_destination_absent_or_empty'], JSON.stringify(r98.release_sql_inspect));
   const withRow = await apply('sql98', r98.live_definition_sha256);
   assert.equal(withRow.code, CODES.DEPLOYMENT_COLLISION);
@@ -316,7 +332,7 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   r98 = await inspect('sql98');
   assert.deepEqual(r98.precondition_failures, [], JSON.stringify(r98.release_sql_inspect));
   assert.deepEqual(r98.release_sql_inspect.unique_covers, [{ name: 'check_billing_events check_event', columns: ['check_intake_item_id', 'event_type'], covered: false }]);
-  assert.deepEqual(r98.release_sql_inspect.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0, platform_billing_destination_rows: 0 });
+  assert.deepEqual(r98.release_sql_inspect.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0, platform_billing_destination_rows: 0, platform_billing_destination_production_rows: 0, platform_billing_destination_sandbox_rows: 0, platform_billing_destination_reviewed_account_rows: 0, platform_billing_destination_production_reviewed_account_rows: 0, platform_billing_destination_payment_method_rows: 0, platform_billing_destination_verified_rows: 0 });
   assert.equal(r98.release_sql_inspect.tables.find((x) => x.name === 'platform_billing_destination').state, 'different');
   // The same fingerprint when an earlier unique index already covers the pair (SQL 98 then adds none).
   await admin.query('BEGIN');
@@ -403,8 +419,16 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   r100 = await inspect('sql100');
   assert.equal(r100.already_applied, true);
   assert.ok(r100.release_sql_inspect.functions.every((row) => row.state === 'intended'), JSON.stringify(r100.release_sql_inspect.functions));
-  assert.deepEqual(r100.release_sql_inspect.policy_comments.map((p) => p.present), [false, false, false, false, false]);
+  assert.deepEqual(r100.release_sql_inspect.policy_comments.map((p) => p.present), [false, false, true, false, false]);
   assert.equal((await apply('sql100', pre100)).code, CODES.UNRELATED_MUTATION);
+  // Likewise a helper EXECUTE grant by another grantor (the owner's REVOKE leaves it): refused (helpers exist now).
+  const fnGrantor = await whatIf('sql100', [
+    'GRANT EXECUTE ON FUNCTION public.aws_is_mortgage_ops_agent() TO checksops WITH GRANT OPTION',
+    'SET LOCAL ROLE checksops',
+    'GRANT EXECUTE ON FUNCTION public.aws_is_mortgage_ops_agent() TO PUBLIC',
+    'RESET ROLE',
+  ]);
+  assert.ok(fnGrantor.failures.includes('function_acl_replaceable'), JSON.stringify(fnGrantor.failures));
   // Access the file does not describe is another state, not "already applied" (no precondition names it).
   for (const wider of [
     'CREATE POLICY zz_open_read ON public.mortgage_handling_requests FOR SELECT TO authenticated USING (true)',

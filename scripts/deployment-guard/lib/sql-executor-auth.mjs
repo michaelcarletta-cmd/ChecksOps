@@ -2186,13 +2186,13 @@ export const AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS = Object.freeze({
   filename: 'aws/workflows/sql/100_mortgage_desk_live_access.sql',
   migration_id: '100_mortgage_desk_live_access',
   // The commit that last authored the file bytes.
-  commit: 'c42bcd9c4f8edf1ab7d0f8d2b7e3d56a180ab994',
-  source_sha256: '6fae188e0d07e4484025ff7154cec5b3cc80cbcd9e40f9dfa6174f86b0d3e11c',
+  commit: '7d6cdcb3fbc425a9905fa49291b4b164800884a9',
+  source_sha256: '16cb8c9ae8ab63bfce4948c560ce6b97a2a53dae11ce502af606ed837a086724',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql100', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: '4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e',
+  intended_replacement_sha256: '52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777',
   function_identities: Object.freeze(['public.aws_is_mortgage_ops_agent()', 'public.aws_mortgage_agent_queue_visible(text, uuid)', 'public.aws_is_active_mortgage_agent(uuid)']),
 });
 
