@@ -1,0 +1,66 @@
+{
+  "id": "sql90-users-only-tenant-roles-production-apply",
+  "migration": "sql90",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/90_users_only_tenant_roles.sql",
+  "migration_id": "90_users_only_tenant_roles",
+  "staging_pin_commit": "b0f219a90a34d87b5fbf10e5632f408f364bf0b1",
+  "source_sha256": "1ee9c1d12b3ad71a58ecec30ee223f8ab660be74d162d9ada9482c5640c26d86",
+  "function_identities": [
+    "public.aws_is_tenant_member(uuid)",
+    "public.aws_can_write_tenant(uuid)",
+    "public.aws_can_write_check(uuid)",
+    "public.aws_can_write_claim(uuid)",
+    "public.aws_tenant_has_no_members(uuid)",
+    "public.aws_is_platform_owner_user(uuid)",
+    "public.aws_has_any_tenant_membership()",
+    "public.aws_can_write_same_tenant_user(uuid)",
+    "public.aws_can_access_tax_profiles(uuid)",
+    "public.aws_first_invite_allowed(uuid)",
+    "public.aws_invite_create_user_identity(uuid, text, text, text)",
+    "public.aws_create_deposit_batch_for_item(uuid, text)",
+    "public.aws_is_tenant_manager_admin()",
+    "public.aws_can_manage_mortgage_library(uuid)",
+    "public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": null,
+  "authorization_phrase": "APPLY_USERS_ONLY_TENANT_ROLES",
+  "predecessors": [],
+  "order_note": "After SQL 29 and SQL 30 (aws/rls/sql/29_mortgage_ops_library_parity.sql, 30_tenant_documents_mortgage_doc_type.sql; the SQL 29 tools refuse once aws_is_tenant_member(uuid) exists) and before SQL 93, SQL 94 and SQL 96. Before tenant-admin.mjs and workflow-rpc.mjs (plan sql_before) and right before the step-6 Lambdas: invites break between SQL 90 and the new tenant-admin.mjs. Needs aws/rls/sql 02, 10, 11, 20, 21, 24, 29, 35 and aws/workflows/sql 80; the file refuses with sql90_prerequisite_missing otherwise.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "missing",
+    "production_tool": null,
+    "staging_executor_handler": null,
+    "note": "Pending: no guarded tooling exists for SQL 90 yet. Needed before this pin can be execute-authorized: a production-apply tool with --inspect (scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs and its lib), a guarded staging SQL executor handler and workflow choice (sql90-users-only-tenant-roles), a code-derived intended-state fingerprint in scripts/deployment-guard/lib/sql-executor-auth.mjs (intended_replacement_sha256 is null until then), the production one-shot entry, a runbook and PostgreSQL 16 tests, as SQL 87-89 have."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 90 (and no inspect tool exists yet). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": null,
+    "note": "Replaces the tenant-role tier helpers with the membership rule (any tenant_users row), adds aws_is_tenant_member(uuid) and the related helpers; does not change the tenant_role enum or tenant_users.role data. The fingerprint is defined by the SQL 90 tooling (pending)."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 90 here in the reviewed change that sets execute true. Until then there is no tool that could apply this pin, and any tool must refuse with PRODUCTION_APPROVAL_REQUIRED (and SQL_COLLISION while expected_live_definition_sha256 is null)."
+  }
+}
