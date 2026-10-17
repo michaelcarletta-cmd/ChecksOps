@@ -1,0 +1,142 @@
+{
+  "id": "production-sql53-apply-plan",
+  "authorization": "evaluate-only",
+  "deployment_type": "lambda-sql53-temporary-config",
+  "sql53_guarded_apply_ready": false,
+  "apply_authorized": false,
+  "receipt_issued": false,
+  "lease_acquired": false,
+  "diagnostic_invoked": false,
+  "lambda_configuration_modified": false,
+  "sql_executed": false,
+  "iam_modified": false,
+  "workstream_id": "prod-sql53-apply-plan-3bc9",
+  "branch": "cursor/prod-sql53-apply-plan-3bc9",
+  "writer": "scripts/deployment-guard/sql53-temporary-lambda-config.mjs",
+  "writer_commit": "67c73fc9f98996ddfc001024ac1138aa279c6968",
+  "hasher_fix_commit": "e9e1c9f61607d63aefefbe30bff2f083ca6e1de1",
+  "inspected_at": "2026-10-11T00:45:42Z",
+  "oidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "assumed_identity": {
+    "Account": "806168576068",
+    "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-apply-plan-fp"
+  },
+  "official_code_and_revision": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "last_modified": "2026-10-10T18:26:47.000+0000",
+    "matches_prior_official": true
+  },
+  "stable_configuration_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "prior_request_scoped_configuration_sha256": "e8da3b0605848139ed780d7d0f358fc70e358761e75381a6c7ca38ba3253222b",
+  "hasher_note": "The prior official configuration_sha256 included AWS SDK $metadata.requestId and is not a CAS token. After excluding $metadata, two consecutive official reads hash identically to 8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24.",
+  "live_runtime": {
+    "checksops_env": "production-prep",
+    "env_key_count": 49,
+    "sql53_authorization_present": false,
+    "sql53_expiry_present": false
+  },
+  "production_approval_requirements": {
+    "target_environment": "production",
+    "approval.approved": true,
+    "approval.workstream_id": "must equal the apply workstream_id; previous overlay/fingerprint workstreams are refused",
+    "approval.inherited": false,
+    "approval.from_previous_workstream": false,
+    "staging_acceptance.ok": true,
+    "staging_acceptance.reference": "required and must not be inherited from prod-sql53-overlay-prep-3bc9 or this evaluate-only plan",
+    "production_fingerprint": "must equal preflight_live_fingerprint",
+    "immediately_before_fingerprint": "must equal preflight_live_fingerprint at apply time"
+  },
+  "receipt_and_lease_workflow": {
+    "lease_key": "production::checksops-production-prep-api",
+    "existing_lease": {
+      "holder": "prod-sql53-overlay-prep-3bc9",
+      "expiry": "2026-10-10T18:41:11.861Z",
+      "status": "expired",
+      "may_be_replaced_later": true,
+      "acquired_this_turn": false
+    },
+    "existing_receipt": {
+      "workstream_id": "prod-sql53-overlay-prep-3bc9",
+      "deployment_type": "lambda-overlay",
+      "expired": true,
+      "consumed": true,
+      "reusable": false
+    },
+    "issue_command": "node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input <manifest.json>",
+    "skip_contracts_flag": "broken; flags is a Set so flags['skip-contracts'] is never true. Provide contract_results.tenant-isolation after executing aws/tests/tenant-security-compliance.test.mjs",
+    "receipt_constraints": {
+      "target_environment": "production",
+      "target_component": "checksops-production-prep-api",
+      "deployment_type": "lambda-sql53-temporary-config",
+      "owned_components": ["checksops-production-prep-api"],
+      "owned_member_ops": "forbidden",
+      "apply": false,
+      "ttl_default_ms": 900000,
+      "ttl_max_ms": 3600000,
+      "hand_written_json": "RECEIPT_FORGED"
+    }
+  },
+  "temporary_authorization": {
+    "keys_added": [
+      "CHECKSOPS_SQL53_READONLY_INSPECT_AUTHORIZATION",
+      "CHECKSOPS_SQL53_READONLY_INSPECT_EXPIRES_AT"
+    ],
+    "token_source": "writer-generated; never in the manifest or printed output",
+    "caller_supplied_env_or_payload": "forbidden",
+    "default_window_ms": 300000,
+    "max_window_ms": 7200000,
+    "revision_id_cas": true,
+    "invoke_payload": {
+      "diagnostic": "sql53-production-readonly-inspect",
+      "authorization": "<writer-generated-token>"
+    },
+    "cleanup": "finally rereads configuration, deletes only the two SQL53 keys using the latest RevisionId, and verifies they are absent. Incomplete cleanup is DEPLOYMENT_COLLISION."
+  },
+  "diagnostic_read_only": {
+    "live_module_authoritative": true,
+    "allowed_envs": ["production", "production-prep"],
+    "http_events_refused": true,
+    "allowlisted_sql_only": true,
+    "begin_read_only_required": true,
+    "writable_transaction_refused": true,
+    "privileged_user_refused": true,
+    "non_production_rds_refused": true,
+    "insert_update_delete_not_allowlisted": true,
+    "main_source_requires_checksops_env_production": true,
+    "do_not_overlay_main_inspect": true
+  },
+  "relevant_contracts": ["tenant-isolation"],
+  "tenant_isolation_test": {
+    "file": "aws/tests/tenant-security-compliance.test.mjs",
+    "executed_this_turn": true,
+    "ok": true,
+    "placed_in_receipt": false
+  },
+  "evaluate_only_gates": {
+    "missing_approval": "PRODUCTION_APPROVAL_REQUIRED",
+    "inherited_or_mismatched_workstream": "PRODUCTION_APPROVAL_REQUIRED",
+    "stale_request_scoped_hash": "DEPLOYMENT_COLLISION",
+    "missing_tenant_isolation_result": "REGRESSION_DETECTED",
+    "hypothetical_complete_manifest": "evaluate ok; not an authorization"
+  },
+  "remaining_blockers": [
+    "No owner apply authorization for lambda-sql53-temporary-config",
+    "No signed deployment-guard receipt or exclusive lease for an apply workstream",
+    "No approval.approved=true with approval.workstream_id matching a future apply workstream",
+    "No non-inherited staging_acceptance.ok=true reference for that apply workstream",
+    "Immediately-before fingerprint at apply time must still equal the stable official fingerprint",
+    "Temporary Cursor OIDC trust on ChecksOpsProductionSql53ConfigWriter must be removed after authorized SQL53 work"
+  ],
+  "exact_next_authorized_action": "Owner authorize a new apply workstream (not this evaluate-only plan) with approval.approved=true, approval.workstream_id equal to that workstream, and a non-inherited staging_acceptance reference. Then run official --fingerprint-only again, issue a receipt with preflight.mjs --acquire-lease --receipt using the stable fingerprint in all three fingerprint fields plus executed tenant-isolation contract_results, then later CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 node scripts/deployment-guard/sql53-temporary-lambda-config.mjs --apply as ChecksOpsProductionSql53ConfigWriter."
+}
