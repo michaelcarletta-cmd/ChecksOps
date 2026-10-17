@@ -1,0 +1,76 @@
+{
+  "id": "production-sql53-temporary-config-final",
+  "authorization": "final-pre-execution-verification",
+  "sql53_final_ready": true,
+  "apply_authorized": false,
+  "receipt_issued": false,
+  "lease_acquired": false,
+  "diagnostic_invoked": false,
+  "lambda_configuration_modified": false,
+  "sql_executed": false,
+  "iam_modified": false,
+  "pr_869_on_main": true,
+  "pr_872_on_main": true,
+  "main_merge": "f458a689e",
+  "workstream_id": "prod-sql53-temporary-config-3bc9",
+  "branch": "cursor/prod-sql53-final-verify-3bc9",
+  "inspected_at": "2026-10-11T02:08:00Z",
+  "assumed_identity": {
+    "Account": "806168576068",
+    "Arn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSql53ConfigWriter/sql53-final-verify-fp"
+  },
+  "oidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "tests": {
+    "deployment_guard_suite": {
+      "pass": 354,
+      "fail": 0,
+      "skip": 1
+    }
+  },
+  "source_matches_live_overlay": {
+    "repo_inspect_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+    "live_overlay_extract_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+    "match": true
+  },
+  "current_live_fingerprint": {
+    "function_name": "checksops-production-prep-api",
+    "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
+    "revision_id": "d49b27cc-3dcb-48ab-8490-206097172689",
+    "configuration_sha256": "8a6ffde71f66390b27dc688e8276536bbbc37ffebcd9f756290ed2cde03a2a24"
+  },
+  "consecutive_fingerprints_identical": true,
+  "previous_revision_id_not_reused": "534d4e36-0e62-461e-948e-e2bf00d3920e",
+  "cleanup_verified": {
+    "sql53_authorization_present": false,
+    "sql53_expiry_present": false,
+    "env_key_count": 49,
+    "last_modified": "2026-10-11T00:55:17.000+0000"
+  },
+  "concurrent_production_changes": false,
+  "staging_acceptance": {
+    "ok": true,
+    "inherited": false,
+    "reference": "prod-sql53-temporary-config-3bc9:acceptance:sql53-writer+sql53-readonly-inspect+tenant-isolation"
+  },
+  "receipt_and_lease_requirements": {
+    "consumed_first_receipt_reusable": false,
+    "issue_command": "node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input ops/deployment-guard/production-sql53-temporary-config-final-manifest.json",
+    "lease_key": "production::checksops-production-prep-api",
+    "local_previous_lease": {
+      "holder": "prod-sql53-temporary-config-3bc9",
+      "expiry": "2026-10-11T01:09:53.838Z",
+      "status": "expired",
+      "replaceable_later": true,
+      "acquired_this_turn": false
+    }
+  },
+  "remaining_risks": [
+    "First-apply invoke status 200 vs 403 was never captured; a secrets/DB/role refuse would still fail closed after cleanup",
+    "Immediately-before fingerprint must still equal this live baseline at apply time",
+    "Owner has not granted retry execution approval"
+  ]
+}
