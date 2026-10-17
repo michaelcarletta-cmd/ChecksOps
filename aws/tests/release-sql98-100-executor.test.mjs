@@ -52,6 +52,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { MEMBER_A, TENANT_A, TENANT_B, pgSkipReason, releaseFixture, sql98To100Schema } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -114,9 +115,7 @@ test('pins: SQL 98-100 pending and code-derived, selectable, packed, in step wit
     const spec = RELEASE_SQL_SPECS[key];
     assert.equal(spec.choice, choices[key]);
     assert.equal(sha(TEXT[key]), pin.source_sha256, key);
-    assert.equal(pin.execute, false, key);
-    assert.equal(pin.authorization, 'pending', key);
-    assert.equal(pin.expected_live_definition_sha256, null, key);
+    assertStagingPinState(assert, key, pin);
     assert.equal(releaseIntendedHash(key, TEXT[key]), pin.intended_replacement_sha256, key);
     assert.equal(MIGRATIONS[spec.choice], pin, key);
     assert.equal(packed[pin.filename], `sql/${path.basename(pin.filename)}`, key);

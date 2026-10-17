@@ -314,3 +314,24 @@ Adding one means: its spec in `release-sql-specs.mjs`, its staging pin (with its
 `scripts/deployment-guard/sqlNNN-…-production-apply.mjs`, plus its bypass-inventory entry. The
 engine, the executor handler, the production library and CLI, and the one-shot registration
 are generic.
+
+## Staging apply waves (2026-10-17)
+
+The staging pins record each migration's staging read-live pre-state. A pre-state stays valid
+only if no earlier migration changes that migration's objects. From the specs, three do:
+- SQL 94 (on SQL 30): the `tenant_documents` doc_type CHECK.
+- SQL 96 (on SQL 93): `aws_tenants_member_column_guard()`.
+- SQL 98 (on SQL 93 and SQL 96): the same function.
+
+- **Wave 1 (owner approved 2026-10-17):** SQL 30, 90, 91, 93, 95, 97, 99 and 100, from the
+  read-live runs recorded in their pins (executor at main `ecb8647b0`; SQL 90 and SQL 98
+  re-read at `3cad3c227`).
+- **Applying:** one guarded staging apply per migration, in release order:
+  30 → 90 → 91 → 93 → 97 → 95 → 99 → 100.
+- **Wave 2:** SQL 94 (after SQL 30) and SQL 96 (after SQL 93). Each needs a fresh read-live and
+  a reviewed pin change.
+- **Wave 3:** SQL 98 (after SQL 96), the same way.
+
+Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
+and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`
+in a reviewed change.

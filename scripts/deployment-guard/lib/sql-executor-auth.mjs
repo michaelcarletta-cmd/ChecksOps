@@ -2017,7 +2017,8 @@ export const AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE = Object.freeze({
   migration_id: '30_tenant_documents_mortgage_doc_type',
   commit: '0d2f1b021829f0a2f52856d59cbe95b0ff2674c1',
   source_sha256: 'd30c7cafb232387e174eb5a3938af9e0942a006fa8b775c2d6eac490d84c7d5a',
-  expected_live_definition_sha256: null,
+  // Staging read-live run 39075094721 (2026-10-17, executor at main ecb8647b0); owner approved the staging apply 2026-10-17.
+  expected_live_definition_sha256: '37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504',
   // sha256(sql30StateText(SQL30_INTENDED_STATE)); re-derived by the tests.
   intended_replacement_sha256: 'e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556',
   constraint: `${SQL30_TABLE}.${SQL30_CONSTRAINT}`,
@@ -2041,9 +2042,10 @@ export const AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES = Object.freeze({
   // The commit that last authored the file bytes (claude/sql90-production-reconcile, reached from main through its merge commit).
   commit: '2a0863ac4e6d4a91a9a82637c2b33d81e84fa0a7',
   source_sha256: '488b2ec455fcfd11c9d1c4ea9b33f3f9323cea8e69934e98938994730b1e07bd',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39078340362',
+  execute: true,
+  // Staging read-live run 39078340362 (2026-10-17).
+  expected_live_definition_sha256: '1af4b3ac3d933fa3e05e938853d93edc196d89c5e2f0b82bbd98a1843d65781c',
   // Code-derived: releaseIntendedHash('sql90', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c',
   function_identities: Object.freeze(['public.aws_is_tenant_member(uuid)', 'public.aws_can_write_tenant(uuid)', 'public.aws_can_write_check(uuid)', 'public.aws_can_write_claim(uuid)', 'public.aws_tenant_has_no_members(uuid)', 'public.aws_is_platform_owner_user(uuid)', 'public.aws_has_any_tenant_membership()', 'public.aws_can_write_same_tenant_user(uuid)', 'public.aws_can_access_tax_profiles(uuid)', 'public.aws_first_invite_allowed(uuid)', 'public.aws_invite_create_user_identity(uuid, text, text, text)', 'public.aws_create_deposit_batch_for_item(uuid, text)', 'public.aws_is_tenant_manager_admin()', 'public.aws_can_manage_mortgage_library(uuid)', 'public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)']),
@@ -2055,9 +2057,10 @@ export const AUTHORIZED_SQL91_MOOV_ONBOARDING = Object.freeze({
   // The commit that last authored the file bytes on the release branch.
   commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
   source_sha256: '199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39075362413',
+  execute: true,
+  // Staging read-live run 39075362413 (2026-10-17).
+  expected_live_definition_sha256: 'bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e',
   // Code-derived: releaseIntendedHash('sql91', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d',
   function_identities: Object.freeze(['public.aws_moov_onboarding_active()', 'public.aws_can_submit_moov_onboarding(uuid)', 'public.aws_moov_onboarding_writer(uuid)', 'public.aws_moov_webhook_apply_active()']),
@@ -2083,9 +2086,10 @@ export const AUTHORIZED_SQL93_TENANT_COMPANY_INFO = Object.freeze({
   // The commit that last authored the file bytes on the release branch.
   commit: 'd1ed17dcf7c5e533a91b240580aa4464ad64627a',
   source_sha256: 'd90ec7f9ef14ca60b805e94337021259c8f9ce9ec80ed9781a47c64dbd6f8cfa',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39075623166',
+  execute: true,
+  // Staging read-live run 39075623166 (2026-10-17).
+  expected_live_definition_sha256: 'ef2ce6baec304517f50b063a3d11048492ae69d34122e26020063f0c53413eb9',
   // Code-derived: releaseIntendedHash('sql93', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '1032695c682d08934f5d4213e866df30100bd7ad855fb84cd4a4fbb9dc7aae58',
   function_identities: Object.freeze(['public.aws_tenants_member_column_guard()']),
@@ -2111,9 +2115,10 @@ export const AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE = Object.freeze({
   // The commit that last authored the file bytes on the release branch.
   commit: 'f50bf7d0d687b188b427263fbb79a8b8360acfc1',
   source_sha256: '0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39075879719',
+  execute: true,
+  // Staging read-live run 39075879719 (2026-10-17).
+  expected_live_definition_sha256: '4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588',
   // Code-derived: releaseIntendedHash('sql95', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2',
   function_identities: Object.freeze([]),
@@ -2139,9 +2144,10 @@ export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze
   // The commit that last authored the file bytes on the release branch.
   commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
   source_sha256: 'e3c8fd413f1d60030dd65192bb8696387229a4fd33fc2ae234cd61e52fbb79db',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39076132740',
+  execute: true,
+  // Staging read-live run 39076132740 (2026-10-17).
+  expected_live_definition_sha256: '80bbcae1bea54fd57035fa802ecf6940314681f0ce73f2bfd9a5d8514f8986f5',
   // Code-derived: releaseIntendedHash('sql97', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef',
   function_identities: Object.freeze(['public.aws_financial_stepup_log_writer_guard()']),
@@ -2174,9 +2180,10 @@ export const AUTHORIZED_SQL99_MORTGAGE_DESK_COMPLETION_MESSAGES = Object.freeze(
   // The commit that last authored the file bytes.
   commit: '600311866039adb0a85217be84d7dfb09f9eeec2',
   source_sha256: '0c079fe41c932f34f33262ba00a17f3201f99960c89a944750f5312bd97f8b15',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39076376639',
+  execute: true,
+  // Staging read-live run 39076376639 (2026-10-17).
+  expected_live_definition_sha256: '4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9',
   // Code-derived: releaseIntendedHash('sql99', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4',
   function_identities: Object.freeze(['public.aws_mortgage_desk_appended_note(text, text)', 'public.aws_mortgage_desk_completion_messages()']),
@@ -2188,9 +2195,10 @@ export const AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '7d6cdcb3fbc425a9905fa49291b4b164800884a9',
   source_sha256: '16cb8c9ae8ab63bfce4948c560ce6b97a2a53dae11ce502af606ed837a086724',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39076502355',
+  execute: true,
+  // Staging read-live run 39076502355 (2026-10-17).
+  expected_live_definition_sha256: 'bdfc6b25d3f9f946e8261c3a8a1f873e7e00e84793f7c145f12eb1b9f78a6af3',
   // Code-derived: releaseIntendedHash('sql100', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777',
   function_identities: Object.freeze(['public.aws_is_mortgage_ops_agent()', 'public.aws_mortgage_agent_queue_visible(text, uuid)', 'public.aws_is_active_mortgage_agent(uuid)']),
