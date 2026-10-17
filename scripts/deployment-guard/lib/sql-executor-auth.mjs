@@ -2038,9 +2038,9 @@ export const AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES = Object.freeze({
   key: 'sql90',
   filename: 'aws/workflows/sql/90_users_only_tenant_roles.sql',
   migration_id: '90_users_only_tenant_roles',
-  // The commit that last authored the file bytes on the release branch.
-  commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
-  source_sha256: '1ee9c1d12b3ad71a58ecec30ee223f8ab660be74d162d9ada9482c5640c26d86',
+  // The commit that last authored the file bytes (claude/sql90-production-reconcile, reached from main through its merge commit).
+  commit: '2a0863ac4e6d4a91a9a82637c2b33d81e84fa0a7',
+  source_sha256: '488b2ec455fcfd11c9d1c4ea9b33f3f9323cea8e69934e98938994730b1e07bd',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,

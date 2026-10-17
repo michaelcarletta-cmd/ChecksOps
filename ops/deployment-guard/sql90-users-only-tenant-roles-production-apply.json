@@ -8,8 +8,8 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/90_users_only_tenant_roles.sql",
   "migration_id": "90_users_only_tenant_roles",
-  "staging_pin_commit": "b0f219a90a34d87b5fbf10e5632f408f364bf0b1",
-  "source_sha256": "1ee9c1d12b3ad71a58ecec30ee223f8ab660be74d162d9ada9482c5640c26d86",
+  "staging_pin_commit": "2a0863ac4e6d4a91a9a82637c2b33d81e84fa0a7",
+  "source_sha256": "488b2ec455fcfd11c9d1c4ea9b33f3f9323cea8e69934e98938994730b1e07bd",
   "function_identities": [
     "public.aws_is_tenant_member(uuid)",
     "public.aws_can_write_tenant(uuid)",
@@ -64,7 +64,7 @@
     "live_definition_sha256": null,
     "apply_preconditions_met": null,
     "precondition_failures": null,
-    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect), but no production inspect has been run for SQL 90 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect), but no production inspect has been run for SQL 90 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change. Run 2026-10-17 at source commit ecb8647b0 (SSM fba11df4-63f0-4fad-b089-efbae962c6dd, read-only, checksops_admin): live_definition_sha256 7fa8c36a...; precondition_failures prerequisites_present (public.aws_can_access_tax_profiles(uuid) absent in production), predecessors_applied (SQL 30 not applied; SQL 29 is), function_acl_replaceable (aws_is_tenant_manager_admin() and aws_can_manage_mortgage_library(uuid) have EXECUTE for PUBLIC, checksops and the owner, which the file did not revoke). The first and third are reconciled in a reviewed change (owner approval 2026-10-17); SQL 30 stays outstanding (it is applied first, in release order): the file creates the tax helper when absent (no longer a prerequisite) and gives the two replaced helpers the SQL 90 helper ACL (checksops, authenticated, no PUBLIC). The intended fingerprint is unchanged. Re-run the inspect at the merged commit."
   },
   "intended_post_state": {
     "fingerprint": "1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c",

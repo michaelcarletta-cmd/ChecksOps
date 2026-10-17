@@ -85,7 +85,6 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.identity_accounts",
       "public.profiles",
       "public.aws_can_write_same_tenant_user(uuid)",
-      "public.aws_can_access_tax_profiles(uuid)",
       "role checksops",
       "role authenticated",
       "auth.uid()",
@@ -211,7 +210,11 @@ export const RELEASE_SQL_SPECS = deepFreeze({
           "checksops EXECUTE",
           "owner EXECUTE"
         ],
-        "revokes": []
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE",
+          "checksops EXECUTE"
+        ]
       },
       {
         "identity": "public.aws_can_manage_mortgage_library(uuid)",
@@ -220,7 +223,11 @@ export const RELEASE_SQL_SPECS = deepFreeze({
           "checksops EXECUTE",
           "owner EXECUTE"
         ],
-        "revokes": []
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE",
+          "checksops EXECUTE"
+        ]
       },
       {
         "identity": "public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)",
