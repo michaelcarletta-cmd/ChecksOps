@@ -432,7 +432,7 @@
     },
     "identity.mjs": {
       "operation": "replace",
-      "accepted_sha256": "0a5ad4c00b258102da38db83722615dae328f80e4d363cb140579f2db5381d7c",
+      "accepted_sha256": "36797f5fa77d2171b2ad3f451d071cbafbca2c82bfb68ab9102783ff3c6551af",
       "expected_live_sha256": "30abd75f4483c5ed25b9c506f08023645c26f7b8aee49c831fb73e702022515b",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
@@ -495,14 +495,14 @@
     },
     "financial.mjs": {
       "operation": "replace",
-      "accepted_sha256": "332da536c8225c343f73df0275798e7d0621344d512b71f24691c5a0bf0627bb",
+      "accepted_sha256": "d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef",
       "expected_live_sha256": "3fcb5f3731b9ec64c49da211ec659e7bceeb5062f0c128f0f647c14bc9c77ebd",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "tenant-admin.mjs": {
       "operation": "replace",
-      "accepted_sha256": "348e4fef54280e0759bbf2688b8109aeca62ededd6cd0d29aac262330fe7bbf7",
+      "accepted_sha256": "be053c68517050621b621d0cc8ba2d86c1a4b109bf8d33f8679727b99ce678ab",
       "expected_live_sha256": "8fc1f049860979387ff83ca3a4c7fdaa384a7dc2aa6eabd620cdf1c40c950bff",
       "sql_before": "aws/workflows/sql/90_users_only_tenant_roles.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"

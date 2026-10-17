@@ -6,12 +6,16 @@ export const stableIdempotencyKey = ({
   resourceId,
   amountCents,
   currency = 'USD',
+  disbursementSequence,
 } = {}) => {
+  const distinguisher = disbursementSequence != null && disbursementSequence !== ''
+    ? `seq:${disbursementSequence}`
+    : String(amountCents ?? '');
   const material = [
     String(tenantId || ''),
     String(operationType || ''),
     String(resourceId || ''),
-    String(amountCents ?? ''),
+    distinguisher,
     String(currency || 'USD'),
   ].join('|');
   return createHash('sha256').update(material).digest('hex');

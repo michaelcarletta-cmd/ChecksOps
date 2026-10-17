@@ -3,7 +3,7 @@
   "authorization": "Owner-approved 2026-10-17 (\"approve the release lock and pin PR\"): the release branch claude/release-2026-10-17 bytes may be planned for production as these accepted_sha256 values, in the plan order (ops/release-2026-10-17-lock-pin-deltas.md section 5 and Appendix A). Planning only. Each production apply still needs SQL before it where the plan says so, the owner's run-time approval, a staging acceptance run and the phrase DEPLOY <member> TO PRODUCTION.",
   "deploy_authorized": false,
   "live_lambda": "checksops-production-prep-api",
-  "notes": "Release 2026-10-17 (ten merged feature branches plus merge glue). Nothing here is live or verified; no inspect, deploy or AWS call was made for this manifest. live_sha256 provenance: (a) previous_manifest: the previous planned bytes are recorded live (auth-financial-totp.mjs and checkalt-approve.mjs: production runs 37-39, 2026-10-14; checkalt-authz.mjs: production runs 58/59, 2026-10-15; providers.mjs: production runs 31/33, 2026-10-13) or were earlier than checkalt-authz.mjs in the guarded order when runs 58/59 applied it (checkalt-submit.mjs; workflow.mjs and workflow-transitions.mjs at their 2026-10-08 reconciled bytes), since the overlay refuses a member while an earlier member is not its accepted bytes. (b) supersedes_unapplied_manifest: no production apply of that manifest's accepted bytes is recorded, so live_sha256 stays that manifest's live value (workflow-rpc.mjs, providers/parity/checkalt-functions.mjs, homeowner.mjs, write-signature.mjs, email-branding.mjs, esign.mjs, app-services.mjs, write-allowlist.mjs, write-check-workflow.mjs). (c) Members new to the plan: live_sha256 is the file in the 2026-10-11 live production bundle snapshot (origin/claude/production-api-live-snapshot f78e16d99); null (ADD) when the snapshot has no such file. Several differ from origin/main (identity.mjs, financial.mjs, tenant-admin.mjs, documents.mjs, check-endorsement.mjs, storage*.mjs, write-app-metadata.mjs, tenant-check-user.mjs, providers/catalog.mjs, providers/webhook-apply.mjs, providers/parity/moov-functions.mjs, ingest-shared-check.mjs): the accepted bytes replace production bytes main never carried, so each needs a source review against the live file. endorsement-composite.mjs already equals the snapshot (no-op). Every live_sha256 must be confirmed by a read-only production inspect before any apply; the guard refuses a REPLACE whose live bytes differ (SOURCE_RECONCILIATION_REQUIRED) and an ADD whose member exists (DEPLOYMENT_COLLISION).",
+  "notes": "Release 2026-10-17 (ten merged feature branches plus merge glue). Nothing here is live or verified; no inspect, deploy or AWS call was made for this manifest. live_sha256 provenance: (a) previous_manifest: the previous planned bytes are recorded live (auth-financial-totp.mjs and checkalt-approve.mjs: production runs 37-39, 2026-10-14; checkalt-authz.mjs: production runs 58/59, 2026-10-15; providers.mjs: production runs 31/33, 2026-10-13) or were earlier than checkalt-authz.mjs in the guarded order when runs 58/59 applied it (checkalt-submit.mjs; workflow.mjs and workflow-transitions.mjs at their 2026-10-08 reconciled bytes), since the overlay refuses a member while an earlier member is not its accepted bytes. (b) supersedes_unapplied_manifest: no production apply of that manifest's accepted bytes is recorded, so live_sha256 stays that manifest's live value (workflow-rpc.mjs, providers/parity/checkalt-functions.mjs, homeowner.mjs, write-signature.mjs, email-branding.mjs, esign.mjs, app-services.mjs, write-allowlist.mjs, write-check-workflow.mjs). (c) Members new to the plan: live_sha256 is the file in the 2026-10-11 live production bundle snapshot (origin/claude/production-api-live-snapshot f78e16d99); null (ADD) when the snapshot has no such file. Several differ from origin/main (identity.mjs, financial.mjs, tenant-admin.mjs, documents.mjs, check-endorsement.mjs, storage*.mjs, write-app-metadata.mjs, tenant-check-user.mjs, providers/catalog.mjs, providers/webhook-apply.mjs, providers/parity/moov-functions.mjs, ingest-shared-check.mjs): the accepted bytes replace production bytes main never carried, so each needs a source review against the live file. endorsement-composite.mjs already equals the snapshot (no-op). Every live_sha256 must be confirmed by a read-only production inspect before any apply; the guard refuses a REPLACE whose live bytes differ (SOURCE_RECONCILIATION_REQUIRED) and an ADD whose member exists (DEPLOYMENT_COLLISION). Live-only reconciliation (2026-10-17, same owner approval): financial.mjs (S11 remaining-balance partial disbursement from #473, on top of the release's users-only membership rules), identity.mjs (live mortgageAgentStatus) and tenant-admin.mjs (live production Cognito lock bind on invite, mortgage_agent_accounts on hire) were re-pinned to the reconciled branch bytes; expected live values are unchanged.",
   "members": {
     "ops-readiness.mjs": {
       "live_sha256": "614add851b4c85a7b79dcdf540a3167d04b944d986523810f4c59274010aa448",
@@ -17,7 +17,7 @@
     },
     "identity.mjs": {
       "live_sha256": "30abd75f4483c5ed25b9c506f08023645c26f7b8aee49c831fb73e702022515b",
-      "accepted_sha256": "0a5ad4c00b258102da38db83722615dae328f80e4d363cb140579f2db5381d7c",
+      "accepted_sha256": "36797f5fa77d2171b2ad3f451d071cbafbca2c82bfb68ab9102783ff3c6551af",
       "operation": "replace"
     },
     "workflow-transitions.mjs": {
@@ -108,12 +108,12 @@
     },
     "financial.mjs": {
       "live_sha256": "3fcb5f3731b9ec64c49da211ec659e7bceeb5062f0c128f0f647c14bc9c77ebd",
-      "accepted_sha256": "332da536c8225c343f73df0275798e7d0621344d512b71f24691c5a0bf0627bb",
+      "accepted_sha256": "d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef",
       "operation": "replace"
     },
     "tenant-admin.mjs": {
       "live_sha256": "8fc1f049860979387ff83ca3a4c7fdaa384a7dc2aa6eabd620cdf1c40c950bff",
-      "accepted_sha256": "348e4fef54280e0759bbf2688b8109aeca62ededd6cd0d29aac262330fe7bbf7",
+      "accepted_sha256": "be053c68517050621b621d0cc8ba2d86c1a4b109bf8d33f8679727b99ce678ab",
       "operation": "replace"
     },
     "workflow-rpc.mjs": {

@@ -4,7 +4,8 @@
 release lock and pin PR"; see section 0). Nothing is deployed, live or verified: no deploy, workflow run,
 inspect or AWS call was made to produce this file or the lock/pin commit. Sections 1-7 and the appendices
 are the original delta inventory (branch `claude/release-2026-10-17`, base `origin/main` 307417cbe, ten
-merged feature branches plus merge glue); section 0 records what was applied and what differs from it.
+merged feature branches plus merge glue); section 0 records what was applied and what differs from it; section 0b records the live-only
+reconciliation (S11/S14 and the 2026-10-11 live snapshot) applied after it.
 
 ## 0. Applied in this branch
 
@@ -61,6 +62,99 @@ Tooling still needed before any SQL 90-97 pin can be execute-authorized (none ex
 | 95 Freedom Claims bridge removal | same (drop-only: inspect must prove no other callers) |
 | 96 platform-owner tenant pricing | same (columns, audit table, setter, replaced column guard) |
 | 97 financial_stepup_log server writer | same (grant + BEFORE INSERT guard); ordered after the step-6 Lambdas |
+
+## 0b. Live-only reconciliation (applied in this branch, 2026-10-17)
+
+The 2026-10-11 live bundle snapshot (`origin/claude/production-api-live-snapshot` f78e16d99) carries behaviour
+that never reached `origin/main`: S11 (#473, remaining-balance partial disbursement) and S14 (#474/#475,
+deposited `payee_line` lock), both overlaid to production on 2026-09-25, plus other live-only changes. This
+release changes the same files, so its accepted bytes would have removed them. Same owner approval as section 0
+(lock and pin update); `expected_live_sha256` values and earlier manifests are unchanged.
+
+**Ported** (branch bytes now carry the live behaviour on top of the release's own changes):
+
+| File | Live-only behaviour ported | New branch sha256 | Plan |
+|---|---|---|---|
+| `financial.mjs` | S11: `parseRequestedPartialCents`, `lockCheckMoney`, `disbursement_sequence`, sequence / remaining-draw replay, 23505 race replay, `remaining` in responses, `summarizeCheckMoney` re-export (3-way merge of main to live onto the release; the release's users-only membership roles and no platform `user_roles` merge are kept; `FINANCIAL_ROLES` stays in `financial-authz.mjs`) | `d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef` | accepted re-pinned |
+| `financial-idempotency.mjs` | S11 `disbursementSequence` key distinguisher | `14c6ca7a4bd5ea18b681d1cb83921b83b1a933255d0ef1a60546ad1fffe2f96e` (= live) | not a member (equals live) |
+| `identity.mjs` | `mortgageAgentStatus` in `/identity/me` (reads `mortgage_agent_accounts`; release `isPrivilegedIdentity` kept) | `36797f5fa77d2171b2ad3f451d071cbafbca2c82bfb68ab9102783ff3c6551af` | accepted re-pinned |
+| `tenant-admin.mjs` | invite binds the production Cognito lock (`bindProductionCognitoLock`, inside the release's invite savepoint; failure -> `failInvite`); hire marks `mortgage_agent_accounts` active (now in a savepoint) | `be053c68517050621b621d0cc8ba2d86c1a4b109bf8d33f8679727b99ce678ab` | accepted re-pinned |
+| `identity-env.mjs` | `bindProductionCognitoLock` and the production lock SQL (needed by tenant-admin) | `e814546feded3a323461b3a7a8369e3d8a09f9a5d306d68973e15389b871f443` (= live) | not a member (equals live) |
+| `ocr-descriptive-persist.mjs` | S14 `resolveWritablePayeeLine` only (exact #475 bytes) | `2152c7c252d1156825ff87a2fa4bd1f512d26d6ab71f1ab3c4bbe016fb1aff5a` | not a member; must not become one (see below) |
+
+Tests ported: `aws/tests/financial-remaining.test.mjs`, `aws/tests/check-deposited.test.mjs` (new), the S11 cases
+in `api-financial.test.mjs`, the S14 cases in `api-write.test.mjs`, `ocr-descriptive-persist.test.mjs` and
+`ocr-intake-staging.test.mjs`. Audit records: `aws/audit/S11_PRODUCTION_PROMOTION.md`,
+`aws/audit/S14_PRODUCTION_PROMOTION.md`. The S14 ingest guard (`guardIngestPlanPayeeLine`) has no home:
+`ingest-shared-check.mjs` is the 410 stub and writes nothing. The remaining payee_line writers all apply the lock:
+`write-check-workflow.mjs` (check_intake_items and claim_checks review edits, already on the release) and
+`ocr-descriptive-persist.mjs` in the repository; `ocr.mjs` in production only. `ocr.mjs` stays on main's bytes
+(`2e69e2ea…`) on purpose: it is `keep_live` / `do_not_overlay`, and the 2026-10-08 reconciliation proof pins the
+repository file to main's bytes without the `check-deposited.mjs` import
+(`aws/tests/production-lambda-source-reconciliation.test.mjs`), so production keeps its live S14 bytes
+(`ecd3b253…`) through the overlay. A full ZIP rebuild from the repository would drop the OCR payee_line lock
+(owner item 5 below).
+
+Release lock re-set (same rule as section 0): `financial-ledger`
+`be39d79b1ae2c316dc70c7d6b4113acc44629c8f4ea15ce9c44339a139a8d3a6` (financial.mjs, financial-idempotency.mjs). The
+other locks are unchanged (`ocr-azure` too: ocr.mjs is not changed).
+
+**Live vs main for every API file the release changes** (snapshot vs `origin/main`; "older" means the live bytes
+are an earlier main version or lack later main changes, so the release loses nothing):
+
+| File | Live vs main | Disposition |
+|---|---|---|
+| `admin-reset-totp.mjs`, `financial-authz.mjs`, `mortgage-library-doc-types.mjs`, `mortgage-library-docs.mjs`, `ops-readiness.mjs`, `privileged-auth.mjs`, `package.json`, `package-lock.json`, `providers/parity/{caller,db,moov-client,moov-money,moov-onboard}.mjs`, `providers/webhooks.mjs`, `tax-profiles.mjs`, `tax-secrets.mjs`, `tenant-billing-engine.mjs`, `tenant-billing-handlers.mjs`, `tenant-email-domain.mjs`, `tenant-settings-handlers.mjs` | same | nothing to reconcile |
+| `app-services.mjs` | older (no homeowner-ledger endorse/document-sign link routes) | release keeps everything |
+| `auth-financial-totp.mjs`, `email-branding.mjs`, `providers/catalog.mjs`, `providers/parity/checkalt-functions.mjs`, `providers/production/checkalt-{approve,authz,submit}.mjs`, `storage-write-auth.mjs`, `storage-write.mjs`, `workflow-transitions.mjs` | live = an earlier main version | release keeps everything |
+| `check-endorsement.mjs` | live-only endorsement changes | already synced; only persist-diagnostic labels differ |
+| `documents.mjs` | live-only document changes | already synced; only the release's retry-pdf refactor differs |
+| `endorsement-composite.mjs` | live-only | release bytes equal live |
+| `esign.mjs`, `homeowner.mjs`, `workflow.mjs`, `workflow-rpc.mjs`, `write-allowlist.mjs`, `write-signature.mjs` | older (live lacks main's actor/claim/path checks, `mark_manual_deposit`, Review-only amount edits, stakeholder tables) | release keeps the newer main behaviour |
+| `storage.mjs` | older (suffix `LIKE` path match; main's exact `storedPathSql` fixed a cross-tenant read) | release keeps the fix |
+| `financial.mjs` | live-only S11 | **ported** |
+| `identity.mjs` | live-only `mortgageAgentStatus` | **ported** |
+| `tenant-admin.mjs` | live-only production Cognito lock bind, `mortgage_agent_accounts` on hire, `identity_accounts` fallback lookup and loud identity/membership failures | **ported** the first two; the last two are superseded by the release's SQL 90 `aws_invite_create_user_identity` + savepoint `failInvite` |
+| `tenant-check-user.mjs` | live membership-only move rule | release has the same rule (comment differs) |
+| `write-app-metadata.mjs` | live-only `tenants` insert (`executeTenantsCreate`) | release has it (platform-owner gate) |
+| `write-check-workflow.mjs` | live S11/S14 payee_line lock, material payee invalidation; older otherwise | release has all of it |
+| `ingest-shared-check.mjs` | live S14 ingest guard | dropped with the route (410 stub, no writes) |
+| `providers.mjs` | snapshot older (no moov-wallet-sync; runs 31/33 since) | release keeps everything |
+| `providers/parity/moov-functions.mjs` | **live-only Platform Finance wrapper** (`platform-finance.mjs`, a live-only module) | **not ported: owner decision** (below) |
+| `providers/webhook-apply.mjs` | **live-only billing settlement call** (`applyBillingProviderEvent` on every transfer webhook) | **not ported: owner decision** (below) |
+| `invoice-actions.mjs`, `tenant-collection-v2-uat.mjs`, `tenant-maintenance-payments-catalog-inspect.mjs`, `workflow-delete-check.mjs` | absent from live | `do_not_overlay` |
+| `ocr-descriptive-persist.mjs`, `financial-idempotency.mjs`, `identity-env.mjs` (changed by this reconciliation) | live-only S14 / S11 / Cognito lock | ported (table above); `ocr-descriptive-persist.mjs` only partly |
+| `ocr.mjs` (not changed by the release) | live-only S14 lock | stays on main's bytes by the pinned keep_live contract; production keeps live bytes |
+
+**Left for the owner** (not ported; each would change behaviour beyond restoring S11/S14):
+
+1. `providers/parity/moov-functions.mjs` (plan member): live wraps `moov-platform-bank` and `platform-treasury` in
+   `wrapPlatformFinance` with `platformFinanceBank` / `platformFinanceTreasury` from the live-only
+   `providers/parity/platform-finance.mjs` (production facilitator read model, writes blocked, owner-email gate). The
+   release instead serves them from `moov-onboard.mjs` `platformBank` / `platformTreasury` with `platformOwnerOnly`.
+   Overlaying the release bytes switches production to the release's handlers. Keep the live wrapper (add
+   `platform-finance.mjs` from the snapshot and merge the wrapper) or accept the switch.
+2. `providers/webhook-apply.mjs` (plan member): live calls `tenant-billing-engine.mjs` `applyBillingProviderEvent`
+   for every transfer webhook (records `tenant_maintenance_payments`). Main and the release settle billing through
+   `providers/webhooks.mjs` -> `tenant-collection-v2-settlement.mjs` `applyCollectionV2ProviderCompletion` instead.
+   Porting the live call could settle twice; dropping it changes which path settles live maintenance payments.
+3. `ocr-descriptive-persist.mjs` (not a plan member, live bytes stay under overlay): live also persists the OCR
+   amount through `public.ocr_persist_extracted_amount` (SQL not in the repository), rejects bank/disclaimer carrier
+   names, clears bad carriers and cleans payee lines, using `ocr-parse.mjs` exports that only the live bundle has
+   (`cleanPayeeLine`, `looksLikeBankName`, `looksLikeSecurityDisclaimer`, `matchKnownCarrier`, `normalizeAmount`,
+   `sanitizeCarrierName`). Do not add this file to the plan with the branch bytes: that would remove those
+   behaviours from production.
+4. Not reviewed here: files outside this release's file set whose live bytes differ from main and are not an
+   earlier main version. They stay live under the overlay but a full ZIP rebuild (which Moov onboarding needs)
+   would replace them with main's bytes: `ocr-parse.mjs`, `check-ocr-provider.mjs`, `data.mjs`, `index.mjs`,
+   `provider-flags.mjs`, `scheduled.mjs`, `write.mjs`, `admin-override-check-status.mjs`, `allowed-tables.json`,
+   `tenant-collection-v2.mjs`, `tenant-email-domain-handlers.mjs`, and the live-only modules
+   `providers/parity/platform-finance.mjs`, `providers/parity/tenant-receivables.mjs`,
+   `providers/parity/moov-stakeholder-status.mjs`, `tenant-collection-contract-v2.mjs`.
+5. `ocr.mjs`: the repository file lacks the S14 lock that production carries (see above). Porting it means
+   changing the protected `ocr-azure` path and the 2026-10-08 reconciliation contract
+   (`production-lambda-reconciliation-2026-10-08.json` `repo_sha256`, and the test that forbids the
+   `check-deposited.mjs` import), which this change does not do.
 
 The original inventory follows.
 
@@ -125,8 +219,8 @@ the ZIP or keep live bytes until the route is gone).
 | `documents.mjs` | modified (REPLACE) | `7cc8dd90241cffef3466117357cc47c8e3387e14869568a3411d4cad64bf795c` |
 | `endorsement-composite.mjs` | modified (REPLACE) | `9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80` |
 | `financial-authz.mjs` | modified (REPLACE) | `0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8` |
-| `financial.mjs` | modified (REPLACE) | `332da536c8225c343f73df0275798e7d0621344d512b71f24691c5a0bf0627bb` |
-| `identity.mjs` | modified (REPLACE) | `0a5ad4c00b258102da38db83722615dae328f80e4d363cb140579f2db5381d7c` |
+| `financial.mjs` | modified (REPLACE) | `d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef` (0b; was `332da536…`) |
+| `identity.mjs` | modified (REPLACE) | `36797f5fa77d2171b2ad3f451d071cbafbca2c82bfb68ab9102783ff3c6551af` (0b; was `0a5ad4c0…`) |
 | `ingest-shared-check.mjs` | DELETED on the branch | `a4149a0fff4b4770867da317605a35e3167b1f9daf6aafa477d79cffb17c5634` |
 | `invoice-actions.mjs` | modified (REPLACE) | `866032c6f972a1d02a1c3e9649b21990d91ba62b6a5a49ac4e1f1274e2045507` |
 | `mortgage-library-doc-types.mjs` | modified (REPLACE) | `8e31c5c906c1a2f05012297296a4f14be788d7462a5fd9dfb0d5c47f0f381c7a` |
@@ -160,7 +254,7 @@ the ZIP or keep live bytes until the route is gone).
 | `storage.mjs` | modified (REPLACE) | `d92f34ca0dbba5b7b5b4c406d1a7cdf4b2e9c0a900ceddd1217dbebf3cd017d1` |
 | `tax-profiles.mjs` | modified (REPLACE) | `cb49cc567d017dbf732ed6743ee57c71ba12541b161fa927eb8bf8763e518a42` |
 | `tax-secrets.mjs` | modified (REPLACE) | `4a44531115a2789a5d6a921633d759143fceaa258156402585c25b1d64098d4d` |
-| `tenant-admin.mjs` | modified (REPLACE) | `348e4fef54280e0759bbf2688b8109aeca62ededd6cd0d29aac262330fe7bbf7` |
+| `tenant-admin.mjs` | modified (REPLACE) | `be053c68517050621b621d0cc8ba2d86c1a4b109bf8d33f8679727b99ce678ab` (0b; was `348e4fef…`) |
 | `tenant-billing-engine.mjs` | modified (REPLACE) | `3397c65d89122f706b182970d12e83b98de461b72acba5c32c8e8d1e60944557` |
 | `tenant-billing-handlers.mjs` | modified (REPLACE) | `2866356c3bf82a04d04c834fadbf94faed026a7f119e73bd8cc6f42dc2098298` |
 | `tenant-check-user.mjs` | modified (REPLACE) | `f25e165ea08312ddbde6e67d5f522171368043be43a7875926e859f7c15931df` |
@@ -329,12 +423,15 @@ M email-branding.mjs -> (no changed imports)
 M endorsement-composite.mjs -> (no changed imports)
 M esign.mjs -> email-branding.mjs [needs new: resolveTenantDocumentBranding]; write-signature.mjs
 M financial-authz.mjs -> (no changed imports)
-M financial.mjs -> identity.mjs; financial-authz.mjs; privileged-auth.mjs
+M financial-idempotency.mjs -> (no changed imports)
+M financial.mjs -> identity.mjs; financial-authz.mjs; privileged-auth.mjs; financial-idempotency.mjs (0b: equals live)
 M homeowner.mjs -> email-branding.mjs; tenant-library.mjs [needs new: loadSharedDocumentsSafely]
+M identity-env.mjs -> (no changed imports)
 M identity.mjs -> privileged-auth.mjs [needs new: isPrivilegedIdentity]
 M invoice-actions.mjs -> providers/parity/caller.mjs
 M mortgage-library-doc-types.mjs -> (no changed imports)
 M mortgage-library-docs.mjs -> mortgage-library-doc-types.mjs
+M ocr-descriptive-persist.mjs -> (no changed imports)
 M ops-readiness.mjs -> (no changed imports)
 M privileged-auth.mjs -> ops-readiness.mjs
 M providers.mjs -> identity.mjs; providers/catalog.mjs; providers/webhooks.mjs; providers/onboarding/handlers.mjs [needs new: handleMoovOnboarding, isOnboardingFunction]; providers/onboarding/flags.mjs [needs new: moovOnboardingProductionEnabled]; app-services.mjs
@@ -356,7 +453,7 @@ M storage-write.mjs -> storage.mjs; storage-write-auth.mjs; tenant-library-rules
 M storage.mjs -> mortgage-library-docs.mjs
 M tax-profiles.mjs -> tax-secrets.mjs
 M tax-secrets.mjs -> (no changed imports)
-M tenant-admin.mjs -> email-branding.mjs
+M tenant-admin.mjs -> email-branding.mjs; identity-env.mjs [needs new: bindProductionCognitoLock] (0b: live identity-env.mjs exports it)
 M tenant-billing-engine.mjs -> providers/parity/moov-client.mjs
 M tenant-billing-handlers.mjs -> tenant-billing-engine.mjs
 M tenant-check-user.mjs -> (no changed imports)
