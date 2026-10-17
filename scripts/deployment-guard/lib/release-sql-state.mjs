@@ -245,10 +245,11 @@ FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum`,
-  // contype 'n' (PostgreSQL 18 records each NOT NULL as a named constraint) is left out: the
-  // column's notnull already carries it, and PostgreSQL 16 has no such row.
+  // A validated contype 'n' (PostgreSQL 18 records each NOT NULL as a named constraint) is left
+  // out: the column's notnull already carries it, and PostgreSQL 16 has no such row. A NOT VALID
+  // one stays in (notnull is true for it too), so it is a different state.
   constraints: `SELECT con.conname AS name, pg_catalog.pg_get_constraintdef(con.oid) AS def, con.convalidated AS validated
-FROM pg_catalog.pg_constraint con WHERE con.conrelid = pg_catalog.to_regclass($1) AND con.contype <> 'n' ORDER BY 1`,
+FROM pg_catalog.pg_constraint con WHERE con.conrelid = pg_catalog.to_regclass($1) AND NOT (con.contype = 'n' AND con.convalidated) ORDER BY 1`,
   indexes: `SELECT c.relname AS name, pg_catalog.pg_get_indexdef(i.indexrelid) AS def
 FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
 WHERE i.indrelid = pg_catalog.to_regclass($1) ORDER BY 1`,

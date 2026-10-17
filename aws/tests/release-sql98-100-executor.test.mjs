@@ -164,8 +164,30 @@ test('reviewed files: SQL 98-100 parse as reviewed; SQL 100 bodies are productio
 
 const PINS_TABLE_ACL = ['checksops DELETE grantor=owner', 'checksops INSERT grantor=owner', 'checksops SELECT grantor=owner'];
 
-test('table constraints leave out PostgreSQL 18 named NOT NULL constraints (the column notnull carries them)', () => {
-  assert.match(RELEASE_READS.constraints, /con\.contype <> 'n'/);
+test('table constraints leave out PostgreSQL 18 validated NOT NULL constraints (the column notnull carries them), not NOT VALID ones', () => {
+  assert.match(RELEASE_READS.constraints, /NOT \(con\.contype = 'n' AND con\.convalidated\)/);
+});
+
+test('SQL 98 destination rule: only absent, empty or exactly the reviewed row; unreadable counts refuse', () => {
+  const RULE = 'platform_billing_destination_absent_empty_or_reviewed';
+  const REVIEWED = {
+    platform_billing_destination_rows: 1, platform_billing_destination_production_reviewed_account_rows: 1,
+    platform_billing_destination_payment_method_rows: 1, platform_billing_destination_verified_rows: 1,
+  };
+  const refused = (counts, exists = true) => releaseSharedPreconditionFailures('sql98', {
+    tables: { 'public.platform_billing_destination': { exists } }, counts,
+  }, TEXT.sql98).includes(RULE);
+  assert.equal(refused({}, false), false, 'absent');
+  assert.equal(refused({ platform_billing_destination_rows: 0 }), false, 'empty');
+  assert.equal(refused(REVIEWED), false, 'exactly the reviewed row');
+  for (const [what, counts] of [
+    ['a second row without a payment method or verification', { ...REVIEWED, platform_billing_destination_rows: 2 }],
+    ['no payment method', { ...REVIEWED, platform_billing_destination_payment_method_rows: 0 }],
+    ['unverified', { ...REVIEWED, platform_billing_destination_verified_rows: 0 }],
+    ['not production on the reviewed account', { ...REVIEWED, platform_billing_destination_production_reviewed_account_rows: 0 }],
+    ['unreadable counts', Object.fromEntries(Object.keys(REVIEWED).map((k) => [k, null]))],
+    ['counts not read', undefined],
+  ]) assert.equal(refused(counts), true, what);
 });
 
 test('SQL 100 fingerprint: a grantor or a policy comment is another state; specs without render are unchanged by either', () => {
@@ -365,6 +387,14 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
     platform_billing_destination_payment_method_rows: 2, platform_billing_destination_verified_rows: 1,
   });
   assert.ok(reviewed.failures.includes('platform_billing_destination_absent_empty_or_reviewed'), 'a second (sandbox) row is refused');
+  // A second row with no payment method and no verification: only the row count refuses it.
+  const secondBare = await whatIf('sql98', ['DELETE FROM public.platform_billing_destination', `INSERT INTO public.platform_billing_destination
+    (environment, moov_account_id, moov_payment_method_id, verified_at) VALUES ('production', '41cb5d67-4911-4bef-aad5-d8ee9c582208', 'pm_reviewed', now()),
+    ('sandbox', 'acct_sandbox', '', NULL)`]);
+  assert.ok(secondBare.failures.includes('platform_billing_destination_absent_empty_or_reviewed'));
+  const noPaymentMethod = await whatIf('sql98', ['DELETE FROM public.platform_billing_destination', `INSERT INTO public.platform_billing_destination
+    (environment, moov_account_id, moov_payment_method_id, verified_at) VALUES ('production', '41cb5d67-4911-4bef-aad5-d8ee9c582208', '', now())`]);
+  assert.ok(noPaymentMethod.failures.includes('platform_billing_destination_absent_empty_or_reviewed'));
   // Exactly the reviewed row (production, the owner-confirmed account, a payment method, verified) is kept.
   const onlyReviewed = await whatIf('sql98', ['DELETE FROM public.platform_billing_destination', `INSERT INTO public.platform_billing_destination
     (environment, moov_account_id, moov_payment_method_id, verified_at) VALUES ('production', '41cb5d67-4911-4bef-aad5-d8ee9c582208', 'pm_reviewed', now())`]);
