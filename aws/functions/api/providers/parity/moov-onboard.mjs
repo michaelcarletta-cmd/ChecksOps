@@ -1239,7 +1239,14 @@ export const platformBank = {
 
 export const feeScheduleUpsert = {
   requireAdmin: true,
+  platformOwnerOnly: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
+    // Owner decision (2026-10-17): ChecksOps' fees for a tenant are set by
+    // the platform owner only (by email); tenant members never set them.
+    if (ctx.isPlatformOwner !== true) {
+      return fail('Platform owner access required', 403, { error: 'platform_owner_required' });
+    }
+    if (!ctx.tenantId) return fail('tenant_id is required', 400, { error: 'invalid_uuid', field: 'tenant_id' });
     const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     const facilitatorId = await facilitatorAccountId(account.provider_account_id, fetchImpl);
@@ -1266,7 +1273,14 @@ export const feeScheduleUpsert = {
 
 export const feeScheduleCancel = {
   requireAdmin: true,
+  platformOwnerOnly: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
+    // Owner decision (2026-10-17): ChecksOps' fees for a tenant are set by
+    // the platform owner only (by email); tenant members never set them.
+    if (ctx.isPlatformOwner !== true) {
+      return fail('Platform owner access required', 403, { error: 'platform_owner_required' });
+    }
+    if (!ctx.tenantId) return fail('tenant_id is required', 400, { error: 'invalid_uuid', field: 'tenant_id' });
     const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
     const facilitatorId = account?.provider_account_id
       ? await facilitatorAccountId(account.provider_account_id, fetchImpl)

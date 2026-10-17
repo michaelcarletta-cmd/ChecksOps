@@ -40,6 +40,7 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 
 import { TenantProvider } from "@/contexts/TenantContext";
 import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
+import { saveTenantPricing, type TenantPricingPatch } from "@/lib/tenantPricing";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
@@ -70,6 +71,10 @@ type Tenant = {
   monthly_rate_cents?: number | null;
   referral_code?: string | null;
   referral_discount_cents?: number | null;
+  next_day_rate_cents?: number | null;
+  same_day_rate_cents?: number | null;
+  mortgage_ops_initial_rate_cents?: number | null;
+  mortgage_ops_additional_rate_cents?: number | null;
   kyc_status?: string | null;
   kyc_notes?: string | null;
   internal_notes?: string | null;
@@ -709,14 +714,57 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
 function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
   const [enabled, setEnabled] = useState(tenant.per_check_billing_enabled || false);
   const [rate, setRate] = useState(tenant.per_check_rate_cents || 0);
-  const { saving, save } = useTenantSave(tenant, onUpdated);
+  const [nextDay, setNextDay] = useState<number | "">(tenant.next_day_rate_cents ?? "");
+  const [sameDay, setSameDay] = useState<number | "">(tenant.same_day_rate_cents ?? "");
+  const [mortgageInitial, setMortgageInitial] = useState<number | "">(tenant.mortgage_ops_initial_rate_cents ?? "");
+  const [mortgageAdditional, setMortgageAdditional] = useState<number | "">(tenant.mortgage_ops_additional_rate_cents ?? "");
+  const [saving, setSaving] = useState(false);
+
+  // Pricing is the platform owner's (tenant-billing-admin, SQL 96); it never
+  // goes through the generic tenants update.
+  const save = async () => {
+    const patch: TenantPricingPatch = { per_check_billing_enabled: enabled, per_check_rate_cents: rate };
+    if (nextDay !== "") patch.next_day_rate_cents = nextDay;
+    if (sameDay !== "") patch.same_day_rate_cents = sameDay;
+    if (mortgageInitial !== "") patch.mortgage_ops_initial_rate_cents = mortgageInitial;
+    if (mortgageAdditional !== "") patch.mortgage_ops_additional_rate_cents = mortgageAdditional;
+    setSaving(true);
+    try {
+      await saveTenantPricing(tenant.id, patch);
+      toast({ title: "Saved" });
+      onUpdated({ ...tenant, ...patch });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message ?? "Pricing was not saved", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const centsInput = (
+    id: string,
+    label: string,
+    value: number | "",
+    setValue: (v: number | "") => void,
+  ) => (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs">{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        min={0}
+        value={value}
+        placeholder="Default"
+        onChange={(e) => setValue(e.target.value === "" ? "" : Math.max(0, parseInt(e.target.value) || 0))}
+      />
+    </div>
+  );
 
   return (
     <SectionCard
       title="Per-Check Billing"
       icon={<Receipt className="h-4 w-4 text-amber-500" />}
       accent="bg-gradient-to-r from-amber-500 to-amber-500/30"
-      description="Configure how much this tenant is billed per check processed."
+      description="Configure what this tenant is billed. Only the ChecksOps platform owner can change these; every change is audited."
     >
 
         <div className="flex items-center justify-between">
@@ -726,14 +774,14 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} />
         </div>
-        
+
         <div className="space-y-2">
           <Label>Standard Check Rate (cents)</Label>
           <div className="flex items-center gap-2">
-            <Input 
-              type="number" 
-              value={rate} 
-              onChange={(e) => setRate(parseInt(e.target.value) || 0)} 
+            <Input
+              type="number"
+              value={rate}
+              onChange={(e) => setRate(parseInt(e.target.value) || 0)}
               disabled={!enabled}
               className="max-w-[200px]"
             />
@@ -746,25 +794,25 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         <Separator />
 
         <div className="space-y-4">
-          <h3 className="text-sm font-medium">Moov Usage Fees</h3>
-          <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Moov.</p>
+          <h3 className="text-sm font-medium">Deposit speed rates (cents)</h3>
+          <p className="text-xs text-muted-foreground">Leave empty to use the default rate.</p>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Next Day Credit</Label>
-              <Input value="$0.75" disabled className="bg-muted/50" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Same Day Credit</Label>
-              <Input value="$1.00" disabled className="bg-muted/50" />
-            </div>
+            {centsInput("next-day-rate", "Next Day Credit", nextDay, setNextDay)}
+            {centsInput("same-day-rate", "Same Day Credit", sameDay, setSameDay)}
           </div>
-
         </div>
 
-        <Button 
-          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rate })} 
-          disabled={saving}
-        >
+        <Separator />
+
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium">MortgageOps rates (cents)</h3>
+          <div className="grid grid-cols-2 gap-4">
+            {centsInput("mortgage-initial-rate", "Initial request", mortgageInitial, setMortgageInitial)}
+            {centsInput("mortgage-additional-rate", "Each additional request", mortgageAdditional, setMortgageAdditional)}
+          </div>
+        </div>
+
+        <Button onClick={save} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
         </Button>
     </SectionCard>
@@ -1340,8 +1388,26 @@ function TenantManagementTable({
   const toggleActive = (t: Tenant, active: boolean) =>
     updateTenant(t.id, { subscription_status: active ? "active" : "inactive" });
 
+  // Pricing (rate, referral discount, founding-partner price) is the platform
+  // owner's and goes through tenant-billing-admin (SQL 96), never the generic
+  // tenants update.
+  const updatePricing = async (id: string, patch: TenantPricingPatch) => {
+    setBusyId(id);
+    try {
+      await saveTenantPricing(id, patch);
+      toast({ title: "Saved" });
+      onChanged();
+      return true;
+    } catch (e: any) {
+      toast({ title: "Update failed", description: e?.message ?? "Pricing was not saved", variant: "destructive" });
+      return false;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const toggleFoundingPartner = (t: Tenant, on: boolean) =>
-    updateTenant(t.id, on
+    updatePricing(t.id, on
       ? { is_founding_partner: true, monthly_rate_cents: 7500 }
       : { is_founding_partner: false });
 
@@ -1455,7 +1521,7 @@ function TenantManagementTable({
       cell: (t) => (
         <InlineMoneyEditor
           valueCents={t.monthly_rate_cents ?? null}
-          onSave={(cents) => updateTenant(t.id, { monthly_rate_cents: cents })}
+          onSave={(cents) => updatePricing(t.id, { monthly_rate_cents: cents ?? 0 })}
         />
       ),
     },
@@ -1473,7 +1539,12 @@ function TenantManagementTable({
       mobileLabel: "Referral discount",
       headerClassName: "w-[8%] min-w-[70px]",
       className: "text-[11px]",
-      cell: (t) => fmtMoney(t.referral_discount_cents),
+      cell: (t) => (
+        <InlineMoneyEditor
+          valueCents={t.referral_discount_cents ?? null}
+          onSave={(cents) => updatePricing(t.id, { referral_discount_cents: cents ?? 0 })}
+        />
+      ),
     },
     {
       id: "kyc",

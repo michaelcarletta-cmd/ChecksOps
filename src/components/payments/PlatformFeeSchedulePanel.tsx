@@ -15,6 +15,8 @@ import {
 import { CalendarClock, Loader2, RefreshCw } from "lucide-react";
 import { usePlatformFees } from "@/hooks/usePlatformFees";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import type { FeeAmountMode } from "@/lib/payments/feeSchedules";
 
 const money = (cents: number) =>
@@ -48,6 +50,9 @@ export function PlatformFeeSchedulePanel() {
     rollUp,
   } = usePlatformFees();
   const { toast } = useToast();
+  const { user } = useAuth();
+  // ChecksOps' fees are set by the platform owner only; members see them read-only.
+  const canEdit = isPlatformOwner(user?.email, user?.id);
 
   const active = schedules[0] ?? null;
   const [dayOfMonth, setDayOfMonth] = useState("1");
@@ -123,6 +128,7 @@ export function PlatformFeeSchedulePanel() {
             <p className="text-lg font-semibold">{money(unbilledTotalCents)}</p>
           </div>
           <Badge variant="secondary">{unbilled.length} item(s)</Badge>
+          {canEdit && (
           <div className="ml-auto flex gap-2">
             <Button variant="outline" size="sm" disabled={rollUp.isPending} onClick={() => handleRollUp(true)}>
               Preview
@@ -132,6 +138,7 @@ export function PlatformFeeSchedulePanel() {
               Bill now
             </Button>
           </div>
+          )}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -143,12 +150,13 @@ export function PlatformFeeSchedulePanel() {
               min={1}
               max={28}
               value={dayOfMonth}
+              disabled={!canEdit}
               onChange={(e) => setDayOfMonth(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
             <Label>Amount</Label>
-            <Select value={amountMode} onValueChange={(v) => setAmountMode(v as FeeAmountMode)}>
+            <Select value={amountMode} disabled={!canEdit} onValueChange={(v) => setAmountMode(v as FeeAmountMode)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -166,21 +174,28 @@ export function PlatformFeeSchedulePanel() {
               min="0"
               step="0.01"
               placeholder="0.00"
-              disabled={amountMode !== "fixed"}
+              disabled={!canEdit || amountMode !== "fixed"}
               value={fixedAmount}
               onChange={(e) => setFixedAmount(e.target.value)}
             />
           </div>
         </div>
 
+        {!canEdit && (
+          <p className="text-xs text-muted-foreground">These fees are set by ChecksOps.</p>
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
           <Button size="sm" disabled={save.isPending} onClick={handleSave}>
             {save.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             {active ? "Update schedule" : "Create schedule"}
           </Button>
+          )}
           {active && (
             <>
               <Badge variant="outline">Next charge {dateLabel(active.next_run_at)}</Badge>
+              {canEdit && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -200,6 +215,7 @@ export function PlatformFeeSchedulePanel() {
               >
                 Cancel schedule
               </Button>
+              )}
             </>
           )}
         </div>

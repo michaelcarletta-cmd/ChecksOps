@@ -92,8 +92,8 @@ the ZIP or keep live bytes until the route is gone).
 | `providers/parity/db.mjs` | modified (REPLACE) | `d23eefb5ee34477ac918ae5be1a892202ee16e71be2fd7570c23f53b1d552512` |
 | `providers/parity/moov-client.mjs` | modified (REPLACE) | `56928d66128c4a60141ef6d7392749ebad5211acef9bce6516411f1a2420612a` |
 | `providers/parity/moov-functions.mjs` | modified (REPLACE) | `7b0cde12ff969f7bfc5d83204cde77e2f322e42fe67399ca1a1e4a867eea6e75` |
-| `providers/parity/moov-money.mjs` | modified (REPLACE) | `90bf0710c6eafad216f208bb3245a22ad3d4291461731e6813ef17c41861a710` |
-| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `c43149e43b328039d7a73ec8559a76daf4c60a4d447ef4335c92ec8f7fa6853a` |
+| `providers/parity/moov-money.mjs` | modified (REPLACE) | `b35beaa7fe50d25941dc277056c133a67f9393e1a249e1027c32f16ec60f5e37` |
+| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `228e10616e69aeb8ffadd433516a038669a4c802cdf657ca17c3881879344d56` |
 | `providers/webhook-apply.mjs` | modified (REPLACE) | `8b86c7b10db7db27e94aa152bc417252dc1cf3fe9667c2d32791c0e41f2c191e` |
 | `providers/webhooks.mjs` | modified (REPLACE) | `3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5` |
 | `signature-library-source.mjs` | ADD (new file) | `f4eccc99e4c3af3d3b6b6b229f0d2408da682fc9176695acffa0e53486c7970f` |
@@ -103,8 +103,8 @@ the ZIP or keep live bytes until the route is gone).
 | `tax-profiles.mjs` | modified (REPLACE) | `cb49cc567d017dbf732ed6743ee57c71ba12541b161fa927eb8bf8763e518a42` |
 | `tax-secrets.mjs` | modified (REPLACE) | `4a44531115a2789a5d6a921633d759143fceaa258156402585c25b1d64098d4d` |
 | `tenant-admin.mjs` | modified (REPLACE) | `de8c400e05f597202d2170fc80608aa0fe28f9c48cf5f482220a3f3567384642` |
-| `tenant-billing-engine.mjs` | modified (REPLACE) | `dbbf108f0b4b8fd01fd5401e3d0a9dba426c0327a3c0ce06ed20b81396c8e372` |
-| `tenant-billing-handlers.mjs` | modified (REPLACE) | `daf96f6c16c2642f7cdda1603b9ed1b9bcd08785f0aa269027c991684c44ca0a` |
+| `tenant-billing-engine.mjs` | modified (REPLACE) | `3397c65d89122f706b182970d12e83b98de461b72acba5c32c8e8d1e60944557` |
+| `tenant-billing-handlers.mjs` | modified (REPLACE) | `2866356c3bf82a04d04c834fadbf94faed026a7f119e73bd8cc6f42dc2098298` |
 | `tenant-check-user.mjs` | modified (REPLACE) | `f25e165ea08312ddbde6e67d5f522171368043be43a7875926e859f7c15931df` |
 | `tenant-collection-v2-uat.mjs` | modified (REPLACE) | `7a0c9bc1a7e23647a9834ab7b5735e7323fcd16a7911624f8f45fb967bdb1d49` |
 | `tenant-email-domain.mjs` | modified (REPLACE) | `ec57a360830347ede87d35e247397da41711d00c94252dd4cbd78b9288421dc4` |
@@ -139,6 +139,7 @@ apply and acceptance, then a production pin.
 | `aws/workflows/sql/93_tenant_company_info.sql` | `d90ec7f9ef14ca60b805e94337021259c8f9ce9ec80ed9781a47c64dbd6f8cfa` |
 | `aws/workflows/sql/94_document_library_restore.sql` | `ef865f65c8ccdfda51e1b6f65a828f9d6bed16bdbd1879a1a85cf4ba30a990a2` |
 | `aws/workflows/sql/95_remove_freedom_claims_bridge.sql` | `0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137` |
+| `aws/workflows/sql/96_platform_owner_tenant_pricing.sql` | `18109fed72bf8446dbe0c9560507ae6ed1fed1eb49f972142e78112479e257b6` |
 
 Already pinned by the document-library-restore branch (unchanged here, bytes match their pins):
 `aws/rls/sql/29_mortgage_ops_library_parity.sql` (`e8d416a5...`, ops/deployment-guard/sql29-...-production-apply.json)
@@ -148,8 +149,8 @@ SQL 93 was changed on the release branch (merge glue): it no longer creates
 `aws_member_update_tenant_branding`; it requires SQL 90 and adds the `aws_tenants_member_column_guard`
 BEFORE UPDATE trigger. Any pin taken from the branding-missing-fixes branch bytes is stale.
 
-Numbering on the branch is unique for 90-95 (90 users-only, 91 Moov onboarding, 92 signature link grant,
-93 tenant company info, 94 document library, 95 Freedom Claims bridge removal). The older duplicate
+Numbering on the branch is unique for 90-96 (90 users-only, 91 Moov onboarding, 92 signature link grant,
+93 tenant company info, 94 document library, 95 Freedom Claims bridge removal, 96 platform-owner tenant pricing). The older duplicate
 prefixes 67, 68, 70 and 76 exist on `origin/main` already and are not touched.
 
 ## 5. Required deploy order
@@ -168,7 +169,11 @@ SQL order:
 4. **SQL 93** after SQL 90 (refuses with `sql93_prerequisite_missing` without `aws_is_tenant_member` and
    `aws_write_tenants`).
 5. **SQL 94** after SQL 90 and SQL 30.
-6. **SQL 91** and **SQL 92** are independent of the others. **SQL 95** is independent of the other SQL
+6. **SQL 96** (`96_platform_owner_tenant_pricing.sql`) after SQL 90 and SQL 93 (refuses with
+   `sql96_prerequisite_missing` otherwise). It replaces SQL 93's `aws_tenants_member_column_guard`: do not
+   re-run SQL 93 after SQL 96 (that restores the member-only guard and blocks the platform owner's pricing
+   setter until SQL 96 is re-run).
+7. **SQL 91** and **SQL 92** are independent of the others. **SQL 95** is independent of the other SQL
    but must follow the Lambda change below.
 
 SQL before Lambda:
@@ -185,6 +190,10 @@ SQL before Lambda:
   SPA saves core fields first and `email-branding.mjs` tolerates missing columns, so this is soft.
 - **SQL 94 before** `tenant-library.mjs`, `signature-library-source.mjs`, `app-services.mjs` (library routes)
   and `homeowner.mjs` (shared documents reader; returns [] without SQL 94).
+- **SQL 96 before** `tenant-billing-engine.mjs` / `tenant-billing-handlers.mjs` (pricing saves call
+  `aws_platform_owner_set_tenant_pricing`; without SQL 96 they return 503 `pricing_setter_missing`).
+  `providers/parity/moov-onboard.mjs` and `moov-money.mjs` are independent of SQL 96. The SPA
+  (AdminTenants pricing through tenant-billing-admin) goes after SQL 96 and the billing Lambdas.
 - **SQL 95 after** `app-services.mjs` without the `ingest-shared-check` route is live (SQL 95 drops
   `aws_ingest_shared_check`, which the old route calls).
 
@@ -208,5 +217,16 @@ signature repairs, announcements, Inter font, Freedom removal) after the Lambda 
   (connect_partner_by_code / share_check_with_partner, aws/rls/sql/32) is unchanged.
 - `tenant-company-branding-save` is retired: `app-services.mjs` (a plan member) answers it with 410
   `route_retired`, and its handler is removed from `tenant-settings-handlers.mjs`. SQL 93's member column
-  guard therefore no longer allows `business_address`, `business_phone` or `email_reply_to` (no live API
-  path writes them on `tenants`: Reply-To lives in `tenant_email_settings`, KYC in the Moov onboarding tables).
+  guard therefore no longer allows `business_address`, `business_phone` or `email_reply_to`.
+
+## 7. Platform-owner tenant pricing (SQL 96, owner decision 2026-10-17)
+
+- Pricing columns on `tenants` (platform owner only, audited in the new `tenant_pricing_audit`):
+  monthly_rate_cents, referral_discount_cents, is_founding_partner, per_check_billing_enabled,
+  per_check_rate_cents, next_day_rate_cents, same_day_rate_cents, mortgage_ops_initial_rate_cents,
+  mortgage_ops_additional_rate_cents. `platform_fee_schedules` writes become platform owner only (members read).
+- New Lambda bytes: `tenant-billing-engine.mjs`, `tenant-billing-handlers.mjs`, `providers/parity/moov-onboard.mjs`
+  (fee schedule upsert/cancel platform owner only) and `providers/parity/moov-money.mjs` (browser
+  `platform_fee_cents` ignored) are listed in section 3 with their branch sha256.
+- `tenant_billing_settings` (billing_enabled, billing_day_of_month) is written only by the platform-owner
+  billing admin; it has no RLS policy in `aws/rls/sql`, so SQL 96 does not change it.

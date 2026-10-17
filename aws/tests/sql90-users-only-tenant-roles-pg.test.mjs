@@ -18,6 +18,7 @@ import { AWS_ROOT, applyBaseSchema, pgSkipReason, policyBlock, startPg } from '.
 
 const SQL_90 = path.join(AWS_ROOT, 'workflows/sql/90_users_only_tenant_roles.sql');
 const SQL_93 = path.join(AWS_ROOT, 'workflows/sql/93_tenant_company_info.sql');
+const SQL_96 = path.join(AWS_ROOT, 'workflows/sql/96_platform_owner_tenant_pricing.sql');
 const SQL_80 = path.join(AWS_ROOT, 'workflows/sql/80_checkalt_member_auto_deposit.sql');
 const SQL_35 = path.join(AWS_ROOT, 'rls/sql/35_manager_partner_parity.sql');
 
@@ -520,6 +521,149 @@ test('PostgreSQL 16: SQL 90 makes membership the only tenant gate and platform r
     }
     // Server-side writes with no end-user caller (table owner, no request.app_user_id) are not limited.
     assert.equal((await client.query(`UPDATE public.tenants SET moov_environment = 'production' WHERE id = '${TENANT_A}'`)).rowCount, 1);
+
+    // --- SQL 96 on top of SQL 90 + SQL 93: the platform owner sets pricing
+    // through a DEFINER setter; members never change pricing; every change is
+    // audited. (mortgage_ops_* rate columns are left absent on purpose.) ----
+    await client.query(`ALTER TABLE public.tenants
+      ADD COLUMN referral_discount_cents integer NOT NULL DEFAULT 0, ADD COLUMN is_founding_partner boolean NOT NULL DEFAULT false,
+      ADD COLUMN per_check_billing_enabled boolean DEFAULT false, ADD COLUMN per_check_rate_cents integer DEFAULT 0,
+      ADD COLUMN next_day_rate_cents integer, ADD COLUMN same_day_rate_cents integer`);
+    await client.query(`CREATE TABLE public.platform_fee_schedules (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, name text NOT NULL DEFAULT 'fees',
+      amount_cents bigint NOT NULL DEFAULT 0)`);
+    await client.query('ALTER TABLE public.platform_fee_schedules ENABLE ROW LEVEL SECURITY');
+    await client.query('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.platform_fee_schedules TO checksops');
+    await client.query(policyBlock('24_complete_write_policies.sql', 'aws_write_platform_fee_schedules'));
+    await client.query(policyBlock('12_final_select_policies.sql', 'aws_select_platform_fee_schedules'));
+    await client.query(`INSERT INTO public.platform_fee_schedules (tenant_id, amount_cents) VALUES ('${TENANT_A}', 500)`);
+    // Before SQL 96 (SQL 24 + SQL 90): any member could rewrite its own fee schedule.
+    assert.equal(await rowCount(VIEWER, 'UPDATE public.platform_fee_schedules SET amount_cents = 0 WHERE tenant_id = $1', [TENANT_A]), 1);
+
+    // Refuses to run without SQL 93's guard.
+    await client.query('BEGIN');
+    await client.query('DROP TRIGGER aws_tenants_member_column_guard ON public.tenants');
+    await assert.rejects(client.query(fs.readFileSync(SQL_96, 'utf8')),
+      (error) => error.code === '55000' && /sql96_prerequisite_missing/.test(error.message));
+    await client.query('ROLLBACK');
+    await client.query(fs.readFileSync(SQL_96, 'utf8'));
+    await client.query(fs.readFileSync(SQL_96, 'utf8'));
+    // Still exactly one tenants UPDATE policy (SQL 90's, members only).
+    assert.deepEqual((await client.query(`
+      SELECT policyname FROM pg_policies
+       WHERE schemaname = 'public' AND tablename = 'tenants' AND cmd IN ('UPDATE', 'ALL')`)).rows.map((r) => r.policyname),
+    ['aws_write_tenants']);
+
+    const setPricing = (user, tenantId, pricing) => as(user, async () => (await client.query(
+      'SELECT public.aws_platform_owner_set_tenant_pricing($1::uuid, $2::jsonb) AS result',
+      [tenantId, JSON.stringify(pricing)],
+    )).rows[0].result);
+    const pricingOf = async (tenantId) => (await client.query(
+      `SELECT monthly_rate_cents, referral_discount_cents, is_founding_partner, per_check_billing_enabled,
+              per_check_rate_cents, next_day_rate_cents, same_day_rate_cents, name, slug
+         FROM public.tenants WHERE id = $1`, [tenantId])).rows[0];
+    const auditCount = async () => (await client.query('SELECT count(*)::int AS n FROM public.tenant_pricing_audit')).rows[0].n;
+
+    // The platform owner sets every pricing column present (committed so the audit is visible).
+    await client.query('BEGIN');
+    await client.query('SET LOCAL ROLE checksops');
+    await client.query("SELECT set_config('request.app_user_id', $1, true)", [PLATFORM_OWNER]);
+    const set = (await client.query('SELECT public.aws_platform_owner_set_tenant_pricing($1::uuid, $2::jsonb) AS r', [TENANT_A, JSON.stringify({
+      monthly_rate_cents: 9900, referral_discount_cents: 1000, is_founding_partner: true,
+      per_check_billing_enabled: true, per_check_rate_cents: 300, next_day_rate_cents: 75, same_day_rate_cents: 100,
+    })])).rows[0].r;
+    await client.query('COMMIT');
+    assert.equal(set.ok, true);
+    assert.deepEqual(set.updated.sort(), ['is_founding_partner', 'monthly_rate_cents', 'next_day_rate_cents',
+      'per_check_billing_enabled', 'per_check_rate_cents', 'referral_discount_cents', 'same_day_rate_cents']);
+    const priced = await pricingOf(TENANT_A);
+    assert.equal(priced.monthly_rate_cents, 9900);
+    assert.equal(priced.referral_discount_cents, 1000);
+    assert.equal(priced.is_founding_partner, true);
+    assert.equal(priced.per_check_billing_enabled, true);
+    assert.equal(priced.per_check_rate_cents, 300);
+    assert.equal(priced.next_day_rate_cents, 75);
+    assert.equal(priced.same_day_rate_cents, 100);
+    // Audit: one row per changed field, with who, tenant and old -> new.
+    const audit = (await client.query(
+      'SELECT tenant_id, actor_id, field, old_value, new_value FROM public.tenant_pricing_audit ORDER BY field')).rows;
+    assert.equal(audit.length, 7);
+    const monthly = audit.find((r) => r.field === 'monthly_rate_cents');
+    assert.equal(monthly.tenant_id, TENANT_A);
+    assert.equal(monthly.actor_id, PLATFORM_OWNER);
+    assert.equal(monthly.old_value, 0);
+    assert.equal(monthly.new_value, 9900);
+    assert.equal(audit.find((r) => r.field === 'is_founding_partner').new_value, true);
+    // Setting the same values again changes nothing and writes no audit row.
+    await setPricing(PLATFORM_OWNER, TENANT_A, { monthly_rate_cents: 9900 });
+    assert.equal(await auditCount(), 7);
+
+    // The platform owner is refused on every non-pricing column, through the
+    // setter and through a direct UPDATE (no tenants row matches its RLS).
+    const refusedField = (error) => error.code === '22023' && /invalid_field/.test(error.message);
+    for (const column of ['name', 'slug', 'logo_url', 'company_address', 'moov_environment', 'payment_provider',
+      'moov_allowlisted', 'is_test_account', 'is_system_tenant', 'ein', 'kyc_status', 'updated_at']) {
+      await assert.rejects(setPricing(PLATFORM_OWNER, TENANT_A, { [column]: column === 'moov_allowlisted' ? true : 'x' }), refusedField, column);
+    }
+    await assert.rejects(setPricing(PLATFORM_OWNER, TENANT_A, { monthly_rate_cents: 100, slug: 'x' }), refusedField);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.tenants SET name = $1 WHERE id = $2', ['P', TENANT_A]), 0);
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.tenants SET monthly_rate_cents = 1 WHERE id = $1', [TENANT_A]), 0);
+    // Bad values and absent columns are refused; nothing changed.
+    for (const pricing of [{ monthly_rate_cents: -1 }, { monthly_rate_cents: 1.5 }, { monthly_rate_cents: '100' },
+      { is_founding_partner: 'yes' }, { per_check_rate_cents: 2000000000 }]) {
+      await assert.rejects(setPricing(PLATFORM_OWNER, TENANT_A, pricing),
+        (error) => error.code === '22023' && /invalid_value/.test(error.message), JSON.stringify(pricing));
+    }
+    await assert.rejects(setPricing(PLATFORM_OWNER, TENANT_A, { mortgage_ops_initial_rate_cents: 100 }),
+      (error) => error.code === '22023' && /column_not_present/.test(error.message));
+    await assert.rejects(setPricing(PLATFORM_OWNER, '99999999-9999-4999-8999-999999999999', { monthly_rate_cents: 1 }),
+      (error) => error.code === 'P0002');
+    assert.equal((await pricingOf(TENANT_A)).monthly_rate_cents, 9900);
+    assert.equal((await pricingOf(TENANT_A)).slug, 'a');
+
+    // Members (stored role viewer included) never change pricing: not through
+    // the setter, not with a direct UPDATE (SQL 93/96 guard). Branding still saves.
+    const guardRefusedAgain = (error) => error.code === '42501' && /tenant_column_not_member_writable/.test(error.message);
+    for (const user of MEMBERS) {
+      await assert.rejects(setPricing(user, TENANT_A, { monthly_rate_cents: 1 }),
+        (error) => error.code === '42501' && /not_authorized/.test(error.message), user);
+      for (const [column, value] of [['monthly_rate_cents', 1], ['referral_discount_cents', 0], ['is_founding_partner', false],
+        ['per_check_billing_enabled', false], ['per_check_rate_cents', 0], ['next_day_rate_cents', 0], ['same_day_rate_cents', 0]]) {
+        await assert.rejects(rowCount(user, `UPDATE public.tenants SET ${column} = $1 WHERE id = $2`, [value, TENANT_A]),
+          guardRefusedAgain, `${user} ${column}`);
+      }
+      assert.equal(await rowCount(user, 'UPDATE public.tenants SET name = $1 WHERE id = $2', ['A7', TENANT_A]), 1, user);
+    }
+    // Partners / other tenants and global admin/staff: refused by the setter, no row by UPDATE.
+    for (const user of OUTSIDERS) {
+      await assert.rejects(setPricing(user, TENANT_A, { monthly_rate_cents: 1 }), (error) => error.code === '42501', user);
+      assert.equal(await rowCount(user, 'UPDATE public.tenants SET monthly_rate_cents = 1 WHERE id = $1', [TENANT_A]), 0, user);
+    }
+    // B's owner on its own tenant: still a member, still no pricing.
+    await assert.rejects(rowCount(B_OWNER, 'UPDATE public.tenants SET monthly_rate_cents = 1 WHERE id = $1', [TENANT_B]), guardRefusedAgain);
+    assert.equal((await pricingOf(TENANT_A)).monthly_rate_cents, 9900);
+    assert.equal(await auditCount(), 7);
+
+    // The audit is append-only and the platform owner's to read.
+    for (const user of [...MEMBERS, ...OUTSIDERS]) {
+      assert.equal(await rowCount(user, 'SELECT 1 FROM public.tenant_pricing_audit', []), 0, user);
+      await assert.rejects(rowCount(user, `INSERT INTO public.tenant_pricing_audit (tenant_id, field) VALUES ($1, 'x')`, [TENANT_A]),
+        /permission denied/, user);
+    }
+    assert.equal(await rowCount(PLATFORM_OWNER, 'SELECT 1 FROM public.tenant_pricing_audit', []), 7);
+    await assert.rejects(rowCount(PLATFORM_OWNER, 'DELETE FROM public.tenant_pricing_audit', []), /permission denied/);
+
+    // platform_fee_schedules: the platform owner writes; members only read.
+    for (const user of MEMBERS) {
+      assert.equal(await rowCount(user, 'UPDATE public.platform_fee_schedules SET amount_cents = 1 WHERE tenant_id = $1', [TENANT_A]), 0, user);
+      await assert.rejects(rowCount(user, 'INSERT INTO public.platform_fee_schedules (tenant_id) VALUES ($1)', [TENANT_A]),
+        /row-level security/, user);
+      assert.equal(await rowCount(user, 'SELECT 1 FROM public.platform_fee_schedules WHERE tenant_id = $1', [TENANT_A]), 1, user);
+    }
+    for (const user of OUTSIDERS) {
+      assert.equal(await rowCount(user, 'UPDATE public.platform_fee_schedules SET amount_cents = 1 WHERE tenant_id = $1', [TENANT_A]), 0, user);
+    }
+    assert.equal(await rowCount(PLATFORM_OWNER, 'UPDATE public.platform_fee_schedules SET amount_cents = 700 WHERE tenant_id = $1', [TENANT_A]), 1);
   } finally {
     await client.end().catch(() => {});
     server.stop();

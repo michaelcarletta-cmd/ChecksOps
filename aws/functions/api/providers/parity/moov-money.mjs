@@ -129,7 +129,10 @@ export const transferCreate = {
     const existing = await existingTransferByKey(client, tenantId, key);
     if (existing) return jsonResult({ success: true, duplicate: true, transfer: existing });
 
-    const platformFee = Math.max(0, Number(body.platform_fee_cents) || 0);
+    // ChecksOps' fee is never taken from the browser: a tenant member cannot
+    // set what ChecksOps charges (owner decision 2026-10-17). No per-tenant
+    // payout fee is configured, so the sandbox draft records 0, as production does.
+    const platformFee = 0;
     let draft;
     try {
       draft = await insertTransferDraft(client, {
