@@ -720,14 +720,31 @@ const grantee = (line) => String(line).split(' ')[0];
  * the roles in `revokes_from` before granting, so live policies may be anything, triggers only
  * the file's own and privileges only of those roles. Owned by the login (the file alters it).
  */
-function preexistingTableReplaceable(t, live, want) {
-  if (!want || live.owner_is_login !== true) return false;
+function preexistingTableTakeover(t, live, want) {
   const structural = (x) => tableLines(t.name, { ...x, rls: false, policies: [], triggers: [], acl: [], columns: (x.columns || []).map((c) => ({ ...c, acl: [] })) });
   const revocable = new Set(['owner', ...(t.revokes_from || [])]);
-  return same(structural(live), structural(want))
-    && (live.triggers || []).every((name) => want.triggers.includes(name))
-    && (live.acl || []).every((line) => revocable.has(grantee(line)))
-    && (live.columns || []).every((c) => (c.acl || []).every((line) => revocable.has(grantee(line))));
+  const liveLines = want ? structural(live) : [];
+  const wantLines = want ? structural(want) : [];
+  // Names only (column, constraint or index name, or the table line), never definitions or rows.
+  const lineName = (line) => line.slice(`table ${t.name}`.length).replace(/:.*$/, '').trim() || 'table';
+  const uniq = (values) => [...new Set(values)].sort();
+  const differing = uniq([...liveLines.filter((l) => !wantLines.includes(l)), ...wantLines.filter((l) => !liveLines.includes(l))].map(lineName));
+  return {
+    owner_is_login: live.owner_is_login === true,
+    // The shape is ordered (columns by attnum): the same lines in another order still differ.
+    shape_matches: same(liveLines, wantLines),
+    shape_differs: differing.length === 0 && !same(liveLines, wantLines) ? ['order'] : differing,
+    unexpected_triggers: (live.triggers || []).filter((name) => !(want?.triggers || []).includes(name)).sort(),
+    unexpected_acl_grantees: uniq((live.acl || []).map(grantee).filter((g) => !revocable.has(g))),
+    unexpected_column_acl_grantees: uniq((live.columns || []).flatMap((c) => (c.acl || []).map(grantee)).filter((g) => !revocable.has(g))),
+  };
+}
+
+function preexistingTableReplaceable(t, live, want) {
+  if (!want) return false;
+  const d = preexistingTableTakeover(t, live, want);
+  return d.owner_is_login && d.shape_matches && d.unexpected_triggers.length === 0
+    && d.unexpected_acl_grantees.length === 0 && d.unexpected_column_acl_grantees.length === 0;
 }
 
 /** Rules both environments apply before the migration runs. */
@@ -984,6 +1001,8 @@ export function releaseSqlReport(key, state, text) {
         rls: live?.rls === true,
         column_count: (live?.columns || []).length,
         policy_count: (live?.policies || []).length,
+        // A pre-existing table the file may take over: why it would be refused, by name only.
+        ...(t.may_preexist === true && live?.exists && intended ? { takeover: preexistingTableTakeover(t, live, intended) } : {}),
       };
     }),
     columns: [
