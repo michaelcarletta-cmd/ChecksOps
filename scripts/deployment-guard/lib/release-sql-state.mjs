@@ -436,7 +436,30 @@ async function readObjects(q, spec, login) {
   }
   const definer = {};
   for (const table of spec.definer_writes || []) definer[table] = (await q(RELEASE_READS.definerWrite, [table]))[0]?.ok === true;
-  return { functions, policies, views, tables, columns, constraints, triggers, privileges, altered, indexes, covers, definer };
+  // spec.whole_tables (SQL 100): the whole access surface of the table, not only the named
+  // objects: RLS flags, every other policy, every non-owner table grant and every grant on an
+  // unlisted column, so a policy or grant the file does not describe moves the fingerprint.
+  const whole = {};
+  for (const w of spec.whole_tables || []) {
+    const rel = await readRelation(q, w.table, login);
+    if (!rel.exists) {
+      whole[w.table] = { exists: false };
+      continue;
+    }
+    const named = new Set([...(spec.policies || []), ...(spec.dropped_policies || [])].filter((p) => p.table === w.table).map((p) => p.name));
+    const listed = new Set((spec.column_acl || []).filter((c) => c.table === w.table).map((c) => c.column));
+    whole[w.table] = {
+      exists: true,
+      rls: rel.rls === true,
+      forced: rel.forced === true,
+      other_policies: (await rowsFor(w.table)).filter((r) => !named.has(r.name))
+        .map((r) => policyLine(objKey(w.table, r.name), policyState(r, spec), spec)).sort(),
+      acl: (await q(RELEASE_READS.relationAcl, [w.table])).filter((r) => r.grantee !== 'owner').map(aclLineFor(spec)).sort(),
+      other_column_acl: (await q(RELEASE_READS.columns, [w.table])).filter((c) => !listed.has(c.name))
+        .flatMap((c) => columnAcl(spec, c).map((line) => `${c.name} ${line}`)).sort(),
+    };
+  }
+  return { functions, policies, views, tables, columns, constraints, triggers, privileges, altered, indexes, covers, definer, whole };
 }
 
 // --- state text --------------------------------------------------------------------
@@ -506,6 +529,19 @@ export function releaseStateText(key, state = {}) {
   for (const u of spec.unique_covers || []) {
     lines.push(`unique ${u.table} ${u.name} (${u.contains.join(',')}): covered=${s.covers?.[objKey(u.table, u.name)]?.covered === true}`);
   }
+  for (const w of spec.whole_tables || []) {
+    const row = s.whole?.[w.table];
+    if (!row?.exists) {
+      lines.push(`whole ${w.table}: absent`);
+      continue;
+    }
+    lines.push(
+      `whole ${w.table}: rls=${row.rls === true} forced=${row.forced === true}`,
+      `whole ${w.table} other policies: ${list(row.other_policies)}`,
+      `whole ${w.table} acl: ${list(row.acl)}`,
+      `whole ${w.table} other column acl: ${list(row.other_column_acl)}`,
+    );
+  }
   return lines.join('\n');
 }
 
@@ -572,7 +608,16 @@ export function releaseIntendedState(key, text) {
   const privileges = Object.fromEntries((spec.table_privileges || []).map((p) => [p.table, { exists: true, lines: [...p.intended].sort() }]));
   const indexes = Object.fromEntries((spec.indexes || []).map((i) => [objKey(i.table, i.name), { exists: true, def: collapse(i.def) }]));
   const covers = Object.fromEntries((spec.unique_covers || []).map((u) => [objKey(u.table, u.name), { covered: true }]));
-  return { functions, policies, views, tables, columns, constraints, triggers, privileges, indexes, covers };
+  // Only the policies and grants the file names: no other policy, table grant or column grant.
+  const whole = Object.fromEntries((spec.whole_tables || []).map((w) => [w.table, {
+    exists: true,
+    rls: w.rls === true,
+    forced: w.forced === true,
+    other_policies: [],
+    acl: (spec.table_privileges || []).filter((p) => p.table === w.table).flatMap((p) => p.intended).sort(),
+    other_column_acl: [],
+  }]));
+  return { functions, policies, views, tables, columns, constraints, triggers, privileges, indexes, covers, whole };
 }
 
 export function releaseIntendedHash(key, text) {
@@ -742,6 +787,12 @@ export function releaseSharedPreconditionFailures(key, state, text) {
     if (extra === 'no_rows_outside_sql94_rule') checks.push(['no_rows_outside_sql94_rule', s.counts?.rows_outside_sql94_rule === 0]);
     // SQL 98: the file raises 23505 on duplicate tenant periods; refuse before it runs.
     if (extra === 'no_duplicate_billing_periods') checks.push(['no_duplicate_billing_periods', s.counts?.duplicate_billing_periods === 0]);
+    // SQL 98: a pre-existing platform_billing_destination is taken over only while it is empty:
+    // a row there would become the fee destination with no review and no audit history.
+    if (extra === 'platform_billing_destination_absent_or_empty') {
+      checks.push(['platform_billing_destination_absent_or_empty', s.tables?.['public.platform_billing_destination']?.exists !== true
+        || s.counts?.platform_billing_destination_rows === 0]);
+    }
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {
       checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);

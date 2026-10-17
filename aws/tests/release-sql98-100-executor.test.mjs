@@ -160,6 +160,8 @@ test('reviewed files: SQL 98-100 parse as reviewed; SQL 100 bodies are productio
     sha(releaseFunctionDefinitions(TEXT.sql96).aws_tenants_member_column_guard.prosrc));
 });
 
+const PINS_TABLE_ACL = ['checksops DELETE grantor=owner', 'checksops INSERT grantor=owner', 'checksops SELECT grantor=owner'];
+
 test('SQL 100 fingerprint: a grantor or a policy comment is another state; specs without render are unchanged by either', () => {
   const intended = releaseIntendedState('sql100', TEXT.sql100);
   const base = releaseStateHash('sql100', intended);
@@ -173,6 +175,20 @@ test('SQL 100 fingerprint: a grantor or a policy comment is another state; specs
   const fnGrant = structuredClone(intended);
   fnGrant.functions['public.aws_is_mortgage_ops_agent()'].acl.push('authenticated EXECUTE grantor=owner');
   assert.notEqual(releaseStateHash('sql100', fnGrant), base);
+  // The whole table: RLS off or forced, another policy, a grant to any other role or on an unlisted column.
+  const W = 'public.mortgage_handling_requests';
+  assert.deepEqual(intended.whole[W], { exists: true, rls: true, forced: false, other_policies: [], acl: [...PINS_TABLE_ACL], other_column_acl: [] });
+  for (const change of [
+    (w) => { w.rls = false; },
+    (w) => { w.forced = true; },
+    (w) => { w.other_policies.push('policy public.mortgage_handling_requests zz_open: cmd=SELECT'); },
+    (w) => { w.acl.push('PUBLIC SELECT grantor=owner'); },
+    (w) => { w.other_column_acl.push('tenant_id authenticated UPDATE grantor=owner'); },
+  ]) {
+    const wider = structuredClone(intended);
+    change(wider.whole[W]);
+    assert.notEqual(releaseStateHash('sql100', wider), base);
+  }
   // SQL 98 drops and recreates policies too, but its fingerprint (like SQL 90-97's) has no comment term.
   const s98 = releaseIntendedState('sql98', TEXT.sql98);
   const s98c = structuredClone(s98);
@@ -282,17 +298,25 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   assert.ok(foreign.failures.includes('created_tables_absent_or_intended'));
   const otherShape = await whatIf('sql98', [DEST, 'ALTER TABLE public.platform_billing_destination ADD COLUMN notes text']);
   assert.ok(otherShape.failures.includes('created_tables_absent_or_intended'));
-  // A pre-existing one of the reviewed shape, with an extra permissive policy and wider grants, is taken over.
+  // A pre-existing one of the reviewed shape, with an extra permissive policy and wider grants, is taken over,
+  // but only while it holds no row (a row would become the fee destination unreviewed and unaudited).
   await admin.query(DEST);
   await admin.query(`ALTER TABLE public.platform_billing_destination ENABLE ROW LEVEL SECURITY;
     CREATE POLICY legacy_read_platform_billing_destination ON public.platform_billing_destination FOR SELECT TO authenticated USING (true);
     GRANT SELECT ON public.platform_billing_destination TO PUBLIC;
     GRANT INSERT, UPDATE, DELETE ON public.platform_billing_destination TO authenticated;
-    INSERT INTO public.platform_billing_destination (environment, moov_account_id, moov_payment_method_id) VALUES ('sandbox', 'acct', 'pm')`);
+    INSERT INTO public.platform_billing_destination (environment, moov_account_id, moov_payment_method_id) VALUES ('sandbox', 'acct_unreviewed', 'pm_unreviewed')`);
+  r98 = await inspect('sql98');
+  assert.equal(r98.release_sql_inspect.counts.platform_billing_destination_rows, 1);
+  assert.deepEqual(r98.precondition_failures, ['platform_billing_destination_absent_or_empty'], JSON.stringify(r98.release_sql_inspect));
+  const withRow = await apply('sql98', r98.live_definition_sha256);
+  assert.equal(withRow.code, CODES.DEPLOYMENT_COLLISION);
+  assert.ok(withRow.details.failed.includes('platform_billing_destination_absent_or_empty'));
+  await admin.query('DELETE FROM public.platform_billing_destination');
   r98 = await inspect('sql98');
   assert.deepEqual(r98.precondition_failures, [], JSON.stringify(r98.release_sql_inspect));
   assert.deepEqual(r98.release_sql_inspect.unique_covers, [{ name: 'check_billing_events check_event', columns: ['check_intake_item_id', 'event_type'], covered: false }]);
-  assert.deepEqual(r98.release_sql_inspect.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0 });
+  assert.deepEqual(r98.release_sql_inspect.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0, platform_billing_destination_rows: 0 });
   assert.equal(r98.release_sql_inspect.tables.find((x) => x.name === 'platform_billing_destination').state, 'different');
   // The same fingerprint when an earlier unique index already covers the pair (SQL 98 then adds none).
   await admin.query('BEGIN');
@@ -381,6 +405,18 @@ test('PostgreSQL 16: SQL 98, SQL 99 and SQL 100 through the executor: predecesso
   assert.ok(r100.release_sql_inspect.functions.every((row) => row.state === 'intended'), JSON.stringify(r100.release_sql_inspect.functions));
   assert.deepEqual(r100.release_sql_inspect.policy_comments.map((p) => p.present), [false, false, false, false, false]);
   assert.equal((await apply('sql100', pre100)).code, CODES.UNRELATED_MUTATION);
+  // Access the file does not describe is another state, not "already applied" (no precondition names it).
+  for (const wider of [
+    'CREATE POLICY zz_open_read ON public.mortgage_handling_requests FOR SELECT TO authenticated USING (true)',
+    'ALTER TABLE public.mortgage_handling_requests DISABLE ROW LEVEL SECURITY',
+    'ALTER TABLE public.mortgage_handling_requests FORCE ROW LEVEL SECURITY',
+    'GRANT SELECT ON public.mortgage_handling_requests TO PUBLIC',
+    'GRANT SELECT ON public.mortgage_handling_requests TO authenticated',
+    'GRANT UPDATE (tenant_id) ON public.mortgage_handling_requests TO authenticated',
+  ]) {
+    const probe = await whatIf('sql100', wider);
+    assert.notEqual(probe.state.live_definition_sha256, PINS.sql100.intended_replacement_sha256, wider);
+  }
   // Re-running the file on the state it produced changes nothing (as on production).
   await asOwner((c) => c.query(TEXT.sql100));
   assert.equal((await inspect('sql100')).live_definition_sha256, PINS.sql100.intended_replacement_sha256);

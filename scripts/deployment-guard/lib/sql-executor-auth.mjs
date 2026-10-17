@@ -2192,7 +2192,7 @@ export const AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS = Object.freeze({
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql100', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: 'cdbc82da6afe1fa00241605f071d67e4c0ae5bcc82131b5fcdd23d910f528c3d',
+  intended_replacement_sha256: '4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e',
   function_identities: Object.freeze(['public.aws_is_mortgage_ops_agent()', 'public.aws_mortgage_agent_queue_visible(text, uuid)', 'public.aws_is_active_mortgage_agent(uuid)']),
 });
 

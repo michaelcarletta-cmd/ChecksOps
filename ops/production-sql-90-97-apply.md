@@ -125,7 +125,7 @@ from the pinned file's bytes; renderings from the reviewed constants in
 | `sql97` | `5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef` |
 | `sql98` | `f101573a218b5fd08ec9c9fb855f14d366a0df703a48be3637be3f47bfff7b1f` |
 | `sql99` | `481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4` |
-| `sql100` | `cdbc82da6afe1fa00241605f071d67e4c0ae5bcc82131b5fcdd23d910f528c3d` |
+| `sql100` | `4a9e9b26eb05d64c23735a51018d50cd71eeb66dbe3fc8f5d322939b7b1e8c4e` |
 
 SQL 98's fingerprint also has a line for `tenant_maintenance_payments_tenant_period_uidx` (an
 index on an existing table) and one for whether a unique index covers `check_billing_events
@@ -177,7 +177,10 @@ post-condition is the intended hash); reconcile the rendering in a reviewed chan
   pre-existing `platform_billing_destination` only when it is owned by the login and has the
   reviewed columns, constraints and indexes (FORCE off), no trigger but the file's and
   privileges only of PUBLIC, `authenticated` and `checksops` (the roles the file revokes from;
-  any other policy is dropped by the file). `successors_not_applied` on SQL 96 once SQL 98 is in
+  any other policy is dropped by the file), and `platform_billing_destination_absent_or_empty`
+  only while it holds no row (the `platform_billing_destination_rows` count): an existing row
+  would become the fee destination with no review and no audit history, so a non-empty table is
+  refused and reconciled in a reviewed change. `successors_not_applied` on SQL 96 once SQL 98 is in
   place.
 - SQL 99: `definer_can_write_relations` (`check_messages`: superuser, BYPASSRLS, or a member of
   the owner and no FORCE RLS, the file's own check); `altered_relations_owned_by_login`
@@ -279,12 +282,15 @@ nothing. The production tool therefore never runs the file there:
 
 1. `sql100-mortgage-desk-live-access-production-apply.mjs --inspect` (read-only, the owner runs
    it). Production is recorded when `already_applied` is `true` (`live_definition_sha256` equals
-   `cdbc82da…`), `production_noop.live_is_intended` is `true` and `precondition_failures` is
+   `4a9e9b26…`), `production_noop.live_is_intended` is `true` and `precondition_failures` is
    `[]`. Record that run in the SQL 100 production pin (`production_inspect`) and in
    `production-api-overlay-plan.json` if a member ever needs it.
 2. If `live_definition_sha256` differs, SQL 100 does not describe production (for example a
    helper EXECUTE grant beyond PUBLIC and the owner, a grant whose grantor is not
-   `checksops_admin`, or a policy comment). Stop: reconcile the file in a reviewed change. Do not
+   `checksops_admin`, a policy comment, or anything on `mortgage_handling_requests` the file
+   does not name: RLS off or forced, another policy, a table grant to any other role (PUBLIC
+   included) or a grant on an unlisted column; the fingerprint covers the table's whole access
+   surface, spec `whole_tables`). Stop: reconcile the file in a reviewed change. Do not
    apply it. The tool refuses anyway: `production_state_already_intended` while the state
    differs, and `already in place` once it is intended. `mortgage-desk-access-production-inspect.mjs`
    shows which: `execute_acl`, `comment`, `column_acl_entries[].grantor`.

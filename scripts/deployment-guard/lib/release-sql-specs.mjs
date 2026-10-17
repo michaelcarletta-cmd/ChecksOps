@@ -2179,9 +2179,16 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "extra_preconditions": [
       "no_duplicate_billing_periods",
-      "check_billing_config_active_or_empty"
+      "check_billing_config_active_or_empty",
+      "platform_billing_destination_absent_or_empty"
     ],
     "counts": {
+      "platform_billing_destination_rows": {
+        "requires": [
+          "public.platform_billing_destination"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.platform_billing_destination"
+      },
       "duplicate_billing_periods": {
         "requires": [
           "public.tenant_maintenance_payments",
@@ -3038,6 +3045,13 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.mortgage_handling_requests"
+    ],
+    "whole_tables": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "rls": true,
+        "forced": false
+      }
     ]
   },
 });

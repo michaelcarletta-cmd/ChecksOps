@@ -204,7 +204,7 @@ test('PostgreSQL 16: read-only inspects; SQL 98 and SQL 99 apply once as checkso
     assert.equal(d.apply_preconditions_met, false, 'no recorded pre-state');
     assert.equal(d.production_noop, undefined, key);
     if (key === 'sql98') {
-      assert.deepEqual(d.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0 });
+      assert.deepEqual(d.counts, { duplicate_billing_periods: 0, check_billing_event_duplicates: 0, check_billing_config_rows: 0, check_billing_config_active_rows: 0, platform_billing_destination_rows: null });
     }
     const pin = authorized(key, d.live_definition_sha256);
     const asSuper = await executeReleaseProductionApply(key, manifest(key, pin), { root: ROOT, pin, connect: connectWith('ubuntu'), consumedPath: consumedPath() });
