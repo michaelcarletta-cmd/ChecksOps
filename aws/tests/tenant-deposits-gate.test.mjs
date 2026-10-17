@@ -210,6 +210,27 @@ test('providers.mjs: a gate read that fails refuses (fail closed); an unauthenti
   assert.equal(await gateProviderDeposit(SUBMIT.name, SUBMIT.body, async () => ({ ok: false, statusCode: 401, error: 'missing_token' })), null);
 });
 
+test('providers.mjs: an approve whose deposit lookup fails refuses (fail closed), by id and by reference, even when deposits are off', async () => {
+  const lookupFails = () => {
+    const client = gateClient({ enabled: false });
+    const query = client.query;
+    client.query = async (sql, params) => {
+      if (/FROM public\.(checkalt_deposits|aws_provider_sandbox_operations)/.test(String(sql))) throw new Error('statement timeout');
+      return query(sql, params);
+    };
+    return client;
+  };
+  for (const body of [APPROVE.body, { action: 'approve', checkalt_reference: 'CA-REF-1' }]) {
+    const refused = await gateProviderDeposit(APPROVE.name, body, (fn) => fn({ client: lookupFails() }));
+    assert.ok(refused, JSON.stringify(body));
+    assert.equal(refused.error, 'deposits_status_unavailable');
+    assert.equal(refused.statusCode, 503);
+    assert.equal(refused.liveProviderCalled, false);
+  }
+  // No rows (not an error) still passes through to the handler, which refuses an unknown deposit itself.
+  assert.equal(await gateProviderDeposit(APPROVE.name, APPROVE.body, (fn) => fn({ client: gateClient({ tenant: null }) })), null);
+});
+
 test('workflow-rpc.mjs deposit_action: all three actions check the switch for the item\'s own tenant before writing', () => {
   const src = read('aws/functions/api/workflow-rpc.mjs');
   const fn = src.slice(src.indexOf('const executeDepositAction'), src.indexOf('export const DEPOSIT_BATCH_LOCK_SQL'));

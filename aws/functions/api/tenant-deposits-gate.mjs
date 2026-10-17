@@ -98,26 +98,26 @@ export async function depositRequestTenant(client, name, body = {}) {
       client,
       'SELECT tenant_id FROM public.checkalt_deposits WHERE id = $1::uuid',
       [depositId],
-    ).catch(() => []))[0]?.tenant_id;
+    ))[0]?.tenant_id;
     if (production) return production;
     return (await savepointRead(
       client,
       "SELECT tenant_id FROM public.aws_provider_sandbox_operations WHERE id = $1::uuid AND provider = 'checkalt'",
       [depositId],
-    ).catch(() => []))[0]?.tenant_id || null;
+    ))[0]?.tenant_id || null;
   }
   if (reference) {
     const production = (await savepointRead(
       client,
       'SELECT tenant_id FROM public.checkalt_deposits WHERE checkalt_reference = $1 LIMIT 1',
       [String(reference)],
-    ).catch(() => []))[0]?.tenant_id;
+    ))[0]?.tenant_id;
     if (production) return production;
     return (await savepointRead(
       client,
       "SELECT tenant_id FROM public.aws_provider_sandbox_operations WHERE provider = 'checkalt' AND provider_reference = $1 LIMIT 1",
       [String(reference)],
-    ).catch(() => []))[0]?.tenant_id || null;
+    ))[0]?.tenant_id || null;
   }
   return null;
 }

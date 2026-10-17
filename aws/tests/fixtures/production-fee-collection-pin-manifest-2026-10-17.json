@@ -67,7 +67,7 @@
     },
     "tenant-deposits-gate.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "46f99bea7ef9435a0c4c9865abaabf41255a177b3f46dd984f2bea9bc84ec6d2",
+      "accepted_sha256": "0b9942462b5d78a5cff9f5f78145b0a15fc398b3d2b8160966004f4fa9f60b95",
       "operation": "add",
       "live_source": "new file: absent from the 2026-10-11 live bundle snapshot (f78e16d99) and from main"
     }

@@ -43,7 +43,7 @@ Planning only: `deploy_authorized` is false and nothing is live or verified.
 | `tenant-fee-invoice-email.mjs` (new file, ADD) | – (absent) | `c7c1921bd6be6d311f1d81235911f79a55f0d1bbd1f7b4f9a5365d1324052dc2` | – | not in the live bundle or main |
 | `tenant-billing-engine.mjs` | `65b75735…` | `7c2eedd32aebc26630339817b07321afc4da64a915601083746f80d8f0c50d1b` | SQL 98 (was 96) | release manifest (unapplied) |
 | `tenant-billing-handlers.mjs` | `8aeb8b7f…` | `231be3d3068afbf88a6b77f22c0f84ad58ecd7bbe86f63a1300f87f24a71c6a7` | SQL 98 (was 96) | release manifest (unapplied) |
-| `tenant-deposits-gate.mjs` (new file, ADD) | – (absent) | `46f99bea7ef9435a0c4c9865abaabf41255a177b3f46dd984f2bea9bc84ec6d2` | – | not in the live bundle or main |
+| `tenant-deposits-gate.mjs` (new file, ADD) | – (absent) | `0b9942462b5d78a5cff9f5f78145b0a15fc398b3d2b8160966004f4fa9f60b95` | – | not in the live bundle or main |
 | `workflow-rpc.mjs` (moved from the release manifest) | `9a630bdb…` | `79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485` | SQL 98 (was 90) | release manifest (unapplied) |
 | `providers.mjs` (moved from the release manifest) | `6ad4c7ec…` | `af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc` | SQL 98 (was none) | release manifest (unapplied) |
 
@@ -241,3 +241,19 @@ adds no new bypass.
 - The $1 verification debit applies the pull's bank-source rules (`assertTenantBankSource`).
 - SQL 98 fails closed on unknown live `platform_billing_destination` policies and grants (see section 3).
 - SQL 98 requires SQL 96.
+
+## 8. Final review fixes (2026-10-17)
+
+- **Approve lookup fails closed.** `tenant-deposits-gate.mjs` no longer turns a failed
+  deposit lookup on `checkalt-approve-deposit` (action `approve`) into "tenant not found".
+  A lookup error now refuses with 503 `deposits_status_unavailable`, by deposit id and by
+  reference. Only "no rows" still passes to the handler, which refuses an unknown deposit
+  itself. Covered by a new test. Re-pinned `tenant-deposits-gate.mjs` in the plan and the
+  fee manifest.
+- **Staging hold (operator rule, not enforced by the staging overlay).** The staging Lambda
+  overlay has no `sql_before` check. Do not overlay `providers.mjs` or `workflow-rpc.mjs`
+  to staging until SQL 98 is applied in staging. Before that, every staging deposit call
+  returns 503 `deposits_status_unavailable`, because `aws_tenant_deposits_enabled` does not
+  exist yet. SQL 98 (and SQL 99) still need staging-executor and production apply tooling
+  on the SQL 90-97 engine. That is a follow-up PR, and it is required before the staging
+  deploy. Production is held by the plan's `sql_before` on SQL 98.
