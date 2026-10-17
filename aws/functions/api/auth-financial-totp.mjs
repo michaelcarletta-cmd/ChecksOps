@@ -491,8 +491,19 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
  */
 export const STEPUP_WRITER_SQL = "SELECT set_config('app.stepup_writer', '1', true)";
 
+/** Clears the writer flag right after the server's step-up insert. */
+export const STEPUP_WRITER_RESET_SQL = "SELECT set_config('app.stepup_writer', '0', true)";
+
 export const insertAppStepUpLog = async (client, mapping, bound) => {
   await client.query(STEPUP_WRITER_SQL);
+  try {
+    return await insertAppStepUpLogRow(client, mapping, bound);
+  } finally {
+    await client.query(STEPUP_WRITER_RESET_SQL).catch(() => {});
+  }
+};
+
+const insertAppStepUpLogRow = async (client, mapping, bound) => {
   if (bound.kind === 'login_session') {
     const row = (await client.query(
       `INSERT INTO public.financial_stepup_log

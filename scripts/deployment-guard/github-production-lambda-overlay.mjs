@@ -105,10 +105,26 @@ export function namedImports(source, fromMember = '') {
   for (const { re, split } of patterns) {
     let match;
     while ((match = re.exec(source))) {
-      const names = match[1].split(',').map((part) => part.trim().split(split)[0].trim())
-        .filter((name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name));
+      const names = match[1].split(',').map((part) => part.trim().split(split)[0].trim()).filter(Boolean);
+      const unparsed = names.filter((name) => !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name));
+      if (unparsed.length) {
+        // Fail closed: a binding the scanner cannot read (nested destructuring,
+        // defaults, a rest element, a comment) could hide a dropped export.
+        throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'cannot verify imported names; refuse rather than guess', {
+          member: fromMember, module: match[2], unparsed,
+        });
+      }
       out.push({ module: path.posix.normalize(path.posix.join(dir, match[2])), names });
     }
+  }
+  // Fail closed on a destructured dynamic import of a relative module that the
+  // pattern above could not read (nested destructuring, defaults with braces).
+  const dynamicTargets = [...String(source).matchAll(/\}\s*=\s*await\s+import\(\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]\s*\)/g)].length;
+  const dynamicRead = [...String(source).matchAll(patterns[1].re)].length;
+  if (dynamicTargets !== dynamicRead) {
+    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'cannot verify imported names; refuse rather than guess', {
+      member: fromMember, reason: 'unreadable_dynamic_import',
+    });
   }
   return out;
 }

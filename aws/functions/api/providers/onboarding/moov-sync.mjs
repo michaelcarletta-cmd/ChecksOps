@@ -97,7 +97,8 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
       accountType: 'business',
       profile: { business },
       capabilities: [...MERCHANT_CAPABILITIES],
-      ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
+      // Members only (defense in depth; the handler already drops a non-member's token).
+      ...(tosToken && ctx.member === true ? { termsOfService: { token: tosToken } } : {}),
       foreignID: ctx.tenantId,
       metadata: { checksops_tenant_id: ctx.tenantId },
     },

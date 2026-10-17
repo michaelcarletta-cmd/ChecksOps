@@ -562,3 +562,16 @@ test('linkProblems refuses a member whose new bytes drop a name a live file impo
   assert.deepEqual(forward, ['x.mjs does not export missingName']);
   assert.deepEqual(namedImports("const { a, b: c } = await import('./z.mjs');", 'dir/m.mjs'), [{ module: 'dir/z.mjs', names: ['a', 'b'] }]);
 });
+
+test('namedImports fails closed on a binding it cannot read', async () => {
+  const { namedImports } = await import('../../scripts/deployment-guard/github-production-lambda-overlay.mjs');
+  for (const src of [
+    "const { a = 1 } = await import('./x.mjs');",
+    "const { a: { b } } = await import('./x.mjs');",
+    "const { ...rest } = await import('./x.mjs');",
+    "import { a /* b */ } from './x.mjs';",
+  ]) {
+    assert.throws(() => namedImports(src, 'm.mjs'), (error) => error.code === CODES.DEPLOYMENT_COLLISION && /cannot verify imported names/.test(error.message), src);
+  }
+  assert.deepEqual(namedImports("import { a, b as c } from './x.mjs';", 'm.mjs'), [{ module: 'x.mjs', names: ['a', 'b'] }]);
+});

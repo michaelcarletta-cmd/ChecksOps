@@ -546,9 +546,19 @@ test('the step-up endpoint binds wallet.fund to the tenant and this login', asyn
   assert.equal(other.error, 'action_mismatch');
 
   let inserted;
-  const recordClient = { query: async (sql, params) => { inserted = params; return { rows: [{ id: 'new-stepup' }] }; } };
+  const writerFlags = [];
+  const recordClient = {
+    query: async (sql, params) => {
+      const flag = String(sql).match(/set_config\('app\.stepup_writer', '(\d)', true\)/);
+      if (flag) writerFlags.push(flag[1]);
+      if (/INSERT INTO public\.financial_stepup_log/.test(sql)) inserted = params;
+      return { rows: [{ id: 'new-stepup' }] };
+    },
+  };
   const recorded = await insertAppStepUpLog(recordClient, mapping, bound);
   assert.equal(recorded.ok, true);
+  // SQL 97 writer flag: set for the insert, cleared right after it.
+  assert.deepEqual(writerFlags, ['1', '0']);
   assert.equal(inserted[1], TENANT);
   assert.equal(inserted[2], 'wallet.fund');
   assert.equal(JSON.parse(inserted[3]).login_session, LOGIN);
