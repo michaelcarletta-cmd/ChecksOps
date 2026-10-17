@@ -3,8 +3,9 @@
 Guarded apply tooling for the eleven release 2026-10-17 migrations in `aws/workflows/sql/`:
 SQL 90 to SQL 97, SQL 98 (tenant fee collection and the deposits switch) and SQL 99 / SQL 100
 (Mortgage Desk). This runbook covers staging and production and the order between them. It
-authorizes nothing: every pin below is `execute: false`, `authorization: "pending"`, with no
-recorded pre-state and no staging acceptance, so every apply refuses before connecting. SQL 100
+authorizes nothing itself. Every production pin is `execute: false`, `authorization: "pending"`,
+with no recorded pre-state and no staging acceptance, so every production apply refuses before
+connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
 production").
 
@@ -314,3 +315,31 @@ Adding one means: its spec in `release-sql-specs.mjs`, its staging pin (with its
 `scripts/deployment-guard/sqlNNN-…-production-apply.mjs`, plus its bypass-inventory entry. The
 engine, the executor handler, the production library and CLI, and the one-shot registration
 are generic.
+
+## Staging apply waves (2026-10-17)
+
+The staging pins record each migration's staging read-live pre-state. A pre-state stays valid
+only if no earlier migration changes that migration's objects. From the specs, three do:
+- SQL 94 (on SQL 30): the `tenant_documents` doc_type CHECK.
+- SQL 96 (on SQL 93): `aws_tenants_member_column_guard()`.
+- SQL 98 (on SQL 93 and SQL 96): the same function.
+
+- **Already applied in staging:** SQL 29 and SQL 92 (read-live runs 39074958756 and
+  39075498539, `already_applied` true); they are not re-applied.
+- **Wave 1 (owner approved 2026-10-17):** SQL 30, 90, 91, 93, 99 and 100, from the read-live
+  runs recorded in their pins (executor at main `ecb8647b0`; SQL 90 re-read at `3cad3c227`).
+  Redeploy the guarded executor at the merged commit first (the pins are in its package).
+- **Applying:** one guarded staging apply per migration, in release order:
+  30 → 90 → 91 → 93 → 99 → 100. SQL 90 breaks invites until `tenant-admin.mjs` is live (step 3),
+  so the staging Lambda overlay for the members held on SQL 90 follows right after.
+- **SQL 95 and SQL 97 are not in wave 1:** they go only after their Lambdas are live (steps 7 and
+  8: `auth-financial-totp.mjs` / `admin-reset-totp.mjs`; `app-services.mjs` and the
+  `ingest-shared-check.mjs` 410 stub). Their pins get `execute: true` in the reviewed change
+  that records those Lambdas live.
+- **Wave 2:** SQL 94 (after SQL 30) and SQL 96 (after SQL 93). Each needs a fresh read-live and
+  a reviewed pin change.
+- **Wave 3:** SQL 98 (after SQL 96), the same way.
+
+Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
+and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`
+in a reviewed change.

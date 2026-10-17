@@ -53,6 +53,7 @@ import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-ex
 import { READ_LIVE_EXPECTED_SENTINEL, readLiveSummary } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { stagingExecutorMembers } from '../../scripts/deployment-guard/lib/staging-sql-executor-module.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { MEMBER_A, TENANT_A, pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -114,8 +115,7 @@ test('pins: the reviewed bytes, pending pre-states, code-derived post-states, se
     const pin = PINS[key];
     const spec = RELEASE_SQL_SPECS[key];
     assert.equal(sha(TEXT[key]), pin.source_sha256, key);
-    assert.equal(pin.expected_live_definition_sha256, null, key);
-    assert.equal(pin.execute, false, key);
+    assertStagingPinState(assert, key, pin);
     assert.match(pin.intended_replacement_sha256, /^[0-9a-f]{64}$/, key);
     assert.equal(releaseIntendedHash(key, TEXT[key]), pin.intended_replacement_sha256, key);
     assert.equal(sha(releaseStateText(key, releaseIntendedState(key, TEXT[key]))), pin.intended_replacement_sha256, key);
@@ -171,7 +171,7 @@ test('reviewed files: every function body parsed; transaction or role control, e
 
 test('apply refuses before connecting: no pre-state, a mismatched pin, the read-live sentinel, an unknown action', async () => {
   for (const key of RELEASE_SQL_KEYS) {
-    const noPre = await handlerFor(neverConnect)(releaseEvent(key, { expected_live_definition_sha256: 'a'.repeat(64) }));
+    const noPre = await handlerFor(neverConnect, { pins: { [key]: pendingPin(PINS[key]) } })(releaseEvent(key, { expected_live_definition_sha256: 'a'.repeat(64) }));
     assert.equal(noPre.code, CODES.SQL_COLLISION, key);
     assert.match(noPre.message, /no reviewed pre-apply live definition hash/, key);
     const recorded = Object.freeze({ ...PINS[key], expected_live_definition_sha256: 'b'.repeat(64) });
@@ -193,7 +193,7 @@ test('a staging pin must itself authorize the apply: execute true and an owner-a
   for (const key of RELEASE_SQL_KEYS) {
     const live = 'd'.repeat(64);
     // Pre-state recorded but the pin still pending (execute false, authorization pending).
-    const pending = Object.freeze({ ...PINS[key], expected_live_definition_sha256: live });
+    const pending = Object.freeze({ ...pendingPin(PINS[key]), expected_live_definition_sha256: live });
     const refusedPending = await handlerFor(neverConnect, { pins: { [key]: pending } })(releaseEvent(key, { pin: pending }));
     assert.equal(refusedPending.code, CODES.GUARD_APPLY_FORBIDDEN, key);
     assert.deepEqual(refusedPending.details.failed, ['pin_execute', 'pin_owner_approved'], key);

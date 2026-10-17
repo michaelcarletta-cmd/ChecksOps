@@ -36,6 +36,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL, readLiveSummary } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import {
   AGENT,
   AGENT_OTHER,
@@ -107,8 +108,8 @@ const neverConnect = async () => { throw new Error('should-not-connect'); };
 test('pins: the unchanged files, pending pre-states, code-derived post-states, selectable and packed', () => {
   assert.equal(sha(TEXT29), PIN29.source_sha256);
   assert.equal(sha(TEXT30), PIN30.source_sha256);
-  assert.equal(PIN29.expected_live_definition_sha256, null);
-  assert.equal(PIN30.expected_live_definition_sha256, null);
+  assertStagingPinState(assert, 'sql29', PIN29);
+  assertStagingPinState(assert, 'sql30', PIN30);
   assert.equal(sha(sql29StateText(sql29IntendedState(TEXT29))), PIN29.intended_replacement_sha256);
   assert.equal(sha(sql30StateText(SQL30_INTENDED_STATE)), PIN30.intended_replacement_sha256);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(PIN29));
@@ -151,7 +152,7 @@ test('reviewed package: SQL 29 bodies parsed; SQL 30 runs without its own BEGIN/
 
 test('apply refuses before connecting: no pre-state, a mismatched pin, an unknown action', async () => {
   for (const key of ['sql29', 'sql30']) {
-    const handler = handlerFor(neverConnect);
+    const handler = handlerFor(neverConnect, { [`${key}Pin`]: pendingPin(PINS[key]) });
     const noPre = await handler(libraryEvent(key, { expected_live_definition_sha256: 'a'.repeat(64) }));
     assert.equal(noPre.code, CODES.SQL_COLLISION, key);
     assert.match(noPre.message, /no reviewed pre-apply live definition hash/);
