@@ -16,6 +16,8 @@ const LIBS = [
   'identity.mjs',
   'sql-apply.mjs',
   'sql-executor-auth.mjs',
+  'release-sql-state.mjs',
+  'release-sql-specs.mjs',
   'function-def-lookup.mjs',
   'collection-v2-synthetic-uat-cleanup.mjs',
   'tmp-rls-catalog.mjs',

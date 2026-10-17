@@ -54,6 +54,7 @@ import {
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
   AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
+  RELEASE_2026_10_17_PENDING_SQL_PINS,
   SQL_EXECUTOR_COMPONENT,
   SQL_EXECUTOR_DEPLOYMENT_TYPE,
   SQL_EXECUTOR_FUNCTION,
@@ -94,6 +95,15 @@ export const MIGRATIONS = Object.freeze({
   'sql89-check-intake-column-update': AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   'sql29-mortgage-ops-library-parity': AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
   'sql30-tenant-documents-doc-type': AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
+  // Release 2026-10-17 (lib/release-sql-specs.mjs choice names).
+  'sql90-users-only-tenant-roles': RELEASE_2026_10_17_PENDING_SQL_PINS.sql90,
+  'sql91-moov-onboarding': RELEASE_2026_10_17_PENDING_SQL_PINS.sql91,
+  'sql92-signature-request-check-files-link-grant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql92,
+  'sql93-tenant-company-info': RELEASE_2026_10_17_PENDING_SQL_PINS.sql93,
+  'sql94-document-library-restore': RELEASE_2026_10_17_PENDING_SQL_PINS.sql94,
+  'sql95-remove-freedom-claims-bridge': RELEASE_2026_10_17_PENDING_SQL_PINS.sql95,
+  'sql96-platform-owner-tenant-pricing': RELEASE_2026_10_17_PENDING_SQL_PINS.sql96,
+  'sql97-financial-stepup-log-server-writer': RELEASE_2026_10_17_PENDING_SQL_PINS.sql97,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

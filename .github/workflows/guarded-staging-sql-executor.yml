@@ -38,6 +38,14 @@ on:
           - sql89-check-intake-column-update
           - sql29-mortgage-ops-library-parity
           - sql30-tenant-documents-doc-type
+          - sql90-users-only-tenant-roles
+          - sql91-moov-onboarding
+          - sql92-signature-request-check-files-link-grant
+          - sql93-tenant-company-info
+          - sql94-document-library-restore
+          - sql95-remove-freedom-claims-bridge
+          - sql96-platform-owner-tenant-pricing
+          - sql97-financial-stepup-log-server-writer
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -138,6 +146,7 @@ jobs:
           node --test aws/tests/sql88-claim-id-assign-case-executor.test.mjs
           node --test aws/tests/sql89-check-intake-column-update-executor.test.mjs
           node --test aws/tests/sql29-sql30-library-executor.test.mjs
+          node --test aws/tests/release-sql90-97-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
