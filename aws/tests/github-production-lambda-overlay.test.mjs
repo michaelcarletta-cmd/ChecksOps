@@ -106,6 +106,16 @@ function applyDeps(member, liveOpts = {}) {
   };
 }
 
+// providers.mjs (and workflow-rpc.mjs) wait for SQL 98 (the deposits gate fails closed without it; fee
+// collection test below). Tests about member order and links run them with SQL 98 recorded live.
+const SQL98_FILE = 'aws/workflows/sql/98_tenant_fee_collection.sql';
+const PLAN_SQL98_LIVE = (() => {
+  const plan = structuredClone(PLAN);
+  plan.sql_prerequisites[SQL98_FILE] = { verified_live: true, evidence: 'test' };
+  return plan;
+})();
+const withSql98 = (member, deps) => (PLAN.members[member]?.sql_before === SQL98_FILE ? { ...deps, plan: PLAN_SQL98_LIVE } : deps);
+
 const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
@@ -329,7 +339,7 @@ test('read-only Moov wallet sync members apply in order with nested ZIP paths', 
   assert.ok(!positions.includes(-1));
   for (const member of MOOV) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), deps);
+    const result = await run(applyEnv(member), withSql98(member, deps));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -352,7 +362,7 @@ test('read-only Moov wallet sync members refuse to apply out of order', async ()
   );
   // providers.mjs before the added module: its import is not in the live ZIP yet.
   await assert.rejects(
-    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-sync.mjs'] }).deps),
+    run(applyEnv('providers.mjs'), withSql98('providers.mjs', applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-sync.mjs'] }).deps)),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
 });
@@ -364,7 +374,7 @@ test('Moov send members apply in order: the send module, then providers.mjs last
   assert.equal(PLAN.members['providers/production/moov-send.mjs'].operation, 'replace');
   for (const member of SEND) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), deps);
+    const result = await run(applyEnv(member), withSql98(member, deps));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -377,7 +387,7 @@ test('Moov send members apply in order: the send module, then providers.mjs last
   }
   assert.ok(sendImports.includes('providers/production/moov-wallet-fund.mjs'));
   await assert.rejects(
-    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-send.mjs'] }).deps),
+    run(applyEnv('providers.mjs'), withSql98('providers.mjs', applyDeps('providers.mjs', { pending: ['providers/production/moov-send.mjs'] }).deps)),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
 });
@@ -395,7 +405,7 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
   assert.ok(positions.every((pos, i) => pos >= 0 && (i === 0 || pos > positions[i - 1])), JSON.stringify(positions));
   for (const member of FUND) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), deps);
+    const result = await run(applyEnv(member), withSql98(member, deps));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -407,7 +417,7 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
   assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api/auth-financial-totp.mjs'), 'utf8'), 'auth-financial-totp.mjs')
     .includes('providers/production/moov-fund-authz.mjs'));
   await assert.rejects(
-    run(applyEnv('providers.mjs'), applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-fund.mjs'] }).deps),
+    run(applyEnv('providers.mjs'), withSql98('providers.mjs', applyDeps('providers.mjs', { pending: ['providers/production/moov-wallet-fund.mjs'] }).deps)),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   await assert.rejects(
@@ -556,6 +566,150 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     const ahead = await run(applyEnv(member), applyDeps(member, { pending: [WORKFLOW_WRITES] }).deps);
     assert.equal(ahead.mutation, false, member);
   }
+});
+
+test('fee collection: eleven members on the fee manifest, collection-v2 then destination then invoice email then billing, held for SQL 98', async () => {
+  const MANIFEST_FEES = 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json';
+  const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const SQL96 = 'aws/workflows/sql/96_platform_owner_tenant_pricing.sql';
+  const SQL98 = 'aws/workflows/sql/98_tenant_fee_collection.sql';
+  const COLLECTION = 'tenant-collection-v2.mjs';
+  const DESTINATION = 'tenant-billing-destination.mjs';
+  const ENGINE = 'tenant-billing-engine.mjs';
+  const HANDLERS = 'tenant-billing-handlers.mjs';
+  const INVOICE_EMAIL = 'tenant-fee-invoice-email.mjs';
+  const DEPOSITS_GATE = 'tenant-deposits-gate.mjs';
+  const WORKFLOW_RPC = 'workflow-rpc.mjs';
+  const PROVIDERS = 'providers.mjs';
+  const ADDS = new Set([INVOICE_EMAIL, DEPOSITS_GATE]);
+  const fees = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_FEES), 'utf8'));
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_RELEASE), 'utf8'));
+  assert.equal(fees.deploy_authorized, false);
+
+  const superseded = ['providers/parity/moov-functions.mjs', 'providers/parity/moov-money.mjs', 'providers/catalog.mjs', ENGINE, HANDLERS, WORKFLOW_RPC, PROVIDERS];
+  assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION, INVOICE_EMAIL, DEPOSITS_GATE].sort());
+  for (const member of Object.keys(fees.members)) {
+    const row = PLAN.members[member];
+    assert.equal(row.manifest, MANIFEST_FEES, member);
+    assert.equal(row.operation, ADDS.has(member) ? 'add' : 'replace', member);
+    assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  }
+  // The release's planned bytes were never applied: same live values, the fee branch's accepted bytes.
+  for (const member of superseded) {
+    assert.equal(fees.members[member].supersedes_unapplied_manifest, MANIFEST_RELEASE, member);
+    assert.equal(fees.members[member].live_sha256, release.members[member].live_sha256, member);
+  }
+  // New to the plan: the 2026-10-11 live snapshot values.
+  assert.equal(PLAN.members[COLLECTION].expected_live_sha256, '8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66');
+  assert.equal(PLAN.members[DESTINATION].expected_live_sha256, '7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80');
+  // provider-flags.mjs (locked) is main's bytes and never a member: live carries moovTransferPostEnabled,
+  // which main's bytes would drop. identity-env.mjs is not a member either: the destination imports only
+  // names it already exports live and on main.
+  assert.equal(sha('aws/functions/api/provider-flags.mjs'), '122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec');
+  assert.ok(!PLAN.order.includes('identity-env.mjs'));
+  assert.ok(!PLAN.order.includes('provider-flags.mjs'));
+  assert.equal(PLAN.members['provider-flags.mjs'], undefined);
+
+  // Order: collection-v2 (PRODUCTION_FEE_DESTINATION, bankOnly) -> destination -> engine -> handlers.
+  const at = (name) => PLAN.order.indexOf(name);
+  assert.ok(at(COLLECTION) >= 0 && at(COLLECTION) < at(DESTINATION));
+  assert.ok(at(DESTINATION) < at(INVOICE_EMAIL) && at(INVOICE_EMAIL) < at(ENGINE) && at(ENGINE) < at(HANDLERS));
+  assert.ok(localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes(COLLECTION));
+  // The invoice email module is new (ADD), imports the destination and is imported by the engine.
+  assert.equal(PLAN.members[INVOICE_EMAIL].expected_live_sha256, null);
+  assert.equal(PLAN.members[INVOICE_EMAIL].sql_before, null);
+  assert.ok(localImports(fs.readFileSync(path.join(API, INVOICE_EMAIL), 'utf8'), INVOICE_EMAIL).includes(DESTINATION));
+  assert.ok(localImports(fs.readFileSync(path.join(API, ENGINE), 'utf8'), ENGINE).includes(INVOICE_EMAIL));
+  // Its email imports are names the live bundle already exports (email.mjs, email-layout.mjs and
+  // email-policy.mjs are not members; email-branding.mjs is planned earlier).
+  for (const dep of ['email.mjs', 'email-layout.mjs', 'email-policy.mjs']) assert.ok(!PLAN.order.includes(dep), dep);
+  assert.ok(at('email-branding.mjs') >= 0 && at('email-branding.mjs') < at(INVOICE_EMAIL));
+  const invoiceApply = await run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL).deps);
+  assert.equal(invoiceApply.mutation, false);
+  await assert.rejects(
+    run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL, { sources: { 'email.mjs': 'export const handleSendEmail = async () => ({});\n' } }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION
+      && error.details.problems.some((row) => row === 'email.mjs does not export sendViaSesOrSink'),
+  );
+  assert.deepEqual(PLAN.order.slice(-2), ['providers/production/moov-send.mjs', 'providers.mjs']);
+
+  // The deposits gate (ADD, no local imports) lands before both deposit choke points that import it,
+  // and both are held for SQL 98: the gate fails closed without SQL 98's reader.
+  assert.deepEqual(localImports(fs.readFileSync(path.join(API, DEPOSITS_GATE), 'utf8'), DEPOSITS_GATE), []);
+  for (const member of [WORKFLOW_RPC, PROVIDERS]) {
+    assert.ok(localImports(fs.readFileSync(path.join(API, member), 'utf8'), member).includes(DEPOSITS_GATE), member);
+    assert.ok(at(DEPOSITS_GATE) >= 0 && at(DEPOSITS_GATE) < at(member), member);
+    assert.equal(PLAN.members[member].sql_before, SQL98, member);
+    await assert.rejects(
+      run(applyEnv(member), applyDeps(member).deps),
+      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL98,
+      member,
+    );
+    const held = await run(applyEnv(member), { ...applyDeps(member).deps, plan: PLAN_SQL98_LIVE });
+    assert.equal(held.mutation, false, member);
+  }
+  assert.equal(PLAN.members[DEPOSITS_GATE].expected_live_sha256, null);
+  assert.equal(PLAN.members[DEPOSITS_GATE].sql_before, null);
+  assert.equal((await run(applyEnv(DEPOSITS_GATE), applyDeps(DEPOSITS_GATE).deps)).mutation, false);
+  // SQL 98 holds the billing members; it is a pending pin (SQL 98 itself requires SQL 96).
+  for (const member of [ENGINE, HANDLERS]) assert.equal(PLAN.members[member].sql_before, SQL98, member);
+  for (const member of [COLLECTION, DESTINATION]) assert.equal(PLAN.members[member].sql_before, null, member);
+  const pre = PLAN.sql_prerequisites[SQL98];
+  assert.equal(pre.verified_live, false);
+  assert.equal(pre.evidence, null);
+  assert.equal(PLAN.sql_prerequisites[SQL96].verified_live, false);
+  const pin = JSON.parse(fs.readFileSync(path.join(ROOT, pre.pin), 'utf8'));
+  assert.equal(pin.execute, false);
+  assert.equal(pin.authorization, 'pending');
+  assert.equal(pin.filename, SQL98);
+  assert.equal(pin.source_sha256, sha(SQL98));
+  assert.deepEqual(pin.predecessors, ['sql96']);
+  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.staging_acceptance.ok, false);
+  const { AUTHORIZED_SQL98_TENANT_FEE_COLLECTION: reg, FEE_COLLECTION_PENDING_SQL_PINS } = await import('../../scripts/deployment-guard/lib/sql-executor-auth.mjs');
+  assert.equal(FEE_COLLECTION_PENDING_SQL_PINS.sql98, reg);
+  assert.equal(reg.execute, false);
+  assert.equal(reg.authorization, 'pending');
+  assert.equal(reg.source_sha256, pin.source_sha256);
+  assert.equal(reg.commit, pin.staging_pin_commit);
+  assert.deepEqual([...reg.function_identities], pin.function_identities);
+  assert.match(fs.readFileSync(path.join(ROOT, SQL98), 'utf8'), /to_regprocedure\('public\.aws_platform_owner_set_tenant_pricing\(uuid, jsonb\)'\) IS NULL/);
+
+  // Held while SQL 98 is not recorded live ...
+  for (const member of [ENGINE, HANDLERS]) {
+    await assert.rejects(
+      run(applyEnv(member), applyDeps(member).deps),
+      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL98,
+      member,
+    );
+  }
+  const with98 = structuredClone(PLAN);
+  with98.sql_prerequisites[SQL98] = { verified_live: true, evidence: 'test' };
+  // ... then the engine still waits for collection-v2 and the destination ...
+  await assert.rejects(
+    run(applyEnv(ENGINE), { ...applyDeps(ENGINE, { pending: [COLLECTION] }).deps, plan: with98 }),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes(COLLECTION),
+  );
+  // ... and applies once they are live.
+  const engine = applyDeps(ENGINE);
+  const applied = await run(applyEnv(ENGINE), { ...engine.deps, plan: with98 });
+  assert.equal(applied.mutation, false);
+  assert.deepEqual(engine.calls.receipt.owned_member_ops, { replace: [ENGINE], add: [] });
+
+  // collection-v2 and the destination need no SQL. The destination links against live identity-env.mjs
+  // (identityEnvFromChecksopsEnv, IDENTITY_ENV_PRODUCTION) and no longer imports provider-flags.mjs.
+  assert.ok(!localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes('provider-flags.mjs'));
+  assert.ok(localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes('identity-env.mjs'));
+  const collection = await run(applyEnv(COLLECTION), applyDeps(COLLECTION).deps);
+  assert.equal(collection.mutation, false);
+  const destination = await run(applyEnv(DESTINATION), applyDeps(DESTINATION).deps);
+  assert.equal(destination.mutation, false);
+  await assert.rejects(
+    run(applyEnv(DESTINATION), applyDeps(DESTINATION, { sources: { 'identity-env.mjs': "export const IDENTITY_ENV_PRODUCTION = 'production';\n" } }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION
+      && error.details.problems.some((row) => row === 'identity-env.mjs does not export identityEnvFromChecksopsEnv'),
+  );
 });
 
 test('linkProblems refuses a member whose new bytes drop a name a live file imports (static or dynamic)', async () => {

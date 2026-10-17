@@ -1,10 +1,18 @@
 /**
- * Platform-owner monthly billing administration and tenant funding-source authorization.
+ * Platform-owner tenant fee billing administration and tenant funding-source authorization.
+ *
+ * Owner decision (2026-10-17): the platform owner (is_platform_owner(), by
+ * email) collects tenant fees MANUALLY from Tenant Management:
+ *   1. `preview` returns the server invoice (Billing tab rates + recorded
+ *      usage) for a period and a preview_hash, without charging;
+ *   2. the SPA shows the total in a confirm dialog;
+ *   3. `pull` with confirm:true, the period and the preview_hash charges only
+ *      if the server-rebuilt invoice still hashes the same.
+ * A browser-supplied amount is refused. Fees land only in the ChecksOps
+ * platform account (platform_billing_destination or env config, set with
+ * `destination-set`). There is no scheduled billing (manual_billing_only).
  */
-import pg from 'pg';
 import { ignoredSpoof, parseBody, withIdentityWrite } from './data.mjs';
-import { loadDatabaseCredentials } from './secrets.mjs';
-import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import {
   actorIsPlatformOwner,
   applyBillingProviderEvent,
@@ -15,21 +23,30 @@ import {
   chargeTenantPeriod,
   defaultPullPeriodKey,
   loadTenantBillingContext,
-  runMonthlyBillingScheduler,
+  MANUAL_BILLING_ONLY,
+  previewTenantPeriodCharge,
+  recordBillingAudit,
+  resendTenantFeeInvoice,
   saveBillingAuthorization,
   saveBillingSettings,
   verifyTenantBillingDebit,
 } from './tenant-billing-engine.mjs';
 import {
+  billingDestinationStatus,
   billingEnvironment,
-  monthlyBillingEnabled,
   resolveBillingDestination,
+  setBillingDestination,
 } from './tenant-billing-destination.mjs';
-
-const { Client } = pg;
+import { deliverFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
+
+/** Body fields that would carry a browser amount. A pull never takes one. */
+export const CLIENT_AMOUNT_FIELDS = Object.freeze([
+  'amount', 'amount_cents', 'amountCents', 'total', 'total_cents', 'line_items', 'lineItems',
+]);
+const clientAmountFields = (body) => CLIENT_AMOUNT_FIELDS.filter((key) => body?.[key] !== undefined);
 
 const denied = (spoof, extra) => ({
   ok: false,
@@ -49,17 +66,129 @@ const runWithIdentity = (event, fn, deps) => {
   return withIdentityWrite(event, fn, deps);
 };
 
+/**
+ * Once a charge has been booked (a period row exists and the audit row was
+ * written) the response is ok:true so withIdentityWrite commits the ledger
+ * row, the collection legs and the audit, whatever the provider said;
+ * `charged` reports whether money was submitted. Refusals before booking
+ * (not ready, preview mismatch, destination unset, ...) roll back.
+ */
+const chargeResponse = (spoof, result, key, extra = {}) => {
+  if (result.booked === true) {
+    return {
+      ok: true,
+      statusCode: 200,
+      spoofFieldsIgnored: spoof,
+      charged: result.ok === true && result.duplicate !== true,
+      duplicate: result.duplicate === true,
+      [key]: result,
+      amount_cents_posted: result.ok === true && result.duplicate !== true ? (result.amount_cents ?? null) : 0,
+      provider_transfer_ids: result.provider_transfer_ids || [],
+      ...extra,
+    };
+  }
+  return {
+    ok: false,
+    statusCode: result.statusCode || 409,
+    spoofFieldsIgnored: spoof,
+    error: result.error || 'charge_refused',
+    message: result.message,
+    charged: false,
+    [key]: result,
+    amount_cents_posted: 0,
+    ...extra,
+  };
+};
+
+/**
+ * Runs fn({ client }) in its own committed transaction with the caller's
+ * identity: withIdentityWrite in the Lambda; on an injected client (tests)
+ * BEGIN / COMMIT on that client with request.app_user_id bound.
+ */
+const postCommitTxnRunner = (event, deps) => {
+  if (deps.client) {
+    const c = deps.client;
+    return async (fn) => {
+      await c.query('BEGIN');
+      try {
+        if (deps.mapping?.application_user_id) {
+          await c.query("SELECT set_config('request.app_user_id', $1, true)", [deps.mapping.application_user_id]);
+        }
+        const result = await fn({ client: c });
+        await c.query(result?.ok === false ? 'ROLLBACK' : 'COMMIT');
+        return result;
+      } catch (error) {
+        await c.query('ROLLBACK').catch(() => {});
+        throw error;
+      }
+    };
+  }
+  return (fn) => withIdentityWrite(event, ({ client }) => fn({ client }), deps);
+};
+
+/**
+ * Invoice email ordering: the pull / resend transaction only queues the
+ * invoice (outbox). Once that transaction has committed (result ok), the
+ * email is claimed, sent and recorded in separate transactions
+ * (deliverFeeInvoiceEmail). A refused or uncommitted request sends nothing.
+ * With an injected client the caller owns the commit, so the step is handed
+ * back as post_commit() instead of run here.
+ */
 export const handleTenantBillingAdmin = async (event, deps = {}) => {
+  const result = await handleTenantBillingAdminInTransaction(event, deps);
+  const marker = result?.post_commit_invoice || null;
+  if (result && typeof result === 'object') delete result.post_commit_invoice;
+  if (result?.pull && typeof result.pull === 'object') delete result.pull.invoice_email_after_commit;
+  if (!marker || result?.ok !== true) return result;
+  const deliver = () => deliverFeeInvoiceEmail({
+    runTxn: postCommitTxnRunner(event, deps),
+    occurrenceId: marker.occurrenceId,
+    recordAudit: recordBillingAudit,
+    confirmUnsent: marker.confirmUnsent === true,
+    resend: marker.resend === true,
+    deps,
+  });
+  const merge = (delivered) => {
+    if (marker.resend) return { ...result, invoice_email: delivered };
+    return {
+      ...result,
+      pull: { ...result.pull, invoice_email: delivered, invoice_email_sent: delivered.sent === true },
+    };
+  };
+  if (deps.client) return { ...result, post_commit: async () => merge(await deliver()) };
+  return merge(await deliver());
+};
+
+const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   return runWithIdentity(event, async ({ client, mapping }) => {
     if (!(await actorIsPlatformOwner(client))) {
       return denied(spoof, {
         error: 'platform_owner_required',
-        message: 'Monthly billing administration is limited to the ChecksOps platform owner.',
+        message: 'Tenant fee billing is limited to the ChecksOps platform owner.',
       });
     }
     const action = String(body.action || 'get');
+
+    // Platform-level: where fees land. Never a tenant account, never from a
+    // request field other than the platform owner's own set action.
+    if (action === 'destination-get') {
+      const destination = await billingDestinationStatus(client, { environment: billingEnvironment(), deps });
+      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, destination };
+    }
+    if (action === 'destination-set') {
+      const saved = await setBillingDestination(client, {
+        environment: billingEnvironment(),
+        accountId: body.moov_account_id,
+        paymentMethodId: body.moov_payment_method_id,
+        label: body.label,
+      });
+      if (!saved.ok) return denied(spoof, { ...saved, statusCode: saved.statusCode || 400 });
+      const destination = await billingDestinationStatus(client, { environment: billingEnvironment(), deps });
+      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, saved: true, destination };
+    }
+
     const tenantId = body.tenant_id || body.tenantId;
     if (!isUuid(tenantId)) {
       return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'tenant_id' });
@@ -88,6 +217,7 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         mortgageOpsAdditionalRateCents: body.mortgage_ops_additional_rate_cents,
         perCheckBillingEnabled: body.per_check_billing_enabled,
         isFoundingPartner: body.is_founding_partner,
+        depositsEnabled: body.deposits_enabled,
         billingEnabled: body.billing_enabled,
         billingDay: body.billing_day_of_month,
         userId: mapping.application_user_id,
@@ -114,22 +244,24 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
     }
 
     if (action === 'preview') {
-      const data = await snapshot(client, tenantId, dest);
-      if (!data.ok) return denied(spoof, { statusCode: data.statusCode || 404, ...data });
-      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, preview: true, ...data };
+      let period = body.period;
+      if (period === undefined || period === null || period === '') {
+        const ctx = await loadTenantBillingContext(client, tenantId);
+        if (!ctx.ok) return denied(spoof, { statusCode: ctx.statusCode || 404, ...ctx });
+        period = defaultPullPeriodKey(new Date(), ctx.settings?.billing_day_of_month || 1);
+      }
+      const preview = await previewTenantPeriodCharge(client, { tenantId, period: String(period), deps });
+      if (!preview.ok) return denied(spoof, { ...preview, statusCode: preview.statusCode || 400 });
+      return { ...preview, ok: true, statusCode: 200, spoofFieldsIgnored: spoof, preview: true };
     }
 
     if (action === 'verify-debit') {
       if (body.confirm !== true) {
-        const data = await snapshot(client, tenantId, dest);
-        return {
-          ...data,
-          ok: false,
+        return denied(spoof, {
           statusCode: 409,
           error: 'confirmation_required',
           message: 'Verify Billing Debit requires explicit operator confirmation.',
-          spoofFieldsIgnored: spoof,
-        };
+        });
       }
       if (body.amount_cents != null || body.amount != null) {
         const raw = Number(body.amount_cents ?? body.amount);
@@ -151,54 +283,67 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         fetchImpl: deps.fetchImpl,
         deps,
       });
-      const data = await snapshot(client, tenantId, dest);
-      return {
-        ...data,
-        ok: verified.ok === true,
-        statusCode: verified.ok ? 200 : (verified.statusCode || 409),
-        spoofFieldsIgnored: spoof,
-        verify: verified,
-        amount_cents_posted: 100,
+      return chargeResponse(spoof, verified, 'verify', {
         client_amount_ignored: body.amount_cents != null || body.amount != null,
         idempotency_key: verified.idempotency_key || null,
-      };
+      });
     }
 
     if (action === 'pull') {
+      const supplied = clientAmountFields(body);
+      if (supplied.length) {
+        return denied(spoof, {
+          statusCode: 400,
+          error: 'client_amount_refused',
+          fields: supplied,
+          message: 'The amount is computed by the server from the Billing tab rates. Preview, then pull with the preview hash.',
+        });
+      }
       if (body.confirm !== true) {
-        const data = await snapshot(client, tenantId, dest);
-        return {
-          ok: false,
+        return denied(spoof, {
           statusCode: 409,
           error: 'confirmation_required',
-          message: 'Pull Now requires explicit operator confirmation of the server invoice preview.',
-          spoofFieldsIgnored: spoof,
-          ...data,
-        };
+          message: 'Pull requires explicit operator confirmation of the server invoice preview.',
+        });
       }
-      const ctx = await loadTenantBillingContext(client, tenantId);
-      const period = body.period || defaultPullPeriodKey(new Date(), ctx.settings?.billing_day_of_month || 1);
+      const period = String(body.period || '');
       const charged = await chargeTenantPeriod(client, {
         tenantId,
         period,
+        previewHash: body.preview_hash || body.previewHash,
         recordedBy: mapping.application_user_id,
         fetchImpl: deps.fetchImpl,
-        deps: {
-          ...deps,
-          // Never trust a client-supplied amount. Persisted invoice total wins.
-          amountCents: undefined,
-        },
+        deps,
       });
-      const data = await snapshot(client, tenantId, dest);
-      return {
-        ok: charged.ok === true,
-        statusCode: charged.ok ? 200 : (charged.statusCode || 409),
-        spoofFieldsIgnored: spoof,
-        pull: charged,
-        amount_cents_posted: charged.amount_cents ?? charged.occurrence?.amount_cents ?? null,
-        client_amount_ignored: body.amount_cents != null || body.amount != null,
+      return chargeResponse(spoof, charged, 'pull', {
+        period,
         idempotency_key: billingIdempotencyKey(tenantId, period),
-        ...data,
+        post_commit_invoice: charged.invoice_email_after_commit
+          ? { occurrenceId: charged.invoice_email_after_commit, resend: false }
+          : null,
+      });
+    }
+
+    if (action === 'invoice-resend') {
+      if (body.confirm !== true) {
+        return denied(spoof, {
+          statusCode: 409,
+          error: 'confirmation_required',
+          message: 'Resending the invoice email requires explicit operator confirmation.',
+        });
+      }
+      const resent = await resendTenantFeeInvoice(client, { tenantId, period: String(body.period || ''), deps });
+      if (!resent.ok) return denied(spoof, { ...resent, statusCode: resent.statusCode || 409 });
+      const { invoice_email_after_commit: occurrenceId, ...rest } = resent;
+      // ok:true commits the queued outbox row; the send runs after commit.
+      return {
+        ...rest,
+        ok: true,
+        statusCode: 200,
+        spoofFieldsIgnored: spoof,
+        post_commit_invoice: occurrenceId
+          ? { occurrenceId, resend: true, confirmUnsent: body.confirm_unsent === true }
+          : null,
       };
     }
 
@@ -227,7 +372,10 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
       });
       const data = await snapshot(client, tenantId, dest);
       if (!data.ok) return denied(spoof, { statusCode: data.statusCode || 404, ...data });
-      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, ...data };
+      // Members see whether fees can be collected, not the platform's account ids.
+      const owner = await actorIsPlatformOwner(client);
+      const destination = owner ? data.destination : { configured: dest.ok === true };
+      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, ...data, destination };
     }
     if (!(await canAuthorizeTenantBilling(client, mapping.application_user_id, tenantId))) {
       return denied(spoof, {
@@ -262,56 +410,16 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
 
 export const handleBillingProviderEvent = applyBillingProviderEvent;
 
-export const handleMonthlyBillingScheduled = async (event, deps = {}) => {
-  const spoof = ignoredSpoof(event, parseBody(event));
-  if (!monthlyBillingEnabled() && deps.ignoreEnabledFlag !== true) {
-    return {
-      ok: false,
-      statusCode: 403,
-      error: 'monthly_billing_disabled',
-      message: 'Monthly tenant billing is not enabled on this runtime.',
-      spoofFieldsIgnored: spoof,
-    };
-  }
-  let client;
-  try {
-    if (deps.client) {
-      client = deps.client;
-      await client.query("SELECT set_config('request.monthly_billing_job', '1', true)").catch(() => {});
-      const result = await runMonthlyBillingScheduler(client, {
-        now: deps.now,
-        fetchImpl: deps.fetchImpl,
-        deps,
-      });
-      return { ok: result.ok === true, statusCode: result.ok ? 200 : (result.statusCode || 409), spoofFieldsIgnored: spoof, ...result };
-    }
-    const credentials = await loadDatabaseCredentials();
-    client = new Client(buildWriteClientConfig(credentials, { queryTimeoutMillis: 25000 }));
-    await client.connect();
-    await client.query('BEGIN');
-    await client.query('SET TRANSACTION READ WRITE');
-    await client.query("SELECT set_config('request.monthly_billing_job', '1', true)");
-    const result = await runMonthlyBillingScheduler(client, {
-      now: deps.now,
-      fetchImpl: deps.fetchImpl,
-      deps,
-    });
-    await client.query('COMMIT');
-    return { ok: result.ok === true, statusCode: result.ok ? 200 : (result.statusCode || 409), spoofFieldsIgnored: spoof, ...result };
-  } catch (error) {
-    if (client && !deps.client) {
-      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
-    }
-    return {
-      ok: false,
-      statusCode: 503,
-      error: 'monthly_billing_scheduler_failed',
-      message: sanitizePublicError(error),
-      spoofFieldsIgnored: spoof,
-    };
-  } finally {
-    if (client && !deps.client) {
-      try { await client.end(); } catch { /* ignore */ }
-    }
-  }
-};
+/**
+ * Retired (owner decision 2026-10-17): there is no scheduled or unattended
+ * billing. Refuses before any database connection or provider call; nothing
+ * in this codebase sets request.monthly_billing_job any more.
+ */
+export const handleMonthlyBillingScheduled = async (event) => ({
+  ok: false,
+  statusCode: 410,
+  error: MANUAL_BILLING_ONLY,
+  message: 'Tenant fees are collected manually by the platform owner from Tenant Management. There is no scheduled billing.',
+  liveProviderCalled: false,
+  spoofFieldsIgnored: ignoredSpoof(event, parseBody(event)),
+});

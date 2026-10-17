@@ -1,6 +1,13 @@
 /**
- * Monthly ChecksOps tenant subscription billing engine.
- * One occurrence per (tenant_id, billing_period). Same path for scheduler and Pull Now.
+ * ChecksOps tenant fee billing engine.
+ * One occurrence per (tenant_id, billing_period).
+ *
+ * Owner decision (2026-10-17): fees are collected MANUALLY by the platform
+ * owner from Tenant Management (tenant-billing-admin preview, then pull with
+ * the preview hash). There is no automatic or scheduled pull:
+ * runMonthlyBillingScheduler refuses with manual_billing_only. Amounts come
+ * only from the tenant's Billing tab rates (SQL 96) and recorded usage; a
+ * browser amount is never used.
  *
  * Consolidated invoice:
  *   maintenance - discount + check_processing + moov_next_day + moov_same_day
@@ -8,6 +15,8 @@
  * Instant is schema-compatible but never generated or billed.
  * Mortgage Ops accrues on Accept (status in_progress + accepted_at), not on submit.
  */
+import { createHash } from 'node:crypto';
+import { queueFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
 import {
   billingEnvironment,
   billingShouldSimulate,
@@ -19,6 +28,8 @@ import {
   resolveBillingMoovContext,
 } from './tenant-billing-destination.mjs';
 import {
+  COLLECTION_CONTRACT_ID,
+  assertTenantBankSource,
   collectTenantObligation,
   classifyCollectionStatus,
   receivedCentsFromLegs,
@@ -34,12 +45,37 @@ export const OCCURRENCE_KIND_LEGACY = 'legacy';
 export const BILLING_VERIFICATION_AMOUNT_CENTS = 100;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const DEFAULT_CHECK_RATE_CENTS = 400;
+// Per-check price has ONE default: the active public.check_billing_config row
+// (price_per_check_cents; the Supabase-era seed is $3.00), the same value
+// SQL 98's record_check_billing_event() stamps. No constant lives here.
+export const CHECK_BILLING_DEFAULT_PRICE_SQL = `SELECT price_per_check_cents
+FROM public.check_billing_config
+WHERE active = true
+ORDER BY created_at DESC
+LIMIT 1`;
+export const MANUAL_BILLING_ONLY = 'manual_billing_only';
+
+/**
+ * OWNER QUESTION (b), OPEN: does per-check billing "off" mean no per-check fee?
+ * Default (the Supabase trigger's behavior, unchanged): with per-check billing
+ * off a deposited check is still billed at the check_billing_config default;
+ * "on" only means the tenant's own rate is used. The charge itself comes from
+ * the price SQL 98 stamps on each event, so the database switch is
+ * public.aws_check_billing_charges_when_per_check_off() in
+ * 98_tenant_fee_collection.sql. Change both together, in a reviewed change.
+ */
+export const PER_CHECK_OFF_BILLS_DEFAULT_PRICE = true;
+
+// Invoice email after a pull (owner question (c), answered yes 2026-10-17):
+// tenant-fee-invoice-email.mjs, behind AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED
+// (on by default off production, off on production until the owner enables it).
+export const BILLING_PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
 export const DEFAULT_SAME_DAY_RATE_CENTS = 100;
 export const DEFAULT_MORTGAGE_INITIAL_RATE_CENTS = 1000;
 export const DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS = 500;
-export const MAX_RATE_CENTS = 1_000_000;
+// Integer sanity bound only, the same as SQL 96 (owner policy: no amount limits).
+export const MAX_RATE_CENTS = 1_000_000_000;
 
 /** Safest existing billable point: transfer actually completed (webhook sets completed_at). */
 export const BILLABLE_TRANSFER_STATUSES = new Set(['completed', 'settled', 'succeeded']);
@@ -159,10 +195,31 @@ export const parseRateCents = (value, field) => {
   return { ok: true, cents: numeric };
 };
 
-export const resolveCheckRateCents = (tenant) => {
-  const stored = Number(tenant?.per_check_rate_cents);
-  return stored > 0 ? stored : DEFAULT_CHECK_RATE_CENTS;
+/**
+ * The per-check price a new check_processing event is stamped with (SQL 98
+ * record_check_billing_event): the tenant's per_check_rate_cents when
+ * per-check billing is on and a rate is set, otherwise the check_billing_config
+ * default. `defaultCents` is that config value (loadCheckBillingDefaultCents);
+ * null when no active config row exists.
+ */
+export const resolveCheckRateCents = (tenant, defaultCents = null, {
+  perCheckOffBillsDefault = PER_CHECK_OFF_BILLS_DEFAULT_PRICE,
+} = {}) => {
+  const enabled = tenant?.per_check_billing_enabled === true;
+  const stored = tenant?.per_check_rate_cents;
+  if (enabled && stored !== null && stored !== undefined && Number.isFinite(Number(stored))) {
+    return Math.max(0, Number(stored));
+  }
+  // Owner question (b): per-check billing off and no fee for it.
+  if (!enabled && !perCheckOffBillsDefault) return 0;
+  return defaultCents === null || defaultCents === undefined ? null : Number(defaultCents);
 };
+
+export async function loadCheckBillingDefaultCents(client) {
+  const row = (await client.query(CHECK_BILLING_DEFAULT_PRICE_SQL).catch(() => ({ rows: [] }))).rows[0];
+  const cents = Number(row?.price_per_check_cents);
+  return row && Number.isFinite(cents) ? cents : null;
+}
 
 export const resolveNextDayRateCents = (tenant) => {
   if (tenant?.next_day_rate_cents === undefined || tenant?.next_day_rate_cents === null) {
@@ -283,7 +340,8 @@ export async function loadTenantBillingContext(client, tenantId) {
     `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
             is_founding_partner, per_check_rate_cents, per_check_billing_enabled,
             next_day_rate_cents, same_day_rate_cents,
-            mortgage_ops_initial_rate_cents, mortgage_ops_additional_rate_cents
+            mortgage_ops_initial_rate_cents, mortgage_ops_additional_rate_cents,
+            deposits_enabled
      FROM public.tenants WHERE id = $1::uuid`,
     [tenantId],
   ).catch(() => client.query(
@@ -312,7 +370,8 @@ export async function loadTenantBillingContext(client, tenantId) {
      FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid`,
     [tenantId],
   ).catch(() => ({ rows: [] }))).rows[0] || null;
-  return { ok: true, tenant, settings, authorization };
+  const checkDefaultCents = await loadCheckBillingDefaultCents(client);
+  return { ok: true, tenant, settings, authorization, checkDefaultCents };
 }
 
 export async function evaluateBillingReadiness(client, {
@@ -320,7 +379,7 @@ export async function evaluateBillingReadiness(client, {
 }) {
   const ctx = await loadTenantBillingContext(client, tenantId);
   if (!ctx.ok) return ctx;
-  const { tenant, settings, authorization } = ctx;
+  const { tenant, settings, authorization, checkDefaultCents } = ctx;
   const amountCents = netFeeCents(tenant.monthly_rate_cents, tenant.referral_discount_cents);
   const reasons = [];
   if (String(tenant.subscription_status || '') !== 'active') reasons.push('tenant_inactive');
@@ -388,7 +447,7 @@ export async function evaluateBillingReadiness(client, {
     rateCents: Number(tenant.monthly_rate_cents || 0),
     discountCents: Number(tenant.referral_discount_cents || 0),
     maintenanceNetCents: amountCents,
-    perCheckRateCents: resolveCheckRateCents(tenant),
+    perCheckRateCents: resolveCheckRateCents(tenant, checkDefaultCents),
     nextDayRateCents: resolveNextDayRateCents(tenant),
     sameDayRateCents: resolveSameDayRateCents(tenant),
     mortgageInitialRateCents: resolveMortgageInitialRateCents(tenant),
@@ -456,8 +515,11 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
      WHERE tenant_id = $1::uuid
        AND provider = 'moov'
        AND COALESCE(completed_at, created_at) >= $2::timestamptz
-       AND COALESCE(completed_at, created_at) < $3::timestamptz`,
-    [tenantId, bounds.startIso, bounds.endIso],
+       AND COALESCE(completed_at, created_at) < $3::timestamptz
+       -- ChecksOps' own fee pulls are not the tenant's deposits: never bill them.
+       AND COALESCE(provider_metadata->>'collection_contract', '') <> $4
+       AND COALESCE(leg_role, '') <> 'platform_fee'`,
+    [tenantId, bounds.startIso, bounds.endIso, COLLECTION_CONTRACT_ID],
   ).catch(() => ({ rows: [] }))).rows;
 
   const existing = (await client.query(
@@ -715,6 +777,7 @@ export async function loadMortgageOpsUsageForPeriod(client, { tenantId, period }
 
 export function assembleInvoiceTotals({
   tenant, period, checks, nextDay, sameDay, mortgageInitial = [], mortgageAdditional = [],
+  checkDefaultCents = null,
 }) {
   const maintenance_rate_cents = Number(tenant.monthly_rate_cents || 0);
   const discount_cents = Number(tenant.referral_discount_cents || 0);
@@ -748,7 +811,7 @@ export function assembleInvoiceTotals({
     mortgage_ops_usage_cents,
     usage_total_cents,
     amount_cents,
-    per_check_rate_cents: resolveCheckRateCents(tenant),
+    per_check_rate_cents: resolveCheckRateCents(tenant, checkDefaultCents),
     next_day_rate_cents: resolveNextDayRateCents(tenant),
     same_day_rate_cents: resolveSameDayRateCents(tenant),
     mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(tenant),
@@ -774,6 +837,7 @@ export async function buildConsolidatedInvoice(client, {
     sameDay: moov.sameDay,
     mortgageInitial: mortgage.initial,
     mortgageAdditional: mortgage.additional,
+    checkDefaultCents: ctx.checkDefaultCents,
   });
   const allocations = [
     ...checks.included.map((row) => ({
@@ -1182,7 +1246,9 @@ export async function submitOccurrence(client, {
      RETURNING *`,
     [
       occurrence.id,
-      collected.occurrence?.status || providerStatus,
+      // collected.occurrence is the row as passed in (still due); the collector's
+      // obligation_status is the outcome.
+      collected.obligation_status || providerStatus,
       providerTransferId,
       failure,
       failure
@@ -1297,12 +1363,26 @@ export async function submitVerificationOccurrence(client, {
       providerStatus = 'submitted';
     }
   } else {
-    const debit = await resolveBillingDebitSource(client, {
+    const resolveDebit = deps.resolveBillingDebitSource || resolveBillingDebitSource;
+    const debit = await resolveDebit(client, {
       authorization: readiness.authorization,
       fetchImpl,
     });
     if (!debit.ok) {
       return debit;
+    }
+    // Same source rules as a fee pull (collectTenantObligation): this tenant's
+    // authorized bank only, never the ChecksOps platform account, never the
+    // destination itself, never a sandbox resource in production.
+    const asserted = assertTenantBankSource({
+      tenantId: occurrence.tenant_id,
+      environment: readiness.environment || destination.environment || billingEnvironment(),
+      authorization: readiness.authorization,
+      debit,
+      destination,
+    });
+    if (!asserted.ok) {
+      return fail(asserted.errors[0], { statusCode: 409, errors: asserted.errors, liveProviderCalled: false });
     }
     debitSource = debit;
     try {
@@ -1394,6 +1474,31 @@ export async function verifyTenantBillingDebit(client, {
     });
   }
 
+  // Production never records a simulated debit: without the verification POST
+  // flag it refuses before anything is booked.
+  if (environment === 'production' && !billingVerificationPostEnabled() && deps.simulate !== true) {
+    return fail('verification_post_disabled', {
+      statusCode: 403,
+      message: 'Billing verification posts are not authorized on production.',
+    });
+  }
+
+  try {
+    await recordBillingAudit(client, {
+      event: 'verify_debit',
+      tenantId,
+      amountCents: BILLING_VERIFICATION_AMOUNT_CENTS,
+      outcome: 'started',
+      details: { verification_id: verificationId },
+    }, { required: true });
+  } catch (error) {
+    return fail('billing_audit_unavailable', {
+      statusCode: 503,
+      message: 'The billing audit writer is not available (SQL 98). Nothing was charged.',
+      detail: error.message,
+    });
+  }
+
   const booked = await createOrGetVerificationOccurrence(client, {
     tenantId, verificationId, readiness, destination, recordedBy,
   });
@@ -1406,18 +1511,268 @@ export async function verifyTenantBillingDebit(client, {
     fetchImpl,
     deps: { ...deps, verificationId },
   });
+  const transferIds = submitted.occurrence?.provider_transfer_id ? [submitted.occurrence.provider_transfer_id] : [];
+  const audit = await recordBillingAudit(client, {
+    event: 'verify_debit',
+    tenantId,
+    amountCents: BILLING_VERIFICATION_AMOUNT_CENTS,
+    occurrenceId: booked.occurrence?.id,
+    providerTransferIds: transferIds,
+    outcome: submitted.ok ? (submitted.occurrence?.status || 'submitted') : `failed:${submitted.error || 'unknown'}`,
+    details: { verification_id: verificationId, simulated: submitted.simulated === true, environment },
+  });
   return {
     ...submitted,
+    booked: true,
     created: booked.created,
     amount_cents: BILLING_VERIFICATION_AMOUNT_CENTS,
     idempotency_key: booked.idempotency_key,
+    provider_transfer_ids: transferIds,
+    audit_recorded: audit.ok === true,
     client_amount_ignored: true,
   };
 }
 
+/** Advisory lock key for one tenant + period: a double click or retry waits, then sees the booked row. */
+export const BILLING_PULL_LOCK_SQL = 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))';
+
+export const AUDIT_BILLING_SQL = 'SELECT public.aws_platform_owner_record_billing_audit($1::jsonb) AS id';
+
+const CHARGED_STATUSES = new Set(['submitted', 'settled', 'returned']);
+
+async function loadPeriodOccurrence(client, tenantId, period) {
+  return (await client.query(
+    `SELECT * FROM public.tenant_maintenance_payments
+     WHERE tenant_id = $1::uuid AND billing_period = $2
+     LIMIT 1`,
+    [tenantId, period],
+  )).rows[0] || null;
+}
+
+const lineSource = (row, feeType) => (
+  [FEE_NEXT_DAY, FEE_SAME_DAY, FEE_INSTANT].includes(feeType)
+    ? `transfer:${row.payment_transfer_id || row.source_id || ''}`
+    : `event:${row.id || ''}`
+);
+
+/** Flat, ordered invoice lines (server-computed; what preview shows and pull charges). */
+export function invoiceLineItems(invoice) {
+  const lines = invoice?.lines || {};
+  const groups = [
+    [FEE_CHECK, lines.checks],
+    [FEE_NEXT_DAY, lines.next_day],
+    [FEE_SAME_DAY, lines.same_day],
+    [FEE_MORTGAGE_INITIAL, lines.mortgage_ops_initial],
+    [FEE_MORTGAGE_ADDITIONAL, lines.mortgage_ops_additional],
+  ];
+  const out = [];
+  for (const [feeType, rows] of groups) {
+    for (const row of rows || []) {
+      out.push({
+        fee_type: feeType,
+        source: lineSource(row, feeType),
+        unit_price_cents: Number(row.unit_price_cents || 0),
+        billed_at: row.billed_at || null,
+      });
+    }
+  }
+  return out.sort((a, b) => (
+    a.fee_type.localeCompare(b.fee_type) || a.source.localeCompare(b.source)
+  ));
+}
+
+/** Invoice summary rows for the confirm dialog. */
+export function invoiceSummaryLines(invoice) {
+  if (!invoice?.ok) return [];
+  return [
+    { key: 'maintenance', label: 'Monthly maintenance', count: 1, amount_cents: invoice.maintenance_rate_cents },
+    {
+      key: 'referral_discount',
+      label: 'Referral discount',
+      count: invoice.discount_cents > 0 ? 1 : 0,
+      amount_cents: -Math.min(invoice.discount_cents, invoice.maintenance_rate_cents),
+    },
+    { key: FEE_CHECK, label: 'Check processing', count: invoice.check_count, amount_cents: invoice.check_usage_cents },
+    { key: FEE_NEXT_DAY, label: 'Next-day deposits', count: invoice.next_day_count, amount_cents: invoice.next_day_usage_cents },
+    { key: FEE_SAME_DAY, label: 'Same-day deposits', count: invoice.same_day_count, amount_cents: invoice.same_day_usage_cents },
+    {
+      key: FEE_MORTGAGE_INITIAL,
+      label: 'MortgageOps initial requests',
+      count: invoice.mortgage_ops_initial_count,
+      amount_cents: invoice.mortgage_ops_initial_amount_cents,
+    },
+    {
+      key: FEE_MORTGAGE_ADDITIONAL,
+      label: 'MortgageOps additional requests',
+      count: invoice.mortgage_ops_additional_count,
+      amount_cents: invoice.mortgage_ops_additional_amount_cents,
+    },
+  ].filter((line) => line.count > 0 || line.amount_cents !== 0);
+}
+
+/**
+ * What a pull for this period charges: an already-booked period row keeps its
+ * booked amount (historical snapshot wins); otherwise the server invoice.
+ */
+const chargeAmountFor = (invoice, occurrence) => (
+  occurrence ? Number(occurrence.amount_cents || 0) : Number(invoice?.amount_cents || 0)
+);
+
+/** Integer cents only: a non-integer, unsafe or non-positive amount is never posted. */
+export const isChargeableCents = (value) => Number.isSafeInteger(value) && value > 0;
+
+/**
+ * Hash of exactly what a pull will charge, and from where to where: tenant,
+ * period, amount, the booked row (if any), every invoice line, the ChecksOps
+ * fee destination and the tenant's authorized funding source. The preview
+ * returns it; the pull sends it back and the server recomputes it inside the
+ * pull's lock, so what is charged (and the accounts it moves between) equals
+ * what was previewed or nothing is charged.
+ */
+export function billingPreviewHash({
+  tenantId, period, invoice, occurrence, destination = null,
+}) {
+  const canonical = {
+    v: 2,
+    tenant_id: String(tenantId),
+    period: String(period),
+    amount_cents: chargeAmountFor(invoice, occurrence),
+    occurrence: occurrence ? { id: occurrence.id, amount_cents: Number(occurrence.amount_cents || 0) } : null,
+    maintenance_net_cents: Number(invoice?.maintenance_net_cents || 0),
+    lines: invoiceLineItems(invoice).map((line) => `${line.fee_type}|${line.source}|${line.unit_price_cents}`),
+    destination: destination?.ok
+      ? { account_id: destination.accountId, payment_method_id: destination.paymentMethodId }
+      : null,
+    funding_source: invoice?.authorization?.provider_payment_method_id || null,
+  };
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
+
+const occurrenceView = (row) => (row ? {
+  id: row.id,
+  status: row.status,
+  amount_cents: Number(row.amount_cents || 0),
+  billing_period: row.billing_period,
+  provider_transfer_id: row.provider_transfer_id || null,
+  submitted_at: row.submitted_at || null,
+  failure_reason: row.failure_reason || null,
+} : null);
+
+/**
+ * Server-computed preview for one tenant period. Never charges, never writes.
+ * The amount is the server invoice (Billing tab rates + recorded usage) or the
+ * already-booked amount for that period.
+ */
+export async function previewTenantPeriodCharge(client, {
+  tenantId, period, deps = {},
+}) {
+  if (!BILLING_PERIOD_RE.test(String(period || ''))) {
+    return fail('invalid_billing_period', { statusCode: 400, field: 'period' });
+  }
+  const environment = deps.environment || billingEnvironment();
+  const destination = await resolveBillingDestination(client, { environment, deps });
+  const invoice = await buildConsolidatedInvoice(client, { tenantId, period, persist: false });
+  if (!invoice.ok) return invoice;
+  const occurrence = await loadPeriodOccurrence(client, tenantId, period);
+  const amountCents = chargeAmountFor(invoice, occurrence);
+  const readiness = await evaluateBillingReadiness(client, {
+    tenantId, period, destination, environment,
+  });
+  const reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
+  if (!(amountCents > 0)) reasons.push('invalid_amount');
+  else if (!isChargeableCents(amountCents)) reasons.push('invalid_amount_cents');
+  if (!monthlyBillingEnabled() && deps.ignoreEnabledFlag !== true) reasons.push('monthly_billing_disabled');
+  const alreadyCharged = Boolean(occurrence && CHARGED_STATUSES.has(occurrence.status));
+  return {
+    ok: true,
+    statusCode: 200,
+    tenant_id: tenantId,
+    period,
+    environment,
+    amount_cents: amountCents,
+    invoice_amount_cents: invoice.amount_cents,
+    summary: invoiceSummaryLines(invoice),
+    line_items: invoiceLineItems(invoice),
+    totals: {
+      maintenance_rate_cents: invoice.maintenance_rate_cents,
+      discount_cents: invoice.discount_cents,
+      maintenance_net_cents: invoice.maintenance_net_cents,
+      check_count: invoice.check_count,
+      check_usage_cents: invoice.check_usage_cents,
+      next_day_count: invoice.next_day_count,
+      next_day_usage_cents: invoice.next_day_usage_cents,
+      same_day_count: invoice.same_day_count,
+      same_day_usage_cents: invoice.same_day_usage_cents,
+      mortgage_ops_initial_count: invoice.mortgage_ops_initial_count,
+      mortgage_ops_initial_amount_cents: invoice.mortgage_ops_initial_amount_cents,
+      mortgage_ops_additional_count: invoice.mortgage_ops_additional_count,
+      mortgage_ops_additional_amount_cents: invoice.mortgage_ops_additional_amount_cents,
+      usage_total_cents: invoice.usage_total_cents,
+      per_check_rate_cents: invoice.per_check_rate_cents,
+    },
+    existing_charge: occurrenceView(occurrence),
+    already_charged: alreadyCharged,
+    destination: destination.ok
+      ? { configured: true, source: destination.source, environment: destination.environment, label: destination.label }
+      : { configured: false, error: destination.error, reason: destination.reason },
+    readiness: { ready: reasons.length === 0 && !alreadyCharged, reasons },
+    preview_hash: billingPreviewHash({
+      tenantId, period, invoice, occurrence, destination,
+    }),
+  };
+}
+
+const legTransferIds = (result) => [...new Set([
+  ...((result?.legs || []).map((leg) => leg?.provider_transfer_id)),
+  result?.occurrence?.provider_transfer_id || null,
+].filter(Boolean))];
+
+/**
+ * Append-only audit of every pull and verification debit (SQL 98
+ * aws_platform_owner_record_billing_audit: platform owner only, actor =
+ * auth.uid(), never a client value). A `required` audit runs before any
+ * provider call and its failure refuses the pull; the outcome audit runs in a
+ * savepoint so a late audit failure never hides a posted transfer.
+ */
+export async function recordBillingAudit(client, entry, { required = false } = {}) {
+  const payload = JSON.stringify({
+    event: entry.event,
+    tenant_id: entry.tenantId,
+    billing_period: entry.period || null,
+    amount_cents: entry.amountCents ?? null,
+    occurrence_id: entry.occurrenceId || null,
+    provider_transfer_ids: entry.providerTransferIds || [],
+    outcome: entry.outcome,
+    preview_hash: entry.previewHash || null,
+    details: entry.details || {},
+  });
+  if (required) {
+    const row = (await client.query(AUDIT_BILLING_SQL, [payload])).rows[0];
+    return { ok: true, id: row?.id || null };
+  }
+  await client.query('SAVEPOINT billing_audit');
+  try {
+    const row = (await client.query(AUDIT_BILLING_SQL, [payload])).rows[0];
+    await client.query('RELEASE SAVEPOINT billing_audit');
+    return { ok: true, id: row?.id || null };
+  } catch (error) {
+    await client.query('ROLLBACK TO SAVEPOINT billing_audit').catch(() => {});
+    return { ok: false, error: 'billing_audit_failed', message: error.message };
+  }
+}
+
+/**
+ * Manual pull for one tenant period (platform owner, from Tenant Management).
+ * Requires the preview hash from previewTenantPeriodCharge: the invoice is
+ * rebuilt under a per-(tenant, period) advisory lock and charged only if it
+ * still hashes the same. One booked row per tenant period (unique index
+ * tenant_maintenance_payments_tenant_period_uidx, SQL 98); a period already
+ * submitted, settled or returned is never posted again.
+ */
 export async function chargeTenantPeriod(client, {
   tenantId,
-  period = periodKey(),
+  period,
+  previewHash,
   recordedBy = null,
   fetchImpl,
   deps = {},
@@ -1425,28 +1780,63 @@ export async function chargeTenantPeriod(client, {
   if (!monthlyBillingEnabled() && deps.ignoreEnabledFlag !== true) {
     return fail('monthly_billing_disabled', {
       statusCode: 403,
-      message: 'Monthly tenant billing is not enabled on this runtime.',
+      message: 'Tenant fee billing is not enabled on this runtime.',
+    });
+  }
+  if (!BILLING_PERIOD_RE.test(String(period || ''))) {
+    return fail('invalid_billing_period', { statusCode: 400, field: 'period' });
+  }
+  if (!/^[0-9a-f]{64}$/.test(String(previewHash || ''))) {
+    return fail('preview_required', {
+      statusCode: 400,
+      message: 'Preview the invoice first; the pull must carry the preview hash.',
     });
   }
   const environment = deps.environment || billingEnvironment();
   const destination = await resolveBillingDestination(client, { environment, deps });
   if (!destination.ok) return { ...destination, statusCode: 503 };
 
+  await client.query(BILLING_PULL_LOCK_SQL, [billingIdempotencyKey(tenantId, period)]);
+
+  const existing = await loadPeriodOccurrence(client, tenantId, period);
+  if (existing && CHARGED_STATUSES.has(existing.status)) {
+    return {
+      ok: true,
+      duplicate: true,
+      booked: true,
+      reason: `already_${existing.status}`,
+      occurrence: existing,
+      amount_cents: Number(existing.amount_cents || 0),
+      liveProviderCalled: false,
+    };
+  }
+
   const invoice = await buildConsolidatedInvoice(client, {
     tenantId, period, persist: true,
   });
   if (!invoice.ok) return invoice;
+  const currentHash = billingPreviewHash({
+    tenantId, period, invoice, occurrence: existing, destination,
+  });
+  if (currentHash !== previewHash) {
+    return fail('preview_mismatch', {
+      statusCode: 409,
+      message: 'The invoice changed since it was previewed. Preview again before collecting.',
+      preview_hash: currentHash,
+      amount_cents: chargeAmountFor(invoice, existing),
+    });
+  }
 
   const readiness = await evaluateBillingReadiness(client, {
     tenantId, period, destination, environment,
   });
-  readiness.amountCents = invoice.amount_cents;
+  readiness.amountCents = chargeAmountFor(invoice, existing);
   readiness.invoice = invoice;
-  if (invoice.amount_cents > 0) {
-    readiness.reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
-    readiness.ready = readiness.reasons.length === 0;
-    readiness.ok = readiness.ready;
-  }
+  readiness.reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
+  if (!(readiness.amountCents > 0)) readiness.reasons.push('invalid_amount');
+  else if (!isChargeableCents(readiness.amountCents)) readiness.reasons.push('invalid_amount_cents');
+  readiness.ready = readiness.reasons.length === 0;
+  readiness.ok = readiness.ready;
   if (!readiness.ready) {
     return fail('billing_not_ready', {
       statusCode: 409,
@@ -1456,65 +1846,121 @@ export async function chargeTenantPeriod(client, {
     });
   }
 
+  // Production never records a simulated charge: without
+  // AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST it refuses before anything is booked.
+  if (environment === 'production' && !monthlyBillingProductionPostEnabled() && deps.simulate !== true) {
+    return fail('production_billing_post_disabled', {
+      statusCode: 403,
+      message: 'Production fee posts are not authorized on this runtime.',
+    });
+  }
+
+  // No provider call without an audit row (SQL 98). A missing writer refuses here.
+  try {
+    await recordBillingAudit(client, {
+      event: 'pull',
+      tenantId,
+      period,
+      amountCents: readiness.amountCents,
+      occurrenceId: existing?.id,
+      outcome: 'started',
+      previewHash,
+    }, { required: true });
+  } catch (error) {
+    return fail('billing_audit_unavailable', {
+      statusCode: 503,
+      message: 'The billing audit writer is not available (SQL 98). Nothing was charged.',
+      detail: error.message,
+    });
+  }
+
   const booked = await createOrGetOccurrence(client, {
     tenantId, period, readiness, destination, recordedBy,
   });
   if (!booked.ok) return booked;
-  if (
-    booked.occurrence.amount_cents !== readiness.amountCents
-    && ['due'].includes(booked.occurrence.status)
-    && booked.created === false
-  ) {
-    // Historical snapshot wins. Do not rewrite amount on an existing period row.
-  }
   if (booked.created) {
     await allocateInvoiceLines(client, { invoice: booked.occurrence, invoiceBuild: invoice });
   }
 
+  // ACH from the tenant's authorized bank account only (never the tenant wallet).
   const submitted = await submitOccurrence(client, {
     occurrence: booked.occurrence,
     readiness,
     destination,
     fetchImpl,
-    deps,
+    deps: { ...deps, bankOnly: true },
   });
+  const transferIds = legTransferIds(submitted);
+  const audit = await recordBillingAudit(client, {
+    event: 'pull',
+    tenantId,
+    period,
+    amountCents: Number(booked.occurrence.amount_cents || 0),
+    occurrenceId: booked.occurrence.id,
+    providerTransferIds: transferIds,
+    outcome: submitted.ok ? (submitted.occurrence?.status || 'submitted') : `failed:${submitted.error || 'unknown'}`,
+    previewHash,
+    details: { simulated: submitted.simulated === true, environment },
+  });
+  // Invoice email: queued in this transaction (outbox) only when the debit was
+  // submitted; it is sent only after this transaction commits
+  // (tenant-billing-handlers.mjs post-commit step). Never fails the pull.
+  const charged = submitted.ok === true && submitted.duplicate !== true
+    && CHARGED_STATUSES.has(String(submitted.occurrence?.status || ''));
+  const invoiceEmail = charged
+    ? await queueFeeInvoiceEmail(client, {
+      occurrenceId: submitted.occurrence.id,
+      tenantId,
+      period,
+      deps,
+    })
+    : { status: 'not_charged', sent: false };
   return {
     ...submitted,
+    booked: true,
     invoice,
-    amount_cents: booked.occurrence.amount_cents,
+    amount_cents: Number(booked.occurrence.amount_cents || 0),
+    provider_transfer_ids: transferIds,
+    audit_recorded: audit.ok === true,
+    invoice_email: invoiceEmail,
+    invoice_email_sent: false,
+    invoice_email_after_commit: invoiceEmail.status === 'pending' ? submitted.occurrence.id : null,
   };
 }
 
-export async function runMonthlyBillingScheduler(client, { now = new Date(), fetchImpl, deps = {} } = {}) {
-  if (!monthlyBillingEnabled() && deps.ignoreEnabledFlag !== true) {
-    return fail('monthly_billing_disabled', { statusCode: 403 });
+/**
+ * Platform owner resends the invoice email for a charged period (after a
+ * failed, missing or unqueued send). Validates in this transaction and makes
+ * sure the charge has an outbox row; the send itself runs after commit.
+ * Still once per charge: an invoice already sent answers already_sent.
+ */
+export async function resendTenantFeeInvoice(client, { tenantId, period, deps = {} }) {
+  if (!BILLING_PERIOD_RE.test(String(period || ''))) {
+    return fail('invalid_billing_period', { statusCode: 400, field: 'period' });
   }
-  const today = (now instanceof Date ? now : new Date(now)).toISOString().slice(0, 10);
-  const period = collectionPeriodKey(now);
-  const due = (await client.query(
-    `SELECT t.id AS tenant_id
-     FROM public.tenants t
-     JOIN public.tenant_billing_settings s ON s.tenant_id = t.id
-     WHERE t.subscription_status = 'active'
-       AND s.billing_enabled = true
-       AND (s.next_period_start IS NULL OR s.next_period_start <= $1::date)
-       AND s.billing_day_of_month <= EXTRACT(DAY FROM $1::date)`,
-    [today],
-  )).rows;
+  await client.query(BILLING_PULL_LOCK_SQL, [billingIdempotencyKey(tenantId, period)]);
+  const occurrence = await loadPeriodOccurrence(client, tenantId, period);
+  if (!occurrence || !['submitted', 'settled'].includes(occurrence.status)) {
+    return fail('not_charged', { statusCode: 409, message: 'No collected charge for this period.' });
+  }
+  const queued = await queueFeeInvoiceEmail(client, { occurrenceId: occurrence.id, tenantId, period, deps });
+  if (queued.status === 'disabled') return { ok: true, statusCode: 200, invoice_email: queued };
+  if (queued.status !== 'pending') {
+    return fail('invoice_queue_failed', { statusCode: 503, invoice_email: queued });
+  }
+  return { ok: true, statusCode: 200, invoice_email: queued, invoice_email_after_commit: occurrence.id };
+}
 
-  const results = [];
-  for (const row of due) {
-    results.push({
-      tenant_id: row.tenant_id,
-      ...(await chargeTenantPeriod(client, {
-        tenantId: row.tenant_id,
-        period,
-        fetchImpl,
-        deps,
-      })),
-    });
-  }
-  return { ok: true, period, due: due.length, results };
+/**
+ * Retired (owner decision 2026-10-17): no automatic or scheduled pulls. Kept
+ * as an export so files that still import it keep loading; it never charges.
+ */
+export async function runMonthlyBillingScheduler() {
+  return fail(MANUAL_BILLING_ONLY, {
+    statusCode: 410,
+    message: 'Tenant fees are collected manually by the platform owner from Tenant Management. There is no scheduled billing.',
+    liveProviderCalled: false,
+  });
 }
 
 export async function applyBillingProviderEvent(client, {
@@ -1619,6 +2065,9 @@ export const TENANT_PRICING_COLUMNS = Object.freeze([
 
 export const SET_TENANT_PRICING_SQL = 'SELECT public.aws_platform_owner_set_tenant_pricing($1::uuid, $2::jsonb) AS result';
 
+/** SQL 98: the platform owner's deposits switch setter (audited in tenant_pricing_audit). */
+export const SET_TENANT_DEPOSITS_ENABLED_SQL = 'SELECT public.aws_platform_owner_set_tenant_deposits_enabled($1::uuid, $2::boolean) AS result';
+
 /** Maps a refusal from aws_platform_owner_set_tenant_pricing (SQL 96). */
 export const tenantPricingError = (error) => {
   const code = String(error?.code || '');
@@ -1648,8 +2097,11 @@ export async function saveBillingSettings(client, {
   tenantId, monthlyRateCents, referralDiscountCents, billingEnabled, billingDay, userId,
   perCheckRateCents, nextDayRateCents, sameDayRateCents,
   mortgageOpsInitialRateCents, mortgageOpsAdditionalRateCents,
-  perCheckBillingEnabled, isFoundingPartner,
+  perCheckBillingEnabled, isFoundingPartner, depositsEnabled,
 }) {
+  if (depositsEnabled !== undefined && depositsEnabled !== null && typeof depositsEnabled !== 'boolean') {
+    return fail('invalid_deposits_enabled', { statusCode: 400, field: 'deposits_enabled' });
+  }
   const pricing = {};
   const applyRate = (value, field, column) => {
     if (value === undefined) return true;
@@ -1681,6 +2133,19 @@ export async function saveBillingSettings(client, {
     try {
       await client.query(SET_TENANT_PRICING_SQL, [tenantId, JSON.stringify(pricing)]);
     } catch (error) {
+      return tenantPricingError(error);
+    }
+  }
+  if (typeof depositsEnabled === 'boolean') {
+    try {
+      await client.query(SET_TENANT_DEPOSITS_ENABLED_SQL, [tenantId, depositsEnabled]);
+    } catch (error) {
+      if (String(error?.code || '') === '42883') {
+        return fail('deposits_setter_missing', {
+          statusCode: 503,
+          message: 'The deposits switch cannot be saved until SQL 98 is applied.',
+        });
+      }
       return tenantPricingError(error);
     }
   }
@@ -1881,7 +2346,10 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     monthly_rate_cents: Number(ctx.tenant.monthly_rate_cents || 0),
     referral_discount_cents: Number(ctx.tenant.referral_discount_cents || 0),
     net_fee_cents: netFeeCents(ctx.tenant.monthly_rate_cents, ctx.tenant.referral_discount_cents),
-    per_check_rate_cents: resolveCheckRateCents(ctx.tenant),
+    per_check_rate_cents: resolveCheckRateCents(ctx.tenant, ctx.checkDefaultCents),
+    check_billing_default_cents: ctx.checkDefaultCents,
+    // SQL 98 deposits switch (platform owner sets it; NOT NULL DEFAULT true).
+    deposits_enabled: ctx.tenant.deposits_enabled !== false,
     next_day_rate_cents: resolveNextDayRateCents(ctx.tenant),
     same_day_rate_cents: resolveSameDayRateCents(ctx.tenant),
     mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(ctx.tenant),

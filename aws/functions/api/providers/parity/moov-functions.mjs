@@ -68,6 +68,8 @@ import {
 } from './moov-onboard.mjs';
 
 const wrap = (handler, name) => async (event, deps = {}) => {
+  // A retired route answers its fixed refusal before identity, DB or provider work.
+  if (handler.retired) return { ...handler.retired };
   const { parseBody, withIdentity, withIdentityWrite } = await import('../../data.mjs');
   const { loadSandboxCredentials } = await import('../../sandbox-credentials.mjs');
   const { executionAllowed } = await import('../../provider-flags.mjs');

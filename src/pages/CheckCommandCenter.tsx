@@ -8,6 +8,8 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { DEPOSITS_DISABLED_MESSAGE, useTenantDepositsEnabled } from "@/lib/tenantDeposits";
+import { DepositsDisabledNotice } from "@/components/deposit-ops/DepositsDisabledNotice";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
@@ -3470,11 +3472,18 @@ function CheckDetailPanel({
   };
 
 
+  // Per-tenant deposits switch (platform owner, SQL 98): off disables every deposit action here.
+  const { depositsEnabled } = useTenantDepositsEnabled(check?.tenant_id);
+
   // Branch deposit → Deposited transition
   // Routes through the deposit pipeline so the check appears in Deposit Operations
   // and reconciliation reports (creates a deposit_items row).
   const handleMoveToDeposited = async (force = false) => {
     if (!user?.id || !check) return;
+    if (!depositsEnabled) {
+      toast({ title: "Deposits are off", description: DEPOSITS_DISABLED_MESSAGE, variant: "destructive" });
+      return;
+    }
     setMovingToDeposited(true);
     const rollbackStage = optimisticStage(qc, [checkId], "deposited");
     try {
@@ -3567,6 +3576,10 @@ function CheckDetailPanel({
   // No separate compliance/prepare click. No local prepare_deposit / assign_provider.
   const handleDepositWithCheckAlt = async () => {
     if (!user?.id || !check || depositingWithCheckAlt) return;
+    if (!depositsEnabled) {
+      toast({ title: "Deposits are off", description: DEPOSITS_DISABLED_MESSAGE, variant: "destructive" });
+      return;
+    }
     setDepositingWithCheckAlt(true);
     setDepositPhase("preparing");
     try {
@@ -4240,12 +4253,13 @@ function CheckDetailPanel({
                               frontImagePath={check.front_image_path}
                               backImageDepositPath={check.back_image_deposit_path}
                             />
+                            {!depositsEnabled && <DepositsDisabledNotice className="mt-1" />}
                             {canDepositWithCheckAlt && (
                               <Button
                                 size="sm"
                                 variant="success"
                                 className="w-full mt-1"
-                                disabled={depositingWithCheckAlt}
+                                disabled={depositingWithCheckAlt || !depositsEnabled}
                                 onClick={handleDepositWithCheckAlt}
                               >
                                 <Banknote className="h-4 w-4 mr-2" />
@@ -4319,6 +4333,7 @@ function CheckDetailPanel({
               {/* Branch → Deposited transition */}
               {check.status === "branch_deposit_required" && !isSharedView && (
                 <div className="space-y-2 mt-2">
+                  {!depositsEnabled && <DepositsDisabledNotice />}
                   <Button
                     size="sm"
                     variant="outline"
@@ -4327,7 +4342,7 @@ function CheckDetailPanel({
                       setBranchApprovedAt(Date.now());
                       handleMoveToDeposited(false);
                     }}
-                    disabled={movingToDeposited}
+                    disabled={movingToDeposited || !depositsEnabled}
                   >
                     {movingToDeposited ? (
                       <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Moving...</>
@@ -4345,7 +4360,7 @@ function CheckDetailPanel({
                         variant="outline"
                         className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
                         onClick={() => handleMoveToDeposited(true)}
-                        disabled={movingToDeposited}
+                        disabled={movingToDeposited || !depositsEnabled}
                       >
                         {movingToDeposited ? (
                           <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Forcing...</>
@@ -4358,13 +4373,16 @@ function CheckDetailPanel({
                 </div>
               )}
               {/* Approved → Deposited transition */}
+              {check.status === "approved_for_deposit" && !isSharedView && !depositsEnabled && (
+                <DepositsDisabledNotice className="mt-2" />
+              )}
               {check.status === "approved_for_deposit" && !isSharedView && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="w-full mt-2 border-border text-foreground hover:bg-primary hover:text-primary-foreground"
                   onClick={() => handleMoveToDeposited(false)}
-                  disabled={movingToDeposited}
+                  disabled={movingToDeposited || !depositsEnabled}
                 >
                   {movingToDeposited ? (
                     <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Moving...</>
