@@ -875,7 +875,7 @@ test('the fingerprints and statement checks are the staging executor\'s own', as
   // The copied libraries are exactly what the executor imports.
   assert.deepEqual(stagingExecutorMembers(ROOT).libs, [
     'collection-v2-synthetic-uat-cleanup.mjs', 'errors.mjs', 'function-def-lookup.mjs', 'identity.mjs',
-    'sql-apply.mjs', 'sql-executor-auth.mjs', 'tmp-rls-catalog.mjs',
+    'release-sql-specs.mjs', 'release-sql-state.mjs', 'sql-apply.mjs', 'sql-executor-auth.mjs', 'tmp-rls-catalog.mjs',
   ]);
   // SQL 77's single-statement check is the executor's expression, character for character.
   const source = fs.readFileSync(path.join(ROOT, 'aws/write-path/guarded-sql-executor/index.mjs'), 'utf8');

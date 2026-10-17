@@ -173,10 +173,58 @@
       "note": "Official production apply for SQL 30 (aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql, unchanged: tenant_documents_doc_type_check from the 3- or 6-value predecessor to the 13-value list) only. The file's BEGIN/COMMIT are not executed; the bytes between them run in the tool's transaction. Same receipt, pin, approval, phrase and single-use rules as SQL 29; rolls back unless the constraint is exactly the reviewed one and everything else is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK; of table rows it reads only aggregate COUNT(*)s."
     },
     {
+      "path": "scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql90-production-apply"],
+      "note": "Official production apply for SQL 90 (aws/workflows/sql/90_users_only_tenant_roles.sql: the membership-rule helpers, the members-only write policies, the platform-owner-only tenant create, first invite and user_roles writes, the SQL 35 view and the SQL 29 / SQL 80 helpers it replaces) only. Shares the staging executor's release engine (lib/release-sql-state.mjs): code-derived fingerprint, SQL 29 and SQL 30 in place, every object it changes present (so the post-state is fixed), relations and functions owned by the pinned login, no EXECUTE grant the file neither keeps nor revokes. Requires a sql-apply production-sql receipt owning the pinned file, a pin with execute true, an owner-approved authorization, a recorded pre-apply live hash and a staging acceptance reference, CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1, the pin's authorization phrase and a single-use id. Credentials come only from the pinned production checksops_admin secret; credential flags and arbitrary SQL are refused. Rolls back unless the intended fingerprint is reached and everything else in schema public (and schema auth's functions) is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
+      "path": "scripts/deployment-guard/sql91-moov-onboarding-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql91-production-apply"],
+      "note": "Official production apply for SQL 91 (aws/workflows/sql/91_moov_onboarding.sql: the four Moov onboarding tables with RLS, their writer helpers and policies, the additional onboarding / webhook policies on the payment tables and payment_provider_methods.routing_last_four) only. Same engine, receipt, pin, approval, phrase and single-use rules as SQL 90; the new tables must be absent (or already exactly as intended) and the payment tables owned by the pinned login. Rolls back unless the intended fingerprint is reached and everything else is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
+      "path": "scripts/deployment-guard/sql92-signature-request-check-files-link-grant-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql92-production-apply"],
+      "note": "Official production apply for SQL 92 (aws/workflows/sql/92_signature_request_check_files_link_grant.sql: UPDATE on check_files.signature_request_id for checksops and authenticated) only. Same engine and gates as SQL 90; refuses unless check_files and the column exist (the file would otherwise skip silently) and the column carries no grant the file does not make. Rolls back unless exactly that column ACL results and everything else is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
+      "path": "scripts/deployment-guard/sql93-tenant-company-info-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql93-production-apply"],
+      "note": "Official production apply for SQL 93 (aws/workflows/sql/93_tenant_company_info.sql: four company / letterhead columns on public.tenants and the aws_tenants_member_column_guard BEFORE UPDATE trigger) only. Same engine and gates as SQL 90; requires SQL 90 in place and refuses once SQL 96 is (re-running SQL 93 after SQL 96 would put back the member-only guard). Rolls back unless the intended fingerprint is reached and everything else is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
+      "path": "scripts/deployment-guard/sql94-document-library-restore-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql94-production-apply"],
+      "note": "Official production apply for SQL 94 (aws/workflows/sql/94_document_library_restore.sql: the doc_type rule and CHECK, public.homeowner_shared_documents with its guard trigger and policies, and the public homeowner share readers) only. Same engine and gates as SQL 90; requires SQL 29 and SQL 90 in place, a supported doc_type CHECK predecessor and no tenant_documents row outside the new rule (an aggregate COUNT(*), the only row read). Rolls back unless the intended fingerprint is reached and everything else is unchanged."
+    },
+    {
+      "path": "scripts/deployment-guard/sql95-remove-freedom-claims-bridge-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql95-production-apply"],
+      "note": "Official production apply for SQL 95 (aws/workflows/sql/95_remove_freedom_claims_bridge.sql: drops trg_notify_freedom_status_change, notify_freedom_status_change(), list_checks_by_freedom_claim(text, uuid), aws_ingest_shared_check(jsonb) and the vault bridge helpers) only. Same engine and gates as SQL 90; refuses while any other object depends on a function it drops or one is owned by another role. Rolls back unless every listed object is gone and everything else is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
+      "path": "scripts/deployment-guard/sql96-platform-owner-tenant-pricing-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql96-production-apply"],
+      "note": "Official production apply for SQL 96 (aws/workflows/sql/96_platform_owner_tenant_pricing.sql: tenant_pricing_audit and its trigger, aws_platform_owner_set_tenant_pricing(uuid, jsonb), the replaced aws_tenants_member_column_guard() and the platform-owner-only platform_fee_schedules write policy) only. Same engine and gates as SQL 90; requires SQL 93 in place. Rolls back unless the intended fingerprint is reached and everything else is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
+      "path": "scripts/deployment-guard/sql97-financial-stepup-log-server-writer-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql97-production-apply"],
+      "note": "Official production apply for SQL 97 (aws/workflows/sql/97_financial_stepup_log_server_writer.sql: INSERT on financial_stepup_log revoked from PUBLIC and authenticated and granted to checksops, and the aws_financial_stepup_log_writer_guard BEFORE INSERT trigger) only. Same engine and gates as SQL 90; rolls back unless exactly that INSERT ACL and trigger result, every other privilege on the table is unchanged and everything else is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
       "path": "scripts/deployment-guard/production-sql-one-shot.mjs",
       "classification": "GUARDED",
       "capabilities": ["production-sql-orchestrator"],
-      "note": "Runner-side orchestrator for one registered production SQL tool (sql71, sql77, sql78, sql79, sql80, sql81, sql82, sql83, sql84, sql85, sql86, sql87, sql88, sql89). Never connects to a database or AWS itself and never applies SQL: it verifies the transfer tarball, the tree and the migration bytes, then runs the registered tool's --inspect, the registry's accepted contracts, preflight.mjs --acquire-lease --receipt, the tool's evaluate and --apply, and a post-apply --inspect, each as a child process, stopping on the first failure. Refuses a pin with execute false, takes no receipt, manifest or input file, refuses to start with any CHECKSOPS_DEPLOYMENT_GUARD_* or node loader variable or node flag set, binds the tree to --expected-tarball-sha256 and SOURCE_COMMIT and re-compares it before preflight and before apply, gives children only an allowlisted environment, and sets CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 and the preflight-issued receipt path only for the single apply child. The tool's own enforceScriptGuard, receipt ownership, execute, phrase and one_use_id checks stay authoritative."
+      "note": "Runner-side orchestrator for one registered production SQL tool (sql71, sql77, sql78, sql79, sql80, sql81, sql82, sql83, sql84, sql85, sql86, sql87, sql88, sql89, sql90, sql91, sql92, sql93, sql94, sql95, sql96, sql97). Never connects to a database or AWS itself and never applies SQL: it verifies the transfer tarball, the tree and the migration bytes, then runs the registered tool's --inspect, the registry's accepted contracts, preflight.mjs --acquire-lease --receipt, the tool's evaluate and --apply, and a post-apply --inspect, each as a child process, stopping on the first failure. Refuses a pin with execute false, takes no receipt, manifest or input file, refuses to start with any CHECKSOPS_DEPLOYMENT_GUARD_* or node loader variable or node flag set, binds the tree to --expected-tarball-sha256 and SOURCE_COMMIT and re-compares it before preflight and before apply, gives children only an allowlisted environment, and sets CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 and the preflight-issued receipt path only for the single apply child. The tool's own enforceScriptGuard, receipt ownership, execute, phrase and one_use_id checks stay authoritative."
     },
     {
       "path": "scripts/deployment-guard/github-sql53-production-apply.mjs",

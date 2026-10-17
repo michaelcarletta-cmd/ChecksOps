@@ -2028,12 +2028,12 @@ export const LIBRARY_SQL_PINS = Object.freeze({
   sql30: AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
 });
 
-// Release 2026-10-17 pending staging pins: SQL 90-97 (aws/workflows/sql/9x_*.sql). Recorded so the
-// reviewed bytes are pinned; no guarded staging executor handler, workflow choice or production
-// tool exists for them yet, so nothing can apply them. expected_live_definition_sha256 stays null
-// until a staging read-live is recorded, and intended_replacement_sha256 stays null until each
-// migration's tooling defines its code-derived intended-state fingerprint. They are deliberately
-// not in github-staging-sql-executor.mjs MIGRATIONS or the workflow choices until then.
+// Release 2026-10-17 staging pins: SQL 90-97 (aws/workflows/sql/9x_*.sql). One engine
+// (release-sql-state.mjs, specs in release-sql-specs.mjs) serves the staging guarded executor
+// (handleReleaseSqlMigration) and the production tools (release-sql-production-apply.mjs).
+// intended_replacement_sha256 is each file's code-derived intended-state fingerprint.
+// expected_live_definition_sha256 stays null until a staging read-live is recorded in a reviewed
+// pin change, so every staging apply refuses before connecting until then (read-live works).
 export const AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES = Object.freeze({
   key: 'sql90',
   filename: 'aws/workflows/sql/90_users_only_tenant_roles.sql',
@@ -2044,7 +2044,8 @@ export const AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES = Object.freeze({
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql90', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c',
   function_identities: Object.freeze(['public.aws_is_tenant_member(uuid)', 'public.aws_can_write_tenant(uuid)', 'public.aws_can_write_check(uuid)', 'public.aws_can_write_claim(uuid)', 'public.aws_tenant_has_no_members(uuid)', 'public.aws_is_platform_owner_user(uuid)', 'public.aws_has_any_tenant_membership()', 'public.aws_can_write_same_tenant_user(uuid)', 'public.aws_can_access_tax_profiles(uuid)', 'public.aws_first_invite_allowed(uuid)', 'public.aws_invite_create_user_identity(uuid, text, text, text)', 'public.aws_create_deposit_batch_for_item(uuid, text)', 'public.aws_is_tenant_manager_admin()', 'public.aws_can_manage_mortgage_library(uuid)', 'public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)']),
 });
 export const AUTHORIZED_SQL91_MOOV_ONBOARDING = Object.freeze({
@@ -2057,7 +2058,8 @@ export const AUTHORIZED_SQL91_MOOV_ONBOARDING = Object.freeze({
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql91', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d',
   function_identities: Object.freeze(['public.aws_moov_onboarding_active()', 'public.aws_can_submit_moov_onboarding(uuid)', 'public.aws_moov_onboarding_writer(uuid)', 'public.aws_moov_webhook_apply_active()']),
 });
 export const AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT = Object.freeze({
@@ -2070,7 +2072,8 @@ export const AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT = Object.
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql92', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762',
   function_identities: Object.freeze([]),
 });
 export const AUTHORIZED_SQL93_TENANT_COMPANY_INFO = Object.freeze({
@@ -2083,7 +2086,8 @@ export const AUTHORIZED_SQL93_TENANT_COMPANY_INFO = Object.freeze({
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql93', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '1032695c682d08934f5d4213e866df30100bd7ad855fb84cd4a4fbb9dc7aae58',
   function_identities: Object.freeze(['public.aws_tenants_member_column_guard()']),
 });
 export const AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE = Object.freeze({
@@ -2096,7 +2100,8 @@ export const AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE = Object.freeze({
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql94', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57',
   function_identities: Object.freeze(['public.aws_tenant_document_doc_type_ok(text)', 'public.aws_homeowner_share_member(uuid)', 'public.aws_homeowner_shared_documents_guard()', 'public.aws_public_homeowner_shared_documents(text)', 'public.aws_public_homeowner_shared_document(text, uuid)']),
 });
 export const AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE = Object.freeze({
@@ -2109,7 +2114,8 @@ export const AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE = Object.freeze({
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql95', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2',
   function_identities: Object.freeze([]),
 });
 export const AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING = Object.freeze({
@@ -2122,7 +2128,8 @@ export const AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING = Object.freeze({
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql96', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767',
   function_identities: Object.freeze(['public.aws_tenant_pricing_columns()', 'public.aws_tenant_pricing_audit_row()', 'public.aws_tenants_member_column_guard()', 'public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)']),
 });
 export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze({
@@ -2135,7 +2142,8 @@ export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
-  intended_replacement_sha256: null,
+  // Code-derived: releaseIntendedHash('sql97', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef',
   function_identities: Object.freeze(['public.aws_financial_stepup_log_writer_guard()']),
 });
 
@@ -2177,6 +2185,12 @@ export function isSql29MortgageOpsLibraryParity(input = {}) {
 
 export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
+}
+
+/** The release 2026-10-17 migration key (sql90 ... sql97) an input names, or null. */
+export function releaseSqlMigrationKey(input = {}) {
+  return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
+    .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
 }
 
 /** The reviewed bytes as the guarded tools execute them, or null. */
@@ -2642,6 +2656,7 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
   AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
+  ...Object.values(RELEASE_2026_10_17_PENDING_SQL_PINS),
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
@@ -2766,6 +2781,8 @@ export function resolveAuthorizedMigration(input = {}) {
   if (isSql89CheckIntakeColumnUpdate(input)) return AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE;
   if (isSql29MortgageOpsLibraryParity(input)) return AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY;
   if (isSql30TenantDocumentsDocType(input)) return AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE;
+  const releaseKey = releaseSqlMigrationKey(input);
+  if (releaseKey) return RELEASE_2026_10_17_PENDING_SQL_PINS[releaseKey];
   if (isSql40(input)) return AUTHORIZED_SQL40;
   if (isSql39(input)) return AUTHORIZED_SQL39;
   if (isTenantUsersSameCheckPermissions(input)) return AUTHORIZED_TENANT_USERS_SAME_CHECK_PERMISSIONS;

@@ -46,6 +46,7 @@ import { SQL86_PRODUCTION_PIN_REL } from './sql86-mortgage-compensation-owner-on
 import { SQL87_PRODUCTION_PIN_REL } from './sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 import { SQL88_PRODUCTION_PIN_REL } from './sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 import { SQL89_PRODUCTION_PIN_REL } from './sql89-check-intake-column-update-production-apply.mjs';
+import { RELEASE_PRODUCTION } from './release-sql-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
 export const ONE_SHOT_DEPLOYMENT_TYPE = 'sql-apply';
@@ -226,6 +227,14 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL89_PRODUCTION_PIN_REL,
     allowed_key: 'sql89_production_apply_allowed',
   }),
+  // SQL 90-97 (release 2026-10-17): one tool per migration on the shared release engine.
+  ...Object.fromEntries(Object.values(RELEASE_PRODUCTION).map((tool) => [tool.key, Object.freeze({
+    key: tool.key,
+    script: tool.cli,
+    args: Object.freeze([]),
+    pin_rel: tool.pin_rel,
+    allowed_key: tool.allowed_key,
+  })])),
 });
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */
@@ -280,6 +289,10 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'sql89_columns_missing',
   'unsafe_update_functions',
   'ingest_function_security_definer',
+  // SQL 90-97: aggregate counts, successor markers and the per-object state report (no rows).
+  'counts',
+  'successors_applied',
+  'release_sql_inspect',
 ]);
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;

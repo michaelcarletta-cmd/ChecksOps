@@ -21,6 +21,7 @@ that connects to the database:
 | `sql87` | `scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs` (`ops/production-sql-87-apply.md`) |
 | `sql88` | `scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs` (`ops/production-sql-88-apply.md`) |
 | `sql89` | `scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs` (`ops/production-sql-89-apply.md`) |
+| `sql90` … `sql97` | `scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs`, `sql91-moov-onboarding-…`, `sql92-signature-request-check-files-link-grant-…`, `sql93-tenant-company-info-…`, `sql94-document-library-restore-…`, `sql95-remove-freedom-claims-bridge-…`, `sql96-platform-owner-tenant-pricing-…`, `sql97-financial-stepup-log-server-writer-production-apply.mjs` (`ops/production-sql-90-97-apply.md`, which also gives their order) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). Tests:
@@ -30,7 +31,7 @@ To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql89`) |
+| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql89`, `sql90`…`sql97`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
