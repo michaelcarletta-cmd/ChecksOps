@@ -115,6 +115,15 @@ test('PostgreSQL 16: SQL 97 lets only the server record app_financial_totp step-
       kind: 'login_session', tenantId: TENANT_A, loginSession: LOGIN, actionKey: TEAM_RESET_TOTP_ACTION,
     }));
     assert.equal(recordedA.recorded, true);
+    // The writer flag is cleared right after the server's insert: a forged row later in
+    // the same transaction is refused.
+    await assert.rejects(inTx(checksops, async () => {
+      await insertAppStepUpLog(checksops, mapping, {
+        kind: 'login_session', tenantId: TENANT_A, loginSession: LOGIN, actionKey: 'wallet.fund',
+      });
+      assert.equal((await checksops.query("SELECT current_setting('app.stepup_writer', true) AS v")).rows[0].v, '0');
+      await checksops.query(f.sql, f.params);
+    }), (e) => e.code === '42501' && /stepup_writer_required/.test(e.message));
     const row = (await admin.query('SELECT tenant_id, metadata FROM public.financial_stepup_log WHERE id = $1', [recordedA.stepup_id])).rows[0];
     assert.equal(row.tenant_id, TENANT_A);
     assert.equal(row.metadata.source, 'app_financial_totp');

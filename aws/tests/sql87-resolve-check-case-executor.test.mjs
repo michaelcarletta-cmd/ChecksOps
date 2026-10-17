@@ -253,11 +253,11 @@ test('apply refuses before connecting: a pin with no pre-state, the read-live se
   }
 });
 
-test('the AWS API never calls the SQL function: the SPA rpc goes to the workflow-rpc route, which is unchanged (37cab8d6)', () => {
+test('the AWS API never calls the SQL function: the SPA rpc goes to the workflow-rpc route, at its planned bytes', () => {
   const rpc = fs.readFileSync(path.join(ROOT, 'aws/functions/api/workflow-rpc.mjs'), 'utf8');
-  assert.equal(sha(rpc), '37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907');
+  // 37cab8d6 when SQL 87 was planned; release 2026-10-17 plans the branch bytes (members-only gates).
   const plan = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
-  assert.ok(JSON.stringify(plan).includes('37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907'));
+  assert.equal(sha(rpc), plan.members['workflow-rpc.mjs'].accepted_sha256);
   assert.match(rpc, /export const SAFE_WRITE_RPCS = new Set\(\[[^\]]*'resolve_check_case'/);
   assert.match(rpc, /case 'resolve_check_case':\n\s+return executeResolveCheckCase\(/);
   const data = fs.readFileSync(path.join(ROOT, 'aws/functions/api/data.mjs'), 'utf8');

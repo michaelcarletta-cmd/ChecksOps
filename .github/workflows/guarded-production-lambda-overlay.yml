@@ -21,37 +21,83 @@ on:
           - write-claim-settlement.mjs
           - financial-remaining.mjs
           - check-deposited.mjs
-          - workflow.mjs
           - claim-settlement-rpc.mjs
           - providers/checkalt-account-mask.mjs
           - data.mjs
-          - workflow-transitions.mjs
           - providers/parity/moov-wallet.mjs
           - providers/production/moov-wallet-sync.mjs
           - providers/production/moov-fund-authz.mjs
           - cognito.mjs
-          - auth-financial-totp.mjs
-          - providers/production/checkalt-approve.mjs
           - providers/production/checkalt-config.mjs
           - providers/production/checkalt-idempotency.mjs
-          - providers/production/checkalt-submit.mjs
-          - workflow-rpc.mjs
-          - providers/production/checkalt-authz.mjs
           - providers/production/checkalt-dual-control.mjs
           - providers/production/checkalt-register.mjs
           - providers/production/checkalt-dispatch.mjs
           - providers/production/checkalt-holds.mjs
+          - homeowner-signing-integration.mjs
+          - ops-readiness.mjs
+          - privileged-auth.mjs
+          - identity.mjs
+          - workflow-transitions.mjs
+          - workflow.mjs
           - providers/parity/checkalt-functions.mjs
+          - providers/parity/db.mjs
+          - providers/parity/moov-functions.mjs
+          - providers/parity/moov-money.mjs
+          - providers/parity/moov-onboard.mjs
+          - providers/parity/moov-client.mjs
+          - providers/parity/caller.mjs
+          - write-allowlist.mjs
+          - admin-reset-totp.mjs
+          - auth-financial-totp.mjs
+          - providers/production/checkalt-submit.mjs
+          - providers/production/checkalt-approve.mjs
+          - providers/production/checkalt-authz.mjs
+          - financial-authz.mjs
+          - financial.mjs
+          - tenant-admin.mjs
+          - workflow-rpc.mjs
+          - tenant-check-user.mjs
+          - mortgage-library-doc-types.mjs
+          - tenant-library-rules.mjs
+          - tenant-library.mjs
           - write-signature.mjs
+          - signature-library-source.mjs
+          - platform-announcements.mjs
+          - mortgage-library-docs.mjs
+          - write-app-metadata.mjs
+          - storage-write-auth.mjs
+          - storage.mjs
+          - storage-write.mjs
           - email-branding.mjs
           - esign.mjs
-          - homeowner-signing-integration.mjs
+          - endorsement-composite.mjs
+          - check-endorsement.mjs
+          - documents.mjs
           - homeowner.mjs
+          - tax-secrets.mjs
+          - tax-profiles.mjs
+          - tenant-email-domain.mjs
           - app-services.mjs
           - mortgage-agent-compensation.mjs
-          - providers/production/moov-wallet-fund.mjs
-          - write-allowlist.mjs
+          - tenant-settings-handlers.mjs
+          - ingest-shared-check.mjs
+          - providers/onboarding/flags.mjs
+          - providers/onboarding/crypto.mjs
+          - providers/onboarding/redact.mjs
+          - providers/onboarding/store.mjs
+          - providers/onboarding/context.mjs
+          - providers/onboarding/documents.mjs
+          - providers/onboarding/moov-sync.mjs
+          - providers/onboarding/webhook-status.mjs
+          - providers/onboarding/handlers.mjs
+          - providers/catalog.mjs
+          - providers/webhook-apply.mjs
+          - providers/webhooks.mjs
+          - tenant-billing-engine.mjs
+          - tenant-billing-handlers.mjs
           - write-check-workflow.mjs
+          - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
       approved_commit:

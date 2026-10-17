@@ -382,7 +382,10 @@ export const ONBOARDING_HANDLERS = {
     access: access.submit,
     moov: true,
     run: async ({ client, ctx, body, fetchImpl }) => {
-      const tosToken = typeof body.terms_of_service_token === 'string' && body.terms_of_service_token.length >= 8
+      // Accepting the Moov terms is the tenant members' own: a token sent by a
+      // non-member (the platform owner acting on the tenant's behalf) is dropped.
+      const tosToken = ctx.member === true
+        && typeof body.terms_of_service_token === 'string' && body.terms_of_service_token.length >= 8
         ? body.terms_of_service_token
         : null;
       const { account, created } = await ensureMoovAccount(client, ctx, { tosToken, fetchImpl });

@@ -125,12 +125,16 @@ const loadResetStepUp = async (client, { userId, targetUserId, loginSession }) =
 const consumeResetStepUp = async (client, { userId, targetUserId, stepUp }) => {
   // The server's step-up writer (SQL 97 trigger); same setting as auth-financial-totp.
   await client.query("SELECT set_config('app.stepup_writer', '1', true)");
-  return client.query(RESET_TOTP_CONSUME_SQL, [
-  userId,
-  stepUp.tenant_id,
-  TEAM_RESET_TOTP_CONSUMED_ACTION,
-  JSON.stringify({ stepup_id: String(stepUp.id), target_user_id: targetUserId, source: 'team_reset_totp_consumed' }),
-]);
+  try {
+    return await client.query(RESET_TOTP_CONSUME_SQL, [
+      userId,
+      stepUp.tenant_id,
+      TEAM_RESET_TOTP_CONSUMED_ACTION,
+      JSON.stringify({ stepup_id: String(stepUp.id), target_user_id: targetUserId, source: 'team_reset_totp_consumed' }),
+    ]);
+  } finally {
+    await client.query("SELECT set_config('app.stepup_writer', '0', true)").catch(() => {});
+  }
 };
 
 export const softwareTokenEnrolled = (user = {}) => {

@@ -1421,3 +1421,18 @@ test('redactText masks SSNs and EINs written with spaces, dots or other separato
   }
   assert.equal(redactText('Account ok'), 'Account ok');
 });
+
+test('moov-account-create: a terms token is used only for a member; the platform owner acting on behalf has it dropped', async () => {
+  await withEnv(BASE_ENV, async () => {
+    for (const [who, expectTerms] of [['viewer', true], ['platformOwner', false]]) {
+      resetMoovTokenCache();
+      const db = makeDb({ account: false });
+      const fetch = moovFetch();
+      const r = await run('moov-account-create', { tenant_id: TENANT, terms_of_service_token: 'client-tos-token-123' }, USERS[who], { db, fetch });
+      assert.equal(r.ok, true, `${who} ${JSON.stringify(r)}`);
+      const create = fetch.calls.find((c) => c.url.endsWith('/accounts') && c.method === 'POST');
+      assert.ok(create, who);
+      assert.equal('termsOfService' in JSON.parse(create.body), expectTerms, who);
+    }
+  });
+});

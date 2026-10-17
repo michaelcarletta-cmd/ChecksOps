@@ -144,7 +144,7 @@
       "required_contracts": [],
       "applicable_artifact_types": ["spa", "lambda"],
       "supersession_history": [],
-      "notes": "Accepted evaluate-only. Invariants record the #708 tenant remount plus the #709 Email Preview public-logo contract. Enforcement remains disabled; acceptance does not block merge or deploy."
+      "notes": "Accepted evaluate-only. Invariants record the #708 tenant remount plus the #709 Email Preview public-logo contract. Enforcement remains disabled; acceptance does not block merge or deploy. Release 2026-10-17 (not a supersession): Company Information and Document Letterhead save on the tenant's own row (aws/workflows/sql/93_tenant_company_info.sql) and the tenant-company-branding-save route answers 410 route_retired; every accepted Branding invariant still holds. Moving restore authority off #713 needs an explicit supersession record with the merged review PR."
     },
     {
       "feature_id": "signature-requests",
@@ -161,7 +161,10 @@
       },
       "source_paths": [
         "src/components/claim-detail/SignatureRequests.tsx",
-        "aws/tests/parity-signature-submit.test.mjs"
+        "aws/tests/parity-signature-submit.test.mjs",
+        "aws/functions/api/esign.mjs",
+        "aws/functions/api/write-signature.mjs",
+        "aws/functions/api/signature-library-source.mjs"
       ],
       "semantic_invariants": [
         {
@@ -169,13 +172,27 @@
           "kind": "source_file",
           "title": "Signature Requests UI file exists on main",
           "file": "src/components/claim-detail/SignatureRequests.tsx"
+        },
+        {
+          "id": "signature-requests-actor-gate",
+          "kind": "source_file",
+          "title": "esign.mjs exports the shared signature-request actor gate",
+          "file": "aws/functions/api/esign.mjs",
+          "must_export": "requireSignatureRequestActor"
+        },
+        {
+          "id": "signature-requests-library-copy",
+          "kind": "source_file",
+          "title": "Signature Request library copy handler exists",
+          "file": "aws/functions/api/signature-library-source.mjs",
+          "must_export": "handleSignatureLibraryDocumentCopy"
         }
       ],
-      "required_tests": ["aws/tests/parity-signature-submit.test.mjs"],
+      "required_tests": ["aws/tests/parity-signature-submit.test.mjs", "aws/tests/esign-create-request.test.mjs", "aws/tests/signature-write-role-gate.test.mjs"],
       "required_contracts": ["signature-requests"],
       "applicable_artifact_types": ["spa", "lambda"],
       "supersession_history": [],
-      "notes": "Inventoried from existing contracts. Not accepted for enforcement."
+      "notes": "Inventoried from existing contracts. Not accepted for enforcement. Release 2026-10-17: member-gated actor check (requireSignatureRequestActor) and library copy; SQL 92 (check_files.signature_request_id link grant) is a pending pin."
     },
     {
       "feature_id": "homeowner",
@@ -224,7 +241,9 @@
       "source_paths": [
         "src/pages/admin/AdminMortgageOps.tsx",
         "aws/functions/api/mortgage-library-docs.mjs",
-        "aws/rls/sql/29_mortgage_ops_library_parity.sql"
+        "aws/rls/sql/29_mortgage_ops_library_parity.sql",
+        "aws/workflows/sql/94_document_library_restore.sql",
+        "aws/functions/api/tenant-library.mjs"
       ],
       "semantic_invariants": [
         {
@@ -232,12 +251,18 @@
           "kind": "source_file",
           "title": "Mortgage Ops admin page exists on main",
           "file": "src/pages/admin/AdminMortgageOps.tsx"
+        },
+        {
+          "id": "mortgage-ops-document-library-sql94-present",
+          "kind": "source_file",
+          "title": "SQL 94 document library restore exists on the branch",
+          "file": "aws/workflows/sql/94_document_library_restore.sql"
         }
       ],
-      "required_tests": ["aws/tests/mortgage-ops-library-parity.test.mjs"],
+      "required_tests": ["aws/tests/mortgage-ops-library-parity.test.mjs", "aws/tests/document-library-restore.test.mjs"],
       "applicable_artifact_types": ["spa", "lambda", "sql"],
       "supersession_history": [],
-      "notes": "Inventoried presence only. Not accepted for enforcement."
+      "notes": "Inventoried presence only. Not accepted for enforcement. Release 2026-10-17: tenant library restore (SQL 94, pending pin; requires SQL 29 and SQL 90)."
     },
     {
       "feature_id": "mortgage-agent",
@@ -434,7 +459,9 @@
         "notes": "Release-lock delete-check contract remains authoritative for that lock. This registry row is inventory only and does not become restore authority."
       },
       "source_paths": [
-        "src/integrations/aws/deleteCheckBridge.ts"
+        "src/integrations/aws/deleteCheckBridge.ts",
+        "aws/functions/api/workflow.mjs",
+        "aws/functions/api/workflow-delete-check.mjs"
       ],
       "semantic_invariants": [
         {
@@ -442,12 +469,28 @@
           "kind": "source_file",
           "title": "Delete Check bridge file exists on main",
           "file": "src/integrations/aws/deleteCheckBridge.ts"
+        },
+        {
+          "id": "delete-check-tenant-members-only",
+          "kind": "source_marker",
+          "title": "production Delete Check (workflow.mjs) lets any member of the check's tenant delete; no admin tier",
+          "file": "aws/functions/api/workflow.mjs",
+          "must_match": "isTenantMember\\(client, mapping\\.application_user_id, looked\\.check\\.tenant_id\\)[\\s\\S]*Only a member of this check\\\\'s company can delete it",
+          "must_not_match": "Only admins can delete checks"
+        },
+        {
+          "id": "delete-check-extracted-module-members-only",
+          "kind": "source_marker",
+          "title": "the excluded workflow-delete-check.mjs module carries the same members-only rule",
+          "file": "aws/functions/api/workflow-delete-check.mjs",
+          "must_match": "Only a member of this check\\\\'s company can delete it",
+          "must_not_match": "Only admins can delete checks"
         }
       ],
-      "required_tests": ["aws/tests/frontend-delete-check-bridge.test.mjs"],
+      "required_tests": ["aws/tests/frontend-delete-check-bridge.test.mjs", "aws/tests/users-only-role-gates.test.mjs", "ops/release-locks/tests/delete-check-invariants.test.mjs"],
       "applicable_artifact_types": ["spa", "lambda"],
       "supersession_history": [],
-      "notes": "Inventoried presence only. Release Locks remain the delete-check authority."
+      "notes": "Inventoried presence only. Release Locks remain the delete-check authority. Release 2026-10-17: any member of the check's tenant may delete (delete-check-contract invariant tenant_members_only replaces admin_only); partner/shared, terminal financial and dependent financial/provider blocks remain."
     },
     {
       "feature_id": "check-movement-601",

@@ -336,8 +336,13 @@ test('live production API bytes (2026-10-11 snapshot f78e16d99 and every overlay
       fs.rmSync(file, { force: true });
     }
   }
-  // Every live ingest still calls SQL 70 first and falls back only when it is missing.
+  // Every live ingest still calls SQL 70 first and falls back only when it is missing. The
+  // release 2026-10-17 plan's accepted bytes are the retired 410 stub, which runs no SQL at all.
   for (const src of sources.filter((s) => s.rel.endsWith('/ingest-shared-check.mjs'))) {
+    if (/^ \* RETIRED stub \(release 2026-10-17\)/m.test(src.text)) {
+      assert.doesNotMatch(src.text, /aws_ingest_shared_check|UPDATE public\.|client\.query/, src.label);
+      continue;
+    }
     assert.match(src.text, /SELECT public\.aws_ingest_shared_check\(\$1::jsonb\)/, src.label);
     assert.match(src.text, /if \(error\?\.code !== '42883'\) throw error;/, src.label);
   }

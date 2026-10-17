@@ -2028,6 +2028,128 @@ export const LIBRARY_SQL_PINS = Object.freeze({
   sql30: AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
 });
 
+// Release 2026-10-17 pending staging pins: SQL 90-97 (aws/workflows/sql/9x_*.sql). Recorded so the
+// reviewed bytes are pinned; no guarded staging executor handler, workflow choice or production
+// tool exists for them yet, so nothing can apply them. expected_live_definition_sha256 stays null
+// until a staging read-live is recorded, and intended_replacement_sha256 stays null until each
+// migration's tooling defines its code-derived intended-state fingerprint. They are deliberately
+// not in github-staging-sql-executor.mjs MIGRATIONS or the workflow choices until then.
+export const AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES = Object.freeze({
+  key: 'sql90',
+  filename: 'aws/workflows/sql/90_users_only_tenant_roles.sql',
+  migration_id: '90_users_only_tenant_roles',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
+  source_sha256: '1ee9c1d12b3ad71a58ecec30ee223f8ab660be74d162d9ada9482c5640c26d86',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_is_tenant_member(uuid)', 'public.aws_can_write_tenant(uuid)', 'public.aws_can_write_check(uuid)', 'public.aws_can_write_claim(uuid)', 'public.aws_tenant_has_no_members(uuid)', 'public.aws_is_platform_owner_user(uuid)', 'public.aws_has_any_tenant_membership()', 'public.aws_can_write_same_tenant_user(uuid)', 'public.aws_can_access_tax_profiles(uuid)', 'public.aws_first_invite_allowed(uuid)', 'public.aws_invite_create_user_identity(uuid, text, text, text)', 'public.aws_create_deposit_batch_for_item(uuid, text)', 'public.aws_is_tenant_manager_admin()', 'public.aws_can_manage_mortgage_library(uuid)', 'public.aws_save_checkalt_tenant_auto_deposit(uuid, jsonb)']),
+});
+export const AUTHORIZED_SQL91_MOOV_ONBOARDING = Object.freeze({
+  key: 'sql91',
+  filename: 'aws/workflows/sql/91_moov_onboarding.sql',
+  migration_id: '91_moov_onboarding',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
+  source_sha256: '199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_moov_onboarding_active()', 'public.aws_can_submit_moov_onboarding(uuid)', 'public.aws_moov_onboarding_writer(uuid)', 'public.aws_moov_webhook_apply_active()']),
+});
+export const AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT = Object.freeze({
+  key: 'sql92',
+  filename: 'aws/workflows/sql/92_signature_request_check_files_link_grant.sql',
+  migration_id: '92_signature_request_check_files_link_grant',
+  // The commit that last authored the file bytes on the release branch.
+  commit: '214621e7b57b201515dfad2ff32117390d6e33a1',
+  source_sha256: 'ceef6482271f5572db20f5a6db3b4bbcf77e29ada2290f03f53af7fb6e725e17',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze([]),
+});
+export const AUTHORIZED_SQL93_TENANT_COMPANY_INFO = Object.freeze({
+  key: 'sql93',
+  filename: 'aws/workflows/sql/93_tenant_company_info.sql',
+  migration_id: '93_tenant_company_info',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'd1ed17dcf7c5e533a91b240580aa4464ad64627a',
+  source_sha256: 'd90ec7f9ef14ca60b805e94337021259c8f9ce9ec80ed9781a47c64dbd6f8cfa',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_tenants_member_column_guard()']),
+});
+export const AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE = Object.freeze({
+  key: 'sql94',
+  filename: 'aws/workflows/sql/94_document_library_restore.sql',
+  migration_id: '94_document_library_restore',
+  // The commit that last authored the file bytes on the release branch.
+  commit: '0625354916088d999d8fd27e635dff2f78b72d21',
+  source_sha256: 'ef865f65c8ccdfda51e1b6f65a828f9d6bed16bdbd1879a1a85cf4ba30a990a2',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_tenant_document_doc_type_ok(text)', 'public.aws_homeowner_share_member(uuid)', 'public.aws_homeowner_shared_documents_guard()', 'public.aws_public_homeowner_shared_documents(text)', 'public.aws_public_homeowner_shared_document(text, uuid)']),
+});
+export const AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE = Object.freeze({
+  key: 'sql95',
+  filename: 'aws/workflows/sql/95_remove_freedom_claims_bridge.sql',
+  migration_id: '95_remove_freedom_claims_bridge',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'f50bf7d0d687b188b427263fbb79a8b8360acfc1',
+  source_sha256: '0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze([]),
+});
+export const AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING = Object.freeze({
+  key: 'sql96',
+  filename: 'aws/workflows/sql/96_platform_owner_tenant_pricing.sql',
+  migration_id: '96_platform_owner_tenant_pricing',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'c952d1ceb846dda394b460568e426d8b55f899ff',
+  source_sha256: '18109fed72bf8446dbe0c9560507ae6ed1fed1eb49f972142e78112479e257b6',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_tenant_pricing_columns()', 'public.aws_tenant_pricing_audit_row()', 'public.aws_tenants_member_column_guard()', 'public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)']),
+});
+export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze({
+  key: 'sql97',
+  filename: 'aws/workflows/sql/97_financial_stepup_log_server_writer.sql',
+  migration_id: '97_financial_stepup_log_server_writer',
+  // The commit that last authored the file bytes on the release branch.
+  commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
+  source_sha256: 'e3c8fd413f1d60030dd65192bb8696387229a4fd33fc2ae234cd61e52fbb79db',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  intended_replacement_sha256: null,
+  function_identities: Object.freeze(['public.aws_financial_stepup_log_writer_guard()']),
+});
+
+export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
+  sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
+  sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
+  sql92: AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT,
+  sql93: AUTHORIZED_SQL93_TENANT_COMPANY_INFO,
+  sql94: AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE,
+  sql95: AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE,
+  sql96: AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING,
+  sql97: AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER,
+});
+
 export function isSql29MortgageOpsLibraryParity(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY);
 }

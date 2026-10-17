@@ -33,6 +33,8 @@ const createClient = ({ existingPayees = [] } = {}) => {
     account_number: null,
     carrier_name: null,
     payee_line: null,
+    deposited_at: null,
+    confirmedDeposit: false,
     detected_claim_number: null,
     claim_id: null,
     payees: existingPayees.map((row) => ({ ...row })),
@@ -47,6 +49,14 @@ const createClient = ({ existingPayees = [] } = {}) => {
       assert.equal(/UPDATE public\.check_intake_items[\s\S]*detected_claim_number\s*=/.test(text), false);
       if (/SAVEPOINT |RELEASE SAVEPOINT |ROLLBACK TO SAVEPOINT /.test(text)) {
         return { rows: [] };
+      }
+      if (/SELECT deposited_at, payee_line/.test(text)) {
+        const row = { deposited_at: store.deposited_at, payee_line: store.payee_line };
+        if (typeof store.afterDepositedLookup === 'function') store.afterDepositedLookup(store);
+        return { rows: [row] };
+      }
+      if (/FROM public.aws_financial_operations/.test(text)) {
+        return { rows: store.confirmedDeposit ? [{ ok: 1 }] : [] };
       }
       if (/ocr_persist_detected_claim_number/.test(text)) {
         const incoming = String(params[2] || '').trim();
@@ -71,7 +81,10 @@ const createClient = ({ existingPayees = [] } = {}) => {
       }
       if (/UPDATE public\.check_intake_items/.test(text) && /carrier_name = COALESCE/.test(text)) {
         if (params[1] != null) store.carrier_name = params[1];
-        if (params[2] != null) store.payee_line = params[2];
+        // Model the SQL as written: payee_line only moves when the UPDATE
+        // itself guards on deposited_at IS NULL and the row is not deposited.
+        const guarded = /payee_line = CASE[\s\S]*deposited_at IS NULL[\s\S]*END/.test(text);
+        if (params[2] != null && (!guarded || store.deposited_at == null)) store.payee_line = params[2];
         return { rows: [{ id: CHECK_ID, carrier_name: store.carrier_name, payee_line: store.payee_line }] };
       }
       if (/UPDATE public\.check_intake_items/.test(text) && /is_multi_payee = true/.test(text)) {
@@ -337,6 +350,10 @@ test('19) amount remains prohibited and unpersisted after intake', async () => {
         };
       }
       if (/FROM public\.check_payees/.test(sql)) return { rows: [] };
+      if (/SELECT deposited_at, payee_line/.test(sql)) {
+        return { rows: [{ deposited_at: null, payee_line: null }] };
+      }
+      if (/FROM public.aws_financial_operations/.test(sql)) return { rows: [] };
       return { rows: [] };
     },
   };
@@ -576,6 +593,42 @@ test('claim/check/MICR/amount values are not case-normalized; only claim RPC wri
   assert.equal(blob.includes(ACCOUNT), false);
   assert.equal(/UPDATE public\.check_intake_items[\s\S]*detected_claim_number\s*=/.test(blob), false);
   assert.equal(client.store.amount, null);
+});
+
+test('OCR descriptive persist does not overwrite payee_line after deposit', async () => {
+  const client = createClient();
+  client.store.payee_line = 'Corrected Payee Line';
+  client.store.confirmedDeposit = true;
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { carrier_name: 'Still Writable Carrier', payee_line: 'OCR Rewrite After Deposit' },
+  });
+  assert.equal(client.store.payee_line, 'Corrected Payee Line');
+  assert.equal(client.store.carrier_name, 'Still Writable Carrier');
+});
+
+test('OCR descriptive persist keeps payee_line when a deposit lands after the S14 lock check', async () => {
+  const client = createClient();
+  client.store.payee_line = 'Original Payee Line';
+  // The S14 lookup sees an undeposited check; the deposit commits right after.
+  client.store.afterDepositedLookup = (store) => {
+    store.deposited_at = '2026-10-17T12:00:00Z';
+    store.afterDepositedLookup = null;
+  };
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { carrier_name: 'Still Writable Carrier', payee_line: 'OCR Rewrite Racing Deposit' },
+  });
+  assert.equal(client.store.deposited_at, '2026-10-17T12:00:00Z');
+  assert.equal(client.store.payee_line, 'Original Payee Line');
+  assert.equal(client.store.carrier_name, 'Still Writable Carrier');
+  const update = client.statements.find((row) => /carrier_name = COALESCE/.test(row.sql));
+  assert.ok(update, 'descriptive UPDATE ran');
+  assert.match(update.sql, /payee_line = CASE[\s\S]*deposited_at IS NULL[\s\S]*ELSE payee_line[\s\S]*END/);
 });
 
 test('generic /data/write still prohibits detected_claim_number', () => {

@@ -30,6 +30,8 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { CheckMessageThread } from "@/components/check-messages/CheckMessageThread";
 import { SendToMortgageDeskButton } from "./SendToMortgageDeskButton";
 import { MortgageDeskShippingCard } from "./MortgageDeskShippingCard";
+import { MortgageDeskReturnedBanner } from "./MortgageDeskReturnedBanner";
+import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
 
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -73,6 +75,9 @@ export function LossDraftDetailPanel({
   const [savingLender, setSavingLender] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("actions");
+  const [ackBusy, setAckBusy] = useState(false);
+  const { data: returnAlert } = useMortgageDeskReturnAlert(draft?.check_intake_item_id);
+  const acknowledgeReturn = useAcknowledgeMortgageDeskReturn();
 
   const handleChanged = () => {
     invalidateAll();
@@ -345,6 +350,43 @@ export function LossDraftDetailPanel({
       )}
       
       <Separator />
+
+      {returnAlert?.actionRequired && draft.check_intake_item_id && (
+        <div className="mx-4 my-3 shrink-0">
+          <MortgageDeskReturnedBanner
+            completedAt={returnAlert.completedAt}
+            returnedAt={returnAlert.returnedAt}
+            acknowledging={ackBusy}
+            onReview={() => setActiveTab("docs")}
+            onAcknowledge={async () => {
+              if (!user?.id || !draft.check_intake_item_id) return;
+              setAckBusy(true);
+              try {
+                const result = await acknowledgeReturn({
+                  checkId: draft.check_intake_item_id,
+                  requestIds: returnAlert.unackedRequestIds,
+                  senderId: user.id,
+                });
+                if (result.error) {
+                  toast({
+                    title: "Could not acknowledge the return",
+                    description: result.error.message || "Please try again.",
+                    variant: "destructive",
+                  });
+                }
+              } catch (e) {
+                toast({
+                  title: "Could not acknowledge the return",
+                  description: e instanceof Error ? e.message : "Please try again.",
+                  variant: "destructive",
+                });
+              } finally {
+                setAckBusy(false);
+              }
+            }}
+          />
+        </div>
+      )}
 
       {draft.escrow_status === "final_release_complete" && (
         <div className="mx-4 my-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-start gap-3 shrink-0">
