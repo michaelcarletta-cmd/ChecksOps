@@ -51,8 +51,28 @@ const assertChainsFromReconciled = (name, row) => {
     assertChainsFromReconciled(name, previous);
     return;
   }
+  // A change that supersedes a planned change never applied live keeps that
+  // manifest's live bytes, which in turn chain back to 2026-10-08.
+  if (row.supersedes_unapplied_manifest) {
+    const superseded = JSON.parse(fs.readFileSync(path.join(ROOT, row.supersedes_unapplied_manifest), 'utf8')).members?.[name];
+    assert.ok(superseded, `${row.supersedes_unapplied_manifest} must list ${name}`);
+    assert.equal(row.live_sha256, superseded.live_sha256, `${name} live_sha256 must equal ${row.supersedes_unapplied_manifest} live bytes`);
+    assertChainsFromReconciled(name, superseded);
+    return;
+  }
   assert.equal(row.live_sha256, proof.members[name].reconciled_sha256, `${name} newer manifest live_sha256 must equal the 2026-10-08 reconciled bytes`);
 };
+
+/**
+ * A 2026-10-08 ADD member the production plan excludes (do_not_overlay) never went
+ * live, so the reconciliation keeps its bytes only as evidence: the repository file
+ * may move on (workflow-delete-check.mjs: release 2026-10-17 users-only gate). It
+ * stays excluded and unimported by workflow.mjs (checked below).
+ */
+const excludedNeverLive = (name) => name !== 'ocr.mjs'
+  && (plan.do_not_overlay || []).includes(name)
+  && !plan.order.includes(name)
+  && proof.members[name]?.live_sha256 === null;
 
 test('proof pins the official live production Lambda identity', () => {
   assert.equal(proof.function_name, 'checksops-production-prep-api');
@@ -68,6 +88,7 @@ test('reconciled members match the pinned SHA-256 values', () => {
       assertChainsFromReconciled(name, newer);
       continue;
     }
+    if (excludedNeverLive(name)) continue;
     const expected = name === 'ocr.mjs' ? row.repo_sha256 : row.reconciled_sha256;
     assert.equal(sha256(name), expected, name);
   }
@@ -96,7 +117,9 @@ test('workflow-transitions.mjs removes only the claim-linked deny', () => {
   assert.doesNotMatch(src, /claim_linked_transition_denied/);
   assert.match(src, /partner_linked_transition_denied/);
   assert.match(src, /financial_or_provider/);
-  assert.equal(sha256('workflow-transitions.mjs'), proof.members['workflow-transitions.mjs'].reconciled_sha256);
+  const newer = newerManifestRow('workflow-transitions.mjs');
+  if (newer) assertChainsFromReconciled('workflow-transitions.mjs', newer);
+  else assert.equal(sha256('workflow-transitions.mjs'), proof.members['workflow-transitions.mjs'].reconciled_sha256);
 });
 
 test('workflow-rpc.mjs keeps production settlement writer and adds mark_manual_deposit', () => {
@@ -187,6 +210,7 @@ test('deployment manifest pins live hashes, accepted hashes, and SQL order', () 
       assertChainsFromReconciled(name, newer);
       continue;
     }
+    if (excludedNeverLive(name)) continue;
     assert.equal(sha256(name), row.accepted_sha256, name);
   }
 

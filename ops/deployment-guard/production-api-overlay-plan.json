@@ -2,7 +2,7 @@
   "id": "production-api-overlay-plan",
   "function_name": "checksops-production-prep-api",
   "source": "aws/tests/fixtures/production-reconciliation-deployment-manifest-2026-10-08.json",
-  "notes": "One member per guarded production run. Main's bytes must equal accepted_sha256. REPLACE requires the live member to still equal expected_live_sha256 (the reconciled pre-deploy bytes) unless it already equals accepted_sha256 (no-op). ADD requires the member to be absent. ocr.mjs and index.mjs are never overlaid. workflow-delete-check.mjs is not imported by any accepted member (Delete Check is served from workflow.mjs) and is excluded, matching overlay_sequence_when_authorized. Read-only production Moov wallet sync (2026-10-13): moov-wallet.mjs, then ADD providers/production/moov-wallet-sync.mjs, then providers.mjs (live production bytes, which carry the Platform Finance read exception, plus the moov-wallet-sync route). parity/moov-functions.mjs is not overlaid. Production WalletOps funding (2026-10-13): providers/production/moov-wallet-sync.mjs (financial GUCs for SQL 72), ADD providers/production/moov-fund-authz.mjs, cognito.mjs (login id claims), auth-financial-totp.mjs (wallet.fund step-up once per login), ADD providers/production/moov-wallet-fund.mjs, then providers.mjs (#914 bytes plus the moov-wallet-fund route). Production sends (2026-10-13): ADD providers/production/moov-send.mjs, then providers.mjs (#915 bytes plus the moov-disburse send route); applied (overlay runs 31 and 33). Then REPLACE providers/production/moov-send.mjs so partners added to the check stakeholders can be paid. Check Alt approve two-factor (2026-10-14): REPLACE providers/production/checkalt-authz.mjs, then auth-financial-totp.mjs (its new bytes import FINANCIAL_CHECKALT_STEPUP_ACTIONS from checkalt-authz.mjs at runtime, so checkalt-authz.mjs must be live first), then providers/production/checkalt-approve.mjs (so approve never asks for a proof the live step-up cannot mint). Check Alt approve two-factor applied 2026-10-14 (overlay runs 37, 38 and 39). Check Alt auto-approve (2026-10-14, PR #954): REPLACE providers/production/checkalt-config.mjs, then providers/production/checkalt-idempotency.mjs, then providers/production/checkalt-submit.mjs. Check Alt member access (2026-10-15): REPLACE providers/production/checkalt-authz.mjs (tenant owner, admin, manager or operator may submit, approve and refresh with their own step-up; viewers may not), then workflow-rpc.mjs (the same roles may save Auto-Deposit; SQL 80 replaces the SQL 38 function's admin check). Live workflow-rpc.mjs equals the 2026-10-08 reconciled bytes (inspect run 38665168066). Check Alt member access applied 2026-10-15 (checkalt-authz.mjs 80b44100… and workflow-rpc.mjs 659028c2… live). Check Alt second approver (2026-10-15): REPLACE providers/production/checkalt-authz.mjs (the second approver counts only with a tenant owner, admin, manager or operator role; platform roles are ignored), then providers/production/checkalt-dual-control.mjs (recording a second approval uses the same tenant-role rule). Apply checkalt-authz.mjs first so a second approver is checked by tenant role when it is consumed, before the recorder changes; both orders link (live 80b44100 already exports the helpers). checkalt-dual-control.mjs expected_live_sha256 is main's bytes (unchanged since 113b6e1c6) and must be confirmed by a read-only production inspect before any apply. Check Alt dual control removed and applied 2026-10-15 (production runs 58/59). Check Alt production onboarding (2026-10-15, owner-approved \"approve the onboarding lock and plan values\"): ADD providers/checkalt-account-mask.mjs, REPLACE data.mjs (last four only; owner-only Check Alt embeds), REPLACE workflow-rpc.mjs (masked save_checkalt_settings response), ADD providers/production/checkalt-register.mjs (needs SQL 81 first), REPLACE providers/production/checkalt-dispatch.mjs (imports register), then REPLACE providers/production/checkalt-holds.mjs last (switches register/verify to production). Confirm every expected live value with a read-only inspect first. Homeowner signing links (2026-10-15, PR 6): ADD homeowner-signing-integration.mjs, then homeowner.mjs, then app-services.mjs (live production cce9d0ff plus the endorse-link and document-sign-link routes); app-services.mjs must not go before homeowner.mjs. app-services.mjs is a PRODUCTION-only REPLACE: its accepted bytes are the production live file (cce9d0ff) plus only the homeowner-ledger-endorse-link and homeowner-ledger-document-sign-link routes. Staging keeps its live router (84a8e9e7) until the #901 reconciliation, because these bytes would drop staging's tenant-management-v2 route. The staging Lambda overlay workflow takes any single repository member by name and does not consult this plan, so it would accept app-services.mjs for staging (REPLACE against 84a8e9e7) without a guard; do not run it for this member. Required order for the homeowner signing links (PR #989): (1) SQL 82 and SQL 83 applied and verified live (read-only function-definition inspect); (2) ADD homeowner-signing-integration.mjs; (3) REPLACE homeowner.mjs; (4) REPLACE app-services.mjs; (5) promote the SPA as soon as possible after homeowner.mjs: between the homeowner.mjs overlay and the SPA promotion, signing from the ledger stops in the live SPA (it still calls the retired homeowner-ledger-sign-link and expects sign_url in the ledger view). sql_before is intentionally not set yet for these members. Review follow-ups (2026-10-16): REPLACE homeowner.mjs (f9f993a7 -> allow-listed link origins; never reflects a request-supplied host). REPLACE mortgage-agent-compensation.mjs (c3898615 -> Adjust forwards the SPA idempotency key as SQL 85's p_idempotency_key): mortgage-agent-compensation.mjs deploys only after production SQL 85 (85_mortgage_compensation_adjust.sql) is applied and recorded verified_live; before SQL 85 the six-argument call does not exist and Adjust would fail. sql_before enforces this. Its place in order is after app-services.mjs (before the Moov send members and providers.mjs) so the SQL 85 hold does not block homeowner.mjs or the other members before it. Review financial edits (2026-10-16, PR #901, owner-approved \"start steps 1-3\"): REPLACE write-allowlist.mjs (0fdc95bd -> 9fdce9c6), then REPLACE write-check-workflow.mjs (d9a9ce68 -> 1f5e9444). Both live values are the 2026-10-11 production snapshot (f78e16d99), confirmed by read-only inspect run 38903720825 on main b83e5cc33. write-allowlist.mjs goes first: the new write-check-workflow.mjs imports REVIEW_CHECK_STAGE and REVIEW_FINANCIAL_COLUMNS, which only the new write-allowlist.mjs exports. The new write-allowlist.mjs is safe alone: live write-check-workflow.mjs d9a9ce68 drops amount, routing_number and account_number in intakeCoerce and answers table_not_allowlisted for check_stakeholders and check_partner_stakeholder_removals, and write.mjs is the only live caller of WRITE_ALLOWLIST/pickAllowlistedValues. write-check-workflow.mjs deploys only after production SQL 89 (89_check_intake_items_column_update.sql) is applied and recorded verified_live (sql_before; it was SQL 71 until SQL 89 replaced SQL 71 in production). SQL 89's 43 columns include amount (SQL 71) and routing_number/account_number (SQL 52), so SQL 71 and SQL 52 are recorded verified_live from the SQL 89 apply. Its stakeholder writes need SQL 77, 78 and 79 (applied in production 2026-10-15). Both sit just before providers/production/moov-send.mjs (moov-send.mjs and providers.mjs stay last) so the SQL 89 hold blocks only those two if they are not yet live at their accepted bytes. SQL 71 in production (2026-10-16): the read-only production inspect (SSM f3715bb0-5fd9-43a8-83e9-86350ef5bab7, main 358ef188) found checksops with table-level UPDATE on check_intake_items (ACL checksops=arwd/checksops_admin, all 73 columns updatable), so amount is already updatable there and the SQL 71 production tool refuses (no_table_level_update). SQL 71's production state (amount updatable, no table-level UPDATE) was produced by SQL 89 (applied 2026-10-16, SSM c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77) (aws/workflows/sql/89_check_intake_items_column_update.sql, ops/production-sql-89-apply.md), which replaces the table-level UPDATE with UPDATE on exactly the 43 columns the API writes (amount, routing_number and account_number among them). SQL 89 was applied in production on 2026-10-16 (SSM c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77), and the reviewed plan change after it recorded SQL 89, SQL 71 and SQL 52 verified live and moved write-check-workflow.mjs sql_before to SQL 89.",
+  "notes": "One member per guarded production run. Main's bytes must equal accepted_sha256. REPLACE requires the live member to still equal expected_live_sha256 (the reconciled pre-deploy bytes) unless it already equals accepted_sha256 (no-op). ADD requires the member to be absent. ocr.mjs and index.mjs are never overlaid. workflow-delete-check.mjs is not imported by any accepted member (Delete Check is served from workflow.mjs) and is excluded, matching overlay_sequence_when_authorized. Read-only production Moov wallet sync (2026-10-13): moov-wallet.mjs, then ADD providers/production/moov-wallet-sync.mjs, then providers.mjs (live production bytes, which carry the Platform Finance read exception, plus the moov-wallet-sync route). parity/moov-functions.mjs is not overlaid. Production WalletOps funding (2026-10-13): providers/production/moov-wallet-sync.mjs (financial GUCs for SQL 72), ADD providers/production/moov-fund-authz.mjs, cognito.mjs (login id claims), auth-financial-totp.mjs (wallet.fund step-up once per login), ADD providers/production/moov-wallet-fund.mjs, then providers.mjs (#914 bytes plus the moov-wallet-fund route). Production sends (2026-10-13): ADD providers/production/moov-send.mjs, then providers.mjs (#915 bytes plus the moov-disburse send route); applied (overlay runs 31 and 33). Then REPLACE providers/production/moov-send.mjs so partners added to the check stakeholders can be paid. Check Alt approve two-factor (2026-10-14): REPLACE providers/production/checkalt-authz.mjs, then auth-financial-totp.mjs (its new bytes import FINANCIAL_CHECKALT_STEPUP_ACTIONS from checkalt-authz.mjs at runtime, so checkalt-authz.mjs must be live first), then providers/production/checkalt-approve.mjs (so approve never asks for a proof the live step-up cannot mint). Check Alt approve two-factor applied 2026-10-14 (overlay runs 37, 38 and 39). Check Alt auto-approve (2026-10-14, PR #954): REPLACE providers/production/checkalt-config.mjs, then providers/production/checkalt-idempotency.mjs, then providers/production/checkalt-submit.mjs. Check Alt member access (2026-10-15): REPLACE providers/production/checkalt-authz.mjs (tenant owner, admin, manager or operator may submit, approve and refresh with their own step-up; viewers may not), then workflow-rpc.mjs (the same roles may save Auto-Deposit; SQL 80 replaces the SQL 38 function's admin check). Live workflow-rpc.mjs equals the 2026-10-08 reconciled bytes (inspect run 38665168066). Check Alt member access applied 2026-10-15 (checkalt-authz.mjs 80b44100… and workflow-rpc.mjs 659028c2… live). Check Alt second approver (2026-10-15): REPLACE providers/production/checkalt-authz.mjs (the second approver counts only with a tenant owner, admin, manager or operator role; platform roles are ignored), then providers/production/checkalt-dual-control.mjs (recording a second approval uses the same tenant-role rule). Apply checkalt-authz.mjs first so a second approver is checked by tenant role when it is consumed, before the recorder changes; both orders link (live 80b44100 already exports the helpers). checkalt-dual-control.mjs expected_live_sha256 is main's bytes (unchanged since 113b6e1c6) and must be confirmed by a read-only production inspect before any apply. Check Alt dual control removed and applied 2026-10-15 (production runs 58/59). Check Alt production onboarding (2026-10-15, owner-approved \"approve the onboarding lock and plan values\"): ADD providers/checkalt-account-mask.mjs, REPLACE data.mjs (last four only; owner-only Check Alt embeds), REPLACE workflow-rpc.mjs (masked save_checkalt_settings response), ADD providers/production/checkalt-register.mjs (needs SQL 81 first), REPLACE providers/production/checkalt-dispatch.mjs (imports register), then REPLACE providers/production/checkalt-holds.mjs last (switches register/verify to production). Confirm every expected live value with a read-only inspect first. Homeowner signing links (2026-10-15, PR 6): ADD homeowner-signing-integration.mjs, then homeowner.mjs, then app-services.mjs (live production cce9d0ff plus the endorse-link and document-sign-link routes); app-services.mjs must not go before homeowner.mjs. app-services.mjs is a PRODUCTION-only REPLACE: its accepted bytes are the production live file (cce9d0ff) plus only the homeowner-ledger-endorse-link and homeowner-ledger-document-sign-link routes. Staging keeps its live router (84a8e9e7) until the #901 reconciliation, because these bytes would drop staging's tenant-management-v2 route. The staging Lambda overlay workflow takes any single repository member by name and does not consult this plan, so it would accept app-services.mjs for staging (REPLACE against 84a8e9e7) without a guard; do not run it for this member. Required order for the homeowner signing links (PR #989): (1) SQL 82 and SQL 83 applied and verified live (read-only function-definition inspect); (2) ADD homeowner-signing-integration.mjs; (3) REPLACE homeowner.mjs; (4) REPLACE app-services.mjs; (5) promote the SPA as soon as possible after homeowner.mjs: between the homeowner.mjs overlay and the SPA promotion, signing from the ledger stops in the live SPA (it still calls the retired homeowner-ledger-sign-link and expects sign_url in the ledger view). sql_before is intentionally not set yet for these members. Review follow-ups (2026-10-16): REPLACE homeowner.mjs (f9f993a7 -> allow-listed link origins; never reflects a request-supplied host). REPLACE mortgage-agent-compensation.mjs (c3898615 -> Adjust forwards the SPA idempotency key as SQL 85's p_idempotency_key): mortgage-agent-compensation.mjs deploys only after production SQL 85 (85_mortgage_compensation_adjust.sql) is applied and recorded verified_live; before SQL 85 the six-argument call does not exist and Adjust would fail. sql_before enforces this. Its place in order is after app-services.mjs (before the Moov send members and providers.mjs) so the SQL 85 hold does not block homeowner.mjs or the other members before it. Review financial edits (2026-10-16, PR #901, owner-approved \"start steps 1-3\"): REPLACE write-allowlist.mjs (0fdc95bd -> 9fdce9c6), then REPLACE write-check-workflow.mjs (d9a9ce68 -> 1f5e9444). Both live values are the 2026-10-11 production snapshot (f78e16d99), confirmed by read-only inspect run 38903720825 on main b83e5cc33. write-allowlist.mjs goes first: the new write-check-workflow.mjs imports REVIEW_CHECK_STAGE and REVIEW_FINANCIAL_COLUMNS, which only the new write-allowlist.mjs exports. The new write-allowlist.mjs is safe alone: live write-check-workflow.mjs d9a9ce68 drops amount, routing_number and account_number in intakeCoerce and answers table_not_allowlisted for check_stakeholders and check_partner_stakeholder_removals, and write.mjs is the only live caller of WRITE_ALLOWLIST/pickAllowlistedValues. write-check-workflow.mjs deploys only after production SQL 89 (89_check_intake_items_column_update.sql) is applied and recorded verified_live (sql_before; it was SQL 71 until SQL 89 replaced SQL 71 in production). SQL 89's 43 columns include amount (SQL 71) and routing_number/account_number (SQL 52), so SQL 71 and SQL 52 are recorded verified_live from the SQL 89 apply. Its stakeholder writes need SQL 77, 78 and 79 (applied in production 2026-10-15). Both sit just before providers/production/moov-send.mjs (moov-send.mjs and providers.mjs stay last) so the SQL 89 hold blocks only those two if they are not yet live at their accepted bytes. SQL 71 in production (2026-10-16): the read-only production inspect (SSM f3715bb0-5fd9-43a8-83e9-86350ef5bab7, main 358ef188) found checksops with table-level UPDATE on check_intake_items (ACL checksops=arwd/checksops_admin, all 73 columns updatable), so amount is already updatable there and the SQL 71 production tool refuses (no_table_level_update). SQL 71's production state (amount updatable, no table-level UPDATE) was produced by SQL 89 (applied 2026-10-16, SSM c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77) (aws/workflows/sql/89_check_intake_items_column_update.sql, ops/production-sql-89-apply.md), which replaces the table-level UPDATE with UPDATE on exactly the 43 columns the API writes (amount, routing_number and account_number among them). SQL 89 was applied in production on 2026-10-16 (SSM c6c05ba9-dc58-4ab3-bdca-1b9996a7dc77), and the reviewed plan change after it recorded SQL 89, SQL 71 and SQL 52 verified live and moved write-check-workflow.mjs sql_before to SQL 89. Release 2026-10-17 (owner-approved \"approve the release lock and pin PR\"; planning only, nothing live or verified): the 16 members the release branch changes take the branch bytes as accepted_sha256 and 46 files become members, all under aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json, which records each live value's provenance (previous_manifest when the previous planned bytes are recorded live or were earlier in the guarded order than a recorded apply; supersedes_unapplied_manifest when no apply of the previous planned bytes is recorded; the 2026-10-11 live snapshot f78e16d99 for files new to the plan). Confirm every expected live value with a read-only production inspect before any apply. Order (ops/release-2026-10-17-lock-pin-deltas.md section 5 and Appendix A): the members the release does not change keep their place first; then ops-readiness.mjs, privileged-auth.mjs, identity.mjs; workflow-transitions.mjs, workflow.mjs; the parity files, providers/parity/caller.mjs last; write-allowlist.mjs (SQL 93), admin-reset-totp.mjs (before auth-financial-totp.mjs, whose new bytes read TEAM_RESET_TOTP_ACTION from it through a destructured dynamic import the link check enforces), auth-financial-totp.mjs, checkalt-submit/approve/authz, financial-authz.mjs, financial.mjs, tenant-admin.mjs (SQL 90), workflow-rpc.mjs (SQL 90), tenant-check-user.mjs, then SQL 97; the library (SQL 94; write-app-metadata.mjs SQL 93) with the ADDs tenant-library-rules.mjs, tenant-library.mjs, signature-library-source.mjs and platform-announcements.mjs before their importers; email-branding.mjs, write-signature.mjs, esign.mjs (SQL 92 soft), endorsement-composite.mjs, check-endorsement.mjs, documents.mjs, homeowner.mjs, tax-secrets.mjs, tax-profiles.mjs, tenant-email-domain.mjs, app-services.mjs, mortgage-agent-compensation.mjs (unchanged, SQL 85 live), tenant-settings-handlers.mjs, the ingest-shared-check.mjs 410 stub, then SQL 95; ADD providers/onboarding/* (SQL 91; flags, crypto, redact, store, context, documents, moov-sync, webhook-status, handlers), providers/catalog.mjs, providers/webhook-apply.mjs, providers/webhooks.mjs, tenant-billing-engine.mjs and tenant-billing-handlers.mjs (SQL 96), write-check-workflow.mjs (SQL 89), then the unchanged moov-wallet-fund.mjs and moov-send.mjs, and providers.mjs last. SQL 90, 91, 93, 94 and 96 are listed in sql_prerequisites with verified_live false (pending pins). app-services.mjs stays production-only (staging keeps its live router until the tenant-management-v2 reconciliation). package.json and package-lock.json (@aws-sdk/client-kms) are not overlay members: production onboarding needs a full rebuilt ZIP. invoice-actions.mjs, tenant-collection-v2-uat.mjs and tenant-maintenance-payments-catalog-inspect.mjs are absent from the live bundle and imported only by index.mjs (never overlaid) and public-invoice.mjs, so they reach production only with a rebuilt ZIP. workflow-delete-check.mjs stays excluded.",
   "live_identity_at_plan": {
     "code_sha256": "oQDCIRFyreTPe781aeSFLdXNfU3M2ZUQo5Wcgi0EqWI=",
     "revision_id": "f4904e55-61b3-46c4-bf1f-da178e84911b",
@@ -51,43 +51,119 @@
     "aws/workflows/sql/79_member_stakeholder_writes.sql": {
       "verified_live": true,
       "evidence": "2026-10-15 guarded production SQL apply on i-0c35557c4e5385406 (SSM b443d830-9b42-467e-af94-d8f77f43d9f8, workstream prod-sql79-member-stakeholder-writes-20261015, source 18fafde1b, one_use_id sql79-prod-ed5216d8-5f92-4f7a-a49b-316dad1f58e5): d9bc8921… -> 878d6441…; post-apply read-only inspect already_applied true; recorded in ops/deployment-guard/sql79-member-stakeholder-writes-production-apply.json applied"
+    },
+    "aws/workflows/sql/90_users_only_tenant_roles.sql": {
+      "verified_live": false,
+      "evidence": null,
+      "pin": "ops/deployment-guard/sql90-users-only-tenant-roles-production-apply.json",
+      "note": "Pending: not applied in staging or production. Holds tenant-admin.mjs and workflow-rpc.mjs (sql_before). Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
+    },
+    "aws/workflows/sql/91_moov_onboarding.sql": {
+      "verified_live": false,
+      "evidence": null,
+      "pin": "ops/deployment-guard/sql91-moov-onboarding-production-apply.json",
+      "note": "Pending: not applied in staging or production. Holds the providers/onboarding/*.mjs ADD members (sql_before). Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
+    },
+    "aws/workflows/sql/93_tenant_company_info.sql": {
+      "verified_live": false,
+      "evidence": null,
+      "pin": "ops/deployment-guard/sql93-tenant-company-info-production-apply.json",
+      "note": "Pending: not applied in staging or production. Requires SQL 90. Holds write-allowlist.mjs and write-app-metadata.mjs (sql_before). Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
+    },
+    "aws/workflows/sql/94_document_library_restore.sql": {
+      "verified_live": false,
+      "evidence": null,
+      "pin": "ops/deployment-guard/sql94-document-library-restore-production-apply.json",
+      "note": "Pending: not applied in staging or production. Requires SQL 29, SQL 30 (optional) and SQL 90. Holds the library members (sql_before). Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
+    },
+    "aws/workflows/sql/96_platform_owner_tenant_pricing.sql": {
+      "verified_live": false,
+      "evidence": null,
+      "pin": "ops/deployment-guard/sql96-platform-owner-tenant-pricing-production-apply.json",
+      "note": "Pending: not applied in staging or production. Holds tenant-billing-engine.mjs and tenant-billing-handlers.mjs (sql_before). Do not re-run SQL 93 after SQL 96. Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
     }
   },
   "order": [
     "write-claim-settlement.mjs",
     "financial-remaining.mjs",
     "check-deposited.mjs",
-    "workflow.mjs",
     "claim-settlement-rpc.mjs",
     "providers/checkalt-account-mask.mjs",
     "data.mjs",
-    "workflow-transitions.mjs",
     "providers/parity/moov-wallet.mjs",
     "providers/production/moov-wallet-sync.mjs",
     "providers/production/moov-fund-authz.mjs",
     "cognito.mjs",
-    "auth-financial-totp.mjs",
-    "providers/production/checkalt-approve.mjs",
     "providers/production/checkalt-config.mjs",
     "providers/production/checkalt-idempotency.mjs",
-    "providers/production/checkalt-submit.mjs",
-    "workflow-rpc.mjs",
-    "providers/production/checkalt-authz.mjs",
     "providers/production/checkalt-dual-control.mjs",
     "providers/production/checkalt-register.mjs",
     "providers/production/checkalt-dispatch.mjs",
     "providers/production/checkalt-holds.mjs",
-    "providers/parity/checkalt-functions.mjs",
-    "write-signature.mjs",
-    "email-branding.mjs",
-    "esign.mjs",
     "homeowner-signing-integration.mjs",
+    "ops-readiness.mjs",
+    "privileged-auth.mjs",
+    "identity.mjs",
+    "workflow-transitions.mjs",
+    "workflow.mjs",
+    "providers/parity/checkalt-functions.mjs",
+    "providers/parity/db.mjs",
+    "providers/parity/moov-functions.mjs",
+    "providers/parity/moov-money.mjs",
+    "providers/parity/moov-onboard.mjs",
+    "providers/parity/moov-client.mjs",
+    "providers/parity/caller.mjs",
+    "write-allowlist.mjs",
+    "admin-reset-totp.mjs",
+    "auth-financial-totp.mjs",
+    "providers/production/checkalt-submit.mjs",
+    "providers/production/checkalt-approve.mjs",
+    "providers/production/checkalt-authz.mjs",
+    "financial-authz.mjs",
+    "financial.mjs",
+    "tenant-admin.mjs",
+    "workflow-rpc.mjs",
+    "tenant-check-user.mjs",
+    "mortgage-library-doc-types.mjs",
+    "tenant-library-rules.mjs",
+    "tenant-library.mjs",
+    "signature-library-source.mjs",
+    "platform-announcements.mjs",
+    "mortgage-library-docs.mjs",
+    "write-app-metadata.mjs",
+    "storage-write-auth.mjs",
+    "storage.mjs",
+    "storage-write.mjs",
+    "email-branding.mjs",
+    "write-signature.mjs",
+    "esign.mjs",
+    "endorsement-composite.mjs",
+    "check-endorsement.mjs",
+    "documents.mjs",
     "homeowner.mjs",
+    "tax-secrets.mjs",
+    "tax-profiles.mjs",
+    "tenant-email-domain.mjs",
     "app-services.mjs",
     "mortgage-agent-compensation.mjs",
-    "providers/production/moov-wallet-fund.mjs",
-    "write-allowlist.mjs",
+    "tenant-settings-handlers.mjs",
+    "ingest-shared-check.mjs",
+    "providers/onboarding/flags.mjs",
+    "providers/onboarding/crypto.mjs",
+    "providers/onboarding/redact.mjs",
+    "providers/onboarding/store.mjs",
+    "providers/onboarding/context.mjs",
+    "providers/onboarding/documents.mjs",
+    "providers/onboarding/moov-sync.mjs",
+    "providers/onboarding/webhook-status.mjs",
+    "providers/onboarding/handlers.mjs",
+    "providers/catalog.mjs",
+    "providers/webhook-apply.mjs",
+    "providers/webhooks.mjs",
+    "tenant-billing-engine.mjs",
+    "tenant-billing-handlers.mjs",
     "write-check-workflow.mjs",
+    "providers/production/moov-wallet-fund.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
   ],
@@ -112,9 +188,10 @@
     },
     "workflow.mjs": {
       "operation": "replace",
-      "accepted_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
-      "expected_live_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
-      "sql_before": null
+      "accepted_sha256": "753ae14a0d04ded5782c653bd67c308067311f4fcebf835c0aac4e6659188138",
+      "expected_live_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "claim-settlement-rpc.mjs": {
       "operation": "add",
@@ -138,9 +215,10 @@
     },
     "workflow-transitions.mjs": {
       "operation": "replace",
-      "accepted_sha256": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
-      "expected_live_sha256": "e0464d10ddca1da8e8d19fffd50b0aa5aa4ef14751c1ae210413f8429e9273f3",
-      "sql_before": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql"
+      "accepted_sha256": "f11206b4ac7239b6d75eb62e739d3c83f3dc8c568aa5c6d2be98f8335166c350",
+      "expected_live_sha256": "fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62",
+      "sql_before": "supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/parity/moov-wallet.mjs": {
       "operation": "replace",
@@ -172,17 +250,17 @@
     },
     "auth-financial-totp.mjs": {
       "operation": "replace",
-      "accepted_sha256": "c625e8c2b0efa5a5093c983bcd89f3660f017e22d8143bd6a2b4d88df9ab4c4d",
-      "expected_live_sha256": "9abdc5289c1bcd6decb76210578dd5f040df62b0e53dc6c26aaf5ca66a4c70fb",
+      "accepted_sha256": "ccfe06bb1164212ba6fb0d2b6f42eed282f5d1bc59a0c075a267a6afecd5b393",
+      "expected_live_sha256": "c625e8c2b0efa5a5093c983bcd89f3660f017e22d8143bd6a2b4d88df9ab4c4d",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-approve-manifest-2026-10-14.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/production/checkalt-approve.mjs": {
       "operation": "replace",
-      "accepted_sha256": "4f19b9a7d582fd4132e7a9b6f65180268ccf41100e733ec63ba7bcf761f331ba",
-      "expected_live_sha256": "56e4fe14c92c698f8546493973413412b6255a6359cf99eeedd72d4654a90105",
+      "accepted_sha256": "d2aec271955373ec24cace5bf3b08116b26511aed30810499e5e15d439f9b161",
+      "expected_live_sha256": "4f19b9a7d582fd4132e7a9b6f65180268ccf41100e733ec63ba7bcf761f331ba",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-approve-manifest-2026-10-14.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/production/checkalt-config.mjs": {
       "operation": "replace",
@@ -200,10 +278,10 @@
     },
     "providers/production/checkalt-submit.mjs": {
       "operation": "replace",
-      "accepted_sha256": "dd164667b1968cd487cf82b908ac3b8f2763152e700c649b53620e70425388d2",
-      "expected_live_sha256": "3bff32b31c6810e4c7b745536a4213c41a18c39e14f65a06a12187e031d2c151",
+      "accepted_sha256": "68b0b9a8406ac1ea6ee39641eefc4fc3522d2ca6f4de0f5d8f2b46f1bff67f7d",
+      "expected_live_sha256": "dd164667b1968cd487cf82b908ac3b8f2763152e700c649b53620e70425388d2",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-auto-approve-manifest-2026-10-14.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/production/moov-wallet-fund.mjs": {
       "operation": "add",
@@ -221,24 +299,24 @@
     },
     "providers.mjs": {
       "operation": "replace",
-      "accepted_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
-      "expected_live_sha256": "11c6fdd85d06d3257e0564c2fa0b22e22c966439af43a962cfc511e25e79f114",
+      "accepted_sha256": "2c769fffd293deb9ad7c4d85511eb1d3847a91d091635c7886d5c51db463c0dd",
+      "expected_live_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "workflow-rpc.mjs": {
       "operation": "replace",
-      "accepted_sha256": "37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907",
+      "accepted_sha256": "9eda29f177a97896d6b0d564e4ceac1aa24f9ba2c41ae7f90621c470852221f7",
       "expected_live_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
-      "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-check-case-tenant-scope-manifest-2026-10-16.json"
+      "sql_before": "aws/workflows/sql/90_users_only_tenant_roles.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/production/checkalt-authz.mjs": {
       "operation": "replace",
-      "accepted_sha256": "77fe337d047bfea5e0432258d0a6a4ca7ae0742dd7113fbc5bc69907ffd6ad46",
-      "expected_live_sha256": "c7f75c1ac65e638359d4313d5e320a19c073fe3046809db27d08bd3ef40016cf",
+      "accepted_sha256": "259802f8f0af515d75b139f8bf6a4bbe24a9d7b9ae12b11b3eeae879b7107c71",
+      "expected_live_sha256": "77fe337d047bfea5e0432258d0a6a4ca7ae0742dd7113fbc5bc69907ffd6ad46",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-remove-dual-control-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/production/checkalt-dual-control.mjs": {
       "operation": "replace",
@@ -270,10 +348,10 @@
     },
     "providers/parity/checkalt-functions.mjs": {
       "operation": "replace",
-      "accepted_sha256": "31e08908e587aa21552f2f6dd1a2a7bbacca88e08d4febbaf64f3368f3511357",
+      "accepted_sha256": "cea9a31157ec2a084e6538c8454bb7b094b15111e5f5f8a05d14ebc1ce7f48ee",
       "expected_live_sha256": "3d6a0495dbd797ce59ef8b553a074acdff6fd6c557a27a502587f0fa728954a7",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-parity-functions-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "mortgage-agent-compensation.mjs": {
       "operation": "replace",
@@ -284,31 +362,31 @@
     },
     "homeowner.mjs": {
       "operation": "replace",
-      "accepted_sha256": "0cb700f158e01e8bf8ef5d02808fd8dd96c3710a2eebcee650db01dcc6717a95",
+      "accepted_sha256": "c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c",
       "expected_live_sha256": "f9f993a71ea55f98681931e6d51ae283c0da84cde8e39e659db52b08a3c11897",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-review-followups-manifest-2026-10-16.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "write-signature.mjs": {
       "operation": "replace",
-      "accepted_sha256": "867ab4e06cb1cda29802f1463f9af6c731898738e42d748da14b1780f7ad8b9c",
+      "accepted_sha256": "14340acadf5af027646acbd636f7bde5efaae9d7ae337ffd2e4f2c17aaaf68bc",
       "expected_live_sha256": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "email-branding.mjs": {
       "operation": "replace",
-      "accepted_sha256": "f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0",
+      "accepted_sha256": "fea68bc0c3f42193a13f5daaa60cfb831dce926ec150bd7b97df6675f0430b22",
       "expected_live_sha256": "54cb79d1a62e9b62618d54c0f1e86e8ec43d9e1860a77bec32adde171a7b88cb",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "esign.mjs": {
       "operation": "replace",
-      "accepted_sha256": "953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83",
+      "accepted_sha256": "5e2c5f48913d12b0b1916aec63d6bf9a209e5bd516ec61c5ceba01ca4754ca70",
       "expected_live_sha256": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "homeowner-signing-integration.mjs": {
       "operation": "add",
@@ -319,29 +397,356 @@
     },
     "app-services.mjs": {
       "operation": "replace",
-      "accepted_sha256": "51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa",
+      "accepted_sha256": "ca922af81aee9cd2c2d9c3d5c932cbd2ddf441de188b41d79198f76e3d789c88",
       "expected_live_sha256": "cce9d0ff48ce7644083e5aa04aec77c5100246b93a440c20ddb1ba5701bcc0c5",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-homeowner-signing-links-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "write-allowlist.mjs": {
       "operation": "replace",
-      "accepted_sha256": "9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7",
+      "accepted_sha256": "9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1",
       "expected_live_sha256": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
-      "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json"
+      "sql_before": "aws/workflows/sql/93_tenant_company_info.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "write-check-workflow.mjs": {
       "operation": "replace",
-      "accepted_sha256": "1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d",
+      "accepted_sha256": "fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2",
       "expected_live_sha256": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
       "sql_before": "aws/workflows/sql/89_check_intake_items_column_update.sql",
-      "manifest": "aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json"
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "ops-readiness.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "2785381cd8a9e0f23f50453c81ad905e259eac0299b98790776d629cc442de6d",
+      "expected_live_sha256": "614add851b4c85a7b79dcdf540a3167d04b944d986523810f4c59274010aa448",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "privileged-auth.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "55d079a7c59f29a42c3cd5d8a03a191cbd54e28826339dcb87e2ea444e910b9b",
+      "expected_live_sha256": "32eb1c1d6fda00a1bb4e6128cf95db26530da6303af91b46a7bae62e61012bfc",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "identity.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "0a5ad4c00b258102da38db83722615dae328f80e4d363cb140579f2db5381d7c",
+      "expected_live_sha256": "30abd75f4483c5ed25b9c506f08023645c26f7b8aee49c831fb73e702022515b",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/parity/db.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "d23eefb5ee34477ac918ae5be1a892202ee16e71be2fd7570c23f53b1d552512",
+      "expected_live_sha256": "db24ae19e5cfff9cc418da99c4f0a81a7426385c450ecfee1ecc41b9f9148e3b",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/parity/moov-functions.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "7b0cde12ff969f7bfc5d83204cde77e2f322e42fe67399ca1a1e4a867eea6e75",
+      "expected_live_sha256": "2dff151e470aabf74f905d4f6af51c9ac7dd1d13696eeffa585ca43cf00302ee",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/parity/moov-money.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "b35beaa7fe50d25941dc277056c133a67f9393e1a249e1027c32f16ec60f5e37",
+      "expected_live_sha256": "1cd405caec4982369c6a858efec8168b3f98cff8fb881fe888c3994217e93726",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/parity/moov-onboard.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "bf79153ce392881101293d2c7de5625f64493e13ac8cb8c87b5d1653ee642a1e",
+      "expected_live_sha256": "86127db01e4918ed72e8ca3ed56a378a53a000a9c046dde986aa2afc525f2f89",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/parity/moov-client.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "56928d66128c4a60141ef6d7392749ebad5211acef9bce6516411f1a2420612a",
+      "expected_live_sha256": "870fe189f87649e661ae4c84c978e04f80a577bff1fe54b50eae749c99e2a338",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/parity/caller.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "15ba09643b5b4b77189d944c3069eabe0b9c5b7a8b453aed8e5872222d851d30",
+      "expected_live_sha256": "1958eaa287ad2623d8cff9885c56cbb1948d069d2dd34093a56ac08e669c0470",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "admin-reset-totp.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "9e85ae9a1393a73aa83ed8df12f26544bd47f44de6db0c234fb56c29ee9f2a09",
+      "expected_live_sha256": "a1d8a54a0f686be926498cf823cfd55bfc1fe4caf919ab66ce49810d63bcb450",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "financial-authz.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8",
+      "expected_live_sha256": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "financial.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "332da536c8225c343f73df0275798e7d0621344d512b71f24691c5a0bf0627bb",
+      "expected_live_sha256": "3fcb5f3731b9ec64c49da211ec659e7bceeb5062f0c128f0f647c14bc9c77ebd",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-admin.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "348e4fef54280e0759bbf2688b8109aeca62ededd6cd0d29aac262330fe7bbf7",
+      "expected_live_sha256": "8fc1f049860979387ff83ca3a4c7fdaa384a7dc2aa6eabd620cdf1c40c950bff",
+      "sql_before": "aws/workflows/sql/90_users_only_tenant_roles.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-check-user.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "f25e165ea08312ddbde6e67d5f522171368043be43a7875926e859f7c15931df",
+      "expected_live_sha256": "27f477de81c555ff8cf44e12d3a191d5c1a2d0a4c16c01f7f4c881a74e16f1db",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "mortgage-library-doc-types.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "8e31c5c906c1a2f05012297296a4f14be788d7462a5fd9dfb0d5c47f0f381c7a",
+      "expected_live_sha256": "7838dfe6a7472c233acb47e94e3d42bc7924ada1a0d68a31250292395ef39a7e",
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-library-rules.mjs": {
+      "operation": "add",
+      "accepted_sha256": "43abcf433458e296872dca92fc674053f3131e1dafe9278d1f76126625684d98",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-library.mjs": {
+      "operation": "add",
+      "accepted_sha256": "c9b1219b4f327f2c5ebaa6b505906b11051a0141f54b10b22dc0b816852ff7d5",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "signature-library-source.mjs": {
+      "operation": "add",
+      "accepted_sha256": "f4eccc99e4c3af3d3b6b6b229f0d2408da682fc9176695acffa0e53486c7970f",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "platform-announcements.mjs": {
+      "operation": "add",
+      "accepted_sha256": "8141775a7e75a1d2b28426f250da6e5b81eb6d33a1baea55c248a87c38b4e76c",
+      "expected_live_sha256": null,
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "mortgage-library-docs.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "16204986c7ca7b3f533bafb2e6f72f9600a5d986e41c1c260d8c310ab9dd044c",
+      "expected_live_sha256": "29f7ad95d3257cbd2171021710ab7f64deaa6bdd3fb05d593df103eb0e655136",
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "write-app-metadata.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "32b805080a38f222ad99b8d558b16ce05795f6eb3a6d7a86b60d9fe2493766d5",
+      "expected_live_sha256": "20b062fff58158b48a09f7e5cf1694f118743f91b4925066e21e94ec0ca5b84e",
+      "sql_before": "aws/workflows/sql/93_tenant_company_info.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "storage-write-auth.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "593afcd11f9bcd50d0cef9ee5abdec5dea2ec9493d81e514aad46cfd19e461b8",
+      "expected_live_sha256": "371bf9b2ab0b1834696654572411d39ddc48c44b40f38b498d7eaf592d341ce9",
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "storage.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "d92f34ca0dbba5b7b5b4c406d1a7cdf4b2e9c0a900ceddd1217dbebf3cd017d1",
+      "expected_live_sha256": "77714d51590969e026bb6a79dea7170fd6ab8b282ad90af3ff5002ae59a1be85",
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "storage-write.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "c397c52202b564917cd9d2b62853566c765b92aa6a8cd2304b6a09e74a3ed73f",
+      "expected_live_sha256": "9ef5843ad55e8628c1e2f912d0c538471490828281d63f26934b8a87bfcd741f",
+      "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "endorsement-composite.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80",
+      "expected_live_sha256": "9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "check-endorsement.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "85f4bec43620e574498a289e6d245ddd02301603fd6698a1d6bacb915e922677",
+      "expected_live_sha256": "7c6ae30182358a80184b9617188c59356f357e94d2c79fc875d9d74f8e82e3da",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "documents.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "7cc8dd90241cffef3466117357cc47c8e3387e14869568a3411d4cad64bf795c",
+      "expected_live_sha256": "2f98678e4a019c604bc58821f01aa9cfc8de467ce46a0b04121c8fbdf1faba3f",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tax-secrets.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "4a44531115a2789a5d6a921633d759143fceaa258156402585c25b1d64098d4d",
+      "expected_live_sha256": "978d9b7e1e92ca41fe0e31978b02cd45d313d8e60eb81b4e6f99c02f2eabc402",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tax-profiles.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "cb49cc567d017dbf732ed6743ee57c71ba12541b161fa927eb8bf8763e518a42",
+      "expected_live_sha256": "3aafef3f4125969dcb2f74ac143b91e001d536568bb252b85d627289f15b5731",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-email-domain.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "ec57a360830347ede87d35e247397da41711d00c94252dd4cbd78b9288421dc4",
+      "expected_live_sha256": "921af0502402be4855356280669e9f0cfc6f6395fba2e452eae6151e876ba689",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-settings-handlers.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+      "expected_live_sha256": "ac373ce37d5faac73fae8c17ed2cde7cf1c81e762e427eb3933335fa88644322",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "ingest-shared-check.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "a4149a0fff4b4770867da317605a35e3167b1f9daf6aafa477d79cffb17c5634",
+      "expected_live_sha256": "4f33af74e59caf15543a00b32ef4deee2df12d07e6f2eaf5007a7e6a0b9fdf7b",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/flags.mjs": {
+      "operation": "add",
+      "accepted_sha256": "723644138c363c17b08008ec267644fed4d50b8ecc1821903fb3a20672229121",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/crypto.mjs": {
+      "operation": "add",
+      "accepted_sha256": "2fb63cb012cb1b21213fc7d29d2770845bc2f2b5788ff3379596d2b116426e90",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/redact.mjs": {
+      "operation": "add",
+      "accepted_sha256": "962017211bd33f7af8a53423f84f5bbef45cbd2c71dbbde3e2299ecca20a4cf9",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/store.mjs": {
+      "operation": "add",
+      "accepted_sha256": "56961c0affbece63d924fdf51e7e64045bd05f808fd4d25e885a420d7e9807ed",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/context.mjs": {
+      "operation": "add",
+      "accepted_sha256": "ba7315e03d55e92d4c78e838ab3486f004240337c6e527a280c9ff32d1d65189",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/documents.mjs": {
+      "operation": "add",
+      "accepted_sha256": "231028fb19592d0cc677f8d365d1375a8c6493d905e97682267de7017fcc68ac",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/moov-sync.mjs": {
+      "operation": "add",
+      "accepted_sha256": "1352cd5a3ef3b6c89242cd69ffd7d855fca64bccf3a2b1573dddfa7fa940ea57",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/webhook-status.mjs": {
+      "operation": "add",
+      "accepted_sha256": "45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/onboarding/handlers.mjs": {
+      "operation": "add",
+      "accepted_sha256": "708cb33ef86724126d0b93f7b9574cc5372a891c6d6ff9ffa9a096d3da49d5b7",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/catalog.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "6a3bf4e5dd8a2a23efd6e2c92a601aad96c4ebac43055da7af25b53608bdc7d8",
+      "expected_live_sha256": "ae78899274a1dfe93835d2e8fc4856f5d47d84fde18de688ed1f533a800fb521",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/webhook-apply.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "28e9d27f14e9c1bd1de43b3f893705fa44b74dc0071eaa3b1895120438cd5300",
+      "expected_live_sha256": "e26a617a576aea568ffd9d112a58fff3efc516ab54e9e2eabc1f22d0b8fc52bf",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "providers/webhooks.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5",
+      "expected_live_sha256": "4bd776a7766b0bd63e17ba18e790e28bb0b4fb8a7c9cceb271bf4f84280e7681",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-billing-engine.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "3397c65d89122f706b182970d12e83b98de461b72acba5c32c8e8d1e60944557",
+      "expected_live_sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+      "sql_before": "aws/workflows/sql/96_platform_owner_tenant_pricing.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-billing-handlers.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "2866356c3bf82a04d04c834fadbf94faed026a7f119e73bd8cc6f42dc2098298",
+      "expected_live_sha256": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
+      "sql_before": "aws/workflows/sql/96_platform_owner_tenant_pricing.sql",
+      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     }
   },
   "do_not_overlay": [
     "ocr.mjs",
     "index.mjs",
-    "workflow-delete-check.mjs"
+    "workflow-delete-check.mjs",
+    "package.json",
+    "package-lock.json",
+    "invoice-actions.mjs",
+    "tenant-collection-v2-uat.mjs",
+    "tenant-maintenance-payments-catalog-inspect.mjs"
   ]
 }
