@@ -272,8 +272,14 @@ const catalogSnapshot = async (c) => (await c.query(`SELECT
 
 test('PostgreSQL 16: the inspect is read-only, reports the live access surface and finds the drift', {
   timeout: 180000, skip: pgSkipReason() || false,
-}, async () => {
-  const { default: pg } = await import('pg');
+}, async (t) => {
+  let pg;
+  try {
+    pg = (await import('pg')).default;
+  } catch {
+    t.skip('pg module is not installed');
+    return;
+  }
   const server = startPg('pg-mortgage-desk-access-', 61300);
   const open = async (user) => {
     const c = new pg.Client({ host: server.host, port: server.port, user, database: 'postgres' });
