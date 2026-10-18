@@ -1445,11 +1445,15 @@ const platformStatusPayload = async ({ client, accountId, environment, fetchImpl
   };
 };
 
+// Wallet and wallet-transaction reads need the wallets read scope (as moov-wallet.mjs),
+// not profile.read.
+const walletsReadScopes = (id) => [`/accounts/${id}/wallets.read`];
+
 const platformWalletPayload = async ({ accountId, environment, fetchImpl }) => {
   const warnings = [];
   let wallets = [];
   try {
-    wallets = await moovFetch(`/accounts/${accountId}/wallets`, { scopes: scopes.accountRead(accountId), fetchImpl });
+    wallets = await moovFetch(`/accounts/${accountId}/wallets`, { scopes: walletsReadScopes(accountId), fetchImpl });
   } catch (error) {
     warnings.push(`wallets: ${error.message}`);
   }
@@ -1461,7 +1465,7 @@ const platformWalletPayload = async ({ accountId, environment, fetchImpl }) => {
   if (walletId) {
     try {
       transactions = await moovFetch(`/accounts/${accountId}/wallets/${walletId}/transactions?count=25`, {
-        scopes: scopes.accountRead(accountId), fetchImpl,
+        scopes: walletsReadScopes(accountId), fetchImpl,
       });
     } catch (error) {
       warnings.push(`transactions: ${error.message}`);
@@ -1719,7 +1723,7 @@ export const platformTreasury = {
     }
     if (action !== 'list' && action !== 'get') return platformFinanceWriteBlocked(action);
     const wallets = await moovFetch(`/accounts/${platformId}/wallets`, {
-      scopes: scopes.accountRead(platformId), fetchImpl,
+      scopes: walletsReadScopes(platformId), fetchImpl,
     }).catch((e) => ({ error: e.message }));
     return jsonResult({ success: true, wallets, liveProviderCalled: true });
   },

@@ -187,15 +187,44 @@ planning only, nothing live or verified. Staging live API carries features from 
   every other action with 503 `invoice_lifecycle_unavailable`. `platformBank` / `platformTreasury` keep the
   `is_platform_owner()` gate (item 1 above) and add read-only `status` / `overview` / `wallet` / `pnl` views
   (ported from the live `platform-finance.mjs` read model, which the SPA panels call); every other action is
-  refused (403 `write_blocked`; platform bank `add` keeps its own refusal). Accepted re-pinned to
-  `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf`; expected live unchanged.
-- `invoice-provider.mjs` (new file, `1b219a8a24ef8faf4b5db888dd6f772a9f04b3eb0ec2b869b76cd3b0b7d54e24`, the
-  `150da36eb` bytes) is not a plan member: like `invoice-actions.mjs` and `public-invoice.mjs` it is absent from
-  the production bundle and reaches production only with a rebuilt ZIP. Until then the production overlay of
-  `moov-onboard.mjs` / `moov-functions.mjs` serves the fallbacks above. Link safety: both files load
-  `invoice-actions.mjs` / `public-invoice.mjs` only through a whole-module dynamic import inside a
-  `try` (`ERR_MODULE_NOT_FOUND` handled), never a static or destructured import, so neither the module link nor
-  the overlay guard's import check depends on those files being live.
+  refused (403 `write_blocked`; platform bank `add` keeps its own refusal). The platform wallet, wallet-transaction
+  and treasury `list` reads use the wallets read scope (`/accounts/{id}/wallets.read`, as `moov-wallet.mjs`), not
+  `profile.read` (security review M1). Accepted re-pinned to
+  `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf`, then (security review follow-ups) to
+  `4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f`; expected live unchanged.
+- `invoice-provider.mjs` (new file; `1b219a8a24ef8faf4b5db888dd6f772a9f04b3eb0ec2b869b76cd3b0b7d54e24` were the
+  `150da36eb` bytes, now `3382d93ecdcf998428167df61aac82a5fc3eb912dfd393785a5de962b6d897e8` after the security review
+  follow-ups below) is not a plan member: like `invoice-actions.mjs` and `public-invoice.mjs` it is absent from the
+  production bundle and reaches production only with a rebuilt ZIP. Until then the production overlay of
+  `moov-onboard.mjs` / `moov-functions.mjs` serves the fallbacks above. Module link: both files load
+  `invoice-actions.mjs` / `public-invoice.mjs` only through a whole-module dynamic import inside a `try`
+  (`ERR_MODULE_NOT_FOUND` handled), never a static or destructured import, so the ESM link of the production
+  bundle does not depend on those files.
+- Overlay guard (security review H1, owner decision: a reviewed exemption). The guard's apply-mode module-presence
+  check does depend on those files: `localImports` collects static and dynamic relative imports, and `classifyLive`
+  refuses a member that imports a module missing from the live production ZIP (`DEPLOYMENT_COLLISION`). Without an
+  exemption both re-pinned members, and every member after them in plan order, would be blocked. The plan therefore
+  carries a reviewed per-member list: `providers/parity/moov-onboard.mjs` `optional_imports: ["invoice-actions.mjs"]`
+  and `providers/parity/moov-functions.mjs` `optional_imports: ["public-invoice.mjs"]` (ZIP-root paths, the form
+  `localImports` resolves to). The guard skips a missing module only when it is listed for that member AND the
+  member's bytes import it (a module the member does not import is refused), only by a whole-module `import(...)`
+  (a static `from` / bare `import`, or a destructured dynamic import, is refused) AND contain `ERR_MODULE_NOT_FOUND`
+  (`optionalImportProblems`, checked in `resolvePlannedMember` and again in `classifyLive`). The field shape (a
+  non-empty array of distinct relative `.mjs` ZIP member paths, no `./`, `../` or `/`) is validated in `loadPlan`.
+  Every other missing import still refuses. The ordering, SQL and link checks are unchanged. The staging overlay
+  guard (`github-staging-lambda-overlay.mjs`) has no module-presence check (and staging already has these files
+  live), so it needs no exemption. Tests: `aws/tests/production-overlay-optional-imports.test.mjs`.
+- Security review follow-ups in `invoice-provider.mjs` (staging-only until a rebuilt ZIP): create / create_and_send
+  send an `X-Idempotency-Key` on the customer POST, invoice POST and send PATCH, derived from the tenant plus the
+  client `request_id` / `idempotency_key`, or (the SPA sends none yet) from the tenant, action and canonical payload
+  within a 10-minute window; a repeat with the same key returns the saved invoice (`idempotent: true`) without a
+  provider call (key hash in `provider_metadata.checksops_request_ref`). `send` refuses 409 `invoice_already_sent`
+  once `sent_at` is set (`resend` is the path for that). `recover` accepts only a UUID-shaped `moov_invoice_id`. A
+  persist failure answers `persistError: "invoice_persist_failed"` and other internal errors a fixed
+  `invoice_action_failed`; the DB text is logged server-side only. `claim_id` must be a claim of the caller's tenant
+  (else 400 / 404, before any provider call). `sync` runs each row inside `SAVEPOINT invoice_sync_row`, so one DB
+  error does not abort the rest (`failed` count returned). Rate limiting (L1) is an infrastructure item (API
+  Gateway / WAF), not changed here. Tests: `aws/tests/invoice-provider-hardening.test.mjs`.
 
 ## 0c. Code-review fixes (applied in this branch, 2026-10-17)
 
@@ -305,7 +334,7 @@ the ZIP or keep live bytes until the route is gone).
 | `providers/parity/moov-client.mjs` | modified (REPLACE) | `56928d66128c4a60141ef6d7392749ebad5211acef9bce6516411f1a2420612a` |
 | `providers/parity/moov-functions.mjs` | modified (REPLACE) | `7b0cde12ff969f7bfc5d83204cde77e2f322e42fe67399ca1a1e4a867eea6e75` |
 | `providers/parity/moov-money.mjs` | modified (REPLACE) | `b35beaa7fe50d25941dc277056c133a67f9393e1a249e1027c32f16ec60f5e37` |
-| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf` |
+| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f` |
 | `providers/webhook-apply.mjs` | modified (REPLACE) | `28e9d27f14e9c1bd1de43b3f893705fa44b74dc0071eaa3b1895120438cd5300` |
 | `providers/webhooks.mjs` | modified (REPLACE) | `3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5` |
 | `signature-library-source.mjs` | ADD (new file) | `f4eccc99e4c3af3d3b6b6b229f0d2408da682fc9176695acffa0e53486c7970f` |

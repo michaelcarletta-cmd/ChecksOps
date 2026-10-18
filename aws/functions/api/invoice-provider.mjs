@@ -7,6 +7,7 @@
  * Does not grant RLS, disable RLS, or fall back to the 5480 local persist path.
  * Does not enable AWS_MOOV_ENABLED or AWS_PROVIDER_EXECUTION_ENABLED.
  */
+import { createHash } from 'node:crypto';
 import { fail, jsonResult } from './providers/parity/caller.mjs';
 import { loadMoovAccount, logPaymentEvent, sanitize } from './providers/parity/db.mjs';
 import { failClosedMissingAccount, requireMoovProviderEnvironment } from './providers/parity/moov-provider-env.mjs';
@@ -27,6 +28,62 @@ export const INVOICE_PROVIDER_ACTIONS = new Set([
   'cancel',
   'delete',
 ]);
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const REQUEST_ID_RE = /^[A-Za-z0-9._:-]{8,128}$/;
+
+/** A request without a client request id is deduplicated within this window. */
+export const INVOICE_CREATE_WINDOW_MS = 10 * 60 * 1000;
+
+const sha256Hex = (value) => createHash('sha256').update(String(value)).digest('hex');
+
+/**
+ * Idempotency key for create / create_and_send, always bound to the tenant.
+ * A client request id (body.request_id or body.idempotency_key) is used as given.
+ * Without one (the SPA does not send one yet) the key is derived from the tenant,
+ * the action and the canonical invoice payload within a short window, so a
+ * double submit or a retry does not create a second provider invoice while the
+ * same invoice can still be created again later on purpose.
+ */
+export function invoiceCreateRequestKey({ tenantId, action, body = {}, items = [], now = Date.now() }) {
+  const supplied = body.request_id ?? body.idempotency_key;
+  if (supplied != null && String(supplied).trim() !== '') {
+    const value = String(supplied).trim();
+    if (!REQUEST_ID_RE.test(value)) return { error: 'request_id must be 8-128 letters, digits, dot, colon, underscore or dash' };
+    return { key: `invoice:${tenantId}:${value}`, source: 'client' };
+  }
+  const payload = {
+    action,
+    customer_name: String(body.customer_name ?? '').trim(),
+    customer_email: String(body.customer_email ?? '').trim().toLowerCase(),
+    customer_type: body.customer_type === 'individual' ? 'individual' : 'business',
+    customer_phone: body.customer_phone ?? null,
+    description: body.description ? String(body.description).slice(0, 500) : null,
+    invoice_date: body.invoice_date ?? null,
+    due_date: body.due_date ?? null,
+    claim_id: body.claim_id ?? null,
+    line_items: items.map((item) => [item.name, item.unit_price, item.quantity]),
+  };
+  const bucket = Math.floor(now / INVOICE_CREATE_WINDOW_MS);
+  return { key: `invoice:${tenantId}:derived:${sha256Hex(JSON.stringify(payload))}:${bucket}`, source: 'derived' };
+}
+
+const loadInvoiceByRequestRef = async (client, tenantId, environment, requestRef) => (
+  await client.query(
+    `SELECT * FROM public.moov_invoices
+     WHERE tenant_id = $1::uuid AND environment = $2
+       AND provider_metadata->>'checksops_request_ref' = $3
+     LIMIT 1`,
+    [tenantId, environment, requestRef],
+  )
+).rows[0] || null;
+
+const claimBelongsToTenant = async (client, tenantId, claimId) => Boolean((
+  await client.query(
+    'SELECT id FROM public.claims WHERE id = $1::uuid AND tenant_id = $2::uuid LIMIT 1',
+    [claimId, tenantId],
+  )
+).rows[0]);
 
 const invoiceScopes = (accountID, write = false) => [
   `/accounts/${accountID}/invoices.${write ? 'write' : 'read'}`,
@@ -231,6 +288,7 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
     if (action === 'recover') {
       const moovInvoiceId = String(body.moov_invoice_id || '').trim();
       if (!moovInvoiceId) return fail('moov_invoice_id is required', 400);
+      if (!UUID_RE.test(moovInvoiceId)) return fail('moov_invoice_id must be a provider invoice id', 400);
       const already = await loadInvoiceByMoovId(client, ctx.tenantId, moovInvoiceId);
       if (already) {
         return jsonResult({
@@ -357,6 +415,28 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
       const amount = invoiceLineItemsTotal(items);
       const customerType = body.customer_type === 'individual' ? 'individual' : 'business';
       const description = body.description ? String(body.description).slice(0, 500) : null;
+      let claimId = null;
+      if (body.claim_id != null && String(body.claim_id).trim() !== '') {
+        claimId = String(body.claim_id).trim();
+        if (!UUID_RE.test(claimId)) return fail('claim_id must be a claim id', 400);
+        if (!(await claimBelongsToTenant(client, ctx.tenantId, claimId))) {
+          return fail('Claim not found', 404, { error: 'claim_not_found' });
+        }
+      }
+      const request = invoiceCreateRequestKey({ tenantId: ctx.tenantId, action, body, items });
+      if (request.error) return fail(request.error, 400);
+      const requestRef = sha256Hex(request.key);
+      const replay = await loadInvoiceByRequestRef(client, ctx.tenantId, environment, requestRef);
+      if (replay) {
+        return jsonResult({
+          success: true,
+          invoice: replay,
+          idempotent: true,
+          liveProviderCalled: false,
+          emailed: false,
+          apiVersion: INVOICE_API_VERSION,
+        });
+      }
       const branding = await loadInvoiceBranding(client, ctx.tenantId);
 
       let existing = await loadInvoiceCustomer(client, ctx.tenantId, environment, customerEmail);
@@ -372,6 +452,7 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
           method: 'POST',
           scopes: ['/accounts.write'],
           apiVersion: INVOICE_API_VERSION,
+          idempotencyKey: `${request.key}:customer`,
           fetchImpl,
           body: { accountType: customerType, profile },
         });
@@ -394,6 +475,7 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
         method: 'POST',
         scopes: invoiceScopes(merchantAccountId, true),
         apiVersion: INVOICE_API_VERSION,
+        idempotencyKey: `${request.key}:invoice`,
         fetchImpl,
         body: {
           customerAccountID: customerAccountId,
@@ -421,6 +503,7 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
             method: 'PATCH',
             scopes: invoiceScopes(merchantAccountId, true),
             apiVersion: INVOICE_API_VERSION,
+            idempotencyKey: `${request.key}:send`,
             fetchImpl,
             body: { status: 'unpaid' },
           },
@@ -453,15 +536,22 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
             body.invoice_date ?? null, body.due_date ?? null,
             finalInvoice.paymentLinkURL ?? null, generatePublicToken(),
             finalInvoice.sentOn ?? (action === 'create_and_send' ? new Date().toISOString() : null),
-            body.claim_id ?? null, JSON.stringify(sanitize(finalInvoice)), userId,
+            claimId, JSON.stringify({ ...sanitize(finalInvoice), checksops_request_ref: requestRef }), userId,
           ],
         )).rows[0];
       } catch (insertError) {
+        // The DB error text stays in the server log; the caller gets a fixed code.
+        console.error('invoice persist failed', {
+          tenant_id: ctx.tenantId,
+          moov_invoice_id: finalInvoice.invoiceID || null,
+          code: insertError?.code || null,
+          message: String(insertError?.message || insertError).slice(0, 500),
+        });
         return fail('Invoice was created but could not be saved', 500, {
           liveProviderCalled: true,
           emailed: false,
           moov_invoice_id: finalInvoice.invoiceID || null,
-          persistError: String(insertError?.message || insertError).slice(0, 200),
+          persistError: 'invoice_persist_failed',
         });
       }
 
@@ -502,6 +592,9 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
       }
       if (action === 'send' && row.status === 'canceled') {
         return fail('A canceled invoice cannot be sent', 400);
+      }
+      if (action === 'send' && row.sent_at) {
+        return fail('This invoice was already sent; use resend', 409, { error: 'invoice_already_sent', liveProviderCalled: false, emailed: false });
       }
       const sent = await moovFetch(
         `/accounts/${merchantAccountId}/invoices/${row.moov_invoice_id}`,
@@ -563,9 +656,18 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
       }
       const rows = (await client.query(sql, params)).rows;
       let synced = 0;
+      let failed = 0;
       let inventedPaid = false;
       for (const row of rows) {
         if (row.tenant_id !== ctx.tenantId || row.environment !== environment) continue;
+        // One row's failure (provider or DB) must not abort the rest: a savepoint keeps
+        // a DB error local. Outside a transaction block SAVEPOINT is refused; each
+        // statement then stands alone.
+        let savepoint = false;
+        try {
+          await client.query('SAVEPOINT invoice_sync_row');
+          savepoint = true;
+        } catch { /* no transaction block */ }
         try {
           const inv = await moovFetch(
             `/accounts/${merchantAccountId}/invoices/${row.moov_invoice_id}`,
@@ -596,12 +698,24 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
               ctx.tenantId,
             ],
           );
+          if (savepoint) await client.query('RELEASE SAVEPOINT invoice_sync_row');
           synced += 1;
-        } catch { /* keep remaining rows */ }
+        } catch (error) {
+          failed += 1;
+          if (savepoint) {
+            try { await client.query('ROLLBACK TO SAVEPOINT invoice_sync_row'); } catch { /* ignore */ }
+          }
+          console.error('invoice sync row failed', {
+            tenant_id: ctx.tenantId,
+            invoice_id: row.id,
+            code: error?.code || error?.status || null,
+          });
+        }
       }
       return jsonResult({
         success: true,
         synced,
+        failed,
         liveProviderCalled: rows.length > 0,
         invented_paid: inventedPaid,
         emailed: false,
@@ -696,7 +810,15 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
         emailed: false,
       });
     }
-    return fail(String(error?.message || error).slice(0, 400), 500, {
+    // Internal (DB) error text stays in the server log.
+    console.error('invoice action failed', {
+      tenant_id: ctx?.tenantId || null,
+      action: body?.action || null,
+      code: error?.code || null,
+      message: String(error?.message || error).slice(0, 500),
+    });
+    return fail('Invoice request could not be completed', 500, {
+      error_code: 'invoice_action_failed',
       liveProviderCalled: false,
       emailed: false,
     });

@@ -47,6 +47,12 @@ Planning only: `deploy_authorized` is false and nothing is live or verified.
 | `workflow-rpc.mjs` (moved from the release manifest) | `9a630bdb…` | `79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485` | SQL 98 (was 90) | release manifest (unapplied) |
 | `providers.mjs` (moved from the release manifest) | `6ad4c7ec…` | `af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc` | SQL 98 (was none) | release manifest (unapplied) |
 
+`providers/parity/moov-functions.mjs` (accepted `fbefc70e…`, unchanged by the 2026-10-18 security review follow-ups)
+carries the reviewed plan exemption `optional_imports: ["public-invoice.mjs"]`: `public-invoice.mjs` is not in the
+live production ZIP, and the member loads it only by a whole-module dynamic import with `ERR_MODULE_NOT_FOUND`
+handled, so the overlay guard's module-presence check skips it for this member only
+(`ops/release-2026-10-17-lock-pin-deltas.md`, section 0b).
+
 Deposits switch: `tenant-deposits-gate.mjs` goes just before `workflow-rpc.mjs` (its first importer).
 `workflow-rpc.mjs` (`deposit_action`) and `providers.mjs` (Check Alt submit / approve) import it and are held for
 SQL 98, because the gate fails closed without SQL 98's reader `aws_tenant_deposits_enabled(uuid)`. Deploying
