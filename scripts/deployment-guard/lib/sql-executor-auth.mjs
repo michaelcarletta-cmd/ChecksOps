@@ -2214,9 +2214,10 @@ export const AUTHORIZED_SQL101_INVITE_IDENTITY_INSERT_ORDER = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '22b58f165d434bef3c5cef7e7212dd3048de819a',
   source_sha256: '5a5e2617b8f4f6757758a34559e621a41cc65090b1127a9414eae51b94a5da87',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-18: staging apply (wave 5) from staging read-live run 39142701783',
+  execute: true,
+  // Staging read-live run 39142701783 (2026-10-18, main 0d4a7b8a8; executor cEKeOR0s...).
+  expected_live_definition_sha256: '1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a',
   // Code-derived: releaseIntendedHash('sql101', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b',
   // Code-derived: releaseSupersededIntendedHash('sql90', SQL 90 bytes, 'sql101', these bytes). After

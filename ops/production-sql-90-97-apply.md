@@ -373,6 +373,10 @@ only if no earlier migration changes that migration's objects. From the specs, t
   `80bbcae1…`; SQL 95 run 39121392809, live `4e8f3745…`; precondition_failures [], no dropped
   function callers or dependents) and pinned for apply (owner approved 2026-10-18). Redeploy the
   guarded executor at the merged commit before applying.
+- **Wave 5:** SQL 101 (fixes SQL 90's invite insert order; `profiles_id_identity_fkey` refused
+  brand-new invites on staging). Re-read at `0d4a7b8a8` (run 39142701783, live `1c7e1d52…`,
+  precondition_failures [], predecessor sql90 true) and pinned for apply (owner approved
+  2026-10-18). Redeploy the guarded executor at the merged commit before applying.
 
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
 and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`
