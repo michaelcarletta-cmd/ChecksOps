@@ -16,6 +16,9 @@
  *   - a non-owner member gets 42501 from both functions, and still cannot change pricing or
  *     owner-only profile columns through a direct UPDATE (the column guard), while branding
  *     still works;
+ *   - the column guard's test-mode lock on a direct UPDATE by the platform owner:
+ *     moov_environment alone 42501, is_test_account with a Moov account 55000, both together
+ *     without one allowed; aws_tenant_has_moov_account's ACL and pg_temp search_path;
  *   - aws_platform_owner_remove_tenant_member deletes only that membership (the account and the
  *     user's other memberships stay), audits it (member_removed) and answers P0002
  *     membership_not_found the second time.
@@ -41,6 +44,7 @@ const BEFORE = Object.freeze([
 const SQL_102 = sql('102_platform_owner_tenant_profile.sql');
 const TEAMMATE = 'a1000000-0000-4000-8000-00000000000a';
 const NO_TENANT = '99999999-9999-4999-8999-999999999999';
+const CONFIG = ['search_path=public, pg_temp', 'row_security=off'];
 
 /** The tenants profile columns as the Supabase-era migrations left them, and the real provider column. */
 const PROFILE_SCHEMA = `
@@ -220,18 +224,51 @@ test('PostgreSQL 16: SQL 102 profile setter and member removal are platform-owne
     await refuses(as(PLATFORM_OWNER, REMOVE, [TENANT_A, TEAMMATE]), 'P0002', /membership_not_found/);
     await refuses(as(PLATFORM_OWNER, REMOVE, [TENANT_A, null]), '22023', /missing_required_field/);
 
-    // 8) The functions' shape: SECURITY DEFINER, EXECUTE for checksops and authenticated only.
-    const acl = (await admin.query(`SELECT p.proname, p.prosecdef,
+    // 8) The test-mode lock in the column guard, on a direct UPDATE by the platform owner. SQL 90's
+    //    aws_write_tenants admits members only, so the platform owner reaches the row here as a
+    //    member of tenant B (the guard then applies its platform-owner branch).
+    await admin.query(`INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES ($1, $2, 'viewer')`, [TENANT_B, PLATFORM_OWNER]);
+    await admin.query(`UPDATE public.tenants SET is_test_account = false, moov_environment = 'production' WHERE id = $1`, [TENANT_B]);
+    const tenantB = async () => (await admin.query('SELECT is_test_account, moov_environment FROM public.tenants WHERE id = $1', [TENANT_B])).rows[0];
+    // moov_environment alone: refused (it moves only with is_test_account).
+    await refuses(as(PLATFORM_OWNER, "UPDATE public.tenants SET moov_environment = 'sandbox' WHERE id = $1", [TENANT_B]),
+      '42501', /tenant_column_not_member_writable: moov_environment/);
+    // Both together, no Moov account: allowed.
+    const together = await as(PLATFORM_OWNER, "UPDATE public.tenants SET is_test_account = true, moov_environment = 'sandbox' WHERE id = $1", [TENANT_B]);
+    assert.equal(together.rowCount, 1);
+    assert.deepEqual(await tenantB(), { is_test_account: true, moov_environment: 'sandbox' });
+    // is_test_account alone (no ledger move) is allowed by the guard too while there is no Moov account.
+    await as(PLATFORM_OWNER, 'UPDATE public.tenants SET is_test_account = false WHERE id = $1', [TENANT_B]);
+    await as(PLATFORM_OWNER, 'UPDATE public.tenants SET is_test_account = true WHERE id = $1', [TENANT_B]);
+    // With a Moov account: is_test_account (alone or with moov_environment) is refused 55000.
+    await admin.query(`INSERT INTO public.payment_provider_accounts (tenant_id, environment, provider) VALUES ($1, 'sandbox', 'moov')`, [TENANT_B]);
+    await refuses(as(PLATFORM_OWNER, 'UPDATE public.tenants SET is_test_account = false WHERE id = $1', [TENANT_B]),
+      '55000', /moov_environment_locked/, 'is_test_account');
+    await refuses(as(PLATFORM_OWNER, "UPDATE public.tenants SET is_test_account = false, moov_environment = 'production' WHERE id = $1", [TENANT_B]),
+      '55000', /moov_environment_locked/, 'is_test_account');
+    await refuses(setProfile(PLATFORM_OWNER, { is_test_account: false }, TENANT_B), '55000', /moov_environment_locked/);
+    assert.deepEqual(await tenantB(), { is_test_account: true, moov_environment: 'sandbox' });
+    // Other fields still save with the lock in place.
+    assert.equal((await as(PLATFORM_OWNER, "UPDATE public.tenants SET kyc_status = 'approved' WHERE id = $1", [TENANT_B])).rowCount, 1);
+    // The helper reads every row whatever the caller's RLS (a member of another tenant asks).
+    assert.equal((await as(MEMBER_A, 'SELECT public.aws_tenant_has_moov_account($1) AS v', [TENANT_B])).rows[0].v, true);
+    assert.equal((await as(MEMBER_A, 'SELECT public.aws_tenant_has_moov_account($1) AS v', [NO_TENANT])).rows[0].v, false);
+
+    // 9) The functions' shape: SECURITY DEFINER with search_path public, pg_temp; EXECUTE for
+    //    checksops and authenticated only (the audit trigger function: the owner only).
+    const acl = (await admin.query(`SELECT p.proname, p.prosecdef, p.provolatile, p.proconfig,
         (SELECT array_agg(g.name ORDER BY g.name) FROM (
            SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END AS name
              FROM aclexplode(p.proacl) a WHERE a.grantee <> p.proowner) g) AS grantees
       FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-       AND p.proname IN ('aws_platform_owner_set_tenant_profile', 'aws_platform_owner_remove_tenant_member', 'aws_tenant_profile_audit_row')
+       AND p.proname IN ('aws_platform_owner_set_tenant_profile', 'aws_platform_owner_remove_tenant_member', 'aws_tenant_profile_audit_row',
+                         'aws_tenant_has_moov_account')
       ORDER BY p.proname`)).rows;
     assert.deepEqual(acl, [
-      { proname: 'aws_platform_owner_remove_tenant_member', prosecdef: true, grantees: ['authenticated', 'checksops'] },
-      { proname: 'aws_platform_owner_set_tenant_profile', prosecdef: true, grantees: ['authenticated', 'checksops'] },
-      { proname: 'aws_tenant_profile_audit_row', prosecdef: true, grantees: null },
+      { proname: 'aws_platform_owner_remove_tenant_member', prosecdef: true, provolatile: 'v', proconfig: CONFIG, grantees: ['authenticated', 'checksops'] },
+      { proname: 'aws_platform_owner_set_tenant_profile', prosecdef: true, provolatile: 'v', proconfig: CONFIG, grantees: ['authenticated', 'checksops'] },
+      { proname: 'aws_tenant_has_moov_account', prosecdef: true, provolatile: 's', proconfig: CONFIG, grantees: ['authenticated', 'checksops'] },
+      { proname: 'aws_tenant_profile_audit_row', prosecdef: true, provolatile: 'v', proconfig: CONFIG, grantees: null },
     ]);
   } finally {
     await api?.end().catch(() => {});

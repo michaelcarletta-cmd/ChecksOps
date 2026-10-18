@@ -738,14 +738,14 @@
     },
     "tenant-billing-engine.mjs": {
       "operation": "replace",
-      "accepted_sha256": "cda17ef85cd74374d9d5bf94d61e2a1004682ed378f4edf1267e756a4f95273a",
+      "accepted_sha256": "338f93e1122d35e4929655b7418d65a6d14b51f5f61fe38812c1f2234be81d94",
       "expected_live_sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
       "sql_before": "aws/workflows/sql/98_tenant_fee_collection.sql",
       "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
     },
     "tenant-billing-handlers.mjs": {
       "operation": "replace",
-      "accepted_sha256": "97adcdf9c66d27ace116d3e9354a5011f90a16978d0c8e93e0d08debc2b9ac4e",
+      "accepted_sha256": "2f8ca3c53b3e3a125b6bb8c6e61e09a593388450274c320978498af78643937e",
       "expected_live_sha256": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
       "sql_before": "aws/workflows/sql/98_tenant_fee_collection.sql",
       "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
