@@ -477,6 +477,7 @@ test('workflow never interpolates expressions into run scripts', () => {
 const PLAN = JSON.parse(fs.readFileSync(new URL('../../ops/deployment-guard/production-api-overlay-plan.json', import.meta.url), 'utf8'));
 const STAGING_SQL = JSON.parse(fs.readFileSync(new URL('../../ops/deployment-guard/staging-sql-live.json', import.meta.url), 'utf8'));
 const SQL98 = 'aws/workflows/sql/98_tenant_fee_collection.sql';
+const SQL102 = 'aws/workflows/sql/102_platform_owner_tenant_profile.sql';
 
 function memberDeps(member, { calls = [] } = {}) {
   const zip = writeZipMembers({ 'index.mjs': 'unrelated live handler', [member]: 'reviewed live member' });
@@ -554,10 +555,12 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
   // SQL 98 is live in staging (run 39085677318), so the hold is shown on a record where it is not.
   const stagingSqlLive = structuredClone(STAGING_SQL);
   stagingSqlLive.sql[SQL98] = { verified_live: false, evidence: null };
-  for (const member of ['providers.mjs', 'workflow-rpc.mjs', 'tenant-billing-engine.mjs', 'tenant-billing-handlers.mjs']) {
-    assert.equal(PLAN.members[member].sql_before, SQL98, member);
+  // tenant-billing-handlers.mjs waits on SQL 102 (live in staging, run 39162625974), shown the same way.
+  stagingSqlLive.sql[SQL102] = { verified_live: false, evidence: null };
+  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL98], ['tenant-billing-engine.mjs', SQL98], ['tenant-billing-handlers.mjs', SQL102]]) {
+    assert.equal(PLAN.members[member].sql_before, sqlBefore, member);
     assert.equal(stagingSqlBefore(member).verified_live_in_staging, true, `${member}: released by the committed record`);
-    assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: SQL98, verified_live_in_staging: false, evidence: null }, member);
+    assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: sqlBefore, verified_live_in_staging: false, evidence: null }, member);
     const deps = { ...memberDeps(member), stagingSqlLive };
     for (const operation of ['replace', 'add']) {
       await assert.rejects(run({
@@ -566,7 +569,7 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
         CHECKSOPS_STAGING_DEPLOY_MODE: 'apply',
         CHECKSOPS_STAGING_OVERLAY_OPERATION: operation,
         CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: hashZipMembers(deps.zip)[member],
-      }, deps), (error) => error.code === 'DEPLOYMENT_COLLISION' && error.details.sql_before === SQL98 && error.details.member === member, `${member} ${operation}`);
+      }, deps), (error) => error.code === 'DEPLOYMENT_COLLISION' && error.details.sql_before === sqlBefore && error.details.member === member, `${member} ${operation}`);
     }
     assert.equal(deps.calls.length, 0, `${member}: no AWS call`);
   }

@@ -130,17 +130,19 @@ test('pin: the SQL 90-97 pin shape, pending, in step with the staging pin, the o
   assert.match(runbook, new RegExp(`\\| \`sql102\` \\| \`${pin.intended_replacement_sha256}\` \\|`));
 });
 
-test('plan: SQL 102 before tenant-billing-handlers.mjs is the operator\'s gate; the plan still holds that member on SQL 98 only', () => {
+test('plan: SQL 102 holds tenant-billing-handlers.mjs (sql_before); live in staging, pending in production', () => {
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   const stagingLive = readJson('ops/deployment-guard/staging-sql-live.json');
-  // tenant-billing-handlers.mjs (profile-update and member-remove call SQL 102's functions) is
-  // held by SQL 98; SQL 102 is not a plan prerequisite, so the pin's order_note and the runbook
-  // carry the SQL 102 gate.
-  assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, 'aws/workflows/sql/98_tenant_fee_collection.sql');
-  assert.equal(Object.hasOwn(plan.sql_prerequisites, SQL102_FILE), false);
-  assert.equal(Object.hasOwn(stagingLive.sql, SQL102_FILE), false);
+  // tenant-billing-handlers.mjs (profile-update and member-remove call SQL 102's functions) waits
+  // on SQL 102, which requires SQL 98; the guarded overlays enforce it (production: this plan's
+  // record; staging: staging-sql-live.json, applied in run 39162625974).
+  assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, SQL102_FILE);
+  assert.equal(plan.sql_prerequisites[SQL102_FILE].verified_live, false);
+  assert.equal(plan.sql_prerequisites[SQL102_FILE].evidence, null);
+  assert.equal(plan.sql_prerequisites[SQL102_FILE].pin, 'ops/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.json');
+  assert.equal(stagingLive.sql[SQL102_FILE].verified_live, true);
+  assert.match(stagingLive.sql[SQL102_FILE].evidence, /run 39162625974/);
   assert.match(COMMITTED.order_note, /before the tenant-billing-handlers\.mjs overlay/);
-  assert.match(COMMITTED.order_note, /operator's gate/);
   assert.match(COMMITTED.order_note, /do not re-run SQL 98 afterwards/);
 });
 
