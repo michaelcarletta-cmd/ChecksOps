@@ -2219,6 +2219,9 @@ export const AUTHORIZED_SQL101_INVITE_IDENTITY_INSERT_ORDER = Object.freeze({
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql101', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b',
+  // Code-derived: releaseSupersededIntendedHash('sql90', SQL 90 bytes, 'sql101', these bytes). After
+  // SQL 101, SQL 90 counts as applied (for SQL 93/94/99/100) only when every SQL 90 object matches.
+  superseded_intended_sha256: Object.freeze({ sql90: '8e19c4a2deb94e854e22d055884ea0beeedaf24eb633adbd51484f1b458b32e2' }),
   function_identities: Object.freeze(['public.aws_invite_create_user_identity(uuid, text, text, text)']),
 });
 

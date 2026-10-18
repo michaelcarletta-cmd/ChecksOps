@@ -40,6 +40,7 @@ import {
   readReleaseSqlState,
   releaseFunctionDefinitions,
   releaseIntendedHash,
+  releaseSupersededIntendedHash,
   releaseIntendedState,
   releaseSharedPreconditionFailures,
   releaseSqlExecutableText,
@@ -115,6 +116,10 @@ test('pin: SQL 101 pending and code-derived, selectable, packed, in step with th
   assert.equal(pin.execute, false);
   assert.equal(pin.authorization, 'pending');
   assert.equal(releaseIntendedHash(KEY, TEXT[KEY]), pin.intended_replacement_sha256);
+  // SQL 90 after SQL 101: every SQL 90 object, with the invite function as SQL 101 renders it.
+  assert.deepEqual(Object.keys(pin.superseded_intended_sha256), ['sql90']);
+  assert.equal(releaseSupersededIntendedHash('sql90', TEXT.sql90, KEY, TEXT[KEY]), pin.superseded_intended_sha256.sql90);
+  assert.notEqual(pin.superseded_intended_sha256.sql90, releaseIntendedHash('sql90', TEXT.sql90));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
   assert.equal(resolveAuthorizedMigration({ filename: pin.filename }), pin);
   assert.equal(MIGRATIONS[spec.choice], pin);
@@ -277,6 +282,16 @@ test('PostgreSQL 16: SQL 101 through the executor: predecessor, ACL refusal, one
     assert.equal(dependent.release_sql_inspect.predecessors.sql90, true, key);
     assert.ok(!dependent.precondition_failures.includes('predecessors_applied'), `${key}: ${JSON.stringify(dependent.precondition_failures)}`);
   }
+  // ...but only while every other SQL 90 object still matches: a drifted SQL 90 grant is no
+  // longer SQL 90 applied, even with SQL 101's function in place.
+  await admin.query('REVOKE EXECUTE ON FUNCTION public.aws_first_invite_allowed(uuid) FROM authenticated');
+  try {
+    assert.equal((await inspect(KEY)).already_applied, true);
+    assert.equal((await inspect('sql93')).release_sql_inspect.predecessors.sql90, false);
+  } finally {
+    await admin.query('GRANT EXECUTE ON FUNCTION public.aws_first_invite_allowed(uuid) TO checksops, authenticated');
+  }
+  assert.equal((await inspect('sql93')).release_sql_inspect.predecessors.sql90, true);
 
   // With the live constraint, a brand-new invite through the applied function has both rows.
   await admin.query('ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_identity_fkey FOREIGN KEY (id) REFERENCES public.identity_accounts(application_user_id) ON DELETE CASCADE');
