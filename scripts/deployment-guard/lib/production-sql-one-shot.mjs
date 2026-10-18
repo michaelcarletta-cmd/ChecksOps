@@ -227,7 +227,7 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL89_PRODUCTION_PIN_REL,
     allowed_key: 'sql89_production_apply_allowed',
   }),
-  // SQL 90-100 (release 2026-10-17): one tool per migration on the shared release engine.
+  // SQL 90-101 (release 2026-10-17): one tool per migration on the shared release engine.
   ...Object.fromEntries(Object.values(RELEASE_PRODUCTION).map((tool) => [tool.key, Object.freeze({
     key: tool.key,
     script: tool.cli,
@@ -289,7 +289,7 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'sql89_columns_missing',
   'unsafe_update_functions',
   'ingest_function_security_definer',
-  // SQL 90-100: aggregate counts, successor markers and the per-object state report (no rows).
+  // SQL 90-101: aggregate counts, successor markers and the per-object state report (no rows).
   'counts',
   'successors_applied',
   'release_sql_inspect',

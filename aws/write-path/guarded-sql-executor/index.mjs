@@ -210,7 +210,7 @@ const SQL88_CLAIM_ID_ASSIGN_CASE_TENANT_SCOPE_FILE = path.join(ROOT, 'sql/88_cla
 const SQL89_CHECK_INTAKE_COLUMN_UPDATE_FILE = path.join(ROOT, 'sql/89_check_intake_items_column_update.sql');
 const SQL29_MORTGAGE_OPS_LIBRARY_PARITY_FILE = path.join(ROOT, 'sql/29_mortgage_ops_library_parity.sql');
 const SQL30_TENANT_DOCUMENTS_DOC_TYPE_FILE = path.join(ROOT, 'sql/30_tenant_documents_mortgage_doc_type.sql');
-// SQL 90-100: packed as sql/<basename> (sql-executor-ensure.mjs EXECUTOR_PACK_MEMBERS).
+// SQL 90-101: packed as sql/<basename> (sql-executor-ensure.mjs EXECUTOR_PACK_MEMBERS).
 const RELEASE_SQL_FILES = Object.freeze(Object.fromEntries(Object.entries(RELEASE_2026_10_17_PENDING_SQL_PINS)
   .map(([key, pin]) => [key, path.join(ROOT, 'sql', path.basename(pin.filename))])));
 const SQL39_FILE = path.join(ROOT, 'sql/39_tmp_write_policy_reconcile.sql');
@@ -2138,7 +2138,7 @@ async function handleLibrarySqlMigration({ key, event, authorization, identity, 
   }
 }
 
-// --- SQL 90-100: release 2026-10-17 migrations ----------------------------------
+// --- SQL 90-101: release 2026-10-17 migrations ----------------------------------
 // One engine (lib/release-sql-state.mjs, specs in lib/release-sql-specs.mjs), shared with the
 // production tools: the state reader, code-derived fingerprints, predecessor rules, pre/post
 // conditions and the unrelated-catalog snapshot. The files carry no BEGIN/COMMIT; the
@@ -6742,7 +6742,7 @@ export function createHandler({
   sql29Pin = AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
   sqlFile30 = SQL30_TENANT_DOCUMENTS_DOC_TYPE_FILE,
   sql30Pin = AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
-  // SQL 90-100 by key (sql90 ... sql100): files and pins, for tests.
+  // SQL 90-101 by key (sql90 ... sql101): files and pins, for tests.
   releaseSqlFiles = RELEASE_SQL_FILES,
   releaseSqlPins = RELEASE_2026_10_17_PENDING_SQL_PINS,
   sqlFile39 = SQL39_FILE,

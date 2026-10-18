@@ -23,6 +23,7 @@ that connects to the database:
 | `sql89` | `scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs` (`ops/production-sql-89-apply.md`) |
 | `sql90` … `sql97` | `scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs`, `sql91-moov-onboarding-…`, `sql92-signature-request-check-files-link-grant-…`, `sql93-tenant-company-info-…`, `sql94-document-library-restore-…`, `sql95-remove-freedom-claims-bridge-…`, `sql96-platform-owner-tenant-pricing-…`, `sql97-financial-stepup-log-server-writer-production-apply.mjs` (`ops/production-sql-90-97-apply.md`, which also gives their order) |
 | `sql98` … `sql100` | `scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs`, `sql99-mortgage-desk-completion-messages-…`, `sql100-mortgage-desk-live-access-production-apply.mjs` (same runbook; SQL 100 is a strict no-op on production and its tool never runs the file there, so its pin never becomes executable and the one-shot refuses it) |
+| `sql101` | `scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs` (same runbook; after SQL 90, before `tenant-admin.mjs`) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). Tests:
@@ -32,7 +33,7 @@ To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql89`, `sql90`…`sql100`) |
+| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql89`, `sql90`…`sql101`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |

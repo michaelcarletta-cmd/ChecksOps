@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 100), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 101), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -167,7 +167,7 @@ export function releaseForbiddenStatements(text) {
   return hits;
 }
 
-/** The reviewed bytes as the guarded tools execute them (none of SQL 90-100 has BEGIN/COMMIT), or null. */
+/** The reviewed bytes as the guarded tools execute them (none of SQL 90-101 has BEGIN/COMMIT), or null. */
 export function releaseSqlExecutableText(key, text) {
   const spec = releaseSpec(key);
   const source = String(text || '');
