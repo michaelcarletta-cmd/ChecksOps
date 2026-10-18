@@ -273,7 +273,7 @@ the ZIP or keep live bytes until the route is gone).
 | `providers/onboarding/store.mjs` | ADD (new file) | `56961c0affbece63d924fdf51e7e64045bd05f808fd4d25e885a420d7e9807ed` |
 | `providers/onboarding/webhook-status.mjs` | ADD (new file) | `45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f` |
 | `providers/parity/caller.mjs` | modified (REPLACE) | `15ba09643b5b4b77189d944c3069eabe0b9c5b7a8b453aed8e5872222d851d30` |
-| `providers/parity/db.mjs` | modified (REPLACE) | `d23eefb5ee34477ac918ae5be1a892202ee16e71be2fd7570c23f53b1d552512` |
+| `providers/parity/db.mjs` | modified (REPLACE) | `03e67070c2fc1d3910509170ac75d519856bf3f3ec75a126622a765fecee77c4` |
 | `providers/parity/moov-client.mjs` | modified (REPLACE) | `56928d66128c4a60141ef6d7392749ebad5211acef9bce6516411f1a2420612a` |
 | `providers/parity/moov-functions.mjs` | modified (REPLACE) | `7b0cde12ff969f7bfc5d83204cde77e2f322e42fe67399ca1a1e4a867eea6e75` |
 | `providers/parity/moov-money.mjs` | modified (REPLACE) | `b35beaa7fe50d25941dc277056c133a67f9393e1a249e1027c32f16ec60f5e37` |

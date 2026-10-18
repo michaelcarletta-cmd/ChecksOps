@@ -24,6 +24,13 @@ export const loadMoovAccount = async (client, tenantId, environment = 'sandbox')
 };
 
 export const logPaymentEvent = async (client, row) => {
+  // A failed insert (e.g. event-log RLS) must not abort the caller's transaction: a savepoint
+  // keeps it local. Outside a transaction block SAVEPOINT is refused and the insert stands alone.
+  let savepoint = false;
+  try {
+    await client.query('SAVEPOINT payment_event_log');
+    savepoint = true;
+  } catch { /* no transaction block */ }
   try {
     await client.query(
       `INSERT INTO public.payment_event_log
@@ -42,7 +49,21 @@ export const logPaymentEvent = async (client, row) => {
         JSON.stringify(sanitize(row.provider_metadata || {})),
       ],
     );
-  } catch { /* event log must not fail the provider call */ }
+    if (savepoint) await client.query('RELEASE SAVEPOINT payment_event_log');
+  } catch (error) {
+    // The event log must not fail the provider call.
+    if (savepoint) {
+      try { await client.query('ROLLBACK TO SAVEPOINT payment_event_log'); } catch { /* ignore */ }
+    }
+    console.error(JSON.stringify({
+      service: 'checksops-api',
+      event: 'payment_event_log_failed',
+      sqlstate: error?.code || null,
+      table: 'payment_event_log',
+      operation: 'INSERT',
+      message: String(error?.message || error).slice(0, 200),
+    }));
+  }
 };
 
 // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
