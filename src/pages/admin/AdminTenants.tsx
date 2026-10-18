@@ -633,7 +633,10 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
     });
     setInviting(false);
     if (error || (data as any)?.error) {
-      toast({ title: "Invite failed", description: error?.message || (data as any)?.error, variant: "destructive" });
+      // Platform-owner page: show the API's reason with the code, so a failed invite can be diagnosed.
+      const reason = (data as any)?.message;
+      const code = error?.message || (data as any)?.error;
+      toast({ title: "Invite failed", description: reason ? `${code}: ${reason}` : code, variant: "destructive" });
       return;
     }
     const inviteSent = (data as any)?.invite_sent;
