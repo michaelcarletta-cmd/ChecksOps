@@ -341,9 +341,13 @@ only if no earlier migration changes that migration's objects. From the specs, t
   99 (39080577323), 100 (39080713230). SQL 90, 91 and 93 are recorded in `staging-sql-live.json`.
 - **Wave 2:** SQL 94 (after SQL 30) and SQL 96 (after SQL 93), re-read at `c8a79d554` (runs
   39080904425 and 39081015501, precondition_failures []) and pinned for apply.
-  Redeploy the guarded executor at the merged commit before applying (the pins are in its
-  package).
-- **Wave 3:** SQL 98 (after SQL 96), the same way.
+  **Applied 2026-10-18** at main `02fb97d5a` (executor `Kmln7zaw…`), each receipt on the intended
+  fingerprint: SQL 94 (run 39082817752), SQL 96 (39082957003). SQL 94 is recorded in
+  `staging-sql-live.json` (SQL 96 is no plan member's `sql_before`).
+- **Wave 3:** SQL 98 (after SQL 96), re-read at `02fb97d5a` (run 39083278136,
+  precondition_failures []; the staging sandbox destination rule holds: 1 sandbox row, 0
+  production rows) and pinned for apply. Redeploy the guarded executor at the merged commit
+  before applying.
 
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
 and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`

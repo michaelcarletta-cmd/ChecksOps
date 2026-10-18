@@ -669,8 +669,9 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(pin.staging_acceptance.ok, false);
   const { AUTHORIZED_SQL98_TENANT_FEE_COLLECTION: reg, FEE_COLLECTION_PENDING_SQL_PINS } = await import('../../scripts/deployment-guard/lib/sql-executor-auth.mjs');
   assert.equal(FEE_COLLECTION_PENDING_SQL_PINS.sql98, reg);
-  assert.equal(reg.execute, false);
-  assert.equal(reg.authorization, 'pending');
+  // The staging pin is wave 3 (owner approved); the production pin above stays pending.
+  const { assertStagingPinState } = await import('./helpers/staging-sql-wave1.mjs');
+  assertStagingPinState(assert, 'sql98', reg);
   assert.equal(reg.source_sha256, pin.source_sha256);
   assert.equal(reg.commit, pin.staging_pin_commit);
   assert.deepEqual([...reg.function_identities], pin.function_identities);
