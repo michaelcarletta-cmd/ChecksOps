@@ -193,7 +193,7 @@ planning only, nothing live or verified. Staging live API carries features from 
   `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf`, then (security review follow-ups) to
   `4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f`; expected live unchanged.
 - `invoice-provider.mjs` (new file; `1b219a8a24ef8faf4b5db888dd6f772a9f04b3eb0ec2b869b76cd3b0b7d54e24` were the
-  `150da36eb` bytes, now `3382d93ecdcf998428167df61aac82a5fc3eb912dfd393785a5de962b6d897e8` after the security review
+  `150da36eb` bytes, now `3cbabefbdfc3bac99c261e89811bb92f0cbd6a428c21f41aff4336116100a4aa` after the security review
   follow-ups below) is not a plan member: like `invoice-actions.mjs` and `public-invoice.mjs` it is absent from the
   production bundle and reaches production only with a rebuilt ZIP. Until then the production overlay of
   `moov-onboard.mjs` / `moov-functions.mjs` serves the fallbacks above. Module link: both files load
@@ -217,7 +217,7 @@ planning only, nothing live or verified. Staging live API carries features from 
 - Security review follow-ups in `invoice-provider.mjs` (staging-only until a rebuilt ZIP): create / create_and_send
   send an `X-Idempotency-Key` on the customer POST, invoice POST and send PATCH, derived from the tenant plus the
   client `request_id` / `idempotency_key`, or (the SPA sends none yet) from the tenant, action and canonical payload
-  within a 10-minute window; a repeat with the same key returns the saved invoice (`idempotent: true`) without a
+  within a 60-second window (a double-click or retry; two deliberate identical invoices a minute apart stay separate); a repeat with the same key returns the saved invoice (`idempotent: true`) without a
   provider call (key hash in `provider_metadata.checksops_request_ref`). `send` refuses 409 `invoice_already_sent`
   once `sent_at` is set (`resend` is the path for that). `recover` accepts only a UUID-shaped `moov_invoice_id`. A
   persist failure answers `persistError: "invoice_persist_failed"` and other internal errors a fixed

@@ -33,7 +33,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const REQUEST_ID_RE = /^[A-Za-z0-9._:-]{8,128}$/;
 
 /** A request without a client request id is deduplicated within this window. */
-export const INVOICE_CREATE_WINDOW_MS = 10 * 60 * 1000;
+export const INVOICE_CREATE_WINDOW_MS = 60 * 1000;
 
 const sha256Hex = (value) => createHash('sha256').update(String(value)).digest('hex');
 
