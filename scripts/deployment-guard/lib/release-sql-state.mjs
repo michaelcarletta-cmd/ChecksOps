@@ -864,6 +864,9 @@ export function releaseUnrelatedScope(key) {
     acl_relations: (spec.table_privileges || []).map((p) => p.table),
     skip_columns: [...(spec.added_columns || []), ...(spec.column_acl || [])].map((c) => objectName(c.table, c.column)),
     skip_constraints: [...(spec.constraints || []), ...(spec.added_constraints || [])].map((c) => objectName(c.table, c.name)),
+    // PostgreSQL 18 records a column's NOT NULL as a named constraint (contype 'n'): the one on a
+    // column the migration adds is that column's change (SQL 98: tenants.deposits_enabled).
+    skip_not_null_columns: (spec.added_columns || []).map((c) => objectName(c.table, c.column)),
     skip_policies: [...(spec.policies || []), ...(spec.dropped_policies || [])].map((p) => objectName(p.table, p.name)),
     skip_functions: [...spec.functions.map((fn) => fn.identity), ...(spec.dropped_functions || [])],
     skip_triggers: [...(spec.triggers || []), ...(spec.dropped_triggers || [])].map((t) => objectName(t.table, t.name)),
@@ -898,6 +901,8 @@ FROM pg_catalog.pg_constraint con JOIN pg_catalog.pg_namespace n ON n.oid = con.
 LEFT JOIN pg_catalog.pg_class r ON r.oid = con.conrelid
 WHERE n.nspname = 'public' AND NOT ${SKIPPED_REL('con.conrelid')}
   AND NOT ((n.nspname || '.' || COALESCE(r.relname, '') || '.' || con.conname) = ANY ($2::text[]))
+  AND NOT (con.contype = 'n' AND (n.nspname || '.' || COALESCE(r.relname, '') || '.' || COALESCE((SELECT a.attname FROM pg_catalog.pg_attribute a
+    WHERE a.attrelid = con.conrelid AND a.attnum = con.conkey[1]), '')) = ANY ($3::text[]))
 ORDER BY 1`,
   policies: `SELECT c.oid::regclass::text || ' ' || pol.polname || ' ' || pol.polcmd::text || ' ' || pol.polpermissive::text || ' ' || pol.polroles::text
   || ' ' || COALESCE(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), '') || ' ' || COALESCE(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), '') AS d
@@ -957,7 +962,7 @@ export async function readReleaseUnrelatedSnapshot(client, key) {
   const params = {
     relations: [scope.skip_relations, scope.acl_relations, scope.skip_indexes],
     columns: [scope.skip_relations, scope.skip_columns],
-    constraints: [scope.skip_relations, scope.skip_constraints],
+    constraints: [scope.skip_relations, scope.skip_constraints, scope.skip_not_null_columns],
     policies: [scope.skip_relations, scope.skip_policies],
     functions: [scope.skip_functions],
     triggers: [scope.skip_relations, scope.skip_triggers],

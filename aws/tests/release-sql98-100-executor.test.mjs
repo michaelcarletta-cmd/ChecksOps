@@ -39,6 +39,7 @@ import {
   RELEASE_READS,
   RELEASE_SQL_SPECS,
   readReleaseSqlState,
+  readReleaseUnrelatedSnapshot,
   releaseFunctionDefinitions,
   releaseIntendedHash,
   releaseIntendedState,
@@ -146,7 +147,7 @@ test('pins: SQL 98-100 pending and code-derived, selectable, packed, in step wit
   assert.deepEqual(Object.keys(RELEASE_SQL_SPECS).filter((key) => RELEASE_SQL_SPECS[key].render), ['sql100']);
 });
 
-test('reviewed files: SQL 98-100 parse as reviewed; SQL 100 bodies are production\'s; the unrelated scope skips the new indexes', () => {
+test('reviewed files: SQL 98-100 parse as reviewed; SQL 100 bodies are production\'s; the unrelated scope skips the new indexes and the added column NOT NULL', async () => {
   for (const key of KEYS) assert.equal(releaseSqlExecutableText(key, TEXT[key]), TEXT[key], key);
   // The prosrc sha256 the 2026-10-17 production inspect recorded (EXECUTE'd body included).
   const defs = releaseFunctionDefinitions(TEXT.sql100);
@@ -156,6 +157,17 @@ test('reviewed files: SQL 98-100 parse as reviewed; SQL 100 bodies are productio
   for (const fn of Object.values(defs)) assert.deepEqual(fn.config, ['row_security=off', 'search_path=public']);
   assert.deepEqual(releaseUnrelatedScope('sql98').skip_indexes, ['public.tenant_maintenance_payments_tenant_period_uidx', 'public.check_billing_events_check_event_uidx']);
   assert.deepEqual(releaseUnrelatedScope('sql90').skip_indexes, []);
+  // PostgreSQL 18 records tenants.deposits_enabled's NOT NULL as a named constraint (contype 'n'):
+  // only that one, on the column SQL 98 adds, is outside the unrelated catalog (staging apply run
+  // 39084622818 refused UNRELATED_MUTATION ["constraints"] on it).
+  assert.deepEqual(releaseUnrelatedScope('sql98').skip_not_null_columns, ['public.tenants.deposits_enabled']);
+  assert.deepEqual(releaseUnrelatedScope('sql90').skip_not_null_columns, []);
+  const calls = [];
+  await readReleaseUnrelatedSnapshot({ query: async (text, params) => { calls.push({ text, params }); return { rows: [] }; } }, 'sql98');
+  const constraintRead = calls.filter((c) => /FROM pg_catalog\.pg_constraint con/.test(c.text));
+  assert.equal(constraintRead.length, 1);
+  assert.match(constraintRead[0].text, /con\.contype = 'n' AND .*con\.conkey\[1\]/s);
+  assert.deepEqual(constraintRead[0].params[2], ['public.tenants.deposits_enabled']);
   // SQL 98's guard is SQL 96's plus deposits_enabled for the platform owner: a different body.
   assert.notEqual(sha(releaseFunctionDefinitions(TEXT.sql98).aws_tenants_member_column_guard.prosrc),
     sha(releaseFunctionDefinitions(TEXT.sql96).aws_tenants_member_column_guard.prosrc));
