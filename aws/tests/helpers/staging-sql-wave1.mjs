@@ -26,7 +26,7 @@ export const STAGING_WAVE1 = Object.freeze({
   // tenant profile and member removal). No staging read-live yet (the executor must carry it
   // first): run and live stay null and the pin stays pending until a reviewed change records the
   // read-live run and pre-state here and in the pin (execute true), as wave 5 did for SQL 101.
-  sql102: Object.freeze({ wave: 6, approved: '2026-10-18', run: null, live: null }),
+  sql102: Object.freeze({ wave: 6, approved: '2026-10-18', run: '39161620576', live: 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -38,7 +38,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-5 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-6 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
