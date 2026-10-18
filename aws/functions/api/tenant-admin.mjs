@@ -385,14 +385,42 @@ export const runTenantInviteUser = async ({
   };
 };
 
-export const handleTenantInviteUser = (event, deps = {}) => withIdentity(event, (ctx) => (
-  runTenantInviteUser({
-    ...ctx,
-    identityScope: deps.identityScope,
-    send: deps.sendViaSesOrSink,
-    cognitoJson: deps.cognitoJson,
-  })
-), { write: true, commit: true, ...deps });
+/**
+ * A login created by the invite keeps its suppressed temporary password, so it
+ * stays in FORCE_CHANGE_PASSWORD, where Cognito offers no EMAIL_OTP sign-in.
+ * Once the invite has committed, set a random permanent password that is never
+ * returned, logged or sent; the invitee signs in with an email code. Logins the
+ * invite did not create are never touched. A failure keeps the invite.
+ */
+export const confirmInvitedLogin = async ({ email, cognitoJson: cognitoFn }) => {
+  const adminCognito = cognitoFn || cognitoJson;
+  try {
+    await adminCognito('AdminSetUserPassword', {
+      UserPoolId: POOL_ID(),
+      Username: email,
+      Password: `Inv-${randomBytes(24).toString('base64url')}!a1`,
+      Permanent: true,
+    });
+    return true;
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'invite_login_confirm_failed', error_name: String(error?.name || 'Error').slice(0, 80) }));
+    return false;
+  }
+};
+
+export const handleTenantInviteUser = async (event, deps = {}) => {
+  const result = await withIdentity(event, (ctx) => (
+    runTenantInviteUser({
+      ...ctx,
+      identityScope: deps.identityScope,
+      send: deps.sendViaSesOrSink,
+      cognitoJson: deps.cognitoJson,
+    })
+  ), { write: true, commit: true, ...deps });
+  // withIdentity has committed by the time it returns an ok result.
+  if (result?.ok !== true || !result.isNewUser || Number(result.statusCode || 200) >= 400) return result;
+  return { ...result, login_ready: await confirmInvitedLogin({ email: result.email, cognitoJson: deps.cognitoJson }) };
+};
 
 export const handleCreateTenantUser = async (event) => handleTenantInviteUser(event);
 

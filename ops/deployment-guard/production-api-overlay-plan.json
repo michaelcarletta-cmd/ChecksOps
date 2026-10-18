@@ -514,7 +514,7 @@
     },
     "tenant-admin.mjs": {
       "operation": "replace",
-      "accepted_sha256": "be053c68517050621b621d0cc8ba2d86c1a4b109bf8d33f8679727b99ce678ab",
+      "accepted_sha256": "34479a7b235ba5473df458d6a0549ddf59b2420e72f476e23e7963d8b584120f",
       "expected_live_sha256": "8fc1f049860979387ff83ca3a4c7fdaa384a7dc2aa6eabd620cdf1c40c950bff",
       "sql_before": "aws/workflows/sql/90_users_only_tenant_roles.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
