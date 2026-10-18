@@ -980,8 +980,9 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
       return {
         data: body && typeof body === "object" ? body : null,
         error: {
-          message: String(body?.error || body?.message || `FunctionsHttpError:${name}`),
+          message: String(body?.message || body?.error || `FunctionsHttpError:${name}`),
           name: "FunctionsHttpError",
+          code: typeof body?.error === "string" ? body.error : undefined,
           context: { status: response.status || 403, body },
         },
       };

@@ -82,6 +82,7 @@ import { handleAdminResetTotp } from './admin-reset-totp.mjs';
 import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
 import { handleTaxProfiles } from './tax-profiles.mjs';
+import { handleTenantManagementV2 } from './tenant-management-v2.mjs';
 import {
   handleSaveTenantBillingAccount,
 } from './tenant-settings-handlers.mjs';
@@ -173,6 +174,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-set-openai-key',
   'tenant-validate-openai-key',
   'tenant-remove-openai-key',
+  'tenant-management-v2',
   // Mortgage desk hire (Cognito + identity_accounts)
   'hire-mortgage-agent',
   'mortgage-agent-compensation',
@@ -209,6 +211,13 @@ export const handleAppServiceRequest = async (event, path, method) => {
   const upper = String(method || 'POST').toUpperCase();
   if (upper === 'OPTIONS') {
     return { ok: true, statusCode: 200, cors: true };
+  }
+
+  if (name === 'tenant-management-v2') {
+    if (upper !== 'GET') {
+      return { ok: false, statusCode: 405, error: 'method_not_allowed' };
+    }
+    return handleTenantManagementV2(event);
   }
 
   if (name === 'handle-email-unsubscribe' && (upper === 'GET' || upper === 'POST')) {

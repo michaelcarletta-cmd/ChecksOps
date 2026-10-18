@@ -81,8 +81,65 @@ async function callBillingAdmin<T>(body: AdminBody): Promise<T & { ok: boolean; 
   return { ok: false, error: error?.message ?? "request_failed" } as T & { ok: boolean; error?: string };
 }
 
-export const feeErrorText = (result: { error?: string | null; message?: string | null } | null | undefined) =>
-  result?.message || result?.error || "Request failed";
+/** Readable text for the server's billing readiness / refusal codes. */
+export const REASON_TEXT: Record<string, string> = {
+  tenant_inactive: "The organization is not active.",
+  billing_paused: "Billing is paused for this organization.",
+  missing_authorization: "No member of this organization has authorized ACH billing yet.",
+  auto_debit_disabled: "The organization turned off billing debits.",
+  missing_ach_authorization: "ACH authorization is missing.",
+  missing_funding_source: "No authorized bank account.",
+  invalid_amount: "Nothing to collect for this period.",
+  invalid_amount_cents: "The amount due is not a valid charge.",
+  destination_unresolved: "The ChecksOps fee destination is not set.",
+  billing_destination_unresolved: "The ChecksOps fee destination is not set.",
+  destination_not_configured: "No fee destination has been saved for this environment yet.",
+  destination_ids_required: "Enter both the platform account id and the payment method id.",
+  sandbox_destination_must_be_checksops_merchant: "On sandbox the destination must be the ChecksOps platform account.",
+  production_destination_cannot_be_sandbox_merchant: "Production can't use the sandbox platform account.",
+  moov_account_missing: "The organization has no payment account.",
+  moov_account_inactive: "The organization's payment account is not active.",
+  ach_capability_unavailable: "ACH debits are not available on the organization's account.",
+  funding_source_not_found: "The authorized bank account was not found.",
+  funding_source_account_mismatch: "The authorized bank account belongs to a different payment account.",
+  bank_disconnected: "The authorized bank account is disconnected.",
+  funding_source_cannot_debit: "The authorized bank account cannot be debited.",
+  monthly_billing_disabled: "Fee collection is not enabled on this environment.",
+};
+
+export const reasonText = (reason: string) => REASON_TEXT[reason] ?? reason.replace(/_/g, " ");
+
+export const OUTDATED_BILLING_SERVICE = "The billing service on this server is out of date.";
+
+type FeeRefusal = {
+  error?: string | null;
+  message?: string | null;
+  reason?: string | null;
+  reasons?: unknown;
+  readiness?: { reasons?: unknown } | null;
+} | null | undefined;
+
+const reasonList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((r): r is string => typeof r === "string" && r.length > 0) : [];
+
+/** Every toast text: the server message, else mapped reasons, else the mapped code. */
+export const feeErrorText = (result: FeeRefusal) => {
+  if (result?.message) return result.message;
+  const reasons = [...reasonList(result?.reasons), ...reasonList(result?.readiness?.reasons)];
+  if (reasons.length) return [...new Set(reasons)].map(reasonText).join(" ");
+  if (result?.reason) return reasonText(result.reason);
+  if (result?.error) return reasonText(result.error);
+  return "Request failed";
+};
+
+/** A preview reply this SPA can render (older servers lack summary / preview_hash). */
+export const isUsableFeePreview = (preview: Partial<FeePreview> | null | undefined): preview is FeePreview =>
+  !!preview
+  && Array.isArray(preview.summary)
+  && typeof preview.preview_hash === "string"
+  && preview.preview_hash.length > 0
+  && !!preview.readiness
+  && Array.isArray(preview.readiness.reasons);
 
 export const previewTenantFees = (tenantId: string, period?: string) =>
   callBillingAdmin<FeePreview>({ action: "preview", tenant_id: tenantId, ...(period ? { period } : {}) });

@@ -44,6 +44,8 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 import { TenantProvider } from "@/contexts/TenantContext";
 import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
 import { saveTenantPricing, type TenantPricingPatch } from "@/lib/tenantPricing";
+import { removeTenantMember, resendTenantInvite, saveTenantProfile, type TenantProfilePatch } from "@/lib/tenantProfile";
+import { isAwsStaging } from "@/lib/awsStaging";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
@@ -447,34 +449,31 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
 /* ---------------- Tabs ---------------- */
 
+// Company details are the platform owner's (tenant-billing-admin
+// profile-update, SQL 102); the slug and partner code are permanent and never sent.
 function useTenantSave(tenant: Tenant, onUpdated: (t: Tenant) => void) {
   const [saving, setSaving] = useState(false);
-  const save = async (patch: Record<string, any>) => {
+  const save = async (patch: TenantProfilePatch) => {
     setSaving(true);
-    const { data, error } = await supabase
-      .from("tenants")
-      .update(patch as any)
-      .eq("id", tenant.id)
-      .select()
-      .single();
-    setSaving(false);
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return;
+    try {
+      const saved = await saveTenantProfile<Partial<Tenant>>(tenant.id, patch);
+      toast({ title: "Saved" });
+      onUpdated({ ...tenant, ...patch, ...(saved ?? {}) } as Tenant);
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message ?? "Company details were not saved", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    toast({ title: "Saved" });
-    onUpdated(data as Tenant);
   };
   return { saving, save };
 }
 
 function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
   const [name, setName] = useState(tenant.name);
-  const [slug, setSlug] = useState(tenant.slug);
   const [customDomain, setCustomDomain] = useState(tenant.custom_domain || "");
   const [subStatus, setSubStatus] = useState(tenant.subscription_status || "inactive");
   const [isTest, setIsTest] = useState(!!(tenant as any).is_test_account);
-  const [maxChecks, setMaxChecks] = useState(tenant.max_checks_per_month ?? 100);
+  const [maxChecks, setMaxChecks] = useState<number | "">(tenant.max_checks_per_month ?? 100);
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
@@ -487,7 +486,11 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Company Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-          <div className="space-y-2"><Label>Slug</Label><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
+          <div className="space-y-2">
+            <Label>Slug</Label>
+            <Input value={tenant.slug} readOnly disabled className="font-mono" />
+            <p className="text-xs text-muted-foreground">Permanent.</p>
+          </div>
         </div>
         <div className="space-y-2">
           <Label>Custom Domain</Label>
@@ -508,7 +511,20 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2"><Label>Max Checks / Month</Label><Input type="number" value={maxChecks} onChange={(e) => setMaxChecks(parseInt(e.target.value) || 0)} /></div>
+          <div className="space-y-2">
+            <Label>Max Checks / Month</Label>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={maxChecks}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                setMaxChecks(e.target.value === "" || !Number.isFinite(n) ? "" : Math.max(0, n));
+              }}
+            />
+            {maxChecks === "" && <p className="text-xs text-muted-foreground">Enter a whole number (0 or more).</p>}
+          </div>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-3">
           <div className="space-y-0.5">
@@ -529,9 +545,20 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
                 <Copy className="w-4 h-4" />
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">Permanent.</p>
           </div>
         )}
-        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, moov_environment: isTest ? "sandbox" : "production", max_checks_per_month: maxChecks } as any)} disabled={saving}>
+        <Button
+          onClick={() => save({
+            name: name.trim(),
+            custom_domain: customDomain.trim().toLowerCase() || null,
+            subscription_status: subStatus,
+            max_checks_per_month: maxChecks === "" ? undefined : maxChecks,
+            is_test_account: isTest,
+          })}
+          disabled={saving || !name.trim() || maxChecks === ""}
+          title={!name.trim() ? "Enter a company name" : maxChecks === "" ? "Enter the max checks per month" : undefined}
+        >
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
 
@@ -653,22 +680,49 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
     load();
   };
 
+  const [busyMember, setBusyMember] = useState<string | null>(null);
+
   const resendInvite = async (email: string) => {
-    const tenantBaseUrl = tenant.custom_domain ? `https://${tenant.custom_domain}` : `https://checksops.com/${tenant.slug}`;
-    const redirectTo = `${tenantBaseUrl}/login`;
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `https://checksops.com/reset-password?next=${encodeURIComponent(redirectTo)}`,
-    });
-    if (error) { toast({ title: "Resend failed", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "Reset link resent", description: `Sent to ${email}` });
+    if (!isAwsStaging()) {
+      const tenantBaseUrl = tenant.custom_domain ? `https://${tenant.custom_domain}` : `https://checksops.com/${tenant.slug}`;
+      const redirectTo = `${tenantBaseUrl}/login`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `https://checksops.com/reset-password?next=${encodeURIComponent(redirectTo)}`,
+      });
+      if (error) { toast({ title: "Resend failed", description: error.message, variant: "destructive" }); return; }
+      toast({ title: "Reset link resent", description: `Sent to ${email}` });
+      return;
+    }
+    setBusyMember(email);
+    try {
+      const result = await resendTenantInvite(tenant.id, email);
+      toast(result.invite_sent
+        ? { title: "Invite resent", description: `Sent to ${email}` }
+        : {
+            title: "Invite email failed",
+            description: result.invite_error || "The email could not be sent. Try again later.",
+            variant: "destructive",
+          });
+    } catch (e: any) {
+      toast({ title: "Resend failed", description: e?.message ?? "The invite was not sent", variant: "destructive" });
+    } finally {
+      setBusyMember(null);
+    }
   };
 
-  const remove = async (id: string) => {
+  // The server removes by login (user_id), not by the tenant_users row id.
+  const remove = async (userId: string) => {
     if (!confirm("Remove this user from the tenant? Their account is not deleted.")) return;
-    const { error } = await supabase.from("tenant_users").delete().eq("id", id);
-    if (error) { toast({ title: "Remove failed", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "User removed" });
-    load();
+    setBusyMember(userId);
+    try {
+      await removeTenantMember(tenant.id, userId);
+      toast({ title: "User removed" });
+      load();
+    } catch (e: any) {
+      toast({ title: "Remove failed", description: e?.message ?? "The user was not removed", variant: "destructive" });
+    } finally {
+      setBusyMember(null);
+    }
   };
 
   return (
@@ -709,11 +763,11 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
                     {u.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
                   </div>
                   {u.email && (
-                    <Button variant="outline" size="sm" onClick={() => resendInvite(u.email!)} title="Resend reset email">
+                    <Button variant="outline" size="sm" onClick={() => resendInvite(u.email!)} disabled={busyMember === u.email} title="Resend invite email">
                       <Mail className="w-4 h-4" />
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" onClick={() => remove(u.id)} className="text-destructive">
+                  <Button variant="ghost" size="sm" onClick={() => remove(u.user_id)} disabled={busyMember === u.user_id} className="text-destructive" title="Remove from tenant">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -737,17 +791,29 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
 
   // Pricing is the platform owner's (tenant-billing-admin, SQL 96); it never
   // goes through the generic tenants update.
+  // A blank rate is sent as null, which clears the override (default rate).
   const save = async () => {
-    const patch: TenantPricingPatch = { per_check_billing_enabled: enabled, per_check_rate_cents: rate };
-    if (nextDay !== "") patch.next_day_rate_cents = nextDay;
-    if (sameDay !== "") patch.same_day_rate_cents = sameDay;
-    if (mortgageInitial !== "") patch.mortgage_ops_initial_rate_cents = mortgageInitial;
-    if (mortgageAdditional !== "") patch.mortgage_ops_additional_rate_cents = mortgageAdditional;
+    const patch: TenantPricingPatch = {
+      per_check_billing_enabled: enabled,
+      per_check_rate_cents: rate,
+      next_day_rate_cents: nextDay === "" ? null : nextDay,
+      same_day_rate_cents: sameDay === "" ? null : sameDay,
+      mortgage_ops_initial_rate_cents: mortgageInitial === "" ? null : mortgageInitial,
+      mortgage_ops_additional_rate_cents: mortgageAdditional === "" ? null : mortgageAdditional,
+    };
     setSaving(true);
     try {
-      await saveTenantPricing(tenant.id, patch);
+      const saved = await saveTenantPricing(tenant.id, patch);
+      const values = { ...patch, ...(saved ?? {}) };
+      const asInput = (v: number | null | undefined): number | "" => (v == null ? "" : v);
+      if (typeof values.per_check_billing_enabled === "boolean") setEnabled(values.per_check_billing_enabled);
+      if (typeof values.per_check_rate_cents === "number") setRate(values.per_check_rate_cents);
+      setNextDay(asInput(values.next_day_rate_cents));
+      setSameDay(asInput(values.same_day_rate_cents));
+      setMortgageInitial(asInput(values.mortgage_ops_initial_rate_cents));
+      setMortgageAdditional(asInput(values.mortgage_ops_additional_rate_cents));
       toast({ title: "Saved" });
-      onUpdated({ ...tenant, ...patch });
+      onUpdated({ ...tenant, ...values });
     } catch (e: any) {
       toast({ title: "Save failed", description: e?.message ?? "Pricing was not saved", variant: "destructive" });
     } finally {
