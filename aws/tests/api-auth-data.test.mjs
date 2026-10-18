@@ -678,7 +678,7 @@ test('secret config tables rewrite to public-column views', () => {
 
 const OWNER_ID = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 const FREEDOM_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
-const LOGIN_SELECT = 'tenant_id, tenants!inner(slug, subscription_status)';
+const LOGIN_SELECT = 'tenant_id, tenants(slug, subscription_status)';
 const C1C_ID = '4f172140-f57a-4744-8050-95f4f07b13b4';
 
 const embedQueryClient = (onQuery) => {
@@ -748,9 +748,35 @@ test('login tenant_users embed queries tenants_public but returns tenants', asyn
   assert.equal(memberships[0].tenants.slug, 'freedom');
 
   const loginSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages/checkops/CheckOpsLogin.tsx'), 'utf8');
-  assert.match(loginSrc, /tenants!inner\(slug, subscription_status\)/);
-  assert.match(loginSrc, /m\.tenants\?\.subscription_status === "active"/);
-  assert.equal(loginSrc.includes('tenants_public'), false);
+  assert.match(loginSrc, /"tenant_id, tenants\(slug, subscription_status\)"/);
+  assert.equal(loginSrc.includes('tenants!inner'), false);
+  assert.match(loginSrc, /classifyLoginMemberships\(/);
+  assert.equal(loginSrc.includes('"tenants_public"'), false);
+  const classifierSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src/lib/loginMembership.ts'), 'utf8');
+  assert.match(classifierSrc, /m\.tenants\?\.subscription_status === "active"/);
+});
+
+test('login tenant_users embed keeps membership rows whose tenant is inactive (not in tenants_public)', async () => {
+  const client = embedQueryClient((sql) => {
+    if (sql.includes('FROM public.tenant_users')) {
+      return { rows: [{ tenant_id: FREEDOM_ID, user_id: OWNER_ID }] };
+    }
+    // tenants_public lists active tenants only; the inactive tenant is absent.
+    if (sql.includes('FROM public.tenants_public')) return { rows: [] };
+    return { rows: [] };
+  });
+
+  const result = await handleDataQuery(jwtEvent('/data/query', 'POST', {
+    table: 'tenant_users',
+    select: LOGIN_SELECT,
+    filters: [{ column: 'user_id', op: 'eq', value: OWNER_ID }],
+  }), depsFor(client));
+
+  assert.equal(result.ok, true, result.message || result.error);
+  assert.equal(result.data.length, 1);
+  assert.equal(result.data[0].tenant_id, FREEDOM_ID);
+  assert.equal(result.data[0].tenants, null);
+  assert.equal(loginFilter(result.data).length, 0);
 });
 
 test('aliased partner tenant embeds keep inviter/invitee keys while querying tenants_public', async () => {

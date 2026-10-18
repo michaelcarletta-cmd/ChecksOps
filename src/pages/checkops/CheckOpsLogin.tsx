@@ -15,6 +15,7 @@ import { isPlatformOwner } from "@/lib/masterMerchant";
 import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
+import { classifyLoginMemberships, INACTIVE_ORG_LOGIN_MESSAGE, NO_MEMBERSHIP_LOGIN_MESSAGE, type LoginMembershipRow } from "@/lib/loginMembership";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 
 /** Passwordless ChecksOps sign-in. AWS staging: Cognito WebAuthn + EMAIL_OTP only. No password path. */
@@ -61,14 +62,16 @@ export default function CheckOpsLogin() {
       toast({ title: "Wrong portal", description: "This account is for the Mortgage Desk. Please sign in at /mortgage-ops/login.", variant: "destructive" });
       return;
     }
-    const { data } = await supabase.from("tenant_users").select("tenant_id, tenants!inner(slug, subscription_status)").eq("user_id", resolvedUserId);
-    const memberships = (data ?? []).filter((m: any) => m.tenants?.subscription_status === "active" && m.tenants?.slug);
-    if (memberships.length === 0) {
+    // No `!inner`: keep membership rows whose tenant is inactive (AWS embeds read the active-only tenants_public view).
+    const { data } = await supabase.from("tenant_users").select("tenant_id, tenants(slug, subscription_status)").eq("user_id", resolvedUserId);
+    const membership = classifyLoginMemberships(data as LoginMembershipRow[] | null);
+    if (membership.kind !== "active") {
       await supabase.auth.signOut();
-      toast({ title: "No ChecksOps access", description: "This account isn't a member of any active organization. Contact your admin.", variant: "destructive" });
+      const message = membership.kind === "inactive" ? INACTIVE_ORG_LOGIN_MESSAGE : NO_MEMBERSHIP_LOGIN_MESSAGE;
+      toast({ ...message, variant: "destructive" });
       return;
     }
-    navigate(`/${(memberships[0] as any).tenants.slug}/checks`, { replace: true });
+    navigate(`/${membership.slug}/checks`, { replace: true });
   };
 
   const handlePasskey = async () => {

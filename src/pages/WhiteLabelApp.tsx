@@ -74,14 +74,46 @@ function WhiteLabelRoutes() {
     enabled: !!tenant?.id && !!user?.id,
   });
 
+  // tenants_public lists active tenants only, so an inactive organization looks
+  // "not found". For a signed-in member, read the base tenant row (membership-
+  // scoped RLS) to show the inactive screen instead.
+  const { slug: routeSlug } = useParams<{ slug: string }>();
+  const { data: hiddenTenantStatus, isLoading: hiddenStatusLoading } = useQuery({
+    queryKey: ["tenant-hidden-status", routeSlug, user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("tenants")
+        .select("subscription_status")
+        .eq("slug", routeSlug!)
+        .maybeSingle();
+      return (data as { subscription_status?: string | null } | null)?.subscription_status ?? null;
+    },
+    enabled: !loading && !tenant && !!routeSlug && !!user?.id,
+  });
+  const tenantInactive = (!tenant && !!hiddenTenantStatus && hiddenTenantStatus !== "active")
+    || (!!tenant && tenant.subscription_status !== "active");
+
   // Master merchant can preview any tenant's Check Center
   const isMember = !!isTenantMember || isMasterMerchant(user?.email, user?.id);
 
 
-  if (loading || authLoading || (user && memberLoading)) {
+  if (loading || authLoading || (user && memberLoading) || (user && !tenant && !!routeSlug && hiddenStatusLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (tenantInactive) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-2">
+          <h1 className="text-2xl font-bold">Subscription Inactive</h1>
+          <p className="text-muted-foreground">
+            This organization's subscription is currently inactive. Please contact your administrator.
+          </p>
+        </div>
       </div>
     );
   }
@@ -93,19 +125,6 @@ function WhiteLabelRoutes() {
           <h1 className="text-2xl font-bold">Organization Not Found</h1>
           <p className="text-muted-foreground">
             The organization you're looking for doesn't exist or is no longer active.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (tenant.subscription_status !== "active") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">Subscription Inactive</h1>
-          <p className="text-muted-foreground">
-            This organization's subscription is currently inactive. Please contact your administrator.
           </p>
         </div>
       </div>
