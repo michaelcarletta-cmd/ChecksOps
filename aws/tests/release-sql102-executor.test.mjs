@@ -6,7 +6,7 @@
  * connecting, the reviewed-file and forbidden-statement checks, the read-only fake-client
  * inspect); this file covers what is new:
  *
- *   - the pin: staging wave 6 approved, read-live still to record (so pending), code-derived,
+ *   - the pin: staging wave 6 (production pending), code-derived,
  *     selectable, packed, in step with the production pin; the file's bytes are authored by the
  *     pinned commit once it is set; predecessor and supersedes SQL 98; SQL 98 refuses after it;
  *   - the file creates the profile setter, the member removal, the profile column list and the
@@ -111,7 +111,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 102 staging wave 6 (read-live to record, pending), code-derived, selectable, packed, in step with the production pin; predecessor and supersedes SQL 98', () => {
+test('pin: SQL 102 staging wave 6, code-derived, selectable, packed, in step with the production pin; predecessor and supersedes SQL 98', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);

@@ -397,11 +397,10 @@ only if no earlier migration changes that migration's objects. From the specs, t
   brand-new invites on staging). Re-read at `0d4a7b8a8` (run 39142701783, live `1c7e1d52…`,
   precondition_failures [], predecessor sql90 true) and pinned for apply (owner approved
   2026-10-18). Redeploy the guarded executor at the merged commit before applying.
-- **Wave 6 (next, owner approved 2026-10-18):** SQL 102 (the platform owner's tenant profile and
-  member removal; after SQL 98). Its pin stays pending until the guarded executor carries it and
-  a staging read-live of `sql102-platform-owner-tenant-profile` is recorded (run, live
-  pre-state, precondition_failures [], predecessor sql98 true) in the reviewed change that sets
-  `execute: true`, as wave 5 did for SQL 101.
+- **Wave 6:** SQL 102 (the platform owner's tenant profile and member removal; after SQL 98).
+  Re-read at `5c35bd09b` (run 39161620576, live `d3b2cd30…`, precondition_failures [], prerequisites
+  missing [], predecessor sql98 true) and pinned for apply (owner approved 2026-10-18). Redeploy
+  the guarded executor at the merged commit before applying.
 
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
 and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`

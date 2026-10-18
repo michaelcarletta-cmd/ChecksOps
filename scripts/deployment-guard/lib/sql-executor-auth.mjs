@@ -2236,9 +2236,10 @@ export const AUTHORIZED_SQL102_PLATFORM_OWNER_TENANT_PROFILE = Object.freeze({
   // The commit that last authored the file bytes (the review's test-mode lock and pg_temp, b34470d9a).
   commit: 'b34470d9aec61a394d2214a5176ed0bc4fb9ffcd',
   source_sha256: '7ef8736baf2d610b36dbf93104f543eb7951e2228704f26f21366a3f1621f35a',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-18: staging apply (wave 6) from staging read-live run 39161620576',
+  execute: true,
+  // Staging read-live run 39161620576 (2026-10-18, main 5c35bd09b; executor 1tH8Uemla...).
+  expected_live_definition_sha256: 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752',
   // Code-derived: releaseIntendedHash('sql102', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd',
   // Code-derived: releaseSupersededIntendedHash('sql98', SQL 98 bytes, 'sql102', these bytes). After
