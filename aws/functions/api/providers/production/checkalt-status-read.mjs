@@ -37,18 +37,7 @@ export const checkaltStatusReadOnlyMode = () => (
 
 export const isCheckAltStatusReadFunction = (name) => name === CHECKALT_STATUS_READ_FUNCTION;
 
-/**
- * checkalt-verify-account with action "status" only reads the stored
- * registration (no provider call, no write), so status-read mode allows it.
- * Its "user" / "account" actions still call Check Alt and stay blocked.
- */
-export const isCheckAltStoredStatusRead = (name, body) => (
-  name === 'checkalt-verify-account' && body?.action === 'status'
-);
-
-export const isCheckAltMutationFunction = (name, body) => (
-  CHECKALT_MUTATION_FUNCTIONS.has(name) && !isCheckAltStoredStatusRead(name, body)
-);
+export const isCheckAltMutationFunction = (name) => CHECKALT_MUTATION_FUNCTIONS.has(name);
 
 export const denyCheckAltStatusReadDisabled = (extra = {}) => ({
   ok: false,

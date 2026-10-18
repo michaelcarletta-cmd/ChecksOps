@@ -1,5 +1,4 @@
-import { parseBody, withIdentityWrite } from '../../data.mjs';
-import { IDENTITY_ENV_PRODUCTION, identityEnvFromChecksopsEnv } from '../../identity-env.mjs';
+import { withIdentityWrite } from '../../data.mjs';
 import { isProviderNetworkError, providerEgressFailure } from '../../sandbox-credentials.mjs';
 import {
   denyAmbiguousCheckAltMode,
@@ -17,7 +16,6 @@ import {
   denyCheckAltMutationUnderStatusRead,
   denyCheckAltStatusReadDisabled,
   isCheckAltStatusReadFunction,
-  isCheckAltStoredStatusRead,
   statusReadOnlyFetch,
 } from './checkalt-status-read.mjs';
 
@@ -69,14 +67,6 @@ const HANDLERS = {
   'checkalt-verify-account': wrap(handleProductionCheckAltVerify),
 };
 
-// The stored registration read (verify action "status") under status-read
-// mode: identity GUCs only, status-only fetch, and any other action refused.
-const verifyStoredStatus = wrap((args) => (
-  args.body?.action === 'status'
-    ? handleProductionCheckAltVerify(args)
-    : denyCheckAltMutationUnderStatusRead('checkalt-verify-account')
-), { statusRead: true });
-
 /**
  * Poll uses AWS_CHECKALT_STATUS_RECONCILE_ENABLED only.
  * Submit/approve still require the existing money-movement holds.
@@ -93,16 +83,7 @@ export const runProductionCheckAltHandler = (name, event, deps = {}) => {
 
   if (productionCheckAltAmbiguousMode()) return denyAmbiguousCheckAltMode(name);
   if (!productionCheckAltExecutionAllowed()) {
-    if (checkaltStatusReadAllowed()) {
-      // Stored registration read: production answers from checkalt_tenant_accounts;
-      // any other runtime falls through to the UAT handler (isolated UAT rows).
-      if (isCheckAltStoredStatusRead(name, parseBody(event))) {
-        return identityEnvFromChecksopsEnv(process.env.CHECKSOPS_ENV) === IDENTITY_ENV_PRODUCTION
-          ? verifyStoredStatus(event, deps)
-          : null;
-      }
-      return denyCheckAltMutationUnderStatusRead(name);
-    }
+    if (checkaltStatusReadAllowed()) return denyCheckAltMutationUnderStatusRead(name);
     return null;
   }
   return handler(event, deps);

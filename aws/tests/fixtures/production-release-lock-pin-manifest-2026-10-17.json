@@ -32,7 +32,7 @@
     },
     "providers/parity/checkalt-functions.mjs": {
       "live_sha256": "3d6a0495dbd797ce59ef8b553a074acdff6fd6c557a27a502587f0fa728954a7",
-      "accepted_sha256": "cea9a31157ec2a084e6538c8454bb7b094b15111e5f5f8a05d14ebc1ce7f48ee",
+      "accepted_sha256": "e794dda662db6bf26413a9744390ac67f0e2aa70687240e5dbd298784cc8007e",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-checkalt-parity-functions-manifest-2026-10-15.json"
     },
@@ -113,7 +113,7 @@
     },
     "tenant-admin.mjs": {
       "live_sha256": "8fc1f049860979387ff83ca3a4c7fdaa384a7dc2aa6eabd620cdf1c40c950bff",
-      "accepted_sha256": "34479a7b235ba5473df458d6a0549ddf59b2420e72f476e23e7963d8b584120f",
+      "accepted_sha256": "f7bed9fb6a57ab9310dbbd0c72a5bc3d36c8425c2a90d7acf03f92fbfc2c0584",
       "operation": "replace"
     },
     "workflow-rpc.mjs": {
@@ -233,7 +233,7 @@
     },
     "app-services.mjs": {
       "live_sha256": "cce9d0ff48ce7644083e5aa04aec77c5100246b93a440c20ddb1ba5701bcc0c5",
-      "accepted_sha256": "ca922af81aee9cd2c2d9c3d5c932cbd2ddf441de188b41d79198f76e3d789c88",
+      "accepted_sha256": "daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-homeowner-signing-links-manifest-2026-10-15.json"
     },
