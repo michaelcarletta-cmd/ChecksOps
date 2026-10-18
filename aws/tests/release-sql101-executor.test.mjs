@@ -6,7 +6,7 @@
  * connecting, the reviewed-file and forbidden-statement checks, the read-only fake-client
  * inspect); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging wave 5 (production pending), code-derived, selectable, packed, in step with the production pin; the
  *     file's bytes are authored by the pinned commit; predecessor and supersedes SQL 90;
  *   - the file replaces only SQL 90's aws_invite_create_user_identity, with the same
  *     attributes and ACL (only the body, so only prosrc_sha256, differs); SQL 90's own pin and
@@ -102,7 +102,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 101 pending and code-derived, selectable, packed, in step with the production pin; predecessor and supersedes SQL 90', () => {
+test('pin: SQL 101 staging wave 5, code-derived, selectable, packed, in step with the production pin; predecessor and supersedes SQL 90', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -113,8 +113,6 @@ test('pin: SQL 101 pending and code-derived, selectable, packed, in step with th
   assert.equal(spec.choice, 'sql101-invite-identity-insert-order');
   assert.equal(sha(TEXT[KEY]), pin.source_sha256);
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
   assert.equal(releaseIntendedHash(KEY, TEXT[KEY]), pin.intended_replacement_sha256);
   // SQL 90 after SQL 101: every SQL 90 object, with the invite function as SQL 101 renders it.
   assert.deepEqual(Object.keys(pin.superseded_intended_sha256), ['sql90']);

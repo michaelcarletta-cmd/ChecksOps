@@ -19,6 +19,9 @@ export const STAGING_WAVE1 = Object.freeze({
   // admin-reset-totp for SQL 97; the ingest-shared-check 410 stub for SQL 95), re-read at main 23953055.
   sql97: Object.freeze({ wave: 4, approved: '2026-10-18', run: '39121540941', live: '80bbcae1bea54fd57035fa802ecf6940314681f0ce73f2bfd9a5d8514f8986f5' }),
   sql95: Object.freeze({ wave: 4, approved: '2026-10-18', run: '39121392809', live: '4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588' }),
+  // Wave 5 (owner approved 2026-10-18): SQL 101 fixes SQL 90's invite insert order
+  // (profiles_id_identity_fkey); re-read at main 0d4a7b8a8 after the executor carried it.
+  sql101: Object.freeze({ wave: 5, approved: '2026-10-18', run: '39142701783', live: '1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -29,7 +32,7 @@ export const pendingPin = (pin) => Object.freeze({
   expected_live_definition_sha256: null,
 });
 
-/** The committed staging pin's apply state: waves 1-4 recorded and approved, the rest pending. */
+/** The committed staging pin's apply state: waves 1-5 recorded and approved, the rest pending. */
 export function assertStagingPinState(assert, key, pin) {
   const wave = STAGING_WAVE1[key];
   if (!wave) {
