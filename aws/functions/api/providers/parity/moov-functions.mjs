@@ -68,6 +68,23 @@ import {
 } from './moov-onboard.mjs';
 
 const wrap = (handler, name) => async (event, deps = {}) => {
+  // The public invoice page is token-only: it answers before any login or
+  // identity check (public-invoice.mjs: exact UUID v4 token, read-only shape).
+  // A bundle without public-invoice.mjs / invoice-actions.mjs (production until
+  // a rebuilt ZIP) refuses instead of failing to load.
+  if (name === 'public-invoice') {
+    // Optional module: a missing module is handled here, so it is not a destructured import.
+    let publicInvoiceModule;
+    try {
+      publicInvoiceModule = await import('../../public-invoice.mjs');
+    } catch (error) {
+      if (error?.code === 'ERR_MODULE_NOT_FOUND') {
+        return fail('public_invoice_unavailable', 503, { message: 'Public invoice lookup is not available.' });
+      }
+      throw error;
+    }
+    return publicInvoiceModule.handlePublicInvoice(event, deps);
+  }
   // A retired route answers its fixed refusal before identity, DB or provider work.
   if (handler.retired) return { ...handler.retired };
   const { parseBody, withIdentity, withIdentityWrite } = await import('../../data.mjs');

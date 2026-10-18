@@ -456,7 +456,7 @@
     },
     "providers/parity/moov-functions.mjs": {
       "operation": "replace",
-      "accepted_sha256": "dc20078ad6ea80841c35bc6c06797c00fd97e4fb57d3527d72048e87536460b8",
+      "accepted_sha256": "fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094",
       "expected_live_sha256": "2dff151e470aabf74f905d4f6af51c9ac7dd1d13696eeffa585ca43cf00302ee",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
@@ -470,7 +470,7 @@
     },
     "providers/parity/moov-onboard.mjs": {
       "operation": "replace",
-      "accepted_sha256": "bf79153ce392881101293d2c7de5625f64493e13ac8cb8c87b5d1653ee642a1e",
+      "accepted_sha256": "805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf",
       "expected_live_sha256": "86127db01e4918ed72e8ca3ed56a378a53a000a9c046dde986aa2afc525f2f89",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"

@@ -7,7 +7,7 @@
   "members": {
     "providers/parity/moov-functions.mjs": {
       "live_sha256": "2dff151e470aabf74f905d4f6af51c9ac7dd1d13696eeffa585ca43cf00302ee",
-      "accepted_sha256": "dc20078ad6ea80841c35bc6c06797c00fd97e4fb57d3527d72048e87536460b8",
+      "accepted_sha256": "fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },

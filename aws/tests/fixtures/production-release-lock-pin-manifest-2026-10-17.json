@@ -53,7 +53,7 @@
     },
     "providers/parity/moov-onboard.mjs": {
       "live_sha256": "86127db01e4918ed72e8ca3ed56a378a53a000a9c046dde986aa2afc525f2f89",
-      "accepted_sha256": "bf79153ce392881101293d2c7de5625f64493e13ac8cb8c87b5d1653ee642a1e",
+      "accepted_sha256": "805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf",
       "operation": "replace"
     },
     "providers/parity/moov-client.mjs": {

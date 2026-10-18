@@ -169,6 +169,34 @@ are an earlier main version or lack later main changes, so the release loses not
 - Item 4 (full ZIP rebuild): no full rebuild until a separate, reviewed reconciliation brings the live-only files
   listed above into main. Moov onboarding production (which needs the rebuild) stays behind its flag until then.
 
+**Staging invoice and Platform Finance reconcile (owner decisions 2026-10-18, keep the live staging features):**
+planning only, nothing live or verified. Staging live API carries features from another workstream
+(`150da36eb` / `b23b59984`) that main had dropped; they are reconciled into main instead of being overwritten.
+
+- `providers/parity/moov-functions.mjs` (fee manifest): `public-invoice` answers before any login or identity check
+  (and before the retired check) through `public-invoice.mjs` `handlePublicInvoice`, as staging live does. If
+  `public-invoice.mjs` / `invoice-actions.mjs` cannot be loaded (`ERR_MODULE_NOT_FOUND`, the production bundle),
+  it answers 503 `public_invoice_unavailable`. Accepted re-pinned to
+  `fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094`; expected live unchanged.
+- `providers/parity/moov-onboard.mjs`: `publicInvoice` uses `invoice-actions.mjs` `loadPublicInvoiceByToken`
+  (UUID v4 token only, exact `public_token` match on `moov_invoices`, sanitized response; no id lookup, no
+  `payment_invoices`). `invoice` delegates to `invoice-actions.mjs` `runInvoiceAction` (provider lifecycle in
+  `invoice-provider.mjs`: create, create_and_send, send, resend, cancel, delete, sync, recover; `moov_invoices` /
+  `moov_invoice_customers`); any tenant member may act. When `invoice-actions.mjs` / `invoice-provider.mjs` are
+  missing (`ERR_MODULE_NOT_FOUND`) it falls back to the original create/list port (`legacyInvoice`) and refuses
+  every other action with 503 `invoice_lifecycle_unavailable`. `platformBank` / `platformTreasury` keep the
+  `is_platform_owner()` gate (item 1 above) and add read-only `status` / `overview` / `wallet` / `pnl` views
+  (ported from the live `platform-finance.mjs` read model, which the SPA panels call); every other action is
+  refused (403 `write_blocked`; platform bank `add` keeps its own refusal). Accepted re-pinned to
+  `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf`; expected live unchanged.
+- `invoice-provider.mjs` (new file, `1b219a8a24ef8faf4b5db888dd6f772a9f04b3eb0ec2b869b76cd3b0b7d54e24`, the
+  `150da36eb` bytes) is not a plan member: like `invoice-actions.mjs` and `public-invoice.mjs` it is absent from
+  the production bundle and reaches production only with a rebuilt ZIP. Until then the production overlay of
+  `moov-onboard.mjs` / `moov-functions.mjs` serves the fallbacks above. Link safety: both files load
+  `invoice-actions.mjs` / `public-invoice.mjs` only through a whole-module dynamic import inside a
+  `try` (`ERR_MODULE_NOT_FOUND` handled), never a static or destructured import, so neither the module link nor
+  the overlay guard's import check depends on those files being live.
+
 ## 0c. Code-review fixes (applied in this branch, 2026-10-17)
 
 Owner-approved lock and pin update for the release-PR #1015 review findings. No deploy, AWS call or SQL apply.
@@ -277,7 +305,7 @@ the ZIP or keep live bytes until the route is gone).
 | `providers/parity/moov-client.mjs` | modified (REPLACE) | `56928d66128c4a60141ef6d7392749ebad5211acef9bce6516411f1a2420612a` |
 | `providers/parity/moov-functions.mjs` | modified (REPLACE) | `7b0cde12ff969f7bfc5d83204cde77e2f322e42fe67399ca1a1e4a867eea6e75` |
 | `providers/parity/moov-money.mjs` | modified (REPLACE) | `b35beaa7fe50d25941dc277056c133a67f9393e1a249e1027c32f16ec60f5e37` |
-| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `bf79153ce392881101293d2c7de5625f64493e13ac8cb8c87b5d1653ee642a1e` |
+| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf` |
 | `providers/webhook-apply.mjs` | modified (REPLACE) | `28e9d27f14e9c1bd1de43b3f893705fa44b74dc0071eaa3b1895120438cd5300` |
 | `providers/webhooks.mjs` | modified (REPLACE) | `3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5` |
 | `signature-library-source.mjs` | ADD (new file) | `f4eccc99e4c3af3d3b6b6b229f0d2408da682fc9176695acffa0e53486c7970f` |

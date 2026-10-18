@@ -35,7 +35,7 @@ Planning only: `deploy_authorized` is false and nothing is live or verified.
 
 | Member (under `aws/functions/api/`) | expected live | accepted (branch) | sql_before | Live provenance |
 |---|---|---|---|---|
-| `providers/parity/moov-functions.mjs` | `2dff151e…` | `dc20078ad6ea80841c35bc6c06797c00fd97e4fb57d3527d72048e87536460b8` | – | release manifest (unapplied) |
+| `providers/parity/moov-functions.mjs` | `2dff151e…` | `fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094` | – | release manifest (unapplied) |
 | `providers/parity/moov-money.mjs` | `1cd405ca…` | `0ac52dbde62187d8e93ba229b0f5e4fa3428e84c7f3ba6538c4202242ca68e98` | – | release manifest (unapplied) |
 | `providers/catalog.mjs` | `ae788992…` | `5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9` | – | release manifest (unapplied) |
 | `tenant-collection-v2.mjs` (new member) | `8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66` | `6b4a415fe38a49243f31a2ab9495ab72bc62e1f1e69afae37c48d67147e2a20a` | – | 2026-10-11 snapshot `f78e16d99` |
