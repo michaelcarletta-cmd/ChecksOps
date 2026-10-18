@@ -336,8 +336,13 @@ only if no earlier migration changes that migration's objects. From the specs, t
   8: `auth-financial-totp.mjs` / `admin-reset-totp.mjs`; `app-services.mjs` and the
   `ingest-shared-check.mjs` 410 stub). Their pins get `execute: true` in the reviewed change
   that records those Lambdas live.
-- **Wave 2:** SQL 94 (after SQL 30) and SQL 96 (after SQL 93). Each needs a fresh read-live and
-  a reviewed pin change.
+- **Wave 1 applied 2026-10-17** at main `c8a79d554`, each receipt on the intended fingerprint:
+  SQL 30 (run 39080001060), 90 (39080157856), 91 (39080306273), 93 (39080438659),
+  99 (39080577323), 100 (39080713230). SQL 90, 91 and 93 are recorded in `staging-sql-live.json`.
+- **Wave 2:** SQL 94 (after SQL 30) and SQL 96 (after SQL 93), re-read at `c8a79d554` (runs
+  39080904425 and 39081015501, precondition_failures []) and pinned for apply.
+  Redeploy the guarded executor at the merged commit before applying (the pins are in its
+  package).
 - **Wave 3:** SQL 98 (after SQL 96), the same way.
 
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),

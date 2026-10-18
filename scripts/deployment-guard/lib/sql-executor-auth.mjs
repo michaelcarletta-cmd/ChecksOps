@@ -2101,9 +2101,10 @@ export const AUTHORIZED_SQL94_DOCUMENT_LIBRARY_RESTORE = Object.freeze({
   // The commit that last authored the file bytes on the release branch.
   commit: '0625354916088d999d8fd27e635dff2f78b72d21',
   source_sha256: 'ef865f65c8ccdfda51e1b6f65a828f9d6bed16bdbd1879a1a85cf4ba30a990a2',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 2) from staging read-live run 39080904425',
+  execute: true,
+  // Staging read-live run 39080904425 (2026-10-17).
+  expected_live_definition_sha256: '724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1',
   // Code-derived: releaseIntendedHash('sql94', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57',
   function_identities: Object.freeze(['public.aws_tenant_document_doc_type_ok(text)', 'public.aws_homeowner_share_member(uuid)', 'public.aws_homeowner_shared_documents_guard()', 'public.aws_public_homeowner_shared_documents(text)', 'public.aws_public_homeowner_shared_document(text, uuid)']),
@@ -2129,9 +2130,10 @@ export const AUTHORIZED_SQL96_PLATFORM_OWNER_TENANT_PRICING = Object.freeze({
   // The commit that last authored the file bytes on the release branch.
   commit: 'c952d1ceb846dda394b460568e426d8b55f899ff',
   source_sha256: '18109fed72bf8446dbe0c9560507ae6ed1fed1eb49f972142e78112479e257b6',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-17: staging apply (wave 2) from staging read-live run 39081015501',
+  execute: true,
+  // Staging read-live run 39081015501 (2026-10-17).
+  expected_live_definition_sha256: '275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f',
   // Code-derived: releaseIntendedHash('sql96', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767',
   function_identities: Object.freeze(['public.aws_tenant_pricing_columns()', 'public.aws_tenant_pricing_audit_row()', 'public.aws_tenants_member_column_guard()', 'public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)']),

@@ -508,14 +508,41 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
     else assert.equal(record.evidence, null, file);
     assert.ok(fs.existsSync(new URL(`../../${file}`, import.meta.url)), file);
   }
-  // Not applied in staging or production yet (production-api-overlay-plan.json sql_prerequisites).
-  for (const n of ['90_users_only_tenant_roles', '91_moov_onboarding', '93_tenant_company_info', '94_document_library_restore', '98_tenant_fee_collection']) {
+  // Not applied in staging yet (release 2026-10-17 waves 2 and 3).
+  for (const n of ['94_document_library_restore', '98_tenant_fee_collection']) {
     assert.equal(STAGING_SQL.sql[`aws/workflows/sql/${n}.sql`].verified_live, false, n);
   }
-  // Staging is never ahead of the record it claims: a SQL recorded live in production with a
-  // staging acceptance is the only kind recorded true here.
+  // A SQL recorded true here is either recorded live in production (with its staging acceptance)
+  // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and
+  // a receipt that ended on the pin's intended fingerprint. It is never production's record.
+  // The evidence is checked against the repository: the migration's executor choice, its staging
+  // pin (executable, the recorded pre-state, the intended post-state) and the recorded apply run.
+  const { RELEASE_2026_10_17_PENDING_SQL_PINS: STAGING_PINS } = await import('../../scripts/deployment-guard/lib/sql-executor-auth.mjs');
+  const { RELEASE_SQL_SPECS } = await import('../../scripts/deployment-guard/lib/release-sql-specs.mjs');
+  const { STAGING_WAVE1 } = await import('./helpers/staging-sql-wave1.mjs');
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) {
-    if (record.verified_live) assert.equal(PLAN.sql_prerequisites[file]?.verified_live, true, file);
+    if (!record.verified_live || PLAN.sql_prerequisites[file]?.verified_live === true) continue;
+    const m = /^Guarded staging SQL executor apply of ([a-z0-9-]+) on \d{4}-\d{2}-\d{2} \(run ([0-9]{11}),[^)]*\): receipt before ([0-9a-f]{8})…, after ([0-9a-f]{8})… = the pin's intended_replacement_sha256; precondition_failures \[\], prerequisites_missing \[\]\.$/.exec(record.evidence);
+    assert.ok(m, `${file}: ${record.evidence}`);
+    const [, choice, applyRun, before, after] = m;
+    const key = Object.keys(STAGING_PINS).find((k) => STAGING_PINS[k].filename === file);
+    assert.ok(key, file);
+    const pin = STAGING_PINS[key];
+    assert.equal(choice, RELEASE_SQL_SPECS[key].choice, file);
+    assert.equal(pin.execute, true, file);
+    assert.equal(before, pin.expected_live_definition_sha256.slice(0, 8), file);
+    assert.equal(after, pin.intended_replacement_sha256.slice(0, 8), file);
+    assert.equal(STAGING_WAVE1[key]?.apply_run, applyRun, file);
+    assert.ok(Number(applyRun) > Number(STAGING_WAVE1[key].run), `${file}: applied after its read-live`);
+  }
+  // Staging first: a file in both records that production records live is live in staging too
+  // (the staging record lists only sql_before files).
+  for (const [file, record] of Object.entries(PLAN.sql_prerequisites)) {
+    if (record.verified_live === true && Object.hasOwn(STAGING_SQL.sql, file)) assert.equal(STAGING_SQL.sql[file].verified_live, true, file);
+  }
+  // Production's record is unchanged by staging: SQL 90-98 stay not live there.
+  for (const n of ['90_users_only_tenant_roles', '91_moov_onboarding', '93_tenant_company_info', '94_document_library_restore', '96_platform_owner_tenant_pricing', '98_tenant_fee_collection']) {
+    assert.notEqual(PLAN.sql_prerequisites[`aws/workflows/sql/${n}.sql`]?.verified_live, true, n);
   }
 });
 

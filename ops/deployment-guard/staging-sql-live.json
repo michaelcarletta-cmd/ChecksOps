@@ -25,16 +25,16 @@
       "evidence": "Guarded staging SQL executor apply of sql89-check-intake-column-update (run 38929944170), recorded as the staging acceptance of ops/deployment-guard/sql89-check-intake-column-update-production-apply.json."
     },
     "aws/workflows/sql/90_users_only_tenant_roles.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql90-users-only-tenant-roles on 2026-10-17 (run 39080157856, main c8a79d554, executor D/FtMh1a…): receipt before 1af4b3ac…, after 1351f1d5… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/91_moov_onboarding.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql91-moov-onboarding on 2026-10-17 (run 39080306273, main c8a79d554, executor D/FtMh1a…): receipt before bdbc697f…, after f8611dcc… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/93_tenant_company_info.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql93-tenant-company-info on 2026-10-17 (run 39080438659, main c8a79d554, executor D/FtMh1a…): receipt before ef2ce6ba…, after 1032695c… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/94_document_library_restore.sql": {
       "verified_live": false,
