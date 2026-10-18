@@ -8,7 +8,7 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/102_platform_owner_tenant_profile.sql",
   "migration_id": "102_platform_owner_tenant_profile",
-  "staging_pin_commit": "PENDING_COMMIT",
+  "staging_pin_commit": "0000000000000000000000000000000000000000",
   "source_sha256": "40709d18b6eb25ab4cd1215f2ae25968ab0c513e779c4715e25633e72430e1c9",
   "function_identities": [
     "public.aws_tenant_profile_columns()",

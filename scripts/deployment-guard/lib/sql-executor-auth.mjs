@@ -2235,7 +2235,7 @@ export const AUTHORIZED_SQL102_PLATFORM_OWNER_TENANT_PROFILE = Object.freeze({
   migration_id: '102_platform_owner_tenant_profile',
   // The commit that last authored the file bytes (PENDING_COMMIT: the reviewed fix to the file is
   // not committed yet; set the full sha of the commit that carries these bytes).
-  commit: 'PENDING_COMMIT',
+  commit: '0000000000000000000000000000000000000000',
   source_sha256: '40709d18b6eb25ab4cd1215f2ae25968ab0c513e779c4715e25633e72430e1c9',
   authorization: 'pending',
   execute: false,

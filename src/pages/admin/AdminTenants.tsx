@@ -475,6 +475,15 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const [maxChecks, setMaxChecks] = useState<number | "">(tenant.max_checks_per_month ?? 100);
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
+  // Show what the server saved (it normalizes the domain and derives test mode).
+  useEffect(() => {
+    setName(tenant.name);
+    setCustomDomain(tenant.custom_domain || "");
+    setSubStatus(tenant.subscription_status || "inactive");
+    setIsTest(!!tenant.is_test_account);
+    setMaxChecks(tenant.max_checks_per_month ?? 100);
+  }, [tenant]);
+
   return (
     <SectionCard
       title="Company"

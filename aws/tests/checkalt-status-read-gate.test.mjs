@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL } from '../functions/api/identity.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
+import { LOOKUP_PRODUCTION_IDENTITY_SQL } from '../functions/api/identity-env.mjs';
 import {
   productionCheckAltExecutionAllowed,
   checkaltStatusReconcileEnabled,
@@ -400,4 +401,51 @@ test('scheduled job uses the same status-read permission and stays off by defaul
     assert.equal(store.approvePosts, 0);
     assert.equal(store.deposits[0].status, 'submitted');
   });
+});
+
+test('status-read mode: verify action "status" (stored registration) is allowed; its live lookups stay blocked', async () => {
+  const ownerDeps = (store) => {
+    const base = deps(store);
+    return {
+      ...base,
+      createClient: () => {
+        const client = identityClient(store);
+        const query = client.query;
+        return {
+          ...client,
+          query: async (sql, params) => {
+            if (sql === LOOKUP_PRODUCTION_IDENTITY_SQL) return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
+            if (String(sql).includes('is_platform_owner()')) return { rows: [{ is_owner: true }] };
+            return query(sql, params);
+          },
+        };
+      },
+    };
+  };
+  const call = (body, flags) => withEnv(flags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-verify-account', 'POST', body),
+    '/functions/v1/checkalt-verify-account',
+    'POST',
+    ownerDeps(store),
+  ));
+  const store = createStore();
+  const production = { ...statusReadOnlyFlags, CHECKSOPS_ENV: 'production' };
+  const status = await call({ tenant_id: FREEDOM_TENANT, action: 'status' }, production);
+  assert.equal(status.statusCode, 200, JSON.stringify(status));
+  assert.equal(status.action, 'status');
+  assert.equal(status.liveProviderCalled, false);
+  assert.equal(store.gucs['request.checkalt_status_read'], '1');
+  assert.equal(store.gucs['request.financial_execution'], '0');
+
+  for (const action of ['user', 'account']) {
+    const blocked = await call({ tenant_id: FREEDOM_TENANT, action }, production);
+    assert.equal(blocked.statusCode, 403, action);
+    assert.equal(blocked.error, 'checkalt_mutation_blocked', action);
+  }
+  assert.equal(store.registerPosts + store.processPosts + store.approvePosts, 0);
+
+  // Off production the stored status is the UAT row: the request goes on to the
+  // UAT handler instead of the production table, and is not mutation-blocked.
+  const staging = await call({ tenant_id: FREEDOM_TENANT, action: 'status' }, { ...statusReadOnlyFlags, CHECKSOPS_ENV: 'staging' });
+  assert.notEqual(staging.error, 'checkalt_mutation_blocked');
 });
