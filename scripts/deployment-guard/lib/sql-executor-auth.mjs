@@ -2116,9 +2116,9 @@ export const AUTHORIZED_SQL95_REMOVE_FREEDOM_CLAIMS_BRIDGE = Object.freeze({
   // The commit that last authored the file bytes on the release branch.
   commit: 'f50bf7d0d687b188b427263fbb79a8b8360acfc1',
   source_sha256: '0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-18: staging apply (wave 4) from staging read-live run 39121392809',
+  execute: true,
+  expected_live_definition_sha256: '4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588',
   // Code-derived: releaseIntendedHash('sql95', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2',
   function_identities: Object.freeze([]),
@@ -2145,9 +2145,9 @@ export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze
   // The commit that last authored the file bytes on the release branch.
   commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
   source_sha256: 'e3c8fd413f1d60030dd65192bb8696387229a4fd33fc2ae234cd61e52fbb79db',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-18: staging apply (wave 4) from staging read-live run 39121540941',
+  execute: true,
+  expected_live_definition_sha256: '80bbcae1bea54fd57035fa802ecf6940314681f0ce73f2bfd9a5d8514f8986f5',
   // Code-derived: releaseIntendedHash('sql97', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef',
   function_identities: Object.freeze(['public.aws_financial_stepup_log_writer_guard()']),

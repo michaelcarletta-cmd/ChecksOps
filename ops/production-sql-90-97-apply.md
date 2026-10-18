@@ -351,6 +351,12 @@ only if no earlier migration changes that migration's objects. From the specs, t
   NOT NULL as a named constraint, which the unrelated catalog now skips (PR #1030).
   **Applied 2026-10-18** at main `2176f73ae` (executor `f8fUm1GL…`, run 39085677318): receipt
   before `296c3d6a…`, after `abcb8f21…` = intended. Recorded in `staging-sql-live.json`.
+- **Wave 4:** SQL 97 then SQL 95, after their Lambdas went live in the staging overlay of
+  2026-10-18 at main `23953055e` (`auth-financial-totp.mjs`, `admin-reset-totp.mjs`, the
+  `ingest-shared-check.mjs` 410 stub). Re-read at `23953055e` (SQL 97 run 39121540941, live
+  `80bbcae1…`; SQL 95 run 39121392809, live `4e8f3745…`; precondition_failures [], no dropped
+  function callers or dependents) and pinned for apply (owner approved 2026-10-18). Redeploy the
+  guarded executor at the merged commit before applying.
 
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
 and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`
