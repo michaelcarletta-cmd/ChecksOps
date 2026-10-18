@@ -85,7 +85,11 @@ export const tenantProfileError = (error) => {
     ok: false, statusCode, error: errorCode, message, ...(field ? { field } : {}), ...extra,
   });
   if (code === '42883') return refuse(503, 'profile_setter_missing', SQL_102_MISSING_MESSAGE);
+  if (code === '42501' && reason === 'tenant_column_not_member_writable') {
+    return refuse(403, 'tenant_column_not_member_writable', 'That company detail cannot be changed here.');
+  }
   if (code === '42501') return refuse(403, 'platform_owner_required', 'Only the ChecksOps platform owner can change company details.');
+  if (code === '22P02') return refuse(400, 'invalid_value', `${profileFieldLabel(field)} has an invalid value.`);
   if (code === 'P0002' && reason === 'membership_not_found') {
     return refuse(404, 'membership_not_found', 'That person is not a member of this company.');
   }

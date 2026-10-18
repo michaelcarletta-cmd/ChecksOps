@@ -354,6 +354,24 @@ export async function queryWithColumnFallback(client, savepoint, sql, fallbackSq
   }
 }
 
+/**
+ * Runs an optional read inside the caller's transaction: on failure (a table or
+ * column a later SQL file adds is not there yet) the statement is rolled back to
+ * a SAVEPOINT and no rows are returned, so the transaction stays usable.
+ */
+export async function optionalQuery(client, savepoint, sql, params) {
+  await client.query(`SAVEPOINT ${savepoint}`);
+  try {
+    const result = await client.query(sql, params);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return result;
+  } catch {
+    await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return { rows: [] };
+  }
+}
+
 export async function loadTenantBillingContext(client, tenantId) {
   const tenant = (await queryWithColumnFallback(
     client,
@@ -371,24 +389,28 @@ export async function loadTenantBillingContext(client, tenantId) {
     [tenantId],
   )).rows[0];
   if (!tenant) return fail('tenant_not_found', { statusCode: 404 });
-  const settings = (await client.query(
+  const settings = (await optionalQuery(
+    client,
+    'tenant_billing_settings_read',
     `SELECT tenant_id, billing_enabled, billing_day_of_month, next_period_start, updated_at
      FROM public.tenant_billing_settings WHERE tenant_id = $1::uuid`,
     [tenantId],
-  ).catch(() => ({ rows: [] }))).rows[0] || {
+  )).rows[0] || {
     tenant_id: tenantId,
     billing_enabled: false,
     billing_day_of_month: 1,
     next_period_start: null,
   };
-  const authorization = (await client.query(
+  const authorization = (await optionalQuery(
+    client,
+    'tenant_billing_authorization_read',
     `SELECT id, tenant_id, stakeholder_account_id, auto_debit_enabled, ach_authorized_at,
             ach_authorized_by, verification_status, provider_payment_method_id,
             provider_bank_account_id, provider_account_id, provider_environment,
             nickname, account_holder_name, account_number_last4
      FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid`,
     [tenantId],
-  ).catch(() => ({ rows: [] }))).rows[0] || null;
+  )).rows[0] || null;
   const checkDefaultCents = await loadCheckBillingDefaultCents(client);
   return { ok: true, tenant, settings, authorization, checkDefaultCents };
 }
@@ -442,14 +464,16 @@ export async function evaluateBillingReadiness(client, {
   if (!destination?.ok) reasons.push('destination_unresolved');
 
   const env = environment || billingEnvironment();
-  const account = (await client.query(
+  const account = (await optionalQuery(
+    client,
+    'tenant_billing_moov_account_read',
     `SELECT provider_account_id, onboarding_status, can_ach_debit, can_send_payments,
             verification_status, capabilities
      FROM public.payment_provider_accounts
      WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
      ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
     [tenantId, env],
-  ).catch(() => ({ rows: [] }))).rows[0] || null;
+  )).rows[0] || null;
   if (!account?.provider_account_id) reasons.push('moov_account_missing');
   else {
     if (account.onboarding_status && account.onboarding_status !== 'active') {
@@ -470,7 +494,9 @@ export async function evaluateBillingReadiness(client, {
   }
 
   if (authorization?.provider_payment_method_id) {
-    const method = (await client.query(
+    const method = (await optionalQuery(
+      client,
+      'tenant_billing_method_read',
       `SELECT id, connection_status, verification_status, can_send, provider_payment_method_id
        FROM public.payment_provider_methods
        WHERE tenant_id = $1::uuid
@@ -478,7 +504,7 @@ export async function evaluateBillingReadiness(client, {
          AND environment = $3
        LIMIT 1`,
       [tenantId, authorization.provider_payment_method_id, env],
-    ).catch(() => ({ rows: [] }))).rows[0];
+    )).rows[0];
     if (!method) reasons.push('funding_source_not_found');
     else if (String(method.connection_status || '') !== 'connected') reasons.push('bank_disconnected');
     else if (method.can_send === false) reasons.push('funding_source_cannot_debit');

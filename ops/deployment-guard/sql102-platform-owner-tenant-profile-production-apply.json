@@ -8,17 +8,18 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/102_platform_owner_tenant_profile.sql",
   "migration_id": "102_platform_owner_tenant_profile",
-  "staging_pin_commit": "5843653425174a6a84fafb15242ecbd15f54ff93",
-  "source_sha256": "40709d18b6eb25ab4cd1215f2ae25968ab0c513e779c4715e25633e72430e1c9",
+  "staging_pin_commit": "b34470d9aec61a394d2214a5176ed0bc4fb9ffcd",
+  "source_sha256": "7ef8736baf2d610b36dbf93104f543eb7951e2228704f26f21366a3f1621f35a",
   "function_identities": [
     "public.aws_tenant_profile_columns()",
     "public.aws_platform_owner_set_tenant_profile(uuid, jsonb)",
     "public.aws_platform_owner_remove_tenant_member(uuid, uuid)",
     "public.aws_tenant_profile_audit_row()",
+    "public.aws_tenant_has_moov_account(uuid)",
     "public.aws_tenants_member_column_guard()"
   ],
   "expected_live_definition_sha256": null,
-  "intended_replacement_sha256": "74aead6ffdcc6b2f5bab7cdcfe6f8a45deb7d55ccee406bdd170bb3198f06f71",
+  "intended_replacement_sha256": "6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd",
   "authorization_phrase": "APPLY_PLATFORM_OWNER_TENANT_PROFILE",
   "predecessors": [
     "sql98"
@@ -59,8 +60,8 @@
     "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect), but no production inspect has been run for SQL 102 yet; its preconditions can only pass once SQL 98 is applied (predecessors_applied). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
-    "fingerprint": "74aead6ffdcc6b2f5bab7cdcfe6f8a45deb7d55ccee406bdd170bb3198f06f71",
-    "note": "public.aws_tenant_profile_columns() (sql, IMMUTABLE), public.aws_platform_owner_set_tenant_profile(uuid, jsonb) and public.aws_platform_owner_remove_tenant_member(uuid, uuid) (plpgsql, VOLATILE, SECURITY DEFINER, search_path public, row_security off, returns jsonb), each EXECUTE for checksops and authenticated (revoked from PUBLIC); the SECURITY DEFINER trigger function public.aws_tenant_profile_audit_row() (owner only) and trigger aws_tenant_profile_audit (AFTER UPDATE ON public.tenants); public.aws_tenants_member_column_guard() replaced (SQL 98's body plus the profile fields and moov_environment for the platform owner; ACL unchanged: PUBLIC EXECUTE), all owned by checksops_admin. No policy, grant, table, column or row change. The fingerprint is releaseIntendedHash('sql102', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 74aead6ffdcc6b2f5bab7cdcfe6f8a45deb7d55ccee406bdd170bb3198f06f71."
+    "fingerprint": "6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd",
+    "note": "public.aws_tenant_profile_columns() (sql, IMMUTABLE), public.aws_platform_owner_set_tenant_profile(uuid, jsonb) and public.aws_platform_owner_remove_tenant_member(uuid, uuid) (plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, row_security off, returns jsonb) and public.aws_tenant_has_moov_account(uuid) (plpgsql, STABLE, SECURITY DEFINER, returns boolean), each EXECUTE for checksops and authenticated (revoked from PUBLIC); the SECURITY DEFINER trigger function public.aws_tenant_profile_audit_row() (owner only) and trigger aws_tenant_profile_audit (AFTER UPDATE ON public.tenants); public.aws_tenants_member_column_guard() replaced (SQL 98's body plus the profile fields and moov_environment for the platform owner, moov_environment only together with is_test_account and neither once the tenant has a Moov account; ACL unchanged: PUBLIC EXECUTE), all owned by checksops_admin. No policy, grant, table, column or row change. The fingerprint is releaseIntendedHash('sql102', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd."
   },
   "staging_acceptance": {
     "ok": false,

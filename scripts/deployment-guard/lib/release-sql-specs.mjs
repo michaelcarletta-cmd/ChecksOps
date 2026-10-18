@@ -3239,6 +3239,14 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         ]
       },
       {
+        "identity": "public.aws_tenant_has_moov_account(uuid)",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
         "identity": "public.aws_tenants_member_column_guard()",
         "acl": [
           "PUBLIC EXECUTE",

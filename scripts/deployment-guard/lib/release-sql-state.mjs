@@ -121,7 +121,9 @@ export function releaseFunctionDefinitions(text) {
     const language = /\bLANGUAGE\s+([A-Za-z]+)/i.exec(header);
     const volatility = /\b(IMMUTABLE|STABLE|VOLATILE)\b/i.exec(header);
     const parallel = /\bPARALLEL\s+(SAFE|RESTRICTED|UNSAFE)\b/i.exec(header);
-    const config = [...header.matchAll(/\bSET\s+([a-z_]+)\s*=\s*([A-Za-z0-9_]+)/gi)].map((m) => `${m[1].toLowerCase()}=${m[2]}`).sort();
+    // A list value (SQL 102: search_path = public, pg_temp) as PostgreSQL stores it in proconfig.
+    const config = [...header.matchAll(/\bSET\s+([a-z_]+)\s*=\s*([A-Za-z0-9_]+(?:\s*,\s*[A-Za-z0-9_]+)*)/gi)]
+      .map((m) => `${m[1].toLowerCase()}=${m[2].split(',').map((v) => v.trim()).join(', ')}`).sort();
     out[name] = {
       result: returns ? returns[1].toLowerCase().replace(/^public\./, '') : null,
       language: language ? language[1].toLowerCase() : null,

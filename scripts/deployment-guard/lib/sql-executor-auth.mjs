@@ -2233,23 +2233,24 @@ export const AUTHORIZED_SQL102_PLATFORM_OWNER_TENANT_PROFILE = Object.freeze({
   key: 'sql102',
   filename: 'aws/workflows/sql/102_platform_owner_tenant_profile.sql',
   migration_id: '102_platform_owner_tenant_profile',
-  // The commit that last authored the file bytes (the moov-lock nested-IF fix on top of e81cbf2b4).
-  commit: '5843653425174a6a84fafb15242ecbd15f54ff93',
-  source_sha256: '40709d18b6eb25ab4cd1215f2ae25968ab0c513e779c4715e25633e72430e1c9',
+  // The commit that last authored the file bytes (the review's test-mode lock and pg_temp, b34470d9a).
+  commit: 'b34470d9aec61a394d2214a5176ed0bc4fb9ffcd',
+  source_sha256: '7ef8736baf2d610b36dbf93104f543eb7951e2228704f26f21366a3f1621f35a',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql102', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: '74aead6ffdcc6b2f5bab7cdcfe6f8a45deb7d55ccee406bdd170bb3198f06f71',
+  intended_replacement_sha256: '6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd',
   // Code-derived: releaseSupersededIntendedHash('sql98', SQL 98 bytes, 'sql102', these bytes). After
   // SQL 102, SQL 98 counts as applied (and through it SQL 96 and SQL 93) only when every other
   // SQL 98 object matches.
-  superseded_intended_sha256: Object.freeze({ sql98: 'e169fb811b2890dd76144a4f8f63c45d317c96bb32e975faf9125ef379c5d5a7' }),
+  superseded_intended_sha256: Object.freeze({ sql98: 'd18f0e44a40e04ba058ab7908ff6c4802fc495e29de3dd14f64dffe155acdf15' }),
   function_identities: Object.freeze([
     'public.aws_tenant_profile_columns()',
     'public.aws_platform_owner_set_tenant_profile(uuid, jsonb)',
     'public.aws_platform_owner_remove_tenant_member(uuid, uuid)',
     'public.aws_tenant_profile_audit_row()',
+    'public.aws_tenant_has_moov_account(uuid)',
     'public.aws_tenants_member_column_guard()',
   ]),
 });

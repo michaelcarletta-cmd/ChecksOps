@@ -63,6 +63,7 @@ const IDENTITIES = Object.freeze([
   'public.aws_platform_owner_set_tenant_profile(uuid, jsonb)',
   'public.aws_platform_owner_remove_tenant_member(uuid, uuid)',
   'public.aws_tenant_profile_audit_row()',
+  'public.aws_tenant_has_moov_account(uuid)',
   GUARD,
 ]);
 const sha = (text) => createHash('sha256').update(text).digest('hex');
@@ -170,14 +171,32 @@ test('reviewed file: the profile setter, member removal and audit trigger; SQL 9
   const { prosrc_sha256: oldBody, ...oldAttrs } = sql98;
   assert.deepEqual(newAttrs, oldAttrs);
   assert.notEqual(newBody, oldBody);
-  // The guard body is SQL 98's with the platform owner's allowed list widened, nothing else.
+  // The guard body is SQL 98's with the platform owner's allowed list widened and the test-mode
+  // lock (moov_environment only with is_test_account, neither with a Moov account), nothing else.
   const was = "public.aws_tenant_pricing_columns() || ARRAY['deposits_enabled'];";
-  const now = "public.aws_tenant_pricing_columns() || ARRAY['deposits_enabled']\n      || public.aws_tenant_profile_columns() || ARRAY['moov_environment'];";
+  const now = [
+    "public.aws_tenant_pricing_columns() || ARRAY['deposits_enabled']",
+    "      || public.aws_tenant_profile_columns() || ARRAY['moov_environment'];",
+    '    -- Test mode moves the ledger: moov_environment changes only together with',
+    '    -- is_test_account, and neither once the tenant has a Moov account (every path).',
+    "    IF (to_jsonb(NEW) -> 'moov_environment') IS DISTINCT FROM (v_old -> 'moov_environment')",
+    "       OR (to_jsonb(NEW) -> 'is_test_account') IS DISTINCT FROM (v_old -> 'is_test_account') THEN",
+    "      IF (to_jsonb(NEW) -> 'is_test_account') IS NOT DISTINCT FROM (v_old -> 'is_test_account') THEN",
+    "        RAISE EXCEPTION 'tenant_column_not_member_writable: moov_environment' USING ERRCODE = '42501';",
+    '      END IF;',
+    '      IF public.aws_tenant_has_moov_account(OLD.id) THEN',
+    "        RAISE EXCEPTION 'moov_environment_locked' USING ERRCODE = '55000', DETAIL = 'is_test_account';",
+    '      END IF;',
+    '    END IF;',
+  ].join('\n');
   assert.equal(releaseFunctionDefinitions(TEXT.sql98).aws_tenants_member_column_guard.prosrc.replace(was, now), defs.aws_tenants_member_column_guard.prosrc);
-  for (const id of IDENTITIES.slice(1, 4)) {
+  // Every SECURITY DEFINER function pins search_path to public, pg_temp (pg_temp last).
+  for (const id of IDENTITIES.slice(1, 5)) {
     assert.equal(ours[id].security_definer, true, id);
-    assert.deepEqual(ours[id].config, ['row_security=off', 'search_path=public'], id);
+    assert.deepEqual(ours[id].config, ['row_security=off', 'search_path=public, pg_temp'], id);
   }
+  assert.equal(ours['public.aws_tenant_has_moov_account(uuid)'].result, 'boolean');
+  assert.equal(ours['public.aws_tenant_has_moov_account(uuid)'].volatility, 's');
   assert.equal(ours['public.aws_platform_owner_set_tenant_profile(uuid, jsonb)'].result, 'jsonb');
   assert.equal(ours['public.aws_platform_owner_remove_tenant_member(uuid, uuid)'].result, 'jsonb');
   assert.equal(ours['public.aws_tenant_profile_audit_row()'].result, 'trigger');
@@ -185,7 +204,7 @@ test('reviewed file: the profile setter, member removal and audit trigger; SQL 9
   assert.equal(ours['public.aws_tenant_profile_columns()'].security_definer, false);
   assert.deepEqual(ours['public.aws_tenant_profile_audit_row()'].acl, ['owner EXECUTE']);
   assert.deepEqual(ours[GUARD].acl, ['PUBLIC EXECUTE', 'owner EXECUTE']);
-  for (const id of IDENTITIES.slice(0, 3)) {
+  for (const id of [...IDENTITIES.slice(0, 3), 'public.aws_tenant_has_moov_account(uuid)']) {
     assert.deepEqual(ours[id].acl, ['authenticated EXECUTE', 'checksops EXECUTE', 'owner EXECUTE'], id);
     assert.ok(TEXT[KEY].includes(`REVOKE ALL ON FUNCTION ${id} FROM PUBLIC;`), id);
     assert.ok(TEXT[KEY].includes(`GRANT EXECUTE ON FUNCTION ${id} TO checksops, authenticated;`), id);
@@ -279,7 +298,7 @@ test('PostgreSQL 16: SQL 102 through the executor: refused before SQL 98, ACL re
   assert.deepEqual(r.precondition_failures, [], JSON.stringify(r.release_sql_inspect));
   assert.deepEqual(r.release_sql_inspect.predecessors, { sql98: true });
   assert.equal(r.already_applied, false);
-  assert.deepEqual(r.release_sql_inspect.functions.map((row) => row.state), ['absent', 'absent', 'absent', 'absent', 'different']);
+  assert.deepEqual(r.release_sql_inspect.functions.map((row) => row.state), ['absent', 'absent', 'absent', 'absent', 'absent', 'different']);
 
   // An EXECUTE grant the file neither keeps nor revokes would survive CREATE OR REPLACE: refused.
   await admin.query('BEGIN');

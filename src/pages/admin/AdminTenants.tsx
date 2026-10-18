@@ -557,13 +557,21 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           </div>
         )}
         <Button
-          onClick={() => save({
-            name: name.trim(),
-            custom_domain: customDomain.trim().toLowerCase() || null,
-            subscription_status: subStatus,
-            max_checks_per_month: maxChecks === "" ? undefined : maxChecks,
-            is_test_account: isTest,
-          })}
+          onClick={() => {
+            // Only changed fields are sent, so an untouched legacy value never blocks a save.
+            const patch: TenantProfilePatch = {};
+            const domain = customDomain.trim().toLowerCase() || null;
+            if (name.trim() !== tenant.name) patch.name = name.trim();
+            if (domain !== (tenant.custom_domain || null)) patch.custom_domain = domain;
+            if (subStatus !== (tenant.subscription_status || "inactive")) patch.subscription_status = subStatus;
+            if (maxChecks !== "" && maxChecks !== tenant.max_checks_per_month) patch.max_checks_per_month = maxChecks;
+            if (isTest !== !!tenant.is_test_account) patch.is_test_account = isTest;
+            if (Object.keys(patch).length === 0) {
+              toast({ title: "No changes to save" });
+              return;
+            }
+            save(patch);
+          }}
           disabled={saving || !name.trim() || maxChecks === ""}
           title={!name.trim() ? "Enter a company name" : maxChecks === "" ? "Enter the max checks per month" : undefined}
         >
@@ -671,7 +679,7 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
       // Platform-owner page: show the API's reason with the code, so a failed invite can be diagnosed.
       const reason = (data as any)?.message;
       const code = error?.message || (data as any)?.error;
-      toast({ title: "Invite failed", description: reason ? `${code}: ${reason}` : code, variant: "destructive" });
+      toast({ title: "Invite failed", description: reason && reason !== code ? `${code}: ${reason}` : code, variant: "destructive" });
       return;
     }
     const inviteSent = (data as any)?.invite_sent;
@@ -799,16 +807,24 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
 
   // Pricing is the platform owner's (tenant-billing-admin, SQL 96); it never
   // goes through the generic tenants update.
-  // A blank rate is sent as null, which clears the override (default rate).
+  // Only rates the owner changed are sent; a rate they blanked is sent as
+  // null, which clears the override (default rate).
   const save = async () => {
     const patch: TenantPricingPatch = {
       per_check_billing_enabled: enabled,
       per_check_rate_cents: rate,
-      next_day_rate_cents: nextDay === "" ? null : nextDay,
-      same_day_rate_cents: sameDay === "" ? null : sameDay,
-      mortgage_ops_initial_rate_cents: mortgageInitial === "" ? null : mortgageInitial,
-      mortgage_ops_additional_rate_cents: mortgageAdditional === "" ? null : mortgageAdditional,
     };
+    const rateChange = (
+      key: "next_day_rate_cents" | "same_day_rate_cents" | "mortgage_ops_initial_rate_cents" | "mortgage_ops_additional_rate_cents",
+      value: number | "",
+    ) => {
+      const next = value === "" ? null : value;
+      if (next !== (tenant[key] ?? null)) patch[key] = next;
+    };
+    rateChange("next_day_rate_cents", nextDay);
+    rateChange("same_day_rate_cents", sameDay);
+    rateChange("mortgage_ops_initial_rate_cents", mortgageInitial);
+    rateChange("mortgage_ops_additional_rate_cents", mortgageAdditional);
     setSaving(true);
     try {
       const saved = await saveTenantPricing(tenant.id, patch);
@@ -922,7 +938,8 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     setLoadFailed(false);
     const { data: b, error: billingError } = await supabase
       .from("tenant_billing_accounts")
-      .select("id, stakeholder_account_id, auto_debit_enabled, ach_authorized_at")
+      // "*": provider_payment_method_id (the server's readiness field) is not in every schema.
+      .select("*")
       .eq("tenant_id", tenantId)
       .maybeSingle();
     setLoadFailed(!!billingError);
@@ -958,11 +975,10 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     ? "Checking the billing bank account…"
     : loadFailed
       ? "Couldn't load the billing bank account."
-      : !bank
-        ? "No verified bank account on file."
-        : !billing?.stakeholder_account_id || !billing?.ach_authorized_at
-          ? "The company hasn't authorized billing yet."
-          : null;
+      // The server's readiness: an ACH authorization with a Moov payment method.
+      : !billing?.provider_payment_method_id || !billing?.ach_authorized_at
+        ? (bank ? "The company hasn't authorized billing yet." : "No verified bank account on file.")
+        : null;
 
   return (
     <SectionCard
