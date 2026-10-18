@@ -2,7 +2,7 @@
  * Staging apply wave 1 (owner approved 2026-10-17): the staging read-live pre-states recorded in
  * the staging pins. Every other release / library staging pin stays pending: SQL 29 and SQL 92 are
  * already applied in staging (read-live already_applied true), SQL 98 follows SQL 96 (shared
- * objects; wave 3), and SQL 95 / 97 wait on their Lambdas (runbook steps 7-8).
+ * objects; wave 3), and SQL 95 / 97 follow their Lambdas (runbook steps 7-8; wave 4).
  */
 export const STAGING_WAVE1 = Object.freeze({
   sql30: Object.freeze({ run: '39075094721', live: '37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504', apply_run: '39080001060' }),
@@ -15,6 +15,10 @@ export const STAGING_WAVE1 = Object.freeze({
   sql94: Object.freeze({ wave: 2, run: '39080904425', live: '724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1', apply_run: '39082817752' }),
   sql96: Object.freeze({ wave: 2, run: '39081015501', live: '275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f', apply_run: '39082957003' }),
   // Wave 3 (owner approved 2026-10-18): re-read after SQL 96 was applied (main 02fb97d5a); applied at main 2176f73ae.
+  // Wave 4 (owner approved 2026-10-18): after their Lambdas went live on staging (auth-financial-totp /
+  // admin-reset-totp for SQL 97; the ingest-shared-check 410 stub for SQL 95), re-read at main 23953055.
+  sql97: Object.freeze({ wave: 4, approved: '2026-10-18', run: '39121540941', live: '80bbcae1bea54fd57035fa802ecf6940314681f0ce73f2bfd9a5d8514f8986f5' }),
+  sql95: Object.freeze({ wave: 4, approved: '2026-10-18', run: '39121392809', live: '4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -25,7 +29,7 @@ export const pendingPin = (pin) => Object.freeze({
   expected_live_definition_sha256: null,
 });
 
-/** The committed staging pin's apply state: waves 1-3 recorded and approved, the rest pending. */
+/** The committed staging pin's apply state: waves 1-4 recorded and approved, the rest pending. */
 export function assertStagingPinState(assert, key, pin) {
   const wave = STAGING_WAVE1[key];
   if (!wave) {
