@@ -341,6 +341,8 @@ only if no earlier migration changes that migration's objects. From the specs, t
   99 (39080577323), 100 (39080713230). SQL 90, 91 and 93 are recorded in `staging-sql-live.json`.
 - **Wave 2:** SQL 94 (after SQL 30) and SQL 96 (after SQL 93), re-read at `c8a79d554` (runs
   39080904425 and 39081015501, precondition_failures []) and pinned for apply.
+  Redeploy the guarded executor at the merged commit before applying (the pins are in its
+  package).
 - **Wave 3:** SQL 98 (after SQL 96), the same way.
 
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
