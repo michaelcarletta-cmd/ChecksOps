@@ -2233,9 +2233,8 @@ export const AUTHORIZED_SQL102_PLATFORM_OWNER_TENANT_PROFILE = Object.freeze({
   key: 'sql102',
   filename: 'aws/workflows/sql/102_platform_owner_tenant_profile.sql',
   migration_id: '102_platform_owner_tenant_profile',
-  // The commit that last authored the file bytes (PENDING_COMMIT: the reviewed fix to the file is
-  // not committed yet; set the full sha of the commit that carries these bytes).
-  commit: '0000000000000000000000000000000000000000',
+  // The commit that last authored the file bytes (the moov-lock nested-IF fix on top of e81cbf2b4).
+  commit: '5843653425174a6a84fafb15242ecbd15f54ff93',
   source_sha256: '40709d18b6eb25ab4cd1215f2ae25968ab0c513e779c4715e25633e72430e1c9',
   authorization: 'pending',
   execute: false,
