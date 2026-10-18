@@ -17,6 +17,7 @@ import {
   actorIsPlatformOwner,
   applyBillingProviderEvent,
   billingIdempotencyKey,
+  billingNotReadyMessage,
   buildTenantBillingSnapshot,
   canAuthorizeTenantBilling,
   canViewTenantBilling,
@@ -47,6 +48,69 @@ export const CLIENT_AMOUNT_FIELDS = Object.freeze([
   'amount', 'amount_cents', 'amountCents', 'total', 'total_cents', 'line_items', 'lineItems',
 ]);
 const clientAmountFields = (body) => CLIENT_AMOUNT_FIELDS.filter((key) => body?.[key] !== undefined);
+
+/**
+ * SQL 102 (aws_platform_owner_set_tenant_profile): the company profile keys the
+ * platform owner edits on the tenant page. slug and partner_code are permanent
+ * (owner decision) and are refused here before any SQL.
+ */
+export const TENANT_PROFILE_KEYS = Object.freeze([
+  'name', 'custom_domain', 'subscription_status', 'max_checks_per_month', 'is_test_account',
+  'kyc_status', 'kyc_notes', 'internal_notes',
+]);
+export const TENANT_PROFILE_LOCKED_KEYS = Object.freeze(['slug', 'partner_code']);
+export const SET_TENANT_PROFILE_SQL = 'SELECT public.aws_platform_owner_set_tenant_profile($1::uuid, $2::jsonb) AS result';
+export const REMOVE_TENANT_MEMBER_SQL = 'SELECT public.aws_platform_owner_remove_tenant_member($1::uuid, $2::uuid) AS result';
+
+const PROFILE_FIELD_LABELS = Object.freeze({
+  name: 'Company name',
+  custom_domain: 'Custom domain',
+  subscription_status: 'Subscription status',
+  max_checks_per_month: 'Monthly check limit',
+  is_test_account: 'Test account',
+  kyc_status: 'KYC status',
+  kyc_notes: 'KYC notes',
+  internal_notes: 'Internal notes',
+});
+const profileFieldLabel = (field) => PROFILE_FIELD_LABELS[field] || 'A company detail';
+const PERMANENT_FIELDS_MESSAGE = 'The company URL (slug) and partner code are permanent.';
+const SQL_102_MISSING_MESSAGE = 'Saving company details needs database update SQL 102.';
+
+/** Maps a refusal from the SQL 102 setters to { error, message, field? }. */
+export const tenantProfileError = (error) => {
+  const code = String(error?.code || '');
+  const reason = String(error?.message || '').split(':')[0].trim();
+  const field = error?.detail || null;
+  const refuse = (statusCode, errorCode, message, extra = {}) => ({
+    ok: false, statusCode, error: errorCode, message, ...(field ? { field } : {}), ...extra,
+  });
+  if (code === '42883') return refuse(503, 'profile_setter_missing', SQL_102_MISSING_MESSAGE);
+  if (code === '42501' && reason === 'tenant_column_not_member_writable') {
+    return refuse(403, 'tenant_column_not_member_writable', 'That company detail cannot be changed here.');
+  }
+  if (code === '42501') return refuse(403, 'platform_owner_required', 'Only the ChecksOps platform owner can change company details.');
+  if (code === '22P02') return refuse(400, 'invalid_value', `${profileFieldLabel(field)} has an invalid value.`);
+  if (code === 'P0002' && reason === 'membership_not_found') {
+    return refuse(404, 'membership_not_found', 'That person is not a member of this company.');
+  }
+  if (code === 'P0002') return refuse(404, 'tenant_not_found', 'That company was not found.');
+  if (code === '55000') {
+    return refuse(409, 'moov_environment_locked', "This company already has a connected payment account, so test mode can't be changed.");
+  }
+  if (code === '23505') {
+    return refuse(409, 'custom_domain_in_use', 'That custom domain is already used by another company.', { field: 'custom_domain' });
+  }
+  if (code === '22023') {
+    if (reason === 'field_not_editable') return refuse(400, 'field_not_editable', PERMANENT_FIELDS_MESSAGE);
+    if (reason === 'invalid_field') return refuse(400, 'invalid_field', `${profileFieldLabel(field)} cannot be edited here.`);
+    if (reason === 'column_not_present') {
+      return refuse(400, 'column_not_present', `${profileFieldLabel(field)} is not available on this database yet.`);
+    }
+    if (reason === 'missing_required_field') return refuse(400, 'missing_required_field', 'Nothing to save: no company detail was sent.');
+    return refuse(400, 'invalid_value', `${profileFieldLabel(field)} has an invalid value.`);
+  }
+  throw error;
+};
 
 const denied = (spoof, extra) => ({
   ok: false,
@@ -87,12 +151,15 @@ const chargeResponse = (spoof, result, key, extra = {}) => {
       ...extra,
     };
   }
+  const reasons = Array.isArray(result.reasons) ? result.reasons : undefined;
   return {
     ok: false,
     statusCode: result.statusCode || 409,
     spoofFieldsIgnored: spoof,
     error: result.error || 'charge_refused',
-    message: result.message,
+    message: result.message
+      || (reasons ? billingNotReadyMessage(reasons) : 'The charge was not submitted. Nothing was collected.'),
+    ...(reasons ? { reasons } : {}),
     charged: false,
     [key]: result,
     amount_cents_posted: 0,
@@ -191,7 +258,60 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
 
     const tenantId = body.tenant_id || body.tenantId;
     if (!isUuid(tenantId)) {
-      return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'tenant_id' });
+      return denied(spoof, {
+        statusCode: 400, error: 'invalid_uuid', field: 'tenant_id', message: 'Choose a company first.',
+      });
+    }
+
+    // SQL 102: company profile (everything but slug / partner_code).
+    if (action === 'profile-update') {
+      const locked = TENANT_PROFILE_LOCKED_KEYS.filter((key) => body[key] !== undefined);
+      if (locked.length) {
+        return denied(spoof, {
+          statusCode: 400, error: 'field_not_editable', field: locked[0], fields: locked, message: PERMANENT_FIELDS_MESSAGE,
+        });
+      }
+      const profile = {};
+      for (const key of TENANT_PROFILE_KEYS) {
+        if (body[key] !== undefined) profile[key] = body[key];
+      }
+      if (!Object.keys(profile).length) {
+        return denied(spoof, {
+          statusCode: 400, error: 'missing_required_field', message: 'Nothing to save: no company detail was sent.',
+        });
+      }
+      try {
+        const row = (await client.query(SET_TENANT_PROFILE_SQL, [tenantId, JSON.stringify(profile)])).rows[0];
+        const result = row?.result || {};
+        return {
+          ok: true, statusCode: 200, spoofFieldsIgnored: spoof, saved: true, tenant_id: tenantId, tenant: result.tenant || null,
+        };
+      } catch (error) {
+        return denied(spoof, tenantProfileError(error));
+      }
+    }
+
+    if (action === 'member-remove') {
+      const userId = body.user_id || body.userId;
+      if (!isUuid(userId)) {
+        return denied(spoof, {
+          statusCode: 400, error: 'invalid_uuid', field: 'user_id', message: 'Choose a member to remove.',
+        });
+      }
+      try {
+        const row = (await client.query(REMOVE_TENANT_MEMBER_SQL, [tenantId, userId])).rows[0];
+        const result = row?.result || {};
+        return {
+          ok: true,
+          statusCode: 200,
+          spoofFieldsIgnored: spoof,
+          tenant_id: tenantId,
+          user_id: userId,
+          removed: Number(result.removed ?? 0),
+        };
+      } catch (error) {
+        return denied(spoof, tenantProfileError(error));
+      }
     }
 
     const dest = await resolveBillingDestination(client, {
@@ -224,7 +344,16 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
       });
       if (!saved.ok) return denied(spoof, { ...saved, statusCode: saved.statusCode || 400 });
       const data = await snapshot(client, tenantId, dest);
-      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, saved: true, ...data };
+      // pricing: the stored values (null = cleared); billing_settings: the saved switch and day.
+      return {
+        ok: true,
+        statusCode: 200,
+        spoofFieldsIgnored: spoof,
+        saved: true,
+        ...data,
+        pricing: saved.pricing,
+        billing_settings: saved.billing_settings,
+      };
     }
 
     if (action === 'apply-event') {
@@ -274,7 +403,9 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
         }
       }
       if (!isUuid(body.verification_id || body.verificationId)) {
-        return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'verification_id' });
+        return denied(spoof, {
+          statusCode: 400, error: 'invalid_uuid', field: 'verification_id', message: 'The verification request is missing its id. Try again.',
+        });
       }
       const verified = await verifyTenantBillingDebit(client, {
         tenantId,
@@ -347,7 +478,9 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
       };
     }
 
-    return denied(spoof, { statusCode: 400, error: 'unknown_action', action });
+    return denied(spoof, {
+      statusCode: 400, error: 'unknown_action', action, message: 'That billing action is not supported.',
+    });
   }, deps);
 };
 
@@ -357,7 +490,9 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
   return runWithIdentity(event, async ({ client, mapping }) => {
     const tenantId = body.tenant_id || body.tenantId;
     if (!isUuid(tenantId)) {
-      return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'tenant_id' });
+      return denied(spoof, {
+        statusCode: 400, error: 'invalid_uuid', field: 'tenant_id', message: 'Choose a company first.',
+      });
     }
     if (body.action === 'snapshot' || body.action === 'get') {
       if (!(await canViewTenantBilling(client, mapping.application_user_id, tenantId))) {
@@ -394,7 +529,9 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
       return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, authorization: ctx.authorization };
     }
     if (!body.provider_payment_method_id && !body.payment_method_id) {
-      return denied(spoof, { statusCode: 400, error: 'missing_funding_source' });
+      return denied(spoof, {
+        statusCode: 400, error: 'missing_funding_source', message: 'Choose the bank account to pay ChecksOps fees from.',
+      });
     }
     const saved = await saveBillingAuthorization(client, {
       tenantId,

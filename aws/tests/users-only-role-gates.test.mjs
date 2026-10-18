@@ -21,7 +21,9 @@ import {
   runDeleteUser,
   REMOVABLE_MEMBERSHIPS_SQL,
   runHireMortgageAgent,
+  runTenantInviteResend,
   runTenantInviteUser,
+  TENANT_MEMBER_BY_EMAIL_SQL,
   TENANT_MEMBER_COUNT_SQL,
   USER_IS_PLATFORM_OWNER_SQL,
   handleTenantInviteUser,
@@ -751,4 +753,69 @@ test('invite: runTenantInviteUser itself never confirms a login (the handler doe
   const result = await invite(teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }] }), {}, { cognitoCalls });
   assert.equal(result.ok, true);
   assert.deepEqual(cognitoCalls.map(([target]) => target), ['AdminCreateUser']);
+});
+
+// Member "Resend" on the tenant page: the invite email again, no Cognito.
+const resendClient = (opts = {}, memberEmails = ['teammate@example.com']) => {
+  const client = teamClient(opts);
+  const query = client.query;
+  client.query = async (sql, params = []) => {
+    if (sql === TENANT_MEMBER_BY_EMAIL_SQL) {
+      client.queries.push({ sql, params });
+      return { rows: params[0] === TENANT && memberEmails.includes(params[1]) ? [{ user_id: TEAMMATE }] : [] };
+    }
+    return query(sql, params);
+  };
+  return client;
+};
+const resend = (client, body = {}, mailer) => runTenantInviteResend({
+  client,
+  mapping,
+  spoof: {},
+  body: { tenant_id: TENANT, email: 'Teammate@Example.com', ...body },
+  send: mailer || (async () => {}),
+});
+
+test('invite resend: a member or the platform owner resends the invite email to an existing member; no Cognito, no writes', async () => {
+  for (const opts of [{ memberships: [{ tenant_id: TENANT, role: 'viewer' }] }, { platformOwner: true }]) {
+    const sent = [];
+    const client = resendClient(opts);
+    const result = await resend(client, {}, async (msg) => { sent.push(msg); });
+    assert.equal(result.ok, true, JSON.stringify(opts));
+    assert.equal(result.invite_sent, true);
+    assert.match(result.message, /Invite email sent/);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].to, 'teammate@example.com');
+    assert.match(sent[0].subject, /Acme/);
+    assert.equal(client.queries.some((q) => /\b(INSERT INTO|UPDATE public|DELETE FROM)\b/.test(q.sql)), false);
+  }
+});
+
+test('invite resend: refusals carry a readable message (non-member, not a member email, bad input, failed send)', async () => {
+  const outsider = await resend(resendClient({ memberships: [{ tenant_id: PARTNER_TENANT, role: 'owner' }] }));
+  assert.equal(outsider.statusCode, 403);
+  assert.equal(outsider.error, 'not_authorized');
+  assert.match(outsider.message, /members of this company/);
+
+  const member = { memberships: [{ tenant_id: TENANT, role: 'viewer' }] };
+  const stranger = await resend(resendClient(member), { email: 'someone-else@example.com' });
+  assert.equal(stranger.statusCode, 404);
+  assert.equal(stranger.error, 'member_not_found');
+  assert.match(stranger.message, /not a member/);
+
+  const owner = await resend(resendClient(member, [PLATFORM_OWNER_EMAIL]), { email: PLATFORM_OWNER_EMAIL });
+  assert.equal(owner.error, 'member_not_found');
+
+  for (const [body, error] of [[{ tenant_id: 'nope' }, 'invalid_uuid'], [{ email: '' }, 'invalid_email']]) {
+    const bad = await resend(resendClient(member), body);
+    assert.equal(bad.statusCode, 400, error);
+    assert.equal(bad.error, error);
+    assert.ok(bad.message, error);
+  }
+
+  const unsent = await resend(resendClient(member), {}, async () => { throw new Error('ses throttled'); });
+  assert.equal(unsent.ok, false);
+  assert.equal(unsent.invite_sent, false);
+  assert.equal(unsent.error, 'invite_email_failed');
+  assert.doesNotMatch(unsent.message, /ses throttled/);
 });

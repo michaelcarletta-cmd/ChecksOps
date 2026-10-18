@@ -79,7 +79,7 @@ release changes the same files, so its accepted bytes would have removed them. S
 | `financial.mjs` | S11: `parseRequestedPartialCents`, `lockCheckMoney`, `disbursement_sequence`, sequence / remaining-draw replay, 23505 race replay, `remaining` in responses, `summarizeCheckMoney` re-export (3-way merge of main to live onto the release; the release's users-only membership roles and no platform `user_roles` merge are kept; `FINANCIAL_ROLES` stays in `financial-authz.mjs`) | `d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef` | accepted re-pinned |
 | `financial-idempotency.mjs` | S11 `disbursementSequence` key distinguisher | `14c6ca7a4bd5ea18b681d1cb83921b83b1a933255d0ef1a60546ad1fffe2f96e` (= live) | not a member (equals live) |
 | `identity.mjs` | `mortgageAgentStatus` in `/identity/me` (reads `mortgage_agent_accounts`; release `isPrivilegedIdentity` kept) | `36797f5fa77d2171b2ad3f451d071cbafbca2c82bfb68ab9102783ff3c6551af` | accepted re-pinned |
-| `tenant-admin.mjs` | after commit, an invite that created the login confirms it (`AdminSetUserPassword` permanent, random, never returned) so EMAIL_OTP works; existing logins are never touched; binds the production Cognito lock (`bindProductionCognitoLock`, inside the release's invite savepoint; failure -> `failInvite`); hire marks `mortgage_agent_accounts` active (now in a savepoint) | `34479a7b235ba5473df458d6a0549ddf59b2420e72f476e23e7963d8b584120f` | accepted re-pinned |
+| `tenant-admin.mjs` | after commit, an invite that created the login confirms it (`AdminSetUserPassword` permanent, random, never returned) so EMAIL_OTP works; existing logins are never touched; binds the production Cognito lock (`bindProductionCognitoLock`, inside the release's invite savepoint; failure -> `failInvite`); hire marks `mortgage_agent_accounts` active (now in a savepoint) | `f7bed9fb6a57ab9310dbbd0c72a5bc3d36c8425c2a90d7acf03f92fbfc2c0584` | accepted re-pinned |
 | `identity-env.mjs` | `bindProductionCognitoLock` and the production lock SQL (needed by tenant-admin) | `e814546feded3a323461b3a7a8369e3d8a09f9a5d306d68973e15389b871f443` (= live) | not a member (equals live) |
 | `ocr-descriptive-persist.mjs` | S14 `resolveWritablePayeeLine` only (exact #475 bytes) | `2152c7c252d1156825ff87a2fa4bd1f512d26d6ab71f1ab3c4bbe016fb1aff5a` | not a member; must not become one (see below) |
 
@@ -285,12 +285,12 @@ to `aws/functions/api/`). On `origin/main` every one of these equals its accepte
 | `providers.mjs` | replace | `6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c` | `2c769fffd293deb9ad7c4d85511eb1d3847a91d091635c7886d5c51db463c0dd` |
 | `workflow-rpc.mjs` | replace | `37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907` | `9eda29f177a97896d6b0d564e4ceac1aa24f9ba2c41ae7f90621c470852221f7` |
 | `providers/production/checkalt-authz.mjs` | replace | `77fe337d047bfea5e0432258d0a6a4ca7ae0742dd7113fbc5bc69907ffd6ad46` | `259802f8f0af515d75b139f8bf6a4bbe24a9d7b9ae12b11b3eeae879b7107c71` |
-| `providers/parity/checkalt-functions.mjs` | replace | `31e08908e587aa21552f2f6dd1a2a7bbacca88e08d4febbaf64f3368f3511357` | `cea9a31157ec2a084e6538c8454bb7b094b15111e5f5f8a05d14ebc1ce7f48ee` |
+| `providers/parity/checkalt-functions.mjs` | replace | `31e08908e587aa21552f2f6dd1a2a7bbacca88e08d4febbaf64f3368f3511357` | `e794dda662db6bf26413a9744390ac67f0e2aa70687240e5dbd298784cc8007e` |
 | `homeowner.mjs` | replace | `0cb700f158e01e8bf8ef5d02808fd8dd96c3710a2eebcee650db01dcc6717a95` | `c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c` |
 | `write-signature.mjs` | replace | `867ab4e06cb1cda29802f1463f9af6c731898738e42d748da14b1780f7ad8b9c` | `14340acadf5af027646acbd636f7bde5efaae9d7ae337ffd2e4f2c17aaaf68bc` |
 | `email-branding.mjs` | replace | `f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0` | `fea68bc0c3f42193a13f5daaa60cfb831dce926ec150bd7b97df6675f0430b22` |
 | `esign.mjs` | replace | `953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83` | `5e2c5f48913d12b0b1916aec63d6bf9a209e5bd516ec61c5ceba01ca4754ca70` |
-| `app-services.mjs` | replace | `51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa` | `ca922af81aee9cd2c2d9c3d5c932cbd2ddf441de188b41d79198f76e3d789c88` |
+| `app-services.mjs` | replace | `51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa` | `daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7` |
 | `write-allowlist.mjs` | replace | `9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7` | `9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1` |
 | `write-check-workflow.mjs` | replace | `1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d` | `fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2` |
 
@@ -343,7 +343,7 @@ the ZIP or keep live bytes until the route is gone).
 | `storage.mjs` | modified (REPLACE) | `d92f34ca0dbba5b7b5b4c406d1a7cdf4b2e9c0a900ceddd1217dbebf3cd017d1` |
 | `tax-profiles.mjs` | modified (REPLACE) | `cb49cc567d017dbf732ed6743ee57c71ba12541b161fa927eb8bf8763e518a42` |
 | `tax-secrets.mjs` | modified (REPLACE) | `4a44531115a2789a5d6a921633d759143fceaa258156402585c25b1d64098d4d` |
-| `tenant-admin.mjs` | modified (REPLACE) | `34479a7b235ba5473df458d6a0549ddf59b2420e72f476e23e7963d8b584120f` (0b; was `348e4fef…`) |
+| `tenant-admin.mjs` | modified (REPLACE) | `f7bed9fb6a57ab9310dbbd0c72a5bc3d36c8425c2a90d7acf03f92fbfc2c0584` (0b; was `348e4fef…`) |
 | `tenant-billing-engine.mjs` | modified (REPLACE) | `3397c65d89122f706b182970d12e83b98de461b72acba5c32c8e8d1e60944557` |
 | `tenant-billing-handlers.mjs` | modified (REPLACE) | `2866356c3bf82a04d04c834fadbf94faed026a7f119e73bd8cc6f42dc2098298` |
 | `tenant-check-user.mjs` | modified (REPLACE) | `f25e165ea08312ddbde6e67d5f522171368043be43a7875926e859f7c15931df` |

@@ -167,6 +167,41 @@ const deleteCreatedCognitoUser = async (adminCognito, email, client, cognitoSub)
   }
 };
 
+/**
+ * The tenant invite email (template tenant-user-invite, tenant branding,
+ * tenant login URL). Shared by the invite and the member Resend. A send
+ * failure is reported, never thrown.
+ */
+const sendTenantInviteEmail = async ({
+  client, tenant, email, send,
+}) => {
+  const origin = emailAssetOrigin();
+  const loginUrl = tenant.custom_domain
+    ? `https://${tenant.custom_domain}/login`
+    : `${origin}/login`;
+  const branding = await resolveEmailBranding(client, { tenantId: tenant.id });
+  const rendered = renderTransactionalTemplate('tenant-user-invite', {
+    tenantName: tenant.name,
+    role: 'a member',
+    loginUrl,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  try {
+    await mailer({
+      to: email,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: branding.replyTo,
+    });
+    return { inviteSent: true, inviteError: null };
+  } catch (error) {
+    return { inviteSent: false, inviteError: String(error?.message || error).slice(0, 200) };
+  }
+};
+
 export const runTenantInviteUser = async ({
   client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
@@ -339,33 +374,7 @@ export const runTenantInviteUser = async ({
     return failInvite(500, 'tenant_membership_failed', error?.message || error);
   }
 
-  const origin = emailAssetOrigin();
-  const loginUrl = tenant.custom_domain
-    ? `https://${tenant.custom_domain}/login`
-    : `${origin}/login`;
-  const branding = await resolveEmailBranding(client, { tenantId });
-  const rendered = renderTransactionalTemplate('tenant-user-invite', {
-    tenantName: tenant.name,
-    role: 'a member',
-    loginUrl,
-    branding,
-  });
-  const mailer = send || sendViaSesOrSink;
-  let inviteSent = true;
-  let inviteError = null;
-  try {
-    await mailer({
-      to: email,
-      subject: rendered.subject,
-      html: rendered.html,
-      text: rendered.text,
-      from: branding.from,
-      replyTo: branding.replyTo,
-    });
-  } catch (error) {
-    inviteSent = false;
-    inviteError = String(error?.message || error).slice(0, 200);
-  }
+  const { inviteSent, inviteError } = await sendTenantInviteEmail({ client, tenant, email, send });
 
   return {
     ok: true,
@@ -423,6 +432,63 @@ export const handleTenantInviteUser = async (event, deps = {}) => {
 };
 
 export const handleCreateTenantUser = async (event) => handleTenantInviteUser(event);
+
+/** The member of the tenant whose login email is $2 (normalized, lower case). */
+export const TENANT_MEMBER_BY_EMAIL_SQL = `SELECT tu.user_id::text AS user_id
+  FROM public.tenant_users tu
+  JOIN public.identity_accounts ia ON ia.application_user_id = tu.user_id
+ WHERE tu.tenant_id = $1::uuid
+   AND lower(ia.email) = $2
+ LIMIT 1`;
+
+/**
+ * Member "Resend" on the tenant page: sends the tenant invite email again to
+ * an existing member of the tenant. The caller is the platform owner or a
+ * member of that tenant. Cognito, the identity link and the membership are
+ * not touched (the member signs in with an email code).
+ */
+export const runTenantInviteResend = async ({
+  client, mapping, body, spoof, send,
+}) => {
+  const tenantId = body.tenant_id || body.tenantId;
+  const email = normalizeEmail(body.email);
+  const refuse = (statusCode, error, message, extra = {}) => ({
+    ok: false, statusCode, error, message, invite_sent: false, spoofFieldsIgnored: spoof, ...extra,
+  });
+  if (!UUID_RE.test(String(tenantId || ''))) {
+    return refuse(400, 'invalid_uuid', 'Choose a company first.', { field: 'tenant_id' });
+  }
+  if (!email) return refuse(400, 'invalid_email', 'Enter the member\'s email address.', { field: 'email' });
+  if (!(await assertTenantMember(client, mapping, tenantId)) && !(await isPlatformOwner(client))) {
+    return refuse(403, 'not_authorized', 'Only members of this company or the ChecksOps platform owner can resend an invite.');
+  }
+  const tenant = (await client.query(
+    `SELECT id, slug, name, custom_domain FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
+    [tenantId],
+  )).rows[0];
+  if (!tenant) return refuse(404, 'tenant_not_found', 'That company was not found.');
+  const member = email === PLATFORM_OWNER_EMAIL
+    ? null
+    : (await client.query(TENANT_MEMBER_BY_EMAIL_SQL, [tenantId, email])).rows[0];
+  if (!member) {
+    return refuse(404, 'member_not_found', 'That email is not a member of this company. Use Invite to add them.');
+  }
+  const { inviteSent } = await sendTenantInviteEmail({ client, tenant, email, send });
+  if (!inviteSent) {
+    return refuse(502, 'invite_email_failed', 'The invite email could not be sent. Try again in a moment.');
+  }
+  return {
+    ok: true,
+    statusCode: 200,
+    invite_sent: true,
+    message: `Invite email sent to ${email}.`,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+export const handleTenantInviteResend = async (event, deps = {}) => withIdentity(event, (ctx) => (
+  runTenantInviteResend({ ...ctx, send: deps.sendViaSesOrSink })
+), deps);
 
 export const runDeleteUser = async ({
   client, mapping, body, spoof, cognitoJson: cognitoFn,

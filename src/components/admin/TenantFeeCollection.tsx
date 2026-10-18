@@ -17,10 +17,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SectionCard } from "@/components/settings/SectionCard";
 import {
+  OUTDATED_BILLING_SERVICE,
   feeErrorText,
   getFeeDestination,
+  isUsableFeePreview,
   previewTenantFees,
   pullTenantFees,
+  reasonText,
   resendTenantFeeInvoice,
   setFeeDestination,
   usd,
@@ -28,26 +31,6 @@ import {
   type FeeDestinationStatus,
   type FeePreview,
 } from "@/lib/tenantFeeBilling";
-
-const REASON_TEXT: Record<string, string> = {
-  tenant_inactive: "The organization is not active.",
-  billing_paused: "Billing is paused for this organization.",
-  missing_authorization: "No member of this organization has authorized ACH billing yet.",
-  auto_debit_disabled: "The organization turned off billing debits.",
-  missing_ach_authorization: "ACH authorization is missing.",
-  missing_funding_source: "No authorized bank account.",
-  invalid_amount: "Nothing to collect for this period.",
-  destination_unresolved: "The ChecksOps fee destination is not set.",
-  moov_account_missing: "The organization has no payment account.",
-  moov_account_inactive: "The organization's payment account is not active.",
-  ach_capability_unavailable: "ACH debits are not available on the organization's account.",
-  funding_source_not_found: "The authorized bank account was not found.",
-  bank_disconnected: "The authorized bank account is disconnected.",
-  funding_source_cannot_debit: "The authorized bank account cannot be debited.",
-  monthly_billing_disabled: "Fee collection is not enabled on this environment.",
-};
-
-const reasonText = (reason: string) => REASON_TEXT[reason] ?? reason;
 
 /**
  * Collect fees for one tenant period: server preview first, a confirm dialog
@@ -80,6 +63,10 @@ export function TenantFeeCollectButton({
       sonnerToast.error(feeErrorText(result));
       return;
     }
+    if (!isUsableFeePreview(result)) {
+      sonnerToast.error(OUTDATED_BILLING_SERVICE);
+      return;
+    }
     setPreview(result);
   };
 
@@ -105,7 +92,7 @@ export function TenantFeeCollectButton({
         sonnerToast.warning("The invoice email was not sent. The charge stands; use Resend invoice email from the preview.");
       }
     } else {
-      sonnerToast.error(`Collection failed: ${result.pull?.error || "provider refused"}. The attempt is recorded.`);
+      sonnerToast.error(`Collection failed: ${result.pull?.error ? reasonText(result.pull.error) : "the provider refused"}. The attempt is recorded.`);
     }
     onCollected?.();
   };
@@ -191,8 +178,20 @@ export function TenantFeeCollectButton({
   );
 }
 
-/** $1.00 billing verification debit. Platform owner only; amount fixed by the server. */
-export function TenantBillingVerifyButton({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+/**
+ * $1.00 billing verification debit. Platform owner only; amount fixed by the
+ * server. `disabledReason` (no verified / authorized bank account yet) disables
+ * it with a short hint.
+ */
+export function TenantBillingVerifyButton({
+  tenantId,
+  tenantName,
+  disabledReason,
+}: {
+  tenantId: string;
+  tenantName: string;
+  disabledReason?: string | null;
+}) {
   const [verificationId, setVerificationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -208,15 +207,24 @@ export function TenantBillingVerifyButton({ tenantId, tenantName }: { tenantId: 
     } else if (result.duplicate) {
       sonnerToast.info("That verification was already submitted.");
     } else {
-      sonnerToast.error(`Verification failed: ${result.verify?.error || "provider refused"}. The attempt is recorded.`);
+      sonnerToast.error(`Verification failed: ${result.verify?.error ? reasonText(result.verify.error) : "the provider refused"}. The attempt is recorded.`);
     }
   };
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => setVerificationId(crypto.randomUUID())} disabled={busy}>
-        <ShieldCheck className="w-4 h-4 mr-1" /> Verify billing debit ($1)
-      </Button>
+      <div className="flex flex-col items-end gap-0.5">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setVerificationId(crypto.randomUUID())}
+          disabled={busy || !!disabledReason}
+          title={disabledReason || undefined}
+        >
+          <ShieldCheck className="w-4 h-4 mr-1" /> Verify billing debit ($1)
+        </Button>
+        {disabledReason && <span className="text-[10px] text-muted-foreground">{disabledReason}</span>}
+      </div>
       <AlertDialog open={verificationId !== null} onOpenChange={(open) => { if (!open && !busy) setVerificationId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -247,6 +255,7 @@ export function TenantBillingVerifyButton({ tenantId, tenantName }: { tenantId: 
 export function PlatformFeeDestinationCard() {
   const [status, setStatus] = useState<FeeDestinationStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [accountId, setAccountId] = useState("");
@@ -255,10 +264,11 @@ export function PlatformFeeDestinationCard() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     const result = await getFeeDestination();
     setLoading(false);
-    if (!result.ok) {
-      sonnerToast.error(feeErrorText(result));
+    if (!result.ok || !result.destination || typeof result.destination !== "object") {
+      setLoadError(result.ok ? OUTDATED_BILLING_SERVICE : feeErrorText(result));
       return;
     }
     setStatus(result.destination);
@@ -282,7 +292,8 @@ export function PlatformFeeDestinationCard() {
       sonnerToast.error(feeErrorText(result));
       return;
     }
-    setStatus(result.destination);
+    if (result.destination && typeof result.destination === "object") setStatus(result.destination);
+    else void load();
     setEditing(false);
     sonnerToast.success("Fee destination saved");
   };
@@ -296,6 +307,12 @@ export function PlatformFeeDestinationCard() {
     >
       {loading ? (
         <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+      ) : loadError ? (
+        <div className="space-y-2 text-sm">
+          <p className="font-medium">Couldn&apos;t load the fee destination</p>
+          <p className="text-xs text-muted-foreground">{loadError}</p>
+          <Button size="sm" variant="outline" onClick={() => { void load(); }}>Retry</Button>
+        </div>
       ) : (
         <div className="space-y-3 text-sm">
           <div className="flex items-center gap-2">
@@ -312,7 +329,9 @@ export function PlatformFeeDestinationCard() {
               <div>Payment method {status.payment_method_id}</div>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">{status?.reason ?? status?.error}</p>
+            <p className="text-xs text-muted-foreground">
+              {status?.reason || status?.error ? reasonText(String(status?.reason || status?.error)) : "No fee destination is set."}
+            </p>
           )}
           {status?.env_override && (
             <p className="text-xs text-muted-foreground">Set by Lambda configuration; that value wins over a value saved here.</p>

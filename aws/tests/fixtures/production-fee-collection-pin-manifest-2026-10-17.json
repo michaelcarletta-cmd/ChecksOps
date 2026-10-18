@@ -25,13 +25,13 @@
     },
     "tenant-billing-engine.mjs": {
       "live_sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
-      "accepted_sha256": "7c2eedd32aebc26630339817b07321afc4da64a915601083746f80d8f0c50d1b",
+      "accepted_sha256": "338f93e1122d35e4929655b7418d65a6d14b51f5f61fe38812c1f2234be81d94",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "tenant-billing-handlers.mjs": {
       "live_sha256": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
-      "accepted_sha256": "231be3d3068afbf88a6b77f22c0f84ad58ecd7bbe86f63a1300f87f24a71c6a7",
+      "accepted_sha256": "2f8ca3c53b3e3a125b6bb8c6e61e09a593388450274c320978498af78643937e",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
@@ -43,7 +43,7 @@
     },
     "tenant-billing-destination.mjs": {
       "live_sha256": "7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80",
-      "accepted_sha256": "dce1f7eb0e461fb70e41748952a9e915ce15a828ae14a86f819d36355ac19e69",
+      "accepted_sha256": "aaa94a0751d58927cc6b581570ca17a971e33417c5ec9cc6e4f45ddc062de634",
       "operation": "replace",
       "live_source": "origin/claude/production-api-live-snapshot f78e16d99 (2026-10-11 live bundle)"
     },

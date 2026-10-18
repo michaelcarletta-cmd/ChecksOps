@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 101), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 102), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -121,7 +121,9 @@ export function releaseFunctionDefinitions(text) {
     const language = /\bLANGUAGE\s+([A-Za-z]+)/i.exec(header);
     const volatility = /\b(IMMUTABLE|STABLE|VOLATILE)\b/i.exec(header);
     const parallel = /\bPARALLEL\s+(SAFE|RESTRICTED|UNSAFE)\b/i.exec(header);
-    const config = [...header.matchAll(/\bSET\s+([a-z_]+)\s*=\s*([A-Za-z0-9_]+)/gi)].map((m) => `${m[1].toLowerCase()}=${m[2]}`).sort();
+    // A list value (SQL 102: search_path = public, pg_temp) as PostgreSQL stores it in proconfig.
+    const config = [...header.matchAll(/\bSET\s+([a-z_]+)\s*=\s*([A-Za-z0-9_]+(?:\s*,\s*[A-Za-z0-9_]+)*)/gi)]
+      .map((m) => `${m[1].toLowerCase()}=${m[2].split(',').map((v) => v.trim()).join(', ')}`).sort();
     out[name] = {
       result: returns ? returns[1].toLowerCase().replace(/^public\./, '') : null,
       language: language ? language[1].toLowerCase() : null,
@@ -167,7 +169,7 @@ export function releaseForbiddenStatements(text) {
   return hits;
 }
 
-/** The reviewed bytes as the guarded tools execute them (none of SQL 90-101 has BEGIN/COMMIT), or null. */
+/** The reviewed bytes as the guarded tools execute them (none of SQL 90-102 has BEGIN/COMMIT), or null. */
 export function releaseSqlExecutableText(key, text) {
   const spec = releaseSpec(key);
   const source = String(text || '');

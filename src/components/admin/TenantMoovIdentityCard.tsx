@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Building2, Landmark, Loader2 } from "lucide-react";
 
 /**
@@ -18,7 +19,7 @@ export function TenantMoovIdentityCard({
   tenantId: string;
   tenantName: string;
 }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["tenant-moov-identity", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -51,7 +52,16 @@ export function TenantMoovIdentityCard({
           </div>
         )}
 
-        {!isLoading && (data ?? []).length === 0 && (
+        {!isLoading && error && (
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>Couldn&apos;t load the payment account.</span>
+            <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => { void refetch(); }} disabled={isFetching}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {!isLoading && !error && (data ?? []).length === 0 && (
           <p className="text-xs text-muted-foreground">
             No connected payment account yet for this organization.
           </p>

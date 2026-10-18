@@ -360,24 +360,30 @@ test('marks storage bytes unavailable when source metadata has unknown sizes', a
 });
 
 test('Class A route exposes a GET-only read endpoint and no provider client is used', async () => {
-  // app-services.mjs is the live production router plus the homeowner
-  // signing routes. Production has never had tenant-management-v2.mjs, so the
-  // router deliberately does not route it; the route returns via the #901
-  // reconciliation. The module and its read handler stay in source.
+  // The owner-approved tenant-buttons fix restores the aca3a704a GET-only
+  // route on app-services.mjs (it is then overlaid onto staging).
   assert.equal(typeof handleTenantManagementV2, 'function');
   const direct = await handleTenantManagementV2({ queryStringParameters: {} });
   assert.equal(direct.statusCode, 400);
   assert.equal(direct.error, 'valid_tenant_id_required');
-  for (const method of ['GET', 'POST']) {
+  const routedGet = await handleAppServiceRequest(
+    { queryStringParameters: {} },
+    '/functions/v1/tenant-management-v2',
+    'GET',
+  );
+  assert.equal(routedGet.statusCode, 400);
+  assert.equal(routedGet.error, 'valid_tenant_id_required');
+  for (const method of ['POST', 'PUT', 'DELETE']) {
     const routed = await handleAppServiceRequest(
       { queryStringParameters: { tenant_id: TENANT_ID } },
       '/functions/v1/tenant-management-v2',
       method,
     );
-    assert.equal(routed, null, `${method} tenant-management-v2 is not an app-services route`);
+    assert.equal(routed.statusCode, 405, `${method} tenant-management-v2 is GET-only`);
+    assert.equal(routed.error, 'method_not_allowed');
   }
   const router = fs.readFileSync(new URL('../functions/api/app-services.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(router, /tenant-management-v2/);
+  assert.match(router, /import \{ handleTenantManagementV2 \} from '\.\/tenant-management-v2\.mjs';/);
 
   const source = fs.readFileSync(
     new URL('../functions/api/tenant-management-v2.mjs', import.meta.url),

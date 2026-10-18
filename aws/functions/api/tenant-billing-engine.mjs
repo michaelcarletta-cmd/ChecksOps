@@ -335,44 +335,114 @@ const sandboxCollectFundsAvailable = (account, env) => {
   });
 };
 
+/**
+ * Runs `sql`, and on failure (a column a later SQL file adds is not there yet)
+ * `fallbackSql`. Both run inside the caller's transaction, so the first query
+ * is wrapped in a SAVEPOINT: without it the failed statement aborts the
+ * transaction and the fallback fails too (25P02, surfaced as data_query_failed).
+ */
+export async function queryWithColumnFallback(client, savepoint, sql, fallbackSql, params) {
+  await client.query(`SAVEPOINT ${savepoint}`);
+  try {
+    const result = await client.query(sql, params);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return result;
+  } catch {
+    await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return client.query(fallbackSql, params);
+  }
+}
+
+/**
+ * Runs an optional read inside the caller's transaction: on failure (a table or
+ * column a later SQL file adds is not there yet) the statement is rolled back to
+ * a SAVEPOINT and no rows are returned, so the transaction stays usable.
+ */
+export async function optionalQuery(client, savepoint, sql, params) {
+  await client.query(`SAVEPOINT ${savepoint}`);
+  try {
+    const result = await client.query(sql, params);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return result;
+  } catch {
+    await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    return { rows: [] };
+  }
+}
+
 export async function loadTenantBillingContext(client, tenantId) {
-  const tenant = (await client.query(
+  const tenant = (await queryWithColumnFallback(
+    client,
+    'tenant_billing_context',
     `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
             is_founding_partner, per_check_rate_cents, per_check_billing_enabled,
             next_day_rate_cents, same_day_rate_cents,
             mortgage_ops_initial_rate_cents, mortgage_ops_additional_rate_cents,
             deposits_enabled
      FROM public.tenants WHERE id = $1::uuid`,
-    [tenantId],
-  ).catch(() => client.query(
     `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
             is_founding_partner, per_check_rate_cents, per_check_billing_enabled,
             next_day_rate_cents, same_day_rate_cents
      FROM public.tenants WHERE id = $1::uuid`,
     [tenantId],
-  ))).rows[0];
+  )).rows[0];
   if (!tenant) return fail('tenant_not_found', { statusCode: 404 });
-  const settings = (await client.query(
+  const settings = (await optionalQuery(
+    client,
+    'tenant_billing_settings_read',
     `SELECT tenant_id, billing_enabled, billing_day_of_month, next_period_start, updated_at
      FROM public.tenant_billing_settings WHERE tenant_id = $1::uuid`,
     [tenantId],
-  ).catch(() => ({ rows: [] }))).rows[0] || {
+  )).rows[0] || {
     tenant_id: tenantId,
     billing_enabled: false,
     billing_day_of_month: 1,
     next_period_start: null,
   };
-  const authorization = (await client.query(
+  const authorization = (await optionalQuery(
+    client,
+    'tenant_billing_authorization_read',
     `SELECT id, tenant_id, stakeholder_account_id, auto_debit_enabled, ach_authorized_at,
             ach_authorized_by, verification_status, provider_payment_method_id,
             provider_bank_account_id, provider_account_id, provider_environment,
             nickname, account_holder_name, account_number_last4
      FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid`,
     [tenantId],
-  ).catch(() => ({ rows: [] }))).rows[0] || null;
+  )).rows[0] || null;
   const checkDefaultCents = await loadCheckBillingDefaultCents(client);
   return { ok: true, tenant, settings, authorization, checkDefaultCents };
 }
+
+/** Owner-readable sentence for each readiness reason (billing_not_ready). */
+export const BILLING_REASON_MESSAGES = Object.freeze({
+  tenant_inactive: 'the company subscription is not active',
+  billing_paused: 'billing is paused for this company',
+  missing_authorization: 'the company has not linked a bank account for billing',
+  auto_debit_disabled: 'automatic debit is turned off for this company',
+  missing_ach_authorization: 'the company has not authorized ACH debits',
+  missing_funding_source: 'the company has not chosen a bank account to pay from',
+  invalid_amount: 'there is nothing to collect for this period',
+  invalid_amount_cents: 'the amount due is not a valid charge',
+  destination_unresolved: 'the ChecksOps account that receives fees is not set up',
+  moov_account_missing: 'the company has no connected payment account',
+  moov_account_inactive: 'the company payment account is not active yet',
+  ach_capability_unavailable: 'the company payment account cannot be debited by ACH yet',
+  funding_source_account_mismatch: 'the billing bank account belongs to a different payment account',
+  funding_source_not_found: 'the billing bank account was not found',
+  bank_disconnected: 'the billing bank account is disconnected',
+  funding_source_cannot_debit: 'the billing bank account cannot be debited',
+});
+
+export const billingNotReadyMessage = (reasons = []) => {
+  const parts = [...new Set((reasons || []).map((reason) => (
+    BILLING_REASON_MESSAGES[reason] || String(reason || '').replace(/_/g, ' ')
+  )).filter(Boolean))];
+  if (!parts.length) return 'Billing is not ready for this company yet.';
+  const text = parts.join('; ');
+  return `Billing is not ready: ${text}.`;
+};
 
 export async function evaluateBillingReadiness(client, {
   tenantId, period, destination, environment,
@@ -394,14 +464,16 @@ export async function evaluateBillingReadiness(client, {
   if (!destination?.ok) reasons.push('destination_unresolved');
 
   const env = environment || billingEnvironment();
-  const account = (await client.query(
+  const account = (await optionalQuery(
+    client,
+    'tenant_billing_moov_account_read',
     `SELECT provider_account_id, onboarding_status, can_ach_debit, can_send_payments,
             verification_status, capabilities
      FROM public.payment_provider_accounts
      WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
      ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
     [tenantId, env],
-  ).catch(() => ({ rows: [] }))).rows[0] || null;
+  )).rows[0] || null;
   if (!account?.provider_account_id) reasons.push('moov_account_missing');
   else {
     if (account.onboarding_status && account.onboarding_status !== 'active') {
@@ -422,7 +494,9 @@ export async function evaluateBillingReadiness(client, {
   }
 
   if (authorization?.provider_payment_method_id) {
-    const method = (await client.query(
+    const method = (await optionalQuery(
+      client,
+      'tenant_billing_method_read',
       `SELECT id, connection_status, verification_status, can_send, provider_payment_method_id
        FROM public.payment_provider_methods
        WHERE tenant_id = $1::uuid
@@ -430,7 +504,7 @@ export async function evaluateBillingReadiness(client, {
          AND environment = $3
        LIMIT 1`,
       [tenantId, authorization.provider_payment_method_id, env],
-    ).catch(() => ({ rows: [] }))).rows[0];
+    )).rows[0];
     if (!method) reasons.push('funding_source_not_found');
     else if (String(method.connection_status || '') !== 'connected') reasons.push('bank_disconnected');
     else if (method.can_send === false) reasons.push('funding_source_cannot_debit');
@@ -1470,6 +1544,7 @@ export async function verifyTenantBillingDebit(client, {
     return fail('billing_not_ready', {
       statusCode: 409,
       reasons: readiness.reasons,
+      message: billingNotReadyMessage(readiness.reasons),
       amount_cents: BILLING_VERIFICATION_AMOUNT_CENTS,
     });
   }
@@ -1841,6 +1916,7 @@ export async function chargeTenantPeriod(client, {
     return fail('billing_not_ready', {
       statusCode: 409,
       reasons: readiness.reasons,
+      message: billingNotReadyMessage(readiness.reasons),
       amount_cents: readiness.amountCents,
       invoice,
     });
@@ -2068,6 +2144,20 @@ export const SET_TENANT_PRICING_SQL = 'SELECT public.aws_platform_owner_set_tena
 /** SQL 98: the platform owner's deposits switch setter (audited in tenant_pricing_audit). */
 export const SET_TENANT_DEPOSITS_ENABLED_SQL = 'SELECT public.aws_platform_owner_set_tenant_deposits_enabled($1::uuid, $2::boolean) AS result';
 
+const pricingFieldLabel = (field) => {
+  const text = String(field || '').replace(/_cents$/, '').replace(/_/g, ' ').trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : 'A pricing value';
+};
+
+const pricingRefusalMessage = (reason, field) => {
+  if (reason === 'column_not_present') {
+    return `${pricingFieldLabel(field)} cannot be saved until the database update that adds it is applied.`;
+  }
+  if (reason === 'invalid_field') return `${pricingFieldLabel(field)} is not a pricing setting.`;
+  if (reason === 'missing_required_field') return 'Nothing to save: no pricing value was sent.';
+  return `${pricingFieldLabel(field)} has an invalid value.`;
+};
+
 /** Maps a refusal from aws_platform_owner_set_tenant_pricing (SQL 96). */
 export const tenantPricingError = (error) => {
   const code = String(error?.code || '');
@@ -2078,11 +2168,28 @@ export const tenantPricingError = (error) => {
       message: 'Pricing cannot be saved until SQL 96 (aws_platform_owner_set_tenant_pricing) is applied.',
     });
   }
-  if (code === '42501') return fail('platform_owner_required', { statusCode: 403 });
-  if (code === 'P0002') return fail('tenant_not_found', { statusCode: 404 });
+  if (code === '42501') {
+    return fail('platform_owner_required', {
+      statusCode: 403,
+      message: 'Only the ChecksOps platform owner can change company pricing.',
+    });
+  }
+  if (code === 'P0002') return fail('tenant_not_found', { statusCode: 404, message: 'That company was not found.' });
+  if (code === '23502') {
+    return fail('rate_required', {
+      statusCode: 400,
+      field: error?.column || null,
+      message: 'That rate cannot be cleared. Enter an amount instead.',
+    });
+  }
   if (code === '22023') {
     const reason = message.split(':')[0].trim() || 'invalid_value';
-    return fail(reason, { statusCode: 400, field: error?.detail || null });
+    const field = error?.detail || null;
+    return fail(reason, {
+      statusCode: 400,
+      field,
+      message: pricingRefusalMessage(reason, field),
+    });
   }
   throw error;
 };
@@ -2105,6 +2212,11 @@ export async function saveBillingSettings(client, {
   const pricing = {};
   const applyRate = (value, field, column) => {
     if (value === undefined) return true;
+    // JSON null clears the rate (SQL 96 stores NULL; the default rate applies).
+    if (value === null) {
+      pricing[column] = null;
+      return true;
+    }
     const parsed = parseRateCents(value, field);
     if (!parsed.ok) return parsed;
     if (parsed.cents !== undefined) pricing[column] = parsed.cents;
@@ -2129,9 +2241,11 @@ export async function saveBillingSettings(client, {
   ]) {
     if (result !== true) return result;
   }
+  let savedPricing = null;
   if (Object.keys(pricing).length) {
     try {
-      await client.query(SET_TENANT_PRICING_SQL, [tenantId, JSON.stringify(pricing)]);
+      const row = (await client.query(SET_TENANT_PRICING_SQL, [tenantId, JSON.stringify(pricing)])).rows[0];
+      savedPricing = row?.result?.pricing || null;
     } catch (error) {
       return tenantPricingError(error);
     }
@@ -2167,7 +2281,24 @@ export async function saveBillingSettings(client, {
       userId,
     ],
   );
-  return loadTenantBillingContext(client, tenantId);
+  const ctx = await loadTenantBillingContext(client, tenantId);
+  if (!ctx.ok) return ctx;
+  // The stored values (null = cleared, default applies) so the SPA renders
+  // what was saved, not what it sent.
+  const pricingOut = {};
+  for (const column of TENANT_PRICING_COLUMNS) {
+    if (savedPricing && Object.hasOwn(savedPricing, column)) pricingOut[column] = savedPricing[column];
+    else if (Object.hasOwn(ctx.tenant, column)) pricingOut[column] = ctx.tenant[column];
+  }
+  if (Object.hasOwn(ctx.tenant, 'deposits_enabled')) pricingOut.deposits_enabled = ctx.tenant.deposits_enabled !== false;
+  return {
+    ...ctx,
+    pricing: pricingOut,
+    billing_settings: {
+      billing_enabled: ctx.settings.billing_enabled === true,
+      billing_day_of_month: Number(ctx.settings.billing_day_of_month || 1),
+    },
+  };
 }
 
 export async function saveBillingAuthorization(client, {
@@ -2244,7 +2375,9 @@ export async function saveBillingAuthorization(client, {
 }
 
 export async function listBillingHistory(client, tenantId, limit = 24) {
-  const rows = (await client.query(
+  const rows = (await queryWithColumnFallback(
+    client,
+    'tenant_billing_history',
     `SELECT id, tenant_id, amount_cents, monthly_rate_cents, discount_cents, billing_period,
             period_start, period_end, status, method, provider_transfer_id,
             funding_source_method_id, destination_account_id, destination_payment_method_id,
@@ -2259,8 +2392,6 @@ export async function listBillingHistory(client, tenantId, limit = 24) {
      WHERE tenant_id = $1::uuid
      ORDER BY period_start DESC NULLS LAST, created_at DESC
      LIMIT $2`,
-    [tenantId, limit],
-  ).catch(() => client.query(
     `SELECT id, tenant_id, amount_cents, monthly_rate_cents, discount_cents, billing_period,
             period_start, period_end, status, method, provider_transfer_id,
             funding_source_method_id, destination_account_id, destination_payment_method_id,
@@ -2275,7 +2406,7 @@ export async function listBillingHistory(client, tenantId, limit = 24) {
      ORDER BY period_start DESC NULLS LAST, created_at DESC
      LIMIT $2`,
     [tenantId, limit],
-  ))).rows;
+  )).rows;
   return rows;
 }
 
@@ -2414,10 +2545,13 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
       environment: dest.environment,
       source: dest.source || 'explicit',
       firstWalletFallback: false,
-    } : { error: dest.error, reason: dest.reason, firstWalletFallback: false },
+    } : {
+      error: dest.error, reason: dest.reason, message: dest.message || null, firstWalletFallback: false,
+    },
     readiness: {
       ready: readiness.ready,
       reasons: readiness.reasons || [],
+      message: readiness.ready ? null : billingNotReadyMessage(readiness.reasons || []),
     },
     last_charge: last,
     pending_charge: pending,

@@ -20,6 +20,22 @@ import { AlertTriangle, Landmark, Loader2, ShieldCheck, UserCheck, UserPlus } fr
 /** Digits only, 5-17. No routing number: Check Alt binds the bank through the platform FI key. */
 export const CHECKALT_ACCOUNT_NUMBER_PATTERN = /^\d{5,17}$/;
 
+/** A plain email shape check before Register is enabled; the server still validates. */
+export const CHECKALT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Readable text for a refused Check Alt call: the reviewed provider sentences
+ * (checkAltProviderUserMessage) when the code maps, else the server's
+ * `message`, else the error text.
+ */
+const checkAltErrorText = (data: unknown, error: unknown): string => {
+  const mapped = checkAltProviderUserMessage(error);
+  const raw = error instanceof Error ? error.message : String(error || "");
+  if (mapped !== raw) return mapped;
+  const message = (data as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message.trim() ? message : mapped;
+};
+
 /** What checkalt-verify-account { action: "status" } returns. Account number is last four only. */
 type CheckAltRegistrationStatus = {
   status?: "registered" | "not_registered";
@@ -62,7 +78,7 @@ export function CheckAltTenantAccountCard() {
         tenant_id: tenant!.id,
         action: "status",
       });
-      if (error) throw new Error(checkAltProviderUserMessage(error));
+      if (error) throw new Error(checkAltErrorText(data, error));
       return (data ?? {}) as CheckAltRegistrationStatus;
     },
   });
@@ -91,6 +107,15 @@ export function CheckAltTenantAccountCard() {
   }, [status]);
 
   const accountNumberValid = CHECKALT_ACCOUNT_NUMBER_PATTERN.test(reg.deposit_account_number.trim());
+  const emailValid = CHECKALT_EMAIL_PATTERN.test(reg.email.trim());
+  const registerReady = Boolean(
+    reg.sso_user_id.trim()
+    && reg.first_name.trim()
+    && reg.last_name.trim()
+    && emailValid
+    && accountNumberValid
+    && tenant?.id,
+  );
 
   const registerMutation = useMutation({
     mutationFn: async () => {
@@ -103,10 +128,7 @@ export function CheckAltTenantAccountCard() {
         email: reg.email.trim(),
         deposit_account_number: reg.deposit_account_number.trim(),
       });
-      if (error) {
-        const message = (data as { message?: string } | null)?.message;
-        throw new Error(message || checkAltProviderUserMessage(error));
-      }
+      if (error) throw new Error(checkAltErrorText(data, error));
       return data as CheckAltRegistrationStatus & { warning?: string };
     },
     onSuccess: (data) => {
@@ -137,7 +159,7 @@ export function CheckAltTenantAccountCard() {
         ?? null;
       if (error) {
         setVerifyResult({ action, ok: false, payload });
-        throw new Error(checkAltProviderUserMessage(error));
+        throw new Error(checkAltErrorText(data, error));
       }
       return { action, payload };
     },
@@ -232,6 +254,9 @@ export function CheckAltTenantAccountCard() {
                   value={reg.email}
                   onChange={(e) => setReg({ ...reg, email: e.target.value })}
                 />
+                {reg.email.trim() && !emailValid ? (
+                  <p className="text-xs text-destructive">Enter a valid email address, like name@company.com.</p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="reg_first">First name</Label>
@@ -298,6 +323,14 @@ export function CheckAltTenantAccountCard() {
               </div>
             ) : null}
 
+            {!registered || !registerReady ? (
+              <p className="text-right text-xs text-muted-foreground">
+                {[
+                  !registerReady ? "Fill in every field with valid values to register." : null,
+                  !registered ? "Verify is available once the account is registered." : null,
+                ].filter(Boolean).join(" ")}
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Button
                 variant="outline"
@@ -321,15 +354,7 @@ export function CheckAltTenantAccountCard() {
               </Button>
               <Button
                 onClick={() => registerMutation.mutate()}
-                disabled={
-                  registerMutation.isPending ||
-                  !reg.sso_user_id.trim() ||
-                  !reg.first_name.trim() ||
-                  !reg.last_name.trim() ||
-                  !reg.email.trim() ||
-                  !accountNumberValid ||
-                  !tenant?.id
-                }
+                disabled={registerMutation.isPending || !registerReady}
               >
                 {registerMutation.isPending
                   ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { functionRefusalMessage } from "@/lib/tenantProfile";
 
 /**
  * Per-tenant deposits switch (tenants.deposits_enabled, SQL 98). Only the
@@ -65,7 +66,6 @@ export async function saveTenantDepositsEnabled(tenantId: string, enabled: boole
   const { data, error } = await supabase.functions.invoke("tenant-billing-admin", {
     body: { action: "update", tenant_id: tenantId, deposits_enabled: enabled },
   });
-  if (error) throw error;
-  const body = data as { ok?: boolean; error?: string; message?: string } | null;
-  if (body && body.ok === false) throw new Error(body.message || body.error || "Deposits setting was not saved");
+  const refusal = functionRefusalMessage(data, error, "Deposits setting was not saved");
+  if (refusal) throw new Error(refusal);
 }

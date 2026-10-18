@@ -84,27 +84,46 @@ const textField = (body, key, max) => {
   return text.length >= 1 && text.length <= max ? text : null;
 };
 
+/** Readable reply for each register field Check Alt or SQL 81 can refuse. */
+const FIELD_MESSAGES = Object.freeze({
+  tenant_id: 'Choose a company first.',
+  sso_user_id: 'User ID is required (1-64 characters, no spaces).',
+  first_name: 'First name is required (up to 100 characters).',
+  last_name: 'Last name is required (up to 100 characters).',
+  email: 'Enter a valid email address.',
+  deposit_account_number: 'Deposit account number must be 5 to 17 digits, with no spaces, dashes or letters.',
+});
+const fieldMessage = (field) => FIELD_MESSAGES[field] || 'One of the registration fields is invalid.';
+
 /** Server-side validation of the register form. */
 export const validateRegisterBody = (body = {}) => {
   const tenantId = body.tenant_id;
-  if (!isUuid(tenantId)) return { error: fail('invalid_uuid', 400, { field: 'tenant_id', productionExecution: false }) };
+  if (!isUuid(tenantId)) {
+    return { error: fail('invalid_uuid', 400, { field: 'tenant_id', productionExecution: false, message: 'Choose a company first.' }) };
+  }
   const ssoUserId = textField(body, 'sso_user_id', 64);
   if (!ssoUserId || !SSO_RE.test(ssoUserId)) {
-    return { error: fail('invalid_field', 400, { field: 'sso_user_id', productionExecution: false, message: 'User ID is required (1-64 characters, no spaces).' }) };
+    return { error: fail('invalid_field', 400, { field: 'sso_user_id', productionExecution: false, message: FIELD_MESSAGES.sso_user_id }) };
   }
   const firstName = textField(body, 'first_name', 100);
-  if (!firstName) return { error: fail('invalid_field', 400, { field: 'first_name', productionExecution: false }) };
+  if (!firstName) {
+    return { error: fail('invalid_field', 400, { field: 'first_name', productionExecution: false, message: FIELD_MESSAGES.first_name }) };
+  }
   const lastName = textField(body, 'last_name', 100);
-  if (!lastName) return { error: fail('invalid_field', 400, { field: 'last_name', productionExecution: false }) };
+  if (!lastName) {
+    return { error: fail('invalid_field', 400, { field: 'last_name', productionExecution: false, message: FIELD_MESSAGES.last_name }) };
+  }
   const email = textField(body, 'email', 254);
-  if (!email || !EMAIL_RE.test(email)) return { error: fail('invalid_field', 400, { field: 'email', productionExecution: false }) };
+  if (!email || !EMAIL_RE.test(email)) {
+    return { error: fail('invalid_field', 400, { field: 'email', productionExecution: false, message: FIELD_MESSAGES.email }) };
+  }
   const depositAccountNumber = normalizeDepositAccountNumber(body.deposit_account_number);
   if (!depositAccountNumber) {
     return {
       error: fail('invalid_deposit_account_number', 400, {
         field: 'deposit_account_number',
         productionExecution: false,
-        message: 'Deposit account number must be 5 to 17 digits, with no spaces, dashes or letters.',
+        message: FIELD_MESSAGES.deposit_account_number,
       }),
     };
   }
@@ -126,9 +145,13 @@ const parseJson = async (resp) => {
 
 const sqlErrorResult = (error) => {
   const code = error?.code;
-  if (code === '42501') return fail('not_authorized', 403);
-  if (code === 'P0002') return fail('tenant_not_found', 404);
-  if (code === '22023') return fail('invalid_field', 400, { field: error?.detail || null });
+  if (code === '42501') {
+    return fail('not_authorized', 403, { message: 'Only the platform owner can register a tenant\'s Check Alt depositor.' });
+  }
+  if (code === 'P0002') return fail('tenant_not_found', 404, { message: 'That company was not found.' });
+  if (code === '22023') {
+    return fail('invalid_field', 400, { field: error?.detail || null, message: fieldMessage(error?.detail) });
+  }
   if (code === '42883') {
     return fail('register_writer_missing', 503, {
       message: 'SQL 81 (aws_register_checkalt_tenant_account) is not applied in this database.',
@@ -291,7 +314,9 @@ export async function handleProductionCheckAltVerify({
   const denied = await requireCheckAltPlatformOwner(client);
   if (denied) return { ...denied, spoofFieldsIgnored: spoof };
   const tenantId = body.tenant_id;
-  if (!isUuid(tenantId)) return fail('invalid_uuid', 400, { field: 'tenant_id', productionExecution: false });
+  if (!isUuid(tenantId)) {
+    return fail('invalid_uuid', 400, { field: 'tenant_id', productionExecution: false, message: FIELD_MESSAGES.tenant_id });
+  }
   if (!['status', 'user', 'account'].includes(body.action)) {
     return fail('invalid_action', 400, {
       field: 'action',
@@ -336,7 +361,11 @@ export async function handleProductionCheckAltVerify({
     tenant_id: tenantId,
     action,
     data,
-    ...(result.ok ? {} : { error: 'checkalt_lookup_failed', details: data }),
+    ...(result.ok ? {} : {
+      error: 'checkalt_lookup_failed',
+      message: 'Check Alt did not return this depositor\'s details. Try again, or check the registration.',
+      details: data,
+    }),
     liveProviderCalled: true,
     productionExecution: true,
     productionRecordsMutated: false,

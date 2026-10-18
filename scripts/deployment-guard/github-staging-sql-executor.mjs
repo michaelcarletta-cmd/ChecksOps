@@ -108,6 +108,7 @@ export const MIGRATIONS = Object.freeze({
   'sql99-mortgage-desk-completion-messages': RELEASE_2026_10_17_PENDING_SQL_PINS.sql99,
   'sql100-mortgage-desk-live-access': RELEASE_2026_10_17_PENDING_SQL_PINS.sql100,
   'sql101-invite-identity-insert-order': RELEASE_2026_10_17_PENDING_SQL_PINS.sql101,
+  'sql102-platform-owner-tenant-profile': RELEASE_2026_10_17_PENDING_SQL_PINS.sql102,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

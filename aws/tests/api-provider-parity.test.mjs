@@ -1136,3 +1136,79 @@ test('platform bank and treasury: platform owner only; a member or a global admi
     }
   });
 });
+
+test('UAT Check Alt verify status returns the stored depositor name, email and registration time, like production', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    const { fetchImpl, calls } = uatReadFetch();
+    const client = parityClient({
+      platformOwner: true,
+      uatAccounts: [{
+        sandbox_provider_id: 'depositor-1',
+        created_at: '2026-10-01T12:00:00.000Z',
+        metadata: {
+          sso_user_id: 'depositor-1',
+          deposit_account_number: '90001111',
+          first_name: 'Uat',
+          last_name: 'Depositor',
+          email: 'uat-depositor@example.com',
+          registered_at: '2026-10-02T09:30:00.000Z',
+        },
+      }],
+    });
+    const result = await parityCall('checkalt-verify-account', client, fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
+    assert.equal(result.success, true, JSON.stringify(result));
+    assert.equal(result.first_name, 'Uat');
+    assert.equal(result.last_name, 'Depositor');
+    assert.equal(result.email, 'uat-depositor@example.com');
+    assert.equal(result.registered_at, '2026-10-02T09:30:00.000Z');
+    assert.equal(calls.length, 0);
+
+    // A row registered before registered_at was stored falls back to the row time.
+    const older = parityClient({
+      platformOwner: true,
+      uatAccounts: [{ sandbox_provider_id: 'd', created_at: '2026-09-01T00:00:00.000Z', metadata: { sso_user_id: 'd', deposit_account_number: '90001111' } }],
+    });
+    const fallback = await parityCall('checkalt-verify-account', older, fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
+    assert.equal(fallback.registered_at, '2026-09-01T00:00:00.000Z');
+    assert.equal(fallback.first_name, null);
+  });
+});
+
+test('UAT Check Alt refusals carry the code in error and a sentence in message; thrown errors are generic', async () => {
+  await withEnv({ AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true' }, async () => {
+    const { fetchImpl } = uatReadFetch();
+    const member = await parityCall('checkalt-verify-account', parityClient({ tenantRole: 'viewer', platformAdmin: false }), fetchImpl, { action: 'status' });
+    assert.equal(member.statusCode, 403);
+    assert.equal(member.error, 'platform_owner_required');
+    assert.match(member.message, /platform owner/i);
+
+    const none = await parityCall('checkalt-verify-account', parityClient({ uatAccounts: [], platformOwner: true }), fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'user' });
+    assert.equal(none.statusCode, 409);
+    assert.equal(none.error, 'account_unregistered');
+    assert.match(none.message, /No registered CheckAlt UAT account/);
+
+    const noCreds = await handleProviderRequest(
+      jwtEvent('/functions/v1/checkalt-verify-account', 'POST', { tenant_id: FREEDOM_TENANT, action: 'status' }),
+      '/functions/v1/checkalt-verify-account',
+      'POST',
+      { ...parityDeps(parityClient({ platformOwner: true }), fetchImpl), loadSandboxCredentials: async () => ({ ...sandboxCreds(), checkalt: null }) },
+    );
+    assert.equal(noCreds.error, 'sandbox_credentials_unavailable');
+    assert.match(noCreds.message, /not configured/);
+    assert.doesNotMatch(noCreds.message, /CHECKALT_|AWS_/);
+
+    const broken = parityClient({ platformOwner: true });
+    const query = broken.query.bind(broken);
+    broken.query = async (sql, params) => {
+      if (String(sql).includes('FROM public.aws_provider_sandbox_objects')) {
+        throw new Error('relation "secret_internal_table" does not exist');
+      }
+      return query(sql, params);
+    };
+    const thrown = await parityCall('checkalt-verify-account', broken, fetchImpl, { tenant_id: FREEDOM_TENANT, action: 'status' });
+    assert.equal(thrown.statusCode, 500);
+    assert.equal(thrown.error, 'checkalt_request_failed');
+    assert.match(thrown.message, /Check Alt could not complete this request/);
+    assert.equal(JSON.stringify(thrown).includes('secret_internal_table'), false);
+  });
+});

@@ -39,6 +39,27 @@ import {
 const jwtCache = { token: null, expiresAt: null };
 
 /**
+ * fail(message, status, { error: code }) lets extra.error replace the
+ * sentence, so the reply carried only the code. refuse keeps both:
+ * error = the code, message = the readable sentence.
+ */
+const refuse = (message, status, extra = {}) => fail(extra.error || message, status, { message, ...extra });
+
+/** Readable messages for refusals checkAltParityContext returns with a code only. */
+const CONTEXT_REFUSAL_MESSAGES = Object.freeze({
+  sandbox_credentials_unavailable: 'Check Alt test credentials are not configured on this server yet.',
+  cross_tenant_denied: 'You can only use Check Alt for a company you belong to.',
+  invalid_uuid: 'Choose a company first.',
+  Forbidden: 'You do not have access to Check Alt for this company.',
+  'tenant_id is required': 'Choose a company first.',
+});
+const contextRefusalMessage = (ctx) => (
+  (ctx.message && ctx.message !== ctx.error ? ctx.message : null)
+  || CONTEXT_REFUSAL_MESSAGES[ctx.error]
+  || 'Check Alt is not available for this company right now.'
+);
+
+/**
  * Check Alt deposit actions (submit, approve, reject, poll, prepare-image) and
  * the depositor reads (deposit history, account status) follow the production
  * rule: only the caller's tenant_users membership of the tenant acted on
@@ -83,7 +104,7 @@ const isPlatformOwner = async (client) => (
 // (ctx.isAdmin) are refused.
 const denyUnlessCheckAltSetupAdmin = async (client) => {
   if (await isPlatformOwner(client)) return null;
-  return fail('Platform owner access required', 403, { error: 'platform_owner_required' });
+  return refuse('Only the ChecksOps platform owner can set up Check Alt.', 403, { error: 'platform_owner_required' });
 };
 const MAX_TOTAL_B64_CHARS = 1_600_000;
 
@@ -140,7 +161,7 @@ const credentialsOf = (uat) => ({
 
 const loadUatTenantAccount = async (client, tenantId) => {
   const sandbox = (await client.query(
-    `SELECT sandbox_provider_id, metadata
+    `SELECT sandbox_provider_id, metadata, created_at
      FROM public.aws_provider_sandbox_objects
      WHERE tenant_id = $1::uuid AND provider = 'checkalt' AND object_type = 'uat_tenant_account'
      ORDER BY created_at DESC NULLS LAST LIMIT 1`,
@@ -152,6 +173,10 @@ const loadUatTenantAccount = async (client, tenantId) => {
       sso_user_id: sandbox.metadata.sso_user_id,
       deposit_account_number: sandbox.metadata.deposit_account_number,
       sso_key: sandbox.metadata.sso_key || sandbox.metadata.sso_user_id,
+      first_name: sandbox.metadata.first_name || null,
+      last_name: sandbox.metadata.last_name || null,
+      email: sandbox.metadata.email || null,
+      registered_at: sandbox.metadata.registered_at || sandbox.created_at || null,
       source: 'uat_isolated_row',
     };
   }
@@ -172,7 +197,14 @@ const wrap = (handler) => async (event, deps = {}) => {
       allowPlatformOwner: handler.requireAdmin === true,
       loadSandbox: deps.loadSandboxCredentials,
     });
-    if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
+    if (ctx.error) {
+      return {
+        ...ctx,
+        message: contextRefusalMessage(ctx),
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+      };
+    }
     if (handler.requireAdmin === true) {
       const denied = await denyUnlessCheckAltSetupAdmin(
         client,
@@ -204,7 +236,10 @@ const wrap = (handler) => async (event, deps = {}) => {
           applicationUserId: mapping.application_user_id,
         };
       }
-      return fail(error.message, 500, {
+      // Never the raw error text (SQL, S3 or library detail) in the reply.
+      console.error('checkalt parity handler failed', error?.code || error?.name || 'error');
+      return refuse('Check Alt could not complete this request. Try again in a moment.', 500, {
+        error: 'checkalt_request_failed',
         spoofFieldsIgnored: spoof,
         applicationUserId: mapping.application_user_id,
       });
@@ -216,7 +251,9 @@ const testConnection = {
   requireAdmin: true,
   run: async ({ ctx, fetchImpl, mapping, client }) => {
     // Platform-level UAT connection test: the platform owner only.
-    if (!(await isPlatformOwner(client))) return fail('Platform owner only', 403);
+    if (!(await isPlatformOwner(client))) {
+      return refuse('Only the ChecksOps platform owner can test the Check Alt connection.', 403, { error: 'platform_owner_required' });
+    }
     const cfg = uatCfg(ctx.uat);
     const creds = credentialsOf(ctx.uat);
     try {
@@ -241,7 +278,7 @@ const registerAccount = {
   requireAdmin: true,
   run: async ({ client, mapping, body, ctx, fetchImpl }) => {
     const tenantId = body.tenant_id || ctx.tenantId;
-    if (!tenantId) return fail('tenant_id is required', 400);
+    if (!tenantId) return refuse('Choose a company first.', 400, { error: 'tenant_id_required', field: 'tenant_id' });
     const ssoUserId = String(body.sso_user_id || body.ssoUserId || '').trim()
       || `aws-uat-test-${crypto.randomUUID()}`;
     const fromSecret = String(ctx.uat.depositAccountNumber || '').trim();
@@ -261,7 +298,7 @@ const registerAccount = {
       });
     }
     if (!ssoUserId) {
-      return fail('sso_user_id is required', 400);
+      return refuse('User ID is required (1-64 characters, no spaces).', 400, { error: 'invalid_field', field: 'sso_user_id' });
     }
     if (ssoUserId === (ctx.uat.username || ctx.uat.userId)) {
       return fail('uat_depositor_must_not_be_api_login', 400, {
@@ -269,7 +306,9 @@ const registerAccount = {
       });
     }
     const cfg = uatCfg(ctx.uat);
-    if (!cfg.fi_key) return fail('checkalt_config.fi_key not set', 400);
+    if (!cfg.fi_key) {
+      return refuse('Check Alt test setup is incomplete on this server (no FI key).', 400, { error: 'checkalt_fi_key_missing' });
+    }
     const creds = credentialsOf(ctx.uat);
     const payload = buildRegisterPayload({
       fiKey: cfg.fi_key,
@@ -286,7 +325,8 @@ const registerAccount = {
     let respJson;
     try { respJson = JSON.parse(respText); } catch { respJson = { raw: respText }; }
     if (!resp.ok) {
-      return fail('CheckAlt registration failed', 502, {
+      return refuse('Check Alt refused the registration. Nothing was saved.', 502, {
+        error: 'checkalt_registration_failed',
         status: resp.status, details: maskCheckAltPayload(respJson, [depositAccountNumber]), liveProviderCalled: true,
       });
     }
@@ -312,6 +352,7 @@ const registerAccount = {
         first_name: body.first_name,
         last_name: body.last_name,
         email: body.email,
+        registered_at: new Date().toISOString(),
         register_response_keys: respJson && typeof respJson === 'object' ? Object.keys(respJson) : [],
         production_table_written: false,
         isolation: 'aws_provider_sandbox_objects only; production checkalt_tenant_accounts not overwritten',
@@ -346,7 +387,11 @@ const verifyAccount = {
       status: acct?.sso_user_id ? 'registered' : 'not_registered',
       registered: Boolean(acct?.sso_user_id),
       enabled: Boolean(acct?.sso_user_id),
+      registered_at: acct?.registered_at || null,
       sso_user_id: acct?.sso_user_id || null,
+      first_name: acct?.first_name || null,
+      last_name: acct?.last_name || null,
+      email: acct?.email || null,
       account_last4: accountLast4(acct?.deposit_account_number),
       environment: 'uat',
     };
@@ -354,7 +399,7 @@ const verifyAccount = {
       return jsonResult({ success: true, ...status, tenant_id: tenantId, action, liveProviderCalled: false });
     }
     if (!acct?.sso_user_id) {
-      return fail('No registered CheckAlt UAT account for this tenant. Register in Integration Settings first.', 409, {
+      return refuse('No registered CheckAlt UAT account for this tenant. Register in Integration Settings first.', 409, {
         error: 'account_unregistered',
       });
     }
@@ -375,7 +420,11 @@ const verifyAccount = {
       success: result.ok,
       action,
       data,
-      ...(result.ok ? {} : { error: 'checkalt_lookup_failed', details: data }),
+      ...(result.ok ? {} : {
+        error: 'checkalt_lookup_failed',
+        message: 'Check Alt did not return this depositor\'s details. Try again, or check the registration.',
+        details: data,
+      }),
       liveProviderCalled: true,
       userIdSource: 'uat_tenant_sso_user_id',
     });
@@ -427,7 +476,7 @@ const depositHistory = {
     );
     if (denied) return denied;
     const acct = await loadUatTenantAccount(client, tenantId);
-    if (!acct) return fail('No registered CheckAlt UAT account for this tenant.', 409, { error: 'account_unregistered' });
+    if (!acct) return refuse('No registered CheckAlt UAT account for this tenant.', 409, { error: 'account_unregistered' });
     const cfg = uatCfg(ctx.uat);
     const creds = credentialsOf(ctx.uat);
     const ssoKey = acct.sso_key || acct.sso_user_id;
@@ -550,7 +599,7 @@ const submitDeposit = {
     const tenantId = check.tenant_id;
     const acct = await loadUatTenantAccount(client, tenantId);
     if (!acct?.sso_user_id || !acct?.deposit_account_number) {
-      return fail('No registered CheckAlt account for this tenant. Register in Integration Settings first.', 409, {
+      return refuse('No registered CheckAlt account for this tenant. Register in Integration Settings first.', 409, {
         error: 'account_unregistered',
       });
     }
@@ -569,10 +618,10 @@ const submitDeposit = {
     // Architecture A: ignore client-supplied image bytes. Lovable BodySchema
     // never accepts frontImage/rearImage; AWS must not either.
     if (depositFrontPath && !isAllowedPreparedPath(check, depositFrontPath)) {
-      return fail('Prepared front image path is not allowed for this check', 403, { error: 'prepared_path_denied' });
+      return refuse('Prepared front image path is not allowed for this check', 403, { error: 'prepared_path_denied' });
     }
     if (depositBackPath && !isAllowedPreparedPath(check, depositBackPath)) {
-      return fail('Prepared back image path is not allowed for this check', 403, { error: 'prepared_path_denied' });
+      return refuse('Prepared back image path is not allowed for this check', 403, { error: 'prepared_path_denied' });
     }
     const frontPath = depositFrontPath || check.front_image_path;
     const frontBytes = await downloadClaimFileBytes(frontPath, deps);
@@ -592,7 +641,7 @@ const submitDeposit = {
     try {
       frontImage = await downloadPreparedAsB64(frontBytes, 'front');
     } catch (error) {
-      return fail(error.message, error.statusCode || 400, { error: error.code || 'invalid_jpeg' });
+      return refuse(error.message, error.statusCode || 400, { error: error.code || 'invalid_jpeg' });
     }
     let rearImage = null;
     const backPath = depositBackPath || check.back_image_deposit_path || check.back_image_path;
@@ -613,7 +662,7 @@ const submitDeposit = {
         try {
           rearImage = await downloadPreparedAsB64(backBytes, 'back');
         } catch (error) {
-          return fail(error.message, error.statusCode || 400, { error: error.code || 'invalid_jpeg' });
+          return refuse(error.message, error.statusCode || 400, { error: error.code || 'invalid_jpeg' });
         }
       }
     }
