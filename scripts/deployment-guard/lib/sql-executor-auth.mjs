@@ -2155,7 +2155,8 @@ export const AUTHORIZED_SQL97_FINANCIAL_STEPUP_LOG_SERVER_WRITER = Object.freeze
 
 // Fee collection 2026-10-17 staging pin: SQL 98 (manual tenant fee collection and the per-tenant
 // deposits switch; needs SQL 96, whose column guard it replaces). On the release engine like SQL
-// 90-97 (choice sql98-tenant-fee-collection); pending like them.
+// 90-97 (choice sql98-tenant-fee-collection). Wave 3: the pre-state is the staging read-live after
+// SQL 96 was applied (run 39083278136, main 02fb97d5a; precondition_failures []).
 export const AUTHORIZED_SQL98_TENANT_FEE_COLLECTION = Object.freeze({
   key: 'sql98',
   filename: 'aws/workflows/sql/98_tenant_fee_collection.sql',
@@ -2163,9 +2164,9 @@ export const AUTHORIZED_SQL98_TENANT_FEE_COLLECTION = Object.freeze({
   // The commit that last authored the file bytes (claude/sql98-keep-reviewed-destination, reached from main through its merge commit).
   commit: '567772a9034cae4ec4d7c56b07c983fb4e797103',
   source_sha256: '5a42e485c84f7c9976390d12c275cdf32612fbba7656b66f553110c0ae697c2a',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-18: staging apply (wave 3) from staging read-live run 39083278136',
+  execute: true,
+  expected_live_definition_sha256: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275',
   // Code-derived: releaseIntendedHash('sql98', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603',
   function_identities: Object.freeze(['public.aws_check_billing_default_price_cents()', 'public.aws_check_billing_charges_when_per_check_off()', 'public.record_check_billing_event()', 'public.aws_platform_owner_record_billing_audit(jsonb)', 'public.aws_platform_billing_destination_audit_row()', 'public.aws_tenant_deposits_enabled(uuid)', 'public.aws_tenant_deposits_enabled_audit_row()', 'public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)', 'public.aws_tenants_member_column_guard()']),

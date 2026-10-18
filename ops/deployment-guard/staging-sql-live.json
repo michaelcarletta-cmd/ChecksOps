@@ -37,8 +37,8 @@
       "evidence": "Guarded staging SQL executor apply of sql93-tenant-company-info on 2026-10-17 (run 39080438659, main c8a79d554, executor D/FtMh1a…): receipt before ef2ce6ba…, after 1032695c… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/94_document_library_restore.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql94-document-library-restore on 2026-10-18 (run 39082817752, main 02fb97d5a, executor Kmln7zaw…): receipt before 72411598…, after 1cdc5032… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/98_tenant_fee_collection.sql": {
       "verified_live": false,

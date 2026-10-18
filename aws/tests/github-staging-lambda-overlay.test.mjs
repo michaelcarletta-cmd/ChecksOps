@@ -508,8 +508,8 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
     else assert.equal(record.evidence, null, file);
     assert.ok(fs.existsSync(new URL(`../../${file}`, import.meta.url)), file);
   }
-  // Not applied in staging yet (release 2026-10-17 waves 2 and 3).
-  for (const n of ['94_document_library_restore', '98_tenant_fee_collection']) {
+  // Not applied in staging yet (release 2026-10-17 wave 3).
+  for (const n of ['98_tenant_fee_collection']) {
     assert.equal(STAGING_SQL.sql[`aws/workflows/sql/${n}.sql`].verified_live, false, n);
   }
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
