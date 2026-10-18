@@ -1,0 +1,70 @@
+{
+  "id": "sql102-platform-owner-tenant-profile-production-apply",
+  "migration": "sql102",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/102_platform_owner_tenant_profile.sql",
+  "migration_id": "102_platform_owner_tenant_profile",
+  "staging_pin_commit": "PENDING_COMMIT",
+  "source_sha256": "40709d18b6eb25ab4cd1215f2ae25968ab0c513e779c4715e25633e72430e1c9",
+  "function_identities": [
+    "public.aws_tenant_profile_columns()",
+    "public.aws_platform_owner_set_tenant_profile(uuid, jsonb)",
+    "public.aws_platform_owner_remove_tenant_member(uuid, uuid)",
+    "public.aws_tenant_profile_audit_row()",
+    "public.aws_tenants_member_column_guard()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "74aead6ffdcc6b2f5bab7cdcfe6f8a45deb7d55ccee406bdd170bb3198f06f71",
+  "authorization_phrase": "APPLY_PLATFORM_OWNER_TENANT_PROFILE",
+  "predecessors": [
+    "sql98"
+  ],
+  "order_note": "After SQL 98 (required: the file refuses with 55000 sql102_prerequisite_missing without SQL 98's aws_platform_owner_set_tenant_deposits_enabled and SQL 96's pricing helpers and audit table). It replaces SQL 98's aws_tenants_member_column_guard (which SQL 98 took over from SQL 96 / SQL 93), so do not re-run SQL 98 afterwards: SQL 98 refuses once aws_platform_owner_set_tenant_profile exists (refuse_after), and a re-run would put SQL 98's guard back (fail closed: the platform owner could no longer save the profile). Apply before the tenant-billing-handlers.mjs overlay that calls profile-update and member-remove; the plan's sql_before is the operator's gate for that order, to record in the change that sets execute true. Independent of SQL 99-101.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql102-platform-owner-tenant-profile",
+    "one_shot_migration": "sql102",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-90-97-apply.md",
+    "tests": [
+      "aws/tests/release-sql102-executor.test.mjs",
+      "aws/tests/release-sql102-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql102-platform-owner-tenant-profile-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 102: sql102-platform-owner-tenant-profile-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql102-platform-owner-tenant-profile); production-sql-one-shot.mjs --migration sql102. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). SQL 102 supersedes SQL 98 (release-sql-specs.mjs; staging pin superseded_intended_sha256.sql98): once SQL 102 is in place SQL 98 (and through it SQL 96 and SQL 93) counts as applied only while every other SQL 98 object still matches. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect), but no production inspect has been run for SQL 102 yet; its preconditions can only pass once SQL 98 is applied (predecessors_applied). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "74aead6ffdcc6b2f5bab7cdcfe6f8a45deb7d55ccee406bdd170bb3198f06f71",
+    "note": "public.aws_tenant_profile_columns() (sql, IMMUTABLE), public.aws_platform_owner_set_tenant_profile(uuid, jsonb) and public.aws_platform_owner_remove_tenant_member(uuid, uuid) (plpgsql, VOLATILE, SECURITY DEFINER, search_path public, row_security off, returns jsonb), each EXECUTE for checksops and authenticated (revoked from PUBLIC); the SECURITY DEFINER trigger function public.aws_tenant_profile_audit_row() (owner only) and trigger aws_tenant_profile_audit (AFTER UPDATE ON public.tenants); public.aws_tenants_member_column_guard() replaced (SQL 98's body plus the profile fields and moov_environment for the platform owner; ACL unchanged: PUBLIC EXECUTE), all owned by checksops_admin. No policy, grant, table, column or row change. The fingerprint is releaseIntendedHash('sql102', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 74aead6ffdcc6b2f5bab7cdcfe6f8a45deb7d55ccee406bdd170bb3198f06f71."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 102 (choice sql102-platform-owner-tenant-profile) here in the reviewed change that sets execute true, with the platform owner saving a tenant profile and removing a member through Admin -> Tenants on staging afterwards. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

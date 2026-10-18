@@ -56,6 +56,7 @@ import {
 } from './documents.mjs';
 import {
   handleTenantInviteUser,
+  handleTenantInviteResend,
   handleCreateTenantUser,
   handleDeleteUser,
   handleGetInstanceUsers,
@@ -160,6 +161,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-upload-session',
   // Tenant admin / domain / BYOK
   'tenant-invite-user',
+  'tenant-invite-resend',
   'create-tenant-user',
   'delete-user',
   'get-instance-users',
@@ -327,6 +329,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerUploadSession(event);
     case 'tenant-invite-user':
       return handleTenantInviteUser(event);
+    case 'tenant-invite-resend':
+      return handleTenantInviteResend(event);
     case 'create-tenant-user':
       return handleCreateTenantUser(event);
     case 'delete-user':

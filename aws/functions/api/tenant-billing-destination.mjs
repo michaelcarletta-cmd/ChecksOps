@@ -69,10 +69,36 @@ export const billingVerificationShouldSimulate = (deps = {}) => {
   return !billingVerificationPostEnabled();
 };
 
+/**
+ * Owner-readable sentence for each refusal the platform owner can hit on the
+ * fee destination. No environment variable names: the owner fixes it from
+ * Tenant Management (destination-set), not the Lambda configuration.
+ */
+const NOT_CONFIGURED_MESSAGE = 'The ChecksOps account that receives tenant fees is not set up yet. Add it under Fee destination.';
+export const DESTINATION_REASON_MESSAGES = Object.freeze({
+  destination_not_configured: NOT_CONFIGURED_MESSAGE,
+  destination_ids_required: 'Enter both the ChecksOps account ID and the wallet payment method ID.',
+  sandbox_destination_must_be_checksops_merchant: 'In test mode, fees can only land in the ChecksOps sandbox account.',
+  production_destination_cannot_be_sandbox_merchant: 'The ChecksOps sandbox account cannot receive live fees.',
+  destination_unresolved: 'Enter both the ChecksOps account ID and the wallet payment method ID.',
+  sandbox_resource_in_production: 'A test-mode account cannot receive live fees.',
+  destination_not_checksops_platform: 'Live fees can only land in the ChecksOps platform account.',
+  destination_not_checksops_wallet_pm: 'Live fees can only land in the ChecksOps platform wallet.',
+  invalid_destination_account_id: 'The ChecksOps account ID is not a valid ID.',
+  invalid_destination_payment_method_id: 'The wallet payment method ID is not a valid ID.',
+  destination_is_tenant_account: 'Fees must land in the ChecksOps platform account, never a tenant account.',
+});
+
+export const destinationReasonMessage = (reason) => (
+  DESTINATION_REASON_MESSAGES[String(reason || '').split(':')[0]]
+  || 'The ChecksOps fee destination is not usable. Check it under Fee destination.'
+);
+
 const failClosed = (reason, extra = {}) => ({
   ok: false,
   error: 'billing_destination_unresolved',
   reason,
+  message: destinationReasonMessage(reason),
   ...extra,
 });
 
@@ -112,10 +138,7 @@ export async function resolveBillingDestination(client, { environment, deps = {}
     }
   }
 
-  return failClosed('destination_not_configured', {
-    environment: env,
-    message: 'ChecksOps merchant destination is not configured. Set AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID and AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID, or persist platform_billing_destination.',
-  });
+  return failClosed('destination_not_configured', { environment: env });
 }
 
 /**
@@ -127,7 +150,12 @@ export async function resolveBillingDestination(client, { environment, deps = {}
 export async function resolveBillingMoovContext({ environment, deps = {} } = {}) {
   const env = String(environment || billingEnvironment()).toLowerCase();
   if (env !== 'production' && env !== 'sandbox') {
-    return { ok: false, error: 'invalid_billing_moov_environment', environment: env };
+    return {
+      ok: false,
+      error: 'invalid_billing_moov_environment',
+      environment: env,
+      message: 'Fee billing is not available in this environment.',
+    };
   }
 
   const { loadSandboxCredentials } = await import('./sandbox-credentials.mjs');
@@ -202,6 +230,7 @@ export async function billingDestinationStatus(client, { environment, deps = {} 
     verified_at: resolved.ok ? resolved.verifiedAt : null,
     error: resolved.ok ? null : resolved.error,
     reason: resolved.ok ? null : resolved.reason,
+    message: resolved.ok ? null : (resolved.message || destinationReasonMessage(resolved.reason)),
     expected_sandbox_account_id: env === 'sandbox' ? CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID : null,
     // Owner question (a): the production pin's kind and what the owner confirmed.
     production_destination_kind: env === 'production' ? PRODUCTION_FEE_DESTINATION.kind : null,
@@ -226,8 +255,24 @@ export async function setBillingDestination(client, {
   const env = environment || billingEnvironment();
   const account = String(accountId || '').trim();
   const method = String(paymentMethodId || '').trim();
-  if (!DEST_ID_RE.test(account)) return { ok: false, statusCode: 400, error: 'invalid_destination_account_id' };
-  if (!DEST_ID_RE.test(method)) return { ok: false, statusCode: 400, error: 'invalid_destination_payment_method_id' };
+  if (!DEST_ID_RE.test(account)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'invalid_destination_account_id',
+      field: 'moov_account_id',
+      message: destinationReasonMessage('invalid_destination_account_id'),
+    };
+  }
+  if (!DEST_ID_RE.test(method)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'invalid_destination_payment_method_id',
+      field: 'moov_payment_method_id',
+      message: destinationReasonMessage('invalid_destination_payment_method_id'),
+    };
+  }
   const checked = normalizeDest({ moov_account_id: account, moov_payment_method_id: method }, env);
   if (!checked.ok) return { ...checked, ok: false, statusCode: 400 };
   const tenantOwned = (await client.query(
@@ -237,7 +282,12 @@ export async function setBillingDestination(client, {
     [account],
   ).catch(() => ({ rows: [] }))).rows[0];
   if (tenantOwned) {
-    return { ok: false, statusCode: 400, error: 'destination_is_tenant_account', message: 'Fees must land in the ChecksOps platform account, never a tenant account.' };
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'destination_is_tenant_account',
+      message: destinationReasonMessage('destination_is_tenant_account'),
+    };
   }
   const cleanLabel = String(label || 'ChecksOps platform account').trim().slice(0, 80) || 'ChecksOps platform account';
   const row = (await client.query(

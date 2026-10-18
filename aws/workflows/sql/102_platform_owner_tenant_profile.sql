@@ -180,11 +180,13 @@ BEGIN
       -- Only a real change of test mode moves the ledger (moov_environment follows).
       IF (v_value)::text::boolean IS DISTINCT FROM COALESCE((v_row ->> 'is_test_account')::boolean, false) THEN
         -- Moving a tenant that already has a Moov account to the other ledger
-        -- would strand that account: refused.
-        IF to_regclass('public.payment_provider_accounts') IS NOT NULL
-           AND EXISTS (SELECT 1 FROM public.payment_provider_accounts a
-                        WHERE a.tenant_id = _tenant_id AND a.provider = 'moov') THEN
-          RAISE EXCEPTION 'moov_environment_locked' USING ERRCODE = '55000', DETAIL = v_key;
+        -- would strand that account: refused. Nested IFs: one IF condition is planned
+        -- as a whole, so an AND would still name the table where it does not exist.
+        IF to_regclass('public.payment_provider_accounts') IS NOT NULL THEN
+          IF EXISTS (SELECT 1 FROM public.payment_provider_accounts a
+                      WHERE a.tenant_id = _tenant_id AND a.provider = 'moov') THEN
+            RAISE EXCEPTION 'moov_environment_locked' USING ERRCODE = '55000', DETAIL = v_key;
+          END IF;
         END IF;
         IF v_row ? 'moov_environment' THEN
           v_values := v_values || jsonb_build_object('moov_environment',

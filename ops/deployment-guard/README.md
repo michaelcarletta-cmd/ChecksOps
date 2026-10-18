@@ -58,12 +58,13 @@ node scripts/deployment-guard/github-sql53-production-apply.mjs
 # Production SQL 29 / SQL 30 (Mortgage Ops library; ops/production-sql-29-30-apply.md)
 node scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs --inspect
 node scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs --inspect
-# Production SQL 90-101 (release 2026-10-17; ops/production-sql-90-97-apply.md), one tool per migration
+# Production SQL 90-102 (release 2026-10-17; ops/production-sql-90-97-apply.md), one tool per migration
 node scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect
 node scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect
 node scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs --inspect   # inspect only: a no-op on production
 node scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect   # after SQL 90, before tenant-admin.mjs
-# Production SQL 71, 77-89 and 90-101 on the runner, one invocation (ops/production-sql-one-shot.md)
+node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect   # after SQL 98, before tenant-billing-handlers.mjs
+# Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
 node scripts/deployment-guard/scan-bypass.mjs

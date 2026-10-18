@@ -2519,10 +2519,13 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
       environment: dest.environment,
       source: dest.source || 'explicit',
       firstWalletFallback: false,
-    } : { error: dest.error, reason: dest.reason, firstWalletFallback: false },
+    } : {
+      error: dest.error, reason: dest.reason, message: dest.message || null, firstWalletFallback: false,
+    },
     readiness: {
       ready: readiness.ready,
       reasons: readiness.reasons || [],
+      message: readiness.ready ? null : billingNotReadyMessage(readiness.reasons || []),
     },
     last_charge: last,
     pending_charge: pending,

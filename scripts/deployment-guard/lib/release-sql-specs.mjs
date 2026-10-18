@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 101) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 102) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -9,7 +9,7 @@
  * Function bodies, languages, volatility, SECURITY DEFINER, result types and proconfig are
  * not repeated here: the engine derives them from the pinned file's bytes. Everything below
  * is re-derived on PostgreSQL 16 by aws/tests/release-sql90-97-executor.test.mjs and
- * release-sql98-100-executor.test.mjs and release-sql101-executor.test.mjs (the real files applied in order, as a non-superuser
+ * release-sql98-100-executor.test.mjs, release-sql101-executor.test.mjs and release-sql102-executor.test.mjs (the real files applied in order, as a non-superuser
  * owner): a change to a file or a rendering fails those tests and the pins'
  * intended_replacement_sha256.
  *
@@ -17,9 +17,11 @@
  *   prerequisites      objects that must exist (the file's own prerequisite checks plus every
  *                      object it changes only when present, so the post-state is fixed)
  *   predecessors       migrations that must be in place (pin "predecessors")
- *   refuse_after       a later migration whose marker makes this one refuse (SQL 93 after SQL 96)
+ *   refuse_after       a later migration whose marker makes this one refuse (SQL 93 after SQL 96,
+ *                      SQL 96 after SQL 98, SQL 98 after SQL 102)
  *   supersedes         migrations whose objects this one replaces (SQL 96 replaces SQL 93's guard;
- *                      SQL 101 replaces SQL 90's aws_invite_create_user_identity)
+ *                      SQL 101 replaces SQL 90's aws_invite_create_user_identity; SQL 102 replaces
+ *                      SQL 98's aws_tenants_member_column_guard)
  *   functions          created or replaced: identity, final EXECUTE ACL (owner read as 'owner'),
  *                      revokes = ACL lines the file removes (default: PUBLIC EXECUTE)
  *   tables             created by the file: columns [name, type, not null, default, column ACL],
@@ -49,7 +51,7 @@
  *   production_noop    on production the state must already be the intended one (SQL 100);
  *                      the production tool never runs the file
  *
- * SQL 102 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 103 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -2186,6 +2188,12 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "predecessors": [
       "sql96"
     ],
+    "refuse_after": [
+      {
+        "key": "sql102",
+        "object": "public.aws_platform_owner_set_tenant_profile(uuid, jsonb)"
+      }
+    ],
     "supersedes": [
       "sql96"
     ],
@@ -3168,6 +3176,91 @@ export const RELEASE_SQL_SPECS = deepFreeze({
           "owner EXECUTE"
         ]
       }
+    ]
+  },
+  sql102: {
+    "key": "sql102",
+    "label": "SQL 102",
+    "choice": "sql102-platform-owner-tenant-profile",
+    "production_pin_rel": "ops/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.json",
+    "script": "sql102-platform-owner-tenant-profile-production-apply",
+    "prerequisites": [
+      "public.aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)",
+      "public.aws_tenant_pricing_columns()",
+      "public.aws_tenants_member_column_guard()",
+      "public.is_platform_owner()",
+      "public.aws_is_authenticated()",
+      "public.aws_is_tenant_member(uuid)",
+      "auth.uid()",
+      "public.tenants",
+      "public.tenant_users",
+      "public.tenant_pricing_audit",
+      "role checksops",
+      "role authenticated",
+      "column public.tenants.id",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id"
+    ],
+    "predecessors": [
+      "sql98"
+    ],
+    "supersedes": [
+      "sql98"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_tenant_profile_columns()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_platform_owner_set_tenant_profile(uuid, jsonb)",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_platform_owner_remove_tenant_member(uuid, uuid)",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenant_profile_audit_row()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenants_member_column_guard()",
+        "acl": [
+          "PUBLIC EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": []
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.tenants",
+        "name": "aws_tenant_profile_audit",
+        "def": "CREATE TRIGGER aws_tenant_profile_audit AFTER UPDATE ON public.tenants FOR EACH ROW EXECUTE FUNCTION public.aws_tenant_profile_audit_row()"
+      }
+    ],
+    "definer_writes": [
+      "public.tenants",
+      "public.tenant_users",
+      "public.tenant_pricing_audit"
+    ],
+    "altered_relations": [
+      "public.tenants"
     ]
   },
 });

@@ -407,7 +407,7 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     if (production) return production;
   }
 
-  if (checkaltStatusReadOnlyMode() && isCheckAltMutationFunction(name)) {
+  if (checkaltStatusReadOnlyMode() && isCheckAltMutationFunction(name, body)) {
     return denyCheckAltMutationUnderStatusRead(name);
   }
 

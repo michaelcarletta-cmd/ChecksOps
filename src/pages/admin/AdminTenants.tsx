@@ -22,7 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { toast as sonnerToast } from "sonner";
 import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
@@ -459,8 +458,8 @@ function useTenantSave(tenant: Tenant, onUpdated: (t: Tenant) => void) {
       const saved = await saveTenantProfile<Partial<Tenant>>(tenant.id, patch);
       toast({ title: "Saved" });
       onUpdated({ ...tenant, ...patch, ...(saved ?? {}) } as Tenant);
-    } catch (e: any) {
-      toast({ title: "Save failed", description: e?.message ?? "Company details were not saved", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Save failed", description: e instanceof Error ? e.message : "Company details were not saved", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -703,8 +702,8 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
             description: result.invite_error || "The email could not be sent. Try again later.",
             variant: "destructive",
           });
-    } catch (e: any) {
-      toast({ title: "Resend failed", description: e?.message ?? "The invite was not sent", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Resend failed", description: e instanceof Error ? e.message : "The invite was not sent", variant: "destructive" });
     } finally {
       setBusyMember(null);
     }
@@ -718,8 +717,8 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
       await removeTenantMember(tenant.id, userId);
       toast({ title: "User removed" });
       load();
-    } catch (e: any) {
-      toast({ title: "Remove failed", description: e?.message ?? "The user was not removed", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Remove failed", description: e instanceof Error ? e.message : "The user was not removed", variant: "destructive" });
     } finally {
       setBusyMember(null);
     }
@@ -814,8 +813,8 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
       setMortgageAdditional(asInput(values.mortgage_ops_additional_rate_cents));
       toast({ title: "Saved" });
       onUpdated({ ...tenant, ...values });
-    } catch (e: any) {
-      toast({ title: "Save failed", description: e?.message ?? "Pricing was not saved", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Save failed", description: e instanceof Error ? e.message : "Pricing was not saved", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -907,14 +906,17 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
   const [bank, setBank] = useState<any>(null);
   const [billing, setBilling] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const { data: b } = await supabase
+    setLoadFailed(false);
+    const { data: b, error: billingError } = await supabase
       .from("tenant_billing_accounts")
       .select("id, stakeholder_account_id, auto_debit_enabled, ach_authorized_at")
       .eq("tenant_id", tenantId)
       .maybeSingle();
+    setLoadFailed(!!billingError);
     setBilling(b);
 
     if (b?.stakeholder_account_id) {
@@ -941,21 +943,17 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
 
   useEffect(() => { load(); }, [tenantId]);
 
-  const linkForBilling = async () => {
-    if (!bank?.id) return;
-    const payload = {
-      tenant_id: tenantId,
-      stakeholder_account_id: bank.id,
-      auto_debit_enabled: true,
-      ach_authorized_at: new Date().toISOString(),
-    };
-    const { error } = billing?.id
-      ? await supabase.from("tenant_billing_accounts").update(payload as any).eq("id", billing.id)
-      : await supabase.from("tenant_billing_accounts").insert(payload as any);
-    if (error) return sonnerToast.error(error.message);
-    sonnerToast.success("Bank account linked for maintenance-fee billing");
-    load();
-  };
+  // Owner policy: the company authorizes ACH billing itself (Bank Account
+  // settings); the platform owner never links or authorizes it from here.
+  const verifyDisabledReason = loading
+    ? "Checking the billing bank account…"
+    : loadFailed
+      ? "Couldn't load the billing bank account."
+      : !bank
+        ? "No verified bank account on file."
+        : !billing?.stakeholder_account_id || !billing?.ach_authorized_at
+          ? "The company hasn't authorized billing yet."
+          : null;
 
   return (
     <SectionCard
@@ -966,12 +964,20 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     >
       {/* Fees are computed by the server (tenant-billing-admin preview), confirmed, then pulled. */}
       <div className="flex justify-end gap-2">
-        <TenantBillingVerifyButton tenantId={tenantId} tenantName={tenantName} />
+        <TenantBillingVerifyButton tenantId={tenantId} tenantName={tenantName} disabledReason={verifyDisabledReason} />
         <TenantFeeCollectButton tenantId={tenantId} tenantName={tenantName} label="Preview & collect this period's fees" />
       </div>
 
+        <p className="text-xs text-muted-foreground">
+          The company authorizes billing from its own Bank Account settings.
+        </p>
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : loadFailed ? (
+          <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+            <span>Couldn&apos;t load the billing bank account.</span>
+            <Button size="sm" variant="outline" onClick={() => { void load(); }}>Retry</Button>
+          </div>
         ) : !bank ? (
           <div className="text-sm text-muted-foreground italic">
             No verified bank account on file. Tenant must add one via Moov in the Bank Account panel.
@@ -994,9 +1000,7 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
                   {billing?.auto_debit_enabled ? "Auto-debit ON" : "Auto-debit OFF"}
                 </span>
               ) : (
-                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={linkForBilling}>
-                  Link for billing
-                </Button>
+                <span className="text-[10px] text-muted-foreground">Not authorized for billing</span>
               )}
             </div>
           </div>
@@ -1366,17 +1370,22 @@ function TenantManagementTable({
     staleTime: 30_000,
   });
 
-  const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
+  // Company details (status, KYC, test mode, notes) are the platform owner's
+  // and go through tenant-billing-admin profile-update (SQL 102), never the
+  // generic tenants update.
+  const updateTenant = async (id: string, patch: TenantProfilePatch, silent = false) => {
     setBusyId(id);
-    const { error } = await supabase.from("tenants").update(patch as any).eq("id", id);
-    setBusyId(null);
-    if (error) {
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    try {
+      await saveTenantProfile(id, patch);
+      if (!silent) toast({ title: "Saved" });
+      onChanged();
+      return true;
+    } catch (e) {
+      toast({ title: "Update failed", description: e instanceof Error ? e.message : "The change was not saved", variant: "destructive" });
       return false;
+    } finally {
+      setBusyId(null);
     }
-    if (!silent) toast({ title: "Saved" });
-    onChanged();
-    return true;
   };
 
   const toggleActive = (t: Tenant, active: boolean) =>
@@ -1392,8 +1401,8 @@ function TenantManagementTable({
       toast({ title: "Saved" });
       onChanged();
       return true;
-    } catch (e: any) {
-      toast({ title: "Update failed", description: e?.message ?? "Pricing was not saved", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Update failed", description: e instanceof Error ? e.message : "Pricing was not saved", variant: "destructive" });
       return false;
     } finally {
       setBusyId(null);
@@ -1406,12 +1415,9 @@ function TenantManagementTable({
       : { is_founding_partner: false });
 
   // Test accounts also move to the payment provider's sandbox ledger, so
-  // nothing they do moves real money.
+  // nothing they do moves real money. The server sets moov_environment.
   const toggleTestAccount = (t: Tenant, on: boolean) =>
-    updateTenant(t.id, {
-      is_test_account: on,
-      moov_environment: on ? "sandbox" : "production",
-    } as any);
+    updateTenant(t.id, { is_test_account: on });
 
   const fmtMoney = (cents?: number | null) =>
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
@@ -1744,17 +1750,15 @@ function TenantNotesDialog({
 
   const save = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("tenants")
-      .update({ internal_notes: internal, kyc_notes: kyc } as any)
-      .eq("id", tenant.id);
-    setSaving(false);
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return;
+    try {
+      await saveTenantProfile(tenant.id, { internal_notes: internal, kyc_notes: kyc });
+      toast({ title: "Notes saved" });
+      onSaved();
+    } catch (e) {
+      toast({ title: "Save failed", description: e instanceof Error ? e.message : "Notes were not saved", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    toast({ title: "Notes saved" });
-    onSaved();
   };
 
   return (

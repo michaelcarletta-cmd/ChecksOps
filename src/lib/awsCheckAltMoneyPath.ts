@@ -92,13 +92,29 @@ export const requireAwsCheckAltProviderPath = (deps: {
 /** @deprecated Use requireAwsCheckAltProviderPath */
 export const requireAwsCheckAltMoneyPath = requireAwsCheckAltProviderPath;
 
+/** An Error whose text is the server's sentence, keeping the code for callers that branch on it. */
+const providerError = (message: string, code?: unknown): Error & { code?: string } => {
+  const error = new Error(message) as Error & { code?: string };
+  if (typeof code === "string" && code) error.code = code;
+  return error;
+};
+
+/** Server reply text: `message` before the `error` code. */
+const replyMessage = (body: Record<string, unknown> | null | undefined, fallback: string): string => {
+  const message = typeof body?.message === "string" && body.message.trim() ? body.message : "";
+  const code = typeof body?.error === "string" && body.error ? body.error : "";
+  return message || code || fallback;
+};
+
 export const checkAltProviderUserMessage = (error: unknown): string => {
   const msg = error instanceof Error ? error.message : String(error || "");
-  if (/checkalt_approve_failed|approval_failed/i.test(msg)) {
+  const code = String((error as { code?: unknown } | null)?.code ?? "");
+  const both = `${code} ${msg}`;
+  if (/checkalt_approve_failed|approval_failed/i.test(both)) {
     return CHECKALT_APPROVE_USER_ERROR;
   }
   if (
-    /provider_disabled|production_execution_blocked|legacy_checkalt_provider_path/i.test(msg)
+    /provider_disabled|production_execution_blocked|legacy_checkalt_provider_path/i.test(both)
   ) {
     return CHECKALT_PROVIDER_UNAVAILABLE;
   }
@@ -152,14 +168,14 @@ export async function invokeAwsCheckAltProviderFunction(
     if (!response.ok) {
       return {
         data: body && typeof body === "object" ? body : null,
-        error: new Error(String(body?.error || body?.message || `FunctionsHttpError:${name}`)),
+        error: providerError(replyMessage(body, `FunctionsHttpError:${name}`), body?.error),
         providerHttp: false,
       };
     }
     if (body && typeof body === "object" && body.success === false && body.error) {
       return {
         data: body,
-        error: new Error(String(body.error)),
+        error: providerError(replyMessage(body, String(body.error)), body.error),
         providerHttp: false,
       };
     }
