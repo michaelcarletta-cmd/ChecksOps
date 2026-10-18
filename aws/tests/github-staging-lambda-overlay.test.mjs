@@ -508,10 +508,8 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
     else assert.equal(record.evidence, null, file);
     assert.ok(fs.existsSync(new URL(`../../${file}`, import.meta.url)), file);
   }
-  // Not applied in staging yet (release 2026-10-17 wave 3).
-  for (const n of ['98_tenant_fee_collection']) {
-    assert.equal(STAGING_SQL.sql[`aws/workflows/sql/${n}.sql`].verified_live, false, n);
-  }
+  // Release 2026-10-17 waves 1-3 are applied in staging: every sql_before of the plan is live there.
+  for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, true, file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and
   // a receipt that ended on the pin's intended fingerprint. It is never production's record.
@@ -553,10 +551,14 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
     mock.method(fs, method, () => assert.fail(`a held member must not reach ${method}`));
   }
   // providers.mjs and workflow-rpc.mjs are held behind SQL 98 (ops/fee-collection-deltas.md), the billing members too.
+  // SQL 98 is live in staging (run 39085677318), so the hold is shown on a record where it is not.
+  const stagingSqlLive = structuredClone(STAGING_SQL);
+  stagingSqlLive.sql[SQL98] = { verified_live: false, evidence: null };
   for (const member of ['providers.mjs', 'workflow-rpc.mjs', 'tenant-billing-engine.mjs', 'tenant-billing-handlers.mjs']) {
     assert.equal(PLAN.members[member].sql_before, SQL98, member);
-    assert.deepEqual(stagingSqlBefore(member), { sql_before: SQL98, verified_live_in_staging: false, evidence: null }, member);
-    const deps = memberDeps(member);
+    assert.equal(stagingSqlBefore(member).verified_live_in_staging, true, `${member}: released by the committed record`);
+    assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: SQL98, verified_live_in_staging: false, evidence: null }, member);
+    const deps = { ...memberDeps(member), stagingSqlLive };
     for (const operation of ['replace', 'add']) {
       await assert.rejects(run({
         ...env,
@@ -575,14 +577,17 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
 });
 
 test('staging sql_before: inspect reports the hold without refusing; a recorded staging SQL lifts it; a member with no sql_before has none', async () => {
-  const deps = memberDeps('providers.mjs');
+  const held = structuredClone(STAGING_SQL);
+  held.sql[SQL98] = { verified_live: false, evidence: null };
+  const deps = { ...memberDeps('providers.mjs'), stagingSqlLive: held };
   const inspected = await run({ ...env, CHECKSOPS_STAGING_OVERLAY_MEMBER: 'providers.mjs' }, deps);
   assert.equal(inspected.mode, 'inspect');
   assert.deepEqual(inspected.sql_before, { sql_before: SQL98, verified_live_in_staging: false, evidence: null });
   assert.equal(deps.calls.length, 1);
-  // Recorded live in staging: the hold lifts and the run goes on to the reviewed-hash check (refused here on a wrong hash).
-  const stagingSqlLive = structuredClone(STAGING_SQL);
-  stagingSqlLive.sql[SQL98] = { verified_live: true, evidence: 'test fixture run 00000000000' };
+  // Recorded live in staging (the committed record): the hold lifts and the run goes on to the
+  // reviewed-hash check (refused here on a wrong hash).
+  const stagingSqlLive = STAGING_SQL;
+  assert.equal(stagingSqlLive.sql[SQL98].verified_live, true);
   const lifted = memberDeps('providers.mjs');
   await assert.rejects(run({
     ...env,

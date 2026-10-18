@@ -346,8 +346,11 @@ only if no earlier migration changes that migration's objects. From the specs, t
   `staging-sql-live.json` (SQL 96 is no plan member's `sql_before`).
 - **Wave 3:** SQL 98 (after SQL 96), re-read at `02fb97d5a` (run 39083278136,
   precondition_failures []; the staging sandbox destination rule holds: 1 sandbox row, 0
-  production rows) and pinned for apply. Redeploy the guarded executor at the merged commit
-  before applying.
+  production rows) and pinned for apply. The first apply (run 39084622818) rolled back with
+  `UNRELATED_MUTATION ["constraints"]`: PostgreSQL 18 records the added `tenants.deposits_enabled`
+  NOT NULL as a named constraint, which the unrelated catalog now skips (PR #1030).
+  **Applied 2026-10-18** at main `2176f73ae` (executor `f8fUm1GL…`, run 39085677318): receipt
+  before `296c3d6a…`, after `abcb8f21…` = intended. Recorded in `staging-sql-live.json`.
 
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
 and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`
