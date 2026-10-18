@@ -1,9 +1,9 @@
-# Production SQL 90 to SQL 100 (release 2026-10-17)
+# Production SQL 90 to SQL 101 (release 2026-10-17)
 
-Guarded apply tooling for the eleven release 2026-10-17 migrations in `aws/workflows/sql/`:
-SQL 90 to SQL 97, SQL 98 (tenant fee collection and the deposits switch) and SQL 99 / SQL 100
-(Mortgage Desk). This runbook covers staging and production and the order between them. It
-authorizes nothing itself. Every production pin is `execute: false`, `authorization: "pending"`,
+Guarded apply tooling for the twelve release 2026-10-17 migrations in `aws/workflows/sql/`:
+SQL 90 to SQL 97, SQL 98 (tenant fee collection and the deposits switch), SQL 99 / SQL 100
+(Mortgage Desk) and SQL 101 (the invite's identity-first insert, a fix to SQL 90). This runbook
+covers staging and production and the order between them. It authorizes nothing itself. Every production pin is `execute: false`, `authorization: "pending"`,
 with no recorded pre-state and no staging acceptance, so every production apply refuses before
 connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
@@ -22,6 +22,7 @@ production").
 | `sql98` | `98_tenant_fee_collection.sql` (`5a42e485…`) | Per-check price stamping (`record_check_billing_event()` and `trg_record_check_billing_event`, the `check_billing_config` default and the owner-question switch, a seed config row only when the table is empty); one charge per tenant period (`tenant_maintenance_payments_tenant_period_uidx`); `check_billing_events` unique (check, event) index when none covers it; `platform_billing_destination` (platform owner only, audited), `platform_billing_audit`, `tenant_fee_invoice_outbox`, `aws_platform_owner_record_billing_audit(jsonb)`; `tenants.deposits_enabled` with `aws_tenant_deposits_enabled(uuid)`, `aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean)` and its audit trigger; SQL 96's `aws_tenants_member_column_guard()` replaced (plus `deposits_enabled` for the platform owner). | SQL 96 |
 | `sql99` | `99_mortgage_desk_completion_messages.sql` (`0c079fe4…`) | `aws_mortgage_desk_appended_note(text, text)`, the SECURITY DEFINER trigger function `aws_mortgage_desk_completion_messages()` and `tr_mortgage_desk_completion_messages` on `mortgage_handling_requests`. | SQL 90 |
 | `sql100` | `100_mortgage_desk_live_access.sql` (`16cb8c9a…`) | Records production's live Mortgage Desk access: `aws_is_mortgage_ops_agent()`, `aws_mortgage_agent_queue_visible(text, uuid)`, `aws_is_active_mortgage_agent(uuid)`; the five live `mortgage_handling_requests` policies (drops the repository-only `aws_write_mortgage_handling_requests`); `checksops` table SELECT / INSERT / DELETE and UPDATE on 17 columns, `authenticated` UPDATE on three columns only; the helpers' live EXECUTE grants and the Accept / Complete policy's live comment. A strict no-op on production. | SQL 90 (and 12 / 24 / SQL 50, already live) |
+| `sql101` | `101_invite_identity_insert_order.sql` (`5a5e2617…`) | Replaces SQL 90's `aws_invite_create_user_identity(uuid, text, text, text)` (same signature, attributes, comment and ACL) so a new user's `identity_accounts` row is inserted before its profile: staging and production have `profiles_id_identity_fkey` (`aws/rls/sql/25_fk_retarget.sql`), and under SQL 90 every invite of a brand-new email fails with 23503 (staging, 2026-10-18). Supersedes SQL 90 (spec `supersedes`). | SQL 90 |
 
 ## Tooling
 
@@ -29,13 +30,13 @@ production").
 |---|---|
 | Engine (state reader, fingerprints, predecessor rules, pre/post conditions, unrelated snapshot) | `scripts/deployment-guard/lib/release-sql-state.mjs` |
 | Specs (objects, reviewed ACLs, PostgreSQL renderings) | `scripts/deployment-guard/lib/release-sql-specs.mjs` |
-| Staging pins (`AUTHORIZED_SQL9x_*`, `AUTHORIZED_SQL100_*`, `RELEASE_2026_10_17_PENDING_SQL_PINS`; SQL 98 also as `FEE_COLLECTION_PENDING_SQL_PINS.sql98`) | `scripts/deployment-guard/lib/sql-executor-auth.mjs` |
+| Staging pins (`AUTHORIZED_SQL9x_*`, `AUTHORIZED_SQL100_*`, `AUTHORIZED_SQL101_*`, `RELEASE_2026_10_17_PENDING_SQL_PINS`; SQL 98 also as `FEE_COLLECTION_PENDING_SQL_PINS.sql98`) | `scripts/deployment-guard/lib/sql-executor-auth.mjs` |
 | Staging executor handler | `handleReleaseSqlMigration` in `aws/write-path/guarded-sql-executor/index.mjs` |
-| Staging workflow choices | `.github/workflows/guarded-staging-sql-executor.yml`: `sql90-users-only-tenant-roles`, `sql91-moov-onboarding`, `sql92-signature-request-check-files-link-grant`, `sql93-tenant-company-info`, `sql94-document-library-restore`, `sql95-remove-freedom-claims-bridge`, `sql96-platform-owner-tenant-pricing`, `sql97-financial-stepup-log-server-writer`, `sql98-tenant-fee-collection`, `sql99-mortgage-desk-completion-messages`, `sql100-mortgage-desk-live-access` |
-| Production tools | `scripts/deployment-guard/sql9x-*-production-apply.mjs`, `sql100-mortgage-desk-live-access-production-apply.mjs` (one per key) on `lib/release-sql-production-apply.mjs` and `lib/release-sql-production-cli.mjs` |
-| Production pins | `ops/deployment-guard/sql9x-*-production-apply.json`, `sql100-mortgage-desk-live-access-production-apply.json` |
-| One-shot | `production-sql-one-shot.mjs --migration sql90` … `sql100` (`ops/production-sql-one-shot.md`) |
-| Tests | `aws/tests/release-sql90-97-executor.test.mjs`, `aws/tests/release-sql90-97-production-apply.test.mjs`, `aws/tests/release-sql98-100-executor.test.mjs`, `aws/tests/release-sql98-100-production-apply.test.mjs` (PostgreSQL 16: `sudo -n -u ubuntu env PATH=$PATH node --test …`), fixture `aws/tests/helpers/release-sql-pg.mjs` (`sql98To100Schema()`); per-file behaviour: `tenant-fee-collection-sql98-pg.test.mjs`, `tenant-deposits-switch-pg.test.mjs`, `sql99-mortgage-desk-completion-messages-pg.test.mjs`, `sql100-mortgage-desk-live-access-pg.test.mjs` |
+| Staging workflow choices | `.github/workflows/guarded-staging-sql-executor.yml`: `sql90-users-only-tenant-roles`, `sql91-moov-onboarding`, `sql92-signature-request-check-files-link-grant`, `sql93-tenant-company-info`, `sql94-document-library-restore`, `sql95-remove-freedom-claims-bridge`, `sql96-platform-owner-tenant-pricing`, `sql97-financial-stepup-log-server-writer`, `sql98-tenant-fee-collection`, `sql99-mortgage-desk-completion-messages`, `sql100-mortgage-desk-live-access`, `sql101-invite-identity-insert-order` |
+| Production tools | `scripts/deployment-guard/sql9x-*-production-apply.mjs`, `sql100-mortgage-desk-live-access-production-apply.mjs`, `sql101-invite-identity-insert-order-production-apply.mjs` (one per key) on `lib/release-sql-production-apply.mjs` and `lib/release-sql-production-cli.mjs` |
+| Production pins | `ops/deployment-guard/sql9x-*-production-apply.json`, `sql100-mortgage-desk-live-access-production-apply.json`, `sql101-invite-identity-insert-order-production-apply.json` |
+| One-shot | `production-sql-one-shot.mjs --migration sql90` … `sql101` (`ops/production-sql-one-shot.md`) |
+| Tests | `aws/tests/release-sql90-97-executor.test.mjs`, `aws/tests/release-sql90-97-production-apply.test.mjs`, `aws/tests/release-sql98-100-executor.test.mjs`, `aws/tests/release-sql98-100-production-apply.test.mjs`, `aws/tests/release-sql101-executor.test.mjs`, `aws/tests/release-sql101-production-apply.test.mjs` (PostgreSQL 16: `sudo -n -u ubuntu env PATH=$PATH node --test …`), fixture `aws/tests/helpers/release-sql-pg.mjs` (`sql98To100Schema()`); per-file behaviour: `tenant-fee-collection-sql98-pg.test.mjs`, `tenant-deposits-switch-pg.test.mjs`, `sql99-mortgage-desk-completion-messages-pg.test.mjs`, `sql100-mortgage-desk-live-access-pg.test.mjs`, `sql101-invite-identity-insert-order-pg.test.mjs` |
 | Staging Lambda hold | `scripts/deployment-guard/github-staging-lambda-overlay.mjs` refuses an apply of a member whose plan entry has `sql_before` until `ops/deployment-guard/staging-sql-live.json` records that file `verified_live: true` (below) |
 
 ## Apply order
@@ -47,8 +48,11 @@ production pin before the matching production step (deltas report
 1. Deploy main's guarded SQL executor package (it carries the SQL 29/30 and SQL 90-97
    handlers and the files) through its reviewed path (`mode: deploy`).
 2. **SQL 29 → SQL 30** (`ops/production-sql-29-30-apply.md`).
-3. **SQL 90**, then right away the step-6 Lambdas (invites break between SQL 90 and the new
-   `tenant-admin.mjs`); SQL 90 also goes before `tenant-admin.mjs` / `workflow-rpc.mjs`.
+3. **SQL 90**, then right away **SQL 101** (step 12) and the step-6 Lambdas (invites break
+   between SQL 90 and the new `tenant-admin.mjs`, and an invite of a brand-new email fails with
+   23503 on `profiles_id_identity_fkey` until SQL 101 replaces SQL 90's
+   `aws_invite_create_user_identity`); SQL 90 also goes before `tenant-admin.mjs` /
+   `workflow-rpc.mjs`, and SQL 101 before `tenant-admin.mjs` (operator gate, below).
 4. **SQL 93** and **SQL 94** (either order, both after SQL 90). SQL 93 before
    `write-allowlist.mjs` / `write-app-metadata.mjs`; SQL 94 before the library Lambdas (step 7).
 5. **SQL 91** and **SQL 92** any time before their Lambdas (`providers/onboarding/*`; `esign.mjs`,
@@ -75,13 +79,22 @@ production pin before the matching production step (deltas report
 11. **SQL 100** after SQL 90 (and 12 / 24 / SQL 50, already live). Staging only: on production it
    is a strict no-op and is recorded by the read-only inspect (below). In staging it brings
    the Mortgage Desk access to production's.
+12. **SQL 101** after SQL 90 (it refuses with `sql101_prerequisite_missing` without SQL 90's
+   function and helpers), in production too, as soon as SQL 90 is in: it replaces only
+   `aws_invite_create_user_identity`, inserting the `identity_accounts` row before the profile.
+   **Before** `tenant-admin.mjs`: the plan's `sql_before` still holds it on SQL 90 only, so
+   this is the operator's gate (like SQL 95 / 97's), to check before that overlay and record in
+   the pin change that sets `execute: true`. **Never re-run SQL 90 after SQL 101**: it
+   would put the profile-first insert back. SQL 101 supersedes SQL 90 (spec `supersedes`), so
+   once it is in place SQL 90 still counts as applied for SQL 93, 94, 99 and 100. Independent of
+   SQL 91-100 in the database.
 
 Exact order used by the tests: 29 → 30 → 90 → 91 → 92 → 93 → 94 → 96 → 97 → 95 → 98 → 99 →
-100. SQL 98, SQL 99 and SQL 100 are independent of each other in the database; 99 and 100 only
-need SQL 90. The engine enforces the database-visible part (predecessors, prerequisites, SQL
-93 after SQL 96, SQL 96 after SQL 98). It cannot see Lambda state: the SQL 95 and SQL 97 gates
-are the operator's to check (the deployed member SHA-256s from
-`guarded-staging-lambda-overlay.yml` / the production overlay inspect) and to record in the pin
+100 → 101. SQL 98, SQL 99, SQL 100 and SQL 101 are independent of each other in the database;
+99, 100 and 101 only need SQL 90. The engine enforces the database-visible part (predecessors,
+prerequisites, SQL 93 after SQL 96, SQL 96 after SQL 98). It cannot see Lambda state: the SQL 95
+and SQL 97 gates (and SQL 101 before `tenant-admin.mjs`) are the operator's to check (the
+deployed member SHA-256s from `guarded-staging-lambda-overlay.yml` / the production overlay inspect) and to record in the pin
 change that sets `execute: true`; the SQL 98 hold on the Lambdas is enforced by the overlays'
 `sql_before` in both environments.
 
@@ -127,6 +140,7 @@ from the pinned file's bytes; renderings from the reviewed constants in
 | `sql98` | `abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603` |
 | `sql99` | `481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4` |
 | `sql100` | `52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777` |
+| `sql101` | `4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b` |
 
 SQL 98's fingerprint also has a line for `tenant_maintenance_payments_tenant_period_uidx` (an
 index on an existing table) and one for whether a unique index covers `check_billing_events
@@ -156,7 +170,8 @@ post-condition is the intended hash); reconcile the rendering in a reviewed chan
   `platform_fee_schedules`), so the post-state is fixed.
 - `predecessors_applied`: SQL 29 by structure (its five functions and two policies, no other
   policy), SQL 30 by its CHECK (SQL 30's or SQL 94's), a release migration by its own
-  fingerprint (or, once superseded, its successor's: SQL 93 by SQL 96).
+  fingerprint (or, once superseded, its successor's: SQL 93 by SQL 96, SQL 96 by SQL 98, SQL 90
+  by SQL 101).
 - `successors_not_applied`: SQL 93 refuses once `aws_platform_owner_set_tenant_pricing` exists.
 - `altered_relations_owned_by_login`, `functions_owned_by_login`, `dropped_functions_owned_by_login`.
 - `function_results_match`; `function_acl_replaceable` (no EXECUTE grant the file neither
@@ -230,6 +245,7 @@ definitions, emails or row data.
 node scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect
 node scripts/deployment-guard/sql99-mortgage-desk-completion-messages-production-apply.mjs --inspect
 node scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs --inspect
+node scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect
 ```
 
 ## Steps (per key, in the order above)
@@ -307,7 +323,7 @@ nothing. The production tool therefore never runs the file there:
    shows which: `execute_acl`, `comment`, `column_acl_entries[].grantor`.
 3. The SQL 100 pin stays `execute: false`; no production apply step exists for it.
 
-## Later migrations (SQL 101 and up)
+## Later migrations (SQL 102 and up)
 
 Adding one means: its spec in `release-sql-specs.mjs`, its staging pin (with its code-derived
 `intended_replacement_sha256`) in the release pin map of `sql-executor-auth.mjs`, its file in

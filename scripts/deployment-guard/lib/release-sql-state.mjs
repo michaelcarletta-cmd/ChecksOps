@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 100), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 101), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -167,7 +167,7 @@ export function releaseForbiddenStatements(text) {
   return hits;
 }
 
-/** The reviewed bytes as the guarded tools execute them (none of SQL 90-100 has BEGIN/COMMIT), or null. */
+/** The reviewed bytes as the guarded tools execute them (none of SQL 90-101 has BEGIN/COMMIT), or null. */
 export function releaseSqlExecutableText(key, text) {
   const spec = releaseSpec(key);
   const source = String(text || '');
@@ -628,13 +628,31 @@ export function releaseIntendedHash(key, text) {
   return state ? releaseStateHash(key, state) : null;
 }
 
+/**
+ * The fingerprint `key` has once `laterKey` replaced some of its functions (SQL 101 replaces
+ * one of SQL 90's): every object of `key` as its own file renders it, with the functions both
+ * files define as the later file renders them. Pinned on the later migration
+ * (superseded_intended_sha256) and re-derived by the tests.
+ */
+export function releaseSupersededIntendedHash(key, text, laterKey, laterText) {
+  const base = releaseIntendedState(key, text);
+  const later = releaseIntendedState(laterKey, laterText);
+  if (!base || !later) return null;
+  for (const [identity, fn] of Object.entries(later.functions)) {
+    if (Object.hasOwn(base.functions, identity)) base.functions[identity] = fn;
+  }
+  return releaseStateHash(key, base);
+}
+
 // --- predecessors -------------------------------------------------------------------
 
 /**
  * Whether a predecessor is in place. SQL 29 and SQL 30 by structure (SQL 90 replaces SQL 29's
  * aws_can_manage_mortgage_library and SQL 94 SQL 30's CHECK, so their own fingerprints move
  * on by design); a release migration by its own fingerprint equal to its pin's intended one,
- * or, once a later migration superseded it (SQL 93 after SQL 96), by that later one's.
+ * or, once a later migration superseded it (SQL 93 after SQL 96), by that later one's. A later
+ * migration that replaces only part of it (SQL 101: one of SQL 90's functions) pins
+ * superseded_intended_sha256: then every object of the earlier one must still match too.
  */
 async function predecessorApplied(client, q, key, library, login) {
   if (key === 'sql29') {
@@ -648,7 +666,10 @@ async function predecessorApplied(client, q, key, library, login) {
   const objects = await readObjects(q, releaseSpec(key), login);
   if (releaseStateHash(key, objects) === releasePin(key).intended_replacement_sha256) return true;
   for (const later of RELEASE_SQL_KEYS) {
-    if ((releaseSpec(later).supersedes || []).includes(key) && await predecessorApplied(client, q, later, library, login)) return true;
+    if (!(releaseSpec(later).supersedes || []).includes(key)) continue;
+    const partial = RELEASE_SQL_PINS[later]?.superseded_intended_sha256?.[key];
+    if (partial != null && releaseStateHash(key, objects) !== partial) continue;
+    if (await predecessorApplied(client, q, later, library, login)) return true;
   }
   return false;
 }

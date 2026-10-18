@@ -1,5 +1,5 @@
 /**
- * Shared command line of the SQL 90 to SQL 100 production tools
+ * Shared command line of the SQL 90 to SQL 101 production tools
  * (scripts/deployment-guard/sql9x-*-production-apply.mjs). Same flow as the SQL 29 / 30 / 89
  * tools:
  *

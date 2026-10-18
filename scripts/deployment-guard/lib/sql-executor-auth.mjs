@@ -2029,7 +2029,7 @@ export const LIBRARY_SQL_PINS = Object.freeze({
   sql30: AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
 });
 
-// Release 2026-10-17 staging pins: SQL 90-100 (aws/workflows/sql/9x_*.sql, 100_*.sql). One engine
+// Release 2026-10-17 staging pins: SQL 90-101 (aws/workflows/sql/9x_*.sql, 10x_*.sql). One engine
 // (release-sql-state.mjs, specs in release-sql-specs.mjs) serves the staging guarded executor
 // (handleReleaseSqlMigration) and the production tools (release-sql-production-apply.mjs).
 // intended_replacement_sha256 is each file's code-derived intended-state fingerprint.
@@ -2204,6 +2204,26 @@ export const AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS = Object.freeze({
   intended_replacement_sha256: '52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777',
   function_identities: Object.freeze(['public.aws_is_mortgage_ops_agent()', 'public.aws_mortgage_agent_queue_visible(text, uuid)', 'public.aws_is_active_mortgage_agent(uuid)']),
 });
+// Invite 2026-10-18 staging pin: SQL 101 (aws_invite_create_user_identity inserts identity_accounts
+// before profiles, for profiles_id_identity_fkey; needs SQL 90, whose function it replaces:
+// release-sql-specs.mjs supersedes). Pending like the release pins until a reviewed wave.
+export const AUTHORIZED_SQL101_INVITE_IDENTITY_INSERT_ORDER = Object.freeze({
+  key: 'sql101',
+  filename: 'aws/workflows/sql/101_invite_identity_insert_order.sql',
+  migration_id: '101_invite_identity_insert_order',
+  // The commit that last authored the file bytes.
+  commit: '22b58f165d434bef3c5cef7e7212dd3048de819a',
+  source_sha256: '5a5e2617b8f4f6757758a34559e621a41cc65090b1127a9414eae51b94a5da87',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql101', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b',
+  // Code-derived: releaseSupersededIntendedHash('sql90', SQL 90 bytes, 'sql101', these bytes). After
+  // SQL 101, SQL 90 counts as applied (for SQL 93/94/99/100) only when every SQL 90 object matches.
+  superseded_intended_sha256: Object.freeze({ sql90: '8e19c4a2deb94e854e22d055884ea0beeedaf24eb633adbd51484f1b458b32e2' }),
+  function_identities: Object.freeze(['public.aws_invite_create_user_identity(uuid, text, text, text)']),
+});
 
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
@@ -2217,6 +2237,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql98: AUTHORIZED_SQL98_TENANT_FEE_COLLECTION,
   sql99: AUTHORIZED_SQL99_MORTGAGE_DESK_COMPLETION_MESSAGES,
   sql100: AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS,
+  sql101: AUTHORIZED_SQL101_INVITE_IDENTITY_INSERT_ORDER,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2232,7 +2253,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql100) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql101) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

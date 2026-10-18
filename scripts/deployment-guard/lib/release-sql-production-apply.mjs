@@ -1,6 +1,6 @@
 /**
- * Production apply of the release 2026-10-17 SQL (SQL 90 to SQL 100, aws/workflows/sql/9x_*.sql
- * and 100_*.sql),
+ * Production apply of the release 2026-10-17 SQL (SQL 90 to SQL 101, aws/workflows/sql/9x_*.sql
+ * and 10x_*.sql),
  * one migration per run, on the engine shared with the staging guarded executor
  * (release-sql-state.mjs): the same state reader, code-derived fingerprints, predecessor rules,
  * pre- and post-conditions and unrelated-catalog snapshot. The production rules add the pinned

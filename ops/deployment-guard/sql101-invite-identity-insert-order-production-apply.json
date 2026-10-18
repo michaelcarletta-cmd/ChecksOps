@@ -1,0 +1,66 @@
+{
+  "id": "sql101-invite-identity-insert-order-production-apply",
+  "migration": "sql101",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/101_invite_identity_insert_order.sql",
+  "migration_id": "101_invite_identity_insert_order",
+  "staging_pin_commit": "22b58f165d434bef3c5cef7e7212dd3048de819a",
+  "source_sha256": "5a5e2617b8f4f6757758a34559e621a41cc65090b1127a9414eae51b94a5da87",
+  "function_identities": [
+    "public.aws_invite_create_user_identity(uuid, text, text, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b",
+  "authorization_phrase": "APPLY_INVITE_IDENTITY_INSERT_ORDER",
+  "predecessors": [
+    "sql90"
+  ],
+  "order_note": "After SQL 90 (required: the file refuses with 55000 sql101_prerequisite_missing without SQL 90's aws_invite_create_user_identity and helpers; it replaces SQL 90's function, so do not re-run SQL 90 afterwards). Production has profiles_id_identity_fkey (aws/rls/sql/25_fk_retarget.sql), so under SQL 90 alone every invite of a brand-new email fails with 23503: apply SQL 101 right after SQL 90 and before tenant-admin.mjs, which calls the function on invite. The plan's sql_before holds tenant-admin.mjs on SQL 90 only, so the SQL 101 order is the operator's gate: confirm SQL 101 is applied before the tenant-admin.mjs production overlay and record it in the change that sets execute true. Independent of SQL 91-100. No Lambda change of its own.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql101-invite-identity-insert-order",
+    "one_shot_migration": "sql101",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-90-97-apply.md",
+    "tests": [
+      "aws/tests/release-sql101-executor.test.mjs",
+      "aws/tests/release-sql101-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql101-invite-identity-insert-order-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 101: sql101-invite-identity-insert-order-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql101-invite-identity-insert-order); production-sql-one-shot.mjs --migration sql101. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). SQL 101 supersedes SQL 90 (release-sql-specs.mjs): once SQL 101 is in place SQL 90 counts as applied for the migrations that need it. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect), but no production inspect has been run for SQL 101 yet; its preconditions can only pass once SQL 90 is applied (predecessors_applied). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b",
+    "note": "public.aws_invite_create_user_identity(uuid, text, text, text) (plpgsql, VOLATILE, SECURITY DEFINER, search_path public, row_security off, returns uuid) owned by checksops_admin, EXECUTE for checksops and authenticated (revoked from PUBLIC), SQL 90's comment; its new-user branch inserts identity_accounts before profiles. No other function, policy, grant, table, column or row change. The fingerprint is releaseIntendedHash('sql101', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 101 (choice sql101-invite-identity-insert-order) here in the reviewed change that sets execute true, with a staging invite of a brand-new email through Admin -> Tenants succeeding afterwards. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

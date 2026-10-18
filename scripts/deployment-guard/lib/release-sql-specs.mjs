@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 100) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 101) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -9,7 +9,7 @@
  * Function bodies, languages, volatility, SECURITY DEFINER, result types and proconfig are
  * not repeated here: the engine derives them from the pinned file's bytes. Everything below
  * is re-derived on PostgreSQL 16 by aws/tests/release-sql90-97-executor.test.mjs and
- * release-sql98-100-executor.test.mjs (the real files applied in order, as a non-superuser
+ * release-sql98-100-executor.test.mjs and release-sql101-executor.test.mjs (the real files applied in order, as a non-superuser
  * owner): a change to a file or a rendering fails those tests and the pins'
  * intended_replacement_sha256.
  *
@@ -18,7 +18,8 @@
  *                      object it changes only when present, so the post-state is fixed)
  *   predecessors       migrations that must be in place (pin "predecessors")
  *   refuse_after       a later migration whose marker makes this one refuse (SQL 93 after SQL 96)
- *   supersedes         migrations whose objects this one replaces (SQL 96 replaces SQL 93's guard)
+ *   supersedes         migrations whose objects this one replaces (SQL 96 replaces SQL 93's guard;
+ *                      SQL 101 replaces SQL 90's aws_invite_create_user_identity)
  *   functions          created or replaced: identity, final EXECUTE ACL (owner read as 'owner'),
  *                      revokes = ACL lines the file removes (default: PUBLIC EXECUTE)
  *   tables             created by the file: columns [name, type, not null, default, column ACL],
@@ -48,7 +49,7 @@
  *   production_noop    on production the state must already be the intended one (SQL 100);
  *                      the production tool never runs the file
  *
- * SQL 101 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 102 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3123,6 +3124,49 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         "table": "public.mortgage_handling_requests",
         "rls": true,
         "forced": false
+      }
+    ]
+  },
+  sql101: {
+    "key": "sql101",
+    "label": "SQL 101",
+    "choice": "sql101-invite-identity-insert-order",
+    "production_pin_rel": "ops/deployment-guard/sql101-invite-identity-insert-order-production-apply.json",
+    "script": "sql101-invite-identity-insert-order-production-apply",
+    "prerequisites": [
+      "public.aws_invite_create_user_identity(uuid, text, text, text)",
+      "public.aws_is_tenant_member(uuid)",
+      "public.aws_first_invite_allowed(uuid)",
+      "public.aws_is_platform_owner_user(uuid)",
+      "auth.uid()",
+      "public.identity_accounts",
+      "public.profiles",
+      "role checksops",
+      "role authenticated",
+      "column public.identity_accounts.application_user_id",
+      "column public.identity_accounts.cognito_sub",
+      "column public.identity_accounts.email",
+      "column public.identity_accounts.status",
+      "column public.identity_accounts.linked_at",
+      "column public.identity_accounts.created_at",
+      "column public.profiles.id",
+      "column public.profiles.email",
+      "column public.profiles.full_name"
+    ],
+    "predecessors": [
+      "sql90"
+    ],
+    "supersedes": [
+      "sql90"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_invite_create_user_identity(uuid, text, text, text)",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
       }
     ]
   },
