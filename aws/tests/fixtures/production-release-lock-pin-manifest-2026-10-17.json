@@ -38,7 +38,7 @@
     },
     "providers/parity/db.mjs": {
       "live_sha256": "db24ae19e5cfff9cc418da99c4f0a81a7426385c450ecfee1ecc41b9f9148e3b",
-      "accepted_sha256": "d23eefb5ee34477ac918ae5be1a892202ee16e71be2fd7570c23f53b1d552512",
+      "accepted_sha256": "03e67070c2fc1d3910509170ac75d519856bf3f3ec75a126622a765fecee77c4",
       "operation": "replace"
     },
     "providers/parity/moov-functions.mjs": {
