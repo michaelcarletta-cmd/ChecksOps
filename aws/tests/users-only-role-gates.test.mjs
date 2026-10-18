@@ -24,7 +24,9 @@ import {
   runTenantInviteUser,
   TENANT_MEMBER_COUNT_SQL,
   USER_IS_PLATFORM_OWNER_SQL,
+  handleTenantInviteUser,
 } from '../functions/api/tenant-admin.mjs';
+import { resolveTrustedIdentityScope } from '../functions/api/identity-env.mjs';
 import { platformBank } from '../functions/api/providers/parity/moov-onboard.mjs';
 
 const USER = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -255,9 +257,7 @@ const teamClient = ({
 };
 
 const COGNITO_SUB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const invite = (client, body = {}, {
-  mailer, cognitoCalls = [], existingLogin = false, existingStatus = 'CONFIRMED', passwords = [], failConfirm = false,
-} = {}) => runTenantInviteUser({
+const invite = (client, body = {}, { mailer, cognitoCalls = [], existingLogin = false } = {}) => runTenantInviteUser({
   client,
   mapping,
   spoof: {},
@@ -269,13 +269,8 @@ const invite = (client, body = {}, {
       if (existingLogin) throw Object.assign(new Error('exists'), { name: 'UsernameExistsException' });
       return { User: { Username: 'cog', Attributes: [{ Name: 'sub', Value: COGNITO_SUB }] } };
     }
-    if (target === 'AdminGetUser') return { Username: 'cog', UserStatus: existingStatus, UserAttributes: [{ Name: 'sub', Value: COGNITO_SUB }] };
+    if (target === 'AdminGetUser') return { Username: 'cog', UserAttributes: [{ Name: 'sub', Value: COGNITO_SUB }] };
     if (target === 'AdminDeleteUser') return {};
-    if (target === 'AdminSetUserPassword') {
-      if (failConfirm) throw Object.assign(new Error('denied'), { name: 'AccessDeniedException' });
-      passwords.push(payload);
-      return {};
-    }
     throw new Error(`unexpected ${target}`);
   },
 });
@@ -667,41 +662,93 @@ test('remove member: the last member of a tenant is protected (counted under the
   assert.equal(closed.error, 'last_member_protected');
 });
 
-test('invite: the login is confirmed with an unseen permanent password so email-code sign-in works', async () => {
-  const member = () => teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }] });
-  const sent = [];
-  const passwords = [];
+test('invite: only after commit, a login the invite created gets an unseen permanent password (email-code sign-in)', async () => {
+  const CALLER_SUB = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const run = async ({ existingStatus = null, commitTag = 'COMMIT', failConfirm = false } = {}) => {
+    const team = teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }] });
+    const cognitoCalls = [];
+    const passwords = [];
+    const sent = [];
+    const logs = [];
+    const origWarn = console.warn;
+    console.warn = (...args) => logs.push(args.map(String).join(' '));
+    try {
+      const result = await handleTenantInviteUser({
+        requestContext: { authorizer: { jwt: { claims: { sub: CALLER_SUB } } } },
+        body: JSON.stringify({ tenant_id: TENANT, email: 'new@example.com', full_name: 'New Person' }),
+      }, {
+        identityScope: resolveTrustedIdentityScope({ checksopsEnv: 'staging', userPoolId: '' }),
+        loadDatabaseCredentials: async () => ({ host: 'db.invalid', port: 5432, username: 'u', password: 'p', dbname: 'd' }),
+        createClient: () => ({
+          connect: async () => {},
+          end: async () => {},
+          on: () => {},
+          query: async (sql, params = []) => {
+            if (sql === 'COMMIT') { team.queries.push({ sql, params }); return { command: commitTag }; }
+            if (params[0] === CALLER_SUB) return { rows: [{ application_user_id: USER }] };
+            return team.query(sql, params);
+          },
+        }),
+        sendViaSesOrSink: async (m) => { sent.push(m); },
+        cognitoJson: async (target, payload) => {
+          cognitoCalls.push(target);
+          if (target === 'AdminCreateUser') {
+            if (existingStatus) throw Object.assign(new Error('exists'), { name: 'UsernameExistsException' });
+            return { User: { Username: 'cog', Attributes: [{ Name: 'sub', Value: COGNITO_SUB }] } };
+          }
+          if (target === 'AdminGetUser') return { Username: 'cog', UserStatus: existingStatus, UserAttributes: [{ Name: 'sub', Value: COGNITO_SUB }] };
+          if (target === 'AdminSetUserPassword') {
+            if (failConfirm) throw Object.assign(new Error('denied for new@example.com'), { name: 'AccessDeniedException' });
+            passwords.push(payload);
+            return {};
+          }
+          throw new Error(`unexpected ${target}`);
+        },
+      });
+      return { result, cognitoCalls, passwords, sent, logs, sqls: team.queries.map((q) => q.sql) };
+    } finally {
+      console.warn = origWarn;
+    }
+  };
+
+  const created = await run();
+  assert.equal(created.result.ok, true);
+  assert.equal(created.result.login_ready, true);
+  assert.deepEqual(created.cognitoCalls, ['AdminCreateUser', 'AdminSetUserPassword']);
+  assert.equal(created.passwords.length, 1);
+  assert.equal(created.passwords[0].Permanent, true);
+  assert.equal(created.passwords[0].Username, 'new@example.com');
+  assert.ok(created.passwords[0].Password.length >= 32);
+  assert.ok(created.sqls.includes('COMMIT'));
+  for (const where of [created.result, created.sent, created.logs]) {
+    assert.equal(JSON.stringify(where).includes(created.passwords[0].Password), false);
+  }
+
+  // The commit did not happen: the login is not confirmed.
+  const rolledBack = await run({ commitTag: 'ROLLBACK' });
+  assert.equal(rolledBack.result.ok, false);
+  assert.equal(rolledBack.result.error, 'transaction_not_committed');
+  assert.equal(rolledBack.cognitoCalls.includes('AdminSetUserPassword'), false);
+
+  // A login the invite did not create is never touched, whatever its state.
+  for (const existingStatus of ['FORCE_CHANGE_PASSWORD', 'CONFIRMED']) {
+    const existing = await run({ existingStatus });
+    assert.equal(existing.result.ok, true, existingStatus);
+    assert.equal('login_ready' in existing.result, false, existingStatus);
+    assert.equal(existing.cognitoCalls.includes('AdminSetUserPassword'), false, existingStatus);
+  }
+
+  // A refused confirm keeps the committed invite; the log carries the error name only.
+  const refused = await run({ failConfirm: true });
+  assert.equal(refused.result.ok, true);
+  assert.equal(refused.result.login_ready, false);
+  assert.equal(refused.logs.length, 1);
+  assert.deepEqual(JSON.parse(refused.logs[0]), { event: 'invite_login_confirm_failed', error_name: 'AccessDeniedException' });
+});
+
+test('invite: runTenantInviteUser itself never confirms a login (the handler does, after commit)', async () => {
   const cognitoCalls = [];
-  const created = await invite(member(), {}, { cognitoCalls, passwords, mailer: async (m) => { sent.push(m); } });
-  assert.equal(created.ok, true);
-  assert.equal(created.login_ready, true);
-  assert.deepEqual(cognitoCalls.map(([target]) => target), ['AdminCreateUser', 'AdminSetUserPassword']);
-  assert.equal(passwords.length, 1);
-  assert.equal(passwords[0].Permanent, true);
-  assert.equal(passwords[0].Username, 'new@example.com');
-  assert.ok(passwords[0].Password.length >= 32);
-  assert.equal(JSON.stringify(created).includes(passwords[0].Password), false);
-  assert.equal(JSON.stringify(sent).includes(passwords[0].Password), false);
-
-  // An existing login still waiting on its temporary password is confirmed; a
-  // confirmed one is left alone.
-  const pending = [];
-  const stuck = await invite(member(), {}, { existingLogin: true, existingStatus: 'FORCE_CHANGE_PASSWORD', passwords: pending });
-  assert.equal(stuck.ok, true);
-  assert.equal(stuck.login_ready, true);
-  assert.equal(pending.length, 1);
-  const untouched = [];
-  const confirmed = await invite(member(), {}, { existingLogin: true, cognitoCalls: untouched });
-  assert.equal(confirmed.login_ready, true);
-  assert.equal(untouched.some(([target]) => target === 'AdminSetUserPassword'), false);
-
-  // A refused confirm keeps the invite and reports the login as not ready.
-  const refused = await invite(member(), {}, { failConfirm: true });
-  assert.equal(refused.ok, true);
-  assert.equal(refused.login_ready, false);
-
-  // A failed invite never confirms the login.
-  const failedCalls = [];
-  await invite(teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }], failMembershipInsert: true }), {}, { cognitoCalls: failedCalls });
-  assert.equal(failedCalls.some(([target]) => target === 'AdminSetUserPassword'), false);
+  const result = await invite(teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }] }), {}, { cognitoCalls });
+  assert.equal(result.ok, true);
+  assert.deepEqual(cognitoCalls.map(([target]) => target), ['AdminCreateUser']);
 });

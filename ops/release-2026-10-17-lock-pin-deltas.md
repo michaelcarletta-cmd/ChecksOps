@@ -79,7 +79,7 @@ release changes the same files, so its accepted bytes would have removed them. S
 | `financial.mjs` | S11: `parseRequestedPartialCents`, `lockCheckMoney`, `disbursement_sequence`, sequence / remaining-draw replay, 23505 race replay, `remaining` in responses, `summarizeCheckMoney` re-export (3-way merge of main to live onto the release; the release's users-only membership roles and no platform `user_roles` merge are kept; `FINANCIAL_ROLES` stays in `financial-authz.mjs`) | `d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef` | accepted re-pinned |
 | `financial-idempotency.mjs` | S11 `disbursementSequence` key distinguisher | `14c6ca7a4bd5ea18b681d1cb83921b83b1a933255d0ef1a60546ad1fffe2f96e` (= live) | not a member (equals live) |
 | `identity.mjs` | `mortgageAgentStatus` in `/identity/me` (reads `mortgage_agent_accounts`; release `isPrivilegedIdentity` kept) | `36797f5fa77d2171b2ad3f451d071cbafbca2c82bfb68ab9102783ff3c6551af` | accepted re-pinned |
-| `tenant-admin.mjs` | invite confirms a suppressed-temp-password login (`AdminSetUserPassword` permanent, random, never returned) so EMAIL_OTP works; binds the production Cognito lock (`bindProductionCognitoLock`, inside the release's invite savepoint; failure -> `failInvite`); hire marks `mortgage_agent_accounts` active (now in a savepoint) | `5d8fd36ddcf9f36c3ad023529dff276b5640af4a792a9c51b4e57a6095259359` | accepted re-pinned |
+| `tenant-admin.mjs` | after commit, an invite that created the login confirms it (`AdminSetUserPassword` permanent, random, never returned) so EMAIL_OTP works; existing logins are never touched; binds the production Cognito lock (`bindProductionCognitoLock`, inside the release's invite savepoint; failure -> `failInvite`); hire marks `mortgage_agent_accounts` active (now in a savepoint) | `34479a7b235ba5473df458d6a0549ddf59b2420e72f476e23e7963d8b584120f` | accepted re-pinned |
 | `identity-env.mjs` | `bindProductionCognitoLock` and the production lock SQL (needed by tenant-admin) | `e814546feded3a323461b3a7a8369e3d8a09f9a5d306d68973e15389b871f443` (= live) | not a member (equals live) |
 | `ocr-descriptive-persist.mjs` | S14 `resolveWritablePayeeLine` only (exact #475 bytes) | `2152c7c252d1156825ff87a2fa4bd1f512d26d6ab71f1ab3c4bbe016fb1aff5a` | not a member; must not become one (see below) |
 
@@ -343,7 +343,7 @@ the ZIP or keep live bytes until the route is gone).
 | `storage.mjs` | modified (REPLACE) | `d92f34ca0dbba5b7b5b4c406d1a7cdf4b2e9c0a900ceddd1217dbebf3cd017d1` |
 | `tax-profiles.mjs` | modified (REPLACE) | `cb49cc567d017dbf732ed6743ee57c71ba12541b161fa927eb8bf8763e518a42` |
 | `tax-secrets.mjs` | modified (REPLACE) | `4a44531115a2789a5d6a921633d759143fceaa258156402585c25b1d64098d4d` |
-| `tenant-admin.mjs` | modified (REPLACE) | `5d8fd36ddcf9f36c3ad023529dff276b5640af4a792a9c51b4e57a6095259359` (0b; was `348e4fef…`) |
+| `tenant-admin.mjs` | modified (REPLACE) | `34479a7b235ba5473df458d6a0549ddf59b2420e72f476e23e7963d8b584120f` (0b; was `348e4fef…`) |
 | `tenant-billing-engine.mjs` | modified (REPLACE) | `3397c65d89122f706b182970d12e83b98de461b72acba5c32c8e8d1e60944557` |
 | `tenant-billing-handlers.mjs` | modified (REPLACE) | `2866356c3bf82a04d04c834fadbf94faed026a7f119e73bd8cc6f42dc2098298` |
 | `tenant-check-user.mjs` | modified (REPLACE) | `f25e165ea08312ddbde6e67d5f522171368043be43a7875926e859f7c15931df` |
