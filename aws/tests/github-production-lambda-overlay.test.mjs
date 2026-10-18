@@ -456,6 +456,38 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   assert.equal(mortgage.mutation, false);
 });
 
+test('tenant-management-v2.mjs is added just before app-services.mjs, which imports it statically', async () => {
+  const TMV2 = 'tenant-management-v2.mjs';
+  const ROUTER = 'app-services.mjs';
+  const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const row = PLAN.members[TMV2];
+  assert.equal(row.operation, 'add');
+  assert.equal(row.expected_live_sha256, null);
+  assert.equal(row.sql_before, null);
+  assert.equal(row.manifest, RELEASE);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${TMV2}`));
+  assert.equal(PLAN.order.indexOf(TMV2) + 1, PLAN.order.indexOf(ROUTER));
+  assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', ROUTER), 'utf8'), ROUTER).includes(TMV2));
+  // Its only import is data.mjs, an earlier member.
+  const deps = localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', TMV2), 'utf8'), TMV2);
+  assert.deepEqual(deps, ['data.mjs']);
+  assert.ok(PLAN.order.indexOf('data.mjs') < PLAN.order.indexOf(TMV2));
+
+  // While tenant-management-v2.mjs is absent live, app-services.mjs is refused.
+  await assert.rejects(
+    run(applyEnv(ROUTER), applyDeps(ROUTER, { pending: [TMV2] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing?.includes(TMV2),
+  );
+  // The ADD itself applies when absent ...
+  const { deps: addDeps, calls } = applyDeps(TMV2);
+  const added = await run(applyEnv(TMV2), addDeps);
+  assert.equal(added.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [TMV2] });
+  // ... and app-services.mjs then links.
+  const router = await run(applyEnv(ROUTER), applyDeps(ROUTER).deps);
+  assert.equal(router.mutation, false);
+});
+
 test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflow.mjs, held for SQL 89', async () => {
   const ALLOWLIST = 'write-allowlist.mjs';
   const WORKFLOW_WRITES = 'write-check-workflow.mjs';

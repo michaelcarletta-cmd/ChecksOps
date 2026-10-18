@@ -231,6 +231,11 @@
       "accepted_sha256": "ec57a360830347ede87d35e247397da41711d00c94252dd4cbd78b9288421dc4",
       "operation": "replace"
     },
+    "tenant-management-v2.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835",
+      "operation": "add"
+    },
     "app-services.mjs": {
       "live_sha256": "cce9d0ff48ce7644083e5aa04aec77c5100246b93a440c20ddb1ba5701bcc0c5",
       "accepted_sha256": "daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7",
