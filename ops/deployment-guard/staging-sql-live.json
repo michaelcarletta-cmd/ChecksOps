@@ -43,6 +43,10 @@
     "aws/workflows/sql/98_tenant_fee_collection.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql98-tenant-fee-collection on 2026-10-18 (run 39085677318, main 2176f73ae, executor f8fUm1GL…): receipt before 296c3d6a…, after abcb8f21… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/102_platform_owner_tenant_profile.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql102-platform-owner-tenant-profile on 2026-10-18 (run 39162625974, main 0ea950b0b, executor WT6J2LvT…): receipt before d3b2cd30…, after 6e1346af… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }

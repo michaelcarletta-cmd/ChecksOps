@@ -686,9 +686,10 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
     const inviteErrMsg = (data as any)?.invite_error;
     toast({
       title: (data as any)?.is_new_user ? "User created" : "User added to tenant",
-      description: inviteSent
+      description: (inviteSent
         ? `Invite email sent to ${inviteEmail}`
-        : `User added but email failed${inviteErrMsg ? `: ${inviteErrMsg}` : ""}. Use the Resend button.`,
+        : `User added but email failed${inviteErrMsg ? `: ${inviteErrMsg}` : ""}. Use the Resend button.`)
+        + (tenant.subscription_status !== "active" ? " Note: this organization is inactive, so the user can't sign in until it's activated." : ""),
       variant: inviteSent ? "default" : "destructive",
     });
     setInviteEmail("");
