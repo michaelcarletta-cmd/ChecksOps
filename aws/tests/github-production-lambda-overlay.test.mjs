@@ -568,11 +568,12 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   }
 });
 
-test('fee collection: eleven members on the fee manifest, collection-v2 then destination then invoice email then billing, held for SQL 98', async () => {
+test('fee collection: eleven members on the fee manifest, collection-v2 then destination then invoice email then billing, held for SQL 98 (handlers: SQL 102)', async () => {
   const MANIFEST_FEES = 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json';
   const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
   const SQL96 = 'aws/workflows/sql/96_platform_owner_tenant_pricing.sql';
   const SQL98 = 'aws/workflows/sql/98_tenant_fee_collection.sql';
+  const SQL102 = 'aws/workflows/sql/102_platform_owner_tenant_profile.sql';
   const COLLECTION = 'tenant-collection-v2.mjs';
   const DESTINATION = 'tenant-billing-destination.mjs';
   const ENGINE = 'tenant-billing-engine.mjs';
@@ -652,8 +653,11 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(PLAN.members[DEPOSITS_GATE].expected_live_sha256, null);
   assert.equal(PLAN.members[DEPOSITS_GATE].sql_before, null);
   assert.equal((await run(applyEnv(DEPOSITS_GATE), applyDeps(DEPOSITS_GATE).deps)).mutation, false);
-  // SQL 98 holds the billing members; it is a pending pin (SQL 98 itself requires SQL 96).
-  for (const member of [ENGINE, HANDLERS]) assert.equal(PLAN.members[member].sql_before, SQL98, member);
+  // SQL 98 holds the engine; the handlers (profile-update, member-remove) wait on SQL 102, which
+  // requires SQL 98. Both are pending pins (SQL 98 itself requires SQL 96).
+  assert.equal(PLAN.members[ENGINE].sql_before, SQL98);
+  assert.equal(PLAN.members[HANDLERS].sql_before, SQL102);
+  assert.equal(PLAN.sql_prerequisites[SQL102].verified_live, false);
   for (const member of [COLLECTION, DESTINATION]) assert.equal(PLAN.members[member].sql_before, null, member);
   const pre = PLAN.sql_prerequisites[SQL98];
   assert.equal(pre.verified_live, false);
@@ -677,11 +681,11 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.deepEqual([...reg.function_identities], pin.function_identities);
   assert.match(fs.readFileSync(path.join(ROOT, SQL98), 'utf8'), /to_regprocedure\('public\.aws_platform_owner_set_tenant_pricing\(uuid, jsonb\)'\) IS NULL/);
 
-  // Held while SQL 98 is not recorded live ...
-  for (const member of [ENGINE, HANDLERS]) {
+  // Held while SQL 98 (the engine) or SQL 102 (the handlers) is not recorded live ...
+  for (const [member, sqlBefore] of [[ENGINE, SQL98], [HANDLERS, SQL102]]) {
     await assert.rejects(
       run(applyEnv(member), applyDeps(member).deps),
-      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL98,
+      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === sqlBefore,
       member,
     );
   }

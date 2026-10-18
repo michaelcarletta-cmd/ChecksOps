@@ -86,7 +86,13 @@
       "verified_live": false,
       "evidence": null,
       "pin": "ops/deployment-guard/sql98-tenant-fee-collection-production-apply.json",
-      "note": "Pending: not applied in staging or production. Requires SQL 96 (SQL 98 refuses without aws_platform_owner_set_tenant_pricing, so SQL 98 verified live implies SQL 96, SQL 93 and SQL 90 are live). Holds tenant-billing-engine.mjs, tenant-billing-handlers.mjs, workflow-rpc.mjs and providers.mjs (sql_before; the deposits gate fails closed without aws_tenant_deposits_enabled). Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
+      "note": "Pending: not applied in staging or production. Requires SQL 96 (SQL 98 refuses without aws_platform_owner_set_tenant_pricing, so SQL 98 verified live implies SQL 96, SQL 93 and SQL 90 are live). Holds tenant-billing-engine.mjs, workflow-rpc.mjs and providers.mjs (sql_before; the deposits gate fails closed without aws_tenant_deposits_enabled); tenant-billing-handlers.mjs waits on SQL 102, which requires SQL 98. Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
+    },
+    "aws/workflows/sql/102_platform_owner_tenant_profile.sql": {
+      "verified_live": false,
+      "evidence": null,
+      "pin": "ops/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.json",
+      "note": "Pending: applied in staging (run 39162625974), not in production. Requires SQL 98 (SQL 102 refuses without aws_platform_owner_set_tenant_deposits_enabled, so SQL 102 verified live implies SQL 98, 96, 93 and 90). Holds tenant-billing-handlers.mjs (sql_before; profile-update and member-remove call aws_platform_owner_set_tenant_profile and aws_platform_owner_remove_tenant_member). Never re-run SQL 98 after SQL 102. Record verified_live only from a guarded production apply and post-apply read-only inspect, in its own reviewed change."
     }
   },
   "order": [
@@ -747,7 +753,7 @@
       "operation": "replace",
       "accepted_sha256": "2f8ca3c53b3e3a125b6bb8c6e61e09a593388450274c320978498af78643937e",
       "expected_live_sha256": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
-      "sql_before": "aws/workflows/sql/98_tenant_fee_collection.sql",
+      "sql_before": "aws/workflows/sql/102_platform_owner_tenant_profile.sql",
       "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
     },
     "tenant-collection-v2.mjs": {
