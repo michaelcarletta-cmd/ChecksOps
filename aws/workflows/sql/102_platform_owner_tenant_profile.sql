@@ -28,9 +28,13 @@
 --    (AFTER UPDATE on tenants): one tenant_pricing_audit row per changed
 --    profile field, by any path. A member removal is audited by the remover
 --    (field member_removed).
--- 4) public.aws_tenants_member_column_guard() (SQL 98's, replaced here): the
+-- 4) public.aws_tenant_has_moov_account(uuid) (new, SECURITY DEFINER): whether
+--    the tenant has a Moov payment account, read whatever the caller's RLS.
+-- 5) public.aws_tenants_member_column_guard() (SQL 98's, replaced here): the
 --    same body, plus the profile fields and moov_environment for the platform
---    owner. Members still change only SQL 93's display/branding/company-info
+--    owner. On every path, moov_environment changes only with is_test_account,
+--    and neither once the tenant has a Moov account (55000
+--    moov_environment_locked). Members still change only SQL 93's display/branding/company-info
 --    columns; slug and partner_code stay refused for everyone. Re-running SQL
 --    98 after this file would put back SQL 98's guard (fail closed: the
 --    platform owner could no longer save the profile) until SQL 102 is re-run.
@@ -106,7 +110,7 @@ CREATE OR REPLACE FUNCTION public.aws_platform_owner_set_tenant_profile(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 SET row_security = off
 AS $body$
 DECLARE
@@ -237,7 +241,7 @@ CREATE OR REPLACE FUNCTION public.aws_platform_owner_remove_tenant_member(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 SET row_security = off
 AS $body$
 DECLARE
@@ -269,7 +273,7 @@ CREATE OR REPLACE FUNCTION public.aws_tenant_profile_audit_row()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 SET row_security = off
 AS $$
 DECLARE
@@ -293,6 +297,29 @@ CREATE TRIGGER aws_tenant_profile_audit
   AFTER UPDATE ON public.tenants
   FOR EACH ROW
   EXECUTE FUNCTION public.aws_tenant_profile_audit_row();
+
+-- Whether a tenant has a Moov payment account (any environment). DEFINER so
+-- the column guard sees every row whatever the caller's RLS.
+CREATE OR REPLACE FUNCTION public.aws_tenant_has_moov_account(_tenant_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+BEGIN
+  IF to_regclass('public.payment_provider_accounts') IS NULL THEN
+    RETURN false;
+  END IF;
+  RETURN EXISTS (SELECT 1 FROM public.payment_provider_accounts a
+                  WHERE a.tenant_id = _tenant_id AND a.provider = 'moov');
+END
+$$;
+REVOKE ALL ON FUNCTION public.aws_tenant_has_moov_account(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_tenant_has_moov_account(uuid) TO checksops, authenticated;
+COMMENT ON FUNCTION public.aws_tenant_has_moov_account(uuid) IS
+  'SQL 102: true when the tenant has a Moov payment_provider_accounts row; the test-mode lock of the column guard and the profile setter.';
 
 -- Column guard (SQL 98's, replaced here): SQL 98's body unchanged except that
 -- the platform owner may also change the profile fields and moov_environment.
@@ -324,6 +351,17 @@ BEGIN
   IF COALESCE(public.is_platform_owner(), false) THEN
     v_allowed := v_allowed || public.aws_tenant_pricing_columns() || ARRAY['deposits_enabled']
       || public.aws_tenant_profile_columns() || ARRAY['moov_environment'];
+    -- Test mode moves the ledger: moov_environment changes only together with
+    -- is_test_account, and neither once the tenant has a Moov account (every path).
+    IF (to_jsonb(NEW) -> 'moov_environment') IS DISTINCT FROM (v_old -> 'moov_environment')
+       OR (to_jsonb(NEW) -> 'is_test_account') IS DISTINCT FROM (v_old -> 'is_test_account') THEN
+      IF (to_jsonb(NEW) -> 'is_test_account') IS NOT DISTINCT FROM (v_old -> 'is_test_account') THEN
+        RAISE EXCEPTION 'tenant_column_not_member_writable: moov_environment' USING ERRCODE = '42501';
+      END IF;
+      IF public.aws_tenant_has_moov_account(OLD.id) THEN
+        RAISE EXCEPTION 'moov_environment_locked' USING ERRCODE = '55000', DETAIL = 'is_test_account';
+      END IF;
+    END IF;
   END IF;
   SELECT array_agg(n.key ORDER BY n.key) INTO v_changed
     FROM jsonb_each(to_jsonb(NEW)) AS n
